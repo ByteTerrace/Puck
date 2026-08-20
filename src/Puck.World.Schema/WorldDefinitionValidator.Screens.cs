@@ -611,6 +611,30 @@ public static partial class WorldDefinitionValidator {
                     errors: errors
                 );
 
+                if (!Enum.IsDefined(value: camera.Sensor)) {
+                    errors.Add(item: $"{path}.camera.sensor '{camera.Sensor}' is not recognized.");
+                }
+
+                if (camera.Controls?.Vendor is { } vendorControls) {
+                    for (var index = 0; (index < vendorControls.Count); index++) {
+                        var control = vendorControls[index];
+
+                        if (control is null) {
+                            errors.Add(item: $"{path}.camera.controls.vendor[{index}] is required.");
+
+                            continue;
+                        }
+
+                        if ((control.Id < byte.MinValue) || (control.Id > byte.MaxValue)) {
+                            errors.Add(item: $"{path}.camera.controls.vendor[{index}].id {control.Id} is outside 0..255.");
+                        }
+
+                        if ((control.Value < byte.MinValue) || (control.Value > byte.MaxValue)) {
+                            errors.Add(item: $"{path}.camera.controls.vendor[{index}].value {control.Value} is outside 0..255.");
+                        }
+                    }
+                }
+
                 return false;
             case WorldScreenSource.Capture capture:
                 // Selector: monitor mode validates the index; window mode requires a title (its unused counterpart).

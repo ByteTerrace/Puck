@@ -65,8 +65,28 @@ public sealed class Win32MediaFoundationCameraService : ICameraCaptureService {
                 infraredWidth: infraredWidth
             );
 
-            colorSession = new Win32MediaFoundationDualCameraSession(core: core, infrared: false);
-            infraredSession = new Win32MediaFoundationDualCameraSession(core: core, infrared: true);
+            try {
+                colorSession = new Win32MediaFoundationDualCameraSession(core: core, infrared: false);
+                infraredSession = new Win32MediaFoundationDualCameraSession(core: core, infrared: true);
+            } catch {
+                // The core reserves one reference for each facade. Release both reservations even if allocating a
+                // facade fails, otherwise an exceptional open permanently holds the camera.
+                if (colorSession is null) {
+                    core.Release();
+                } else {
+                    colorSession.Dispose();
+                    colorSession = null;
+                }
+
+                if (infraredSession is null) {
+                    core.Release();
+                } else {
+                    infraredSession.Dispose();
+                    infraredSession = null;
+                }
+
+                throw;
+            }
 
             return true;
         } catch (Exception exception) {
@@ -524,26 +544,30 @@ internal static class Win32CameraModeNegotiation {
         var l8 = MfInterop.MFVideoFormat_L8;
 
         for (var stream = 0u; (reader.GetNativeMediaType(dwStreamIndex: stream, dwMediaTypeIndex: 0, ppMediaType: out var firstType) >= 0); stream++) {
-            if (
-                (reader.GetPresentationAttribute(dwStreamIndex: stream, guidAttribute: ref frameSourceKey, pvarAttribute: out var sourceTypes) >= 0) &&
-                (MfPropVariant.VtUInt32 == sourceTypes.Vt)
-            ) {
-                if (0 != (sourceTypes.UInt32Value & MfInterop.FrameSourceTypeInfrared)) {
+            try {
+                if (
+                    (reader.GetPresentationAttribute(dwStreamIndex: stream, guidAttribute: ref frameSourceKey, pvarAttribute: out var sourceTypes) >= 0) &&
+                    (MfPropVariant.VtUInt32 == sourceTypes.Vt)
+                ) {
+                    if (0 != (sourceTypes.UInt32Value & MfInterop.FrameSourceTypeInfrared)) {
+                        streamIndex = stream;
+
+                        return true;
+                    }
+
+                    continue;
+                }
+
+                if (
+                    (firstType.GetGUID(guidKey: ref subTypeKey, guidValue: out var subtype) >= 0) &&
+                    (l8 == subtype)
+                ) {
                     streamIndex = stream;
 
                     return true;
                 }
-
-                continue;
-            }
-
-            if (
-                (firstType.GetGUID(guidKey: ref subTypeKey, guidValue: out var subtype) >= 0) &&
-                (l8 == subtype)
-            ) {
-                streamIndex = stream;
-
-                return true;
+            } finally {
+                _ = Marshal.ReleaseComObject(o: firstType);
             }
         }
 
@@ -565,46 +589,63 @@ internal static class Win32CameraModeNegotiation {
         var bestRateCovers = false;
 
         for (var index = 0u; (reader.GetNativeMediaType(dwStreamIndex: streamIndex, dwMediaTypeIndex: index, ppMediaType: out var candidate) >= 0); index++) {
-            if (candidate.GetUINT64(guidKey: ref frameSizeKey, punValue: out var packedSize) < 0) {
-                continue;
-            }
+            var retained = false;
 
-            var width = ((long)(packedSize >> 32));
-            var height = ((long)(packedSize & 0xffffffff));
+            try {
+                if (candidate.GetUINT64(guidKey: ref frameSizeKey, punValue: out var packedSize) < 0) {
+                    continue;
+                }
 
-            if ((width <= 0) || (height <= 0)) {
-                continue;
-            }
+                var width = ((long)(packedSize >> 32));
+                var height = ((long)(packedSize & 0xffffffff));
 
-            var area = (width * height);
-            var covers = ((width >= requestedWidth) && (height >= requestedHeight));
-            var rate = (((candidate.GetUINT64(guidKey: ref frameRateKey, punValue: out var packedRate) >= 0) && ((packedRate & 0xffffffff) != 0))
-                ? (((double)(packedRate >> 32)) / (packedRate & 0xffffffff))
-                : 0.0
-            );
-            var rateCovers = ((requestedRateHz > 0) && (rate >= requestedRateHz));
-            var better = ((best is null) || ((covers != bestCovers)
-                ? covers
-                : ((area != bestArea)
-                    ? (covers ? (area < bestArea) : (area > bestArea))
-                    : ((rateCovers != bestRateCovers)
-                        ? rateCovers
-                        : (rateCovers ? (rate < bestRate) : (rate > bestRate))
+                if ((width <= 0) || (height <= 0)) {
+                    continue;
+                }
+
+                var area = (width * height);
+                var covers = ((width >= requestedWidth) && (height >= requestedHeight));
+                var rate = (((candidate.GetUINT64(guidKey: ref frameRateKey, punValue: out var packedRate) >= 0) && ((packedRate & 0xffffffff) != 0))
+                    ? (((double)(packedRate >> 32)) / (packedRate & 0xffffffff))
+                    : 0.0
+                );
+                var rateCovers = ((requestedRateHz > 0) && (rate >= requestedRateHz));
+                var better = ((best is null) || ((covers != bestCovers)
+                    ? covers
+                    : ((area != bestArea)
+                        ? (covers ? (area < bestArea) : (area > bestArea))
+                        : ((rateCovers != bestRateCovers)
+                            ? rateCovers
+                            : (rateCovers ? (rate < bestRate) : (rate > bestRate))
+                        )
                     )
-                )
-            ));
+                ));
 
-            if (better) {
-                best = candidate;
-                bestArea = area;
-                bestCovers = covers;
-                bestRate = rate;
-                bestRateCovers = rateCovers;
+                if (better) {
+                    if (best is not null) {
+                        _ = Marshal.ReleaseComObject(o: best);
+                    }
+
+                    best = candidate;
+                    bestArea = area;
+                    bestCovers = covers;
+                    bestRate = rate;
+                    bestRateCovers = rateCovers;
+                    retained = true;
+                }
+            } finally {
+                if (!retained) {
+                    _ = Marshal.ReleaseComObject(o: candidate);
+                }
             }
         }
 
         if (best is not null) {
-            _ = reader.SetCurrentMediaType(dwStreamIndex: streamIndex, pMediaType: best, pdwReserved: IntPtr.Zero);
+            try {
+                _ = reader.SetCurrentMediaType(dwStreamIndex: streamIndex, pMediaType: best, pdwReserved: IntPtr.Zero);
+            } finally {
+                _ = Marshal.ReleaseComObject(o: best);
+            }
         }
     }
 }

@@ -11,79 +11,130 @@ namespace Puck.Platform.Windows;
 /// <summary>
 /// The dual-sensor camera core: ONE <see cref="MediaCapture"/> over the frame-source group that carries both the
 /// color and infrared sources, with one <see cref="MediaFrameReader"/> per sensor, fanned out to two
-/// <see cref="ICameraCaptureSession"/> facades. A device that multiplexes both sensors through one pipeline (the
-/// BRIO) streams them simultaneously ONLY through the camera frame server — a raw source reader with both pins
-/// selected never starts (hardware-measured: the first configuration blocks forever and a second session kills the
-/// first with 0xC00D3EA3), while this is the arrangement Windows Hello itself uses. The frame server also converts
+/// <see cref="ICameraCaptureSession"/> facades. This route asks the camera frame server to arbitrate devices that expose
+/// both streams through one source group. Reader-start success alone is insufficient: the installed BRIO accepts both
+/// readers but produces only IR, while two independent sessions terminate the first with 0xC00D3EA3, so construction
+/// verifies that both readers actually produce a frame before reporting success. The frame server also converts
 /// color frames to BGRA and stamps each infrared frame's <see cref="InfraredMediaFrame.IsIlluminated"/>, so the
 /// lit-frame gate here is EXACT rather than the single-sensor session's luminance-envelope heuristic. The two
 /// facades share the core by refcount — the last disposal stops the readers and the capture.
 /// </summary>
 [SupportedOSPlatform("windows10.0.19041")]
 internal sealed class Win32MediaFoundationDualCameraCore {
-    private readonly MediaCapture m_capture;
-    private readonly MediaFrameReader m_colorReader;
-    private readonly MediaFrameReader m_infraredReader;
+    private const int FirstFrameTimeoutMilliseconds = 5000;
+
+    private readonly MediaCapture? m_capture;
+    private readonly MediaFrameReader? m_colorReader;
+    private readonly MediaFrameReader? m_infraredReader;
 
     private byte[] m_colorScratch = [];
     private volatile bool m_ended;
     private byte[] m_infraredScratch = [];
     private int m_referenceCount = 2;
+    private int m_shutdown;
     private volatile bool m_stop;
-    private readonly Thread m_thread = null!;
+    private readonly Thread? m_thread;
 
     internal readonly LatestFrameBuffer ColorFrames = new();
     internal readonly LatestFrameBuffer InfraredFrames = new();
 
     public Win32MediaFoundationDualCameraCore(int colorWidth, int colorHeight, uint colorRateHz, int infraredWidth, int infraredHeight, uint infraredRateHz) {
-        var (group, colorInfo, infraredInfo) = FindDualGroup();
+        try {
+            var (group, colorInfo, infraredInfo) = FindDualGroup();
 
-        Name = group.DisplayName;
-        m_capture = new MediaCapture();
-        m_capture.InitializeAsync(mediaCaptureInitializationSettings: new MediaCaptureInitializationSettings {
-            MemoryPreference = MediaCaptureMemoryPreference.Cpu,
-            SharingMode = MediaCaptureSharingMode.ExclusiveControl,
-            SourceGroup = group,
-            StreamingCaptureMode = StreamingCaptureMode.Video,
-        }).AsTask().GetAwaiter().GetResult();
+            Name = group.DisplayName;
 
-        var colorSource = m_capture.FrameSources[colorInfo.Id];
-        var infraredSource = m_capture.FrameSources[infraredInfo.Id];
+            // Logitech BRIO 4K (046D:085E) exposes a color+IR frame-source group, but the installed driver/firmware
+            // multiplexes one physical pipe: starting both readers yields IR only, and probing the combination can
+            // leave the device in IR mode long enough to break an immediate color fallback. Reject this measured
+            // topology before touching the device. Keep the display-name check as a fallback because some driver
+            // versions replace the source-group id with an opaque value.
+            if (
+                group.Id.Contains(value: "VID_046D&PID_085E", comparisonType: StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(a: group.DisplayName, b: "Logitech BRIO", comparisonType: StringComparison.OrdinalIgnoreCase)
+            ) {
+                throw new NotSupportedException(message: "Logitech BRIO 4K does not provide concurrent color and infrared streams");
+            }
 
-        SelectNearestFormat(height: colorHeight, rateHz: colorRateHz, source: colorSource, width: colorWidth);
-        SelectNearestFormat(height: infraredHeight, rateHz: infraredRateHz, source: infraredSource, width: infraredWidth);
+            m_capture = new MediaCapture();
+            m_capture.InitializeAsync(mediaCaptureInitializationSettings: new MediaCaptureInitializationSettings {
+                MemoryPreference = MediaCaptureMemoryPreference.Cpu,
+                SharingMode = MediaCaptureSharingMode.ExclusiveControl,
+                SourceGroup = group,
+                StreamingCaptureMode = StreamingCaptureMode.Video,
+            }).AsTask().GetAwaiter().GetResult();
 
-        ColorWidth = ((int)colorSource.CurrentFormat.VideoFormat.Width);
-        ColorHeight = ((int)colorSource.CurrentFormat.VideoFormat.Height);
-        InfraredWidth = ((int)infraredSource.CurrentFormat.VideoFormat.Width);
-        InfraredHeight = ((int)infraredSource.CurrentFormat.VideoFormat.Height);
-        // The frame server converts both sensors to BGRA at the reader (infrared luminance lands as gray BGRA),
-        // so both publish paths share one shape.
-        m_colorReader = m_capture.CreateFrameReaderAsync(inputSource: colorSource, outputSubtype: MediaEncodingSubtypes.Bgra8).AsTask().GetAwaiter().GetResult();
-        m_infraredReader = m_capture.CreateFrameReaderAsync(inputSource: infraredSource, outputSubtype: MediaEncodingSubtypes.Bgra8).AsTask().GetAwaiter().GetResult();
-        m_colorReader.AcquisitionMode = MediaFrameReaderAcquisitionMode.Realtime;
-        m_infraredReader.AcquisitionMode = MediaFrameReaderAcquisitionMode.Realtime;
+            var colorSource = m_capture.FrameSources[colorInfo.Id];
+            var infraredSource = m_capture.FrameSources[infraredInfo.Id];
 
-        if (MediaFrameReaderStartStatus.Success != m_colorReader.StartAsync().AsTask().GetAwaiter().GetResult()) {
-            throw new InvalidOperationException(message: "the color frame reader refused to start");
+            SelectNearestFormat(height: colorHeight, rateHz: colorRateHz, source: colorSource, width: colorWidth);
+            SelectNearestFormat(height: infraredHeight, rateHz: infraredRateHz, source: infraredSource, width: infraredWidth);
+
+            ColorWidth = ((int)colorSource.CurrentFormat.VideoFormat.Width);
+            ColorHeight = ((int)colorSource.CurrentFormat.VideoFormat.Height);
+            InfraredWidth = ((int)infraredSource.CurrentFormat.VideoFormat.Width);
+            InfraredHeight = ((int)infraredSource.CurrentFormat.VideoFormat.Height);
+            // The frame server converts both sensors to BGRA at the reader (infrared luminance lands as gray BGRA),
+            // so both publish paths share one shape.
+            m_colorReader = m_capture.CreateFrameReaderAsync(inputSource: colorSource, outputSubtype: MediaEncodingSubtypes.Bgra8).AsTask().GetAwaiter().GetResult();
+            m_infraredReader = m_capture.CreateFrameReaderAsync(inputSource: infraredSource, outputSubtype: MediaEncodingSubtypes.Bgra8).AsTask().GetAwaiter().GetResult();
+            m_colorReader.AcquisitionMode = MediaFrameReaderAcquisitionMode.Realtime;
+            m_infraredReader.AcquisitionMode = MediaFrameReaderAcquisitionMode.Realtime;
+
+            if (MediaFrameReaderStartStatus.Success != m_colorReader.StartAsync().AsTask().GetAwaiter().GetResult()) {
+                throw new InvalidOperationException(message: "the color frame reader refused to start");
+            }
+
+            if (MediaFrameReaderStartStatus.Success != m_infraredReader.StartAsync().AsTask().GetAwaiter().GetResult()) {
+                throw new InvalidOperationException(message: "the infrared frame reader refused to start");
+            }
+
+            // The WinRT VideoDeviceController answers the classic control interfaces through COM interop, so the shared
+            // control surface (UVC + vendor XU) rides the same wrapper the single-sensor sessions use.
+            Controls = new Win32CameraControlSurface(mediaSource: m_capture.VideoDeviceController);
+
+            // POLLED acquisition, not FrameArrived: the readers deliver frames to TryAcquireLatestFrame either way, and
+            // the event path silently never fires in this hosting shape — a dedicated poll thread (the MF sessions'
+            // grabber pattern) is deterministic everywhere. Timestamps dedupe re-acquired frames.
+            m_thread = new Thread(start: PollLoop) {
+                IsBackground = true,
+                Name = "camera-dual-poll",
+            };
+            m_thread.SetApartmentState(state: ApartmentState.MTA);
+            m_thread.Start();
+
+            // StartAsync only reports that the driver accepted each reader. Multiplexing cameras can accept both and
+            // then deliver just one (the BRIO does exactly this), so an open is not successful until BOTH streams prove
+            // liveness. Without this gate the binder advertises a dual feed while one screen remains black forever.
+            var deadline = Environment.TickCount64 + FirstFrameTimeoutMilliseconds;
+
+            while (
+                (ColorFrames.Version == 0L || InfraredFrames.Version == 0L) &&
+                !m_ended &&
+                (Environment.TickCount64 < deadline)
+            ) {
+                Thread.Sleep(millisecondsTimeout: 10);
+            }
+
+            if (ColorFrames.Version == 0L || InfraredFrames.Version == 0L) {
+                throw new InvalidOperationException(
+                    message: $"the device did not produce both streams within {FirstFrameTimeoutMilliseconds} ms (color={ColorFrames.Version}, infrared={InfraredFrames.Version})"
+                );
+            }
+        } catch {
+            var readersStarted = (m_thread is not null);
+
+            Shutdown();
+
+            // Some USB camera drivers finish switching modes after their WinRT objects have been released. Give that
+            // asynchronous teardown a short bounded interval before the caller restores its established single-sensor
+            // session; without it the immediate reopen can fail even though the device is healthy.
+            if (readersStarted) {
+                Thread.Sleep(millisecondsTimeout: 2000);
+            }
+
+            throw;
         }
-
-        if (MediaFrameReaderStartStatus.Success != m_infraredReader.StartAsync().AsTask().GetAwaiter().GetResult()) {
-            throw new InvalidOperationException(message: "the infrared frame reader refused to start");
-        }
-
-        // The WinRT VideoDeviceController answers the classic control interfaces through COM interop, so the shared
-        // control surface (UVC + vendor XU) rides the same wrapper the single-sensor sessions use.
-        Controls = new Win32CameraControlSurface(mediaSource: m_capture.VideoDeviceController);
-
-        // POLLED acquisition, not FrameArrived: the readers deliver frames to TryAcquireLatestFrame either way, and
-        // the event path silently never fires in this hosting shape — a dedicated poll thread (the MF sessions'
-        // grabber pattern) is deterministic everywhere. Timestamps dedupe re-acquired frames.
-        m_thread = new Thread(start: PollLoop) {
-            IsBackground = true,
-            Name = "camera-dual-poll",
-        };
-        m_thread.Start();
     }
 
     public int ColorHeight { get; }
@@ -100,20 +151,27 @@ internal sealed class Win32MediaFoundationDualCameraCore {
             return;
         }
 
+        Shutdown();
+    }
+    private void Shutdown() {
+        if (0 != Interlocked.Exchange(ref m_shutdown, 1)) {
+            return;
+        }
+
         m_ended = true;
         m_stop = true;
-        m_thread.Join(millisecondsTimeout: 2000);
+        _ = (m_thread?.Join(millisecondsTimeout: 2000) ?? true);
 
         try {
-            m_colorReader.StopAsync().AsTask().GetAwaiter().GetResult();
-            m_infraredReader.StopAsync().AsTask().GetAwaiter().GetResult();
+            m_colorReader?.StopAsync().AsTask().GetAwaiter().GetResult();
+            m_infraredReader?.StopAsync().AsTask().GetAwaiter().GetResult();
         } catch {
             // A capture torn down by device loss mid-stop is already stopped.
         }
 
-        m_colorReader.Dispose();
-        m_infraredReader.Dispose();
-        m_capture.Dispose();
+        m_colorReader?.Dispose();
+        m_infraredReader?.Dispose();
+        m_capture?.Dispose();
     }
 
     private static (MediaFrameSourceGroup Group, MediaFrameSourceInfo Color, MediaFrameSourceInfo Infrared) FindDualGroup() {
@@ -192,42 +250,50 @@ internal sealed class Win32MediaFoundationDualCameraCore {
         var lastColorTime = TimeSpan.MinValue;
         var lastInfraredTime = TimeSpan.MinValue;
 
-        while (!m_stop) {
-            var progressed = false;
+        try {
+            while (!m_stop) {
+                var progressed = false;
 
-            using (var frame = m_colorReader.TryAcquireLatestFrame()) {
-                if (
-                    (frame?.VideoMediaFrame?.SoftwareBitmap is { } bitmap) &&
-                    (frame.SystemRelativeTime is { } time) &&
-                    (time != lastColorTime)
-                ) {
-                    lastColorTime = time;
-                    progressed = true;
-                    PublishBitmap(bitmap: bitmap, buffer: ColorFrames, scratch: ref m_colorScratch);
-                }
-            }
-
-            using (var frame = m_infraredReader.TryAcquireLatestFrame()) {
-                if (
-                    (frame?.VideoMediaFrame is { } video) &&
-                    (video.SoftwareBitmap is { } bitmap) &&
-                    (frame.SystemRelativeTime is { } time) &&
-                    (time != lastInfraredTime)
-                ) {
-                    lastInfraredTime = time;
-                    progressed = true;
-
-                    // The EXACT lit-frame gate: the frame server stamps whether the IR illuminator fired for this
-                    // frame; the unlit half of a strobing stream never publishes. An unstamped frame publishes.
-                    if (video.InfraredMediaFrame is not { IsIlluminated: false }) {
-                        PublishBitmap(bitmap: bitmap, buffer: InfraredFrames, scratch: ref m_infraredScratch);
+                using (var frame = m_colorReader!.TryAcquireLatestFrame()) {
+                    if (
+                        (frame?.VideoMediaFrame?.SoftwareBitmap is { } bitmap) &&
+                        (frame.SystemRelativeTime is { } time) &&
+                        (time != lastColorTime)
+                    ) {
+                        lastColorTime = time;
+                        progressed = true;
+                        PublishBitmap(bitmap: bitmap, buffer: ColorFrames, scratch: ref m_colorScratch);
                     }
                 }
-            }
 
-            if (!progressed) {
-                Thread.Sleep(millisecondsTimeout: 2);
+                using (var frame = m_infraredReader!.TryAcquireLatestFrame()) {
+                    if (
+                        (frame?.VideoMediaFrame is { } video) &&
+                        (video.SoftwareBitmap is { } bitmap) &&
+                        (frame.SystemRelativeTime is { } time) &&
+                        (time != lastInfraredTime)
+                    ) {
+                        lastInfraredTime = time;
+                        progressed = true;
+
+                        // The EXACT lit-frame gate: the frame server stamps whether the IR illuminator fired for this
+                        // frame; the unlit half of a strobing stream never publishes. An unstamped frame publishes.
+                        if (video.InfraredMediaFrame is not { IsIlluminated: false }) {
+                            PublishBitmap(bitmap: bitmap, buffer: InfraredFrames, scratch: ref m_infraredScratch);
+                        }
+                    }
+                }
+
+                if (!progressed) {
+                    Thread.Sleep(millisecondsTimeout: 2);
+                }
             }
+        } catch (Exception exception) {
+            if (!m_stop) {
+                Console.Error.WriteLine(value: $"[camera] dual-sensor read loop stopped: {exception.Message}");
+            }
+        } finally {
+            m_ended = true;
         }
     }
     // Tightly repacks the (possibly padded) BGRA bitmap rows into the reusable scratch and publishes — each reader's
@@ -253,7 +319,11 @@ internal sealed class Win32MediaFoundationDualCameraCore {
         }
 
         // CsWinRT wrappers answer classic COM interop interfaces through As<T>, never a runtime cast.
-        reference.As<IMemoryBufferByteAccess>().GetBuffer(buffer: out var pixels, capacity: out _);
+        reference.As<IMemoryBufferByteAccess>().GetBuffer(buffer: out var pixels, capacity: out var capacity);
+
+        if ((plane.Stride < tight) || (plane.StartIndex < 0) || (((long)plane.StartIndex + (((long)(height - 1)) * plane.Stride) + tight) > capacity)) {
+            throw new InvalidOperationException(message: "the camera returned an invalid BGRA bitmap plane");
+        }
 
         for (var row = 0; (row < height); row++) {
             Marshal.Copy(
@@ -281,6 +351,10 @@ internal sealed class Win32MediaFoundationDualCameraSession(Win32MediaFoundation
     private bool m_disposed;
     private byte[] m_pullBuffer = [];
 
+    // A frame-source group has one VideoDeviceController, not one per sensor. Expose that shared physical control
+    // surface through the color facade only; otherwise independently authored per-sensor controls alternate writes
+    // against the same hardware on every pull.
+    private Win32CameraControlSurface? Controls => (infrared ? null : core.Controls);
     private LatestFrameBuffer Frames => (infrared ? core.InfraredFrames : core.ColorFrames);
 
     /// <inheritdoc/>
@@ -324,7 +398,7 @@ internal sealed class Win32MediaFoundationDualCameraSession(Win32MediaFoundation
     }
     /// <inheritdoc/>
     public bool TryGet(CameraControl control, out int value, out bool auto) {
-        if (core.Controls is { } controls) {
+        if (Controls is { } controls) {
             return controls.TryGet(control: control, value: out value, auto: out auto);
         }
 
@@ -335,7 +409,7 @@ internal sealed class Win32MediaFoundationDualCameraSession(Win32MediaFoundation
     }
     /// <inheritdoc/>
     public bool TryGetRange(CameraControl control, out CameraControlRange range) {
-        if (core.Controls is { } controls) {
+        if (Controls is { } controls) {
             return controls.TryGetRange(control: control, range: out range);
         }
 
@@ -344,12 +418,12 @@ internal sealed class Win32MediaFoundationDualCameraSession(Win32MediaFoundation
         return false;
     }
     /// <inheritdoc/>
-    public bool TryResetAuto(CameraControl control) => (core.Controls?.TryResetAuto(control: control) ?? false);
+    public bool TryResetAuto(CameraControl control) => (Controls?.TryResetAuto(control: control) ?? false);
     /// <inheritdoc/>
-    public bool TrySet(CameraControl control, int value) => (core.Controls?.TrySet(control: control, value: value) ?? false);
+    public bool TrySet(CameraControl control, int value) => (Controls?.TrySet(control: control, value: value) ?? false);
     /// <inheritdoc/>
     public bool TryVendorRead(uint selector, out int value) {
-        if (core.Controls is { } controls) {
+        if (Controls is { } controls) {
             return controls.TryVendorRead(selector: selector, value: out value);
         }
 
@@ -358,5 +432,5 @@ internal sealed class Win32MediaFoundationDualCameraSession(Win32MediaFoundation
         return false;
     }
     /// <inheritdoc/>
-    public bool TryVendorWrite(uint selector, int value) => (core.Controls?.TryVendorWrite(selector: selector, value: value) ?? false);
+    public bool TryVendorWrite(uint selector, int value) => (Controls?.TryVendorWrite(selector: selector, value: value) ?? false);
 }

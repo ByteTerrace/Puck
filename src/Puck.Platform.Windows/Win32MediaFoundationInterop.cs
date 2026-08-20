@@ -66,7 +66,12 @@ internal static class MfInterop {
     /// <exception cref="COMException"><paramref name="hr"/> is negative.</exception>
     public static void Check(int hr) {
         if (hr < 0) {
-            throw new COMException(errorCode: hr, message: "a Media Foundation call failed");
+            var systemMessage = Marshal.GetExceptionForHR(errorCode: hr)?.Message;
+
+            throw new COMException(
+                errorCode: hr,
+                message: $"Media Foundation call failed (0x{unchecked((uint)hr):X8}){((systemMessage is null) ? "" : $": {systemMessage}")}"
+            );
         }
     }
     /// <summary>Enumerates video capture devices, activates the first one as a media source, and reports its friendly

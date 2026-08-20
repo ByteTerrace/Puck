@@ -36,9 +36,9 @@ public enum CameraControl {
     FieldOfView,
 }
 
-/// <summary>Which physical sensor of the capture device a session opens: the default color camera, or the infrared
-/// sensor a Windows Hello capable device exposes as its own capture device (present only when the device's IR
-/// interface enumerates — e.g. a BRIO on a true SuperSpeed link).</summary>
+/// <summary>Which sensor stream a session opens: the default color stream, or the infrared stream exposed by a
+/// Windows Hello capable device. The streams can share one physical pipeline and therefore are not necessarily usable
+/// concurrently.</summary>
 public enum CameraSensor {
     /// <summary>The default color camera.</summary>
     Color,

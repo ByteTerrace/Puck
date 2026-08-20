@@ -432,10 +432,10 @@ capture, or a jumbotron view — bound through `screen.source <index> <kind>`
 present machine first, through the ordered domain) and `screen.eject` (which
 routes to whichever half — machine or
 local producer — actually holds the slot). A camera source row picks its
-`sensor` (`color` default, or `infrared` — its own shared feed; two-sensor
-worlds open both on ONE frame-server reader, and a device that cannot
-stream both concurrently, like a BRIO with no declared video profiles,
-streams one while the other faults by name; an absent IR source faults that
+`sensor` (`color` default, or `infrared` — its own shared feed; a two-sensor
+open is admitted only after both frame-server readers produce a frame, and
+a device that cannot stream both concurrently keeps the first requested
+sensor while the other faults by name; an absent IR source faults that
 feed loudly) and may author `controls` (the standard
 UVC pan/tilt/zoom/exposure/focus/color surface plus the vendor-extension
 `fieldOfView` in degrees and raw `vendor` selector/value rows,

@@ -38,9 +38,9 @@ namespace Puck.World;
 /// presentation-owned.
 /// <para>An unbound slot (a <see cref="WorldScreenSource.None"/> screen, or a live feed with no signal) registers a
 /// provider returning 0, so the engine leaves its surface unbound and lights it with the procedural no-signal
-/// fallback — never black. One webcam session is opened engine-wide PER SENSOR and shared by every camera screen
-/// naming that sensor (two sessions on one physical device flicker; the color and infrared sensors are separate
-/// devices and stream simultaneously), so N camera screens sample at most two feeds. Single-threaded:
+/// fallback — never black. One webcam session is opened engine-wide per sensor and shared by every camera screen
+/// naming that sensor. A capture device may expose both streams while supporting only one at a time; a dual open must
+/// prove both streams live before it replaces the established feed. Thus N camera screens sample at most two feeds. Single-threaded:
 /// <see cref="Publish"/> and simulation-routed screen mutations all run on the launcher's window-pump thread, so no
 /// lock guards this state.</para>
 /// </remarks>
@@ -96,9 +96,9 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     private DirectXGpuSurfaceExportFactory? m_cameraExport;
     private DirectXDeviceContext? m_cameraTargetDevice;
 
-    // The per-sensor shared webcam feeds — the flicker rule ("two sessions on one device") is PER PHYSICAL DEVICE, and
-    // each WorldCameraSensor names its own capture device, so the color and infrared sensors stream SIMULTANEOUSLY,
-    // each shared by every camera screen naming that sensor. Opened lazily on first demand; a failed open records the
+    // The per-sensor shared webcam feeds. A device may back both streams with one exclusive physical pipeline, so a
+    // dual capture is used only when both streams prove live; each feed is shared by every screen naming that sensor.
+    // Opened lazily on first demand; a failed open records the
     // sensor's fault in m_cameraFaults instead (which doubles as the tried-once latch: a sensor in NEITHER dictionary
     // has not been attempted).
     private readonly Dictionary<WorldCameraSensor, CameraFeed> m_cameraFeeds = new();

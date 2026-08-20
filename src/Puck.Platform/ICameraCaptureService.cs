@@ -26,11 +26,10 @@ public interface ICameraCaptureService {
     /// <param name="session">When this returns <see langword="true"/>, the opened live session; otherwise <see langword="null"/>.</param>
     /// <returns><see langword="true"/> if a device was opened.</returns>
     bool TryOpenDefault(int requestedWidth, int requestedHeight, uint requestedRateHz, CameraSensor sensor, [NotNullWhen(true)] out ICameraCaptureSession? session);
-    /// <summary>Tries to open the default device's color AND infrared sensors together on ONE shared reader — the only
-    /// arrangement a device that multiplexes both sensors through one pipeline (the BRIO) streams them simultaneously
-    /// in; two independent per-sensor sessions on such a device kill each other at the firmware. Each returned session
-    /// is one sensor's view (negotiated independently per the <see cref="TryOpenDefault"/> envelope rule) and both
-    /// share the device's control surface; disposing both closes the reader.</summary>
+    /// <summary>Tries to open the default device's color and infrared streams through one capture graph. The open
+    /// succeeds only after both streams have produced a frame; drivers that expose both streams but can run only one
+    /// at a time are rejected. Each returned session is one sensor's view (negotiated independently per the
+    /// <see cref="TryOpenDefault"/> envelope rule); disposing both closes the graph.</summary>
     /// <param name="colorWidth">The desired color extent's width.</param>
     /// <param name="colorHeight">The desired color extent's height.</param>
     /// <param name="colorRateHz">The desired color capture rate; zero prefers the fastest mode.</param>

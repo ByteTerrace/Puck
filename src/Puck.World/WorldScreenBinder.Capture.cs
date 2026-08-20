@@ -96,8 +96,8 @@ internal sealed partial class WorldScreenBinder {
             slot.DeclaredFault = captureFault;
         }
     }
-    // Services every live shared webcam feed — one per sensor; color and infrared are separate physical devices and
-    // stream simultaneously. On BOTH hosts a feed rides the GPU-resident zero-copy tier — the platform's decode device
+    // Services every live shared webcam feed — one per requested sensor. Whether color and infrared can run together
+    // is a device/driver capability proven by the dual-open path. On BOTH hosts a feed rides the GPU-resident zero-copy tier — the platform's decode device
     // converts frames on-GPU and copies them into the three shared textures provisioned here, so the screen samples
     // the latest published slot directly and no frame ever visits host memory — falling back to the CPU-pixel tier
     // exactly once if the GPU open refuses (no adapter LUID, no device, a failed target or import). The CPU tier pulls
@@ -131,6 +131,17 @@ internal sealed partial class WorldScreenBinder {
         }
 
         if (feed.Session is not { } session) {
+            if (feed.OpenRetryCountdown > 0) {
+                --feed.OpenRetryCountdown;
+
+                return;
+            }
+
+            // A transient exclusive-device refusal (notably while a rejected dual graph is still unwinding) must not
+            // strand the feed forever. Retry the CPU open at a bounded render-frame cadence; this also makes a camera
+            // plugged in after boot recover without rebuilding the world.
+            FallBackToCpuCamera(feed: feed);
+
             return;
         }
 
@@ -145,12 +156,15 @@ internal sealed partial class WorldScreenBinder {
             return;
         }
 
+        if (!feed.ShouldPull(elapsedTicks: elapsedTicks)) {
+            return;
+        }
+
         var version = session.FrameVersion;
 
-        if (
-            (version == feed.LastFrameVersion) ||
-            !feed.ShouldPull(elapsedTicks: elapsedTicks)
-        ) {
+        if (version == feed.LastFrameVersion) {
+            NoteCameraStarvation(feed: feed);
+
             return;
         }
 
@@ -180,20 +194,22 @@ internal sealed partial class WorldScreenBinder {
             // The async producer advertised a new version but the grab raced it. Do not spend the declaration's whole
             // cadence on that miss; retry on the next produced frame while still avoiding more than one attempt here.
             feed.RetryPull();
-
-            // A session that never delivers while its sibling sensor streams is a device that cannot run both
-            // sensors concurrently (the BRIO declares no video profiles, so the frame server arbitrates one pipe) —
-            // say so on the starved feed instead of holding "awaiting" forever. Polling continues; a delivered frame
-            // wins the fault back.
-            if (
-                !feed.Live &&
-                (++feed.StarvedPulls > 90) &&
-                (feed.Fault is null) &&
-                SiblingFeedStreams(sensor: feed.Sensor)
-            ) {
-                feed.Fault = "the device cannot stream color and infrared concurrently";
-            }
+            NoteCameraStarvation(feed: feed);
         }
+    }
+    // StartAsync and source-reader construction can both succeed even when a multiplexing driver delivers only one
+    // selected sensor. Count cadence opportunities with no new frame, including a formerly-live stream that freezes;
+    // after roughly three seconds at the default cadence the no-signal state and its cause become observable.
+    private void NoteCameraStarvation(CameraFeed feed) {
+        if (++feed.StarvedPulls <= 90) {
+            return;
+        }
+
+        feed.Live = false;
+        feed.Fault = (SiblingFeedStreams(sensor: feed.Sensor)
+            ? "the device cannot stream color and infrared concurrently"
+            : "the camera is not producing frames"
+        );
     }
     // The GPU-resident camera tier's whole per-frame service, on BOTH hosts. A pending feed (no session yet) completes
     // its open here once the render adapter LUID has resolved: negotiate the platform session, provision the three
@@ -511,10 +527,14 @@ internal sealed partial class WorldScreenBinder {
             session: out var session
         )) {
             feed.Session = session;
+            feed.OpenRetryCountdown = 0;
+            feed.Fault = null;
+            _ = m_cameraFaults.Remove(key: feed.Sensor);
         } else {
             m_cameraFaults[feed.Sensor] = CameraAbsenceFault(sensor: feed.Sensor);
             feed.Fault = m_cameraFaults[feed.Sensor];
             feed.Live = false;
+            feed.OpenRetryCountdown = 120;
         }
     }
     // The document sensor selector's platform spelling, and the fault a device absence reads as — sensor-specific, so
@@ -589,8 +609,8 @@ internal sealed partial class WorldScreenBinder {
         }
     }
     // Opens (once per sensor) and returns that sensor's shared webcam feed, or null when its device cannot be opened
-    // (m_cameraFaults holds the reason). Every camera screen naming the sensor shares the one feed — two sessions on
-    // ONE physical device flicker; different sensors are different devices and stream together. On a modern Windows
+    // (m_cameraFaults holds the reason). Every camera screen naming the sensor shares the one feed; a second sensor
+    // upgrades to a single dual-stream graph only when both streams prove live. On a modern Windows
     // host — EITHER backend — a feed starts PENDING on the GPU-resident tier (the render adapter LUID it must open on
     // resolves at first publish, so CaptureCameraGpu completes the open and falls back to the CPU tier if it refuses)
     // — the bind succeeds now and a device absence surfaces as the feed's own fault. Elsewhere the CPU-pixel session
@@ -619,9 +639,26 @@ internal sealed partial class WorldScreenBinder {
         if (m_cameraFeeds.TryGetValue(key: other, value: out var otherFeed)) {
             var colorProfile = ((WorldCameraSensor.Color == sensor) ? profile : otherFeed.Profile);
             var infraredProfile = ((WorldCameraSensor.Infrared == sensor) ? profile : otherFeed.Profile);
+            var otherDeviceName = (otherFeed.Session?.Name ?? otherFeed.SharedSession?.Name);
+
+            // The platform has hardware-proven this model's single-pipe topology. Preserve an already-live first
+            // sensor instead of tearing it down for a dual upgrade that the platform will deterministically reject.
+            if (string.Equals(a: otherDeviceName, b: "Logitech BRIO", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+                m_cameraFaults[sensor] = "the device did not provide concurrent color and infrared streams";
+
+                return null;
+            }
+
+            // MediaCapture requests exclusive control. A live single-sensor session must release the device before a
+            // two-reader upgrade can be attempted; if the upgrade is refused, leave the established feed pending so
+            // the normal service path reopens it on the next publish.
+            if ((otherFeed.Session is not null) || (otherFeed.SharedSession is not null)) {
+                otherFeed.ResetSessions();
+                otherFeed.GpuRoute = OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: 10240);
+            }
 
             if (!TryEnterDualCamera(colorProfile: colorProfile, infraredProfile: infraredProfile, requestedProfile: profile, requestedSensor: sensor)) {
-                m_cameraFaults[sensor] = CameraAbsenceFault(sensor: sensor);
+                m_cameraFaults[sensor] = "the device did not provide concurrent color and infrared streams";
 
                 return null;
             }
@@ -673,7 +710,11 @@ internal sealed partial class WorldScreenBinder {
     }
     // The authored control record a sensor's feed applies (the first camera row of that sensor, re-resolved on every
     // screens mutation).
-    private WorldCameraControls? ControlsFor(WorldCameraSensor sensor) => m_cameraControlsBySensor[((int)sensor)];
+    private WorldCameraControls? ControlsFor(WorldCameraSensor sensor) => (sensor switch {
+        WorldCameraSensor.Color => m_cameraControlsBySensor[((int)WorldCameraSensor.Color)],
+        WorldCameraSensor.Infrared => m_cameraControlsBySensor[((int)WorldCameraSensor.Infrared)],
+        _ => null,
+    });
     private bool SiblingFeedStreams(WorldCameraSensor sensor) {
         var sibling = ((WorldCameraSensor.Color == sensor) ? WorldCameraSensor.Infrared : WorldCameraSensor.Color);
 
@@ -976,12 +1017,16 @@ internal sealed partial class WorldScreenBinder {
     /// <c>screen.source &lt;index&gt; camera [color|infrared]</c> path. Any existing producer on the slot is cleared
     /// first. Fails loudly for an undeclared screen or when the sensor's device cannot be opened.</summary>
     /// <param name="index">The engine screen-surface index (must be a declared screen).</param>
-    /// <param name="sensor">Which physical sensor's shared feed to bind — color and infrared are separate devices and
-    /// stream simultaneously.</param>
+    /// <param name="sensor">Which sensor stream's shared feed to bind. Concurrent color and infrared depend on the
+    /// capture device and driver.</param>
     /// <returns>Whether the bind succeeded, and a message describing the outcome.</returns>
     public (bool Ok, string Message) TryCamera(int index, WorldCameraSensor sensor) {
         if (m_disposed) {
             return (Ok: false, Message: "binder disposed");
+        }
+
+        if (!Enum.IsDefined(value: sensor)) {
+            return (Ok: false, Message: $"unknown camera sensor '{sensor}'");
         }
 
         if (m_slots.TryGetValue(
@@ -1107,6 +1152,9 @@ internal sealed partial class WorldScreenBinder {
         // null until a first apply, so an unauthored world never touches driver defaults.
         public WorldCameraControls? AppliedControls { get; set; }
         public string? Fault { get; set; }
+        // Render-frame countdown before retrying a transient CPU open failure. This prevents a busy device from being
+        // reopened every frame while still allowing driver teardown and hot-plug recovery without a world rebuild.
+        public int OpenRetryCountdown { get; set; }
         // Which physical sensor this feed's sessions open — fixed at construction; a document sensor flip tears the
         // whole feed down and reopens (ReconcileScreens), never re-aims a live session.
         public WorldCameraSensor Sensor { get; } = sensor;
@@ -1195,6 +1243,8 @@ internal sealed partial class WorldScreenBinder {
             LastFrameVersion = -1L;
             Live = false;
             Fault = null;
+            OpenRetryCountdown = 0;
+            StarvedPulls = 0;
             Cadence.Rearm();
         }
         // Disposes the shared textures and the Vulkan host's importers over them (all device-owned) and forgets both

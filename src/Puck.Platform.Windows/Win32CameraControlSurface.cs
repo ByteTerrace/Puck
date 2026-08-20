@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Runtime.Versioning;
+using WinRT;
 
 namespace Puck.Platform.Windows;
 
@@ -25,9 +26,9 @@ internal sealed unsafe class Win32CameraControlSurface(object mediaSource) : ICa
     private const uint KsPropertyTypeSet = 0x00000002;
     private const uint KsPropertyTypeTopology = 0x10000000;
 
-    private readonly IAMVideoProcAmp? m_amp = (mediaSource as IAMVideoProcAmp);
-    private readonly IAMCameraControl? m_camera = (mediaSource as IAMCameraControl);
-    private readonly IKsControl? m_ksControl = (mediaSource as IKsControl);
+    private readonly IAMVideoProcAmp? m_amp = QueryInterface<IAMVideoProcAmp>(source: mediaSource);
+    private readonly IAMCameraControl? m_camera = QueryInterface<IAMCameraControl>(source: mediaSource);
+    private readonly IKsControl? m_ksControl = QueryInterface<IKsControl>(source: mediaSource);
 
     // The vendor XU's topology node id, discovered once by sweeping BASICSUPPORT on the FOV selector (node 6 on the
     // BRIO; devices differ): null = not yet probed, -1 = no Logitech video XU on this device.
@@ -236,13 +237,15 @@ internal sealed unsafe class Win32CameraControlSurface(object mediaSource) : ICa
 
         fixed (byte* propertyPointer = property)
         fixed (byte* dataPointer = data) {
-            return (ksControl.KsProperty(
+            var succeeded = (ksControl.KsProperty(
                 Property: ((nint)propertyPointer),
                 PropertyLength: 32,
                 PropertyData: ((nint)dataPointer),
                 DataLength: ((uint)data.Length),
-                BytesReturned: out _
+                BytesReturned: out var bytesReturned
             ) >= 0);
+
+            return (succeeded && (((type & KsPropertyTypeGet) == 0) || (bytesReturned >= data.Length)));
         }
     }
     // Discovers (once) which topology node carries the Logitech video XU by asking each candidate node whether it
@@ -265,6 +268,20 @@ internal sealed unsafe class Win32CameraControlSurface(object mediaSource) : ICa
         m_vendorNode = -1;
 
         return -1;
+    }
+    // A raw Media Foundation media source is an ordinary COM RCW and casts directly. A WinRT projection such as
+    // VideoDeviceController must be queried through CsWinRT's As<T>; treating it as an ordinary C# cast silently
+    // removes the entire control surface from dual-reader sessions.
+    private static T? QueryInterface<T>(object source) where T : class {
+        if (source is T direct) {
+            return direct;
+        }
+
+        try {
+            return source.As<T>();
+        } catch (Exception) {
+            return null;
+        }
     }
     // The two interfaces' own KSPROPERTY ordinals per neutral control.
     private static bool TryMap(CameraControl control, out bool isCamera, out int property) {
