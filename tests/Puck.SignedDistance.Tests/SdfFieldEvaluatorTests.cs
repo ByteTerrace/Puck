@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Numerics;
 
 using Puck.Maths;
@@ -130,13 +131,14 @@ public sealed class SdfFieldEvaluatorTests {
         );
     }
 
-    /// <summary>The ground-height bake builds one terrain rectangle and runs one ground march per cell before handing
-    /// the region to <see cref="WorldQueryBaker"/>, so the cell budget has to be measured first or the refusal costs
-    /// the whole working set it exists to prevent. The refused region below is 16000x16000 cells: if the per-cell loop
-    /// ran, the refusal would arrive a minute-plus later, after every one of those marches.</summary>
+    /// <summary>The ground-height bake allocates one height cell and runs one ground march per cell of the measured
+    /// grid, so the cell budget has to be measured first or the refusal costs the whole working set it exists to
+    /// prevent. The refused region below is 16000x16000 cells: if the per-cell loop ran, the refusal would arrive a
+    /// minute-plus later, after every one of those 256 million marches — which is what the elapsed bound pins.</summary>
     [Fact]
     public void GroundHeightBakeRefusesAnOverBudgetRegionBeforeMarchingIt() {
         var evaluator = BuildRoundedRectangleEvaluator();
+        var elapsed = Stopwatch.StartNew();
         var refusal = Assert.Throws<ArgumentException>(testCode: () => WorldQueryDriftInstrument.BakeGroundHeightArtifact(
             evaluator: evaluator,
             maxX: 2000f,
@@ -147,9 +149,15 @@ public sealed class SdfFieldEvaluatorTests {
             probeUp: 4f
         ));
 
+        elapsed.Stop();
+
         Assert.Equal(
             expected: "maxCellCount",
             actual: refusal.ParamName
+        );
+        Assert.True(
+            condition: (elapsed.Elapsed < TimeSpan.FromSeconds(value: 10.0)),
+            userMessage: $"The over-budget refusal took {elapsed.Elapsed}, long enough to have marched cells before refusing."
         );
 
         // The ceiling is now the caller's to raise, and a region inside it still bakes.
@@ -185,35 +193,94 @@ public sealed class SdfFieldEvaluatorTests {
         );
     }
 
+    /// <summary>The bake authors one float point per cell, so a region whose coordinates are coarser in
+    /// <see cref="float"/> than the baker's cell size cannot address one cell apart from the next. It is refused by
+    /// name rather than answered with an artifact whose cells silently hold a neighbour's ground or none at all — and
+    /// the refusal is reached by measuring the grid, never by walking it, so it costs no marches.</summary>
     [Fact]
-    public void GroundHeightBakeWalksLargeCoordinatesByCellIndex() {
+    public void GroundHeightBakeRefusesAGridFloatCannotAddressCellWise() {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
 
-        _ = builder.Plane(
-            normal: Vector3.UnitY,
+        // A SLOPED ground, pitched 1:4 along X and 1:2 along Z and translated out to the addressable grid's own
+        // corner, so every cell centre has a DIFFERENT ground height. A flat plane grounds every column at zero and
+        // cannot tell a walk that reached the authored cells from one that marched somewhere else entirely.
+        const float Addressable = 131_072f;
+
+        _ = builder
+            .Translate(offset: new Vector3(
+            x: Addressable,
+            y: 0f,
+            z: Addressable
+        ))
+            .Plane(
+            normal: new Vector3(
+                x: 1f,
+                y: 4f,
+                z: 2f
+            ),
             offset: 0f,
             material: material
         );
 
-        const float MinX = 8_388_608f; // 2^23: adding the baker's 0.25f cell size to this float makes no progress.
-        var artifact = WorldQueryDriftInstrument.BakeGroundHeightArtifact(
-            evaluator: new SdfFieldEvaluator(program: builder.Build()),
+        var evaluator = new SdfFieldEvaluator(program: builder.Build());
+        const float Unaddressable = 8_388_608f; // 2^23: one float step there is 1.0, four times the 0.25 cell size.
+        var refusal = Assert.Throws<ArgumentException>(testCode: () => WorldQueryDriftInstrument.BakeGroundHeightArtifact(
+            evaluator: evaluator,
             maxCellCount: 4,
-            maxX: (MinX + 1f),
+            maxX: (Unaddressable + 1f),
             maxZ: 0.25f,
-            minX: MinX,
+            minX: Unaddressable,
             minZ: 0f,
+            probeDown: 1f,
+            probeUp: 1f
+        ));
+
+        Assert.Equal(
+            expected: "maxX",
+            actual: refusal.ParamName
+        );
+
+        // The same grid shape far from the origin but still float-addressable bakes, and its cells carry the ground
+        // under their OWN centre rather than the sentinel a mis-addressed sample would leave behind. Each expected
+        // height is the slope read at that cell's centre offset from the grid corner: -(u/4 + v/2) for a centre
+        // (u, v) cell-local to the translated plane, so dropping either origin term from the walk moves every probe
+        // to a column where this plane is kilometres away and the bake answers with the sentinel instead.
+        var walk = Stopwatch.StartNew();
+        var artifact = WorldQueryDriftInstrument.BakeGroundHeightArtifact(
+            evaluator: evaluator,
+            maxCellCount: 8,
+            maxX: (Addressable + 1f),
+            maxZ: (Addressable + 0.5f),
+            minX: Addressable,
+            minZ: Addressable,
             probeDown: 1f,
             probeUp: 1f
         );
 
-        Assert.Equal(expected: 4, actual: artifact.Width);
-        Assert.Equal(expected: 1, actual: artifact.Height);
-        Assert.Equal(expected: 4, actual: artifact.HeightRaw.Length);
-        Assert.All(
-            action: height => Assert.Equal(expected: 0L, actual: height),
-            collection: artifact.HeightRaw.ToArray()
+        walk.Stop();
+
+        // The bounded-work leg: a walk that steps float bounds instead of integer cell indices does not answer
+        // wrongly, it never answers at all, and an unbounded loop appending cells reports as a stalled run.
+        Assert.True(
+            condition: (walk.Elapsed < TimeSpan.FromSeconds(value: 10.0)),
+            userMessage: $"The eight-cell bake took {walk.Elapsed}, which is not a bounded cell walk."
         );
+        Assert.Equal(expected: 4, actual: artifact.Width);
+        Assert.Equal(expected: 2, actual: artifact.Height);
+        Assert.Equal(expected: 8, actual: artifact.HeightRaw.Length);
+
+        double[] expected = [
+            -0.09375, -0.15625, -0.21875, -0.28125,
+            -0.21875, -0.28125, -0.34375, -0.40625,
+        ];
+
+        for (var cell = 0; (cell < expected.Length); cell++) {
+            Assert.Equal(
+                expected: expected[cell],
+                actual: ((double)FixedQ4816.FromRawBits(value: artifact.HeightRaw[cell])),
+                tolerance: 0.005
+            );
+        }
     }
 }

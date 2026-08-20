@@ -11,8 +11,9 @@ public enum WorldQueryConfidence {
     /// <summary>The answer is conservative rather than measured: a baked, resolution-quantized artifact (see the
     /// <c>Puck.SignedDistance.Queries</c> namespace remarks) — sign-correct and conservatively dilated, but not
     /// sub-cell-exact — or a live evaluator's march that could not complete a safe surface proof because its
-    /// representable safe advance vanished or its iteration budget ended, and resolved to the answer its verb can
-    /// survive being wrong about at the last point it reached.</summary>
+    /// representable safe advance vanished, its iteration budget ended, or it reached a point the program's own frame
+    /// cannot express, and resolved to the answer its verb can survive being wrong about at the last point it
+    /// reached.</summary>
     Bounded = 0,
     /// <summary>The answer came from a fixed-point evaluator against the live SDF program, and the march that produced
     /// it converged.</summary>
@@ -106,8 +107,9 @@ public interface IWorldQuery {
     /// <returns><see langword="true"/> when the sphere overlaps something blocked.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="radius"/> lies outside a range the provider
     /// supports, or the provider elects to refuse a <paramref name="center"/> outside its representable frame. A
-    /// provider may instead resolve such an undecidable center conservatively as occupied; it must never turn failure
-    /// to evaluate into a clear answer.</exception>
+    /// provider may instead resolve such an undecidable center conservatively as occupied. It may answer clear only
+    /// where clear is provable without evaluating there — a world carrying no geometry overlaps nothing anywhere —
+    /// never as the residue of an evaluation that failed.</exception>
     bool Overlap(FixedPosition center, FixedQ4816 radius);
     /// <summary>Finds the ground height directly beneath (or above) <paramref name="position"/>, searching from
     /// <paramref name="probeUp"/> above to <paramref name="probeDown"/> below its Y.</summary>

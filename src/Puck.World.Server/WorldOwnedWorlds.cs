@@ -5,12 +5,17 @@ using Puck.Physics.Motion;
 namespace Puck.World.Server;
 
 /// <summary>The owned world documents available as player identities.</summary>
-/// <remarks>Every id in this catalog addresses exactly one storage location, and that is an INVARIANT of the catalog
-/// — no longer a courtesy of whoever put a document in it: every id here is a <see cref="WorldSafeName"/>, so
-/// <see cref="WorldOwnedWorldFileName"/>'s mapping is INJECTIVE by construction and two distinct ids can never
-/// collapse onto one file name. The type is what makes an id unique here — two identities can no more share a file
-/// than they can share an id — enforced at the earliest door a candidate string crosses: the document's own JSON
-/// parse for an authored seed or a loaded/pulled document, or <see cref="Create"/>'s console-verb argument.</remarks>
+/// <remarks>Every id in this catalog addresses exactly one storage location, and that rests on TWO rules, not one.
+/// The character rule is carried by the type: every id here is a <see cref="WorldSafeName"/>, so
+/// <see cref="WorldOwnedWorldFileName"/> escapes nothing and distinct ids map to distinct file-name strings. The
+/// second rule is this catalog's own, because a file-name string is not a storage location: the directory is stored
+/// on a case-insensitive filesystem, so ids are unique IGNORING CASE and every comparison here that addresses the
+/// directory — the file-name match, <see cref="FindById"/>, <see cref="Create"/>'s collision guard,
+/// <see cref="ReplaceFromSync"/>'s match — is <see cref="StringComparison.OrdinalIgnoreCase"/>. A file whose
+/// name differs from its declared id only in case is therefore ADMITTED (it is the one file that id addresses) and
+/// keeps the name it already carries: a save writes through the id's spelling, which the filesystem resolves onto
+/// the existing entry without renaming it. The same case-insensitive rule is held one door earlier over an authored
+/// seed list by <c>WorldDefinitionValidator.ValidatePlayerDefaults</c>.</remarks>
 public sealed class WorldOwnedWorlds {
     /// <summary>The subdirectory an unadmittable document is moved into — a name outside this catalog's own
     /// <c>*.world.json</c> top-directory glob, exactly like the hand-placed <c>basis/</c> directory, so a disposed
@@ -23,6 +28,7 @@ public sealed class WorldOwnedWorlds {
     private readonly string m_directory;
     private readonly List<WorldOwnedWorldDisposal> m_discarded = [];
     private readonly List<WorldIdentity> m_identities;
+    private readonly List<WorldOwnedWorldRefusal> m_refused = [];
     private readonly WorldMotionDefaults m_motion;
     private readonly WorldDefinition m_template;
 
@@ -52,7 +58,7 @@ public sealed class WorldOwnedWorlds {
         ).Order(comparer: StringComparer.Ordinal).ToArray();
         var present = new HashSet<string>(
             collection: paths.Select(selector: Path.GetFileName)!,
-            comparer: StringComparer.Ordinal
+            comparer: StringComparer.OrdinalIgnoreCase
         );
 
         var unloadable = new List<(string Path, string Reason)>();
@@ -78,19 +84,23 @@ public sealed class WorldOwnedWorlds {
 
             // An owned world's file name IS its id through the one mapping every save and every cloud key derives from,
             // so a file whose name is not the one its declared id maps to is a document this catalog cannot address:
-            // its next save would land on the OTHER name and silently replace whatever lives there. That single rule is
-            // also what makes an id unique here — two files can no more share an id than they can share a name.
+            // its next save would land on the OTHER name and silently replace whatever lives there. The comparison is
+            // case-insensitive because the filesystem's own resolution is: a name differing from the addressed one
+            // only in case IS the file that id addresses, and refusing it would wedge a catalog no save could repair.
             var fileName = Path.GetFileName(path: path);
             var addressed = WorldOwnedWorldFileName.For(id: document.Identity.Id);
 
             if (!string.Equals(
                 a: fileName,
                 b: addressed,
-                comparisonType: StringComparison.Ordinal
+                comparisonType: StringComparison.OrdinalIgnoreCase
             )) {
-                Console.Error.WriteLine(value: $"[identity] owned world refused: '{fileName}' declares id '{document.Identity.Id}', which this catalog stores as '{addressed}'{(present.Contains(item: addressed)
-                    ? $" — the file already holding that id"
-                    : " — a name it does not carry")}; an owned world's file name is its id, so rename the file or the id");
+                RefuseInPlace(
+                    fileName: fileName,
+                    reason: $"declares id '{document.Identity.Id}', which this catalog stores as '{addressed}'{(present.Contains(item: addressed)
+                        ? " — the name another file in this directory carries"
+                        : " — a name no file in this directory carries")}; an owned world's file name is its id, so rename this file to '{addressed}' (or edit its own identity id, which no console verb reaches)"
+                );
 
                 continue;
             }
@@ -106,17 +116,17 @@ public sealed class WorldOwnedWorlds {
 
         if (m_identities.Count == 0) {
             foreach (var seed in Defaults.Identities) {
-                // A seed never writes over an entry that is still there. A refusal this construction left in place,
-                // a disposal whose move failed, or a directory at the deterministic catalog path still occupies the
-                // name this seed's id maps to. Trying to save there would either destroy promised bytes or turn a
-                // recoverable obstruction into a startup exception.
+                // A seed never writes over an entry that is still there — whatever put it there. Trying to save over
+                // one would either destroy bytes a refusal promised to keep or turn a recoverable obstruction (a
+                // directory at the deterministic catalog path) into a startup exception. The probe is the
+                // filesystem's own, so it answers for the name in whatever case the entry actually carries.
                 var occupied = Path.Combine(
                     path1: directory,
                     path2: WorldOwnedWorldFileName.For(id: seed.Id)
                 );
 
                 if (File.Exists(path: occupied) || Directory.Exists(path: occupied)) {
-                    Console.Error.WriteLine(value: $"[identity] seed '{seed.Id}' skipped: '{Path.GetFileName(path: occupied)}' is already occupied in the catalog directory, and a seed never replaces an entry this boot could not admit");
+                    Console.Error.WriteLine(value: $"[identity] seed '{seed.Id}' skipped: the catalog path '{Path.GetFileName(path: occupied)}' is already occupied, and a seed never writes over an entry that is already there");
 
                     continue;
                 }
@@ -139,11 +149,11 @@ public sealed class WorldOwnedWorlds {
     /// <summary>Gets the identities, one per owned world.</summary>
     public IReadOnlyList<WorldIdentity> All => m_identities;
     /// <summary>Gets the first owned identity used before a controller preference applies.</summary>
-    /// <exception cref="InvalidOperationException">The catalog holds no identities — every file was refused and every
-    /// seed name's catalog path is occupied by an entry the catalog left in place.</exception>
+    /// <exception cref="InvalidOperationException">The catalog holds no identities — nothing in the directory was
+    /// admitted and no seed was written.</exception>
     public WorldIdentity BootProfile => ((m_identities.Count > 0)
         ? m_identities[0]
-        : throw new InvalidOperationException(message: "the owned-world catalog holds no identities — every catalog file was refused and every seed name's path is occupied by an entry the catalog could not admit; repair or remove the entries named on stderr")
+        : throw new InvalidOperationException(message: "the owned-world catalog holds no identities — nothing in the catalog directory was admitted this boot and no seed was written; whatever was refused, discarded, or skipped is named on stderr and read back by identity.list")
     );
     /// <summary>Gets the visited world's player presentation defaults.</summary>
     public WorldPlayerDefaults Defaults { get; }
@@ -155,6 +165,13 @@ public sealed class WorldOwnedWorlds {
     public IReadOnlyList<WorldOwnedWorldDisposal> Discarded => m_discarded;
     /// <summary>Gets the owned-world directory.</summary>
     public string FilePath => m_directory;
+    /// <summary>Gets the documents this catalog REFUSED IN PLACE at construction, in the order they were refused —
+    /// the ones still sitting in the catalog directory with their original bytes, either because the refusal can
+    /// answer differently on the next boot (an unreadable file, an unresolved basis link, a validation claim resting
+    /// on a neighbour) or because the file cannot be addressed as written (its name is not the one its declared id
+    /// maps to). The counterpart of <see cref="Discarded"/>:
+    /// nothing here was moved, and every entry is refused again on the next construction until it is repaired.</summary>
+    public IReadOnlyList<WorldOwnedWorldRefusal> Refused => m_refused;
     /// <summary>Gets the latest cross-document durable-state verdict, visible to both authorities.</summary>
     public WorldDocumentSubmissionReceipt? LastReceipt => m_lastReceipt;
     /// <summary>Gets the installation id used by controller state slots.</summary>
@@ -173,6 +190,11 @@ public sealed class WorldOwnedWorlds {
     /// directory with its original bytes: the seeding pass skips any id whose catalog path is occupied, so nothing
     /// writes over it, and it is refused again on the next construction.</param>
     public sealed record WorldOwnedWorldDisposal(string FileName, string Reason, string QuarantinePath, bool Moved);
+
+    /// <summary>One document this catalog refused and left exactly where it was.</summary>
+    /// <param name="FileName">The file name it carries in the catalog directory.</param>
+    /// <param name="Reason">Why it could not be admitted.</param>
+    public sealed record WorldOwnedWorldRefusal(string FileName, string Reason);
 
     /// <summary>The catalog's checkpointed state — the identities as document data plus the mutation counter.
     /// Excludes <see cref="FilePath"/> (host state — the state directory a fresh instance's own construction
@@ -449,7 +471,13 @@ public sealed class WorldOwnedWorlds {
                 path: path,
                 reason: reason
             )) {
-                retained.Add(item: (Path.GetFileName(path: path), detail));
+                var fileName = Path.GetFileName(path: path);
+
+                retained.Add(item: (fileName, detail));
+                m_refused.Add(item: new WorldOwnedWorldRefusal(
+                    FileName: fileName,
+                    Reason: detail
+                ));
 
                 continue;
             }
@@ -553,6 +581,15 @@ public sealed class WorldOwnedWorlds {
         Reason: reason,
         Submission: submission
     );
+    // The one door for "this document parses, and stays exactly where it is": names it on stderr AND records it in
+    // Refused, so a session that starts after the boot line scrolls away can still learn the file exists.
+    private void RefuseInPlace(string fileName, string reason) {
+        m_refused.Add(item: new WorldOwnedWorldRefusal(
+            FileName: fileName,
+            Reason: reason
+        ));
+        Console.Error.WriteLine(value: $"[identity] owned world refused: '{fileName}' {reason}");
+    }
     private static WorldDefinition Seed(WorldDefinition template, WorldMotionDefaults motion, WorldIdentitySeed seed) => template with {
         DocumentId = seed.Id,
         MotionRaw = motion,
@@ -617,9 +654,13 @@ public sealed class WorldOwnedWorlds {
         );
     }
 
-    /// <summary>Creates and persists one owned world. <paramref name="name"/> is a <see cref="WorldSafeName"/> — the
-    /// type already proves it addresses a file of its own, so the only thing left to refuse here is a collision: an id
-    /// this catalog already holds (<c>FindById</c>) or a display name already taken (<c>Find</c>).</summary>
+    /// <summary>Creates and persists one owned world. <paramref name="name"/> is a <see cref="WorldSafeName"/>, so
+    /// what is left to refuse here is a collision, in either of the two places one can live: an id or display name
+    /// this catalog already holds (<c>FindById</c>/<c>Find</c>, both ignoring case), or an entry occupying the id's
+    /// catalog path that this boot did not admit — a refused document, a failed disposal, or a directory. The second
+    /// check reads the directory rather than the identity list, because a boot that admitted nothing leaves the list
+    /// empty while the bytes are still on disk, and <see cref="Save(WorldIdentity)"/> would write straight over
+    /// them.</summary>
     /// <param name="name">The new world's id and display name.</param>
     /// <param name="colorHex">The avatar color.</param>
     /// <param name="reason">Why creation was refused, or empty on success.</param>
@@ -630,6 +671,16 @@ public sealed class WorldOwnedWorlds {
             (FindById(id: name) is not null)
         ) {
             reason = $"'{name}' already exists";
+            return null;
+        }
+
+        var occupied = Path.Combine(
+            path1: m_directory,
+            path2: WorldOwnedWorldFileName.For(id: name)
+        );
+
+        if (File.Exists(path: occupied) || Directory.Exists(path: occupied)) {
+            reason = $"the catalog path '{Path.GetFileName(path: occupied)}' is already occupied by an entry this boot did not admit — saving there would write over it; repair or remove it (identity.list's refused=/discarded= columns and the boot's stderr lines name it)";
             return null;
         }
         var identity = new WorldIdentity(
@@ -656,11 +707,12 @@ public sealed class WorldOwnedWorlds {
         b: name,
         comparisonType: StringComparison.OrdinalIgnoreCase
     ));
-    /// <summary>Finds an identity by owned-world id.</summary>
+    /// <summary>Finds an identity by owned-world id, ignoring case — two spellings differing only in case name one
+    /// storage location, so they name one identity.</summary>
     public WorldIdentity? FindById(string id) => m_identities.FirstOrDefault(predicate: identity => string.Equals(
         a: identity.Id,
         b: id,
-        comparisonType: StringComparison.Ordinal
+        comparisonType: StringComparison.OrdinalIgnoreCase
     ));
     /// <summary>Resolves a reconnect-stable controller from state-slot references in the owned worlds.</summary>
     public WorldIdentity? PreferredProfile(InputDeviceId device) {
@@ -742,8 +794,10 @@ public sealed class WorldOwnedWorlds {
     /// <summary>Adopts a pulled cloud copy of an owned world: replaces the in-memory identity that shares its id (or
     /// adds a new one), then persists it locally through the ordinary save path. The caller has already validated the
     /// document through the boot loader's gate — which means its id already survived <see cref="WorldSafeName"/>'s
-    /// JSON parse — so the only thing left to refuse here is a document without an identity section at all, which
-    /// cannot be an owned world.</summary>
+    /// JSON parse — so what is left to refuse here is a document without an identity section at all, and a document
+    /// whose id collides with a local id in case only. The cloud namespace is case-SENSITIVE and this catalog's
+    /// directory is not, so <c>Amber</c> and <c>amber</c> are two blobs that would adopt onto one local file:
+    /// refusing by name is what keeps a pull from replacing a world it never named.</summary>
     /// <param name="document">The validated world document to adopt.</param>
     /// <param name="reason">What happened — replaced, added, or why it was refused.</param>
     /// <returns>Whether the document was adopted.</returns>
@@ -760,10 +814,18 @@ public sealed class WorldOwnedWorlds {
         var index = m_identities.FindIndex(match: candidate => string.Equals(
             a: candidate.Id,
             b: incoming.Id,
-            comparisonType: StringComparison.Ordinal
+            comparisonType: StringComparison.OrdinalIgnoreCase
         ));
 
         if (index >= 0) {
+            if (!string.Equals(
+                a: m_identities[index].Id,
+                b: incoming.Id,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                reason = $"id '{incoming.Id}' differs from the owned world '{m_identities[index].Id}' in case only, and both address one local file — push it to the local spelling's own key, or rename its identity to '{m_identities[index].Id}'";
+                return false;
+            }
             m_identities[index] = incoming;
             reason = "replaced the local copy";
         } else {

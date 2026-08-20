@@ -507,10 +507,12 @@ and [authority.md](authority.md)).
 World/owned-world ids (`Server/WorldOwnedWorlds.cs`) and `world.instance.start`
 names are `WorldSafeName` (the same `WorldSafeName.cs`) — the reserved-character
 kernel `WorldCellName` shares, plus a bare `"."`/`".."` refusal instead of the
-dot-free rule; `WorldOwnedWorldFileName.For` takes a `WorldSafeName` and no
-longer escapes/collapses characters (the id→file-name mapping is injective by
-construction), so the collision-with-another-id checks that used to run beside
-the character check are gone — a proof, not a courtesy.
+dot-free rule; `WorldOwnedWorldFileName.For` takes a `WorldSafeName` and escapes
+nothing, so the id→file-name mapping is injective into file-name STRINGS — but
+not into storage LOCATIONS, since the catalog directory resolves names
+case-insensitively. One id names one location only under the separate
+**case-insensitive uniqueness** rule the two admitting doors hold (the seed-list
+validator and `WorldOwnedWorlds`).
 
 Worlds have no in-code definition. A boot with no `--world` override loads
 `src/Puck.World/Assets/worlds/nexus.world.json`; an explicit path or the shipped default that cannot be loaded
@@ -885,13 +887,19 @@ row: `WorldOwnedWorlds` (`Server/WorldOwnedWorlds.cs`) is the CATALOG (seats
 select identities from it; a seat's profile IS a `WorldIdentity` wrapping one
 owned document), one file per identity under the local state directory,
 named `WorldOwnedWorldFileName.For(id)` (`"<id>.world.json"`). Every id is a
-`WorldSafeName`, which makes the id→file-name mapping INJECTIVE BY
-CONSTRUCTION — two identities can no more share a file than they can share an
-id. A loaded file whose name does not match `WorldOwnedWorldFileName.For` of
-its OWN declared identity `id` is refused by name (`[identity] owned world
-refused: …`, distinguishing "the file already holding that id" from "a name
-it does not carry") rather than silently renamed or merged — that document
-parses, so it stays where it is and the refusal names the remedy.
+`WorldSafeName`, so the mapping escapes nothing and is injective into file-name
+STRINGS — but a string is not a storage location, and the catalog directory
+resolves names case-insensitively, so **ids are unique IGNORING CASE**. That is
+the rule the seed-list validator holds (a case-variant pair refuses at
+validation) and the rule every id comparison in the catalog holds
+(`FindById`, `Create`'s collision guard, `ReplaceFromSync`'s match, and the
+file-name check). A loaded file whose name does not match
+`WorldOwnedWorldFileName.For` of its OWN declared identity `id` — ignoring case,
+so a case-only rename of a catalog file is ADMITTED and keeps the name it
+carries — is refused by name (`[identity] owned world refused: …`,
+distinguishing "the name another file in this directory carries" from "a name
+no file in this directory carries") rather than silently renamed or merged —
+that document parses, so it stays where it is and the refusal names the remedy.
 
 A document the loader refuses is handled by the CLASS of the refusal, and no
 refusal is ever a hard boot failure. Only a verdict on the BYTES — the
@@ -922,14 +930,19 @@ an ordinal suffix rather than overwriting the earlier copy, and the seeding
 pass SKIPS any seed id whose catalog path still holds a file or directory — so
 a disposal whose move failed, or a document left in place, keeps its authored
 bytes for the next boot instead of being replaced by a fresh default, and a
-directory occupying a deterministic file name cannot crash startup. Read back with
-`WorldOwnedWorlds.Discarded` (disposals only) and `identity.list`'s
-`discarded=` column; the moved bytes stay readable under `unloadable/`.
+directory occupying a deterministic file name cannot crash startup.
+`identity.create` refuses an id whose catalog path is occupied for the same
+reason, reading the DIRECTORY rather than the identity list — a boot that
+admitted nothing leaves that list empty while the bytes are still on disk. Read
+back with `WorldOwnedWorlds.Discarded` + `identity.list`'s `discarded=` column
+(disposals — the moved bytes stay readable under `unloadable/`) and
+`WorldOwnedWorlds.Refused` + `identity.list`'s `refused=` column (everything
+left in place, whatever the class).
 
 **Seeding.** When the identity directory holds zero admitted documents,
 `WorldOwnedWorlds` seeds one owned world per `playerDefaults.identities` row
-(`WorldIdentitySeed(Id, Name, Color)`, validated non-empty, ordinally unique
-ids, case-insensitive unique names, hex color — `ValidatePlayerDefaults` in
+(`WorldIdentitySeed(Id, Name, Color)`, validated non-empty, ids and names both
+unique ignoring case, hex color — `ValidatePlayerDefaults` in
 `WorldDefinitionValidator.cs`) and persists each immediately.
 
 **`WorldIdentity`** (`Puck.World.Schema/WorldIdentity.cs`) is the runtime

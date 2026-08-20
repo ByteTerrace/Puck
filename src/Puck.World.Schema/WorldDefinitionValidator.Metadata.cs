@@ -921,13 +921,12 @@ public static partial class WorldDefinitionValidator {
         );
 
         if (defaults.Identities is { Count: > 0 }) {
-            var ids = new HashSet<string>(comparer: StringComparer.Ordinal);
+            var ids = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
             var names = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
-            // Each seed becomes an owned-world DOCUMENT ON DISK, stored under WorldOwnedWorldFileName's id→file-name
-            // mapping. profile.Id is a WorldSafeName — it CANNOT hold a value that mapping would refuse — so the only
-            // thing left to check here is ORDINAL UNIQUENESS: distinct safe ids always address distinct files (the
-            // mapping is injective over WorldSafeName), so no separate "does it survive the mapping" check can ever
-            // fire once the id has already been through document parse.
+            // Each seed becomes an owned-world document on disk under WorldOwnedWorldFileName's id→file-name mapping,
+            // and that mapping is injective into file-name STRINGS, not into storage locations: NTFS and default APFS
+            // resolve a name case-insensitively, so 'Amber' and 'amber' address one file. Ids are therefore unique
+            // IGNORING CASE here, the same rule Server.WorldOwnedWorlds holds over the directory itself.
             for (var index = 0; (index < defaults.Identities.Count); index++) {
                 var profile = defaults.Identities[index];
                 var path = $"playerDefaults.identities[{index}]";
@@ -938,7 +937,7 @@ public static partial class WorldDefinitionValidator {
                 }
 
                 if (!ids.Add(item: profile.Id)) {
-                    errors.Add(item: $"{path}.id '{profile.Id}' is duplicated.");
+                    errors.Add(item: $"{path}.id '{profile.Id}' is duplicated — owned-world ids are unique ignoring case, since each addresses one '{WorldOwnedWorldFileName.For(id: profile.Id)}' file.");
                 }
 
                 if (

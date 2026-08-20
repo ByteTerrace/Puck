@@ -85,6 +85,10 @@ public static class WorldQueryDriftInstrument {
     /// catches a divergence in the query plumbing — <see cref="WorldQueryBaker"/>'s grid indexing/quantization or
     /// <see cref="BakedWorldQuery"/>'s cell lookup disagreeing with the live evaluator for the same underlying
     /// geometry.</summary>
+    /// <remarks>The sampled heights are handed to <see cref="WorldQueryBaker.Bake(float, float, float, float, IEnumerable{WorldQueryTerrainInput}, IEnumerable{WorldQueryBlockerInput}, int)"/>
+    /// as one authored terrain rectangle per sampled cell, so the artifact's cell indexing and height quantization are
+    /// the baker's own and the comparison this feeds tests plumbing the caller did not write. One rectangle per cell
+    /// costs the working set the <paramref name="maxCellCount"/> refusal exists to bound.</remarks>
     /// <param name="evaluator">The evaluator to sample.</param>
     /// <param name="minX">The grid's minimum X bound.</param>
     /// <param name="minZ">The grid's minimum Z bound.</param>
@@ -97,34 +101,45 @@ public static class WorldQueryDriftInstrument {
     /// <returns>The baked artifact.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="evaluator"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="maxCellCount"/> is not positive.</exception>
-    /// <exception cref="ArgumentException">A grid bound is invalid, or the region holds more than
-    /// <paramref name="maxCellCount"/> cells.</exception>
+    /// <exception cref="ArgumentException">A grid bound is invalid, the region holds more than
+    /// <paramref name="maxCellCount"/> cells, or its coordinates are large enough that <see cref="float"/> cannot
+    /// address one cell apart from the next.</exception>
     public static WorldQueryArtifact BakeGroundHeightArtifact(SdfFieldEvaluator evaluator, float minX, float minZ, float maxX, float maxZ, float probeUp, float probeDown, int maxCellCount = WorldQueryBaker.DefaultMaxCellCount) {
         ArgumentNullException.ThrowIfNull(argument: evaluator);
 
-        // Measure first, then walk integer cell indices. Incrementing authored float bounds by CellSize can stop
-        // making progress once their ULP exceeds 0.25 (a valid grid around 2^23 is enough), hanging this diagnostic.
-        // The baker's quantized grid is the contract, so derive every center from its raw origin and index.
-        var (originXRaw, originZRaw, width, height, cellCount) = WorldQueryBaker.MeasureGrid(
+        // Measure first, then walk integer cell indices, then bake through the baker. Measuring first keeps an
+        // over-budget region from paying one ground march per cell before the refusal; walking by index keeps the walk
+        // making progress (incrementing an authored float bound by CellSize stalls once its ULP reaches 0.5, and a
+        // valid grid around 2^23 is enough); baking through Bake keeps the write-side cell index the baker's own.
+        var (originXRaw, originZRaw, cellSizeRaw, width, height, cellCount) = WorldQueryBaker.MeasureGrid(
             maxCellCount: maxCellCount,
             maxX: maxX,
             maxZ: maxZ,
             minX: minX,
             minZ: minZ
         );
+
+        RequireFloatAddressableCells(
+            cellCount: width,
+            cellSizeRaw: cellSizeRaw,
+            originRaw: originXRaw,
+            paramName: nameof(maxX)
+        );
+        RequireFloatAddressableCells(
+            cellCount: height,
+            cellSizeRaw: cellSizeRaw,
+            originRaw: originZRaw,
+            paramName: nameof(maxZ)
+        );
+
         var up = FixedQ4816.FromDouble(value: probeUp);
         var down = FixedQ4816.FromDouble(value: probeDown);
-        var heightRaw = new long[cellCount];
-        var cellSizeRaw = FixedQ4816.FromDouble(value: WorldQueryBaker.CellSize).Value;
         var halfCellRaw = (cellSizeRaw >> 1);
-
-        Array.Fill(
-            array: heightRaw,
-            value: WorldQueryArtifact.NoHeightSentinel
-        );
+        var terrain = new List<WorldQueryTerrainInput>(capacity: cellCount);
 
         for (var row = 0; (row < height); row++) {
             var cellCenterZRaw = ((long)(((Int128)originZRaw) + (((Int128)row) * cellSizeRaw) + halfCellRaw));
+            var cellCenterZ = ((float)((double)FixedQ4816.FromRawBits(value: cellCenterZRaw)));
 
             for (var column = 0; (column < width); column++) {
                 var cellCenterXRaw = ((long)(((Int128)originXRaw) + (((Int128)column) * cellSizeRaw) + halfCellRaw));
@@ -143,19 +158,52 @@ public static class WorldQueryDriftInstrument {
                     continue; // no surface under this cell — leave it un-authored (WorldQueryArtifact.NoHeightSentinel)
                 }
 
-                heightRaw[(row * width) + column] = groundY.Value;
+                // A rectangle degenerate at the cell's own center, not one spanning the cell's edges: an edge sits on
+                // the boundary the baker's floor/ceil split, so one float rounding there claims the neighbouring cell,
+                // while a center is half a cell from either boundary and the refusal above keeps the rounding under
+                // that margin.
+                var cellCenterX = ((float)((double)FixedQ4816.FromRawBits(value: cellCenterXRaw)));
+
+                terrain.Add(item: new WorldQueryTerrainInput(
+                    MaxX: cellCenterX,
+                    MaxZ: cellCenterZ,
+                    MinX: cellCenterX,
+                    MinZ: cellCenterZ,
+                    TopY: ((float)((double)groundY))
+                ));
             }
         }
 
-        return WorldQueryArtifact.CreateOwned(
-            blocked: [],
-            cellSizeRaw: cellSizeRaw,
-            height: height,
-            heightRaw: heightRaw,
-            originXRaw: originXRaw,
-            originZRaw: originZRaw,
-            width: width
+        return WorldQueryBaker.Bake(
+            blockers: [],
+            maxCellCount: maxCellCount,
+            maxX: maxX,
+            maxZ: maxZ,
+            minX: minX,
+            minZ: minZ,
+            terrain: terrain
         );
+    }
+    // Each cell is authored to the baker as a float point inside it, so the float grid has to resolve one cell from
+    // the next: once a coordinate's ULP reaches the cell size, that point rounds onto or across its own cell boundary
+    // and the bake marks a neighbour or nothing at all. Refused rather than answered with an artifact that silently
+    // disagrees with the evaluator it was sampled from.
+    private static void RequireFloatAddressableCells(long originRaw, long cellSizeRaw, int cellCount, string paramName) {
+        var cellSize = ((double)FixedQ4816.FromRawBits(value: cellSizeRaw));
+        var origin = ((double)FixedQ4816.FromRawBits(value: originRaw));
+        var farEdge = (origin + (cellCount * cellSize));
+        var magnitude = ((float)double.Max(
+            x: double.Abs(value: origin),
+            y: double.Abs(value: farEdge)
+        ));
+        var ulp = (MathF.BitIncrement(x: magnitude) - magnitude);
+
+        if (((double)ulp) >= cellSize) {
+            throw new ArgumentException(
+                message: $"The grid reaches coordinate {magnitude}, where one float step is {ulp} — at or above the {cellSize} cell size, so a per-cell sample cannot address its own cell.",
+                paramName: paramName
+            );
+        }
     }
     /// <summary>Runs the drift comparison over <paramref name="points"/>: excludes anything inside
     /// <paramref name="epsilonShell"/> of the evaluator's own zero set, then compares the sign each remaining point
@@ -167,9 +215,8 @@ public static class WorldQueryDriftInstrument {
     /// <param name="epsilonShell">The exclusion half-width (see the type remarks).</param>
     /// <param name="gpuInsideOrNear">Resolves whether the GPU channel classifies a point as "inside or within its own
     /// resolution floor of the surface" (<see langword="true"/>) or "outside" (<see langword="false"/>). Deriving it
-    /// from a render readback is the caller's job; no stage in the current build supplies one, so this instrument
-    /// currently has no caller.
-    /// <see langword="null"/> skips the GPU comparison entirely.</param>
+    /// from a render readback is the caller's job, and nothing in the current build renders one, so the GPU channel
+    /// has no live supplier. <see langword="null"/> skips the GPU comparison entirely.</param>
     /// <param name="baked">A baked artifact covering the same program (see <see cref="BakeGroundHeightArtifact"/>);
     /// <see langword="null"/> skips the baked comparison.</param>
     /// <param name="groundProbeUp">How far above each point's Y the baked comparison's ground probe searches.</param>

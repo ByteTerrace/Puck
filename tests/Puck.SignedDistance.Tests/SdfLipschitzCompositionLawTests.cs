@@ -311,7 +311,14 @@ public sealed class SdfLipschitzCompositionLawTests {
             expected: WorldQueryConfidence.Bounded,
             actual: hit.Confidence
         );
-        Assert.True(condition: (((double)hit.Distance) <= (trueContactTravel + 0.001)));
+        // Two-sided on purpose. The upper half is the anti-tunnelling claim: the sweep never walks past true contact.
+        // The lower half is the one a marcher that gives up can fail — a sweep that reports contact having travelled
+        // nothing at all, at the point it started from, satisfies every upper bound there is.
+        Assert.InRange(
+            actual: ((double)hit.Distance),
+            high: (trueContactTravel + 0.001),
+            low: (trueContactTravel - 0.001)
+        );
     }
 
     [Fact]

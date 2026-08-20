@@ -60,9 +60,9 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     // there a clear line to that wall" query) never reads as self-obstructing.
     private static readonly FixedQ4816 LineOfSightSkin = FixedQ4816.FromDouble(value: 0.05);
 
-    // The iteration budget at unit step scale. A non-accepted POINT advance is always > HitEpsilon * stepScale and is
-    // bounded below by one Q48.16 tick, so this budget times HitEpsilon is the distance a point march always covers
-    // before it may exhaust. m_marchIterations rescales it so that point-cast reach is invariant under the step scale.
+    // The iteration budget at unit step scale. A non-accepted point advance is at least
+    // max(floor(HitEpsilon * stepScale), one Q48.16 tick) — the divisor m_marchIterations rescales by — so this budget
+    // times HitEpsilon is the distance a point march always covers before it may exhaust, at every step scale.
     private const int BaseMarchIterations = 512;
 
     // TryFieldGradient probes by 6-tap CENTRAL DIFFERENCE — one +/- pair per world axis. Central differences are
@@ -112,10 +112,11 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
         }
     }
 
-    // StepScale is a LOWER-bound multiplier: rounding it upward would make a later advance larger than the program's
+    // StepScale is a lower-bound multiplier: rounding it upward would make a later advance larger than the program's
     // Lipschitz proof. Convert with a directed floor, not FixedQ4816.FromDouble's nearest-even policy. A positive
-    // scale below one Q48.16 tick therefore becomes zero; that is deliberately conservative — casts report Bounded,
-    // Overlap reports occupied — rather than inventing a representable scale larger than the proof permits.
+    // scale below one Q48.16 tick therefore becomes zero, authorizing no scaled advance at all: a radius cast reports
+    // Bounded at its origin, a point cast reports Bounded after March's one-tick reach, and Overlap reports occupied,
+    // rather than inventing a representable scale larger than the proof permits.
     private static FixedQ4816 ConservativeStepScale(float value) {
         const double RawOne = (1L << FixedQ4816.FractionBitCount);
 
@@ -455,10 +456,12 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     // uses of the field value, and they are NOT interchangeable:
     //   accept  — the RAW clearance (fieldDistance - radius) against HitEpsilon. The field is an OVERestimate of true
     //             distance, so a raw clearance inside the epsilon proves the surface is too.
-    //   advance — the SCALED lower bound (fieldDistance * stepScale) minus the radius. Scaling the clearance instead
-    //             ((f - r) * s) is anti-conservative for r > 0: it shrinks the radius by s as well, leaving f/L - r/L,
-    //             which exceeds the true safe advance f/L - r whenever L > 1. If that lower bound cannot support one
-    //             fixed-point step, the cast resolves conservatively instead of advancing through an unproven gap.
+    //   advance — the SCALED lower bound (fieldDistance * stepScale), floored at one fixed-point tick, minus the
+    //             radius. Scaling the clearance instead ((f - r) * s) is anti-conservative for r > 0: it shrinks the
+    //             radius by s as well, leaving f/L - r/L, which exceeds the true safe advance f/L - r whenever L > 1.
+    //             A radius cast whose scaled bound cannot clear its radius resolves conservatively instead of
+    //             advancing through an unproven gap; see the tick floor at the advance for why a point cast cannot
+    //             reach that branch.
     // Mirrors BakedWorldQuery.March's shape so the two providers read as the same family of verb despite one walking a
     // baked grid and the other a live field.
     //
@@ -522,9 +525,25 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
                 return MarchOutcome.Miss;
             }
 
-            var safeAdvance = ScaleDistanceDown(
-                distance: fieldDistance,
-                scale: m_stepScale
+            // The tick floor sits on the field, before the radius comes off, and it is what makes this stop condition
+            // subordinate to the accept arm for a point cast. The two are otherwise in different units — accept tests
+            // the raw field against HitEpsilon (raw 66), this tests the scaled field against zero — and they cross at
+            // stepScale 978/65536 (~0.0149): below it a descent stops one raw tick short of a surface the accept arm's
+            // own premise places within HitEpsilon + 1 tick, and TryGroundHeight folds that to "no ground" over every
+            // column of such a program. Floored, a point advance is at least one tick at every representable step
+            // scale, so the only non-accepting end to a point march is the iteration budget MarchIterationsFor sizes.
+            // Overstep bound: the floor bites only where the proof-backed advance is already under one tick, and one
+            // tick (2^-16 world units) is both the smallest step the format expresses and 1/66 of the band the accept
+            // arm already calls contact, so a point march passes the true surface by less than one tick and the next
+            // iteration accepts on the negative field inside. Geometry thinner than one tick is under the format.
+            // Radius casts are bit-identical: for radius >= one tick, max(floor(f*s), tick) - radius <= 0 exactly when
+            // floor(f*s) - radius <= 0, so a sweep still stops before advancing into the contact envelope.
+            var safeAdvance = FixedQ4816.Max(
+                x: ScaleDistanceDown(
+                    distance: fieldDistance,
+                    scale: m_stepScale
+                ),
+                y: FixedQ4816.Epsilon
             ) - radius;
 
             if (safeAdvance <= FixedQ4816.Zero) {
@@ -552,14 +571,16 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
             traveled: traveled
         );
     }
-    // The iteration budget that keeps a POINT cast's guaranteed pre-exhaustion reach at BaseMarchIterations *
-    // HitEpsilon however far the step scale clamps the advance. A non-accepting point iteration either advances at least
-    // max(HitEpsilon * stepScale, one Q48.16 tick), or conservatively stops once the directed product rounds to zero.
-    // The budget is that reach divided by the same floor, rounded up. The one-tick half bounds the budget on its own:
-    // no step scale can push it past about 33,554 iterations, so a pathologically clamped program cannot spin.
-    // Exactly BaseMarchIterations at stepScale 1, so a warp-free program's answers are unchanged to the bit. A radius
-    // cast has no equivalent reach guarantee: subtracting the unscaled radius can leave a positive safe advance of
-    // only one tick even when the point-cast divisor is larger. It may therefore exhaust conservatively sooner.
+    // The iteration budget that keeps a point cast's guaranteed pre-exhaustion reach at BaseMarchIterations *
+    // HitEpsilon however far the step scale clamps the advance. A non-accepting point iteration advances at least
+    // max(floor(HitEpsilon * stepScale), one Q48.16 tick), so the budget is that reach divided by the same floor,
+    // rounded up. The one-tick half bounds the budget on its own: no step scale can push it past 33,792 iterations
+    // (raw HitEpsilon 66 * BaseMarchIterations, over a one-tick divisor), so a pathologically clamped program cannot
+    // spin. Exactly BaseMarchIterations at stepScale 1, so a warp-free program's answers are unchanged to the bit.
+    // A radius cast has no equivalent reach guarantee: it stops as soon as the scaled field cannot clear the unscaled
+    // radius, which the tick floor deliberately does not lift, so it may report a bounded answer having travelled
+    // nothing at all. Across both, an exhausted answer has exactly three causes: that vanished radius clearance, this
+    // budget running out, and a marched point the program's frame cannot express.
     private static int MarchIterationsFor(FixedQ4816 stepScale) {
         var reach = (HitEpsilon * FixedQ4816.FromInteger(value: BaseMarchIterations));
         var floor = FixedQ4816.Max(
@@ -1049,21 +1070,19 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
             return m_hasShape;
         }
 
-        return (
-            (distance <= FixedQ4816.Zero) ||
-            (ScaleDistanceDown(
-                distance: distance,
-                scale: m_stepScale
-            ) <= FixedQ4816.Max(
-                x: radius,
-                y: FixedQ4816.Zero
-            ))
-        );
+        return (ScaleDistanceDown(
+            distance: distance,
+            scale: m_stepScale
+        ) <= FixedQ4816.Max(
+            x: radius,
+            y: FixedQ4816.Zero
+        ));
     }
     /// <inheritdoc/>
     /// <remarks>A march that cannot safely complete its hit-or-clear proof reports a HIT at the last marched point,
-    /// carrying <see cref="WorldQueryConfidence.Bounded"/>. This occurs when the proof-derived safe advance is below
-    /// the fixed-point progress floor, the iteration budget ends, or the march reaches a point the program's frame
+    /// carrying <see cref="WorldQueryConfidence.Bounded"/>. This occurs when the scaled field can no longer clear the
+    /// sweep radius (a radius cast only — a point march always advances by at least one fixed-point tick), when the
+    /// iteration budget ends, or when the march reaches a point the program's frame
     /// cannot express. Reporting the miss instead would let a grazing ray
     /// that never reached its obstruction claim the line was clear — the one answer a contact, visibility, or sweep
     /// consumer cannot recover from.</remarks>
@@ -1334,8 +1353,8 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     /// <inheritdoc/>
     /// <remarks>Requires a CONVERGED downward march, unlike the cast and visibility verbs. This verb's return value is
     /// a surface, not an obstruction: it has no confidence channel to mark a stand-in with, and a caller that grounds a
-    /// body onto a fabricated Y is moved to a place the world does not have. A march that cannot make another safe
-    /// fixed-point step or runs out of iterations proves nothing about what is below, so it answers
+    /// body onto a fabricated Y is moved to a place the world does not have. A descent that runs out of iterations, or
+    /// reaches a point the program's frame cannot express, proves nothing about what is below, so it answers
     /// <see langword="false"/> — "no ground within the probe range", the same answer an empty column gives.</remarks>
     public bool TryGroundHeight(FixedPosition position, FixedQ4816 probeUp, FixedQ4816 probeDown, out FixedQ4816 groundY) {
         groundY = FixedQ4816.Zero;
@@ -1380,8 +1399,8 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
         return true;
     }
 
-    // What a March call proved. Miss and Hit are assertions about the ray; Exhausted is the absence of one — the march
-    // lost a representable safe advance, ran out of iterations, or reached a point the program's frame cannot express,
+    // What a March call proved. Miss and Hit are assertions about the ray; Exhausted is the absence of one — a radius
+    // cast lost its scaled clearance, the iteration budget ran out, or the march reached a point the frame cannot express,
     // with the field neither accepted nor cleared, so it proves NEITHER. Every consumer folds it into whichever of the two its own contract can survive being wrong
     // about: Hit for an obstruction/contact question (Raycast/SphereCast/LineOfSight), Miss for TryGroundHeight, whose
     // true half asserts a SURFACE.

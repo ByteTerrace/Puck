@@ -68,6 +68,13 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
 
         return distance;
     }
+    // A position whose Y is an exact number of Q48.16 ticks — the fixed-point tie cases a double literal cannot name.
+    private static FixedPosition FromRawY(long raw) =>
+        FixedPosition.FromLocal(local: new FixedVector3(
+            X: FixedQ4816.Zero,
+            Y: FixedQ4816.FromRawBits(value: raw),
+            Z: FixedQ4816.Zero
+        ));
     private static FixedPosition Local(double x, double y, double z) =>
         FixedPosition.FromLocal(local: Vector(
             x: x,
@@ -500,6 +507,28 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
         ));
         Assert.Equal(expected: WorldQueryConfidence.Bounded, actual: hit.Confidence);
         Assert.Equal(expected: FixedQ4816.Zero, actual: hit.Distance);
+
+        // The control, and the reason the pin above is about the GAP rather than about sphere casts: the same sweep
+        // started ABOVE the gap advances until the scaled bound stops clearing the radius, which for f = y and a
+        // half-unit radius at step scale 1/2 is y = 1 — three units of travel, half a unit short of the true contact
+        // at y = 0.5, on the conservative side. A marcher that exhausted at every origin would report zero here too.
+        Assert.True(condition: evaluator.SphereCast(
+            dir: Down,
+            hit: out var clear,
+            maxDist: FixedQ4816.FromInteger(value: 4L),
+            origin: Local(
+                x: 0.0,
+                y: 4.0,
+                z: 0.0
+            ),
+            radius: radius
+        ));
+        Assert.Equal(expected: WorldQueryConfidence.Bounded, actual: clear.Confidence);
+        Assert.Equal(
+            expected: 3.0,
+            actual: ((double)clear.Distance),
+            tolerance: 0.002
+        );
     }
 
     [Fact]
@@ -543,6 +572,54 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
             actual: ((double)groundY),
             tolerance: 0.01
         );
+
+        // Past the crossing, which is the half of this the leg above cannot see. The accept arm tests the RAW field
+        // against HitEpsilon (raw 66) while the advance is the SCALED field; below step scale 978/65536 (~0.0149) the
+        // last advance the proof supports rounds away one tick ABOVE the accept band, and the descent stops on raw 67
+        // with the surface already inside HitEpsilon + one tick. A 67:1 disc is the first eccentricity that reaches
+        // it: 1/67 floors to raw 978, and floor(67 * 978 / 65536) is zero.
+        var edgeProgram = new SdfProgramBuilder();
+        var edgeMaterial = edgeProgram.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        _ = edgeProgram.Ellipsoid(
+            radii: new Vector3(
+                x: 67f,
+                y: 1f,
+                z: 67f
+            ),
+            material: edgeMaterial
+        );
+
+        var edge = new SdfFieldEvaluator(program: edgeProgram.Build());
+
+        Assert.True(condition: edge.TryGroundHeight(
+            groundY: out var edgeGroundY,
+            position: Local(
+                x: 0.0,
+                y: 2.0,
+                z: 0.0
+            ),
+            probeDown: FixedQ4816.FromInteger(value: 50L),
+            probeUp: FixedQ4816.FromDouble(value: 0.5)
+        ));
+        Assert.Equal(
+            expected: 1.0,
+            actual: ((double)edgeGroundY),
+            tolerance: 0.01
+        );
+
+        // The control: the same disc probed over a column its rim does not reach still answers false, so neither leg
+        // above is a verb that has been turned into a constant.
+        Assert.False(condition: edge.TryGroundHeight(
+            groundY: out _,
+            position: Local(
+                x: 200.0,
+                y: 2.0,
+                z: 0.0
+            ),
+            probeDown: FixedQ4816.FromInteger(value: 50L),
+            probeUp: FixedQ4816.FromDouble(value: 0.5)
+        ));
     }
 
     [Fact]
@@ -550,11 +627,14 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
 
+        // 1e-5 sits in [half-ULP, ULP) of Q48.16, the ONE band where the two conversion policies disagree: nearest
+        // rounds it to raw 1, a directed floor to raw 0. An eccentricity twice this large scales below half a ULP,
+        // where both policies produce zero and no fixture can tell them apart.
         _ = builder.Ellipsoid(
             radii: new Vector3(
-                x: 200_000f,
+                x: 100_000f,
                 y: 1f,
-                z: 200_000f
+                z: 100_000f
             ),
             material: material
         );
@@ -563,30 +643,111 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
 
         Assert.InRange(
             actual: program.StepScale,
-            low: float.Epsilon,
+            low: (((float)((double)FixedQ4816.Epsilon)) * 0.5f),
             high: ((float)((double)FixedQ4816.Epsilon))
         );
 
         var evaluator = new SdfFieldEvaluator(program: program);
+        // Twenty thousand units of clearance above the disc's pole. A scale rounded up to one raw tick authorizes an
+        // advance of f/65536 per iteration — three hundred metres a step out here — so the whole budget marches
+        // thousands of units on a proof that authorizes none. At the floored scale nothing is authorized at all and
+        // the march can only creep at the format's own minimum, whose total is the point-cast reach.
+        const double PointMarchReach = 0.515625; // 512 iterations * HitEpsilon, which quantizes to raw 66.
+
         var origin = Local(
             x: 0.0,
-            y: 3.0,
+            y: 20_000.0,
             z: 0.0
         );
 
-        // Rounding the positive scale up to one fixed tick would authorize motion the float proof did not. With a
-        // directed conversion the representable lower bound is zero, so the cast and overlap resolve conservatively.
         Assert.True(condition: evaluator.Raycast(
             dir: Down,
             hit: out var hit,
-            maxDist: FixedQ4816.FromInteger(value: 4L),
+            maxDist: FixedQ4816.FromInteger(value: 20_000L),
             origin: origin
         ));
         Assert.Equal(expected: WorldQueryConfidence.Bounded, actual: hit.Confidence);
-        Assert.Equal(expected: FixedQ4816.Zero, actual: hit.Distance);
+        Assert.InRange(
+            actual: ((double)hit.Distance),
+            high: PointMarchReach,
+            low: 0.0
+        );
+        // The same claim on the verb with no march in it: with no authorized scaled clearance, twenty thousand units
+        // of open sky reads as occupied rather than as a proof of separation.
         Assert.True(condition: evaluator.Overlap(
             center: origin,
             radius: FixedQ4816.Zero
+        ));
+    }
+
+    [Fact]
+    public void TheScaledClearanceFloorsRatherThanRoundingToTheNearestTick() {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        // A ground plane, whose field on the Y axis is Y to the raw bit, plus a 2:1 ellipsoid parked far below to set
+        // the analyzed step scale to exactly 1/2 without putting geometry near the probes.
+        _ = builder
+            .Plane(
+            normal: Vector3.UnitY,
+            offset: 0f,
+            material: material
+        )
+            .ResetPoint()
+            .Translate(offset: new Vector3(
+            x: 0f,
+            y: -100f,
+            z: 0f
+        ))
+            .Ellipsoid(
+            radii: new Vector3(
+                x: 2f,
+                y: 1f,
+                z: 1f
+            ),
+            material: material
+        );
+
+        var program = builder.Build();
+
+        Assert.Equal(
+            expected: 0.5f,
+            actual: program.StepScale
+        );
+
+        var evaluator = new SdfFieldEvaluator(program: program);
+        var radius = FixedQ4816.FromRawBits(value: 3L);
+        // An ODD number of raw ticks halved lands exactly between two ticks. FixedQ4816 multiplication resolves that
+        // tie to even (7/2 -> 4), which rounds a Lipschitz LOWER bound UP: the scaled clearance would then clear a
+        // three-tick radius and report open space where the proof shows none. The directed floor gives 3.
+        var tie = FromRawY(raw: 7L);
+
+        Assert.Equal(
+            expected: FixedQ4816.FromRawBits(value: 7L),
+            actual: Distance(
+                evaluator: evaluator,
+                position: tie
+            )
+        );
+        Assert.True(condition: evaluator.Overlap(
+            center: tie,
+            radius: radius
+        ));
+
+        // The control: one more tick of field halves to exactly 4 with no tie to resolve, and four ticks of proven
+        // clearance really is clear of a three-tick sphere. The verb is not wired to answer occupied.
+        var exact = FromRawY(raw: 8L);
+
+        Assert.Equal(
+            expected: FixedQ4816.FromRawBits(value: 8L),
+            actual: Distance(
+                evaluator: evaluator,
+                position: exact
+            )
+        );
+        Assert.False(condition: evaluator.Overlap(
+            center: exact,
+            radius: radius
         ));
     }
 

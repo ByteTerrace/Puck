@@ -104,8 +104,9 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
             context: context,
             tokens: 5
         );
-    // discarded= is the boot-time disposal's read-back: a document the catalog could not admit was moved out of the
-    // directory once, and this is the only surface that still names it after the boot line has scrolled away.
+    // discarded=/refused= are the boot-time sweep's read-back, and this is the only surface that still names either
+    // after the boot lines have scrolled away: discarded= names what was moved out of the directory once, refused=
+    // what is still sitting there with its original bytes and will be refused again on the next boot.
     private string Describe() => $"[identity.list: {string.Join(
         separator: ", ",
         values: m_worlds.All.Select(selector: identity => $"{identity.Id}:{identity.Name}:{identity.ColorHex}")
@@ -114,6 +115,12 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
         : $"{m_worlds.Discarded.Count}:{string.Join(
             separator: ",",
             values: m_worlds.Discarded.Select(selector: entry => entry.FileName)
+        )}"
+    )} refused={((m_worlds.Refused.Count == 0)
+        ? "none"
+        : $"{m_worlds.Refused.Count}:{string.Join(
+            separator: ",",
+            values: m_worlds.Refused.Select(selector: entry => entry.FileName)
         )}"
     )}]";
     // identity.hud's read-back half: identity.show already reports every other identity-owned setting as one
@@ -381,7 +388,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
         yield return CommandDefinition.Verb(
             bindability: CommandBindability.Unbindable,
             name: "identity.list",
-            description: "Lists owned identity worlds, their paths, and any documents this catalog discarded at boot.",
+            description: "Lists owned identity worlds, their paths, any documents this catalog discarded at boot (moved into unloadable/), and any it refused in place (still in the catalog directory with their original bytes).",
             valueKind: CommandValueKind.Digital,
             handler: _ => new CommandResult(Output: Describe())
         );

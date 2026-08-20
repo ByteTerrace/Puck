@@ -76,6 +76,14 @@ public sealed class OwnedWorldDisposalLawTests {
         path: path,
         share: FileShare.None
     );
+    // Readable but not movable: File.ReadAllBytes shares this handle, while File.Move's own DELETE access does not —
+    // the one way to reach the disposal's move arm with a refusal the loader has already JUDGED on the bytes.
+    private static FileStream Pin(string path) => new(
+        access: FileAccess.Read,
+        mode: FileMode.Open,
+        path: path,
+        share: FileShare.Read
+    );
     // The owner-observed shape: an unmapped member inside a WorldCameraProgram, which the strict parse refuses by
     // name before the document ever reaches a validator. Reaching the seat rig through the model's own member names
     // keeps this fixture from degrading into "a document with an extra root key" if views ever loses that member.
@@ -280,7 +288,8 @@ public sealed class OwnedWorldDisposalLawTests {
     }
     /// <summary>A directory can occupy a deterministic seed path without appearing in the catalog's file glob. The
     /// seed pass preserves that entry and returns an empty catalog instead of throwing while trying to save through
-    /// it; the operator-facing BootProfile door then gives the catalog's explicit empty-state refusal.</summary>
+    /// it; <see cref="WorldOwnedWorlds.BootProfile"/>'s own contract then refuses the empty catalog by name rather
+    /// than handing back a null identity.</summary>
     [Fact]
     public void DirectoryAtSeedPath_IsPreservedAndDoesNotCrashConstruction() {
         using var dir = new TempWorldDirectory();
@@ -393,6 +402,112 @@ public sealed class OwnedWorldDisposalLawTests {
         foreach (var (path, bytes) in before) {
             Assert.Equal(expected: bytes, actual: File.ReadAllBytes(path: path));
         }
+    }
+    /// <summary>DENIAL: when <c>File.Move</c> itself fails, BOTH copies survive — the source keeps its bytes in the
+    /// catalog directory, and the earlier quarantined copy of the same catalog name keeps its own. The move is
+    /// attempted with <c>overwrite: false</c> onto a destination the suffix walk chose, so a failed move can never
+    /// leave a half-written or clobbered copy behind: the destination it chose stays absent.</summary>
+    [Fact]
+    public void FailingFileMove_LeavesTheSourceBytes_AndTheEarlierQuarantinedCopy() {
+        using var dir = new TempWorldDirectory();
+        var target = Populate(dir: dir)[0];
+
+        RetireCameraProgram(path: target);
+
+        var firstBytes = File.ReadAllBytes(path: target);
+        var first = Assert.Single(collection: Open(dir: dir).Discarded);
+
+        Assert.True(condition: first.Moved, userMessage: first.Reason);
+
+        File.WriteAllText(
+            contents: "{ this is not a document either",
+            path: target
+        );
+
+        var secondBytes = File.ReadAllBytes(path: target);
+        WorldOwnedWorlds swept;
+
+        using (var pinned = Pin(path: target)) {
+            swept = Open(dir: dir);
+        }
+
+        var second = Assert.Single(collection: swept.Discarded);
+
+        Assert.False(condition: second.Moved, userMessage: second.Reason);
+        Assert.Contains(
+            actualString: second.Reason,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "it could not be moved aside"
+        );
+        Assert.NotEqual(expected: first.QuarantinePath, actual: second.QuarantinePath);
+        Assert.False(condition: File.Exists(path: second.QuarantinePath), userMessage: second.QuarantinePath);
+        Assert.Equal(expected: secondBytes, actual: File.ReadAllBytes(path: target));
+        Assert.Equal(expected: firstBytes, actual: File.ReadAllBytes(path: first.QuarantinePath));
+    }
+    /// <summary>CONTROL for the denial above: the SAME second document, with nothing holding it open, IS moved to the
+    /// destination the suffix walk chose — so the retention proved above rests on the move failing, not on the
+    /// disposal being inert whenever a quarantined copy of that name already exists.</summary>
+    [Fact]
+    public void MovableSecondCopy_IsQuarantinedBesideTheFirst() {
+        using var dir = new TempWorldDirectory();
+        var target = Populate(dir: dir)[0];
+
+        RetireCameraProgram(path: target);
+
+        var first = Assert.Single(collection: Open(dir: dir).Discarded);
+
+        Assert.True(condition: first.Moved, userMessage: first.Reason);
+
+        File.WriteAllText(
+            contents: "{ this is not a document either",
+            path: target
+        );
+
+        var secondBytes = File.ReadAllBytes(path: target);
+        var second = Assert.Single(collection: Open(dir: dir).Discarded);
+
+        Assert.True(condition: second.Moved, userMessage: second.Reason);
+        Assert.False(condition: File.Exists(path: target));
+        Assert.Equal(expected: secondBytes, actual: File.ReadAllBytes(path: second.QuarantinePath));
+    }
+    /// <summary>READ-BACK: a document refused IN PLACE is not only narrated on stderr — it is carried on
+    /// <see cref="WorldOwnedWorlds.Refused"/>, naming the file that is still sitting in the catalog directory, so a
+    /// session that starts after the boot line scrolls away can still learn it exists. It is never
+    /// <see cref="WorldOwnedWorlds.Discarded"/>: nothing was moved.</summary>
+    [Fact]
+    public void RefusedInPlaceDocument_IsReadBackOnRefused_NotOnDiscarded() {
+        using var dir = new TempWorldDirectory();
+        var files = Populate(dir: dir);
+        var target = files[0];
+        WorldOwnedWorlds swept;
+
+        using (var handle = Lock(path: target)) {
+            swept = Open(dir: dir);
+        }
+
+        var refused = Assert.Single(collection: swept.Refused);
+
+        Assert.Equal(expected: Path.GetFileName(path: target), actual: refused.FileName);
+        Assert.Empty(collection: swept.Discarded);
+        Assert.DoesNotContain(
+            actualString: refused.Reason,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: dir.RootPath
+        );
+    }
+    /// <summary>CONTROL for the read-back above: the documents that load carry no refusal at all, so the list is a
+    /// verdict on what happened rather than a running inventory of the directory.</summary>
+    [Fact]
+    public void AdmittedDocuments_LeaveTheRefusedListEmpty() {
+        using var dir = new TempWorldDirectory();
+
+        _ = Populate(dir: dir);
+
+        var reopened = Open(dir: dir);
+
+        Assert.Empty(collection: reopened.Refused);
+        Assert.Empty(collection: reopened.Discarded);
+        Assert.NotEmpty(collection: reopened.All);
     }
     /// <summary>The refusal line is grouped by reason and names files, never paths: several documents failing the
     /// same way share ONE group, and the player's state directory never reaches the console through a reason.</summary>

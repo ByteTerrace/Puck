@@ -33,10 +33,13 @@ public enum WorldSyncWriteOutcome {
 /// boots. A fresh session therefore reports dirty until its first fully successful whole-catalog push or pull, which
 /// errs on the side that prompts a sync rather than the side that fakes one. Per-world detail lines are the truth;
 /// the cursor is the catalog-level approximation.
-/// <para>One blob name per world id means the id must name the blob unambiguously, and
-/// <see cref="WorldOwnedWorldFileName"/> is lossy (every reserved character collapses to <c>'_'</c>), so an id
-/// that does not survive it — or that escapes onto a name another catalog id already claims — is refused by name at
-/// both push and pull rather than quietly sharing a stranger's key. A whole-catalog <see cref="Pull"/> also discovers
+/// <para>One blob name per world id means the id must name the blob unambiguously. <see cref="WorldOwnedWorldFileName"/>
+/// escapes nothing, so the whole of that rule is <see cref="WorldSafeName"/>: an id that does not parse as one is
+/// refused by name at both push and pull (<c>KeyRefusal</c>) rather than quietly sharing a stranger's key, and two
+/// parsed ids can never collide on one cloud key, whose namespace is case-SENSITIVE. The LOCAL catalog's directory is
+/// not, which is the one asymmetry this engine carries: two cloud keys differing only in case adopt onto one local
+/// file, so <see cref="WorldOwnedWorlds.ReplaceFromSync"/> refuses that adoption by name.
+/// A whole-catalog <see cref="Pull"/> also discovers
 /// cloud-only worlds by listing the <c>puck/worlds/</c> namespace and inverting that same mapping; a listed name the
 /// mapping could never have emitted belongs to no reachable id and is refused by name too, so an operator learns the
 /// object exists instead of watching it vanish.</para>
@@ -44,8 +47,9 @@ public enum WorldSyncWriteOutcome {
 /// own identity <c>id</c> is not that id: adopting it would key the document under one name and the version token
 /// under another, overwriting whichever local world the document happens to name and leaving the adopted copy
 /// unpushable. Adoption keys the document under its own identity <c>id</c> and runs only <see cref="WorldOwnedWorlds.ReplaceFromSync"/>'s
-/// save-side rule — it replaces the same-id entry or adds a new one, refusing merely a document with no identity
-/// section, and does not apply <see cref="WorldOwnedWorlds.Create"/>'s display-name-collision check.</para>
+/// save-side rules — it replaces the same-id entry or adds a new one, refusing a document with no identity section
+/// and one whose id collides with a local id in case only, and does not apply <see cref="WorldOwnedWorlds.Create"/>'s
+/// display-name-collision check.</para>
 /// <para>Operations block the console pump — and with it the frame loop it drains on — for up to 15 seconds PER
 /// BLOB touched, never once per call: a <see cref="Push"/> or <see cref="Pull"/> of an N-link chain touches N blobs,
 /// each under its own 15-second budget, and <see cref="WorldStorageNeighbourResolver.Resolve"/> reads a root (15s)
@@ -255,8 +259,10 @@ public sealed class WorldOwnedWorldSync {
     /// character) exactly like every other door in this family — the id arrives here untyped (a console-verb
     /// argument, a sidecar-tracked key, or a candidate <see cref="DiscoverCloudIds"/> extracted from a cloud blob
     /// name), so this is the one place left that still validates rather than trusts. Once parsed, two distinct safe
-    /// ids can never collide on one cloud key — <see cref="WorldOwnedWorldFileName"/>'s mapping is injective over
-    /// <see cref="WorldSafeName"/> — so there is no separate "shares a key with a stranger" check left to run.</summary>
+    /// ids can never collide on one cloud key — <see cref="WorldOwnedWorldFileName"/> escapes nothing and the object
+    /// namespace is case-sensitive — so there is no separate "shares a key with a stranger" check left to run here.
+    /// The local catalog's own case-insensitive uniqueness rule is held where the document lands, in
+    /// <see cref="WorldOwnedWorlds.ReplaceFromSync"/>.</summary>
     private static string? KeyRefusal(string id, out WorldSafeName safe) {
         if (!WorldSafeName.TryParse(
             candidate: id,

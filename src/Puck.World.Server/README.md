@@ -483,8 +483,11 @@ is already taken takes an ordinal suffix rather than overwriting the earlier
 copy, and the seeding pass that fills an emptied catalog from
 `playerDefaults.identities` skips any id whose catalog path is occupied by a
 file or directory, so a document left behind keeps its bytes and a stray
-directory cannot crash startup. `WorldOwnedWorlds.Discarded` and
-`identity.list`'s `discarded=` column are the read-back for the disposals. The
+directory cannot crash startup, and `identity.create` refuses an id whose catalog
+path is occupied for the same reason. `WorldOwnedWorlds.Discarded` and
+`identity.list`'s `discarded=` column are the read-back for the disposals;
+`WorldOwnedWorlds.Refused` and `identity.list`'s `refused=` column are the
+read-back for the documents left in place. The
 machine-local installation id stays separate in `machine.id`; controller
 recognition is stored through named text state rows in the owned world.
 `--user-id` and `--state-dir` still resolve who is playing and where those
@@ -533,18 +536,21 @@ for something no account layout has, and an emulator that has been laid out to
 match the edge's view will pass while production 404s.
 
 `WorldOwnedWorldFileName` (in `Puck.World.Schema`, because the earliest door that
-has to enforce it is document validation) is the id↔file/blob-name mapping, and
-it is lossy — reserved characters collapse to `_` — so it only names a location
-unambiguously for an id `IsSafe` accepts. Its escaped set is fixed rather than
-`Path.GetInvalidFileNameChars()`, so two machines on different operating systems
-agree on the name an id maps to. An id that does not survive the mapping, or that
-escapes onto a name another catalog id already claims, is refused BY NAME at
-every door: the document's authored `playerDefaults.identities` seeds (refused by
-`WorldDefinitionValidator`, so a colliding pair never reaches disk),
-`identity.create`, the directory load (a file whose name is not the one its
-declared id maps to is refused, which is also what makes an id unique in the
-catalog — two files can no more share an id than share a name), adoption from a
-pull, and push. A pull additionally refuses a cloud document whose own
+has to enforce it is document validation) is the id↔file/blob-name mapping. It
+escapes nothing: it takes a `WorldSafeName`, whose fixed reserved-character set
+(rather than `Path.GetInvalidFileNameChars()`) is what makes two machines on
+different operating systems agree on the name an id maps to. That makes the
+mapping injective into file-name STRINGS, which is not the same as into storage
+LOCATIONS — the local catalog directory resolves names case-insensitively, while
+the cloud object namespace is case-sensitive — so one id names one location only
+under a **case-insensitive** uniqueness rule, held at every door: the document's
+authored `playerDefaults.identities` seeds (refused by
+`WorldDefinitionValidator`, so a case-variant pair never reaches disk),
+`identity.create`, and adoption from a pull. The directory load holds the same
+rule from the other side: a file whose name is not the one its declared id maps
+to — ignoring case, because the filesystem's own resolution ignores it — is
+refused and left where it is, so a case-only rename of a catalog file is
+admitted rather than wedging the catalog. A pull additionally refuses a cloud document whose own
 `identity.id` is not the id whose key was read, since adopting it would file the
 document under one name and its version token under another; a listed cloud name
 the mapping could never emit belongs to no reachable id and refuses by name in

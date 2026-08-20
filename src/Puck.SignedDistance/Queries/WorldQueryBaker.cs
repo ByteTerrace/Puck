@@ -238,8 +238,9 @@ public static class WorldQueryBaker {
     // The whole grid derivation one bake performs before it allocates anything: quantize the four bounds, refuse an
     // inverted or uncarryable one, count the cells, and refuse a count above the caller's budget. Split out so a
     // caller that builds a per-cell working set BEFORE calling Bake can run the same refusal first, against the same
-    // arithmetic, instead of duplicating the formula (see MeasureCellCount).
-    internal static (long OriginXRaw, long OriginZRaw, int Width, int Height, int CellCount) MeasureGrid(float minX, float minZ, float maxX, float maxZ, int maxCellCount) {
+    // arithmetic, instead of duplicating the formula, and read the grid that bake will produce — origin, dimensions,
+    // and the cell size the artifact carries — from this one return instead of re-deriving any of it.
+    internal static (long OriginXRaw, long OriginZRaw, long CellSizeRaw, int Width, int Height, int CellCount) MeasureGrid(float minX, float minZ, float maxX, float maxZ, int maxCellCount) {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(
             paramName: nameof(maxCellCount),
             value: maxCellCount
@@ -302,59 +303,12 @@ public static class WorldQueryBaker {
             );
         }
 
-        RequireRepresentableFarEdge(
-            axis: "X",
-            cellCount: width,
-            cellSizeRaw: CellSizeRaw,
-            originRaw: originXRaw,
-            paramName: nameof(maxX)
-        );
-        RequireRepresentableFarEdge(
-            axis: "Z",
-            cellCount: height,
-            cellSizeRaw: CellSizeRaw,
-            originRaw: originZRaw,
-            paramName: nameof(maxZ)
-        );
-
-        return (originXRaw, originZRaw, width, height, ((int)cellCountLong));
+        // The far edge a grid this wide reaches is checked by WorldQueryArtifact, whose construction takes an
+        // arbitrary origin and cell size. It cannot leave signed Q48.16 from here: QuantizeBound already refuses a
+        // saturating bound, the largest non-saturating float leaves 2^39 raw ticks of headroom, and rounding the far
+        // edge outward adds at most CellSizeRaw - 1.
+        return (originXRaw, originZRaw, CellSizeRaw, width, height, ((int)cellCountLong));
     }
-    private static void RequireRepresentableFarEdge(string axis, long originRaw, long cellSizeRaw, int cellCount, string paramName) {
-        var farEdge = (((Int128)originRaw) + (((Int128)cellCount) * cellSizeRaw));
-
-        if (
-            (farEdge < long.MinValue) ||
-            (farEdge > long.MaxValue)
-        ) {
-            throw new ArgumentException(
-                message: $"The {axis} axis starts at raw coordinate {originRaw} and spans {cellCount} cells of {cellSizeRaw}, placing its outward-rounded far edge at {farEdge}, outside signed Q48.16.",
-                paramName: paramName
-            );
-        }
-    }
-
-    /// <summary>Returns the number of cells a bake over <c>[minX,maxX] x [minZ,maxZ]</c> would allocate, applying the
-    /// same refusals <see cref="Bake(float, float, float, float, IEnumerable{WorldQueryTerrainInput}, IEnumerable{WorldQueryBlockerInput}, int)"/>
-    /// applies and nothing else. A caller that assembles a per-cell working set before baking runs this first, so an
-    /// over-budget region is refused before that set is built rather than after.</summary>
-    /// <param name="minX">The grid's minimum X bound (world units).</param>
-    /// <param name="minZ">The grid's minimum Z bound.</param>
-    /// <param name="maxX">The grid's maximum X bound.</param>
-    /// <param name="maxZ">The grid's maximum Z bound.</param>
-    /// <param name="maxCellCount">The maximum number of cells the bake may allocate; must be positive.</param>
-    /// <returns>The cell count the grid holds.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="maxCellCount"/> is not positive.</exception>
-    /// <exception cref="ArgumentException">A grid bound is not finite or outside the Q48.16 range; a maximum bound
-    /// lies below its minimum; the grid overflows a 32-bit cell index; or its cell count exceeds
-    /// <paramref name="maxCellCount"/>.</exception>
-    public static int MeasureCellCount(float minX, float minZ, float maxX, float maxZ, int maxCellCount) =>
-        MeasureGrid(
-            maxCellCount: maxCellCount,
-            maxX: maxX,
-            maxZ: maxZ,
-            minX: minX,
-            minZ: minZ
-        ).CellCount;
 
     /// <summary>Bakes an artifact covering <c>[minX,maxX] x [minZ,maxZ]</c>. A maximum edge that is not aligned to
     /// <see cref="CellSize"/> rounds outward so the final partial cell remains inside the artifact. The grid is
@@ -404,7 +358,7 @@ public static class WorldQueryBaker {
         ArgumentNullException.ThrowIfNull(argument: terrain);
         ArgumentNullException.ThrowIfNull(argument: blockers);
 
-        var (originXRaw, originZRaw, width, height, cellCount) = MeasureGrid(
+        var (originXRaw, originZRaw, cellSizeRaw, width, height, cellCount) = MeasureGrid(
             maxCellCount: maxCellCount,
             maxX: maxX,
             maxZ: maxZ,
@@ -471,7 +425,7 @@ public static class WorldQueryBaker {
         // layers and doubling the bake's transient working set. Public WorldQueryArtifact construction still copies.
         return WorldQueryArtifact.CreateOwned(
             blocked: blocked,
-            cellSizeRaw: CellSizeRaw,
+            cellSizeRaw: cellSizeRaw,
             height: height,
             heightRaw: heightRaw,
             originXRaw: originXRaw,
