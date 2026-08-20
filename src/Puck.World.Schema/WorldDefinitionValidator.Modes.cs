@@ -6,11 +6,6 @@ public static partial class WorldDefinitionValidator {
     // sync with WorldContextFamilies.Families whenever a built-in family is added, renamed, or removed.
     private static readonly string[] s_reservedContextFamilyNames = ["roster", "engagement", "layout"];
 
-    // The only admitted WorldSeatModeState.Target value today — a seat's own body idles and its channels drive
-    // views.flyRig instead. Kept as a single named constant rather than a vocabulary array: a second target kind is
-    // future work (the un-ratified "control application" primitive), not a today gap to leave open-ended.
-    private const string CameraModeTarget = "camera";
-
     private static void ValidateSeatModes(WorldDefinition definition, List<string> errors) {
         var families = definition.SeatModes;
 
@@ -79,10 +74,10 @@ public static partial class WorldDefinitionValidator {
 
                 if (!string.Equals(
                     a: state.Target,
-                    b: CameraModeTarget,
+                    b: WorldSeatModeState.CameraTarget,
                     comparisonType: StringComparison.Ordinal
                 )) {
-                    errors.Add(item: $"{statePath}.target '{state.Target}' is not admitted — {CameraModeTarget}.");
+                    errors.Add(item: $"{statePath}.target '{state.Target}' is not admitted — {WorldSeatModeState.CameraTarget}.");
                 } else {
                     needsFlyRig = true;
                 }

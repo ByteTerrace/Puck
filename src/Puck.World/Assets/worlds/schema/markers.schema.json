@@ -1,0 +1,108 @@
+{
+  "type": [
+    "array",
+    "null"
+  ],
+  "items": {
+    "description": "One row of the markers document section \u2014 a producerless world-space overlay chip vocabulary: what projects markers (Source), which authored icon draws (Icon, resolved through the icon table like every other icon), whether it carries a radius ring (Ring), and its look (Style). Puck.Overlays owns only the drawing MECHANISM (a chip plate plus an optional ring); every row here supplies the MEANING.",
+    "type": [
+      "object",
+      "null"
+    ],
+    "properties": {
+      "id": {
+        "description": "The row\u0027s stable id, unique within the section.",
+        "type": "string"
+      },
+      "source": {
+        "description": "Which rows (or literal point) this row projects a chip per.",
+        "type": "object",
+        "required": [
+          "$type"
+        ],
+        "anyOf": [
+          {
+            "description": "Tracks every declared speakers row \u2014 one chip per row, at the audio director\u0027s own resolved pose (the same pose the mix hears). WorldMarkerRing\u0027s radius field reads a tracked row\u0027s Radius when it is a bed; every other speaker kind draws no ring.",
+            "properties": {
+              "$type": {
+                "const": "speakers"
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "description": "One static world-space chip at an authored position \u2014 tracks no document section.",
+            "properties": {
+              "$type": {
+                "const": "point"
+              },
+              "position": {
+                "description": "The marker\u0027s world position."
+              }
+            },
+            "required": [
+              "position"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "icon": {
+        "description": "The icon name, resolved through icons.icons.",
+        "type": "string"
+      },
+      "style": {
+        "description": "The row\u0027s look.",
+        "type": "object",
+        "properties": {
+          "chipAlpha": {
+            "description": "The icon chip\u0027s opacity, in [0, 1]."
+          },
+          "size": {
+            "description": "The icon chip\u0027s plate half-extent, px. Positive.",
+            "type": "number"
+          },
+          "ringColor": {
+            "description": "The ring\u0027s stroke color. Required exactly when Ring is authored; omitted otherwise.",
+            "default": null
+          },
+          "ringAlpha": {
+            "description": "The ring\u0027s opacity, in [0, 1]. Required exactly when Ring is authored; omitted otherwise.",
+            "default": null
+          }
+        },
+        "required": [
+          "chipAlpha",
+          "size"
+        ],
+        "additionalProperties": false
+      },
+      "ring": {
+        "description": "The radius-ring policy, or null for no ring.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "field": {
+            "description": "The source row field the ring radius reads. The only field Speakers admits is radius (Radius); a row that is not a bed draws no ring under this policy without refusing (v1\u0027s one closed field name \u2014 a future source kind names its own).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field"
+        ],
+        "additionalProperties": false,
+        "default": null
+      }
+    },
+    "required": [
+      "id",
+      "source",
+      "icon",
+      "style"
+    ],
+    "additionalProperties": false
+  },
+  "default": null
+}

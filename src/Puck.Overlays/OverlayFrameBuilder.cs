@@ -99,9 +99,11 @@ public sealed class OverlayFrameBuilder {
     /// <param name="glyphs">The shared glyph SDF pack (cell metrics + the static prefix the node uploads).</param>
     /// <param name="width">The render width in pixels.</param>
     /// <param name="height">The render height in pixels.</param>
+    /// <param name="theme">The boot-resolved theme the token slab is filled from (see <see cref="UpdateTokenBlock"/>
+    /// for live retheme).</param>
     /// <exception cref="ArgumentNullException"><paramref name="leases"/> or <paramref name="glyphs"/> is
     /// <see langword="null"/>.</exception>
-    public OverlayFrameBuilder(OverlayChannelLeases leases, OverlayGlyphSdfPack glyphs, uint width, uint height) {
+    public OverlayFrameBuilder(OverlayChannelLeases leases, OverlayGlyphSdfPack glyphs, uint width, uint height, in OverlayThemeValues theme) {
         ArgumentNullException.ThrowIfNull(argument: leases);
         ArgumentNullException.ThrowIfNull(argument: glyphs);
 
@@ -128,12 +130,26 @@ public sealed class OverlayFrameBuilder {
         WordCount = (total + 3) & ~3;
         m_scratch = new uint[WordCount];
 
-        OverlayTokenBlock.Write(destination: m_scratch);
+        OverlayTokenBlock.Write(
+            destination: m_scratch,
+            theme: in theme
+        );
 
         for (var index = 0; (index < glyphs.PackedSdf.Count); index++) {
             m_scratch[(OverlayTokenBlock.WordCount + index)] = glyphs.PackedSdf[index];
         }
     }
+
+    /// <summary>Re-fills the token slab (the static prefix's front <see cref="OverlayTokenBlock.WordCount"/> words)
+    /// from a newly resolved theme, in place — the glyph atlas immediately after it is untouched. The caller (the
+    /// composition root, on a definition-revision change) is responsible for re-uploading
+    /// <see cref="Scratch"/>[..<see cref="OverlayTokenBlock.WordCount"/>] to the GPU buffer afterward; this call is
+    /// CPU-side only.</summary>
+    /// <param name="theme">The newly resolved theme.</param>
+    public void UpdateTokenBlock(in OverlayThemeValues theme) => OverlayTokenBlock.Write(
+        destination: m_scratch,
+        theme: in theme
+    );
 
     /// <summary>Gets the clip table's first word index.</summary>
     public int ClipBaseWords { get; }
@@ -364,14 +380,14 @@ public sealed class OverlayFrameBuilder {
         Array.Clear(array: m_dropped);
         Array.Clear(array: m_refused);
     }
-    /// <summary>The on-screen glyph cell height for a token type size — the size-to-cell ratio
-    /// (<c>TypeMonoLine / TypeMonoSize</c> = 1.5), so a 12px mono run gets an 18px cell.</summary>
-    /// <param name="sizePx">The token type size, px.</param>
+    /// <summary>The on-screen glyph cell height for a type size — the fixed size-to-cell ratio
+    /// (<see cref="DesignTokens.Glyph.CellAspectRatio"/> = 1.5), so a 12px run gets an 18px cell.</summary>
+    /// <param name="sizePx">The type size, px.</param>
     /// <returns>The cell height, px.</returns>
     public static int CellHeight(float sizePx) =>
         Math.Max(
             val1: 1,
-            val2: ((int)MathF.Round(x: (sizePx * (DesignTokens.Type.TypeMonoLine / DesignTokens.Type.TypeMonoSize))))
+            val2: ((int)MathF.Round(x: (sizePx * DesignTokens.Glyph.CellAspectRatio)))
         );
     /// <summary>The on-screen glyph cell width for a cell height, preserving the atlas' cell aspect.</summary>
     /// <param name="cellHeight">The cell height, px.</param>
@@ -602,6 +618,36 @@ public sealed class OverlayFrameBuilder {
         m_scratch[(offset + 2)] = Pack(value: radius);
         m_scratch[(offset + 4)] = 3u | (((uint)role) << 4);
         m_scratch[(offset + 7)] = Pack(value: alpha);
+        m_scratch[(offset + 9)] = ((uint)m_activeClip);
+        m_elementCount++;
+    }
+    /// <summary>Packs one stroked hairline ring in a raw, caller-resolved color — the <see cref="OverlayColorRole.Custom"/>
+    /// form of <see cref="WriteRing(float, float, float, OverlayColorRole, float)"/>, for a marker ring whose color
+    /// an authored document token resolved (possibly against live state) rather than a fixed palette role. Word
+    /// layout (12): 0..1 center (normalized) · 2 radius (px float) · 4 = 3 | (Custom &lt;&lt; 4) · 5 color R (px
+    /// float) · 6 color G · 7 alpha · 8 color B · 9 clip index.</summary>
+    /// <param name="centerX">The ring center x, px.</param>
+    /// <param name="centerY">The ring center y, px.</param>
+    /// <param name="radius">The ring radius, px.</param>
+    /// <param name="color">The stroke's resolved color (alpha channel unused — <paramref name="alpha"/> carries
+    /// opacity).</param>
+    /// <param name="alpha">The element opacity.</param>
+    /// <exception cref="InvalidOperationException">No channel scope is open.</exception>
+    public void WriteRing(float centerX, float centerY, float radius, RgbaColor color, float alpha) {
+        if (!TryTakeElement()) {
+            return;
+        }
+
+        var offset = (ElementBaseWords + (m_elementCount * ElementWords));
+
+        m_scratch[offset] = Pack(value: (centerX * m_inverseWidth));
+        m_scratch[(offset + 1)] = Pack(value: (centerY * m_inverseHeight));
+        m_scratch[(offset + 2)] = Pack(value: radius);
+        m_scratch[(offset + 4)] = 3u | (((uint)OverlayColorRole.Custom) << 4);
+        m_scratch[(offset + 5)] = Pack(value: color.R);
+        m_scratch[(offset + 6)] = Pack(value: color.G);
+        m_scratch[(offset + 7)] = Pack(value: alpha);
+        m_scratch[(offset + 8)] = Pack(value: color.B);
         m_scratch[(offset + 9)] = ((uint)m_activeClip);
         m_elementCount++;
     }

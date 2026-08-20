@@ -9,16 +9,18 @@ namespace Puck.World.Client;
 /// <c>Puck.World.Schema</c> to <c>Puck.Overlays</c> as constructor data.</summary>
 public static class WorldOverlayCapacity {
     /// <summary>Creates the overlay capacity from the document contract's constants: <see cref="WorldPopulationLimits.LocalSeatCount"/>
-    /// seats and the <see cref="WorldHudCapacity"/> ceilings at both scopes.</summary>
+    /// seats, the <see cref="WorldHudCapacity"/> ceilings at both scopes, and <see cref="WorldMarkerCapacity.MaxChipsPerSeat"/>.</summary>
     /// <returns>The capacity the composition root hands the overlay.</returns>
     public static OverlayCapacity FromSchema() =>
         new(
             BindingBarMaxBanks: WorldBindingBarCapacity.MaxBanks,
+            BindingBarMaxModifiers: WorldBindingBarCapacity.MaxModifiers,
             BindingBarMaxSlotsPerBank: GamepadButtonCatalog.Count,
             HudElementsPerPanel: WorldHudCapacity.MaxElementsPerPanel,
             HudElementsPerSeatPanel: WorldHudCapacity.MaxElementsPerSeatPanel,
             HudPanels: WorldHudCapacity.MaxWorldPanels,
             HudSeatPanelsPerSeat: WorldHudCapacity.MaxSeatPanels,
+            MarkerMaxChipsPerSeat: WorldMarkerCapacity.MaxChipsPerSeat,
             Seats: WorldPopulationLimits.LocalSeatCount
         );
 }

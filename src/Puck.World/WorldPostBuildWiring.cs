@@ -5,6 +5,7 @@ using Puck.Commands;
 using Puck.Launcher;
 using Puck.Overlays;
 using Puck.World.Client;
+using Puck.World.Protocol;
 using Puck.World.Server;
 
 namespace Puck.World;
@@ -91,6 +92,29 @@ internal static class WorldPostBuildWiring {
                     definition: route.Endpoint.Definition,
                     entityIndex: route.EntityIndex,
                     nextInputTick: route.Endpoint.NextInputTick
+                );
+            }
+        };
+
+        // THE FLY-APPLICATION TEARDOWN SEAM: a world load/reload/reset (or a crossing) reseeds a seat's authored
+        // mode families to their defaults, dropping the camera-targeting state a live fly application was composed
+        // from — but WorldSeatBindings owns the published state, not the rig, so the two halves meet here, where both
+        // resolve in EVERY boot shape (the rig is core-registered for the same reason its verbs are). Dissolving
+        // through the SAME exit player.mode takes re-admits the seat's latched intent source, so a reseed can never
+        // leave a body idled under a rig no mode state is asking for. Stamped with the seat's own acting principal:
+        // the restore targets that seat's own body, which is exactly the authority PrincipalOf reports.
+        var flyRig = services.GetRequiredService<WorldSeatFlyRig>();
+        var flyRoster = services.GetRequiredService<PlayerRoster>();
+        var flyLink = services.GetRequiredService<IServerLink>();
+
+        seatBindings.CameraApplicationDropped += slot => {
+            if (flyRig.IsFlying(slot: slot)) {
+                WorldCameraApplication.Deactivate(
+                    actingPrincipal: flyRoster.PrincipalOf(slot: slot),
+                    flyRig: flyRig,
+                    link: flyLink,
+                    roster: flyRoster,
+                    slot: slot
                 );
             }
         };

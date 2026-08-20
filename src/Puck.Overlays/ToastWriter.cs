@@ -27,14 +27,15 @@ public sealed class ToastWriter {
     /// <summary>The wrapped lines the chip grows to.</summary>
     public const int MaxMessageLines = 4;
 
+    private readonly OverlayThemeStore m_theme;
     private readonly IOverlayToastSource m_source;
 
     private ulong m_firstTicks;
     private int m_sequenceSeen;
 
-    // Lifetime and fade in DETERMINISTIC engine ticks (content tick, never wall clock).
+    // Lifetime in DETERMINISTIC engine ticks (content tick, never wall clock); the fade window rides the live
+    // theme's dur.med, so it recomputes from m_theme.Current per Emit rather than latching once.
     private static readonly ulong DurationTicks = (3UL * EngineTicks.PerSecond);
-    private static readonly ulong FadeTicks = ((ulong)((DesignTokens.Motion.DurMed / 1000f) * EngineTicks.PerSecond));
 
     static ToastWriter() {
         System.Diagnostics.Debug.Assert(
@@ -45,11 +46,15 @@ public sealed class ToastWriter {
 
     /// <summary>Initializes a new instance of the <see cref="ToastWriter"/> class.</summary>
     /// <param name="source">The toast snapshot source.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="source"/> is <see langword="null"/>.</exception>
-    public ToastWriter(IOverlayToastSource source) {
+    /// <param name="theme">The live resolved theme.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="theme"/> is
+    /// <see langword="null"/>.</exception>
+    public ToastWriter(IOverlayToastSource source, OverlayThemeStore theme) {
         ArgumentNullException.ThrowIfNull(argument: source);
+        ArgumentNullException.ThrowIfNull(argument: theme);
 
         m_source = source;
+        m_theme = theme;
     }
 
     // The message's first-line length (a multi-line echo shows its head; no substring allocation).
@@ -136,18 +141,23 @@ public sealed class ToastWriter {
             return;
         }
 
+        var theme = m_theme.Current;
+        var fadeTicks = ((ulong)((theme.Motion.DurMed / 1000f) * EngineTicks.PerSecond));
+
         // Opacity-only exit: full until the trailing dur.med window, then a linear fade.
         var remaining = (DurationTicks - age);
-        var alpha = ((remaining >= FadeTicks)
+        var alpha = ((remaining >= fadeTicks)
             ? 1f
-            : (((float)remaining) / FadeTicks)
+            : ((fadeTicks == 0UL)
+                ? 0f
+                : (((float)remaining) / fadeTicks))
         );
         var stateRole = (toast.IsError
             ? OverlayColorRole.Danger
             : OverlayColorRole.Positive
         );
-        var monoCell = OverlayFrameBuilder.CellHeight(sizePx: DesignTokens.Type.TypeMonoSize);
-        var microCell = OverlayFrameBuilder.CellHeight(sizePx: DesignTokens.Type.TypeMicroSize);
+        var monoCell = OverlayFrameBuilder.CellHeight(sizePx: theme.Type.MonoSize);
+        var microCell = OverlayFrameBuilder.CellHeight(sizePx: theme.Type.MicroSize);
         var message = toast.Message.AsSpan(
             start: 0,
             length: FirstLineLength(text: toast.Message)
@@ -168,17 +178,17 @@ public sealed class ToastWriter {
             );
         }
 
-        var icon = DesignTokens.Space.HeightBadge;
+        var icon = theme.Space.HeightBadge;
         var textHeight = (lineCount * monoCell);
         var panelHeight = MathF.Max(
-            x: DesignTokens.Space.HeightChip,
-            y: (textHeight + (2f * DesignTokens.Space.Space2))
+            x: theme.Space.HeightChip,
+            y: (textHeight + (2f * theme.Space.Space2))
         );
-        var panelWidth = ((((DesignTokens.Space.Space3 + icon) + DesignTokens.Space.Space2) + builder.TextWidth(
+        var panelWidth = ((((theme.Space.Space3 + icon) + theme.Space.Space2) + builder.TextWidth(
             cellHeight: monoCell,
             chars: messageChars
-        )) + DesignTokens.Space.Space3);
-        var x = ((builder.Width - panelWidth) - DesignTokens.Space.Space8);
+        )) + theme.Space.Space3);
+        var x = ((builder.Width - panelWidth) - theme.Space.Space8);
         var y = ((builder.Height * 0.5f) - (panelHeight * 0.5f));
 
         builder.WritePanel(
@@ -196,21 +206,21 @@ public sealed class ToastWriter {
         // sanctioned 2px signal).
         builder.WriteRect(
             alpha: alpha,
-            h: (panelHeight - (2f * DesignTokens.Radius.Radius2)),
+            h: (panelHeight - (2f * theme.Radius.Radius2)),
             radius: 0f,
             role: stateRole,
-            w: DesignTokens.Elevation.RingStatusWidth,
+            w: theme.Elevation.RingStatusWidth,
             x: x,
-            y: (y + DesignTokens.Radius.Radius2)
+            y: (y + theme.Radius.Radius2)
         );
 
-        var iconX = (x + DesignTokens.Space.Space3);
+        var iconX = (x + theme.Space.Space3);
         var iconY = (y + ((panelHeight - icon) * 0.5f));
 
         builder.WriteRect(
             alpha: alpha,
             h: icon,
-            radius: DesignTokens.Radius.Radius1,
+            radius: theme.Radius.Radius1,
             role: OverlayColorRole.SurfaceInset,
             w: icon,
             x: iconX,
@@ -234,7 +244,7 @@ public sealed class ToastWriter {
             )) * 0.5f)),
             y: (iconY + ((icon - microCell) * 0.5f))
         );
-        var textX = ((iconX + icon) + DesignTokens.Space.Space2);
+        var textX = ((iconX + icon) + theme.Space.Space2);
         var textY = (y + ((panelHeight - textHeight) * 0.5f));
 
         for (var index = 0; (index < lineCount); index++) {

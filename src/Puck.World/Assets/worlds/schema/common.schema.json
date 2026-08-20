@@ -3221,6 +3221,63 @@
       ],
       "additionalProperties": false
     },
+    "WorldThemeScrim": {
+      "description": "One scrim\u0027s fill color plus its own alpha, split apart so a world can retheme opacity independent of hue \u2014 the two knobs a scrim (a translucent panel/strip/chip backing) actually varies. Alpha is clamped to ScrimMinAlpha at resolve time when it is a state binding (see WorldDefinitionValidator\u0027s theme validation for the literal-authoring floor).",
+      "type": "object",
+      "properties": {
+        "color": {
+          "description": "The scrim\u0027s opaque fill color."
+        },
+        "alpha": {
+          "description": "The scrim\u0027s opacity, in [0, 1]."
+        }
+      },
+      "required": [
+        "color",
+        "alpha"
+      ],
+      "additionalProperties": false
+    },
+    "WorldThemeBloomHue": {
+      "description": "One elevation bloom hue\u0027s lit ring \u002B outer halo pair (see Puck.Overlays.DesignTokens.Elevation for the composite rule). Each color carries its own baked alpha (#RRGGBBAA).",
+      "type": "object",
+      "properties": {
+        "ring": {
+          "description": "The 1px lit ring color."
+        },
+        "halo": {
+          "description": "The outer distance-falloff halo color."
+        }
+      },
+      "required": [
+        "ring",
+        "halo"
+      ],
+      "additionalProperties": false
+    },
+    "WorldThemeCubicBezier": {
+      "description": "One of the two settled cubic-bezier easings a theme\u0027s motion section authors.",
+      "type": "object",
+      "properties": {
+        "x1": {
+          "description": "The first control point\u0027s x.",
+          "type": "number"
+        },
+        "y1": {
+          "description": "The first control point\u0027s y.",
+          "type": "number"
+        },
+        "x2": {
+          "description": "The second control point\u0027s x.",
+          "type": "number"
+        },
+        "y2": {
+          "description": "The second control point\u0027s y.",
+          "type": "number"
+        }
+      },
+      "additionalProperties": false
+    },
     "WorldMusicRow": {
       "description": "One music-score asset reference row \u2014 a puck.music.v1 document\u0027s stable name, its file path (relative to BaseDirectory, the same convention WorldAddonRow.ModulePath already establishes for a machine-local asset shipped beside the executable), and the SHA-256 hex64 pin of the referenced document\u0027s own canonical bytes. Never embedded: the document is loaded, canonicalized, and hash-verified where it is compiled (Server.WorldServer\u0027s construction), the same load-then-pin discipline Puck.Text.FontAtlasSourceResolver.ResolvePinnedContained already applies to a font asset.",
       "type": [

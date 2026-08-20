@@ -41,7 +41,7 @@ public interface ICursorSource {
 }
 /// <summary>
 /// The cursor state store. A thin named wrapper over the shared <see cref="PublishBuffer{T}"/>. Same threading
-/// contract as <see cref="EditorGizmoStore"/>: the host's feed publishes once per produced frame and the same-thread
+/// contract as <see cref="MarkerStore"/>: the host's feed publishes once per produced frame and the same-thread
 /// overlay writer reads, so backing arrays may be reused across publishes with zero steady-state allocation.
 /// </summary>
 public sealed class CursorStore : ICursorSource {

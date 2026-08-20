@@ -624,8 +624,8 @@ internal static class WorldBootComposition {
             terminalSessions: sp.GetRequiredService<TerminalConsoleSessions>()
         ));
         services.AddSingleton<BindingBarStore>();
-        services.AddSingleton<EditorHudStore>();
-        services.AddSingleton<EditorGizmoStore>();
+        services.AddSingleton<MarkerStore>();
+        services.AddSingleton<WorldThemeResolve>();
         services.AddSingleton<OverlayToastStore>();
         services.AddSingleton(implementationFactory: static sp => new ConsoleInputSink(
             sessions: sp.GetRequiredService<ConsoleSessionBank>(),
@@ -799,7 +799,9 @@ internal static class WorldBootComposition {
                 viewports: sp.GetRequiredService<WorldSeatViewports>(),
                 continuum: sp.GetRequiredService<WorldContinuum>(),
                 text: sp.GetRequiredService<WorldTextCatalog>(),
-                adjacencies: sp.GetRequiredService<IWorldAdjacencySource>()
+                adjacencies: sp.GetRequiredService<IWorldAdjacencySource>(),
+                markers: sp.GetRequiredService<MarkerStore>(),
+                resolveIcon: sp.GetRequiredService<WorldIconTable>().ResolveIcon
             );
 
             // Stand up the jumbotron view pool now the frame source has probed the render envelope: each View screen
@@ -884,11 +886,17 @@ internal static class WorldBootComposition {
 
                         var bytecodeExtension = SdfWorldRenderBuilder.BytecodeExtension(hostsOnDirectX: hostSettings.HostsOnDirectX);
 
+                        var themeResolve = sp.GetRequiredService<WorldThemeResolve>();
+                        var bootDefinition = sp.GetRequiredService<WorldDefinition>();
+                        var bootTheme = themeResolve.Resolve(
+                            definition: bootDefinition,
+                            revision: sp.GetRequiredService<WorldClient>().DefinitionRevision,
+                            tick: sp.GetRequiredService<WorldClient>().Tick
+                        );
+
                         return overlayNode = new UnifiedOverlayNode(
-                            // The seat count and HUD ceilings cross from Schema to Overlays here, as data.
+                            // The seat count and HUD/marker ceilings cross from Schema to Overlays here, as data.
                             capacity: WorldOverlayCapacity.FromSchema(),
-                            editorGizmoBedIcon: icons.ResolveIcon(name: "edit.bed"),
-                            editorGizmoSpeakerIcon: icons.ResolveIcon(name: "edit.speaker"),
                             fragmentBytecode: File.ReadAllBytes(path: Path.Combine(
                                 path1: AppContext.BaseDirectory,
                                 path2: "Assets",
@@ -905,7 +913,6 @@ internal static class WorldBootComposition {
                             sources: new UnifiedOverlaySources(
                                 BindingBar: sp.GetRequiredService<BindingBarStore>(),
                                 Console: sp.GetRequiredService<ConsoleTapeStore>(),
-                                EditorHud: sp.GetRequiredService<EditorHudStore>(),
                                 // WorldHudFeed's Tick joins WorldOverlayFeed's in the same per-produced-frame hook —
                                 // it only reconciles HudStore's STRUCTURE on a definition-revision move (cheap on
                                 // every other frame); live binding VALUES are resolved separately, every frame, by
@@ -921,14 +928,26 @@ internal static class WorldBootComposition {
                                     // The radial menu orders against the cursor feed the same way: its hub anchor
                                     // and hover derive from the status the feed just published.
                                     sp.GetRequiredService<WorldWheelFeed>().Tick();
+                                    // Live retheme: the theme resolve is revision-gated (a no-op most frames), but
+                                    // republishing the store + re-filling the GPU token slab happens every frame the
+                                    // resolve produced a fresh value — cheap, and the only way a state.<row> bind
+                                    // reaches pixels the next produced frame after the write lands.
+                                    var client = sp.GetRequiredService<WorldClient>();
+
+                                    overlayNode?.UpdateTheme(theme: sp.GetRequiredService<WorldThemeResolve>().Resolve(
+                                        definition: client.Definition,
+                                        revision: client.DefinitionRevision,
+                                        tick: client.Tick
+                                    ));
                                 },
-                                Gizmos: sp.GetRequiredService<EditorGizmoStore>(),
+                                Markers: sp.GetRequiredService<MarkerStore>(),
                                 Toast: sp.GetRequiredService<OverlayToastStore>(),
                                 Hud: sp.GetRequiredService<HudStore>(),
                                 HudBindings: sp.GetRequiredService<IHudBindingResolver>(),
                                 Cursor: sp.GetRequiredService<CursorStore>(),
                                 Wheel: sp.GetRequiredService<WheelStore>()
                             ),
+                            theme: bootTheme,
                             vertexBytecode: File.ReadAllBytes(path: Path.Combine(
                                 path1: SdfWorldKernels.DefaultDirectory,
                                 path2: $"fullscreen.vert{bytecodeExtension}"

@@ -1641,6 +1641,10 @@
           {
             "key": "planetoidRock",
             "value": "#5E5348"
+          },
+          {
+            "key": "themeAccent",
+            "value": "#FF6A2B"
           }
         ],
         "kind": "text",
@@ -1681,6 +1685,40 @@
     ],
     "seatControl": {
       "swapRate": 0
+    }
+  },
+  "speakers": [
+    {
+      "$type": "bed",
+      "name": "ambientBed",
+      "center": [0, 1, -4],
+      "radius": 3,
+      "innerRadius": 1,
+      "feed": {
+        "source": { "$type": "none" },
+        "channel": "mix",
+        "gain": 1
+      }
+    }
+  ],
+  "markers": [
+    {
+      "id": "speakers",
+      "source": { "$type": "speakers" },
+      "icon": "edit.bed",
+      "ring": { "field": "radius" },
+      "style": {
+        "chipAlpha": 0.9,
+        "size": 12,
+        "ringColor": "#9BA3AB",
+        "ringAlpha": 0.35
+      }
+    }
+  ],
+  "theme": {
+    "color": {
+      "surfaceBase": "#1A0033",
+      "accent": "state.colors.themeAccent"
     }
   }
 }

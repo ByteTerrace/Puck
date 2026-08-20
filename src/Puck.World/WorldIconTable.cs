@@ -111,15 +111,9 @@ public sealed class WorldIconTable {
             ? resolved
             : OverlayResolvedGlyph.None
         );
-    /// <summary>Resolves a physical button's badge content for a connected controller family (the family override
-    /// seam, checked before the row's default icon).</summary>
-    /// <param name="button">The physical button (one flag).</param>
-    /// <param name="family">The connected controller family.</param>
-    /// <returns>The resolved content, or <see cref="OverlayResolvedGlyph.None"/> when the button carries no badge
-    /// row.</returns>
-    public OverlayResolvedGlyph ResolveBadge(GamepadButtons button, GamepadType family) {
-        var buttonName = button.ToString();
-
+    // The one badge lookup by physical-button NAME, family override checked before the row's default — shared so a
+    // flag button and a pseudo-button (a trigger, which has no GamepadButtons flag) resolve identically.
+    private OverlayResolvedGlyph ResolveBadgeByName(string buttonName, GamepadType family) {
         if (m_badgeOverrideIconByButtonFamily.TryGetValue(
             key: (buttonName, family.ToString()),
             value: out var overrideIcon
@@ -135,14 +129,27 @@ public sealed class WorldIconTable {
             : OverlayResolvedGlyph.None
         );
     }
+
+    /// <summary>Resolves a physical button's badge content for a connected controller family (the family override
+    /// seam, checked before the row's default icon).</summary>
+    /// <param name="button">The physical button (one flag).</param>
+    /// <param name="family">The connected controller family.</param>
+    /// <returns>The resolved content, or <see cref="OverlayResolvedGlyph.None"/> when the button carries no badge
+    /// row.</returns>
+    public OverlayResolvedGlyph ResolveBadge(GamepadButtons button, GamepadType family) =>
+        ResolveBadgeByName(
+            buttonName: button.ToString(),
+            family: family
+        );
     /// <summary>Resolves a modifier's provider-neutral input source id (the two triggers and the two shoulders —
     /// the only sources a binding profile's modifier chord ever names) to its badge content, through the SAME
-    /// badge-mapping table <see cref="ResolveBadge(GamepadButtons, GamepadType)"/> reads (a trigger has no
+    /// family-aware badge lookup <see cref="ResolveBadge(GamepadButtons, GamepadType)"/> reads (a trigger has no
     /// <see cref="GamepadButtons"/> flag of its own — an analog axis — so it is addressed by the pseudo-button
     /// names <c>LeftTrigger</c>/<c>RightTrigger</c> a badge row's <c>button</c> field may also carry).</summary>
     /// <param name="source">The input source id.</param>
+    /// <param name="family">The connected controller family.</param>
     /// <returns>The resolved content, or <see cref="OverlayResolvedGlyph.None"/> when unresolved.</returns>
-    public OverlayResolvedGlyph ResolveModifierSource(string source) {
+    public OverlayResolvedGlyph ResolveModifierSource(string source, GamepadType family) {
         var buttonName = source switch {
             Puck.Input.InputSources.Gamepad.LeftTrigger => "LeftTrigger",
             Puck.Input.InputSources.Gamepad.RightTrigger => "RightTrigger",
@@ -151,16 +158,12 @@ public sealed class WorldIconTable {
             _ => null,
         };
 
-        if (buttonName is null) {
-            return OverlayResolvedGlyph.None;
-        }
-
-        return (m_badgeDefaultIconByButton.TryGetValue(
-            key: buttonName,
-            value: out var icon
-        )
-            ? ResolveIcon(name: icon)
-            : OverlayResolvedGlyph.None
+        return ((buttonName is null)
+            ? OverlayResolvedGlyph.None
+            : ResolveBadgeByName(
+                buttonName: buttonName,
+                family: family
+            )
         );
     }
 }

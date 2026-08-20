@@ -2,6 +2,7 @@ using System.Numerics;
 using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
+using Puck.Overlays;
 using Puck.SdfVm;
 using Puck.SdfVm.Views;
 using Puck.SignedDistance;
@@ -17,8 +18,9 @@ namespace Puck.World.Client;
 /// content source — <see cref="WorldSceneEmitter"/>, the room's geometry — through
 /// <see cref="SdfCompositionFrameSource"/>, and DRESSES the program that host hands back
 /// (<see cref="ISdfFrameDresser"/>): the four local seats' chased over-the-shoulder viewports (fullscreen →
-/// side-by-side → big-top/two-bottom → 2×2 quad as players join), the named authored cameras, the editor speaker
-/// gizmos, the audio listener/emitter snapshot, and the frame's render-quality flags. When no local seat is
+/// side-by-side → big-top/two-bottom → 2×2 quad as players join), the named authored cameras, the authored
+/// <c>markers</c> section's projected chips, the audio listener/emitter snapshot, and the frame's render-quality
+/// flags. When no local seat is
 /// active (every seat departed via a portal/transfer with none yet rejoined) it presents ONE fixed spectator view
 /// instead of zero — an interim safety net, not a designed spectator mode (see <c>Dress</c>'s tail remarks).
 /// </summary>
@@ -79,6 +81,14 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
     // dynamic-transform buffer and its slot assignment, and the rebuild-on-revision-change predicate.
     private readonly WorldSceneEmitter m_emitter;
     private readonly FrameRateMonitor m_frameRate;
+    // The marker channel's store and this frame's per-seat projected chips, plus the reusable scratch the
+    // candidate list is composed into once per Dress call (not once per seat — every seat's cull reads the SAME
+    // list). See ComposeMarkerCandidates/ComposeMarkerSeat.
+    private readonly MarkerStore m_markers;
+    private readonly OverlayMarkerChip[][] m_markerChips = new OverlayMarkerChip[PlayerRoster.MaxSlots][];
+    private readonly OverlayMarkerSeat[] m_markerSeats = new OverlayMarkerSeat[PlayerRoster.MaxSlots];
+    private readonly List<MarkerCandidate> m_markerCandidates = [];
+    private readonly Func<string, OverlayResolvedGlyph> m_resolveIcon;
     private readonly PlayerRoster m_roster;
     // The first-party puck.sdf.v1 document emitter (world.sdf.load) — a SECOND tenant of the same live composition
     // seam m_emitter already exercises, never a parallel composition point (see WorldSdfDocumentEmitter's remarks).
@@ -170,8 +180,14 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
     /// <param name="continuum">The shared authority-to-presentation-frame pose resolver.</param>
     /// <param name="text">The world-relative font catalog and packed GPU atlas.</param>
     /// <param name="adjacencies">The injected adjacency resolver shared by rendering and collision.</param>
+    /// <param name="markers">The marker channel's store — published unconditionally every dressed frame (an empty
+    /// authored <c>markers</c> section, or none, clears the chips).</param>
+    /// <param name="resolveIcon">The boot document's icon-name resolver (badges and bound-action icons alike) — a
+    /// marker row's <c>icon</c> name resolves through it, same as every other icon reference. Threaded in as a
+    /// delegate (never a direct <c>WorldIconTable</c> reference) because <c>Puck.World.Client</c> cannot reference
+    /// <c>Puck.World</c>, which owns the table.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldFrameSource(FrameRateMonitor frameRate, WorldClient client, IWorldSimulationClock simulation, WorldRenderSettings settings, IWorldScreenPresenter binder, WorldRenderEnvelope envelope, WorldSeatFlyRig flyRig, WorldStampPool animator, IWorldAudioFrameFeed audio, WorldPerceptionAnchor anchor, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldContinuum continuum, WorldTextCatalog text, IWorldAdjacencySource adjacencies) {
+    public WorldFrameSource(FrameRateMonitor frameRate, WorldClient client, IWorldSimulationClock simulation, WorldRenderSettings settings, IWorldScreenPresenter binder, WorldRenderEnvelope envelope, WorldSeatFlyRig flyRig, WorldStampPool animator, IWorldAudioFrameFeed audio, WorldPerceptionAnchor anchor, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldContinuum continuum, WorldTextCatalog text, IWorldAdjacencySource adjacencies, MarkerStore markers, Func<string, OverlayResolvedGlyph> resolveIcon) {
         ArgumentNullException.ThrowIfNull(argument: frameRate);
         ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: anchor);
@@ -189,6 +205,15 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         ArgumentNullException.ThrowIfNull(argument: sdfDocuments);
         ArgumentNullException.ThrowIfNull(argument: viewports);
         ArgumentNullException.ThrowIfNull(argument: adjacencies);
+        ArgumentNullException.ThrowIfNull(argument: markers);
+        ArgumentNullException.ThrowIfNull(argument: resolveIcon);
+
+        m_markers = markers;
+        m_resolveIcon = resolveIcon;
+
+        for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
+            m_markerChips[slot] = [];
+        }
 
         m_viewports = viewports;
         m_composition = composition;
@@ -505,6 +530,252 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
             derivedFaces: facets.Faces
         );
         m_builtDefinitionRevision = definitionRevision;
+    }
+    // One authored `markers` row instance's resolved look, cached once per Dress call (every seat's cull reads the
+    // SAME candidate list — see ComposeMarkerCandidates/ComposeMarkerSeat). RingRadiusWorld is 0 for an instance
+    // with no ring (no authored ring policy, or a tracked row that does not resolve the policy's field).
+    private readonly record struct MarkerCandidate(
+        Vector3 Position,
+        float RingRadiusWorld,
+        ushort IconGlyph0,
+        ushort IconGlyph1,
+        float ChipAlpha,
+        float Size,
+        RgbaColor RingColor,
+        float RingAlpha
+    );
+
+    // Resolves a color field that may be absent (a marker row's style.ringColor, meaningful only when a ring is
+    // authored) — Zero (transparent black) when absent, matching every other absence-is-meaning field.
+    private static RgbaColor ResolveMarkerColor(BindableColor? color, WorldDefinition definition, ulong tick) {
+        if (color is not { } bound) {
+            return default;
+        }
+
+        var resolved = bound.Resolve(
+            definition: definition,
+            fallback: default,
+            tick: tick
+        );
+
+        return new RgbaColor(
+            A: resolved.W,
+            B: resolved.Z,
+            G: resolved.Y,
+            R: resolved.X
+        );
+    }
+    // Builds this frame's candidate marker instances ONCE (not once per seat): every authored `markers` row
+    // resolves its look (icon, alpha, size, ring color/alpha) a single time, then fans out into one candidate per
+    // tracked source instance — every declared speaker row for a Speakers source, or the one authored point for a
+    // Point source. A speaker's pose is the SAME one the audio director hears (m_audio.TryResolveSpeakerPose), so a
+    // marker chip never disagrees with what the mix plays from. A ring's world-space radius reads a Bed speaker's
+    // own support radius; every other speaker kind (and every Point source) carries none.
+    private void ComposeMarkerCandidates(WorldDefinition definition) {
+        m_markerCandidates.Clear();
+
+        var markers = definition.Markers;
+        var tick = m_client.Tick;
+
+        for (var index = 0; (index < markers.Count); index++) {
+            var marker = markers[index];
+            var icon = m_resolveIcon(marker.Icon);
+            var chipAlpha = marker.Style.ChipAlpha.Resolve(
+                definition: definition,
+                fallback: 0f,
+                tick: tick
+            );
+            var wantsRing = (marker.Ring is not null);
+            var ringColor = (wantsRing
+                ? ResolveMarkerColor(
+                    color: marker.Style.RingColor,
+                    definition: definition,
+                    tick: tick
+                )
+                : default);
+            var ringAlpha = ((wantsRing && (marker.Style.RingAlpha is { } authoredRingAlpha))
+                ? authoredRingAlpha.Resolve(
+                    definition: definition,
+                    fallback: 0f,
+                    tick: tick
+                )
+                : 0f);
+
+            if (marker.Source is WorldMarkerSource.Speakers) {
+                var speakers = definition.Speakers;
+
+                for (var speakerIndex = 0; (speakerIndex < speakers.Count); speakerIndex++) {
+                    var speaker = speakers[speakerIndex];
+
+                    if (!m_audio.TryResolveSpeakerPose(
+                        speaker: speaker,
+                        transforms: m_transforms,
+                        position: out var position
+                    )) {
+                        continue;
+                    }
+
+                    var ringRadius = ((wantsRing && (speaker is WorldSpeaker.Bed bed))
+                        ? bed.Radius
+                        : 0f);
+
+                    m_markerCandidates.Add(item: new MarkerCandidate(
+                        ChipAlpha: chipAlpha,
+                        IconGlyph0: icon.Glyph0,
+                        IconGlyph1: icon.Glyph1,
+                        Position: position,
+                        RingAlpha: ringAlpha,
+                        RingColor: ringColor,
+                        RingRadiusWorld: ringRadius,
+                        Size: marker.Style.Size
+                    ));
+                }
+            } else if (marker.Source is WorldMarkerSource.Point point) {
+                m_markerCandidates.Add(item: new MarkerCandidate(
+                    ChipAlpha: chipAlpha,
+                    IconGlyph0: icon.Glyph0,
+                    IconGlyph1: icon.Glyph1,
+                    Position: point.Position,
+                    RingAlpha: ringAlpha,
+                    RingColor: ringColor,
+                    RingRadiusWorld: 0f,
+                    Size: marker.Style.Size
+                ));
+            }
+        }
+    }
+    // One seat's marker set: every candidate resolved to a world pose (ComposeMarkerCandidates), projected into
+    // the seat's viewport, then culled to WorldMarkerCapacity.MaxChipsPerSeat nearest the camera — the same
+    // bounded-admission shape the binding bar's own per-seat reservation uses. A dropped chip is off-screen
+    // priority (the farthest candidates), never a nearer one.
+    private OverlayMarkerSeat ComposeMarkerSeat(int slot, NormalizedRect region, in CameraSnapshot camera, uint width, uint height) {
+        var budget = Math.Min(
+            val1: m_markerCandidates.Count,
+            val2: WorldMarkerCapacity.MaxChipsPerSeat
+        );
+
+        if (budget == 0) {
+            return new OverlayMarkerSeat(
+                Chips: ReadOnlyMemory<OverlayMarkerChip>.Empty,
+                Viewport: region
+            );
+        }
+
+        if (m_markerChips[slot].Length < budget) {
+            m_markerChips[slot] = new OverlayMarkerChip[budget];
+        }
+
+        var chips = m_markerChips[slot];
+        var count = 0;
+        Span<float> depths = stackalloc float[WorldMarkerCapacity.MaxChipsPerSeat];
+
+        foreach (var candidate in m_markerCandidates) {
+            if (!TryProjectMarker(
+                camera: in camera,
+                height: height,
+                pixelsPerUnit: out var pixelsPerUnit,
+                px: out var px,
+                py: out var py,
+                region: in region,
+                width: width,
+                world: candidate.Position
+            )) {
+                continue;
+            }
+
+            var depth = Vector3.Dot(
+                vector1: (candidate.Position - camera.Position),
+                vector2: camera.Forward
+            );
+            int writeSlot;
+
+            if (count < budget) {
+                writeSlot = count++;
+            } else {
+                var farthest = 0;
+
+                for (var i = 1; (i < budget); i++) {
+                    if (depths[i] > depths[farthest]) {
+                        farthest = i;
+                    }
+                }
+
+                if (depth >= depths[farthest]) {
+                    continue;
+                }
+
+                writeSlot = farthest;
+            }
+
+            depths[writeSlot] = depth;
+            chips[writeSlot] = new OverlayMarkerChip(
+                CenterX: px,
+                CenterY: py,
+                ChipAlpha: candidate.ChipAlpha,
+                IconGlyph0: candidate.IconGlyph0,
+                IconGlyph1: candidate.IconGlyph1,
+                Pulse: false,
+                PlateHalf: candidate.Size,
+                RingAlpha: candidate.RingAlpha,
+                RingColor: candidate.RingColor,
+                RingRadiusPx: ((candidate.RingRadiusWorld > 0f)
+                    ? (candidate.RingRadiusWorld * pixelsPerUnit)
+                    : 0f),
+                Selected: false
+            );
+        }
+
+        return new OverlayMarkerSeat(
+            Chips: chips.AsMemory(
+                start: 0,
+                length: count
+            ),
+            Viewport: region
+        );
+    }
+    // Perspective-projects a world point into a seat viewport's pixel space through the seat's own CameraSnapshot
+    // frame. False behind the near plane or generously outside the view (the clip rect would discard the pixels
+    // anyway — this just skips the record). pixelsPerUnit is the on-screen scale at the point's DEPTH (a ring's
+    // world-radius -> px conversion; an approximation that reads as a radius indicator, not a perspective-correct
+    // 3D circle — deliberate).
+    private static bool TryProjectMarker(in CameraSnapshot camera, in NormalizedRect region, uint width, uint height, Vector3 world, out float px, out float py, out float pixelsPerUnit) {
+        px = 0f;
+        py = 0f;
+        pixelsPerUnit = 0f;
+
+        var delta = (world - camera.Position);
+        var depth = Vector3.Dot(
+            vector1: delta,
+            vector2: camera.Forward
+        );
+
+        if (depth < 0.05f) {
+            return false;
+        }
+
+        var ndcX = (Vector3.Dot(
+            vector1: delta,
+            vector2: camera.Right
+        ) / ((depth * camera.TanHalfFieldOfView) * camera.AspectRatio));
+        var ndcY = (Vector3.Dot(
+            vector1: delta,
+            vector2: camera.Up
+        ) / (depth * camera.TanHalfFieldOfView));
+
+        if (
+            (MathF.Abs(x: ndcX) > 1.5f) ||
+            (MathF.Abs(x: ndcY) > 1.5f)
+        ) {
+            return false;
+        }
+
+        var regionHeight = (region.Height * height);
+
+        px = ((region.X * width) + ((0.5f + (0.5f * ndcX)) * (region.Width * width)));
+        py = ((region.Y * height) + ((0.5f - (0.5f * ndcY)) * regionHeight));
+        pixelsPerUnit = ((regionHeight * 0.5f) / (depth * camera.TanHalfFieldOfView));
+
+        return true;
     }
     // Frames the slot's view at the region's pixel size (region × window dims), so each split keeps its own aspect.
     // The rig is the seat's chase rig by default; while the seat's fly application is active, the fly rig (advanced
@@ -904,6 +1175,9 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         // Self-heal a seat that left the roster while flying (its camera drops).
         m_flyRig.PruneDeparted();
 
+        // The authored `markers` section's candidate instances, resolved once for every seat's own cull below.
+        ComposeMarkerCandidates(definition: m_client.Definition);
+
         m_views.Clear();
         Array.Clear(array: m_seatCameraPoses);
         m_viewports.BeginFrame();
@@ -952,6 +1226,7 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         var seatViewFallbackRegion = default(NormalizedRect);
         var seatViewFallbackCamera = default(CameraSnapshot);
         var hasSeatViewFallback = false;
+        var markerSeatCount = 0;
         Span<bool> seatSlotBound = stackalloc bool[PlayerRoster.MaxSlots];
 
         foreach (var composed in m_composer.Slots) {
@@ -1027,7 +1302,20 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
                 width: width
             );
             seatSlotBound[slot] = true;
+            m_markerSeats[markerSeatCount++] = ComposeMarkerSeat(
+                camera: in camera,
+                height: height,
+                region: region,
+                slot: slot,
+                width: width
+            );
         }
+
+        // Published EVERY frame: an empty frame clears the chips the moment the section authors none.
+        m_markers.Publish(frame: new OverlayMarkerFrame(Seats: m_markerSeats.AsMemory(
+            start: 0,
+            length: markerSeatCount
+        )));
 
         if (hasSeatViewFallback) {
             for (var order = 0; (order < joinedRosterCount); order++) {

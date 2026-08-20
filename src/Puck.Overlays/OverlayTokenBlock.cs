@@ -31,6 +31,10 @@ public enum OverlayColorRole : uint {
     ScrimPanel = 18,
     ScrimStrip = 19,
     ScrimChip = 20,
+    /// <summary>The ring-element-only sentinel: reads a raw RGB triple packed into the record's own reserved words
+    /// instead of indexing this slab (see <see cref="OverlayFrameBuilder.WriteRing(float, float, float, RgbaColor, float)"/>)
+    /// — a marker's authored, possibly state-bound ring color. Illegitimate on every other element/panel kind.</summary>
+    Custom = 255,
 }
 /// <summary>
 /// The single GPU token slab, uploaded once into the front of the unified overlay's storage buffer. Layout (all
@@ -72,7 +76,7 @@ public static class OverlayTokenBlock {
         EdgeAa = 10,
         /// <summary>The REST-tier chip plate's translucency.</summary>
         ChipRestOpacity = 11,
-        /// <summary>The procedural icon/glyph stroke half-width, in glyph-local units (<see cref="DesignTokens.Icon.StrokeHalfWidth"/>).</summary>
+        /// <summary>The procedural icon/glyph stroke half-width, in glyph-local units (<see cref="OverlayThemeValues.IconSet.StrokeHalfWidth"/>).</summary>
         GlyphStroke = 12,
         /// <summary>The procedural icon/glyph anti-alias ramp, in glyph-local units (<see cref="DesignTokens.Icon.AaRamp"/>).</summary>
         GlyphAa = 13,
@@ -100,10 +104,21 @@ public static class OverlayTokenBlock {
         destination[((RoleCount * 4) + ((int)scalar))] = BitConverter.SingleToUInt32Bits(value: value);
     }
 
-    /// <summary>Serializes the token slab into the destination span (the storage buffer's front words).</summary>
+    // A scrim's fill plus its own alpha, composed into one baked-alpha RgbaColor the way every other role already
+    // bakes its alpha — the GPU-side role table carries no separate per-role alpha channel.
+    private static RgbaColor Baked(OverlayThemeValues.Scrim scrim) => new(
+        A: scrim.Alpha,
+        B: scrim.Color.B,
+        G: scrim.Color.G,
+        R: scrim.Color.R
+    );
+
+    /// <summary>Serializes the token slab into the destination span (the storage buffer's front words) from a
+    /// resolved theme.</summary>
     /// <param name="destination">The destination, at least <see cref="WordCount"/> words.</param>
+    /// <param name="theme">The resolved theme to serialize.</param>
     /// <exception cref="ArgumentException"><paramref name="destination"/> is shorter than <see cref="WordCount"/>.</exception>
-    public static void Write(Span<uint> destination) {
+    public static void Write(Span<uint> destination, in OverlayThemeValues theme) {
         if (destination.Length < WordCount) {
             throw new ArgumentException(
                 message: $"The token block needs {WordCount} words; got {destination.Length}.",
@@ -111,108 +126,110 @@ public static class OverlayTokenBlock {
             );
         }
 
+        var color = theme.Color;
+
         WriteColor(
-            color: DesignTokens.Color.TextPrimary,
+            color: color.TextPrimary,
             destination: destination,
             role: OverlayColorRole.TextPrimary
         );
         WriteColor(
-            color: DesignTokens.Color.TextDim,
+            color: color.TextDim,
             destination: destination,
             role: OverlayColorRole.TextDim
         );
         WriteColor(
-            color: DesignTokens.Color.TextMute,
+            color: color.TextMute,
             destination: destination,
             role: OverlayColorRole.TextMute
         );
         WriteColor(
-            color: DesignTokens.Color.Accent,
+            color: color.Accent,
             destination: destination,
             role: OverlayColorRole.Accent
         );
         WriteColor(
-            color: DesignTokens.Color.Positive,
+            color: color.Positive,
             destination: destination,
             role: OverlayColorRole.Positive
         );
         WriteColor(
-            color: DesignTokens.Color.Warning,
+            color: color.Warning,
             destination: destination,
             role: OverlayColorRole.Warning
         );
         WriteColor(
-            color: DesignTokens.Color.Danger,
+            color: color.Danger,
             destination: destination,
             role: OverlayColorRole.Danger
         );
         WriteColor(
-            color: DesignTokens.Color.Phosphor,
+            color: color.Phosphor,
             destination: destination,
             role: OverlayColorRole.Phosphor
         );
         WriteColor(
-            color: DesignTokens.Color.AccentInk,
+            color: color.AccentInk,
             destination: destination,
             role: OverlayColorRole.AccentInk
         );
         WriteColor(
-            color: DesignTokens.Color.SurfaceRaised,
+            color: color.SurfaceRaised,
             destination: destination,
             role: OverlayColorRole.SurfaceRaised
         );
         WriteColor(
-            color: DesignTokens.Color.SurfaceInset,
+            color: color.SurfaceInset,
             destination: destination,
             role: OverlayColorRole.SurfaceInset
         );
         WriteColor(
-            color: DesignTokens.Color.AccentQuiet,
+            color: color.AccentQuiet,
             destination: destination,
             role: OverlayColorRole.AccentQuiet
         );
         WriteColor(
-            color: DesignTokens.Color.PhosphorCyan,
+            color: color.PhosphorCyan,
             destination: destination,
             role: OverlayColorRole.PhosphorCyan
         );
         WriteColor(
-            color: DesignTokens.Color.SurfaceBase,
+            color: color.SurfaceBase,
             destination: destination,
             role: OverlayColorRole.SurfaceBase
         );
         WriteColor(
-            color: DesignTokens.Color.BadgeDark,
+            color: color.BadgeDark,
             destination: destination,
             role: OverlayColorRole.BadgeDark
         );
         WriteColor(
-            color: DesignTokens.Color.BadgeLight,
+            color: color.BadgeLight,
             destination: destination,
             role: OverlayColorRole.BadgeLight
         );
         WriteColor(
-            color: DesignTokens.Color.LineHair,
+            color: color.LineHair,
             destination: destination,
             role: OverlayColorRole.LineHair
         );
         WriteColor(
-            color: DesignTokens.Color.LineSoft,
+            color: color.LineSoft,
             destination: destination,
             role: OverlayColorRole.LineSoft
         );
         WriteColor(
-            color: DesignTokens.Color.ScrimPanel,
+            color: Baked(scrim: color.ScrimPanel),
             destination: destination,
             role: OverlayColorRole.ScrimPanel
         );
         WriteColor(
-            color: DesignTokens.Color.ScrimStrip,
+            color: Baked(scrim: color.ScrimStrip),
             destination: destination,
             role: OverlayColorRole.ScrimStrip
         );
         WriteColor(
-            color: DesignTokens.Color.ScrimChip,
+            color: Baked(scrim: color.ScrimChip),
             destination: destination,
             role: OverlayColorRole.ScrimChip
         );
@@ -220,52 +237,52 @@ public static class OverlayTokenBlock {
         WriteScalar(
             destination: destination,
             scalar: Scalar.Radius1,
-            value: DesignTokens.Radius.Radius1
+            value: theme.Radius.Radius1
         );
         WriteScalar(
             destination: destination,
             scalar: Scalar.Radius2,
-            value: DesignTokens.Radius.Radius2
+            value: theme.Radius.Radius2
         );
         WriteScalar(
             destination: destination,
             scalar: Scalar.Radius3,
-            value: DesignTokens.Radius.Radius3
+            value: theme.Radius.Radius3
         );
         WriteScalar(
             destination: destination,
             scalar: Scalar.EdgeHairlineWidth,
-            value: DesignTokens.Elevation.EdgeHairlineWidth
+            value: theme.Elevation.EdgeHairlineWidth
         );
         WriteScalar(
             destination: destination,
             scalar: Scalar.RingStatusWidth,
-            value: DesignTokens.Elevation.RingStatusWidth
+            value: theme.Elevation.RingStatusWidth
         );
         WriteScalar(
             destination: destination,
             scalar: Scalar.BloomHaloBlur,
-            value: DesignTokens.Elevation.BloomHaloBlur
+            value: theme.Elevation.BloomHaloBlur
         );
         WriteScalar(
             destination: destination,
             scalar: Scalar.BloomRingAlpha,
-            value: DesignTokens.Elevation.BloomRingAlpha
+            value: theme.Elevation.BloomRingAlpha
         );
         WriteScalar(
             destination: destination,
             scalar: Scalar.BloomHaloAlpha,
-            value: DesignTokens.Elevation.BloomHaloAlpha
+            value: theme.Elevation.BloomHaloAlpha
         );
         WriteScalar(
             destination: destination,
             scalar: Scalar.BloomNeutralRingAlpha,
-            value: DesignTokens.Elevation.BloomNeutralRingAlpha
+            value: theme.Elevation.BloomNeutralRingAlpha
         );
         WriteScalar(
             destination: destination,
             scalar: Scalar.BloomNeutralHaloAlpha,
-            value: DesignTokens.Elevation.BloomNeutralHaloAlpha
+            value: theme.Elevation.BloomNeutralHaloAlpha
         );
         WriteScalar(
             destination: destination,
@@ -275,12 +292,12 @@ public static class OverlayTokenBlock {
         WriteScalar(
             destination: destination,
             scalar: Scalar.ChipRestOpacity,
-            value: DesignTokens.Elevation.ChipRestOpacity
+            value: theme.Elevation.ChipRestOpacity
         );
         WriteScalar(
             destination: destination,
             scalar: Scalar.GlyphStroke,
-            value: DesignTokens.Icon.StrokeHalfWidth
+            value: theme.Icon.StrokeHalfWidth
         );
         WriteScalar(
             destination: destination,
@@ -290,7 +307,7 @@ public static class OverlayTokenBlock {
         WriteScalar(
             destination: destination,
             scalar: Scalar.ReferenceChipHalf,
-            value: (DesignTokens.Space.HeightChip * 0.5f)
+            value: (theme.Space.HeightChip * 0.5f)
         );
     }
 }

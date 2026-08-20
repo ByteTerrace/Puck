@@ -21,6 +21,11 @@
 // KEEP IN SYNC with OverlayTokenBlock.RoleCount.
 #define OVERLAY_TOKEN_ROLE_COUNT 21u
 
+// KEEP IN SYNC with OverlayColorRole.Custom — the ring-element sentinel meaning "read a raw RGB triple from the
+// record's own reserved words instead of indexing the token slab" (a marker's authored, possibly state-bound ring
+// color; see overlay-unified.frag.hlsl's ring element decode).
+#define OVERLAY_ROLE_CUSTOM 255u
+
 // One 32-bit word at word index i.
 uint OverlayWord(StructuredBuffer<uint4> data, uint i) {
     return data[i >> 2u][i & 3u];

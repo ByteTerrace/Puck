@@ -9,10 +9,13 @@ public static class WorldBindingBarCapacity {
     /// <summary>The most stacked banks one bar authors — the ONE declaration the overlay reservation and the
     /// validator's bank ceiling both size from; raising it here reprices the reservation, nowhere else.</summary>
     public const int MaxBanks = 5;
-    /// <summary>The most modifier definitions one COMPOSED binding profile carries — declared rows PLUS the
-    /// compiler-synthesized entry every distinct chord/held source token becomes. The overlay feed's per-seat pip
-    /// reservation is sized by this, and the validator refuses a composed profile past it — the compose path
-    /// clamps to its destination, so an unvalidated overflow would drop pips silently.</summary>
+    /// <summary>The most modifier indicators one COMPOSED binding profile carries — declared rows PLUS the
+    /// compiler-synthesized entry every distinct chord/held source token becomes. This one number sizes the whole
+    /// modifier path: the overlay feed's per-seat modifier array, the overlay channel's lease reservation (crossed as
+    /// <c>Puck.Overlays.OverlayCapacity.BindingBarMaxModifiers</c> through
+    /// <c>Puck.World.Client.WorldOverlayCapacity.FromSchema</c>), the document validator's boot-time count
+    /// (<c>CompiledBindingProfile.Modifiers.Count ≤ MaxModifiers</c>), and the runtime compose door. Raising it here
+    /// reprices every one of them together.</summary>
     public const int MaxModifiers = 16;
 }
 
@@ -32,7 +35,9 @@ public sealed record WorldBindingBarLayout(
     float GlyphSizeRatio,
     float Scale
 ) {
-    /// <summary>Gets the layout used when an overlay authors no binding-bar policy.</summary>
+    /// <summary>Gets the tuning an authored binding-bar row uses when it omits its own <c>layout</c> — the ONLY
+    /// baked fallback in the bar model (a wholly absent bar row draws nothing; see
+    /// <see cref="WorldBindingBarAuthoring.Absent"/>, whose disabled state hides it before this tuning is read).</summary>
     public static WorldBindingBarLayout Default { get; } = new(
         AnchorOffsetY: (220f / 600f),
         ButtonSize: (45f / 600f),
@@ -66,14 +71,15 @@ public sealed record WorldBindingBarBank(
 );
 /// <summary>The authored visibility, layout, and slot vocabulary of the on-screen binding bar. Absence of a whole
 /// <see cref="WorldBindingBarAuthoring"/> row (no identity, no world authoring) draws no bar at all — see
-/// <see cref="Absent"/> — every field below, including the tuning <see cref="WorldBindingBarLayout"/> once authoring
-/// exists, is document data; nothing here falls back to a baked C# default.</summary>
+/// <see cref="Absent"/>. Every field below is document data with one exception: once an authoring row exists but omits
+/// its own <see cref="Layout"/>, the tuning falls back to <see cref="WorldBindingBarLayout.Default"/> — the sole baked
+/// C# default in the bar model.</summary>
 /// <param name="Enabled">Whether the bar is shown when no live override hides it.</param>
 /// <param name="Text">Whether the bar draws the ATLAS TEXT it composes — a badge whose icon row carries a
-/// <c>Label</c> (LB/RB, LT/RT, LS/RS, the menu trio, the exotics), the active page's name under the modifier pips,
-/// and the chord-hint lines above them. <see langword="false"/> drops every label-content badge outright and leaves
-/// a purely pictographic bar: every plate, the glyph-content badges (the d-pad arrows and the face-position marks),
-/// the bound actions' icons, and the modifier pips all still draw.</param>
+/// <c>Label</c> (LB/RB, LT/RT, LS/RS, the menu trio, the exotics), the active page's name under the modifier
+/// indicators, and the chord-hint lines above them. <see langword="false"/> drops every label-content badge outright
+/// and leaves a purely pictographic bar: every plate, the glyph-content badges (the d-pad arrows and the face-position
+/// marks), the bound actions' icons, and the modifier indicators all still draw.</param>
 /// <param name="SlotSet">The physical buttons this bar shows, in authored order (an exotic button's left-to-right
 /// position in its row follows this order) — every name validated against the full <c>GamepadButtons</c> catalog by
 /// name, unique, so the catalog itself bounds the count (the reservation sizes from
@@ -116,8 +122,9 @@ public sealed record WorldBindingBarAuthoring(
 /// <param name="Id">The overlay's stable id — its mutation address (unique within the definition; carries no meaning
 /// beyond identity).</param>
 /// <param name="Document">The overlay binding document merged into the composed mapping.</param>
-/// <param name="BindingBar">The on-screen bar policy carried with this binding layer; <see langword="null"/> preserves
-/// the always-visible reference layout.</param>
+/// <param name="BindingBar">The on-screen bar policy carried with this binding layer; <see langword="null"/> carries no
+/// policy on this layer, so bar resolution falls through to the world-authored policy, and to
+/// <see cref="WorldBindingBarAuthoring.Absent"/> (no bar drawn) when neither an identity nor the world authors one.</param>
 public sealed record WorldBindingOverlay(
     string Id,
     BindingProfileDocument Document,

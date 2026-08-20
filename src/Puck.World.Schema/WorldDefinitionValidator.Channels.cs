@@ -158,6 +158,115 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
     }
+    // One authored icon string, refused by name when it names no row in the composed icon table.
+    private static void CheckComposedIcon(string? icon, string door, IReadOnlySet<string> iconNames, List<string> errors) {
+        if (
+            !string.IsNullOrEmpty(value: icon) &&
+            !iconNames.Contains(item: icon)
+        ) {
+            errors.Add(item: $"bindingOverlays {door} icon '{icon}' names no row in icons.icons.");
+        }
+    }
+    // A page's own display icon plus every one of its entries' icons — the shape a chord-row page and a wheel ring
+    // page share.
+    private static void CheckComposedPageIcons(BindingPageDefinition page, string door, IReadOnlySet<string> iconNames, List<string> errors) {
+        CheckComposedIcon(
+            door: door,
+            errors: errors,
+            icon: page.Icon,
+            iconNames: iconNames
+        );
+
+        for (var index = 0; (index < page.Entries.Count); index++) {
+            CheckComposedIcon(
+                door: $"{door} entry[{index}]",
+                errors: errors,
+                icon: page.Entries[index]?.Icon,
+                iconNames: iconNames
+            );
+        }
+    }
+    // Every icon-bearing door a composed binding profile carries — page and its entries, modifier, chord command, and
+    // wheel ring and its sector entries — so an authored icon naming an unknown row refuses by name at each, matching
+    // the iconography section's referential contract rather than only the page-entry door.
+    private static void ValidateComposedIcons(BindingProfileDocument composed, IReadOnlySet<string> iconNames, List<string> errors) {
+        foreach (var modifier in composed.Modifiers) {
+            if (modifier is not null) {
+                CheckComposedIcon(
+                    door: $"modifier '{modifier.Id}'",
+                    errors: errors,
+                    icon: modifier.Icon,
+                    iconNames: iconNames
+                );
+            }
+        }
+
+        foreach (var chord in composed.Chords) {
+            if (chord is null) {
+                continue;
+            }
+
+            CheckComposedIcon(
+                door: $"group '{chord.Group}' command",
+                errors: errors,
+                icon: chord.Command?.Icon,
+                iconNames: iconNames
+            );
+
+            if (chord.Page is { } page) {
+                CheckComposedPageIcons(
+                    door: $"page '{page.Id}'",
+                    errors: errors,
+                    iconNames: iconNames,
+                    page: page
+                );
+            }
+        }
+
+        foreach (var wheel in (composed.Wheels ?? [])) {
+            if (wheel is null) {
+                continue;
+            }
+
+            foreach (var ring in wheel.Rings) {
+                if (ring is not null) {
+                    CheckComposedPageIcons(
+                        door: $"wheel '{wheel.Id}' ring '{ring.Id}'",
+                        errors: errors,
+                        iconNames: iconNames,
+                        page: ring
+                    );
+                }
+            }
+        }
+    }
+    // The player-profile-side bar preferences (BindingProfileDocument.BindingBar) — a LOOK override, presentation
+    // only. Validated to the same strictness as the world-side layout so an out-of-range scale refuses by name here
+    // rather than being silently dropped at the runtime resolver (WorldBindingBarControl reads a finite positive
+    // scale and ignores anything else). Absence (a null preferences block, or a null field within it) defers to the
+    // world-authored policy and is never a refusal.
+    private static void ValidateBindingBarPreferences(BindingBarPreferences? preferences, string path, List<string> errors) {
+        if (
+            (preferences?.Scale is { } scale) &&
+            (!float.IsFinite(f: scale) || (scale <= 0f))
+        ) {
+            errors.Add(item: $"{path}.scale {scale} must be a finite positive number.");
+        }
+
+        if (
+            (preferences?.ContrastBoost is { } contrastBoost) &&
+            (!float.IsFinite(f: contrastBoost) || (contrastBoost < 1f) || (contrastBoost > 2f))
+        ) {
+            errors.Add(item: $"{path}.contrastBoost {contrastBoost} must be a finite number in [1, 2].");
+        }
+
+        if (
+            (preferences?.UiScale is { } uiScale) &&
+            (!float.IsFinite(f: uiScale) || (uiScale < 0.5f) || (uiScale > 2f))
+        ) {
+            errors.Add(item: $"{path}.uiScale {uiScale} must be a finite number in [0.5, 2].");
+        }
+    }
     // The bank PageId existence check — run AFTER the composed profile compiles successfully (a bank's page
     // reference is only checkable against the WHOLE overlay stack's result, never one overlay's own document).
     private static void ValidateBindingBarPageReferences(IReadOnlyList<WorldBindingOverlay> overlays, CompiledBindingProfile profile, List<string> errors) {
@@ -218,6 +327,11 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.document is required.");
             } else {
                 layers.Add(item: overlay.Document);
+                ValidateBindingBarPreferences(
+                    errors: errors,
+                    path: $"{path}.document.bindingBar",
+                    preferences: overlay.Document.BindingBar
+                );
                 var stateContextErrors = new List<string>();
 
                 WorldStateBindingContext.Validate(
@@ -256,11 +370,13 @@ public static partial class WorldDefinitionValidator {
             );
         }
 
+        var composed = WorldBindingComposer.Compose(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: layers));
+
         try {
-            var compiled = BindingProfile.Compile(document: WorldBindingComposer.Compose(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: layers)));
+            var compiled = BindingProfile.Compile(document: composed);
 
             if (compiled.Modifiers.Count > WorldBindingBarCapacity.MaxModifiers) {
-                errors.Add(item: $"bindingOverlays compose {compiled.Modifiers.Count} modifiers, exceeding the {WorldBindingBarCapacity.MaxModifiers}-modifier pip ceiling.");
+                errors.Add(item: $"bindingOverlays compose {compiled.Modifiers.Count} modifiers, exceeding the {WorldBindingBarCapacity.MaxModifiers}-modifier ceiling.");
             }
 
             ValidateBindingBarPageReferences(
@@ -269,27 +385,15 @@ public static partial class WorldDefinitionValidator {
                 profile: compiled
             );
 
-            // A bound action's icon string, checked against the icon table ONLY when some document in the basis
-            // chain authored one (see ValidateIconography's Absent gate) — no authored icons.icons means every
-            // icon string draws a blank plate, never a refusal.
+            // Every authored icon string, checked against the icon table ONLY when some document in the basis chain
+            // authored one (see ValidateIconography's Absent gate) — no authored icons.icons means every icon string
+            // draws a blank plate, never a refusal.
             if (iconsAuthored) {
-                foreach (var pageId in compiled.PageIds) {
-                    if (!compiled.TryGetPageView(
-                        pageId: pageId,
-                        view: out var view
-                    )) {
-                        continue;
-                    }
-
-                    foreach (var button in view.Buttons) {
-                        if (
-                            !string.IsNullOrEmpty(value: button.Icon) &&
-                            !iconNames.Contains(item: button.Icon)
-                        ) {
-                            errors.Add(item: $"bindingOverlays page '{pageId}' button '{button.Command}' icon '{button.Icon}' names no row in icons.icons.");
-                        }
-                    }
-                }
+                ValidateComposedIcons(
+                    composed: composed,
+                    errors: errors,
+                    iconNames: iconNames
+                );
             }
         } catch (ArgumentException exception) {
             errors.Add(item: $"bindingOverlays do not compose into a valid mapping: {exception.Message.ReplaceLineEndings(replacementText: " ")}");

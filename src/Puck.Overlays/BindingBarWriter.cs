@@ -3,7 +3,7 @@ namespace Puck.Overlays;
 /// <summary>
 /// The binding-bar writer: renders each seat's authored banks from an <see cref="IBindingBarSource"/> snapshot as
 /// icon elements — every bank's slot cluster (the mirrored-diamond layout plus the menu-trio and exotics rows, each
-/// bank displaced by its own authored offset), the modifier pips, and the active page's name — CONFINED to that
+/// bank displaced by its own authored offset), the modifier indicators, and the active page's name — CONFINED to that
 /// seat's own normalized viewport rect, so 4-player split screen gets four correctly scaled bars with the render
 /// node staying dumb. Pure record emission; no GPU types.
 /// </summary>
@@ -14,11 +14,8 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
     /// <summary>The chord-hint lines one seat's bar draws. A page with more command-chord rows than this shows the
     /// first <see cref="MaxHintLines"/> and the rest are refused at the bar's own channel boundary, attributed.</summary>
     public const int MaxHintLines = 8;
-    /// <summary>The character clamp on every text run the bar writes (the page label and the hint lines alike) —
-    /// the editor HUD's line clamp, shared so the two text surfaces read at one width.</summary>
+    /// <summary>The character clamp on every text run the bar writes (the page label and the hint lines alike).</summary>
     public const int MaxLineChars = 46;
-    /// <summary>The modifier pips one seat's bar draws.</summary>
-    public const int MaxModifierPips = 8;
 
     private readonly IBindingBarSource m_source;
 
@@ -94,7 +91,7 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
             );
         }
 
-        // The modifier pips sit between the clusters on the bar's anchor line, lit while held.
+        // The modifier indicators sit between the clusters on the bar's anchor line, lit while held.
         var modifiers = seat.Modifiers.Span;
         var anchor = BindingBarLayout.BarAnchor(
             anchorOffsetY: layout.AnchorOffsetY,
@@ -103,13 +100,13 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
         var anchorX = (regionOriginX + (anchor.X * regionHeightPx));
         var anchorY = (regionOriginY + (anchor.Y * regionHeightPx));
         var scaledButtonSize = (layout.ButtonSize * layout.Scale);
-        var pipHalf = ((scaledButtonSize * 0.35f) * regionHeightPx);
-        var pipSpacing = ((scaledButtonSize * 1.1f) * regionHeightPx);
-        // The page NAME rides directly under the pips — the visible half of the page model: squeeze a trigger chord
+        var modifierHalf = ((scaledButtonSize * 0.35f) * regionHeightPx);
+        var modifierSpacing = ((scaledButtonSize * 1.1f) * regionHeightPx);
+        // The page NAME rides directly under the modifiers — the visible half of the page model: squeeze a trigger chord
         // and the bar both re-renders AND says which page it turned to, so a sparse page still reads.
         var labelCell = Math.Max(
             val1: 12,
-            val2: ((int)(pipHalf * 1.9f))
+            val2: ((int)(modifierHalf * 1.9f))
         );
 
         if (!string.IsNullOrEmpty(value: seat.Label)) {
@@ -128,7 +125,7 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
                     cellHeight: labelCell,
                     chars: labelChars
                 ) * 0.5f)),
-                y: (anchorY + (pipHalf * 1.4f))
+                y: (anchorY + (modifierHalf * 1.4f))
             );
         }
 
@@ -136,21 +133,13 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
             return;
         }
 
-        var pipCount = Math.Min(
-            val1: modifiers.Length,
-            val2: MaxModifierPips
-        );
+        // The producer bounds the count: the feed's per-seat modifier array and this channel's lease reservation are
+        // both sized from the document contract's modifier ceiling (WorldBindingBarCapacity.MaxModifiers, crossed as
+        // OverlayCapacity.BindingBarMaxModifiers), which the document validator also refuses a composed profile past —
+        // so every published modifier has a reserved record and the bar carries no private cap of its own.
+        var modifierCount = modifiers.Length;
 
-        // The pip cap is the SAME kind of self-declared truncation as the hint-line cap below it: attribute it the
-        // same way (NoteRefused) rather than letting it clip silently at a smaller grain than the row cap does.
-        if (pipCount < modifiers.Length) {
-            builder.NoteRefused(
-                elements: (modifiers.Length - pipCount),
-                textWords: 0
-            );
-        }
-
-        for (var index = 0; (index < pipCount); index++) {
+        for (var index = 0; (index < modifierCount); index++) {
             var modifier = modifiers[index];
 
             builder.WriteIcon(
@@ -161,19 +150,19 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
                 badgeGlyph0: modifier.BadgeGlyph0,
                 badgeGlyph1: modifier.BadgeGlyph1,
                 bound: true,
-                centerX: (anchorX + ((index - ((pipCount - 1) * 0.5f)) * pipSpacing)),
+                centerX: (anchorX + ((index - ((modifierCount - 1) * 0.5f)) * modifierSpacing)),
                 centerY: anchorY,
-                glyphHalf: (pipHalf * 0.8f),
+                glyphHalf: (modifierHalf * 0.8f),
                 glyphOffsetX: 0f,
                 glyphOffsetY: 0f,
                 iconGlyph0: 0,
                 iconGlyph1: 0,
-                plateHalf: pipHalf,
+                plateHalf: modifierHalf,
                 pressed: modifier.Held
             );
         }
 
-        // The chord hints stack above the pips: one small centered line per command-chord row of the active group
+        // The chord hints stack above the modifiers: one small centered line per command-chord row of the active group
         // (ASCII only — the glyph pack is ASCII-95), quiet alpha so the bar's chips stay dominant.
         var hints = seat.Hints.Span;
 
@@ -183,10 +172,10 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
 
         var hintCell = Math.Max(
             val1: 10,
-            val2: ((int)(pipHalf * 1.6f))
+            val2: ((int)(modifierHalf * 1.6f))
         );
         var hintLineStep = (hintCell * 1.3f);
-        var hintBaseY = (anchorY - (pipHalf * 2.2f));
+        var hintBaseY = (anchorY - (modifierHalf * 2.2f));
         // Bounded and pinned: a page with many command-chord rows would otherwise lose its overflow silently at the
         // shared record pool's boundary, by draw-order accident. The first MaxHintLines rows draw; the rest are
         // refused at the bar's reservation and attributed to the bar — boundedness is what makes the reservation

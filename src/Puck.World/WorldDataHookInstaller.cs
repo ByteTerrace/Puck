@@ -37,11 +37,7 @@ internal static class WorldDataHookInstaller {
     internal static void Install() {
         BindingVocabularyHook.VocabularyCheck = WorldAffordances.Validate;
         GamepadButtonVocabularyHook.IsKnownButtonName = GamepadButtonCatalog.IsKnownName;
-        GamepadFamilyVocabularyHook.IsKnownFamilyName = static name => (
-            Enum.TryParse<GamepadType>(value: name, ignoreCase: false, result: out var family) &&
-            (family != GamepadType.Unknown) &&
-            Enum.IsDefined(value: family)
-        );
+        GamepadFamilyVocabularyHook.IsKnownFamilyName = GamepadFamilyCatalog.IsKnownName;
         Protocol.MutationKindVocabularyHook.Describe = Protocol.WorldMutationKindCatalog.DescribeMask;
         Protocol.MutationKindVocabularyHook.TryParse = Protocol.WorldMutationKindCatalog.TryParseMask;
 

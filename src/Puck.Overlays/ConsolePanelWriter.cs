@@ -23,6 +23,7 @@ public sealed class ConsolePanelWriter {
     /// never silent — see <see cref="OverlayFrameBuilder.Refused"/>) instead of quietly overrunning the reservation.</summary>
     public const int TitleChars = 7;
 
+    private readonly OverlayThemeStore m_theme;
     private readonly IConsoleTapeSource m_source;
 
     static ConsolePanelWriter() {
@@ -34,11 +35,15 @@ public sealed class ConsolePanelWriter {
 
     /// <summary>Initializes a new instance of the <see cref="ConsolePanelWriter"/> class.</summary>
     /// <param name="source">The console-tape snapshot source.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="source"/> is <see langword="null"/>.</exception>
-    public ConsolePanelWriter(IConsoleTapeSource source) {
+    /// <param name="theme">The live resolved theme.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="theme"/> is
+    /// <see langword="null"/>.</exception>
+    public ConsolePanelWriter(IConsoleTapeSource source, OverlayThemeStore theme) {
         ArgumentNullException.ThrowIfNull(argument: source);
+        ArgumentNullException.ThrowIfNull(argument: theme);
 
         m_source = source;
+        m_theme = theme;
     }
 
     /// <summary>Emits this frame's console panel, when one is visible.</summary>
@@ -53,12 +58,13 @@ public sealed class ConsolePanelWriter {
             return;
         }
 
-        var margin = DesignTokens.Space.Space8;
-        var pad = DesignTokens.Space.Space3;
-        var bandHeight = DesignTokens.Space.HeightConsoleHead;
-        var cellHeight = OverlayFrameBuilder.CellHeight(sizePx: DesignTokens.Type.TypeMonoSize);
+        var theme = m_theme.Current;
+        var margin = theme.Space.Space8;
+        var pad = theme.Space.Space3;
+        var bandHeight = theme.Space.HeightConsoleHead;
+        var cellHeight = OverlayFrameBuilder.CellHeight(sizePx: theme.Type.MonoSize);
         var cellWidth = builder.CellWidth(cellHeight: cellHeight);
-        var microCell = OverlayFrameBuilder.CellHeight(sizePx: DesignTokens.Type.TypeMicroSize);
+        var microCell = OverlayFrameBuilder.CellHeight(sizePx: theme.Type.MicroSize);
 
         // The grid fills the top-left without overrunning: cols across, rows up to ~55% of the height, then the
         // panel's outer rect wraps the padded grid + title band.

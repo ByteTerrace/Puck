@@ -2148,7 +2148,8 @@ public sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolver
         return false;
     }
     /// <summary>The client-visible seat-vacated fact: the slot stops holding a participant, its claim and every
-    /// per-claim cache die with it, and the devices that were driving it are unmapped. Server-side teardown is not
+    /// per-claim cache die with it, the devices that were driving it are unmapped, and its authored mode-family
+    /// states reset to their defaults (<see cref="WorldSeatBindings.ResetSeatModes"/>). Server-side teardown is not
     /// part of this — the caller has already decided (and performed) whatever the server half of the departure is,
     /// which is exactly why this is a fact rather than a verb.</summary>
     /// <remarks>One fact, two producers. <see cref="Leave"/> emits it after the server accepts its
@@ -2189,6 +2190,11 @@ public sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolver
             DeviceSlotChanging?.Invoke(obj: device);
             _ = m_deviceToSlot.Remove(key: device);
         }
+
+        // The departed occupant's AUTHORED mode states die with the occupancy too: a rejoiner arrives at Live and
+        // must derive its group from the family defaults, never from a player.mode flip the previous occupant left
+        // published on this slot.
+        m_seatBindings.ResetSeatModes(slot: slot);
 
         m_revision++;
 

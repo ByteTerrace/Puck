@@ -945,5 +945,204 @@
         { "name": "on", "target": "camera" }
       ]
     }
-  ]
+  ],
+  "markers": [
+    {
+      "id": "speakers",
+      "source": {
+        "$type": "speakers"
+      },
+      "icon": "edit.speaker",
+      "ring": {
+        "field": "radius"
+      },
+      "style": {
+        "chipAlpha": 0.9,
+        "size": 12,
+        "ringColor": "#9BA3AB",
+        "ringAlpha": 0.35
+      }
+    }
+  ],
+  "theme": {
+    "color": {
+      "surfaceBase": "#0E1013",
+      "surfacePanel": "#15181C",
+      "surfaceRaised": "#1D2126",
+      "surfaceInset": "#0B0D0F",
+      "scrimPanel": {
+        "color": "#121519",
+        "alpha": 0.9
+      },
+      "scrimStrip": {
+        "color": "#121519",
+        "alpha": 0.86
+      },
+      "scrimChip": {
+        "color": "#171B1F",
+        "alpha": 0.94
+      },
+      "lineHair": "#FFFFFF17",
+      "lineSoft": "#FFFFFF0F",
+      "lineStrong": "#FFFFFF29",
+      "lineInset": "#0000008C",
+      "textPrimary": "#EDEFF2",
+      "textDim": "#9BA3AB",
+      "textMute": "#5C646C",
+      "accent": "#FF6A2B",
+      "accentQuiet": "#FF6A2B24",
+      "accentLine": "#FF6A2B73",
+      "accentInk": "#160A04",
+      "positive": "#5BC98C",
+      "warning": "#E8B341",
+      "danger": "#F2565B",
+      "phosphor": "#5CFAA0",
+      "phosphorDim": "#5CFAA06B",
+      "phosphorCyan": "#5EEBE0",
+      "badgeDark": "#0D0D12",
+      "badgeLight": "#F5F5FA"
+    },
+    "space": {
+      "space0": 0,
+      "space1": 4,
+      "space2": 8,
+      "space3": 12,
+      "space4": 16,
+      "space5": 20,
+      "space6": 24,
+      "space8": 32,
+      "heightBadge": 24,
+      "heightBindBar": 64,
+      "heightChip": 40,
+      "heightConsoleHead": 38,
+      "heightModeRow": 30,
+      "heightPromptRow": 34,
+      "heightTrackerBar": 52,
+      "heightTrackerCell": 26
+    },
+    "radius": {
+      "radius1": 3,
+      "radius2": 6,
+      "radius3": 9
+    },
+    "type": {
+      "bodySize": 13,
+      "bodyLine": 18,
+      "bodyWeight": 400,
+      "labelSize": 12,
+      "labelLine": 24,
+      "labelTracking": 0.01,
+      "labelWeight": 500,
+      "microSize": 11,
+      "microLine": 13,
+      "microTracking": 0.08,
+      "microWeight": 500,
+      "monoSize": 12,
+      "monoLine": 18,
+      "monoTracking": 0.04,
+      "monoWeight": 400,
+      "monoBadgeSize": 11,
+      "monoReadoutSize": 15,
+      "titleSize": 16,
+      "titleLine": 18,
+      "titleTracking": 0.01,
+      "titleWeight": 600
+    },
+    "elevation": {
+      "bloomHaloBlur": 18,
+      "bloomHaloSpread": -3,
+      "bloomHaloAlpha": 0.42,
+      "bloomRingWidth": 1,
+      "bloomRingAlpha": 0.55,
+      "bloomNeutralHaloAlpha": 0.22,
+      "bloomNeutralRingAlpha": 0.3,
+      "bloomHeldInsetBlur": 12,
+      "bloomHeldInsetSpread": -3,
+      "bloomHeldInsetAlpha": 0.5,
+      "bloomAccent": {
+        "ring": "#FF6A2B8C",
+        "halo": "#FF6A2B6B"
+      },
+      "bloomPositive": {
+        "ring": "#5BC98C8C",
+        "halo": "#5BC98C6B"
+      },
+      "bloomWarning": {
+        "ring": "#E8B3418C",
+        "halo": "#E8B3416B"
+      },
+      "bloomDanger": {
+        "ring": "#F2565B8C",
+        "halo": "#F2565B6B"
+      },
+      "bloomNeutral": {
+        "ring": "#EDEFF24C",
+        "halo": "#EDEFF238"
+      },
+      "pressHeldGlowBlur": 12,
+      "pressHeldGlowSpread": -3,
+      "pressHeldGlowColor": "#EDEFF23D",
+      "pressHeldShadowBlur": 6,
+      "pressHeldShadowOffsetY": 2,
+      "pressHeldTranslateY": 1,
+      "pressHeldShadowColor": "#00000099",
+      "shadowSeatBlur": 44,
+      "shadowSeatOffsetY": 18,
+      "shadowSeatSpread": -18,
+      "shadowSeatStripSpread": -20,
+      "shadowSeatColor": "#000000B8",
+      "shadowSeatStripColor": "#000000BF",
+      "catchlightOffsetY": 1,
+      "catchlightColor": "#FFFFFF0D",
+      "chipRestOpacity": 0.62,
+      "edgeHairlineWidth": 1,
+      "ringStatusWidth": 2,
+      "ringStatusAlpha": 0.6
+    },
+    "diegetic": {
+      "plateTop": "#2C2F33",
+      "plateMid": "#24272B",
+      "plateBottom": "#1C1F22",
+      "plateStripeColor": "#FFFFFF05",
+      "embossFill": "#DFE6E1",
+      "engraveFill": "#14171A",
+      "embossShadowDropAlpha": 0.8,
+      "embossShadowDropBlur": 2,
+      "embossShadowDropOffsetY": 2,
+      "embossShadowLitAlpha": 0.3,
+      "embossShadowLitOffsetY": -1,
+      "engraveShadowLipAlpha": 0.16,
+      "engraveShadowLipOffsetY": 1,
+      "engraveShadowRecessAlpha": 0.85,
+      "engraveShadowRecessBlur": 1,
+      "engraveShadowRecessOffsetY": -1,
+      "screenWellOuter": "#0C221A",
+      "screenWellInner": "#05100C",
+      "bezelOuter": "#23282B",
+      "bezelInner": "#14181A",
+      "bezelEdge": "#05070A",
+      "phosphorGlowBlur": 6
+    },
+    "motion": {
+      "caretBlink": 1080,
+      "durFast": 120,
+      "durMed": 180,
+      "durPanel": 280,
+      "easeStd": {
+        "x1": 0.2,
+        "y1": 0,
+        "x2": 0,
+        "y2": 1
+      },
+      "easeOut": {
+        "x1": 0.4,
+        "y1": 0,
+        "x2": 1,
+        "y2": 1
+      }
+    },
+    "icon": {
+      "strokeHalfWidth": 0.08
+    }
+  }
 }

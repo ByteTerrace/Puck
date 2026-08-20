@@ -14,8 +14,15 @@ public static partial class WorldDefinitionValidator {
         }
 
         if (row.Glyph is { } glyph) {
-            if (!WorldIconFontCatalog.IsKnown(name: glyph.Font)) {
-                errors.Add(item: $"{path}.glyph.font '{(glyph.Font ?? "(absent)")}' is not a committed fixed-UI font id.");
+            // The icon bake draws every glyph cell from the ONE mono atlas (WorldIconTable discards the font id and
+            // OverlayGlyphSdfPack bakes from OverlayGlyphAtlasSet.MonoFont), so a non-mono face would validate yet
+            // bake a blank cell — refuse it by name rather than admit a field the table ignores.
+            if (!string.Equals(
+                a: glyph.Font,
+                b: WorldIconFontCatalog.JetBrainsMonoRegular,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                errors.Add(item: $"{path}.glyph.font '{(glyph.Font ?? "(absent)")}' must be '{WorldIconFontCatalog.JetBrainsMonoRegular}' — the only face the icon bake draws from; the other committed faces bake blank cells.");
             }
 
             if (!WorldIconGlyphRef.TryResolveCodePoint(
@@ -30,6 +37,20 @@ public static partial class WorldDefinitionValidator {
                 (label.Length > WorldIconCapacity.MaxLabelChars)
             ) {
                 errors.Add(item: $"{path}.label '{label}' must be 1..{WorldIconCapacity.MaxLabelChars} characters.");
+            } else {
+                // The label resolves through OverlayGlyphSdfPack's ASCII-95 block (printable ASCII U+0020..U+007E);
+                // a code unit outside it (or a surrogate half of an astral scalar) resolves to a blank cell, so a
+                // validated label always renders only when every unit is renderable.
+                foreach (var character in label) {
+                    if (
+                        (character < ' ') ||
+                        (character > '~')
+                    ) {
+                        errors.Add(item: $"{path}.label '{label}' carries a character 'U+{((int)character):X4}' outside the renderable printable-ASCII range (U+0020..U+007E).");
+
+                        break;
+                    }
+                }
             }
         }
     }
@@ -97,17 +118,13 @@ public static partial class WorldDefinitionValidator {
                 !isKnownButton(badge.Button) &&
                 (badge.Button is not ("LeftTrigger" or "RightTrigger"))
             ) {
-                errors.Add(item: $"{path}.button '{badge.Button}' is not a declared GamepadButtons name (nor the analog 'LeftTrigger'/'RightTrigger' pseudo-buttons the modifier pips also badge).");
+                errors.Add(item: $"{path}.button '{badge.Button}' is not a declared GamepadButtons name (nor the analog 'LeftTrigger'/'RightTrigger' pseudo-buttons the modifier indicators also badge).");
             }
 
             if (string.IsNullOrWhiteSpace(value: badge.Icon)) {
                 errors.Add(item: $"{path}.icon is required.");
             } else if (!names.Contains(item: badge.Icon)) {
                 errors.Add(item: $"{path}.icon '{badge.Icon}' names no row in icons.icons.");
-            }
-
-            if (badge.Overrides.Count > WorldIconCapacity.MaxFamilyOverridesPerBadge) {
-                errors.Add(item: $"{path}.overrides declares {badge.Overrides.Count} entries, exceeding the {WorldIconCapacity.MaxFamilyOverridesPerBadge}-family ceiling.");
             }
 
             var seenFamilies = new HashSet<string>(comparer: StringComparer.Ordinal);

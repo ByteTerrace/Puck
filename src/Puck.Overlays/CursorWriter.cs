@@ -20,15 +20,20 @@ public sealed class CursorWriter : IOverlaySeatEmitter<OverlayCursorSeat> {
     /// size is validated against its document band; this is the render-side backstop the host clamps to).</summary>
     public const float MaxSizePx = 64f;
 
+    private readonly OverlayThemeStore m_theme;
     private readonly ICursorSource m_source;
 
     /// <summary>Initializes a new instance of the <see cref="CursorWriter"/> class.</summary>
     /// <param name="source">The cursor snapshot source.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="source"/> is <see langword="null"/>.</exception>
-    public CursorWriter(ICursorSource source) {
+    /// <param name="theme">The live resolved theme.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="theme"/> is
+    /// <see langword="null"/>.</exception>
+    public CursorWriter(ICursorSource source, OverlayThemeStore theme) {
         ArgumentNullException.ThrowIfNull(argument: source);
+        ArgumentNullException.ThrowIfNull(argument: theme);
 
         m_source = source;
+        m_theme = theme;
     }
 
     void IOverlaySeatEmitter<OverlayCursorSeat>.EmitSeat(OverlayFrameBuilder builder, in OverlayCursorSeat seat) =>
@@ -37,7 +42,7 @@ public sealed class CursorWriter : IOverlaySeatEmitter<OverlayCursorSeat> {
             seat: in seat
         );
 
-    private static void EmitSeat(OverlayFrameBuilder builder, in OverlayCursorSeat seat) {
+    private void EmitSeat(OverlayFrameBuilder builder, in OverlayCursorSeat seat) {
         var region = seat.Viewport;
 
         if (
@@ -89,7 +94,7 @@ public sealed class CursorWriter : IOverlaySeatEmitter<OverlayCursorSeat> {
         );
 
         if (seat.HoverLabel.Length > 0) {
-            var cellHeight = OverlayFrameBuilder.CellHeight(sizePx: DesignTokens.Type.TypeMicroSize);
+            var cellHeight = OverlayFrameBuilder.CellHeight(sizePx: m_theme.Current.Type.MicroSize);
 
             builder.WriteText(
                 alpha: 1f,

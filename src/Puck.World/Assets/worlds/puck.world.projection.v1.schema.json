@@ -4215,6 +4215,20 @@
                       "null"
                     ],
                     "default": null
+                  },
+                  "contrastBoost": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "default": null
+                  },
+                  "uiScale": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "default": null
                   }
                 },
                 "additionalProperties": false,

@@ -113,6 +113,12 @@
     "inputHold": {
       "$ref": "./schema/inputHold.schema.json"
     },
+    "theme": {
+      "$ref": "./schema/theme.schema.json"
+    },
+    "markers": {
+      "$ref": "./schema/markers.schema.json"
+    },
     "rules": {
       "$ref": "./schema/rules.schema.json"
     },

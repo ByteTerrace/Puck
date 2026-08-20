@@ -859,6 +859,18 @@ public static partial class WorldDefinitionValidator {
             iconsAuthored: iconsAuthored,
             errors: errors
         );
+
+        ValidateTheme(
+            definition: definition,
+            errors: errors
+        );
+        ValidateMarkers(
+            definition: definition,
+            errors: errors,
+            iconNames: iconNames,
+            iconsAuthored: iconsAuthored
+        );
+
         ValidateStorage(
             storage: definition.Storage,
             errors: errors

@@ -4,7 +4,7 @@
     "null"
   ],
   "items": {
-    "description": "An AUTHORED per-seat mode family \u2014 a document-declared name plus its admitted states, the generic replacement for the engine\u0027s former hard-coded editor context family. player.mode \u003Cfamily\u003E \u003Cstate\u003E [seat] flips a seat\u0027s published state within the family; Puck.World.Client.WorldContextFamilies context rows may then map a (family, state) pair to a binding group exactly as a built-in family does.",
+    "description": "An AUTHORED per-seat mode family \u2014 a document-declared name plus its admitted states. player.mode \u003Cfamily\u003E \u003Cstate\u003E [seat] flips a seat\u0027s published state within the family; Puck.World.Client.WorldContextFamilies context rows may then map a (family, state) pair to a binding group exactly as a built-in family does.",
     "type": [
       "object",
       "null"

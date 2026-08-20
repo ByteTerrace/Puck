@@ -30,15 +30,20 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
     /// <summary>The most sectors a published ring may carry — <see cref="MaxRings"/>' per-ring twin.</summary>
     public const int MaxSectorsPerRing = 8;
 
+    private readonly OverlayThemeStore m_theme;
     private readonly IWheelSource m_source;
 
     /// <summary>Initializes a new instance of the <see cref="WheelWriter"/> class.</summary>
     /// <param name="source">The wheel snapshot source.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="source"/> is <see langword="null"/>.</exception>
-    public WheelWriter(IWheelSource source) {
+    /// <param name="theme">The live resolved theme.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="theme"/> is
+    /// <see langword="null"/>.</exception>
+    public WheelWriter(IWheelSource source, OverlayThemeStore theme) {
         ArgumentNullException.ThrowIfNull(argument: source);
+        ArgumentNullException.ThrowIfNull(argument: theme);
 
         m_source = source;
+        m_theme = theme;
     }
 
     void IOverlaySeatEmitter<OverlayWheelSeat>.EmitSeat(OverlayFrameBuilder builder, in OverlayWheelSeat seat) =>
@@ -47,7 +52,7 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
             seat: in seat
         );
 
-    private static void EmitSeat(OverlayFrameBuilder builder, in OverlayWheelSeat seat) {
+    private void EmitSeat(OverlayFrameBuilder builder, in OverlayWheelSeat seat) {
         var region = seat.Viewport;
 
         if (
@@ -67,7 +72,7 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
             return;
         }
 
-        var cellHeight = OverlayFrameBuilder.CellHeight(sizePx: DesignTokens.Type.TypeMicroSize);
+        var cellHeight = OverlayFrameBuilder.CellHeight(sizePx: m_theme.Current.Type.MicroSize);
 
         builder.BeginClip(
             h: (region.Height * builder.Height),

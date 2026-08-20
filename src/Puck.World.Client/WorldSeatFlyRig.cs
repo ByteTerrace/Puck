@@ -2,6 +2,7 @@ using System.Numerics;
 using Puck.Commands;
 using Puck.SdfVm;
 using Puck.SdfVm.Views;
+using Puck.World.Protocol;
 
 namespace Puck.World.Client;
 
@@ -9,9 +10,11 @@ namespace Puck.World.Client;
 /// One seat's FLY control application — a free camera driven by the seat's own move/look samples and its
 /// <see cref="ChannelRole.MoveUp"/>-role held channel, the SAME general input a body seat's channels carry (see
 /// <see cref="SeatController.Move"/>/<see cref="SeatController.Look"/>/<see cref="SeatController.HeldIntent"/>).
-/// Activated/deactivated by <c>player.mode</c> composing a <see cref="WorldSeatModeState.Target"/> of <c>"camera"</c>
-/// (in <c>PlayerCommandModule.Mode.cs</c>, alongside the existing <c>player.control</c> idle diversion this class
-/// knows nothing about) — the engine's only knowledge of "why" a seat is flying. Replaces the deleted
+/// Activated by <c>player.mode</c> composing a <see cref="WorldSeatModeState.Target"/> of
+/// <see cref="WorldSeatModeState.CameraTarget"/> (in <c>PlayerCommandModule.Mode.cs</c>, alongside the existing
+/// <c>player.control</c> idle diversion this class knows nothing about) — the engine's only knowledge of "why" a seat
+/// is flying. Deactivated by leaving that state, by the composition root when a mode reseed drops it
+/// (<c>WorldSeatBindings.CameraApplicationDropped</c>), and by <see cref="PruneDeparted"/> on a departure. Replaces the deleted
 /// <c>WorldEditorSession</c>: no camera-mode toggle, no live speed step, no console pose-teleport — the fly rig
 /// always runs at <c>views.flyRig.motion</c>'s authored <c>defaultSpeed</c>, steppable only by
 /// <c>world.row.step views.flyRig.motion.defaultSpeed</c> like any other document field.
@@ -31,6 +34,10 @@ public sealed class WorldSeatFlyRig(PlayerRoster roster) {
         public bool Active;
         public Vector3 Eye;
         public float Pitch;
+        // The intent source to re-admit when this seat leaves the fly application — captured at Activate, restored by
+        // Deactivate, and reset to Live so a departed seat's prune can never leave a stale restore target for the next
+        // occupant.
+        public IntentSource PriorSource = IntentSource.Live;
         public bool SeedPending;
         public float Yaw;
         public readonly FixedRig Rig = new();
@@ -100,10 +107,12 @@ public sealed class WorldSeatFlyRig(PlayerRoster roster) {
         }
     }
 
-    /// <summary>Activates the seat's fly application: arms the camera to seed from the CURRENT chase framing on the
-    /// next resolved frame (no pose pop). Idempotent while already active.</summary>
+    /// <summary>Activates the seat's fly application: arms the camera to seed from the current chase framing on the
+    /// next resolved frame (no pose pop) and latches the source to re-admit when the seat leaves. Idempotent while
+    /// already active.</summary>
     /// <param name="slot">The 0-based seat slot.</param>
-    public void Activate(int slot) {
+    /// <param name="priorSource">The intent source to restore when the seat leaves the fly application.</param>
+    public void Activate(int slot, IntentSource priorSource) {
         if (((uint)slot) >= ((uint)m_seats.Length)) {
             return;
         }
@@ -112,20 +121,27 @@ public sealed class WorldSeatFlyRig(PlayerRoster roster) {
 
         seat.Active = true;
         seat.SeedPending = true;
+        seat.PriorSource = priorSource;
     }
-    /// <summary>Deactivates the seat's fly application and clears its selection (the tools' self-heal hook — see
-    /// <see cref="SelectionReset"/>). A friendly no-op while already inactive.</summary>
+    /// <summary>Deactivates the seat's fly application and returns the intent source to restore, resetting the latched
+    /// source to Live. A friendly no-op returning Live while already inactive.</summary>
     /// <param name="slot">The 0-based seat slot.</param>
-    public void Deactivate(int slot) {
+    /// <returns>The source latched at <see cref="Activate"/>, or Live when the seat was not active.</returns>
+    public IntentSource Deactivate(int slot) {
         if (
             (((uint)slot) >= ((uint)m_seats.Length)) ||
             !m_seats[slot].Active
         ) {
-            return;
+            return IntentSource.Live;
         }
 
-        m_seats[slot].Active = false;
-        SelectionReset?.Invoke(obj: slot);
+        var seat = m_seats[slot];
+        var priorSource = seat.PriorSource;
+
+        seat.Active = false;
+        seat.PriorSource = IntentSource.Live;
+
+        return priorSource;
     }
     /// <summary>The seat's current fly eye position — the AUTHORED pose (advanced through the most recent resolve),
     /// not a frame-resolved read, so a verb batch that picks/places in the same pump window reads the fresh pose
@@ -161,14 +177,14 @@ public sealed class WorldSeatFlyRig(PlayerRoster roster) {
         return CommandResult.Error(output: $"[{verb}: seat {PlayerRoster.DisplayNumber(slot: slot)} is not flying]");
     }
     /// <summary>Self-heals a departed seat: a slot that left the roster while flying is force-deactivated so a later
-    /// join never inherits a stale fly pose or selection. Called once per produced frame.</summary>
+    /// join never inherits a stale fly pose or latched intent source. Called once per produced frame.</summary>
     public void PruneDeparted() {
         for (var slot = 0; (slot < m_seats.Length); slot++) {
             if (
                 m_seats[slot].Active &&
                 !m_roster.IsJoined(slot: slot)
             ) {
-                Deactivate(slot: slot);
+                _ = Deactivate(slot: slot);
             }
         }
     }
@@ -276,9 +292,4 @@ public sealed class WorldSeatFlyRig(PlayerRoster roster) {
 
         return seat.Rig;
     }
-
-    /// <summary>The selection-clear sink <see cref="Deactivate"/> invokes so a deactivated or departed seat never
-    /// leaves a stale selection for the next occupant. Property-injected (the targeting state is composed after this
-    /// rig).</summary>
-    public Action<int>? SelectionReset { get; set; }
 }

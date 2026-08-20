@@ -8,34 +8,23 @@ namespace Puck.World;
 public static class WorldIconCapacity {
     /// <summary>The most badge-mapping rows one world authors.</summary>
     public const int MaxBadges = 32;
-    /// <summary>The most family-specific overrides one badge row carries — one per non-<c>Unknown</c>
-    /// <c>Puck.Input.Devices.GamepadType</c> value (Schema cannot reference <c>Puck.Input</c> — the architecture
-    /// gate's structural denial — so this is that catalog's own copy).</summary>
-    public const int MaxFamilyOverridesPerBadge = 6;
     /// <summary>The most icon rows one world authors.</summary>
     public const int MaxIcons = 128;
     /// <summary>The most characters a <see cref="WorldIconRow.Label"/> carries.</summary>
     public const int MaxLabelChars = 2;
 }
 
-/// <summary>The committed fixed-UI font ids an icon <see cref="WorldIconGlyphRef"/> may name — the same combined
-/// MTSDF atlas <c>Puck.Overlays.OverlayGlyphAtlasSet</c> already loads for on-screen text; an icon glyph is baked
-/// into the overlay's shared atlas from ONE of these at world load, never a document-shipped font file.</summary>
+/// <summary>The committed fixed-UI font ids an icon <see cref="WorldIconGlyphRef"/> is spelled with. Only
+/// <see cref="JetBrainsMonoRegular"/> is admitted: the icon bake draws every glyph cell from that one MTSDF atlas
+/// (<c>Puck.Overlays.OverlayGlyphAtlasSet.MonoFont</c>), so the validator refuses any other face by name rather than
+/// admit a field the bake ignores. An icon glyph is never a document-shipped font file.</summary>
 public static class WorldIconFontCatalog {
-    /// <summary>The Inter Medium face.</summary>
-    public const string InterMedium = "inter-medium";
-    /// <summary>The Inter Regular face.</summary>
+    /// <summary>The Inter Regular face — a committed proportional face the icon bake does NOT draw from, named by
+    /// the refusal law that proves a non-mono face is rejected.</summary>
     public const string InterRegular = "inter-regular";
-    /// <summary>The Inter SemiBold face.</summary>
-    public const string InterSemibold = "inter-semibold";
-    /// <summary>The JetBrains Mono Regular face — the overlay's own text/badge font, and the only face the shipped
-    /// icon repertoire draws from today (its Unicode coverage already carries every glyph the default set needs).</summary>
+    /// <summary>The JetBrains Mono Regular face — the overlay's own text/badge font, and the only face an icon glyph
+    /// may name.</summary>
     public const string JetBrainsMonoRegular = "jetbrains-mono-regular";
-
-    /// <summary>Answers whether <paramref name="name"/> is one of the committed fixed-UI faces.</summary>
-    /// <param name="name">The candidate font id.</param>
-    public static bool IsKnown(string? name) =>
-        (name is JetBrainsMonoRegular or InterRegular or InterMedium or InterSemibold);
 }
 
 /// <summary>A single glyph reference into a world-shipped (committed fixed-UI) font: a font id

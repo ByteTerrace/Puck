@@ -13,8 +13,7 @@ namespace Puck.Overlays;
 /// <param name="Toast">The transient-echo source, or <see langword="null"/>.</param>
 /// <param name="FeedTick">Invoked once per produced frame, before the sources are snapshotted — the host's hook to
 /// freshen pull-model feeds (e.g. recomposing the per-seat binding frame). Runs on the render thread.</param>
-/// <param name="EditorHud">The per-seat editor-HUD source, or <see langword="null"/>.</param>
-/// <param name="Gizmos">The per-seat editor-gizmo source (projected chips for geometry-less rows), or
+/// <param name="Markers">The per-seat marker source (projected chips for authored <c>markers</c> rows), or
 /// <see langword="null"/>.</param>
 /// <param name="Hud">The authored world-scope and player-scope (per-seat) HUD structure source, or
 /// <see langword="null"/>.</param>
@@ -27,8 +26,7 @@ public sealed record UnifiedOverlaySources(
     IBindingBarSource? BindingBar,
     IOverlayToastSource? Toast,
     Action? FeedTick,
-    IEditorHudSource? EditorHud = null,
-    IEditorGizmoSource? Gizmos = null,
+    IMarkerSource? Markers = null,
     IHudSource? Hud = null,
     IHudBindingResolver? HudBindings = null,
     ICursorSource? Cursor = null,
@@ -52,14 +50,14 @@ public sealed record UnifiedOverlaySources(
 /// reused push-constant array, records packed with <see cref="BitConverter.SingleToUInt32Bits"/>.
 /// </remarks>
 public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPassTimingSource {
-    // The FIVE first-party writers' draw-order table size — Console..Toast (OverlayChannel 0..4). OverlayChannel.Hud
-    // (5) is DELIBERATELY excluded from this table: it is not a single fixed-position writer but the banded
+    // The FOUR first-party writers' draw-order table size — Console..Toast (OverlayChannel 0..3). OverlayChannel.Hud
+    // (4) is DELIBERATELY excluded from this table: it is not a single fixed-position writer but the banded
     // pipeline's under/base/over sequence PLUS the unbanded player-scope seat-panel pass (see ProduceFrame), opened
     // as its own channel scope up to four times a frame rather than once through this table.
-    // OverlayChannel.Cursor (6) and OverlayChannel.Wheel (7) are excluded too: they are the frame's LAST two
+    // OverlayChannel.Cursor (5) and OverlayChannel.Wheel (6) are excluded too: they are the frame's LAST two
     // channel scopes (wheel, then cursor on top), drawn over everything and outside the replace-band suppression
     // (see ProduceFrame's tail).
-    private const int FirstPartyChannelCount = 5;
+    private const int FirstPartyChannelCount = 4;
     // The glyph outline halo width, in encoded signed-distance units — the SDF contrast band that keeps overlay text
     // legible over any world content, kept clear of the atlas' saturation floor at the overlay's screenPxRange.
     private const float OutlineBand = 0.20f;
@@ -73,7 +71,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
 
     private readonly BindingBarWriter? m_bindingBarWriter;
     private readonly OverlayFrameBuilder m_builder;
-    // THE DRAW-ORDER TABLE for the five FIRST-PARTY writers: indexed by (int)OverlayChannel, built once in the
+    // THE DRAW-ORDER TABLE for the four FIRST-PARTY writers: indexed by (int)OverlayChannel, built once in the
     // constructor. ProduceFrame walks 0..FirstPartyChannelCount-1 and dispatches through this table — the enum's
     // declared order IS the draw order mechanically, never a hand-ordered if-chain a future reorder could silently
     // diverge from. A null entry is a source this instance simply has none of. Toast's extra renderTicks argument
@@ -87,9 +85,8 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
     private readonly NodeDescriptor m_descriptor;
     private readonly IGpuDescriptorAllocator m_descriptorAllocator;
     private readonly IGpuDeviceContext m_deviceContext;
-    private readonly EditorHudWriter? m_editorHudWriter;
     private readonly ReadOnlyMemory<byte> m_fragmentBytecode;
-    private readonly EditorGizmoWriter? m_gizmoWriter;
+    private readonly MarkerWriter? m_markerWriter;
     private readonly uint m_height;
     // The authored world-scope HUD's banded writer, or null when the host wired no Hud/HudBindings source pair (see
     // UnifiedOverlaySources' remarks) — draws nothing rather than throwing.
@@ -99,6 +96,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
     private readonly IGpuQueueSubmitter m_queueSubmitter;
     private readonly IGpuShaderModuleFactory m_shaderModuleFactory;
     private readonly UnifiedOverlaySources m_sources;
+    private readonly OverlayThemeStore m_theme;
     private readonly uint m_storageBufferBinding;
     private readonly IGpuStorageBufferFactory m_storageBufferFactory;
     private readonly IGpuSurfaceTransferFactory m_surfaceTransferFactory;
@@ -164,11 +162,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
     /// <param name="fragmentBytecode">The unified overlay fragment shader, in the host backend's bytecode format.</param>
     /// <param name="width">The render width in pixels.</param>
     /// <param name="height">The render height in pixels.</param>
-    /// <param name="editorGizmoSpeakerIcon">The resolved plate icon the editor-gizmo writer draws for a point
-    /// speaker (<c>edit.speaker</c> in the caller's icon table); <see cref="OverlayResolvedGlyph.None"/> when
-    /// unresolved.</param>
-    /// <param name="editorGizmoBedIcon">The resolved plate icon the editor-gizmo writer draws for an ambient bed
-    /// (<c>edit.bed</c>).</param>
+    /// <param name="theme">The boot-resolved theme (see <see cref="UpdateTheme"/> for live retheme).</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="capacity"/> derives a lease table that
     /// over-subscribes an <see cref="OverlayFrameBuilder"/> backstop (see <see cref="OverlayChannelLeases"/>).</exception>
@@ -182,18 +176,20 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         ReadOnlyMemory<byte> fragmentBytecode,
         uint width,
         uint height,
-        OverlayResolvedGlyph editorGizmoSpeakerIcon = default,
-        OverlayResolvedGlyph editorGizmoBedIcon = default
+        OverlayThemeValues theme = default
     ) {
         ArgumentNullException.ThrowIfNull(argument: glyphs);
         ArgumentNullException.ThrowIfNull(argument: inner);
         ArgumentNullException.ThrowIfNull(argument: services);
         ArgumentNullException.ThrowIfNull(argument: sources);
 
+        m_theme = new OverlayThemeStore();
+        m_theme.Publish(theme: in theme);
         m_builder = new OverlayFrameBuilder(
             glyphs: glyphs,
             height: height,
             leases: new OverlayChannelLeases(capacity: capacity),
+            theme: in theme,
             width: width
         );
         m_bindingBarWriter = ((sources.BindingBar is { } bindingBar)
@@ -202,15 +198,15 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         );
         m_commandRecorder = services.CommandRecorder;
         m_consoleWriter = ((sources.Console is { } console)
-            ? new ConsolePanelWriter(source: console)
+            ? new ConsolePanelWriter(source: console, theme: m_theme)
             : null
         );
         m_cursorWriter = ((sources.Cursor is { } cursor)
-            ? new CursorWriter(source: cursor)
+            ? new CursorWriter(source: cursor, theme: m_theme)
             : null
         );
         m_wheelWriter = ((sources.Wheel is { } wheel)
-            ? new WheelWriter(source: wheel)
+            ? new WheelWriter(source: wheel, theme: m_theme)
             : null
         );
         m_createRenderTarget = services.CreateRenderTarget;
@@ -220,15 +216,10 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         );
         m_descriptorAllocator = services.DescriptorAllocator;
         m_deviceContext = services.DeviceContext;
-        m_editorHudWriter = ((sources.EditorHud is { } editorHud)
-            ? new EditorHudWriter(source: editorHud)
-            : null
-        );
-        m_gizmoWriter = ((sources.Gizmos is { } gizmos)
-            ? new EditorGizmoWriter(
-                bedIcon: editorGizmoBedIcon,
-                source: gizmos,
-                speakerIcon: editorGizmoSpeakerIcon
+        m_markerWriter = ((sources.Markers is { } markers)
+            ? new MarkerWriter(
+                maxChipsPerSeat: capacity.MarkerMaxChipsPerSeat,
+                source: markers
             )
             : null
         );
@@ -252,7 +243,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         m_timingPoolFactory = services.TimingPoolFactory;
         m_timingRecorder = services.TimingRecorder;
         m_toastWriter = ((sources.Toast is { } toast)
-            ? new ToastWriter(source: toast)
+            ? new ToastWriter(source: toast, theme: m_theme)
             : null
         );
         m_vertexBufferFactory = services.VertexBufferFactory;
@@ -260,7 +251,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         m_width = width;
 
         // Built ONCE, after every writer field above is assigned: OverlayChannel's declared values are the array
-        // index, so the enum order IS the draw order — see ProduceFrame's dispatch loop. Sized to the five
+        // index, so the enum order IS the draw order — see ProduceFrame's dispatch loop. Sized to the four
         // FIRST-PARTY channels only (FirstPartyChannelCount) — OverlayChannel.Hud is drawn through m_hudWriter's
         // own under/base/over calls, never through this table.
         m_channelWriters = new Action<OverlayFrameBuilder>?[FirstPartyChannelCount];
@@ -272,12 +263,8 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
             ? (builder => bindingBarForTable.Emit(builder: builder))
             : null
         );
-        m_channelWriters[((int)OverlayChannel.Gizmos)] = ((m_gizmoWriter is { } gizmosForTable)
-            ? (builder => gizmosForTable.Emit(builder: builder))
-            : null
-        );
-        m_channelWriters[((int)OverlayChannel.EditorHud)] = ((m_editorHudWriter is { } editorHudForTable)
-            ? (builder => editorHudForTable.Emit(builder: builder))
+        m_channelWriters[((int)OverlayChannel.Markers)] = ((m_markerWriter is { } markersForTable)
+            ? (builder => markersForTable.Emit(builder: builder))
             : null
         );
         m_channelWriters[((int)OverlayChannel.Toast)] = ((m_toastWriter is { } toastForTable)
@@ -901,13 +888,13 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         m_hudWriter?.RefreshFrame();
 
         // THE BANDED PIPELINE (draw order, bottom to top): UNDER (document order) -> BASE -> OVER (document order).
-        // BASE is the five FIRST-PARTY writers, MECHANICALLY drawn in OverlayChannel order (console at the bottom,
-        // toast on top; gizmos sit under the HUD text so a chip near the panel never occludes a line) — UNLESS at
+        // BASE is the four FIRST-PARTY writers, MECHANICALLY drawn in OverlayChannel order (console at the bottom,
+        // toast on top; markers sit under the HUD text so a chip near the panel never occludes a line) — UNLESS at
         // least one live authored panel declares the replace band, in which case the replace panels themselves
-        // (document order) take the base slot instead and the five first-party writers do not run this frame.
+        // (document order) take the base slot instead and the four first-party writers do not run this frame.
         // Removing the last replace panel restores them on the very next produced frame (HasReplace is recomputed
         // from the fresh snapshot every RefreshFrame call above). Console mirror note: the on-screen console panel is
-        // one of the five suppressed writers under replace, but the underlying stdin/stdout control plane
+        // one of the four suppressed writers under replace, but the underlying stdin/stdout control plane
         // (Program.cs / ConsoleTape) is untouched — console verbs keep working exactly as before regardless
         // of what is drawn.
         if (m_hudWriter is { } hudUnder) {
@@ -1019,6 +1006,21 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
     }
     /// <inheritdoc/>
     public void RequestCapture(string path) => m_pendingCapturePath = path;
+    /// <summary>Republishes the live theme every CPU writer reads (<see cref="OverlayThemeStore"/>) and re-fills
+    /// the GPU token slab from it — the composition root's live-retheme call, at whatever cadence it resolves the
+    /// document's authored <c>theme</c> section against live state (matching the sky's own per-revision cadence).
+    /// A no-op on the CPU-writer side takes effect on the very next produced frame; the GPU token slab re-uploads
+    /// immediately when resources are already standing (a call before the first produced frame just updates the
+    /// value <see cref="EnsureResources"/> will upload on its own first pass).</summary>
+    /// <param name="theme">The newly resolved theme.</param>
+    public void UpdateTheme(in OverlayThemeValues theme) {
+        m_theme.Publish(theme: in theme);
+        m_builder.UpdateTokenBlock(theme: in theme);
+
+        if (m_resourcesReady) {
+            m_dataBuffer!.Write<uint>(data: m_builder.Scratch[..OverlayTokenBlock.WordCount]);
+        }
+    }
     /// <inheritdoc/>
     public bool TryReadPassTimings(Span<double> passMilliseconds, out int passCount, out double frameMilliseconds) {
         if (

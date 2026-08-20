@@ -9,7 +9,7 @@ namespace Puck.World;
 /// <summary>
 /// The <c>state</c> section's fine-grain verb surface — the dev reflection of the genre-neutral game-state document
 /// protocol (score, rounds, inventory, flags), molded over stdin through the same <see cref="WorldMutation"/>
-/// messages the editor drives. The whole-row pair (a row's name, kind, envelope, capacity, and cells) lives in
+/// messages every document write flows through. The whole-row pair (a row's name, kind, envelope, capacity, and cells) lives in
 /// <c>world.row.set</c>/<c>world.row.remove state ...</c> — a cell write is a finer grain than a row upsert, not
 /// sugar for one, which is why it stays here: <c>world.state.cell.set</c> writes one cell of an already-declared row
 /// without re-authoring its shape, dispatching on the row's own declared kind (a numeric/bool token, or a raw-tail

@@ -185,8 +185,10 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
     //   rect:     0..3 rect (normalized) · 6 corner radius (px) · 7 alpha
     //   icon:     0..1 plate center (normalized) · 2 plate half (px) · 3 badge half (px) · 5 iconGlyph0 ·
     //             6 state bits · 7..8 badge offset (px) · 10 iconGlyph1
-    //   ring:     0..1 center (normalized) · 2 radius (px) · 7 alpha — a stroked hairline circle (the gizmo
-    //             radius indicator), the ONE hairline weight like every grammar stroke
+    //   ring:     0..1 center (normalized) · 2 radius (px) · 7 alpha — a stroked hairline circle (the marker
+    //             radius indicator), the ONE hairline weight like every grammar stroke. colorRole ==
+    //             OVERLAY_ROLE_CUSTOM (255) reads a raw RGB triple from words 5/6/8 (Pack()'d floats) instead of
+    //             indexing the token slab — a marker's authored, possibly state-bound ring color.
     for (int e = 0; (e < elementCount); e++) {
         uint o = (elementBase + ((uint)e * ELEMENT_WORDS));
 
@@ -247,7 +249,9 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
             }
 
             float alpha = OverlayFloat(overlayData, (o + 7u));
-            float4 strokeColor = OverlayTokenColor(overlayData, role);
+            float4 strokeColor = ((role == OVERLAY_ROLE_CUSTOM)
+                ? float4(OverlayFloat(overlayData, (o + 5u)), OverlayFloat(overlayData, (o + 6u)), OverlayFloat(overlayData, (o + 8u)), 1.0)
+                : OverlayTokenColor(overlayData, role));
 
             color = lerp(color, strokeColor.rgb, (strokeMask(dist, 0.5, edgeAa) * strokeColor.a * alpha));
         } else {

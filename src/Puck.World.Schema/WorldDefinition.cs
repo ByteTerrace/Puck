@@ -52,6 +52,8 @@ public sealed record WorldDefinition(
     [property: JsonPropertyName("icons"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldIconographySection? IconsRaw = null,
     [property: JsonPropertyName("state"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldStateSection? StateRaw = null,
     [property: JsonPropertyName("inputHold"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldInputHoldAuthoring? InputHoldRaw = null,
+    [property: JsonPropertyName("theme"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldThemeSection? ThemeRaw = null,
+    [property: JsonPropertyName("markers"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldMarkerRow>? MarkersRaw = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldRule>? Rules = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldIdentityDefinition? Identity = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldGroupsSection? Groups = null,
@@ -196,6 +198,9 @@ public sealed record WorldDefinition(
     /// catalog look (<see cref="WorldLook.Implicit"/>) — no branch special-cases "the author authored none".</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldLook> Looks => (LooksRaw ?? []);
+    /// <summary>Gets the marker rows — ABSENT resolves to none (no marker channel output).</summary>
+    [JsonIgnore]
+    public IReadOnlyList<WorldMarkerRow> Markers => (MarkersRaw ?? []);
     /// <summary>Gets the profileless locomotion speeds a stand-in with no seated profile advances on — ABSENT
     /// resolves to <see cref="WorldMotionDefaults.Default"/> (inert, near-zero).</summary>
     [JsonIgnore]
@@ -280,6 +285,11 @@ public sealed record WorldDefinition(
     /// none.</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldTargetRegister> TargetRegisters => (TargetRegistersRaw ?? []);
+    /// <summary>Gets the <c>theme</c> section — ABSENT resolves to <see cref="WorldThemeSection.Absent"/> (a zeroed
+    /// token block, no chrome); the standard "Instrument + grafts" recipe is authored in
+    /// <c>standard.world.json</c>.</summary>
+    [JsonIgnore]
+    public WorldThemeSection Theme => (ThemeRaw ?? WorldThemeSection.Absent);
     /// <summary>Gets the tune asset rows — ABSENT resolves to none.</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldTune> Tunes => (TunesRaw ?? []);

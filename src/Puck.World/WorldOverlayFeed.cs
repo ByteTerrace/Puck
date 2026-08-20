@@ -44,9 +44,9 @@ internal sealed class WorldOverlayFeed {
     // One cached pressed-probe delegate per SEAT SLOT (the router's held state is slot-keyed), so the per-frame
     // compose closes over nothing.
     private readonly Func<string, bool>[] m_pressedBySlot;
-    // Cached ONCE (never per tick, never per bank): the icon table's own resolvers are stateless, and the badge
-    // resolver's only per-tick input (the connected family) rides the mutable m_currentFamily cell instead of a
-    // fresh closure, the same "mutable cell + preallocated delegate" shape m_pressedByButton already takes.
+    // Cached ONCE (never per tick, never per bank): the icon table's own resolvers are stateless, and the two
+    // family-aware resolvers' only per-tick input (the connected family) rides the mutable m_currentFamily cell
+    // instead of a fresh closure, the same "mutable cell + preallocated delegate" shape m_pressedByButton already takes.
     private readonly Func<GamepadButtons, OverlayResolvedGlyph> m_resolveBadge;
     private readonly Func<string?, OverlayResolvedGlyph> m_resolveIcon;
     private readonly Func<string, OverlayResolvedGlyph> m_resolveModifierSource;
@@ -86,7 +86,10 @@ internal sealed class WorldOverlayFeed {
             family: m_currentFamily
         );
         m_resolveIcon = icons.ResolveIcon;
-        m_resolveModifierSource = icons.ResolveModifierSource;
+        m_resolveModifierSource = source => icons.ResolveModifierSource(
+            source: source,
+            family: m_currentFamily
+        );
         m_roster = roster;
         m_store = store;
         m_hintLines = new string[PlayerRoster.MaxSlots][];

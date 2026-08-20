@@ -1,0 +1,521 @@
+{
+  "type": [
+    "object",
+    "null"
+  ],
+  "properties": {
+    "color": {
+      "description": "The semantic color roles.",
+      "type": "object",
+      "properties": {
+        "surfaceBase": {},
+        "surfacePanel": {},
+        "surfaceRaised": {},
+        "surfaceInset": {},
+        "scrimPanel": {
+          "$ref": "./common.schema.json#/$defs/WorldThemeScrim"
+        },
+        "scrimStrip": {
+          "$ref": "./common.schema.json#/$defs/WorldThemeScrim"
+        },
+        "scrimChip": {
+          "$ref": "./common.schema.json#/$defs/WorldThemeScrim"
+        },
+        "lineHair": {},
+        "lineSoft": {},
+        "lineStrong": {},
+        "lineInset": {},
+        "textPrimary": {},
+        "textDim": {},
+        "textMute": {},
+        "accent": {},
+        "accentQuiet": {},
+        "accentLine": {},
+        "accentInk": {},
+        "positive": {},
+        "warning": {},
+        "danger": {},
+        "phosphor": {},
+        "phosphorDim": {},
+        "phosphorCyan": {},
+        "badgeDark": {},
+        "badgeLight": {}
+      },
+      "required": [
+        "surfaceBase",
+        "surfacePanel",
+        "surfaceRaised",
+        "surfaceInset",
+        "scrimPanel",
+        "scrimStrip",
+        "scrimChip",
+        "lineHair",
+        "lineSoft",
+        "lineStrong",
+        "lineInset",
+        "textPrimary",
+        "textDim",
+        "textMute",
+        "accent",
+        "accentQuiet",
+        "accentLine",
+        "accentInk",
+        "positive",
+        "warning",
+        "danger",
+        "phosphor",
+        "phosphorDim",
+        "phosphorCyan",
+        "badgeDark",
+        "badgeLight"
+      ],
+      "additionalProperties": false
+    },
+    "space": {
+      "description": "The spacing grid and component heights.",
+      "type": "object",
+      "properties": {
+        "space0": {
+          "type": "number"
+        },
+        "space1": {
+          "type": "number"
+        },
+        "space2": {
+          "type": "number"
+        },
+        "space3": {
+          "type": "number"
+        },
+        "space4": {
+          "type": "number"
+        },
+        "space5": {
+          "type": "number"
+        },
+        "space6": {
+          "type": "number"
+        },
+        "space8": {
+          "type": "number"
+        },
+        "heightBadge": {
+          "type": "number"
+        },
+        "heightBindBar": {
+          "type": "number"
+        },
+        "heightChip": {
+          "type": "number"
+        },
+        "heightConsoleHead": {
+          "type": "number"
+        },
+        "heightModeRow": {
+          "type": "number"
+        },
+        "heightPromptRow": {
+          "type": "number"
+        },
+        "heightTrackerBar": {
+          "type": "number"
+        },
+        "heightTrackerCell": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "space0",
+        "space1",
+        "space2",
+        "space3",
+        "space4",
+        "space5",
+        "space6",
+        "space8",
+        "heightBadge",
+        "heightBindBar",
+        "heightChip",
+        "heightConsoleHead",
+        "heightModeRow",
+        "heightPromptRow",
+        "heightTrackerBar",
+        "heightTrackerCell"
+      ],
+      "additionalProperties": false
+    },
+    "radius": {
+      "description": "The radius scale.",
+      "type": "object",
+      "properties": {
+        "radius1": {
+          "type": "number"
+        },
+        "radius2": {
+          "type": "number"
+        },
+        "radius3": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "radius1",
+        "radius2",
+        "radius3"
+      ],
+      "additionalProperties": false
+    },
+    "type": {
+      "description": "The type scale.",
+      "type": "object",
+      "properties": {
+        "bodySize": {
+          "type": "number"
+        },
+        "bodyLine": {
+          "type": "number"
+        },
+        "bodyWeight": {
+          "type": "integer"
+        },
+        "labelSize": {
+          "type": "number"
+        },
+        "labelLine": {
+          "type": "number"
+        },
+        "labelTracking": {
+          "type": "number"
+        },
+        "labelWeight": {
+          "type": "integer"
+        },
+        "microSize": {
+          "type": "number"
+        },
+        "microLine": {
+          "type": "number"
+        },
+        "microTracking": {
+          "type": "number"
+        },
+        "microWeight": {
+          "type": "integer"
+        },
+        "monoSize": {
+          "type": "number"
+        },
+        "monoLine": {
+          "type": "number"
+        },
+        "monoTracking": {
+          "type": "number"
+        },
+        "monoWeight": {
+          "type": "integer"
+        },
+        "monoBadgeSize": {
+          "type": "number"
+        },
+        "monoReadoutSize": {
+          "type": "number"
+        },
+        "titleSize": {
+          "type": "number"
+        },
+        "titleLine": {
+          "type": "number"
+        },
+        "titleTracking": {
+          "type": "number"
+        },
+        "titleWeight": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "bodySize",
+        "bodyLine",
+        "bodyWeight",
+        "labelSize",
+        "labelLine",
+        "labelTracking",
+        "labelWeight",
+        "microSize",
+        "microLine",
+        "microTracking",
+        "microWeight",
+        "monoSize",
+        "monoLine",
+        "monoTracking",
+        "monoWeight",
+        "monoBadgeSize",
+        "monoReadoutSize",
+        "titleSize",
+        "titleLine",
+        "titleTracking",
+        "titleWeight"
+      ],
+      "additionalProperties": false
+    },
+    "elevation": {
+      "description": "The two-tier elevation recipe.",
+      "type": "object",
+      "properties": {
+        "bloomHaloBlur": {
+          "type": "number"
+        },
+        "bloomHaloSpread": {
+          "type": "number"
+        },
+        "bloomHaloAlpha": {},
+        "bloomRingWidth": {
+          "type": "number"
+        },
+        "bloomRingAlpha": {},
+        "bloomNeutralHaloAlpha": {},
+        "bloomNeutralRingAlpha": {},
+        "bloomHeldInsetBlur": {
+          "type": "number"
+        },
+        "bloomHeldInsetSpread": {
+          "type": "number"
+        },
+        "bloomHeldInsetAlpha": {},
+        "bloomAccent": {
+          "$ref": "./common.schema.json#/$defs/WorldThemeBloomHue"
+        },
+        "bloomPositive": {
+          "$ref": "./common.schema.json#/$defs/WorldThemeBloomHue"
+        },
+        "bloomWarning": {
+          "$ref": "./common.schema.json#/$defs/WorldThemeBloomHue"
+        },
+        "bloomDanger": {
+          "$ref": "./common.schema.json#/$defs/WorldThemeBloomHue"
+        },
+        "bloomNeutral": {
+          "$ref": "./common.schema.json#/$defs/WorldThemeBloomHue"
+        },
+        "pressHeldGlowBlur": {
+          "type": "number"
+        },
+        "pressHeldGlowSpread": {
+          "type": "number"
+        },
+        "pressHeldGlowColor": {},
+        "pressHeldShadowBlur": {
+          "type": "number"
+        },
+        "pressHeldShadowOffsetY": {
+          "type": "number"
+        },
+        "pressHeldTranslateY": {
+          "type": "number"
+        },
+        "pressHeldShadowColor": {},
+        "shadowSeatBlur": {
+          "type": "number"
+        },
+        "shadowSeatOffsetY": {
+          "type": "number"
+        },
+        "shadowSeatSpread": {
+          "type": "number"
+        },
+        "shadowSeatStripSpread": {
+          "type": "number"
+        },
+        "shadowSeatColor": {},
+        "shadowSeatStripColor": {},
+        "catchlightOffsetY": {
+          "type": "number"
+        },
+        "catchlightColor": {},
+        "chipRestOpacity": {
+          "type": "number"
+        },
+        "edgeHairlineWidth": {
+          "type": "number"
+        },
+        "ringStatusWidth": {
+          "type": "number"
+        },
+        "ringStatusAlpha": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "bloomHaloBlur",
+        "bloomHaloSpread",
+        "bloomHaloAlpha",
+        "bloomRingWidth",
+        "bloomRingAlpha",
+        "bloomNeutralHaloAlpha",
+        "bloomNeutralRingAlpha",
+        "bloomHeldInsetBlur",
+        "bloomHeldInsetSpread",
+        "bloomHeldInsetAlpha",
+        "bloomAccent",
+        "bloomPositive",
+        "bloomWarning",
+        "bloomDanger",
+        "bloomNeutral",
+        "pressHeldGlowBlur",
+        "pressHeldGlowSpread",
+        "pressHeldGlowColor",
+        "pressHeldShadowBlur",
+        "pressHeldShadowOffsetY",
+        "pressHeldTranslateY",
+        "pressHeldShadowColor",
+        "shadowSeatBlur",
+        "shadowSeatOffsetY",
+        "shadowSeatSpread",
+        "shadowSeatStripSpread",
+        "shadowSeatColor",
+        "shadowSeatStripColor",
+        "catchlightOffsetY",
+        "catchlightColor",
+        "chipRestOpacity",
+        "edgeHairlineWidth",
+        "ringStatusWidth",
+        "ringStatusAlpha"
+      ],
+      "additionalProperties": false
+    },
+    "diegetic": {
+      "description": "The diegetic material recipe.",
+      "type": "object",
+      "properties": {
+        "plateTop": {},
+        "plateMid": {},
+        "plateBottom": {},
+        "plateStripeColor": {},
+        "embossFill": {},
+        "engraveFill": {},
+        "embossShadowDropAlpha": {
+          "type": "number"
+        },
+        "embossShadowDropBlur": {
+          "type": "number"
+        },
+        "embossShadowDropOffsetY": {
+          "type": "number"
+        },
+        "embossShadowLitAlpha": {
+          "type": "number"
+        },
+        "embossShadowLitOffsetY": {
+          "type": "number"
+        },
+        "engraveShadowLipAlpha": {
+          "type": "number"
+        },
+        "engraveShadowLipOffsetY": {
+          "type": "number"
+        },
+        "engraveShadowRecessAlpha": {
+          "type": "number"
+        },
+        "engraveShadowRecessBlur": {
+          "type": "number"
+        },
+        "engraveShadowRecessOffsetY": {
+          "type": "number"
+        },
+        "screenWellOuter": {},
+        "screenWellInner": {},
+        "bezelOuter": {},
+        "bezelInner": {},
+        "bezelEdge": {},
+        "phosphorGlowBlur": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "plateTop",
+        "plateMid",
+        "plateBottom",
+        "plateStripeColor",
+        "embossFill",
+        "engraveFill",
+        "embossShadowDropAlpha",
+        "embossShadowDropBlur",
+        "embossShadowDropOffsetY",
+        "embossShadowLitAlpha",
+        "embossShadowLitOffsetY",
+        "engraveShadowLipAlpha",
+        "engraveShadowLipOffsetY",
+        "engraveShadowRecessAlpha",
+        "engraveShadowRecessBlur",
+        "engraveShadowRecessOffsetY",
+        "screenWellOuter",
+        "screenWellInner",
+        "bezelOuter",
+        "bezelInner",
+        "bezelEdge",
+        "phosphorGlowBlur"
+      ],
+      "additionalProperties": false
+    },
+    "motion": {
+      "description": "The motion recipe.",
+      "type": "object",
+      "properties": {
+        "caretBlink": {
+          "type": "number"
+        },
+        "durFast": {
+          "type": "number"
+        },
+        "durMed": {
+          "type": "number"
+        },
+        "durPanel": {
+          "type": "number"
+        },
+        "easeStd": {
+          "$ref": "./common.schema.json#/$defs/WorldThemeCubicBezier"
+        },
+        "easeOut": {
+          "$ref": "./common.schema.json#/$defs/WorldThemeCubicBezier"
+        }
+      },
+      "required": [
+        "caretBlink",
+        "durFast",
+        "durMed",
+        "durPanel",
+        "easeStd",
+        "easeOut"
+      ],
+      "additionalProperties": false
+    },
+    "icon": {
+      "description": "The procedural icon feel.",
+      "type": "object",
+      "properties": {
+        "strokeHalfWidth": {
+          "description": "The hairline stroke half-width every procedural glyph/icon draws with, in glyph-local units.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "strokeHalfWidth"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "color",
+    "space",
+    "radius",
+    "type",
+    "elevation",
+    "diegetic",
+    "motion",
+    "icon"
+  ],
+  "additionalProperties": false,
+  "default": null
+}
