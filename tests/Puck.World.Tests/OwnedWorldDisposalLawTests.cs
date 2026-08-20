@@ -278,6 +278,31 @@ public sealed class OwnedWorldDisposalLawTests {
             Assert.Equal(expected: bytes, actual: File.ReadAllBytes(path: path));
         }
     }
+    /// <summary>A directory can occupy a deterministic seed path without appearing in the catalog's file glob. The
+    /// seed pass preserves that entry and returns an empty catalog instead of throwing while trying to save through
+    /// it; the operator-facing BootProfile door then gives the catalog's explicit empty-state refusal.</summary>
+    [Fact]
+    public void DirectoryAtSeedPath_IsPreservedAndDoesNotCrashConstruction() {
+        using var dir = new TempWorldDirectory();
+        var template = Fixtures.BuildDocument();
+        var seed = Assert.Single(collection: template.PlayerDefaults.Identities);
+        var occupied = Path.Combine(
+            path1: dir.RootPath,
+            path2: WorldOwnedWorldFileName.For(id: seed.Id)
+        );
+
+        _ = Directory.CreateDirectory(path: occupied);
+
+        var catalog = new WorldOwnedWorlds(
+            directory: dir.RootPath,
+            machineId: Guid.NewGuid(),
+            template: template
+        );
+
+        Assert.Empty(collection: catalog.All);
+        Assert.True(condition: Directory.Exists(path: occupied));
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => catalog.BootProfile);
+    }
     /// <summary>A quarantine name is derived from the catalog name, and the catalog re-seeds a freed name, so the
     /// same name arrives twice carrying different bytes: BOTH copies survive, at distinct paths.</summary>
     [Fact]
@@ -305,6 +330,32 @@ public sealed class OwnedWorldDisposalLawTests {
         Assert.Equal(expected: firstBytes, actual: File.ReadAllBytes(path: first.QuarantinePath));
         Assert.Equal(expected: secondBytes, actual: File.ReadAllBytes(path: second.QuarantinePath));
     }
+    /// <summary>A directory can occupy a path just as completely as a file. It is skipped by the same suffix walk
+    /// rather than turning a recoverable name collision into a failed disposal.</summary>
+    [Fact]
+    public void QuarantineDirectoryEntryCollision_UsesTheNextSuffix() {
+        using var dir = new TempWorldDirectory();
+        var target = Populate(dir: dir)[0];
+
+        RetireCameraProgram(path: target);
+
+        var occupied = Path.Combine(
+            path1: QuarantineDirectory(dir: dir),
+            path2: Path.GetFileName(path: target)
+        );
+
+        _ = Directory.CreateDirectory(path: occupied);
+
+        var disposal = Assert.Single(collection: Open(dir: dir).Discarded);
+
+        Assert.True(condition: disposal.Moved, userMessage: disposal.Reason);
+        Assert.True(condition: Directory.Exists(path: occupied));
+        Assert.EndsWith(
+            actualString: disposal.QuarantinePath,
+            expectedEndString: $"{Path.GetFileName(path: target)}.2",
+            comparisonType: StringComparison.Ordinal
+        );
+    }
     /// <summary>A disposal whose MOVE fails leaves the document exactly as it was — and the seeding pass that runs
     /// behind an emptied catalog skips the ids whose paths those documents still occupy, so nothing overwrites the
     /// bytes the failed move promised would be named again next boot.</summary>
@@ -322,13 +373,12 @@ public sealed class OwnedWorldDisposalLawTests {
             keySelector: path => path
         );
 
-        // A directory standing exactly where each quarantine file would land: the move refuses, nothing else does.
-        foreach (var path in files) {
-            _ = Directory.CreateDirectory(path: Path.Combine(
-                path1: QuarantineDirectory(dir: dir),
-                path2: Path.GetFileName(path: path)
-            ));
-        }
+        // A file standing where the quarantine DIRECTORY must be makes Directory.CreateDirectory and every move
+        // fail without changing the source documents.
+        File.WriteAllText(
+            contents: "occupied",
+            path: QuarantineDirectory(dir: dir)
+        );
 
         var swept = Open(dir: dir);
 

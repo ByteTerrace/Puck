@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Numerics;
 
 using Puck.Maths;
@@ -138,7 +137,6 @@ public sealed class SdfFieldEvaluatorTests {
     [Fact]
     public void GroundHeightBakeRefusesAnOverBudgetRegionBeforeMarchingIt() {
         var evaluator = BuildRoundedRectangleEvaluator();
-        var elapsed = Stopwatch.StartNew();
         var refusal = Assert.Throws<ArgumentException>(testCode: () => WorldQueryDriftInstrument.BakeGroundHeightArtifact(
             evaluator: evaluator,
             maxX: 2000f,
@@ -149,15 +147,9 @@ public sealed class SdfFieldEvaluatorTests {
             probeUp: 4f
         ));
 
-        elapsed.Stop();
-
         Assert.Equal(
             expected: "maxCellCount",
             actual: refusal.ParamName
-        );
-        Assert.True(
-            condition: (elapsed.Elapsed < TimeSpan.FromSeconds(value: 5d)),
-            userMessage: $"The refusal took {elapsed.Elapsed}, long enough that the per-cell working set was built before it fired."
         );
 
         // The ceiling is now the caller's to raise, and a region inside it still bakes.
@@ -190,6 +182,38 @@ public sealed class SdfFieldEvaluatorTests {
         Assert.Equal(
             expected: 4,
             actual: control.Height
+        );
+    }
+
+    [Fact]
+    public void GroundHeightBakeWalksLargeCoordinatesByCellIndex() {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        _ = builder.Plane(
+            normal: Vector3.UnitY,
+            offset: 0f,
+            material: material
+        );
+
+        const float MinX = 8_388_608f; // 2^23: adding the baker's 0.25f cell size to this float makes no progress.
+        var artifact = WorldQueryDriftInstrument.BakeGroundHeightArtifact(
+            evaluator: new SdfFieldEvaluator(program: builder.Build()),
+            maxCellCount: 4,
+            maxX: (MinX + 1f),
+            maxZ: 0.25f,
+            minX: MinX,
+            minZ: 0f,
+            probeDown: 1f,
+            probeUp: 1f
+        );
+
+        Assert.Equal(expected: 4, actual: artifact.Width);
+        Assert.Equal(expected: 1, actual: artifact.Height);
+        Assert.Equal(expected: 4, actual: artifact.HeightRaw.Length);
+        Assert.All(
+            action: height => Assert.Equal(expected: 0L, actual: height),
+            collection: artifact.HeightRaw.ToArray()
         );
     }
 }

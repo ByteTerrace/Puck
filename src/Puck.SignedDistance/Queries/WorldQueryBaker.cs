@@ -239,7 +239,7 @@ public static class WorldQueryBaker {
     // inverted or uncarryable one, count the cells, and refuse a count above the caller's budget. Split out so a
     // caller that builds a per-cell working set BEFORE calling Bake can run the same refusal first, against the same
     // arithmetic, instead of duplicating the formula (see MeasureCellCount).
-    private static (long OriginXRaw, long OriginZRaw, int Width, int Height, int CellCount) MeasureGrid(float minX, float minZ, float maxX, float maxZ, int maxCellCount) {
+    internal static (long OriginXRaw, long OriginZRaw, int Width, int Height, int CellCount) MeasureGrid(float minX, float minZ, float maxX, float maxZ, int maxCellCount) {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(
             paramName: nameof(maxCellCount),
             value: maxCellCount
@@ -302,7 +302,35 @@ public static class WorldQueryBaker {
             );
         }
 
+        RequireRepresentableFarEdge(
+            axis: "X",
+            cellCount: width,
+            cellSizeRaw: CellSizeRaw,
+            originRaw: originXRaw,
+            paramName: nameof(maxX)
+        );
+        RequireRepresentableFarEdge(
+            axis: "Z",
+            cellCount: height,
+            cellSizeRaw: CellSizeRaw,
+            originRaw: originZRaw,
+            paramName: nameof(maxZ)
+        );
+
         return (originXRaw, originZRaw, width, height, ((int)cellCountLong));
+    }
+    private static void RequireRepresentableFarEdge(string axis, long originRaw, long cellSizeRaw, int cellCount, string paramName) {
+        var farEdge = (((Int128)originRaw) + (((Int128)cellCount) * cellSizeRaw));
+
+        if (
+            (farEdge < long.MinValue) ||
+            (farEdge > long.MaxValue)
+        ) {
+            throw new ArgumentException(
+                message: $"The {axis} axis starts at raw coordinate {originRaw} and spans {cellCount} cells of {cellSizeRaw}, placing its outward-rounded far edge at {farEdge}, outside signed Q48.16.",
+                paramName: paramName
+            );
+        }
     }
 
     /// <summary>Returns the number of cells a bake over <c>[minX,maxX] x [minZ,maxZ]</c> would allocate, applying the

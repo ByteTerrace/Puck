@@ -10,8 +10,9 @@ namespace Puck.Maths;
 public enum WorldQueryConfidence {
     /// <summary>The answer is conservative rather than measured: a baked, resolution-quantized artifact (see the
     /// <c>Puck.SignedDistance.Queries</c> namespace remarks) — sign-correct and conservatively dilated, but not
-    /// sub-cell-exact — or a live evaluator's march that could not complete a safe surface proof within its iteration
-    /// budget and resolved to the answer its verb can survive being wrong about, at the last point it reached.</summary>
+    /// sub-cell-exact — or a live evaluator's march that could not complete a safe surface proof because its
+    /// representable safe advance vanished or its iteration budget ended, and resolved to the answer its verb can
+    /// survive being wrong about at the last point it reached.</summary>
     Bounded = 0,
     /// <summary>The answer came from a fixed-point evaluator against the live SDF program, and the march that produced
     /// it converged.</summary>
@@ -103,10 +104,10 @@ public interface IWorldQuery {
     /// <param name="center">The sphere's center.</param>
     /// <param name="radius">The sphere's radius.</param>
     /// <returns><see langword="true"/> when the sphere overlaps something blocked.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="center"/> lies outside the range the provider can
-    /// express against the world origin, or <paramref name="radius"/> outside a range the provider supports. A center
-    /// with no world coordinate is REFUSED rather than answered — neither answer is true of it, and both a false
-    /// "occupied" and a false "clear" change authoritative state.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="radius"/> lies outside a range the provider
+    /// supports, or the provider elects to refuse a <paramref name="center"/> outside its representable frame. A
+    /// provider may instead resolve such an undecidable center conservatively as occupied; it must never turn failure
+    /// to evaluate into a clear answer.</exception>
     bool Overlap(FixedPosition center, FixedQ4816 radius);
     /// <summary>Finds the ground height directly beneath (or above) <paramref name="position"/>, searching from
     /// <paramref name="probeUp"/> above to <paramref name="probeDown"/> below its Y.</summary>

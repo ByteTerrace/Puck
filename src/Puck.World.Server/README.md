@@ -481,8 +481,9 @@ empty. Each half reports as one stderr line grouping file names by their shared
 reason, with the path stripped out of the reason. A quarantine destination that
 is already taken takes an ordinal suffix rather than overwriting the earlier
 copy, and the seeding pass that fills an emptied catalog from
-`playerDefaults.identities` skips any id whose catalog path still holds a file,
-so a document left behind keeps its bytes. `WorldOwnedWorlds.Discarded` and
+`playerDefaults.identities` skips any id whose catalog path is occupied by a
+file or directory, so a document left behind keeps its bytes and a stray
+directory cannot crash startup. `WorldOwnedWorlds.Discarded` and
 `identity.list`'s `discarded=` column are the read-back for the disposals. The
 machine-local installation id stays separate in `machine.id`; controller
 recognition is stored through named text state rows in the owned world.

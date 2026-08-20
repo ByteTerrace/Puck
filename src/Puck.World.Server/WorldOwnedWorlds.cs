@@ -106,17 +106,17 @@ public sealed class WorldOwnedWorlds {
 
         if (m_identities.Count == 0) {
             foreach (var seed in Defaults.Identities) {
-                // A seed never writes over bytes that are still there. A refusal this construction left in place, or
-                // a disposal whose move failed, still occupies the very catalog path this seed's id maps to, and the
-                // save below would replace it with a fresh default — destroying the document the refusal promised
-                // would be read again on the next boot.
+                // A seed never writes over an entry that is still there. A refusal this construction left in place,
+                // a disposal whose move failed, or a directory at the deterministic catalog path still occupies the
+                // name this seed's id maps to. Trying to save there would either destroy promised bytes or turn a
+                // recoverable obstruction into a startup exception.
                 var occupied = Path.Combine(
                     path1: directory,
                     path2: WorldOwnedWorldFileName.For(id: seed.Id)
                 );
 
-                if (File.Exists(path: occupied)) {
-                    Console.Error.WriteLine(value: $"[identity] seed '{seed.Id}' skipped: '{Path.GetFileName(path: occupied)}' is still in the catalog directory after being refused, and a seed never writes over a document this boot could not read");
+                if (File.Exists(path: occupied) || Directory.Exists(path: occupied)) {
+                    Console.Error.WriteLine(value: $"[identity] seed '{seed.Id}' skipped: '{Path.GetFileName(path: occupied)}' is already occupied in the catalog directory, and a seed never replaces an entry this boot could not admit");
 
                     continue;
                 }
@@ -140,10 +140,10 @@ public sealed class WorldOwnedWorlds {
     public IReadOnlyList<WorldIdentity> All => m_identities;
     /// <summary>Gets the first owned identity used before a controller preference applies.</summary>
     /// <exception cref="InvalidOperationException">The catalog holds no identities — every file was refused and every
-    /// seed name's catalog path is occupied by a file the refusal sweep left in place.</exception>
+    /// seed name's catalog path is occupied by an entry the catalog left in place.</exception>
     public WorldIdentity BootProfile => ((m_identities.Count > 0)
         ? m_identities[0]
-        : throw new InvalidOperationException(message: "the owned-world catalog holds no identities — every catalog file was refused and every seed name's path is occupied by a refused file; repair or remove the files named on stderr")
+        : throw new InvalidOperationException(message: "the owned-world catalog holds no identities — every catalog file was refused and every seed name's path is occupied by an entry the catalog could not admit; repair or remove the entries named on stderr")
     );
     /// <summary>Gets the visited world's player presentation defaults.</summary>
     public WorldPlayerDefaults Defaults { get; }
@@ -167,8 +167,8 @@ public sealed class WorldOwnedWorlds {
     /// <summary>One document this catalog could not admit, and where it was put.</summary>
     /// <param name="FileName">The file name it carried in the catalog directory.</param>
     /// <param name="Reason">Why it could not be admitted.</param>
-    /// <param name="QuarantinePath">Where it now lives — never a path that already held a file, so an earlier
-    /// disposal of the same catalog name keeps its own copy.</param>
+    /// <param name="QuarantinePath">Where it now lives — never a path that already held a file or directory, so an
+    /// earlier disposal of the same catalog name keeps its own copy and a stale directory cannot block quarantine.</param>
     /// <param name="Moved">Whether the move succeeded. A false here means the file is still in the catalog
     /// directory with its original bytes: the seeding pass skips any id whose catalog path is occupied, so nothing
     /// writes over it, and it is refused again on the next construction.</param>
@@ -530,15 +530,16 @@ public sealed class WorldOwnedWorlds {
     );
     // A quarantine name is DERIVED from the catalog name, and the catalog re-seeds the name a disposal frees, so the
     // same name reaches this directory again carrying different bytes. Quarantine exists to keep those bytes
-    // readable, so a collision takes the next free ordinal suffix rather than overwriting the earlier copy. The
-    // suffixed name still sits outside the catalog's own top-directory glob, like every other file here.
+    // readable, so any occupied entry (file or directory) takes the next free ordinal suffix rather than blocking or
+    // overwriting the earlier copy. The suffixed name still sits outside the catalog's own top-directory glob, like
+    // every other file here.
     private static string QuarantineDestination(string quarantine, string fileName) {
         var candidate = Path.Combine(
             path1: quarantine,
             path2: fileName
         );
 
-        for (var ordinal = 2; File.Exists(path: candidate); ordinal++) {
+        for (var ordinal = 2; (File.Exists(path: candidate) || Directory.Exists(path: candidate)); ordinal++) {
             candidate = Path.Combine(
                 path1: quarantine,
                 path2: $"{fileName}.{ordinal}"

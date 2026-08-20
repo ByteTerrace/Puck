@@ -198,7 +198,7 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
     }
 
     [Fact]
-    public void OverlapRefusesAnUnrepresentableWorldPointRatherThanAnsweringIt() {
+    public void OverlapTreatsAnUnrepresentableWorldPointAsObstructed() {
         var outsideCarrier = new FixedPosition(
             cellX: long.MaxValue,
             cellY: 0L,
@@ -213,21 +213,12 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
             position: outsideCarrier
         ));
 
-        // Neither answer is true of a point with no world coordinate, and BOTH change authoritative state: a false
-        // "occupied" refuses a legal spawn, a false "clear" places a body nowhere. The verb refuses instead, on the
-        // same parameter and with the same exception type BakedWorldQuery's own range guard raises.
-        var refusal = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => evaluator.Overlap(
+        Assert.True(condition: evaluator.Overlap(
             center: outsideCarrier,
             radius: FixedQ4816.Zero
         ));
 
-        Assert.Equal(
-            expected: "center",
-            actual: refusal.ParamName
-        );
-
-        // Control: a shape-free program still means an empty world, not an undecidable point in a populated one — the
-        // two collapsed causes of a failed TryDistance are told apart, not folded together.
+        // Control: a shape-free program still means an empty world, not an undecidable point in a populated one.
         Assert.False(condition: new SdfFieldEvaluator(program: new SdfProgramBuilder().Build()).Overlap(
             center: outsideCarrier,
             radius: FixedQ4816.Zero
@@ -443,11 +434,11 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
     }
 
     [Fact]
-    public void SphereCastResolvesFromInsideTheStepScaleClearanceGap() {
+    public void SphereCastDoesNotAdvanceThroughTheStepScaleClearanceGap() {
         // The gap: raw clearance (f - r) is well outside HitEpsilon, but the SCALED advance (f*s - r) is NEGATIVE,
-        // because scaling the field shrinks it below the radius it must still clear. Treating an advance that small as
-        // a non-convergence lets the sweep report contact at Distance 0 — a body claiming it is touching a wall a
-        // twentieth of a unit away, at the exact point it started from. The floored advance walks the gap instead.
+        // because scaling the field shrinks it below the radius it must still clear. Advancing from here would cross a
+        // region the Lipschitz proof has not shown clear, so the sweep must report a bounded obstruction at the last
+        // safely reached point rather than manufacture an Exact contact after walking through it.
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
 
@@ -507,17 +498,8 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
             origin: origin,
             radius: radius
         ));
-        Assert.Equal(
-            expected: WorldQueryConfidence.Exact,
-            actual: hit.Confidence
-        );
-
-        // The measured answer: the sweep stops with its centre one radius above the floor, having actually travelled.
-        Assert.Equal(
-            expected: 0.049,
-            actual: ((double)hit.Distance),
-            tolerance: 0.005
-        );
+        Assert.Equal(expected: WorldQueryConfidence.Bounded, actual: hit.Confidence);
+        Assert.Equal(expected: FixedQ4816.Zero, actual: hit.Distance);
     }
 
     [Fact]
@@ -561,6 +543,51 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
             actual: ((double)groundY),
             tolerance: 0.01
         );
+    }
+
+    [Fact]
+    public void AnUnrepresentableStepScaleNeverRoundsUpIntoAnUnsafeAdvance() {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        _ = builder.Ellipsoid(
+            radii: new Vector3(
+                x: 200_000f,
+                y: 1f,
+                z: 200_000f
+            ),
+            material: material
+        );
+
+        var program = builder.Build();
+
+        Assert.InRange(
+            actual: program.StepScale,
+            low: float.Epsilon,
+            high: ((float)((double)FixedQ4816.Epsilon))
+        );
+
+        var evaluator = new SdfFieldEvaluator(program: program);
+        var origin = Local(
+            x: 0.0,
+            y: 3.0,
+            z: 0.0
+        );
+
+        // Rounding the positive scale up to one fixed tick would authorize motion the float proof did not. With a
+        // directed conversion the representable lower bound is zero, so the cast and overlap resolve conservatively.
+        Assert.True(condition: evaluator.Raycast(
+            dir: Down,
+            hit: out var hit,
+            maxDist: FixedQ4816.FromInteger(value: 4L),
+            origin: origin
+        ));
+        Assert.Equal(expected: WorldQueryConfidence.Bounded, actual: hit.Confidence);
+        Assert.Equal(expected: FixedQ4816.Zero, actual: hit.Distance);
+        Assert.True(condition: evaluator.Overlap(
+            center: origin,
+            radius: FixedQ4816.Zero
+        ));
     }
 
     [Fact]

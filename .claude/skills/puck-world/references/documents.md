@@ -919,9 +919,10 @@ documents simply lacks the discarded ids.
 Retention is exact on both sides. A quarantine destination that is already
 taken (deterministic file names, and the catalog re-seeds a freed name) takes
 an ordinal suffix rather than overwriting the earlier copy, and the seeding
-pass SKIPS any seed id whose catalog path still holds a file — so a disposal
-whose move failed, or a document left in place, keeps its authored bytes for
-the next boot instead of being replaced by a fresh default. Read back with
+pass SKIPS any seed id whose catalog path still holds a file or directory — so
+a disposal whose move failed, or a document left in place, keeps its authored
+bytes for the next boot instead of being replaced by a fresh default, and a
+directory occupying a deterministic file name cannot crash startup. Read back with
 `WorldOwnedWorlds.Discarded` (disposals only) and `identity.list`'s
 `discarded=` column; the moved bytes stay readable under `unloadable/`.
 

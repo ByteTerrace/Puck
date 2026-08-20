@@ -102,35 +102,36 @@ public static class WorldQueryDriftInstrument {
     public static WorldQueryArtifact BakeGroundHeightArtifact(SdfFieldEvaluator evaluator, float minX, float minZ, float maxX, float maxZ, float probeUp, float probeDown, int maxCellCount = WorldQueryBaker.DefaultMaxCellCount) {
         ArgumentNullException.ThrowIfNull(argument: evaluator);
 
-        // The bake's own refusal fires only after this method has already built one WorldQueryTerrainInput and run one
-        // ground march per cell, so the budget is measured here, against the baker's own grid arithmetic, before the
-        // working set exists.
-        _ = WorldQueryBaker.MeasureCellCount(
+        // Measure first, then walk integer cell indices. Incrementing authored float bounds by CellSize can stop
+        // making progress once their ULP exceeds 0.25 (a valid grid around 2^23 is enough), hanging this diagnostic.
+        // The baker's quantized grid is the contract, so derive every center from its raw origin and index.
+        var (originXRaw, originZRaw, width, height, cellCount) = WorldQueryBaker.MeasureGrid(
             maxCellCount: maxCellCount,
             maxX: maxX,
             maxZ: maxZ,
             minX: minX,
             minZ: minZ
         );
-
-        var terrain = new List<WorldQueryTerrainInput>();
         var up = FixedQ4816.FromDouble(value: probeUp);
         var down = FixedQ4816.FromDouble(value: probeDown);
-        var cellSize = WorldQueryBaker.CellSize;
+        var heightRaw = new long[cellCount];
+        var cellSizeRaw = FixedQ4816.FromDouble(value: WorldQueryBaker.CellSize).Value;
+        var halfCellRaw = (cellSizeRaw >> 1);
 
-        for (var z = minZ; (z < maxZ); z += cellSize) {
-            var cellMinZ = z;
-            var cellMaxZ = (z + cellSize);
-            var cellCenterZ = (z + (cellSize * 0.5f));
+        Array.Fill(
+            array: heightRaw,
+            value: WorldQueryArtifact.NoHeightSentinel
+        );
 
-            for (var x = minX; (x < maxX); x += cellSize) {
-                var cellMinX = x;
-                var cellMaxX = (x + cellSize);
-                var cellCenterX = (x + (cellSize * 0.5f));
+        for (var row = 0; (row < height); row++) {
+            var cellCenterZRaw = ((long)(((Int128)originZRaw) + (((Int128)row) * cellSizeRaw) + halfCellRaw));
+
+            for (var column = 0; (column < width); column++) {
+                var cellCenterXRaw = ((long)(((Int128)originXRaw) + (((Int128)column) * cellSizeRaw) + halfCellRaw));
                 var probeOrigin = FixedPosition.FromLocal(local: new FixedVector3(
-                    X: FixedQ4816.FromDouble(value: cellCenterX),
+                    X: FixedQ4816.FromRawBits(value: cellCenterXRaw),
                     Y: FixedQ4816.Zero,
-                    Z: FixedQ4816.FromDouble(value: cellCenterZ)
+                    Z: FixedQ4816.FromRawBits(value: cellCenterZRaw)
                 ));
 
                 if (!evaluator.TryGroundHeight(
@@ -142,24 +143,18 @@ public static class WorldQueryDriftInstrument {
                     continue; // no surface under this cell — leave it un-authored (WorldQueryArtifact.NoHeightSentinel)
                 }
 
-                terrain.Add(item: new WorldQueryTerrainInput(
-                    MaxX: cellMaxX,
-                    MaxZ: cellMaxZ,
-                    MinX: cellMinX,
-                    MinZ: cellMinZ,
-                    TopY: ((float)((double)groundY))
-                ));
+                heightRaw[(row * width) + column] = groundY.Value;
             }
         }
 
-        return WorldQueryBaker.Bake(
-            blockers: [],
-            maxCellCount: maxCellCount,
-            maxX: maxX,
-            maxZ: maxZ,
-            minX: minX,
-            minZ: minZ,
-            terrain: terrain
+        return WorldQueryArtifact.CreateOwned(
+            blocked: [],
+            cellSizeRaw: cellSizeRaw,
+            height: height,
+            heightRaw: heightRaw,
+            originXRaw: originXRaw,
+            originZRaw: originZRaw,
+            width: width
         );
     }
     /// <summary>Runs the drift comparison over <paramref name="points"/>: excludes anything inside

@@ -269,12 +269,9 @@ public sealed class SdfLipschitzCompositionLawTests {
         );
     }
 
-    /// <summary>A radius must be subtracted after the field is scaled. <c>Overlap</c> carries that whole contract: it
-    /// compares the SCALED field against the radius, so a centre the raw field calls separated still reads occupied. A
-    /// sweep does NOT — its stopping point is decided by the raw-clearance accept arm, which fires once the field is
-    /// within an epsilon of the radius however far the scaled advance still was from proving separation, so the
-    /// reported contact sits past the true envelope by up to <c>radius · (1 − stepScale)</c>. That residual is the
-    /// price of the march making guaranteed progress; it is bounded here rather than assumed away.</summary>
+    /// <summary>A radius must be subtracted after the field is scaled. Once that lower bound can no longer prove the
+    /// sphere is separated, authoritative queries resolve toward obstruction instead of continuing to a raw-field
+    /// threshold that may lie inside the true contact envelope.</summary>
     [Fact]
     public void ChamferedFieldUsesTheStepScaleForSphereQueries() {
         var program = BuildChamferStack(
@@ -303,27 +300,18 @@ public sealed class SdfLipschitzCompositionLawTests {
 
         var trueContactTravel = (6.0 - (top + 0.1));
 
-        // The sweep RESOLVES rather than handing back a conservative stand-in — the scaled advance sinking below the
-        // radius is a reason to keep stepping, not to stop.
         Assert.True(condition: evaluator.SphereCast(
             dir: Down,
             hit: out var hit,
-            maxDist: FixedQ4816.FromInteger(value: 6L),
+            maxDist: FixedQ4816.FromDouble(value: (trueContactTravel + 0.002)),
             origin: Position(y: 6.0),
             radius: radius
         ));
         Assert.Equal(
-            expected: WorldQueryConfidence.Exact,
+            expected: WorldQueryConfidence.Bounded,
             actual: hit.Confidence
         );
-
-        // And it stops PAST true contact, by no more than the radius' own share of the field's overestimate. A sweep
-        // consumer needing the conservative envelope must widen by this much itself; the answer is not it.
-        Assert.InRange(
-            actual: ((double)hit.Distance),
-            low: trueContactTravel,
-            high: ((trueContactTravel + (0.1 * (1.0 - program.StepScale))) + 0.005)
-        );
+        Assert.True(condition: (((double)hit.Distance) <= (trueContactTravel + 0.001)));
     }
 
     [Fact]
