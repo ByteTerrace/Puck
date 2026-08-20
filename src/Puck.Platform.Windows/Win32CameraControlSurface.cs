@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Runtime.Versioning;
 
 namespace Puck.Platform.Windows;
@@ -13,17 +14,39 @@ namespace Puck.Platform.Windows;
 /// reports <see langword="false"/>, never throws.
 /// </summary>
 [SupportedOSPlatform("windows")]
-internal sealed class Win32CameraControlSurface(object mediaSource) : ICameraControlSurface {
+internal sealed unsafe class Win32CameraControlSurface(object mediaSource) : ICameraControlSurface {
     private const int FlagAuto = 1;
     private const int FlagManual = 2;
+    // The Logitech video XU's discrete field-of-view selector: byte 0/1/2 = 90/78/65 degrees, hardware-verified on
+    // the BRIO (a mid-stream set crops the live sensor readout; a set on an idle filter is accepted and ignored).
+    private const uint FovSelector = 2;
+    private const uint KsPropertyTypeBasicSupport = 0x00000200;
+    private const uint KsPropertyTypeGet = 0x00000001;
+    private const uint KsPropertyTypeSet = 0x00000002;
+    private const uint KsPropertyTypeTopology = 0x10000000;
 
     private readonly IAMVideoProcAmp? m_amp = (mediaSource as IAMVideoProcAmp);
     private readonly IAMCameraControl? m_camera = (mediaSource as IAMCameraControl);
+    private readonly IKsControl? m_ksControl = (mediaSource as IKsControl);
+
+    // The vendor XU's topology node id, discovered once by sweeping BASICSUPPORT on the FOV selector (node 6 on the
+    // BRIO; devices differ): null = not yet probed, -1 = no Logitech video XU on this device.
+    private int? m_vendorNode;
 
     /// <inheritdoc/>
     public bool TryGet(CameraControl control, out int value, out bool auto) {
         value = 0;
         auto = false;
+
+        if (CameraControl.FieldOfView == control) {
+            if (!TryVendorRead(selector: FovSelector, value: out var step)) {
+                return false;
+            }
+
+            value = FovDegrees(step: step);
+
+            return true;
+        }
 
         if (!TryMap(control: control, isCamera: out var isCamera, property: out var property)) {
             return false;
@@ -51,6 +74,24 @@ internal sealed class Win32CameraControlSurface(object mediaSource) : ICameraCon
     /// <inheritdoc/>
     public bool TryGetRange(CameraControl control, out CameraControlRange range) {
         range = default;
+
+        if (CameraControl.FieldOfView == control) {
+            if (VendorNode() < 0) {
+                return false;
+            }
+
+            // The envelope in DEGREES; the device snaps a set to its discrete supported values, so Step reports the
+            // envelope shape rather than a real arithmetic stride.
+            range = new CameraControlRange(
+                Default: 90,
+                Maximum: 90,
+                Minimum: 65,
+                Step: 1,
+                SupportsAuto: false
+            );
+
+            return true;
+        }
 
         if (!TryMap(control: control, isCamera: out var isCamera, property: out var property)) {
             return false;
@@ -87,6 +128,10 @@ internal sealed class Win32CameraControlSurface(object mediaSource) : ICameraCon
     }
     /// <inheritdoc/>
     public bool TryResetAuto(CameraControl control) {
+        if (CameraControl.FieldOfView == control) {
+            return TryVendorWrite(selector: FovSelector, value: 0);
+        }
+
         if (
             !TryGetRange(control: control, range: out var range) ||
             !TryMap(control: control, isCamera: out var isCamera, property: out var property)
@@ -103,6 +148,10 @@ internal sealed class Win32CameraControlSurface(object mediaSource) : ICameraCon
     }
     /// <inheritdoc/>
     public bool TrySet(CameraControl control, int value) {
+        if (CameraControl.FieldOfView == control) {
+            return TryVendorWrite(selector: FovSelector, value: FovStep(degrees: value));
+        }
+
         if (
             !TryGetRange(control: control, range: out var range) ||
             !TryMap(control: control, isCamera: out var isCamera, property: out var property)
@@ -126,6 +175,97 @@ internal sealed class Win32CameraControlSurface(object mediaSource) : ICameraCon
         ) >= 0);
     }
 
+    /// <inheritdoc/>
+    public bool TryVendorRead(uint selector, out int value) {
+        value = 0;
+
+        var node = VendorNode();
+
+        if (node < 0) {
+            return false;
+        }
+
+        Span<byte> data = stackalloc byte[1];
+
+        if (!TryKs(data: data, node: ((uint)node), selector: selector, type: (KsPropertyTypeGet | KsPropertyTypeTopology))) {
+            return false;
+        }
+
+        value = data[0];
+
+        return true;
+    }
+    /// <inheritdoc/>
+    public bool TryVendorWrite(uint selector, int value) {
+        var node = VendorNode();
+
+        if (node < 0) {
+            return false;
+        }
+
+        Span<byte> data = [((byte)Math.Clamp(value: value, min: 0, max: 255))];
+
+        return TryKs(data: data, node: ((uint)node), selector: selector, type: (KsPropertyTypeSet | KsPropertyTypeTopology));
+    }
+
+    // Byte step <-> degrees for the discrete FOV selector: 0/1/2 = 90/78/65. A degrees set snaps to the nearest step
+    // (midpoints 84 and 71.5).
+    private static int FovDegrees(int step) => (step switch {
+        0 => 90,
+        1 => 78,
+        _ => 65,
+    });
+    private static int FovStep(int degrees) => ((degrees >= 84)
+        ? 0
+        : ((degrees >= 72) ? 1 : 2)
+    );
+    // One KSP_NODE-shaped property call against the Logitech video XU: 16-byte set GUID + selector + flags + node id
+    // + reserved, all little-endian, exactly the wire shape ksproxy forwards to the UVC extension unit.
+    private bool TryKs(uint selector, uint type, uint node, Span<byte> data) {
+        if (m_ksControl is not { } ksControl) {
+            return false;
+        }
+
+        Span<byte> property = stackalloc byte[32];
+
+        _ = MfInterop.LOGITECH_VIDEO_XU.TryWriteBytes(destination: property);
+        BinaryPrimitives.WriteUInt32LittleEndian(destination: property[16..], value: selector);
+        BinaryPrimitives.WriteUInt32LittleEndian(destination: property[20..], value: type);
+        BinaryPrimitives.WriteUInt32LittleEndian(destination: property[24..], value: node);
+        BinaryPrimitives.WriteUInt32LittleEndian(destination: property[28..], value: 0u);
+
+        fixed (byte* propertyPointer = property)
+        fixed (byte* dataPointer = data) {
+            return (ksControl.KsProperty(
+                Property: ((nint)propertyPointer),
+                PropertyLength: 32,
+                PropertyData: ((nint)dataPointer),
+                DataLength: ((uint)data.Length),
+                BytesReturned: out _
+            ) >= 0);
+        }
+    }
+    // Discovers (once) which topology node carries the Logitech video XU by asking each candidate node whether it
+    // supports the FOV selector at all — BASICSUPPORT is a read that no device misinterprets as a change.
+    private int VendorNode() {
+        if (m_vendorNode is { } known) {
+            return known;
+        }
+
+        Span<byte> support = stackalloc byte[4];
+
+        for (var node = 0u; (node < 16u); node++) {
+            if (TryKs(data: support, node: node, selector: FovSelector, type: (KsPropertyTypeBasicSupport | KsPropertyTypeTopology))) {
+                m_vendorNode = ((int)node);
+
+                return ((int)node);
+            }
+        }
+
+        m_vendorNode = -1;
+
+        return -1;
+    }
     // The two interfaces' own KSPROPERTY ordinals per neutral control.
     private static bool TryMap(CameraControl control, out bool isCamera, out int property) {
         (isCamera, property) = (control switch {

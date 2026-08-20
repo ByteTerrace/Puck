@@ -228,6 +228,13 @@ public sealed class VulkanSurfaceReadback : IDisposable {
     private void RecordReadback(nint commandBufferHandle, nint sourceImageHandle, GpuImageLayout sourceLayout) {
         var device = m_device!;
         var (vulkanSourceLayout, sourceAccessMask, sourceStageMask) = sourceLayout switch {
+            // The producer-side External handoff is still VkImageLayout.GENERAL; unlike a working General storage
+            // image, however, Record left it scoped for the completed producer write's read-only handoff.
+            GpuImageLayout.External => (
+                VulkanImageLayout.General,
+                VulkanAccessFlags.ShaderRead,
+                VulkanPipelineStageFlags.ComputeShader
+            ),
             GpuImageLayout.General => (
                 VulkanImageLayout.General,
                 VulkanAccessFlags.ShaderRead | VulkanAccessFlags.ShaderWrite,
@@ -241,7 +248,7 @@ public sealed class VulkanSurfaceReadback : IDisposable {
             _ => throw new ArgumentOutOfRangeException(
                 paramName: nameof(sourceLayout),
                 actualValue: sourceLayout,
-                message: "Readback requires a General or ShaderReadOnly source image."
+                message: "Readback requires an External, General, or ShaderReadOnly source image."
             ),
         };
 

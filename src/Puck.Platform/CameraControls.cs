@@ -29,6 +29,21 @@ public enum CameraControl {
     WhiteBalance,
     /// <summary>Backlight compensation (devices commonly report a 0..1 toggle range).</summary>
     BacklightCompensation,
+    /// <summary>The lens field of view in degrees — a vendor-extension control (Logitech video XU on Windows), not
+    /// standard UVC: the device snaps a set to its discrete supported set (90/78/65 on a BRIO) and applies it to the
+    /// LIVE stream only, so it is driven through the open session, never pre-negotiated. Unsupported devices report
+    /// <see langword="false"/> everywhere.</summary>
+    FieldOfView,
+}
+
+/// <summary>Which physical sensor of the capture device a session opens: the default color camera, or the infrared
+/// sensor a Windows Hello capable device exposes as its own capture device (present only when the device's IR
+/// interface enumerates — e.g. a BRIO on a true SuperSpeed link).</summary>
+public enum CameraSensor {
+    /// <summary>The default color camera.</summary>
+    Color,
+    /// <summary>The infrared sensor camera.</summary>
+    Infrared,
 }
 
 /// <summary>One control's device-reported envelope: the value range, its stepping, the driver default, and whether the
@@ -65,4 +80,16 @@ public interface ICameraControlSurface {
     /// <param name="control">The control to reset.</param>
     /// <returns>Whether the device accepted the reset.</returns>
     bool TryResetAuto(CameraControl control);
+    /// <summary>Reads one byte-sized selector from the device's vendor extension unit — device-specific controls the
+    /// engine assigns NO semantics to (an author names the selector; the device decides what it means).</summary>
+    /// <param name="selector">The vendor extension unit's control selector.</param>
+    /// <param name="value">The selector's current byte value when readable.</param>
+    /// <returns>Whether the device answered the read.</returns>
+    bool TryVendorRead(uint selector, out int value);
+    /// <summary>Writes one byte-sized selector on the device's vendor extension unit — applied to the live stream,
+    /// best-effort, no engine semantics.</summary>
+    /// <param name="selector">The vendor extension unit's control selector.</param>
+    /// <param name="value">The byte value to write (clamped to 0..255).</param>
+    /// <returns>Whether the device accepted the write.</returns>
+    bool TryVendorWrite(uint selector, int value);
 }

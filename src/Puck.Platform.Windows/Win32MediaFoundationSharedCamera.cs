@@ -31,6 +31,7 @@ internal sealed class Win32MediaFoundationSharedCameraSession : ICameraSharedCap
     private readonly int m_requestedHeight;
     private readonly uint m_requestedRateHz;
     private readonly int m_requestedWidth;
+    private readonly CameraSensor m_sensor;
 
     private readonly ManualResetEventSlim m_startSignal = new(initialState: false);
 
@@ -54,11 +55,18 @@ internal sealed class Win32MediaFoundationSharedCameraSession : ICameraSharedCap
     private volatile bool m_stop;
     private int m_width;
 
-    public Win32MediaFoundationSharedCameraSession(long adapterLuid, int requestedWidth, int requestedHeight, uint requestedRateHz) {
+    public Win32MediaFoundationSharedCameraSession(long adapterLuid, int requestedWidth, int requestedHeight, uint requestedRateHz, CameraSensor sensor) {
+        // The infrared stream's L8 luminance has no DXVA-to-ARGB32 path; refusing here routes the consumer onto the
+        // CPU tier's host-side expansion instead of opening the WRONG (color) stream on the GPU tier.
+        if (CameraSensor.Infrared == sensor) {
+            throw new NotSupportedException(message: "the infrared sensor rides the CPU-pixel tier");
+        }
+
         m_adapterLuid = adapterLuid;
         m_requestedHeight = requestedHeight;
         m_requestedRateHz = requestedRateHz;
         m_requestedWidth = requestedWidth;
+        m_sensor = sensor;
         m_thread = new Thread(start: GrabberLoop) {
             IsBackground = true,
             Name = "camera-gpu-grabber",
@@ -116,6 +124,18 @@ internal sealed class Win32MediaFoundationSharedCameraSession : ICameraSharedCap
     public bool TryResetAuto(CameraControl control) => (m_controlSurface?.TryResetAuto(control: control) ?? false);
     /// <inheritdoc/>
     public bool TrySet(CameraControl control, int value) => (m_controlSurface?.TrySet(control: control, value: value) ?? false);
+    /// <inheritdoc/>
+    public bool TryVendorRead(uint selector, out int value) {
+        if (m_controlSurface is { } surface) {
+            return surface.TryVendorRead(selector: selector, value: out value);
+        }
+
+        value = 0;
+
+        return false;
+    }
+    /// <inheritdoc/>
+    public bool TryVendorWrite(uint selector, int value) => (m_controlSurface?.TryVendorWrite(selector: selector, value: value) ?? false);
     /// <inheritdoc/>
     public void Start(IReadOnlyList<nint> sharedTargetHandles) {
         ArgumentNullException.ThrowIfNull(sharedTargetHandles);
@@ -227,7 +247,7 @@ internal sealed class Win32MediaFoundationSharedCameraSession : ICameraSharedCap
     }
     private IMFSourceReader OpenReader(IMFDXGIDeviceManager manager) {
         // Enumerate video capture devices, pick the first (shared with the CPU-tier session).
-        var (mediaSource, deviceName) = ActivateDefaultVideoSource();
+        var (mediaSource, deviceName) = ActivateDefaultVideoSource(infrared: (CameraSensor.Infrared == m_sensor));
 
         if (deviceName is not null) {
             m_name = deviceName;

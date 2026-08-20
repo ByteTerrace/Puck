@@ -212,12 +212,13 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
     private void RecordCopyCommandList(ID3D12Device* device, nint sourceImageHandle, GpuPixelFormat format, uint width, uint height, GpuImageLayout sourceLayout, out nint commandAllocator, out nint commandList) {
         var dxgiFormat = DirectXGpuFormats.ToDxgiFormat(gpuPixelFormat: format);
         var sourceState = sourceLayout switch {
+            GpuImageLayout.External => D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON,
             GpuImageLayout.General => D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
             GpuImageLayout.ShaderReadOnly => D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
             _ => throw new ArgumentOutOfRangeException(
                 paramName: nameof(sourceLayout),
                 actualValue: sourceLayout,
-                message: "Readback requires a General or ShaderReadOnly source image."
+                message: "Readback requires an External, General, or ShaderReadOnly source image."
             ),
         };
 

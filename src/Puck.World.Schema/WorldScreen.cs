@@ -58,8 +58,15 @@ public abstract record WorldScreenSource {
     /// <see langword="null"/> to leave every control at its driver default. One physical device carries one control
     /// state, so the FIRST declared camera screen authoring this wins (matching the shared-session model); a later
     /// <c>UpsertScreen</c> mutation re-resolves and applies the change live. Omitted from the wire when null.</param>
+    /// <param name="Sensor">Which physical sensor this row's shared feed opens: <see cref="WorldCameraSensor.Color"/>
+    /// (the default) or <see cref="WorldCameraSensor.Infrared"/> — the infrared frame source a Windows Hello capable
+    /// device carries. Each sensor gets its own shared feed, so different rows may show different sensors at once;
+    /// when a device multiplexes both sensors through one pipeline the engine opens them on ONE reader, and a device
+    /// that cannot stream both concurrently streams one while the other faults by name. An absent infrared source
+    /// faults the bind loudly (the slot shows the no-signal card).</param>
     public sealed record Camera(WorldFeedProfile Profile,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCameraControls? Controls = null) : WorldScreenSource;
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCameraControls? Controls = null,
+        WorldCameraSensor Sensor = WorldCameraSensor.Color) : WorldScreenSource;
     /// <summary>A named view from the presentation view stack, such as a monitor showing another camera's output.</summary>
     /// <param name="CameraName">The registered view name this slot samples.</param>
     public sealed record View(string CameraName) : WorldScreenSource;
@@ -223,6 +230,14 @@ public sealed record WorldMachineCableGroup(string Name, IReadOnlyList<int> Scre
 /// <param name="Gain">Sensor gain (ISO-like amplification).</param>
 /// <param name="WhiteBalance">Manual white-balance color temperature in kelvin; absent = auto white balance.</param>
 /// <param name="BacklightCompensation">Backlight compensation (devices commonly report a 0..1 toggle).</param>
+/// <param name="FieldOfView">The lens field of view in DEGREES — a vendor-extension control (hardware-verified on the
+/// Logitech BRIO: discrete 90/78/65, a true sensor crop composing with <paramref name="Zoom"/>); the device snaps to
+/// its nearest supported value, and a camera without the vendor unit skips it. Absent = the device default (widest).</param>
+/// <param name="Vendor">Raw vendor-extension writes — byte-sized (selector, value) pairs on the device's vendor unit,
+/// applied in order after the named controls. The engine assigns NO semantics: the author names the selector, the
+/// device decides what it means (e.g. the BRIO's unconfirmed HDR candidate is selector 12), and a removed row is NOT
+/// restored (its default is unknowable). <c>screen.camera</c> reads each authored selector back. Omitted from the
+/// wire when null.</param>
 public sealed record WorldCameraControls(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Pan = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Tilt = null,
@@ -235,8 +250,24 @@ public sealed record WorldCameraControls(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Sharpness = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Gain = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? WhiteBalance = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? BacklightCompensation = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? BacklightCompensation = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? FieldOfView = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldCameraVendorControl>? Vendor = null
 );
+/// <summary>One raw vendor-extension write on the shared camera (see <see cref="WorldCameraControls"/>'s
+/// <c>Vendor</c> member): a byte-sized selector on the device's vendor unit and the value to write. Deliberately
+/// semantics-free — the honest vocabulary for device controls no standard names.</summary>
+/// <param name="Id">The vendor extension unit's control selector.</param>
+/// <param name="Value">The byte value to write (0..255; the device clamps or refuses out-of-range writes).</param>
+public sealed record WorldCameraVendorControl(int Id, int Value);
+/// <summary>Which physical sensor a <see cref="WorldScreenSource.Camera"/> row opens.</summary>
+[JsonConverter(typeof(StrictEnumConverter<WorldCameraSensor>))]
+public enum WorldCameraSensor : byte {
+    /// <summary>The default color camera.</summary>
+    Color,
+    /// <summary>The infrared sensor camera a Windows Hello capable device exposes as its own capture device.</summary>
+    Infrared,
+}
 /// <summary>A live screen feed's requested output policy. It belongs to the source declaration rather than the binder,
 /// so two window captures can choose different extents and cadences. Camera extents are preferences because a physical
 /// device remains authoritative for its negotiated format.</summary>

@@ -10,6 +10,8 @@ namespace Puck.Platform.Windows;
 internal static class MfInterop {
     public const uint MfVersion = 0x00020070; // (MF_SDK_VERSION << 16) | MF_API_VERSION
     public const uint FirstVideoStream = 0xFFFFFFFC; // MF_SOURCE_READER_FIRST_VIDEO_STREAM
+    public const uint AllStreams = 0xFFFFFFFE; // MF_SOURCE_READER_ALL_STREAMS
+    public const uint AnyStream = 0xFFFFFFFE; // MF_SOURCE_READER_ANY_STREAM (same value; ReadSample context)
     public const uint EndOfStream = 0x00000002; // MF_SOURCE_READERF_ENDOFSTREAM
 
     public static Guid IID_IMFMediaSource = new(g: "279a808d-aec7-40c8-9c6b-a6b492c78a66");
@@ -20,6 +22,23 @@ internal static class MfInterop {
     public static Guid MF_MT_SUBTYPE = new(g: "f7e34c9a-42e8-4714-b74b-cb29d72c35e5");
     public static Guid MF_MT_FRAME_SIZE = new(g: "1652c33d-d6b2-4012-b834-72030849a37d");
     public static Guid MF_MT_FRAME_RATE = new(g: "c459a2e8-3d2c-4e44-b132-fee5156c7bb0");
+    // Narrows a VIDCAP enumeration to one KS category — some devices expose their infrared sensor as its own
+    // KSCATEGORY_SENSOR_CAMERA device. Others (the BRIO) expose it as a SECOND STREAM on the color device instead,
+    // identified per stream by MF_DEVICESTREAM_ATTRIBUTE_FRAMESOURCE_TYPES carrying the Infrared flag — the session
+    // probes streams first and falls back to the sensor category only when no stream carries the flag.
+    public static Guid MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_CATEGORY = new(g: "77f0ae69-c3bd-4509-941d-467e4d24899e");
+    public static Guid KSCATEGORY_SENSOR_CAMERA = new(g: "24e552d7-6523-47f7-a647-d3465bf1f5ca");
+    // Per-stream frame-source classification (readable through IMFSourceReader.GetPresentationAttribute with a stream
+    // index): a VT_UI4 flag set — Color = 0x1, Infrared = 0x2, Depth = 0x4.
+    public static Guid MF_DEVICESTREAM_ATTRIBUTE_FRAMESOURCE_TYPES = new(g: "17145fd1-1b2b-423c-8001-2b6833ed3588");
+    public const uint FrameSourceTypeInfrared = 0x2;
+    // 8-bit luminance — the format IR streams commonly deliver; the video processor cannot always convert it to
+    // RGB32, so the session may accept it natively and expand host-side.
+    public static Guid MFVideoFormat_L8 = new(g: "00000032-0000-0010-8000-00aa00389b71");
+    // Logitech's video vendor extension unit (hardware-verified on the BRIO at topology node 6): selector 2 is the
+    // discrete field-of-view control (byte 0/1/2 = 90/78/65 degrees, applied MID-STREAM only — a set on an idle
+    // filter is accepted and ignored at the next stream start). Other selectors are device-specific and undocumented.
+    public static Guid LOGITECH_VIDEO_XU = new(g: "49e40215-f434-47fe-b158-0e885023e51b");
     public static Guid MF_MT_DEFAULT_STRIDE = new(g: "644b4e48-1e02-4516-b0eb-c01ca9d49ac6");
     public static Guid MFMediaType_Video = new(g: "73646976-0000-0010-8000-00aa00389b71");
     public static Guid MFVideoFormat_ARGB32 = new(g: "00000015-0000-0010-8000-00aa00389b71");
@@ -53,20 +72,33 @@ internal static class MfInterop {
     /// <summary>Enumerates video capture devices, activates the first one as a media source, and reports its friendly
     /// name. Shared by both the CPU and GPU-tier camera sessions — the enumeration/activation shape is identical; only
     /// what each does with the resulting source (reader configuration) differs.</summary>
+    /// <param name="infrared">Whether to enumerate the sensor-camera category (the infrared stream a Windows Hello
+    /// capable device exposes as its own capture device) instead of the default color-camera category.</param>
     /// <returns>The activated media source (as <see cref="object"/>, the way <c>ActivateObject</c> yields it) and the
     /// device's friendly name (or <see langword="null"/> if the driver did not report one).</returns>
-    /// <exception cref="InvalidOperationException">No video capture device was found.</exception>
-    public static (object MediaSource, string? Name) ActivateDefaultVideoSource() {
-        Check(hr: MFCreateAttributes(cInitialSize: 1, ppMFAttributes: out var enumConfig));
+    /// <exception cref="InvalidOperationException">No matching video capture device was found.</exception>
+    public static (object MediaSource, string? Name) ActivateDefaultVideoSource(bool infrared = false) {
+        Check(hr: MFCreateAttributes(cInitialSize: 2, ppMFAttributes: out var enumConfig));
 
         var sourceTypeKey = MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE;
         var vidcap = MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP;
 
         Check(hr: enumConfig.SetGUID(guidKey: ref sourceTypeKey, guidValue: ref vidcap));
+
+        if (infrared) {
+            var categoryKey = MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_CATEGORY;
+            var sensorCategory = KSCATEGORY_SENSOR_CAMERA;
+
+            Check(hr: enumConfig.SetGUID(guidKey: ref categoryKey, guidValue: ref sensorCategory));
+        }
+
         Check(hr: MFEnumDeviceSources(pAttributes: enumConfig, pcSourceActivate: out var count, pppSourceActivate: out var devices));
 
         if ((0 == count) || (0 == devices)) {
-            throw new InvalidOperationException(message: "no video capture devices were found");
+            throw new InvalidOperationException(message: (infrared
+                ? "no infrared capture device was found"
+                : "no video capture devices were found"
+            ));
         }
 
         var activate = ((IMFActivate)Marshal.GetObjectForIUnknown(pUnk: Marshal.ReadIntPtr(ptr: devices)));
@@ -173,7 +205,7 @@ internal interface IMFMediaType {
     [PreserveSig] int GetUINT32(ref Guid guidKey, out uint punValue);
     [PreserveSig] int GetUINT64(ref Guid guidKey, out ulong punValue);
     [PreserveSig] int GetDouble();
-    [PreserveSig] int GetGUID();
+    [PreserveSig] int GetGUID(ref Guid guidKey, out Guid guidValue);
     [PreserveSig] int GetStringLength();
     [PreserveSig] int GetString();
     [PreserveSig] int GetAllocatedString();
@@ -275,6 +307,18 @@ internal interface IMFMediaBuffer {
     [PreserveSig] int GetCurrentLength(out uint pcbCurrentLength);
 }
 /// <summary>IMFSourceReader — SetStreamSelection (2), GetCurrentMediaType (4), SetCurrentMediaType (5), ReadSample (7).</summary>
+/// <summary>Kernel Streaming's raw property door, answered by Media Foundation video capture sources — the route to a
+/// vendor extension unit's controls (a <c>KSP_NODE</c>-shaped property keyed by the XU's GUID + selector + topology
+/// node id, with <c>KSPROPERTY_TYPE_TOPOLOGY</c> OR'd into the flags).</summary>
+[ComImport]
+[Guid("28f54685-06fd-11d2-b27a-00a0c9223196")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+[SupportedOSPlatform("windows")]
+internal interface IKsControl {
+    [PreserveSig] int KsProperty(nint Property, uint PropertyLength, nint PropertyData, uint DataLength, out uint BytesReturned);
+    [PreserveSig] int KsMethod(nint Method, uint MethodLength, nint MethodData, uint DataLength, out uint BytesReturned);
+    [PreserveSig] int KsEvent(nint Event, uint EventLength, nint EventData, uint DataLength, out uint BytesReturned);
+}
 /// <summary>DirectShow's classic camera-control interface (pan/tilt/zoom/exposure/focus by KSPROPERTY ordinal) —
 /// implemented by Media Foundation video capture sources, so the session's media source answers it directly.</summary>
 [ComImport]
@@ -309,4 +353,22 @@ internal interface IMFSourceReader {
     [PreserveSig] int SetCurrentMediaType(uint dwStreamIndex, nint pdwReserved, IMFMediaType pMediaType);
     [PreserveSig] int SetCurrentPosition();
     [PreserveSig] int ReadSample(uint dwStreamIndex, uint dwControlFlags, out uint pdwActualStreamIndex, out uint pdwStreamFlags, out long pllTimestamp, out IMFSample? ppSample);
+    [PreserveSig] int Flush();
+    [PreserveSig] int GetServiceForStream();
+    [PreserveSig] int GetPresentationAttribute(uint dwStreamIndex, ref Guid guidAttribute, out MfPropVariant pvarAttribute);
+}
+/// <summary>A minimal PROPVARIANT for the VT_UI4-shaped attributes <see cref="IMFSourceReader.GetPresentationAttribute"/>
+/// answers (the per-stream frame-source flags). No PropVariantClear is needed for the inline value types read through
+/// it — nothing is allocated behind a VT_UI4.</summary>
+[StructLayout(LayoutKind.Sequential)]
+internal struct MfPropVariant {
+    public const ushort VtUInt32 = 19;
+
+    public ushort Vt;
+    public ushort Reserved1;
+    public ushort Reserved2;
+    public ushort Reserved3;
+    public uint UInt32Value;
+    public uint Padding1;
+    public ulong Padding2;
 }

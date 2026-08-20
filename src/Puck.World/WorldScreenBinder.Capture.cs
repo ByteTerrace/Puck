@@ -96,17 +96,24 @@ internal sealed partial class WorldScreenBinder {
             slot.DeclaredFault = captureFault;
         }
     }
-    // Services the ONE shared webcam feed. On BOTH hosts it rides the GPU-resident zero-copy tier — the platform's
-    // decode device converts frames on-GPU and copies them into the three shared textures provisioned here, so the
-    // screen samples the latest published slot directly and no frame ever visits host memory — falling back to the
-    // CPU-pixel tier exactly once if the GPU open refuses (no adapter LUID, no device, a failed target or import).
-    // The CPU tier pulls one frame on the capture cadence and publishes it to the shared surface, refreshing the
-    // handle + room glow. A disconnected device drops the feed to unbound + fault on either tier.
+    // Services every live shared webcam feed — one per sensor; color and infrared are separate physical devices and
+    // stream simultaneously. On BOTH hosts a feed rides the GPU-resident zero-copy tier — the platform's decode device
+    // converts frames on-GPU and copies them into the three shared textures provisioned here, so the screen samples
+    // the latest published slot directly and no frame ever visits host memory — falling back to the CPU-pixel tier
+    // exactly once if the GPU open refuses (no adapter LUID, no device, a failed target or import). The CPU tier pulls
+    // one frame on the capture cadence and publishes it to the shared surface, refreshing the handle + room glow. A
+    // disconnected device drops its feed to unbound + fault on either tier.
     private void CaptureCamera(ulong elapsedTicks, IGpuDeviceContext deviceContext, IGpuComputeServices gpu) {
-        if (m_cameraFeed is not { } feed) {
-            return;
+        foreach (var feed in m_cameraFeeds.Values) {
+            ServiceCameraFeed(
+                deviceContext: deviceContext,
+                elapsedTicks: elapsedTicks,
+                feed: feed,
+                gpu: gpu
+            );
         }
-
+    }
+    private void ServiceCameraFeed(CameraFeed feed, ulong elapsedTicks, IGpuDeviceContext deviceContext, IGpuComputeServices gpu) {
         if (
             feed.GpuRoute &&
             OperatingSystem.IsWindowsVersionAtLeast(
@@ -148,6 +155,7 @@ internal sealed partial class WorldScreenBinder {
         }
 
         if (session.TryCapture(surface: out var surface)) {
+            feed.StarvedPulls = 0;
             var panelSurface = FitPanelSurface(
                 feed: feed,
                 surface: in surface
@@ -162,10 +170,29 @@ internal sealed partial class WorldScreenBinder {
             feed.Live = true;
             feed.Fault = null;
             feed.Light = AverageColor(pixels: panelSurface.Pixels.Span);
+            // Controls land only once frames flow (see ApplyCameraControls' live-stream contract); the Equals guard
+            // inside makes this a per-pull no-op after the first application.
+            ApplyCameraControls(
+                desired: ControlsFor(sensor: feed.Sensor),
+                feed: feed
+            );
         } else {
             // The async producer advertised a new version but the grab raced it. Do not spend the declaration's whole
             // cadence on that miss; retry on the next produced frame while still avoiding more than one attempt here.
             feed.RetryPull();
+
+            // A session that never delivers while its sibling sensor streams is a device that cannot run both
+            // sensors concurrently (the BRIO declares no video profiles, so the frame server arbitrates one pipe) —
+            // say so on the starved feed instead of holding "awaiting" forever. Polling continues; a delivered frame
+            // wins the fault back.
+            if (
+                !feed.Live &&
+                (++feed.StarvedPulls > 90) &&
+                (feed.Fault is null) &&
+                SiblingFeedStreams(sensor: feed.Sensor)
+            ) {
+                feed.Fault = "the device cannot stream color and infrared concurrently";
+            }
         }
     }
     // The GPU-resident camera tier's whole per-frame service, on BOTH hosts. A pending feed (no session yet) completes
@@ -196,6 +223,7 @@ internal sealed partial class WorldScreenBinder {
                 requestedWidth: feed.Profile.Width,
                 requestedHeight: feed.Profile.Height,
                 requestedRateHz: feed.Profile.RefreshRateHz,
+                sensor: PlatformSensor(sensor: feed.Sensor),
                 session: out var opened
             )) {
                 FallBackToCpuCamera(feed: feed);
@@ -278,10 +306,6 @@ internal sealed partial class WorldScreenBinder {
             // The idempotence cache belongs to the control surface, not the feed: this is a newly opened device.
             feed.AppliedControls = null;
             session = opened;
-            ApplyCameraControls(
-                desired: m_cameraControls,
-                feed: feed
-            );
         }
 
         if (session.IsEnded) {
@@ -311,6 +335,15 @@ internal sealed partial class WorldScreenBinder {
             ? null
             : "camera awaiting a first frame"
         );
+
+        // Controls land only once frames flow (see ApplyCameraControls' live-stream contract); the Equals guard
+        // inside makes this a per-frame no-op after the first application.
+        if (feed.Live) {
+            ApplyCameraControls(
+                desired: ControlsFor(sensor: feed.Sensor),
+                feed: feed
+            );
+        }
     }
     // The document-member-to-platform-control pairing, stated once so ApplyCameraControls and DescribeCamera can never
     // disagree about which authored member drives which device control.
@@ -327,13 +360,17 @@ internal sealed partial class WorldScreenBinder {
         (CameraControl.Gain, "gain", static controls => controls.Gain),
         (CameraControl.WhiteBalance, "whiteBalance", static controls => controls.WhiteBalance),
         (CameraControl.BacklightCompensation, "backlightCompensation", static controls => controls.BacklightCompensation),
+        (CameraControl.FieldOfView, "fieldOfView", static controls => controls.FieldOfView),
     ];
 
     // Pushes the authored control state onto the live session's device, per control: a PRESENT member sets the control
     // manual at that value (device-clamped), and a member the author REMOVED (present in the last applied state, absent
     // now) restores its driver default — a member never authored never disturbs driver state at all. Best-effort per
     // control (the device is authoritative; screen.camera reads the result back), and a no-op while the authored state
-    // matches what was last applied, so the reconcile path calls this freely.
+    // matches what was last applied, so the per-frame service path calls this freely. CALLED ONLY WITH A LIVE STREAM:
+    // vendor-extension controls (fieldOfView, the vendor rows) are register-accepted but STREAM-IGNORED by firmware
+    // when written before frames flow (hardware-verified on the BRIO), so application waits for the feed's first live
+    // frame rather than riding the session open.
     private static void ApplyCameraControls(CameraFeed feed, WorldCameraControls? desired) {
         if (((object?)feed.SharedSession ?? feed.Session) is not ICameraControlSurface surface) {
             return;
@@ -354,18 +391,51 @@ internal sealed partial class WorldScreenBinder {
             }
         }
 
+        // Vendor rows LAST, in authored order — raw byte writes the engine assigns no semantics to, so there is no
+        // restore for a removed row (its default is unknowable; authors flip values explicitly).
+        if (desired?.Vendor is { } vendorRows) {
+            foreach (var row in vendorRows) {
+                _ = surface.TryVendorWrite(selector: ((uint)row.Id), value: row.Value);
+            }
+        }
+
         feed.AppliedControls = desired;
     }
 
-    /// <summary>Describes the shared camera feed's live control surface — the <c>screen.camera</c> read-back: the
-    /// device name, tier, negotiated extent, and each device-supported control's current value/mode, device envelope,
-    /// and authored document value. Null when no camera feed exists (the fault is <c>m_cameraFault</c>).</summary>
-    /// <returns>The single-line description, or <see langword="null"/> when no camera feed is live.</returns>
+    /// <summary>Describes every shared camera feed's live control surface — the <c>screen.camera</c> read-back: per
+    /// sensor, the device name, tier, negotiated extent, each device-supported control's current value/mode, device
+    /// envelope, and authored document value, plus the authored vendor rows read back raw. A sensor whose open faulted
+    /// reports its fault. Null when no feed was ever attempted.</summary>
+    /// <returns>The description, or <see langword="null"/> when no camera feed or fault exists.</returns>
     public string? DescribeCamera() {
-        if (m_cameraFeed is not { } feed) {
+        if ((0 == m_cameraFeeds.Count) && (0 == m_cameraFaults.Count)) {
             return null;
         }
 
+        var builder = new StringBuilder();
+
+        foreach (var sensor in (WorldCameraSensor[])[WorldCameraSensor.Color, WorldCameraSensor.Infrared]) {
+            if (m_cameraFeeds.TryGetValue(key: sensor, value: out var feed)) {
+                if (builder.Length > 0) {
+                    _ = builder.Append(value: " | ");
+                }
+
+                DescribeCameraFeed(builder: builder, feed: feed);
+            } else if (m_cameraFaults.TryGetValue(key: sensor, value: out var fault)) {
+                if (builder.Length > 0) {
+                    _ = builder.Append(value: " | ");
+                }
+
+                _ = builder.Append(
+                    provider: CultureInfo.InvariantCulture,
+                    handler: $"{sensor.ToString().ToLowerInvariant()} '{fault}'"
+                );
+            }
+        }
+
+        return builder.ToString();
+    }
+    private void DescribeCameraFeed(StringBuilder builder, CameraFeed feed) {
         var session = ((object?)feed.SharedSession ?? feed.Session);
         var tier = ((feed.SharedSession is not null)
             ? "gpu"
@@ -374,20 +444,26 @@ internal sealed partial class WorldScreenBinder {
                 : (feed.GpuRoute ? "pending" : "unopened")
             )
         );
+        var sensorName = feed.Sensor.ToString().ToLowerInvariant();
 
         if (session is not ICameraControlSurface surface) {
-            return $"'{m_cameraFault}' {tier}";
+            _ = builder.Append(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"{sensorName} {tier}{((feed.Fault is { } pendingFault) ? $" '{pendingFault}'" : "")}"
+            );
+
+            return;
         }
 
         var (name, width, height) = ((feed.SharedSession is { } shared)
             ? (shared.Name, shared.Width, shared.Height)
             : (feed.Session!.Name, feed.Session!.Width, feed.Session!.Height)
         );
-        var builder = new StringBuilder();
+        var controls = ControlsFor(sensor: feed.Sensor);
 
         _ = builder.Append(
             provider: CultureInfo.InvariantCulture,
-            handler: $"'{name}' {tier} {width}x{height}"
+            handler: $"{sensorName} '{name}' {tier} {width}x{height}{(feed.Live ? "" : ((feed.Fault is { } liveFault) ? $" '{liveFault}'" : " (no frames)"))}"
         );
 
         foreach (var (control, label, select) in CameraControlMap) {
@@ -397,7 +473,7 @@ internal sealed partial class WorldScreenBinder {
 
             _ = surface.TryGet(control: control, value: out var value, auto: out var auto);
 
-            var authored = ((m_cameraControls is null) ? null : select(arg: m_cameraControls));
+            var authored = ((controls is null) ? null : select(arg: controls));
 
             _ = builder.Append(
                 provider: CultureInfo.InvariantCulture,
@@ -405,7 +481,17 @@ internal sealed partial class WorldScreenBinder {
             );
         }
 
-        return builder.ToString();
+        // The authored vendor rows read back by selector — semantics-free, so the echo is the raw byte pair.
+        if (controls?.Vendor is { } vendorRows) {
+            foreach (var row in vendorRows) {
+                var reads = surface.TryVendorRead(selector: ((uint)row.Id), value: out var current);
+
+                _ = builder.Append(
+                    provider: CultureInfo.InvariantCulture,
+                    handler: $" — vendor({row.Id}) {(reads ? current.ToString(provider: CultureInfo.InvariantCulture) : "unreadable")} authored {row.Value}"
+                );
+            }
+        }
     }
 
     // The GPU camera tier refused (no shared open, or the target provisioning/start faulted): flip the feed to the
@@ -421,19 +507,26 @@ internal sealed partial class WorldScreenBinder {
             requestedWidth: feed.Profile.Width,
             requestedHeight: feed.Profile.Height,
             requestedRateHz: feed.Profile.RefreshRateHz,
+            sensor: PlatformSensor(sensor: feed.Sensor),
             session: out var session
         )) {
             feed.Session = session;
-            ApplyCameraControls(
-                desired: m_cameraControls,
-                feed: feed
-            );
         } else {
-            m_cameraFault = "no camera device present";
-            feed.Fault = m_cameraFault;
+            m_cameraFaults[feed.Sensor] = CameraAbsenceFault(sensor: feed.Sensor);
+            feed.Fault = m_cameraFaults[feed.Sensor];
             feed.Live = false;
         }
     }
+    // The document sensor selector's platform spelling, and the fault a device absence reads as — sensor-specific, so
+    // an authored infrared row on a machine whose IR interface never enumerated says exactly that.
+    private static string CameraAbsenceFault(WorldCameraSensor sensor) => ((WorldCameraSensor.Infrared == sensor)
+        ? "no infrared camera present"
+        : "no camera device present"
+    );
+    private static CameraSensor PlatformSensor(WorldCameraSensor sensor) => ((WorldCameraSensor.Infrared == sensor)
+        ? CameraSensor.Infrared
+        : CameraSensor.Color
+    );
     // Samples only already-completed compositor frames. A miss holds the last frame. An ended compositor session is
     // disposed before the binder resolves a replacement target (a returning window with the same title, or a reconnected
     // monitor); reacquisition is World policy rather than a compatibility path in the platform feed. On the D3D12 GPU
@@ -495,27 +588,45 @@ internal sealed partial class WorldScreenBinder {
             feed.Fault = $"{feed.Label} awaiting a compositor frame";
         }
     }
-    // Opens (once) and returns the ONE shared webcam feed, or null when no device can be opened (m_cameraFault holds
-    // the reason). Every camera screen shares this single feed — two sessions on one physical device flicker. On a
-    // modern Windows host — EITHER backend — the feed starts PENDING on the GPU-resident tier (the render adapter
-    // LUID it must open on resolves at first publish, so CaptureCameraGpu completes the open and falls back to the
-    // CPU tier if it refuses) — the bind succeeds now and a device absence surfaces as the feed's own fault.
-    // Elsewhere the CPU-pixel session opens here, synchronously.
-    private CameraFeed? EnsureCameraFeed(WorldFeedProfile profile) {
-        if (m_cameraFeed is not null) {
-            return m_cameraFeed;
+    // Opens (once per sensor) and returns that sensor's shared webcam feed, or null when its device cannot be opened
+    // (m_cameraFaults holds the reason). Every camera screen naming the sensor shares the one feed — two sessions on
+    // ONE physical device flicker; different sensors are different devices and stream together. On a modern Windows
+    // host — EITHER backend — a feed starts PENDING on the GPU-resident tier (the render adapter LUID it must open on
+    // resolves at first publish, so CaptureCameraGpu completes the open and falls back to the CPU tier if it refuses)
+    // — the bind succeeds now and a device absence surfaces as the feed's own fault. Elsewhere the CPU-pixel session
+    // opens here, synchronously.
+    private CameraFeed? EnsureCameraFeed(WorldFeedProfile profile, WorldCameraSensor sensor) {
+        if (m_cameraFeeds.TryGetValue(key: sensor, value: out var existing)) {
+            return existing;
         }
 
-        if (m_cameraTried) {
+        if (m_cameraFaults.ContainsKey(key: sensor)) {
             return null;
         }
-
-        m_cameraTried = true;
 
         if (!m_cameraCapture.IsSupported) {
-            m_cameraFault = "no camera device present";
+            m_cameraFaults[sensor] = CameraAbsenceFault(sensor: sensor);
 
             return null;
+        }
+
+        // The OTHER sensor already streams: both sensors of one multiplexing device (the BRIO) cannot run as two
+        // independent sessions — each open kills the other's stream at the firmware — so entering two-sensor
+        // operation rebuilds BOTH feeds onto the platform's single-reader dual session (color rides the CPU tier in
+        // this mode). The feeds keep their object identity; only their sessions swap.
+        var other = ((WorldCameraSensor.Color == sensor) ? WorldCameraSensor.Infrared : WorldCameraSensor.Color);
+
+        if (m_cameraFeeds.TryGetValue(key: other, value: out var otherFeed)) {
+            var colorProfile = ((WorldCameraSensor.Color == sensor) ? profile : otherFeed.Profile);
+            var infraredProfile = ((WorldCameraSensor.Infrared == sensor) ? profile : otherFeed.Profile);
+
+            if (!TryEnterDualCamera(colorProfile: colorProfile, infraredProfile: infraredProfile, requestedProfile: profile, requestedSensor: sensor)) {
+                m_cameraFaults[sensor] = CameraAbsenceFault(sensor: sensor);
+
+                return null;
+            }
+
+            return m_cameraFeeds[sensor];
         }
 
         if (OperatingSystem.IsWindowsVersionAtLeast(
@@ -523,39 +634,98 @@ internal sealed partial class WorldScreenBinder {
             minor: 0,
             build: 10240
         )) {
-            m_cameraFeed = new CameraFeed(
+            var pending = new CameraFeed(
                 profile: profile,
+                sensor: sensor,
                 surface: new CpuSurfaceSource(),
                 gpuRoute: true
             );
 
-            return m_cameraFeed;
+            m_cameraFeeds[sensor] = pending;
+
+            return pending;
         }
 
         if (!m_cameraCapture.TryOpenDefault(
             requestedWidth: profile.Width,
             requestedHeight: profile.Height,
             requestedRateHz: profile.RefreshRateHz,
+            sensor: PlatformSensor(sensor: sensor),
             session: out var session
         )) {
-            m_cameraFault = "no camera device present";
+            m_cameraFaults[sensor] = CameraAbsenceFault(sensor: sensor);
 
             return null;
         }
 
-        m_cameraFeed = new CameraFeed(
+        var feed = new CameraFeed(
             profile: profile,
+            sensor: sensor,
             surface: new CpuSurfaceSource(),
             gpuRoute: false
         ) {
             Session = session,
         };
-        ApplyCameraControls(
-            desired: m_cameraControls,
-            feed: m_cameraFeed
+
+        m_cameraFeeds[sensor] = feed;
+
+        return feed;
+    }
+    // The authored control record a sensor's feed applies (the first camera row of that sensor, re-resolved on every
+    // screens mutation).
+    private WorldCameraControls? ControlsFor(WorldCameraSensor sensor) => m_cameraControlsBySensor[((int)sensor)];
+    private bool SiblingFeedStreams(WorldCameraSensor sensor) {
+        var sibling = ((WorldCameraSensor.Color == sensor) ? WorldCameraSensor.Infrared : WorldCameraSensor.Color);
+
+        return (m_cameraFeeds.TryGetValue(key: sibling, value: out var feed) && feed.Live);
+    }
+    // Rebuilds both sensors' feeds onto the platform's single-reader dual session (see EnsureCameraFeed's two-sensor
+    // note). Sessions swap IN PLACE on the existing feed objects — slots hold feed references, so a bound screen
+    // follows its feed across the swap; the requested sensor's feed is created here when it did not exist yet.
+    private bool TryEnterDualCamera(WorldFeedProfile colorProfile, WorldFeedProfile infraredProfile, WorldFeedProfile requestedProfile, WorldCameraSensor requestedSensor) {
+        if (!m_cameraCapture.TryOpenDualDefault(
+            colorWidth: colorProfile.Width,
+            colorHeight: colorProfile.Height,
+            colorRateHz: colorProfile.RefreshRateHz,
+            infraredWidth: infraredProfile.Width,
+            infraredHeight: infraredProfile.Height,
+            infraredRateHz: infraredProfile.RefreshRateHz,
+            colorSession: out var colorSession,
+            infraredSession: out var infraredSession
+        )) {
+            return false;
+        }
+
+        var colorFeed = GetOrCreateCameraFeed(profile: ((WorldCameraSensor.Color == requestedSensor) ? requestedProfile : colorProfile), sensor: WorldCameraSensor.Color);
+        var infraredFeed = GetOrCreateCameraFeed(profile: ((WorldCameraSensor.Infrared == requestedSensor) ? requestedProfile : infraredProfile), sensor: WorldCameraSensor.Infrared);
+
+        colorFeed.ResetSessions();
+        infraredFeed.ResetSessions();
+        colorFeed.GpuRoute = false;
+        infraredFeed.GpuRoute = false;
+        colorFeed.Session = colorSession;
+        infraredFeed.Session = infraredSession;
+        _ = m_cameraFaults.Remove(key: WorldCameraSensor.Color);
+        _ = m_cameraFaults.Remove(key: WorldCameraSensor.Infrared);
+        Console.Out.WriteLine(value: $"[camera] dual-sensor session: '{colorSession.Name}' color {colorSession.Width}x{colorSession.Height} + infrared {infraredSession.Width}x{infraredSession.Height} on one reader.");
+
+        return true;
+    }
+    private CameraFeed GetOrCreateCameraFeed(WorldFeedProfile profile, WorldCameraSensor sensor) {
+        if (m_cameraFeeds.TryGetValue(key: sensor, value: out var existing)) {
+            return existing;
+        }
+
+        var feed = new CameraFeed(
+            profile: profile,
+            sensor: sensor,
+            surface: new CpuSurfaceSource(),
+            gpuRoute: false
         );
 
-        return m_cameraFeed;
+        m_cameraFeeds[sensor] = feed;
+
+        return feed;
     }
     // Ensures the feed's THREE simultaneous-access shared textures exist and are attached to its current source at the
     // source's native extent (the sampler scales, so no GPU-side resize is needed). Reallocates on a resize
@@ -683,23 +853,24 @@ internal sealed partial class WorldScreenBinder {
     // One physical device carries ONE control state, so — unlike the profile's richest-envelope merge below — the
     // FIRST declared camera screen authoring controls wins (two zoom values have no meaningful merge). Document order
     // is the author's priority statement.
-    private static WorldCameraControls? ResolveSharedCameraControls(IReadOnlyList<WorldScreen> screens) {
+    private static WorldCameraControls? ResolveSharedCameraControls(IReadOnlyList<WorldScreen> screens, WorldCameraSensor sensor) {
         foreach (var screen in screens) {
-            if (screen.Source is WorldScreenSource.Camera { Controls: { } controls }) {
+            if (screen.Source is WorldScreenSource.Camera { Controls: { } controls } camera && (sensor == camera.Sensor)) {
                 return controls;
             }
         }
 
         return null;
     }
-    // One physical default-camera session is shared to avoid device flicker. When several camera sources declare
-    // different preferences, request the richest combined envelope rather than letting declaration order choose.
-    private static WorldFeedProfile ResolveSharedCameraProfile(IReadOnlyList<WorldScreen> screens) {
+    // One physical session per SENSOR is shared to avoid device flicker. When several camera sources declare different
+    // preferences for the same sensor, request the richest combined envelope rather than letting declaration order
+    // choose.
+    private static WorldFeedProfile ResolveSharedCameraProfile(IReadOnlyList<WorldScreen> screens, WorldCameraSensor sensor) {
         var profile = WorldFeedProfile.Default;
         var found = false;
 
         foreach (var screen in screens) {
-            if (screen.Source is not WorldScreenSource.Camera camera) {
+            if (screen.Source is not WorldScreenSource.Camera camera || (sensor != camera.Sensor)) {
                 continue;
             }
 
@@ -801,12 +972,14 @@ internal sealed partial class WorldScreenBinder {
         return true;
     }
 
-    /// <summary>Binds a declared screen to the shared live webcam feed — the runtime <c>screen.source &lt;index&gt; camera</c> path. Any
-    /// existing producer on the slot is cleared first. Fails loudly for an undeclared screen or when no camera device can
-    /// be opened.</summary>
+    /// <summary>Binds a declared screen to a sensor's shared live webcam feed — the runtime
+    /// <c>screen.source &lt;index&gt; camera [color|infrared]</c> path. Any existing producer on the slot is cleared
+    /// first. Fails loudly for an undeclared screen or when the sensor's device cannot be opened.</summary>
     /// <param name="index">The engine screen-surface index (must be a declared screen).</param>
+    /// <param name="sensor">Which physical sensor's shared feed to bind — color and infrared are separate devices and
+    /// stream simultaneously.</param>
     /// <returns>Whether the bind succeeded, and a message describing the outcome.</returns>
-    public (bool Ok, string Message) TryCamera(int index) {
+    public (bool Ok, string Message) TryCamera(int index, WorldCameraSensor sensor) {
         if (m_disposed) {
             return (Ok: false, Message: "binder disposed");
         }
@@ -818,15 +991,18 @@ internal sealed partial class WorldScreenBinder {
             return (Ok: false, Message: $"no screen {index} declared");
         }
 
-        if (EnsureCameraFeed(profile: WorldFeedProfile.Default) is not { } feed) {
-            return (Ok: false, Message: m_cameraFault);
+        if (EnsureCameraFeed(profile: WorldFeedProfile.Default, sensor: sensor) is not { } feed) {
+            return (Ok: false, Message: m_cameraFaults.GetValueOrDefault(
+                key: sensor,
+                defaultValue: "no camera device present"
+            ));
         }
 
         slot.ClearLive();
         slot.Camera = feed;
         slot.DeclaredFault = null;
 
-        return (Ok: true, Message: $"screen {index} showing the webcam");
+        return (Ok: true, Message: $"screen {index} showing the {sensor.ToString().ToLowerInvariant()} webcam");
     }
     /// <summary>Binds a declared screen to a live desktop-window capture keyed by a title fragment — the runtime
     /// <c>screen.source &lt;index&gt; capture</c> path. Any existing producer on the slot is cleared first. The capture rebinds each grab, so
@@ -926,11 +1102,17 @@ internal sealed partial class WorldScreenBinder {
     // pixels ever exist, so Light stays dark) or the CPU-pixel tier (Session + Surface — frames read back to host
     // memory, fitted, uploaded, and averaged into the room glow). A mutable class so the sessions flip in place; the
     // handle is 0 (unbound) until the first frame lands and whenever the feed is not live.
-    private sealed class CameraFeed(WorldFeedProfile profile, CpuSurfaceSource surface, bool gpuRoute) : IDisposable {
+    private sealed class CameraFeed(WorldFeedProfile profile, WorldCameraSensor sensor, CpuSurfaceSource surface, bool gpuRoute) : IDisposable {
         // The control state last pushed onto the device (ApplyCameraControls' idempotence + removed-member baseline);
         // null until a first apply, so an unauthored world never touches driver defaults.
         public WorldCameraControls? AppliedControls { get; set; }
         public string? Fault { get; set; }
+        // Which physical sensor this feed's sessions open — fixed at construction; a document sensor flip tears the
+        // whole feed down and reopens (ReconcileScreens), never re-aims a live session.
+        public WorldCameraSensor Sensor { get; } = sensor;
+        // Consecutive frame-less pulls on an open session — the starvation detector behind the "cannot stream
+        // concurrently" fault (reset the moment any frame arrives).
+        public int StarvedPulls { get; set; }
         // Whether this feed rides (or is still pending on) the GPU-resident tier. Set at construction on any modern
         // Windows host; flipped to false exactly once if the GPU open refuses and the feed falls back to the CPU tier.
         public bool GpuRoute { get; set; } = gpuRoute;
@@ -999,6 +1181,20 @@ internal sealed partial class WorldScreenBinder {
 
             ReleaseGpuTargets();
             LastFrameVersion = -1L;
+            Cadence.Rearm();
+        }
+        // Tears both tiers' sessions down while the feed object (and every slot referencing it) stays — the dual-
+        // session upgrade swaps a live feed's sessions in place.
+        public void ResetSessions() {
+            Session?.Dispose();
+            Session = null;
+            SharedSession?.Dispose();
+            SharedSession = null;
+            ReleaseGpuTargets();
+            AppliedControls = null;
+            LastFrameVersion = -1L;
+            Live = false;
+            Fault = null;
             Cadence.Rearm();
         }
         // Disposes the shared textures and the Vulkan host's importers over them (all device-owned) and forgets both

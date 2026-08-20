@@ -11,7 +11,8 @@ public interface IGpuSurfaceReadback : IDisposable {
     /// reuses one output buffer across calls) — copy it if it must live longer.</summary>
     /// <param name="deviceContext">The GPU device context.</param>
     /// <param name="sourceImageHandle">The native image handle to read back from.</param>
-    /// <param name="sourceLayout">The source image's current layout/state.</param>
+    /// <param name="sourceLayout">The source image's current layout/state: <see cref="GpuImageLayout.External"/>,
+    /// <see cref="GpuImageLayout.General"/>, or <see cref="GpuImageLayout.ShaderReadOnly"/>.</param>
     /// <param name="format">The pixel format.</param>
     /// <param name="width">The width, in pixels.</param>
     /// <param name="height">The height, in pixels.</param>
@@ -26,7 +27,8 @@ public interface IGpuSurfaceReadback : IDisposable {
     /// already implies).</summary>
     /// <param name="deviceContext">The GPU device context.</param>
     /// <param name="sourceImageHandle">The native image handle to read back from.</param>
-    /// <param name="sourceLayout">The source image's current layout/state.</param>
+    /// <param name="sourceLayout">The source image's current layout/state: <see cref="GpuImageLayout.External"/>,
+    /// <see cref="GpuImageLayout.General"/>, or <see cref="GpuImageLayout.ShaderReadOnly"/>.</param>
     /// <param name="format">The pixel format.</param>
     /// <param name="width">The width, in pixels.</param>
     /// <param name="height">The height, in pixels.</param>
