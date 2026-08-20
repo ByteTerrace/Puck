@@ -16,8 +16,11 @@ namespace Puck.Platform.Windows;
 /// memory.
 /// <para>Two-phase: the constructor negotiates (device + reader + output size); <see cref="Start"/> hands over the
 /// shared targets and begins streaming.</para>
-/// <para>This built-ahead GPU tier is hardware-verified for 1920×1080 MJPEG on a Logitech C920. Its opener,
-/// <see cref="ICameraCaptureService.TryOpenSharedDefault"/>, currently has no call sites.</para>
+/// <para>Negotiation selects the native capture mode nearest the requested envelope
+/// (<see cref="Win32CameraModeNegotiation"/>, shared with the CPU tier) before the ARGB32 output type is applied, so
+/// the DXVA processor converts format only — it never upscales a smaller default mode to the requested extent. The
+/// opener, <see cref="ICameraCaptureService.TryOpenSharedDefault"/>, carries the Direct3D 12 host's shared camera
+/// feed.</para>
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 internal sealed class Win32MediaFoundationSharedCameraSession : ICameraSharedCaptureSession {
@@ -26,12 +29,16 @@ internal sealed class Win32MediaFoundationSharedCameraSession : ICameraSharedCap
     private readonly ManualResetEventSlim m_initDone = new(initialState: false);
 
     private readonly int m_requestedHeight;
+    private readonly uint m_requestedRateHz;
     private readonly int m_requestedWidth;
 
     private readonly ManualResetEventSlim m_startSignal = new(initialState: false);
 
     private readonly Thread m_thread;
 
+    // The device's control surface, created on the grabber thread beside the media source (the ctor's init-done wait
+    // is the barrier that publishes it to the consumer side); null until initialization succeeds.
+    private volatile Win32CameraControlSurface? m_controlSurface;
     private bool m_disposed;
     private volatile bool m_ended;
     private int m_height;
@@ -47,9 +54,10 @@ internal sealed class Win32MediaFoundationSharedCameraSession : ICameraSharedCap
     private volatile bool m_stop;
     private int m_width;
 
-    public Win32MediaFoundationSharedCameraSession(long adapterLuid, int requestedWidth, int requestedHeight) {
+    public Win32MediaFoundationSharedCameraSession(long adapterLuid, int requestedWidth, int requestedHeight, uint requestedRateHz) {
         m_adapterLuid = adapterLuid;
         m_requestedHeight = requestedHeight;
+        m_requestedRateHz = requestedRateHz;
         m_requestedWidth = requestedWidth;
         m_thread = new Thread(start: GrabberLoop) {
             IsBackground = true,
@@ -83,6 +91,31 @@ internal sealed class Win32MediaFoundationSharedCameraSession : ICameraSharedCap
     /// <inheritdoc/>
     public int Width => m_width;
 
+    /// <inheritdoc/>
+    public bool TryGet(CameraControl control, out int value, out bool auto) {
+        if (m_controlSurface is { } surface) {
+            return surface.TryGet(control: control, value: out value, auto: out auto);
+        }
+
+        value = 0;
+        auto = false;
+
+        return false;
+    }
+    /// <inheritdoc/>
+    public bool TryGetRange(CameraControl control, out CameraControlRange range) {
+        if (m_controlSurface is { } surface) {
+            return surface.TryGetRange(control: control, range: out range);
+        }
+
+        range = default;
+
+        return false;
+    }
+    /// <inheritdoc/>
+    public bool TryResetAuto(CameraControl control) => (m_controlSurface?.TryResetAuto(control: control) ?? false);
+    /// <inheritdoc/>
+    public bool TrySet(CameraControl control, int value) => (m_controlSurface?.TrySet(control: control, value: value) ?? false);
     /// <inheritdoc/>
     public void Start(IReadOnlyList<nint> sharedTargetHandles) {
         ArgumentNullException.ThrowIfNull(sharedTargetHandles);
@@ -200,6 +233,8 @@ internal sealed class Win32MediaFoundationSharedCameraSession : ICameraSharedCap
             m_name = deviceName;
         }
 
+        m_controlSurface = new Win32CameraControlSurface(mediaSource: mediaSource);
+
         // The GPU-tier reader: the D3D manager makes samples GPU textures on our device; ADVANCED video processing
         // enables the DXVA VideoProcessor, which performs the NV12/YUY2 -> ARGB32 conversion (and any scaling) on-GPU.
         Check(hr: MfInterop.MFCreateAttributes(cInitialSize: 2, ppMFAttributes: out var readerConfig));
@@ -214,11 +249,16 @@ internal sealed class Win32MediaFoundationSharedCameraSession : ICameraSharedCap
         Check(hr: MfInterop.MFCreateSourceReaderFromMediaSource(pAttributes: readerConfig, pMediaSource: mediaSource, ppSourceReader: out var reader));
         Check(hr: reader.SetStreamSelection(dwStreamIndex: MfInterop.FirstVideoStream, fSelected: true));
 
-        // Ask for ARGB32 (DXGI B8G8R8A8) at the requested size — the processor scales; if the size is refused, accept
-        // the device's own and let the consumer size its targets from the negotiated result.
-        if (TrySetOutputType(height: m_requestedHeight, reader: reader, width: m_requestedWidth) < 0) {
-            Check(hr: TrySetOutputType(height: 0, reader: reader, width: 0));
-        }
+        // Resolution is chosen by selecting the native capture mode (shared negotiation with the CPU tier) — then the
+        // plain ARGB32 (DXGI B8G8R8A8) output type makes the DXVA processor convert format only, never scale, and the
+        // consumer sizes its targets from the negotiated result.
+        Win32CameraModeNegotiation.SelectNativeType(
+            reader: reader,
+            requestedHeight: m_requestedHeight,
+            requestedRateHz: m_requestedRateHz,
+            requestedWidth: m_requestedWidth
+        );
+        Check(hr: TrySetOutputType(reader: reader));
 
         // Read back the negotiated frame size (the target/ring size the consumer must provision).
         Check(hr: reader.GetCurrentMediaType(dwStreamIndex: MfInterop.FirstVideoStream, ppMediaType: out var currentType));
@@ -236,9 +276,8 @@ internal sealed class Win32MediaFoundationSharedCameraSession : ICameraSharedCap
 
         return reader;
     }
-    // Sets the ARGB32 output type, optionally with an explicit frame size (zero omits it). Returns the raw HRESULT so
-    // the caller can fall back from an explicit size to the device's own.
-    private static int TrySetOutputType(IMFSourceReader reader, int width, int height) {
+    // Sets the plain ARGB32 output type — no frame size, since the selected native mode owns the resolution.
+    private static int TrySetOutputType(IMFSourceReader reader) {
         Check(hr: MfInterop.MFCreateMediaType(ppMFType: out var outputType));
 
         var majorTypeKey = MfInterop.MF_MT_MAJOR_TYPE;
@@ -250,12 +289,6 @@ internal sealed class Win32MediaFoundationSharedCameraSession : ICameraSharedCap
         var argb32 = MfInterop.MFVideoFormat_ARGB32;
 
         Check(hr: outputType.SetGUID(guidKey: ref subTypeKey, guidValue: ref argb32));
-
-        if ((width > 0) && (height > 0)) {
-            var frameSizeKey = MfInterop.MF_MT_FRAME_SIZE;
-
-            Check(hr: outputType.SetUINT64(guidKey: ref frameSizeKey, unValue: (((ulong)((uint)width)) << 32) | ((uint)height)));
-        }
 
         return reader.SetCurrentMediaType(dwStreamIndex: MfInterop.FirstVideoStream, pMediaType: outputType, pdwReserved: IntPtr.Zero);
     }

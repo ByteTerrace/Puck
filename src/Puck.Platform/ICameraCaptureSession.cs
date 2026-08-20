@@ -8,7 +8,7 @@ namespace Puck.Platform;
 /// <see cref="IFrameCaptureSource.TryCapture"/> returns the newest frame as a CPU-pixel <see cref="Surface"/> in
 /// <see cref="SurfaceFormat.B8G8R8A8Unorm"/>, or <see langword="false"/> until the first frame arrives.
 /// </summary>
-public interface ICameraCaptureSession : IFrameCaptureSource, IDisposable {
+public interface ICameraCaptureSession : IFrameCaptureSource, ICameraControlSurface, IDisposable {
     /// <summary>A monotonically increasing counter of frames the device has delivered — a puller compares it against the
     /// value it last processed to skip re-uploading an unchanged frame (the newest-frame-wins drop policy), so the render
     /// pump is never blocked re-doing work between the camera's own (e.g. 30 fps) arrivals.</summary>

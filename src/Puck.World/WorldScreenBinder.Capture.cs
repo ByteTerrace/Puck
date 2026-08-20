@@ -1,6 +1,11 @@
+using System.Globalization;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using System.Text;
+using Puck.DirectX;
+using Puck.DirectX.Apis;
+using Puck.DirectX.Interop;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
@@ -91,14 +96,34 @@ internal sealed partial class WorldScreenBinder {
             slot.DeclaredFault = captureFault;
         }
     }
-    // Pulls one frame from the shared webcam session on the capture cadence and publishes it to the shared surface: a
-    // disconnected device drops the feed to unbound + fault, a frame refreshes the handle + room glow, and no frame yet
-    // holds the last state.
+    // Services the ONE shared webcam feed. On BOTH hosts it rides the GPU-resident zero-copy tier — the platform's
+    // decode device converts frames on-GPU and copies them into the three shared textures provisioned here, so the
+    // screen samples the latest published slot directly and no frame ever visits host memory — falling back to the
+    // CPU-pixel tier exactly once if the GPU open refuses (no adapter LUID, no device, a failed target or import).
+    // The CPU tier pulls one frame on the capture cadence and publishes it to the shared surface, refreshing the
+    // handle + room glow. A disconnected device drops the feed to unbound + fault on either tier.
     private void CaptureCamera(ulong elapsedTicks, IGpuDeviceContext deviceContext, IGpuComputeServices gpu) {
+        if (m_cameraFeed is not { } feed) {
+            return;
+        }
+
         if (
-            (m_cameraFeed is not { } feed) ||
-            (feed.Session is not { } session)
+            feed.GpuRoute &&
+            OperatingSystem.IsWindowsVersionAtLeast(
+            major: 10,
+            minor: 0,
+            build: 10240
+        )
         ) {
+            CaptureCameraGpu(
+                deviceContext: deviceContext,
+                feed: feed
+            );
+
+            return;
+        }
+
+        if (feed.Session is not { } session) {
             return;
         }
 
@@ -139,6 +164,255 @@ internal sealed partial class WorldScreenBinder {
             // The async producer advertised a new version but the grab raced it. Do not spend the declaration's whole
             // cadence on that miss; retry on the next produced frame while still avoiding more than one attempt here.
             feed.RetryPull();
+        }
+    }
+    // The GPU-resident camera tier's whole per-frame service, on BOTH hosts. A pending feed (no session yet) completes
+    // its open here once the render adapter LUID has resolved: negotiate the platform session, provision the three
+    // shared targets at the negotiated extent, and hand their shared handles over for the platform to stream into. The
+    // targets are Direct3D 12 shared simultaneous-access textures on both hosts — the sharing triangle every leg of
+    // which is proven: D3D12 creates them, the platform's D3D11 decode device opens the NT handles and writes the
+    // frames, and the D3D12 render device samples its own resources directly while the Vulkan render device imports
+    // each handle (VK_KHR_external_memory_win32, one importer per slot) and samples the imported views. On the D3D12
+    // host the targets live on the render device; the Vulkan host allocates them on a lazily created headless device
+    // pinned to the render adapter's LUID. A refused or faulted open falls back to the CPU tier exactly once. A live
+    // session needs only bookkeeping per frame — the platform publishes completed slots on its own thread and the
+    // screen's provider samples the latest one directly. No room glow on this tier: frames never visit host memory, so
+    // there are no CPU pixels to average — the tier's one trade against the CPU path.
+    [SupportedOSPlatform("windows10.0.10240")]
+    private void CaptureCameraGpu(CameraFeed feed, IGpuDeviceContext deviceContext) {
+        if (feed.SharedSession is not { } session) {
+            // Publish resolves the LUID from the render device before this runs, so still-unresolved here means the
+            // driver reports none — cross-API sharing is unavailable and the CPU tier is the honest path.
+            if (m_renderAdapterLuid is not { } adapterLuid) {
+                FallBackToCpuCamera(feed: feed);
+
+                return;
+            }
+
+            if (!m_cameraCapture.TryOpenSharedDefault(
+                adapterLuid: adapterLuid,
+                requestedWidth: feed.Profile.Width,
+                requestedHeight: feed.Profile.Height,
+                requestedRateHz: feed.Profile.RefreshRateHz,
+                session: out var opened
+            )) {
+                FallBackToCpuCamera(feed: feed);
+
+                return;
+            }
+
+            var images = new IGpuExportableStorageImage[3];
+            var handles = new nint[images.Length];
+            IGpuSurfaceImport[]? imports = null;
+            nint[]? importedViews = null;
+
+            try {
+                var targetContext = (m_hostsOnDirectX
+                    ? deviceContext
+                    : (m_cameraTargetDevice ??= new DirectXDeviceContext(
+                        adapterLuid: adapterLuid,
+                        deviceApi: new DirectXNativeDeviceApi(),
+                        minimumFeatureLevel: DirectXFeatureLevel.Level110
+                    ))
+                );
+
+                var export = (m_cameraExport ??= new DirectXGpuSurfaceExportFactory());
+
+                for (var i = 0; (i < images.Length); ++i) {
+                    images[i] = export.CreateSimultaneousAccessStorageImage(
+                        deviceContext: targetContext,
+                        format: GpuPixelFormat.B8G8R8A8Unorm,
+                        height: ((uint)opened.Height),
+                        width: ((uint)opened.Width)
+                    );
+                    handles[i] = images[i].SharedHandle;
+                }
+
+                if (!m_hostsOnDirectX) {
+                    // One importer per slot — the Vulkan import caches a single image per importer, and the three
+                    // slots must all stay live for the round-robin publication to sample.
+                    var transfers = (m_surfaceTransfers ?? throw new InvalidOperationException(message: "the Vulkan camera GPU tier needs the surface-transfer factory (absent on a headless boot)"));
+
+                    imports = new IGpuSurfaceImport[images.Length];
+                    importedViews = new nint[images.Length];
+
+                    for (var i = 0; (i < images.Length); ++i) {
+                        imports[i] = transfers.CreateImport(deviceContext: deviceContext);
+                        importedViews[i] = imports[i].Import(
+                            deviceContext: deviceContext,
+                            format: GpuPixelFormat.B8G8R8A8Unorm,
+                            height: ((uint)opened.Height),
+                            sharedHandle: handles[i],
+                            width: ((uint)opened.Width)
+                        ).ImageViewHandle;
+                    }
+                }
+
+                opened.Start(sharedTargetHandles: handles);
+            } catch (Exception exception) {
+                Console.Error.WriteLine(value: $"[camera] GPU tier start failed: {exception.Message}; falling back to the CPU tier.");
+
+                if (imports is not null) {
+                    foreach (var import in imports) {
+                        import?.Dispose();
+                    }
+                }
+
+                foreach (var image in images) {
+                    image?.Dispose();
+                }
+
+                opened.Dispose();
+                FallBackToCpuCamera(feed: feed);
+
+                return;
+            }
+
+            Console.Out.WriteLine(value: $"[camera] GPU tier: '{opened.Name}' {opened.Width}x{opened.Height}, {images.Length} shared targets on the render adapter{(m_hostsOnDirectX ? "" : ", imported for Vulkan sampling")}.");
+            feed.SharedSession = opened;
+            feed.GpuTargets = images;
+            feed.GpuImports = imports;
+            feed.GpuImportedViews = importedViews;
+            session = opened;
+            ApplyCameraControls(
+                desired: m_cameraControls,
+                feed: feed
+            );
+        }
+
+        if (session.IsEnded) {
+            session.Dispose();
+            feed.SharedSession = null;
+            feed.ReleaseGpuTargets();
+            feed.Live = false;
+            feed.Fault = "camera disconnected";
+
+            return;
+        }
+
+        feed.Live = (session.LatestSlot >= 0);
+        feed.Fault = (feed.Live
+            ? null
+            : "camera awaiting a first frame"
+        );
+    }
+    // The document-member-to-platform-control pairing, stated once so ApplyCameraControls and DescribeCamera can never
+    // disagree about which authored member drives which device control.
+    private static readonly (CameraControl Control, string Name, Func<WorldCameraControls, int?> Select)[] CameraControlMap = [
+        (CameraControl.Pan, "pan", static controls => controls.Pan),
+        (CameraControl.Tilt, "tilt", static controls => controls.Tilt),
+        (CameraControl.Zoom, "zoom", static controls => controls.Zoom),
+        (CameraControl.Exposure, "exposure", static controls => controls.Exposure),
+        (CameraControl.Focus, "focus", static controls => controls.Focus),
+        (CameraControl.Brightness, "brightness", static controls => controls.Brightness),
+        (CameraControl.Contrast, "contrast", static controls => controls.Contrast),
+        (CameraControl.Saturation, "saturation", static controls => controls.Saturation),
+        (CameraControl.Sharpness, "sharpness", static controls => controls.Sharpness),
+        (CameraControl.Gain, "gain", static controls => controls.Gain),
+        (CameraControl.WhiteBalance, "whiteBalance", static controls => controls.WhiteBalance),
+        (CameraControl.BacklightCompensation, "backlightCompensation", static controls => controls.BacklightCompensation),
+    ];
+
+    // Pushes the authored control state onto the live session's device, per control: a PRESENT member sets the control
+    // manual at that value (device-clamped), and a member the author REMOVED (present in the last applied state, absent
+    // now) restores its driver default — a member never authored never disturbs driver state at all. Best-effort per
+    // control (the device is authoritative; screen.camera reads the result back), and a no-op while the authored state
+    // matches what was last applied, so the reconcile path calls this freely.
+    private static void ApplyCameraControls(CameraFeed feed, WorldCameraControls? desired) {
+        if (((object?)feed.SharedSession ?? feed.Session) is not ICameraControlSurface surface) {
+            return;
+        }
+
+        if (Equals(objA: desired, objB: feed.AppliedControls)) {
+            return;
+        }
+
+        foreach (var (control, _, select) in CameraControlMap) {
+            var value = ((desired is null) ? null : select(arg: desired));
+            var previous = ((feed.AppliedControls is null) ? null : select(arg: feed.AppliedControls));
+
+            if (value is { } manual) {
+                _ = surface.TrySet(control: control, value: manual);
+            } else if (previous is not null) {
+                _ = surface.TryResetAuto(control: control);
+            }
+        }
+
+        feed.AppliedControls = desired;
+    }
+
+    /// <summary>Describes the shared camera feed's live control surface — the <c>screen.camera</c> read-back: the
+    /// device name, tier, negotiated extent, and each device-supported control's current value/mode, device envelope,
+    /// and authored document value. Null when no camera feed exists (the fault is <c>m_cameraFault</c>).</summary>
+    /// <returns>The single-line description, or <see langword="null"/> when no camera feed is live.</returns>
+    public string? DescribeCamera() {
+        if (m_cameraFeed is not { } feed) {
+            return null;
+        }
+
+        var session = ((object?)feed.SharedSession ?? feed.Session);
+        var tier = ((feed.SharedSession is not null)
+            ? "gpu"
+            : ((feed.Session is not null)
+                ? "cpu"
+                : (feed.GpuRoute ? "pending" : "unopened")
+            )
+        );
+
+        if (session is not ICameraControlSurface surface) {
+            return $"'{m_cameraFault}' {tier}";
+        }
+
+        var (name, width, height) = ((feed.SharedSession is { } shared)
+            ? (shared.Name, shared.Width, shared.Height)
+            : (feed.Session!.Name, feed.Session!.Width, feed.Session!.Height)
+        );
+        var builder = new StringBuilder();
+
+        _ = builder.Append(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"'{name}' {tier} {width}x{height}"
+        );
+
+        foreach (var (control, label, select) in CameraControlMap) {
+            if (!surface.TryGetRange(control: control, range: out var range)) {
+                continue;
+            }
+
+            _ = surface.TryGet(control: control, value: out var value, auto: out var auto);
+
+            var authored = ((m_cameraControls is null) ? null : select(arg: m_cameraControls));
+
+            _ = builder.Append(
+                provider: CultureInfo.InvariantCulture,
+                handler: $" — {label} {value}({(auto ? "auto" : "manual")}) [{range.Minimum}..{range.Maximum}]{(range.SupportsAuto ? "+auto" : "")} authored {((authored is { } a) ? a.ToString(provider: CultureInfo.InvariantCulture) : "none")}"
+            );
+        }
+
+        return builder.ToString();
+    }
+
+    // The GPU camera tier refused (no shared open, or the target provisioning/start faulted): flip the feed to the
+    // CPU-pixel tier once, opening the ordinary session with the same profile — or record the fault when the device
+    // cannot open at all.
+    private void FallBackToCpuCamera(CameraFeed feed) {
+        feed.GpuRoute = false;
+
+        if (m_cameraCapture.TryOpenDefault(
+            requestedWidth: feed.Profile.Width,
+            requestedHeight: feed.Profile.Height,
+            requestedRateHz: feed.Profile.RefreshRateHz,
+            session: out var session
+        )) {
+            feed.Session = session;
+            ApplyCameraControls(
+                desired: m_cameraControls,
+                feed: feed
+            );
+        } else {
+            m_cameraFault = "no camera device present";
+            feed.Fault = m_cameraFault;
+            feed.Live = false;
         }
     }
     // Samples only already-completed compositor frames. A miss holds the last frame. An ended compositor session is
@@ -202,8 +476,12 @@ internal sealed partial class WorldScreenBinder {
             feed.Fault = $"{feed.Label} awaiting a compositor frame";
         }
     }
-    // Opens (once) and returns the ONE shared webcam feed, or null when no device can be opened (m_cameraFault holds the
-    // reason). Every camera screen shares this single session — two sessions on one physical device flicker.
+    // Opens (once) and returns the ONE shared webcam feed, or null when no device can be opened (m_cameraFault holds
+    // the reason). Every camera screen shares this single feed — two sessions on one physical device flicker. On a
+    // modern Windows host — EITHER backend — the feed starts PENDING on the GPU-resident tier (the render adapter
+    // LUID it must open on resolves at first publish, so CaptureCameraGpu completes the open and falls back to the
+    // CPU tier if it refuses) — the bind succeeds now and a device absence surfaces as the feed's own fault.
+    // Elsewhere the CPU-pixel session opens here, synchronously.
     private CameraFeed? EnsureCameraFeed(WorldFeedProfile profile) {
         if (m_cameraFeed is not null) {
             return m_cameraFeed;
@@ -215,25 +493,47 @@ internal sealed partial class WorldScreenBinder {
 
         m_cameraTried = true;
 
-        if (
-            !m_cameraCapture.IsSupported ||
-            !m_cameraCapture.TryOpenDefault(
+        if (!m_cameraCapture.IsSupported) {
+            m_cameraFault = "no camera device present";
+
+            return null;
+        }
+
+        if (OperatingSystem.IsWindowsVersionAtLeast(
+            major: 10,
+            minor: 0,
+            build: 10240
+        )) {
+            m_cameraFeed = new CameraFeed(
+                profile: profile,
+                surface: new CpuSurfaceSource(),
+                gpuRoute: true
+            );
+
+            return m_cameraFeed;
+        }
+
+        if (!m_cameraCapture.TryOpenDefault(
             requestedWidth: profile.Width,
             requestedHeight: profile.Height,
+            requestedRateHz: profile.RefreshRateHz,
             session: out var session
-        )
-        ) {
+        )) {
             m_cameraFault = "no camera device present";
 
             return null;
         }
 
         m_cameraFeed = new CameraFeed(
-            session: session,
+            profile: profile,
             surface: new CpuSurfaceSource(),
-            cadenceTicks: EngineTicks.PerRate(ratePerSecond: profile.RefreshRateHz),
-            outputWidth: checked((uint)profile.Width),
-            outputHeight: checked((uint)profile.Height)
+            gpuRoute: false
+        ) {
+            Session = session,
+        };
+        ApplyCameraControls(
+            desired: m_cameraControls,
+            feed: m_cameraFeed
         );
 
         return m_cameraFeed;
@@ -361,6 +661,18 @@ internal sealed partial class WorldScreenBinder {
         ) {
             Fault = fault,
         };
+    // One physical device carries ONE control state, so — unlike the profile's richest-envelope merge below — the
+    // FIRST declared camera screen authoring controls wins (two zoom values have no meaningful merge). Document order
+    // is the author's priority statement.
+    private static WorldCameraControls? ResolveSharedCameraControls(IReadOnlyList<WorldScreen> screens) {
+        foreach (var screen in screens) {
+            if (screen.Source is WorldScreenSource.Camera { Controls: { } controls }) {
+                return controls;
+            }
+        }
+
+        return null;
+    }
     // One physical default-camera session is shared to avoid device flicker. When several camera sources declare
     // different preferences, request the richest combined envelope rather than letting declaration order choose.
     private static WorldFeedProfile ResolveSharedCameraProfile(IReadOnlyList<WorldScreen> screens) {
@@ -590,36 +902,107 @@ internal sealed partial class WorldScreenBinder {
             return true;
         }
     }
-    // The ONE shared webcam feed: its live session (nulled when the device disconnects), the GPU upload adapter every
-    // camera screen samples, and the live/fault/glow state the cadence maintains. A mutable class so the session flips
-    // in place; the handle is 0 (unbound) until the first frame lands and whenever the feed is not live.
-    private sealed class CameraFeed(ICameraCaptureSession session, CpuSurfaceSource surface, ulong cadenceTicks, uint outputWidth, uint outputHeight) : IDisposable {
+    // The ONE shared webcam feed, on one of two tiers fixed by FallBackToCpuCamera at most once: the D3D12 GPU-resident
+    // tier (SharedSession + GpuTargets — the screen samples the latest published slot's image view directly, and no CPU
+    // pixels ever exist, so Light stays dark) or the CPU-pixel tier (Session + Surface — frames read back to host
+    // memory, fitted, uploaded, and averaged into the room glow). A mutable class so the sessions flip in place; the
+    // handle is 0 (unbound) until the first frame lands and whenever the feed is not live.
+    private sealed class CameraFeed(WorldFeedProfile profile, CpuSurfaceSource surface, bool gpuRoute) : IDisposable {
+        // The control state last pushed onto the device (ApplyCameraControls' idempotence + removed-member baseline);
+        // null until a first apply, so an unauthored world never touches driver defaults.
+        public WorldCameraControls? AppliedControls { get; set; }
         public string? Fault { get; set; }
+        // Whether this feed rides (or is still pending on) the GPU-resident tier. Set at construction on any modern
+        // Windows host; flipped to false exactly once if the GPU open refuses and the feed falls back to the CPU tier.
+        public bool GpuRoute { get; set; } = gpuRoute;
+        // The Vulkan host's per-slot importers over the shared targets and the imported VkImageView handles the
+        // screen samples (null on the D3D12 host, which samples its own resources directly).
+        public IGpuSurfaceImport[]? GpuImports { get; set; }
+        public nint[]? GpuImportedViews { get; set; }
+        // The three consumer-provisioned shared textures the platform streams into (null until the GPU open completes).
+        public IReadOnlyList<IGpuExportableStorageImage>? GpuTargets { get; set; }
         public Vector3 Light { get; set; }
         public bool Live { get; set; }
         public byte[]? PanelPixels { get; set; }
 
         public long LastFrameVersion { get; set; } = -1L;
-        public uint OutputHeight { get; } = outputHeight;
-        public uint OutputWidth { get; } = outputWidth;
-        public ICameraCaptureSession? Session { get; set; } = session;
+        public uint OutputHeight { get; } = checked((uint)profile.Height);
+        public uint OutputWidth { get; } = checked((uint)profile.Width);
+        // The requested capture envelope, stashed so the GPU tier's deferred open (and its CPU fallback) negotiate the
+        // same profile the feed was bound with.
+        public WorldFeedProfile Profile { get; } = profile;
+        public ICameraCaptureSession? Session { get; set; }
+        public ICameraSharedCaptureSession? SharedSession { get; set; }
         public CpuSurfaceSource Surface { get; } = surface;
 
-        private PullCadence Cadence { get; } = new(cadenceTicks: cadenceTicks);
+        private PullCadence Cadence { get; } = new(cadenceTicks: EngineTicks.PerRate(ratePerSecond: profile.RefreshRateHz));
 
         public void Dispose() {
             Session?.Dispose();
             Session = null;
+            SharedSession?.Dispose();
+            SharedSession = null;
+            ReleaseGpuTargets();
             Surface.Dispose();
         }
-        public nint Handle() => (Live
-            ? Surface.CurrentHandle
-            : 0
-        );
+        public nint Handle() {
+            if (!Live) {
+                return 0;
+            }
+
+            if (
+                (SharedSession is { LatestSlot: >= 0 and var slot }) &&
+                (GpuTargets is { } targets) &&
+                (slot < targets.Count)
+            ) {
+                // The image-view of the platform's latest completed GPU copy — the Vulkan host's imported view of
+                // the slot, or the D3D12 host's own resource view; the engine rebinds a bound screen source's
+                // descriptor every frame, so a different slot handle per copy is cheap.
+                return (((GpuImportedViews is { } views) && (slot < views.Length))
+                    ? views[slot]
+                    : targets[slot].ImageViewHandle
+                );
+            }
+
+            return Surface.CurrentHandle;
+        }
         public void NotifyDeviceLost() {
             Surface.NotifyDeviceLost();
+
+            // GPU-tier resources are render-device-owned: drop the session with its targets so the pull path reopens
+            // both on the live device (the CPU-tier Media Foundation session survives device loss untouched).
+            if (SharedSession is not null) {
+                SharedSession.Dispose();
+                SharedSession = null;
+                Live = false;
+            }
+
+            ReleaseGpuTargets();
             LastFrameVersion = -1L;
             Cadence.Rearm();
+        }
+        // Disposes the shared textures and the Vulkan host's importers over them (all device-owned) and forgets both
+        // so the next GPU open reallocates on the live device. Called on a lost/ended session, on device loss, and on
+        // disposal. The importers go first — an importer's image binds the target's exported memory.
+        public void ReleaseGpuTargets() {
+            if (GpuImports is { } imports) {
+                GpuImports = null;
+                GpuImportedViews = null;
+
+                foreach (var import in imports) {
+                    import.Dispose();
+                }
+            }
+
+            if (GpuTargets is not { } targets) {
+                return;
+            }
+
+            GpuTargets = null;
+
+            foreach (var image in targets) {
+                image.Dispose();
+            }
         }
         public void RetryPull() => Cadence.Rearm();
         public bool ShouldPull(ulong elapsedTicks) => Cadence.ShouldPull(elapsedTicks: elapsedTicks);

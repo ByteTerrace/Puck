@@ -1,6 +1,8 @@
 using System.Numerics;
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Machines;
 using Puck.DirectX;
+using Puck.DirectX.Interop;
 using Puck.Platform;
 using Puck.SdfVm;
 using Puck.SdfVm.Views;
@@ -65,8 +67,9 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     // simulation state or duplicating pose math here.
     private readonly ISdfAnchorSource m_anchors;
     private readonly ICameraCaptureService m_cameraCapture;
-    // The D3D12-host GPU capture transport: on the Direct3D 12 host, window/monitor captures publish GPU-side into shared
-    // simultaneous-access textures the screens sample directly (no CPU round trip); the Vulkan host keeps the CPU path.
+    // The D3D12-host GPU capture transport: on the Direct3D 12 host, window/monitor captures AND the shared webcam
+    // publish GPU-side into shared simultaneous-access textures the screens sample directly (no CPU round trip); the
+    // Vulkan host keeps the CPU path.
     // The factory is non-null only on the D3D12 host, and the render adapter LUID is resolved once from the render device
     // context at the first publish (the device does not exist at construction), so capture feeds open on the render GPU.
     private readonly bool m_hostsOnDirectX;
@@ -79,11 +82,25 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     private readonly WorldMachineHost m_machines;
     private readonly WorldStampPool m_stamps;
     private readonly DirectXGpuSurfaceExportFactory? m_surfaceExport;
+    // The backend-neutral surface-transfer factory — the Vulkan host's camera GPU tier imports its shared camera
+    // targets through it (the D3D12 host samples its own resources directly and never calls it for the camera).
+    // Null on a headless boot, which composes no presenter and never publishes.
+    private readonly IGpuSurfaceTransferFactory? m_surfaceTransfers;
     private readonly INativeImageCaptureService m_windowCapture;
+
+    // The camera GPU tier's target factory (lazily created inside the platform-guarded open) and, on the Vulkan host,
+    // the headless Direct3D 12 device the targets are allocated on — pinned to the render adapter's LUID so the
+    // platform's D3D11 decode device and the Vulkan render device both reach the same physical memory.
+    private DirectXGpuSurfaceExportFactory? m_cameraExport;
+    private DirectXDeviceContext? m_cameraTargetDevice;
 
     // The ONE webcam feed shared by every camera screen (the flicker rule), opened lazily on first demand and null until
     // a camera screen exists; a failed open records m_cameraFault and leaves this null.
     private CameraFeed? m_cameraFeed;
+    // The authored device-control state for the shared camera (the first camera row's `controls`, per
+    // ResolveSharedCameraControls) — resolved at boot and re-resolved by ReconcileScreens, so an UpsertScreen mutation
+    // moves the physical device live. Applied to whichever tier's session is open (ApplyCameraControls).
+    private WorldCameraControls? m_cameraControls;
     private bool m_cameraTried;
     // The world's placeable-camera rows — booted from the definition and REPLACED by ReconcileCameras when a camera
     // mutation delivers, so a runtime screen.source <index> view (and every later resolve) reads the LIVE rows.
@@ -144,15 +161,18 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     /// <param name="machines">The authoritative screen-machine host this binder reads outputs from.</param>
     /// <param name="cameraCapture">The platform webcam service (CPU tier) the camera screens share one session of.</param>
     /// <param name="windowCapture">The platform compositor window-capture service.</param>
+    /// <param name="surfaceTransfers">The backend-neutral surface-transfer factory the Vulkan host's camera GPU tier
+    /// imports its shared targets through, or <see langword="null"/> on a headless boot (which never publishes).</param>
     /// <param name="cameras">The world's placeable cameras a View (jumbotron) screen resolves its camera name against.</param>
     /// <param name="anchors">The entity anchor source used by anchored cameras (the client's snapshot-fed view).</param>
     /// <param name="stamps">The compiled creation-look pool supplying authored entity parts.</param>
     /// <param name="hostsOnDirectX">Whether the host backend is Direct3D 12 — selects the GPU capture transport for
-    /// window/monitor captures (the Vulkan host keeps the CPU-pixel path). Camera capture stays CPU on both.</param>
+    /// window/monitor captures (the Vulkan host keeps their CPU-pixel path). The shared camera rides its GPU tier on
+    /// both hosts; this flag only picks how its shared targets are allocated and sampled.</param>
     /// <param name="instanceHost">The process's running world instances — a session-sourced face's resolved
     /// destination instance is found or started here.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldScreenBinder(IReadOnlyList<WorldScreen> screens, WorldMachineHost machines, ICameraCaptureService cameraCapture, INativeImageCaptureService windowCapture, IReadOnlyList<WorldCamera> cameras, ISdfAnchorSource anchors, WorldStampPool stamps, bool hostsOnDirectX, WorldInstanceHost instanceHost) {
+    public WorldScreenBinder(IReadOnlyList<WorldScreen> screens, WorldMachineHost machines, ICameraCaptureService cameraCapture, INativeImageCaptureService windowCapture, IGpuSurfaceTransferFactory? surfaceTransfers, IReadOnlyList<WorldCamera> cameras, ISdfAnchorSource anchors, WorldStampPool stamps, bool hostsOnDirectX, WorldInstanceHost instanceHost) {
         ArgumentNullException.ThrowIfNull(argument: screens);
         ArgumentNullException.ThrowIfNull(argument: machines);
         ArgumentNullException.ThrowIfNull(argument: cameraCapture);
@@ -164,6 +184,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
 
         m_machines = machines;
         m_cameraCapture = cameraCapture;
+        m_surfaceTransfers = surfaceTransfers;
         m_windowCapture = windowCapture;
         m_cameras = cameras;
         m_anchors = anchors;
@@ -181,6 +202,8 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
             : null
         );
         var sharedCameraProfile = ResolveSharedCameraProfile(screens: screens);
+
+        m_cameraControls = ResolveSharedCameraControls(screens: screens);
 
         foreach (var screen in screens) {
             _ = m_bootScreenIndices.Add(item: screen.Index);
@@ -203,7 +226,8 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
                     // do here; Handle()/Light() below read the host directly for a machine-owning index.
                     break;
                 case WorldScreenSource.Camera:
-                    // The declared webcam: bind the ONE shared session (opened here on first demand). An absent device
+                    // The declared webcam: bind the ONE shared feed (opened here on first demand; on the D3D12 GPU
+                    // transport it stays pending until the render adapter resolves at first publish). An absent device
                     // leaves the slot unbound with a visible fault.
                     if (EnsureCameraFeed(profile: sharedCameraProfile) is { } cameraFeed) {
                         slot.Camera = cameraFeed;
@@ -488,6 +512,20 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
 
         m_cameraFeed?.Dispose();
         m_cameraFeed = null;
+
+        // After the feed: the camera's shared targets live on this headless device, so it must outlive them.
+        if (
+            (m_cameraTargetDevice is { } cameraTargetDevice) &&
+            OperatingSystem.IsWindowsVersionAtLeast(
+            major: 10,
+            minor: 0,
+            build: 10240
+        )
+        ) {
+            cameraTargetDevice.Dispose();
+            m_cameraTargetDevice = null;
+        }
+
         m_viewStack?.Dispose();
         m_viewStack = null;
     }
@@ -649,6 +687,18 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
                 source: screen.Source
             );
             slot.DeclaredSource = screen.Source;
+        }
+
+        // The shared camera's authored control state re-resolves from the mutated list and lands on the physical
+        // device live (a no-op when unchanged) — the "changes in-game ride the mutation pipeline" half of the
+        // camera `controls` document member. A pending GPU feed picks the state up when its session opens instead.
+        m_cameraControls = ResolveSharedCameraControls(screens: screens);
+
+        if (m_cameraFeed is { } cameraFeed) {
+            ApplyCameraControls(
+                desired: m_cameraControls,
+                feed: cameraFeed
+            );
         }
     }
     /// <summary>Clears a screen's live local producer — the runtime <c>screen.eject</c> path — for either kind this

@@ -19,6 +19,7 @@ internal static class MfInterop {
     public static Guid MF_MT_MAJOR_TYPE = new(g: "48eba18e-f8c9-4687-bf11-0a74c9f96a8f");
     public static Guid MF_MT_SUBTYPE = new(g: "f7e34c9a-42e8-4714-b74b-cb29d72c35e5");
     public static Guid MF_MT_FRAME_SIZE = new(g: "1652c33d-d6b2-4012-b834-72030849a37d");
+    public static Guid MF_MT_FRAME_RATE = new(g: "c459a2e8-3d2c-4e44-b132-fee5156c7bb0");
     public static Guid MF_MT_DEFAULT_STRIDE = new(g: "644b4e48-1e02-4516-b0eb-c01ca9d49ac6");
     public static Guid MFMediaType_Video = new(g: "73646976-0000-0010-8000-00aa00389b71");
     public static Guid MFVideoFormat_ARGB32 = new(g: "00000015-0000-0010-8000-00aa00389b71");
@@ -274,6 +275,28 @@ internal interface IMFMediaBuffer {
     [PreserveSig] int GetCurrentLength(out uint pcbCurrentLength);
 }
 /// <summary>IMFSourceReader — SetStreamSelection (2), GetCurrentMediaType (4), SetCurrentMediaType (5), ReadSample (7).</summary>
+/// <summary>DirectShow's classic camera-control interface (pan/tilt/zoom/exposure/focus by KSPROPERTY ordinal) —
+/// implemented by Media Foundation video capture sources, so the session's media source answers it directly.</summary>
+[ComImport]
+[Guid("c6e13370-30ac-11d0-a18c-00a0c9118956")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+[SupportedOSPlatform("windows")]
+internal interface IAMCameraControl {
+    [PreserveSig] int GetRange(int Property, out int pMin, out int pMax, out int pSteppingDelta, out int pDefault, out int pCapsFlags);
+    [PreserveSig] int Set(int Property, int lValue, int Flags);
+    [PreserveSig] int Get(int Property, out int lValue, out int pFlags);
+}
+/// <summary>DirectShow's classic image-quality interface (brightness/contrast/saturation/… by ordinal) — implemented by
+/// Media Foundation video capture sources, the sibling of <see cref="IAMCameraControl"/>.</summary>
+[ComImport]
+[Guid("c6e13360-30ac-11d0-a18c-00a0c9118956")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+[SupportedOSPlatform("windows")]
+internal interface IAMVideoProcAmp {
+    [PreserveSig] int GetRange(int Property, out int pMin, out int pMax, out int pSteppingDelta, out int pDefault, out int pCapsFlags);
+    [PreserveSig] int Set(int Property, int lValue, int Flags);
+    [PreserveSig] int Get(int Property, out int lValue, out int pFlags);
+}
 [ComImport]
 [Guid("70ae66f2-c809-4e4f-8915-bdcb406b7993")]
 [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
@@ -281,7 +304,7 @@ internal interface IMFMediaBuffer {
 internal interface IMFSourceReader {
     [PreserveSig] int GetStreamSelection();
     [PreserveSig] int SetStreamSelection(uint dwStreamIndex, [MarshalAs(UnmanagedType.Bool)] bool fSelected);
-    [PreserveSig] int GetNativeMediaType();
+    [PreserveSig] int GetNativeMediaType(uint dwStreamIndex, uint dwMediaTypeIndex, out IMFMediaType ppMediaType);
     [PreserveSig] int GetCurrentMediaType(uint dwStreamIndex, out IMFMediaType ppMediaType);
     [PreserveSig] int SetCurrentMediaType(uint dwStreamIndex, nint pdwReserved, IMFMediaType pMediaType);
     [PreserveSig] int SetCurrentPosition();

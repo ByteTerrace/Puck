@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using Puck.Abstractions.Gpu;
-using Puck.DirectX.Interfaces;
 using Puck.Hosting;
 using Puck.SdfVm;
 using Puck.SdfVm.Views;
@@ -118,19 +117,21 @@ internal sealed partial class WorldScreenBinder {
 
         ReconcileSessionLifecycles();
 
-        // Resolve the render adapter LUID once — the device is created lazily, so the value is first available here (not
-        // at construction). Capture feeds then open their platform capture on the render GPU so the shared textures import.
+        // Resolve the render adapter LUID once, backend-neutrally — the device is created lazily, so the value is
+        // first available here (not at construction). Capture feeds and the camera GPU tier then open their platform
+        // and shim devices on the render GPU so shared textures import across the API boundary. A driver reporting no
+        // LUID (zero) stays unresolved, which the camera GPU tier reads as "sharing unavailable" and falls back on.
         if (
-            m_hostsOnDirectX &&
             (m_renderAdapterLuid is null) &&
             OperatingSystem.IsWindowsVersionAtLeast(
             major: 10,
             minor: 0,
             build: 10240
         ) &&
-            (deviceContext is IDirectXDeviceContext renderDeviceContext)
+            (deviceContext.AdapterLuid is var renderAdapterLuid) &&
+            (0 != renderAdapterLuid)
         ) {
-            m_renderAdapterLuid = renderDeviceContext.AdapterLuid;
+            m_renderAdapterLuid = renderAdapterLuid;
         }
 
         var timingEnabled = GpuTimingControl.Shared.Armed;

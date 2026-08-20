@@ -16,8 +16,9 @@ namespace Puck.World;
 /// restart and the op reproduces on replay; <c>screen.source &lt;index&gt; &lt;kind&gt; [args…]</c> (kind: camera |
 /// capture | desktop | qr | view — absorbing the five former per-kind verbs into one dispatcher) stays genuinely
 /// presentation, calling <see cref="WorldScreenBinder"/> directly (never a machine, never tape-covered).
-/// <c>screen.state</c>/<c>screen.peek</c> are read-only queries that make the machine state pipe-assertable (a booted
-/// machine's engine, bound handle, stepped-frame count, engaged players, and one memory byte). The world speaks the
+/// <c>screen.state</c>/<c>screen.peek</c>/<c>screen.camera</c> are read-only queries that make the live state
+/// pipe-assertable (a booted machine's engine, bound handle, stepped-frame count, engaged players, one memory byte,
+/// and the shared camera device's control surface). The world speaks the
 /// engine-neutral machine vocabulary — a machine is resolved against a registered engine by id, and each engine owns its
 /// own options string. Every verb is wire-native — each failure marks <see cref="CommandResult.IsError"/> so
 /// <c>wire.ack quiet</c> drops only successes, and the two queries always echo their data.
@@ -106,6 +107,12 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
             name: "screen.links",
             description: "Echoes every live cable link: screen.links — each link's name, member screens, and live (transfers=…) or dormant (with the reason) state. A query (always echoes, even under wire.ack quiet).",
             handler: LinksHandler
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "screen.camera",
+            description: "Echoes the shared camera device's live control surface: screen.camera — the device name, live tier (gpu | cpu | pending), negotiated extent, and each device-supported UVC control's current value/mode, device range (with auto capability), and authored document value. The pipe-assertable read-back for a camera source row's `controls` member (authored defaults apply at open; an UpsertScreen mutation moves the device live). A query (always echoes, even under wire.ack quiet). Errors when no camera feed exists (no camera screen bound, or no device present).",
+            handler: CameraHandler
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
@@ -733,6 +740,16 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
                 message: $"[screen.source: {message}]"
             )
             : CommandResult.Error(output: $"[screen.source: {message}]")
+        );
+    }
+    private CommandResult CameraHandler(CommandContext context, WireArgs args) {
+        if (args.Count != 0) {
+            return CommandResult.Error(output: "[screen.camera: expected no arguments]");
+        }
+
+        return ((m_binder.DescribeCamera() is { } description)
+            ? new CommandResult(Output: $"[screen.camera: {description}]")
+            : CommandResult.Error(output: "[screen.camera: no camera feed (bind a camera screen first)]")
         );
     }
     private CommandResult StateHandler(CommandContext context, WireArgs args) {

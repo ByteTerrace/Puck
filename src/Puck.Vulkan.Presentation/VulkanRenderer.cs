@@ -32,7 +32,8 @@ public sealed class VulkanRenderer(
     IVulkanCommandResourcesFactory commandResourcesFactory,
     IVulkanFrameSynchronizationFactory frameSynchronizationFactory,
     IVulkanFramePresenter framePresenter,
-    IVulkanCommandBufferRecorder commandBufferRecorder
+    IVulkanCommandBufferRecorder commandBufferRecorder,
+    IVulkanPhysicalDeviceApi physicalDeviceApi
 ) : IDisposable, IVulkanDeviceContext, IGpuDeviceContext {
     // Vulkan validation is a developer diagnostic, opt-in via PUCK_VULKAN_DEBUG (the peer of PUCK_D3D12_DEBUG on the
     // Direct3D 12 backend). Default OFF: the validation layer and its debug-utils messenger add per-call CPU overhead
@@ -55,6 +56,7 @@ public sealed class VulkanRenderer(
     // (VUID-vkBeginCommandBuffer-commandBuffer-00049, caught by the validation layer under VRR present churn).
     private readonly VulkanCommandResources?[] m_commandResources = new VulkanCommandResources?[PresentFrameRingSize];
 
+    private long? m_adapterLuid;
     private VulkanLogicalDevice? m_device;
     private VulkanFramebufferSet? m_framebufferSet;
     private int m_frameSlot;
@@ -284,6 +286,8 @@ public sealed class VulkanRenderer(
         m_surface = null;
         m_instance?.Dispose();
         m_instance = null;
+        // The re-enumerated adapter may differ (e.g. a driver reset moved the default), so the cached LUID re-reads.
+        m_adapterLuid = null;
 
         // Rebuild the instance, surface, physical-device selection, and logical device. While the adapter is still absent
         // the fresh instance enumerates no suitable physical device, so Select fails BEFORE vkCreateDevice is reached
@@ -356,6 +360,17 @@ public sealed class VulkanRenderer(
     /// <returns><see langword="true"/> when a usable sample exists; otherwise <see langword="false"/>.</returns>
     public bool TryGetPresentTiming(out uint presentCount, out long presentTimestampTicks) =>
         framePresenter.TryGetPresentTiming(presentCount: out presentCount, presentTimestampTicks: out presentTimestampTicks);
+
+    // The DXGI-comparable adapter LUID (VkPhysicalDeviceIDProperties) — the identity a Direct3D 12/11 device is
+    // created on so shared textures cross the API boundary on this same physical adapter. Zero before initialization
+    // or on a driver without the device-ID query (cross-API sharing then unavailable); cached after the first read.
+    long IGpuDeviceContext.AdapterLuid => (((m_instance is not null) && (0 != m_physicalDevice.Handle))
+        ? (m_adapterLuid ??= physicalDeviceApi.GetDeviceLuid(
+            instanceHandle: m_instance.Handle,
+            physicalDeviceHandle: m_physicalDevice.Handle
+        ))
+        : 0L
+    );
 
     nint IGpuDeviceContext.DeviceHandle => LogicalDevice.Handle;
 

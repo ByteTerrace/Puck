@@ -11,10 +11,12 @@ namespace Puck.Platform;
 /// <see cref="Start"/> begins streaming into them. The producer completes each copy on its own thread (a GPU flush +
 /// CPU fence at the camera's cadence) <em>before</em> publishing the slot, so a published slot is always safe to sample
 /// — the render pump never waits.</para>
-/// <para>This built-ahead tier currently has one implementation, and its opener
-/// <see cref="ICameraCaptureService.TryOpenSharedDefault"/> has no call sites.</para>
+/// <para>Both hosts' shared camera feeds open this tier through
+/// <see cref="ICameraCaptureService.TryOpenSharedDefault"/> — the Direct3D 12 host samples its own shared targets
+/// directly, the Vulkan host imports their NT handles — falling back to the CPU-pixel tier when the open
+/// refuses.</para>
 /// </summary>
-public interface ICameraSharedCaptureSession : IDisposable {
+public interface ICameraSharedCaptureSession : ICameraControlSurface, IDisposable {
     /// <summary>A monotonically increasing counter of frames published into the shared targets; a consumer compares it
     /// against the value it last sampled to skip unchanged frames (the newest-frame-wins drop policy).</summary>
     long FrameVersion { get; }

@@ -54,7 +54,12 @@ public abstract record WorldScreenSource {
     /// <summary>The platform's default live camera feed, with an explicit preferred capture profile. The platform may
     /// negotiate a nearby extent; every screen sampling the same physical default device shares one session.</summary>
     /// <param name="Profile">The preferred capture extent and maximum upload cadence.</param>
-    public sealed record Camera(WorldFeedProfile Profile) : WorldScreenSource;
+    /// <param name="Controls">The authored device-control state (<see cref="WorldCameraControls"/>), or
+    /// <see langword="null"/> to leave every control at its driver default. One physical device carries one control
+    /// state, so the FIRST declared camera screen authoring this wins (matching the shared-session model); a later
+    /// <c>UpsertScreen</c> mutation re-resolves and applies the change live. Omitted from the wire when null.</param>
+    public sealed record Camera(WorldFeedProfile Profile,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCameraControls? Controls = null) : WorldScreenSource;
     /// <summary>A named view from the presentation view stack, such as a monitor showing another camera's output.</summary>
     /// <param name="CameraName">The registered view name this slot samples.</param>
     public sealed record View(string CameraName) : WorldScreenSource;
@@ -197,6 +202,41 @@ public sealed record WorldMachineCable(string Name, int Position);
 /// <param name="Name">The cable's stable kebab-case name.</param>
 /// <param name="Screens">The engine screen indices in cable order (2 or more, no duplicates).</param>
 public sealed record WorldMachineCableGroup(string Name, IReadOnlyList<int> Screens);
+/// <summary>The authored control state for the shared physical camera — the standard UVC camera/image controls
+/// (pan/tilt/zoom, exposure, focus, color). Every member is optional: an ABSENT member leaves that control at the
+/// device's own driver default (automatic where the device supports it), and a PRESENT member drives the control
+/// manually at that value. The device remains authoritative — a value outside the device's reported range is clamped
+/// (and step-snapped) at apply, a control the device lacks is skipped, and <c>screen.camera</c> reads the resulting
+/// live state (each control's device range, mode, and current value) back over the pipe. Removing a previously
+/// authored member restores that control's driver default on the next apply. Ranges are device-specific by design, so
+/// validation admits any integer rather than guessing one device's envelope.</summary>
+/// <param name="Pan">Horizontal framing offset (digital pan on webcams).</param>
+/// <param name="Tilt">Vertical framing offset (digital tilt on webcams).</param>
+/// <param name="Zoom">Magnification — on sensor-cropping webcams a region-of-interest zoom (e.g. 100..500 = 1x..5x on
+/// a Logitech BRIO), which pairs with <paramref name="Pan"/>/<paramref name="Tilt"/> to frame a region.</param>
+/// <param name="Exposure">Manual exposure time, typically log2 seconds (e.g. -5 = 1/32 s); absent = auto exposure.</param>
+/// <param name="Focus">Manual focus distance; absent = autofocus.</param>
+/// <param name="Brightness">Image brightness offset.</param>
+/// <param name="Contrast">Image contrast.</param>
+/// <param name="Saturation">Color saturation (0 is grayscale on most devices).</param>
+/// <param name="Sharpness">Edge sharpening strength.</param>
+/// <param name="Gain">Sensor gain (ISO-like amplification).</param>
+/// <param name="WhiteBalance">Manual white-balance color temperature in kelvin; absent = auto white balance.</param>
+/// <param name="BacklightCompensation">Backlight compensation (devices commonly report a 0..1 toggle).</param>
+public sealed record WorldCameraControls(
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Pan = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Tilt = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Zoom = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Exposure = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Focus = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Brightness = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Contrast = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Saturation = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Sharpness = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Gain = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? WhiteBalance = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? BacklightCompensation = null
+);
 /// <summary>A live screen feed's requested output policy. It belongs to the source declaration rather than the binder,
 /// so two window captures can choose different extents and cadences. Camera extents are preferences because a physical
 /// device remains authoritative for its negotiated format.</summary>

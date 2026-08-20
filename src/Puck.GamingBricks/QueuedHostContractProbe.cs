@@ -1345,6 +1345,7 @@ public static class QueuedHostContractProbe {
         public IGpuSurfaceTransferFactory SurfaceTransferFactory { get; } = factory;
     }
     private sealed class TestGpuDeviceContext : IGpuDeviceContext {
+        public long AdapterLuid => 0;
         public nint DeviceHandle => 1;
 
         public void WaitIdle() { }

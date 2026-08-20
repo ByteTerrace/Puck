@@ -10,13 +10,13 @@ public sealed class NullCameraCaptureService : ICameraCaptureService {
     public bool IsSupported => false;
 
     /// <inheritdoc/>
-    public bool TryOpenDefault(int requestedWidth, int requestedHeight, [NotNullWhen(true)] out ICameraCaptureSession? session) {
+    public bool TryOpenDefault(int requestedWidth, int requestedHeight, uint requestedRateHz, [NotNullWhen(true)] out ICameraCaptureSession? session) {
         session = null;
 
         return false;
     }
     /// <inheritdoc/>
-    public bool TryOpenSharedDefault(long adapterLuid, int requestedWidth, int requestedHeight, [NotNullWhen(true)] out ICameraSharedCaptureSession? session) {
+    public bool TryOpenSharedDefault(long adapterLuid, int requestedWidth, int requestedHeight, uint requestedRateHz, [NotNullWhen(true)] out ICameraSharedCaptureSession? session) {
         session = null;
 
         return false;

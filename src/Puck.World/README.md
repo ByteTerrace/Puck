@@ -431,7 +431,14 @@ capture, or a jumbotron view — bound through `screen.source <index> <kind>`
 (`camera`, `capture`, `desktop`, `view`, `qr`; it ejects a
 present machine first, through the ordered domain) and `screen.eject` (which
 routes to whichever half — machine or
-local producer — actually holds the slot). A QR is the one source with no
+local producer — actually holds the slot). A camera source row may author
+`controls` (the standard UVC pan/tilt/zoom/exposure/focus/color surface,
+`WorldCameraControls`): the values apply to the physical device when the
+shared session opens, an `UpsertScreen` mutation (`world.row.set screens …`)
+moves the device live through the ordered domain, and `screen.camera` reads
+each control's device range, mode, and current value back over the pipe
+(the device stays authoritative — values clamp to its reported envelope,
+and absent members leave driver defaults untouched). A QR is the one source with no
 per-frame cost at all: `QrEncoder` (in `Puck.World.Schema`) resolves the module
 grid and the binder rasterizes it ONCE at author time, then re-uploads the
 unchanged buffer only after a device loss. `world.identify <screenIndex>
