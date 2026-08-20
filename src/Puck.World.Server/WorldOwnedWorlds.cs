@@ -12,10 +12,16 @@ namespace Puck.World.Server;
 /// than they can share an id — enforced at the earliest door a candidate string crosses: the document's own JSON
 /// parse for an authored seed or a loaded/pulled document, or <see cref="Create"/>'s console-verb argument.</remarks>
 public sealed class WorldOwnedWorlds {
+    /// <summary>The subdirectory an unadmittable document is moved into — a name outside this catalog's own
+    /// <c>*.world.json</c> top-directory glob, exactly like the hand-placed <c>basis/</c> directory, so a disposed
+    /// document is never enumerated again.</summary>
+    public const string QuarantineDirectoryName = "unloadable";
+
     private static readonly WorldCellName MoveSpeedState = WorldCellName.Parse(candidate: "identity-move-speed");
     private static readonly WorldCellName TurnSpeedState = WorldCellName.Parse(candidate: "identity-turn-speed");
 
     private readonly string m_directory;
+    private readonly List<WorldOwnedWorldDisposal> m_discarded = [];
     private readonly List<WorldIdentity> m_identities;
     private readonly WorldMotionDefaults m_motion;
     private readonly WorldDefinition m_template;
@@ -49,6 +55,8 @@ public sealed class WorldOwnedWorlds {
             comparer: StringComparer.Ordinal
         );
 
+        var unloadable = new List<(string Path, string Reason)>();
+
         foreach (var path in paths) {
             if (
                 !WorldDefinitionFileSource.TryLoad(
@@ -60,7 +68,10 @@ public sealed class WorldOwnedWorlds {
             ) ||
                 (document?.Identity is null)
             ) {
-                Console.Error.WriteLine(value: $"[identity] owned world refused: {reason}");
+                unloadable.Add(item: (path, (document is null)
+                    ? reason
+                    : $"{path} is not a valid {WorldDefinition.SchemaVersion} document: it declares no identity section, so it is not an owned world"
+                ));
 
                 continue;
             }
@@ -90,6 +101,9 @@ public sealed class WorldOwnedWorlds {
             ));
         }
 
+        // Disposal precedes seeding: the seed writes to the very file names being moved aside.
+        DisposeUnloadable(candidates: unloadable);
+
         if (m_identities.Count == 0) {
             foreach (var seed in Defaults.Identities) {
                 var identity = new WorldIdentity(
@@ -113,6 +127,10 @@ public sealed class WorldOwnedWorlds {
     public WorldIdentity BootProfile => m_identities[0];
     /// <summary>Gets the visited world's player presentation defaults.</summary>
     public WorldPlayerDefaults Defaults { get; }
+    /// <summary>Gets the documents this catalog could not admit at construction, in file-name order. Empty on every
+    /// ordinary boot; a non-empty list is a one-time event, since each entry names a file that has been moved out of
+    /// the catalog directory.</summary>
+    public IReadOnlyList<WorldOwnedWorldDisposal> Discarded => m_discarded;
     /// <summary>Gets the owned-world directory.</summary>
     public string FilePath => m_directory;
     /// <summary>Gets the latest cross-document durable-state verdict, visible to both authorities.</summary>
@@ -123,6 +141,14 @@ public sealed class WorldOwnedWorlds {
     public Action<WorldDocumentSubmissionReceipt>? ReceiptTap { get; set; }
     /// <summary>Gets the local owned-world mutation counter.</summary>
     public long Revision => m_revision;
+
+    /// <summary>One document this catalog could not admit, and where it was put.</summary>
+    /// <param name="FileName">The file name it carried in the catalog directory.</param>
+    /// <param name="Reason">Why it could not be admitted.</param>
+    /// <param name="QuarantinePath">Where it now lives.</param>
+    /// <param name="Moved">Whether the move succeeded. A false here means the file is still in the catalog
+    /// directory and will be refused again on the next construction.</param>
+    public sealed record WorldOwnedWorldDisposal(string FileName, string Reason, string QuarantinePath, bool Moved);
 
     /// <summary>The catalog's checkpointed state — the identities as document data plus the mutation counter.
     /// Excludes <see cref="FilePath"/> (host state — the state directory a fresh instance's own construction
@@ -372,6 +398,68 @@ public sealed class WorldOwnedWorlds {
             Submission: submission
         );
     }
+    // A document this catalog cannot admit leaves the *.world.json glob once, so it is named once rather than on
+    // every construction, and the catalog it leaves empty is what the seeding block fills. Nothing here can tell a
+    // deliberately retired document shape from a corrupt file — both arrive as "this is not a puck.world.def.v1
+    // document" — so no discarded file is silently eaten: every one is named with its own reason, grouped BY that
+    // reason so one retired shape across a whole directory reads as one group while a lone corrupt file stands in
+    // a group of its own.
+    private void DisposeUnloadable(IReadOnlyList<(string Path, string Reason)> candidates) {
+        if (candidates.Count == 0) {
+            return;
+        }
+        var quarantine = Path.Combine(
+            path1: m_directory,
+            path2: QuarantineDirectoryName
+        );
+
+        foreach (var (path, reason) in candidates) {
+            var destination = Path.Combine(
+                path1: quarantine,
+                path2: Path.GetFileName(path: path)
+            );
+            var detail = Strip(
+                path: path,
+                reason: reason
+            );
+            var moved = false;
+
+            try {
+                _ = Directory.CreateDirectory(path: quarantine);
+                File.Move(
+                    destFileName: destination,
+                    overwrite: true,
+                    sourceFileName: path
+                );
+
+                moved = true;
+            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+                detail = $"{detail} — and it could not be moved aside ({exception.Message.ReplaceLineEndings(replacementText: " ")}), so it will be named again on the next boot";
+            }
+
+            m_discarded.Add(item: new WorldOwnedWorldDisposal(
+                FileName: Path.GetFileName(path: path),
+                Moved: moved,
+                QuarantinePath: destination,
+                Reason: detail
+            ));
+        }
+
+        var groups = m_discarded
+            .GroupBy(
+                comparer: StringComparer.Ordinal,
+                keySelector: entry => entry.Reason
+            )
+            .Select(selector: group => $"{string.Join(
+                separator: ", ",
+                values: group.Select(selector: entry => entry.FileName)
+            )} — {group.Key}");
+
+        Console.Error.WriteLine(value: $"[identity] discarded {m_discarded.Count} unloadable owned world(s) into '{quarantine}' — a document shape this catalog no longer reads is disposed of, never migrated: {string.Join(
+            separator: "; ",
+            values: groups
+        )}");
+    }
     // Every shipped world is a full arena, so the booted world's own template is the only base and this always
     // returns it; kept as its own method (rather than inlining `fallback` at the one call site) so a future
     // minimal template has one door to return through.
@@ -420,6 +508,20 @@ public sealed class WorldOwnedWorlds {
         ),
         Adjacencies = null,
     };
+
+    // The loader opens its reason with the path it was handed; dropping that prefix is what lets one fault across
+    // several files fold into a single group, and the file name is carried beside the reason anyway.
+    private static string Strip(string path, string reason) {
+        var text = (reason ?? string.Empty).Trim();
+
+        return (text.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: path
+        )
+            ? text[path.Length..].TrimStart()
+            : text
+        );
+    }
 
     /// <summary>Creates and persists one owned world. <paramref name="name"/> is a <see cref="WorldSafeName"/> — the
     /// type already proves it addresses a file of its own, so the only thing left to refuse here is a collision: an id

@@ -9,9 +9,10 @@ namespace Puck.SignedDistance.Queries;
 /// responsibility, and a schema token belongs to whatever serializer a caller adds.
 /// <para>
 /// Construction is total: a layer whose length contradicts <see cref="Width"/> and <see cref="Height"/>, a
-/// non-positive cell size, a negative dimension, and a blocked layer carrying a bit past the last cell are each
-/// refused by parameter name, so no query can index past a layer and no bit outside the grid can be observed. Both
-/// layers are copied in, which is what lets the capability flags be computed once and stay true.
+/// non-positive cell size, a negative dimension, a grid whose far edge lies outside signed Q48.16, and a blocked
+/// layer carrying a bit past the last cell are each refused by parameter name, so no query can overflow a cell edge,
+/// index past a layer, or observe a bit outside the grid. Public construction copies both layers, which is what lets
+/// the capability flags be computed once and stay true.
 /// </para>
 /// <para>
 /// The capability flags describe content, not allocation: <see cref="HasHeightfield"/> is false for an all-sentinel
@@ -71,8 +72,21 @@ public sealed class WorldQueryArtifact {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="width"/> or <paramref name="height"/> is
     /// negative, or <paramref name="cellSizeRaw"/> is not positive.</exception>
     /// <exception cref="ArgumentException">A layer's length contradicts the grid dimensions, the blocked layer sets a
-    /// padding bit at or past <see cref="CellCount"/>, or the cell count overflows <see cref="int"/>.</exception>
-    public WorldQueryArtifact(long originXRaw, long originZRaw, long cellSizeRaw, int width, int height, long[] heightRaw, ulong[] blocked) {
+    /// padding bit at or past <see cref="CellCount"/>, the cell count overflows <see cref="int"/>, or an axis's far
+    /// edge lies outside signed Q48.16.</exception>
+    public WorldQueryArtifact(long originXRaw, long originZRaw, long cellSizeRaw, int width, int height, long[] heightRaw, ulong[] blocked)
+        : this(
+            blocked: blocked,
+            cellSizeRaw: cellSizeRaw,
+            height: height,
+            heightRaw: heightRaw,
+            originXRaw: originXRaw,
+            originZRaw: originZRaw,
+            takeOwnership: false,
+            width: width
+        ) { }
+
+    private WorldQueryArtifact(long originXRaw, long originZRaw, long cellSizeRaw, int width, int height, long[] heightRaw, ulong[] blocked, bool takeOwnership) {
         ArgumentNullException.ThrowIfNull(argument: blocked);
         ArgumentNullException.ThrowIfNull(argument: heightRaw);
         ArgumentOutOfRangeException.ThrowIfNegative(
@@ -99,6 +113,21 @@ public sealed class WorldQueryArtifact {
 
         var cellCount = ((int)cellCountLong);
 
+        RequireRepresentableFarEdge(
+            axis: "X",
+            cellCount: width,
+            cellSizeRaw: cellSizeRaw,
+            originRaw: originXRaw,
+            paramName: nameof(width)
+        );
+        RequireRepresentableFarEdge(
+            axis: "Z",
+            cellCount: height,
+            cellSizeRaw: cellSizeRaw,
+            originRaw: originZRaw,
+            paramName: nameof(height)
+        );
+
         if (
             (heightRaw.Length != 0) &&
             (heightRaw.Length != cellCount)
@@ -123,8 +152,8 @@ public sealed class WorldQueryArtifact {
 
         var paddingBits = (cellCount & 63);
 
-        // The bits above the last cell in the final word address no cell. Left unconstrained they are observable
-        // through IsBlockedCell and HasBlocked, so an artifact could report a blocker outside its own grid.
+        // The bits above the last cell in the final word address no cell. Left unconstrained they remain observable
+        // through Blocked and HasBlocked, so an artifact could report blocker content outside its own grid.
         if (
             (blocked.Length != 0) &&
             (paddingBits != 0) &&
@@ -136,9 +165,9 @@ public sealed class WorldQueryArtifact {
             );
         }
 
-        m_blocked = blocked.ToArray();
+        m_blocked = (takeOwnership ? blocked : blocked.ToArray());
         m_cellCount = cellCount;
-        m_heightRaw = heightRaw.ToArray();
+        m_heightRaw = (takeOwnership ? heightRaw : heightRaw.ToArray());
 
         CellSizeRaw = cellSizeRaw;
         HasBlocked = AnyBlockedBit(blocked: m_blocked);
@@ -148,6 +177,18 @@ public sealed class WorldQueryArtifact {
         OriginZRaw = originZRaw;
         Width = width;
     }
+
+    internal static WorldQueryArtifact CreateOwned(long originXRaw, long originZRaw, long cellSizeRaw, int width, int height, long[] heightRaw, ulong[] blocked) =>
+        new(
+            blocked: blocked,
+            cellSizeRaw: cellSizeRaw,
+            height: height,
+            heightRaw: heightRaw,
+            originXRaw: originXRaw,
+            originZRaw: originZRaw,
+            takeOwnership: true,
+            width: width
+        );
 
     private static bool AnyAuthoredHeight(long[] heightRaw) {
         for (var index = 0; (index < heightRaw.Length); index++) {
@@ -166,6 +207,19 @@ public sealed class WorldQueryArtifact {
         }
 
         return false;
+    }
+    private static void RequireRepresentableFarEdge(string axis, long originRaw, long cellSizeRaw, int cellCount, string paramName) {
+        var farEdge = (((Int128)originRaw) + (((Int128)cellCount) * cellSizeRaw));
+
+        if (
+            (farEdge < long.MinValue) ||
+            (farEdge > long.MaxValue)
+        ) {
+            throw new ArgumentException(
+                message: $"The {axis} axis starts at raw coordinate {originRaw} and spans {cellCount} cells of {cellSizeRaw}, placing its far edge at {farEdge}, outside signed Q48.16.",
+                paramName: paramName
+            );
+        }
     }
 
     /// <summary>Returns how many <see cref="ulong"/> words a blocked bitmap covering <paramref name="cellCount"/>

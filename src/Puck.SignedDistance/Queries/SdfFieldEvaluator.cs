@@ -56,9 +56,9 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     // enough" tolerances against the same fixed-point field) — tighten per-consumer by wrapping this provider, not by
     // editing the shared constant.
     private static readonly FixedQ4816 HitEpsilon = FixedQ4816.FromDouble(value: 0.001);
-    // The march step floor: a step this small still makes progress, so a pathological near-zero-but-not-accepted
-    // clearance cannot stall the loop short of its iteration budget. It is NOT a safety bound — the safe advance is
-    // the field value times the program's step scale (see m_stepScale).
+    // The smallest safe advance the fixed-point march will take. When the Lipschitz lower bound falls below this,
+    // rounding no longer leaves enough progress to justify another step, so the conservative cast verbs report a
+    // bounded obstruction instead of replacing the proof-derived advance with this larger value.
     private static readonly FixedQ4816 MinMarchStep = FixedQ4816.FromDouble(value: 0.0001);
     // The skin distance LineOfSight shrinks its probe by, so a target sitting exactly on a surface (the common "is
     // there a clear line to that wall" query) never reads as self-obstructing.
@@ -448,7 +448,8 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     //             distance, so a raw clearance inside the epsilon proves the surface is too.
     //   advance — the SCALED lower bound (fieldDistance * stepScale) minus the radius. Scaling the clearance instead
     //             ((f - r) * s) is anti-conservative for r > 0: it shrinks the radius by s as well, leaving f/L - r/L,
-    //             which exceeds the true safe advance f/L - r whenever L > 1.
+    //             which exceeds the true safe advance f/L - r whenever L > 1. If that lower bound cannot support one
+    //             fixed-point step, the cast is conservatively bounded rather than advanced through an unproven gap.
     // Mirrors BakedWorldQuery.March's shape so the two providers read as the same family of verb despite one walking a
     // baked grid and the other a live field.
     //
@@ -512,11 +513,19 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
                 return MarchOutcome.Miss;
             }
 
+            var safeAdvance = ((fieldDistance * m_stepScale) - radius);
+
+            if (safeAdvance < MinMarchStep) {
+                return Exhaust(
+                    hit: out hit,
+                    material: material,
+                    position: position,
+                    traveled: traveled
+                );
+            }
+
             var step = FixedQ4816.Min(
-                x: FixedQ4816.Max(
-                    x: ((fieldDistance * m_stepScale) - radius),
-                    y: MinMarchStep
-                ),
+                x: safeAdvance,
                 y: (maxDistance - traveled)
             );
 
@@ -532,8 +541,9 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
         );
     }
     // The iteration budget that keeps the guaranteed pre-exhaustion reach at BaseMarchIterations * HitEpsilon however
-    // far the step scale clamps the advance. A non-accepting iteration advances at least
-    // max(HitEpsilon * stepScale, MinMarchStep), so the budget is that reach divided by that floor, rounded up. The
+    // far the step scale clamps the advance. A non-accepting iteration either advances at least
+    // max(HitEpsilon * stepScale, MinMarchStep), or conservatively stops once a smaller proof-derived advance cannot
+    // make reliable fixed-point progress. The budget is that reach divided by the floor, rounded up. The
     // MinMarchStep half of the floor bounds the budget on its own: no step scale can push it past
     // BaseMarchIterations * HitEpsilon / MinMarchStep, so a pathologically clamped program cannot spin. Exactly
     // BaseMarchIterations at stepScale 1, so a warp-free program's answers are unchanged to the bit.
@@ -1003,18 +1013,29 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
         );
     }
     /// <inheritdoc/>
-    public bool Overlap(FixedPosition center, FixedQ4816 radius) =>
-        (TryDistance(
+    /// <remarks>A point outside signed Q48.16 of the program's world origin reports occupied when the program has
+    /// geometry. The evaluator cannot prove that point clear, and this authoritative verb may not turn an
+    /// unrepresentable displacement into a false-negative placement result.</remarks>
+    public bool Overlap(FixedPosition center, FixedQ4816 radius) {
+        if (!TryDistance(
             distance: out var distance,
             material: out _,
             position: center
-        ) && (distance <= radius));
+        )) {
+            return m_hasShape;
+        }
+
+        return ((distance * m_stepScale) <= FixedQ4816.Max(
+            x: radius,
+            y: FixedQ4816.Zero
+        ));
+    }
     /// <inheritdoc/>
-    /// <remarks>A march that neither hits nor clears within its iteration budget reports a HIT at the last marched
-    /// point, carrying <see cref="WorldQueryConfidence.Bounded"/>. Reporting the miss instead would let a grazing ray
+    /// <remarks>A march that cannot safely complete its hit-or-clear proof reports a HIT at the last marched point,
+    /// carrying <see cref="WorldQueryConfidence.Bounded"/>. This occurs when the remaining safe advance is below the
+    /// fixed-point progress floor or the iteration budget ends. Reporting the miss instead would let a grazing ray
     /// that never reached its obstruction claim the line was clear — the one answer a contact, visibility, or sweep
-    /// consumer cannot recover from. The budget scales with the program's Lipschitz step scale, so the <c>maxDist</c>
-    /// below which no cast can reach that state is the same for every program (see <c>BaseMarchIterations</c>).</remarks>
+    /// consumer cannot recover from.</remarks>
     public bool Raycast(FixedPosition origin, FixedVector3 dir, FixedQ4816 maxDist, out RayHit hit) =>
         (March(
             origin: origin,
@@ -1032,7 +1053,10 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
             hit: out hit,
             maxDistance: maxDist,
             origin: origin,
-            radius: radius
+            radius: FixedQ4816.Max(
+                x: radius,
+                y: FixedQ4816.Zero
+            )
         ) != MarchOutcome.Miss);
     /// <inheritdoc/>
     /// <remarks>The evaluated point is the exact world-space displacement from the world origin — <c>position</c>
@@ -1279,9 +1303,9 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     /// <inheritdoc/>
     /// <remarks>Requires a CONVERGED downward march, unlike the cast and visibility verbs. This verb's return value is
     /// a surface, not an obstruction: it has no confidence channel to mark a stand-in with, and a caller that grounds a
-    /// body onto a fabricated Y is moved to a place the world does not have. A march that runs out of iterations proves
-    /// nothing about what is below, so it answers <see langword="false"/> — "no ground within the probe range", the
-    /// same answer an empty column gives.</remarks>
+    /// body onto a fabricated Y is moved to a place the world does not have. A march that cannot make another safe
+    /// fixed-point step or runs out of iterations proves nothing about what is below, so it answers
+    /// <see langword="false"/> — "no ground within the probe range", the same answer an empty column gives.</remarks>
     public bool TryGroundHeight(FixedPosition position, FixedQ4816 probeUp, FixedQ4816 probeDown, out FixedQ4816 groundY) {
         groundY = FixedQ4816.Zero;
 
@@ -1326,9 +1350,10 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     }
 
     // What a March call proved. Miss and Hit are assertions about the ray; Exhausted is the absence of one — the march
-    // ran out of iterations with the field neither accepted nor cleared, so it proves NEITHER. Every consumer folds it
-    // into whichever of the two its own contract can survive being wrong about: Hit for an obstruction/contact
-    // question (Raycast/SphereCast/LineOfSight), Miss for TryGroundHeight, whose true half asserts a SURFACE.
+    // either lost a representable safe advance or ran out of iterations with the field neither accepted nor cleared,
+    // so it proves NEITHER. Every consumer folds it into whichever of the two its own contract can survive being wrong
+    // about: Hit for an obstruction/contact question (Raycast/SphereCast/LineOfSight), Miss for TryGroundHeight, whose
+    // true half asserts a SURFACE.
     private enum MarchOutcome {
         Miss = 0,
         Hit = 1,

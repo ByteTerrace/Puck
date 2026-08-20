@@ -66,8 +66,8 @@ Every answer is tagged with a `WorldQueryConfidence`:
 
 ```csharp
 public enum WorldQueryConfidence {
-    Bounded = 0,  // a baked, resolution-quantized artifact — sign-correct, conservatively dilated
-    Exact = 1,    // a live evaluator against the actual program
+    Bounded = 0,  // a conservative baked answer, or a live march that could not complete a safe proof
+    Exact = 1,    // a live evaluator whose query converged against the actual program
 }
 ```
 
@@ -117,6 +117,15 @@ artifact's own cells is refused by name rather than paid for quietly.
 Nothing here indexes occupancy hierarchically, and the refusal is how a
 consumer that genuinely needs one says so.
 
+The bake itself has a separate allocation ceiling. The default is
+`WorldQueryBaker.DefaultMaxCellCount` (4,194,304 cells), enough for a 512 by 512
+world-unit square at the default quarter-unit resolution and about 32.5 MiB of
+retained height/blocked storage. A larger bake must pass an explicit
+`maxCellCount`; either way, the dimensions are checked before either per-cell
+array is allocated. The artifact also rejects any origin, dimension, and cell
+size combination whose far edge would leave signed Q48.16, so later cell-edge
+arithmetic stays representable.
+
 **`SdfFieldEvaluator`** is a second, independent interpreter of the *same*
 instruction stream the GPU's `mapCore` walks — not a codegen of the shader,
 a deliberate hand-written twin, the same relationship the program's own
@@ -148,6 +157,17 @@ its wrong answers would look exactly like right ones.
 `WorldQueryProviders.ForWorld` is the resolver a sim asks for the right
 provider; a sim binds only `IWorldQuery` itself; nothing downstream needs to
 know or care which provider answered.
+
+One subtlety matters for sphere queries against a live program. `StepScale`
+turns the field into a lower bound on Euclidean separation, so the safe sphere
+advance is `field * StepScale - radius`, not `(field - radius) * StepScale`.
+`Overlap` compares that same lower bound with the radius. When the lower bound
+becomes too small to support another fixed-point step before the raw field has
+converged, a cast returns a `Bounded` obstruction. It does not continue through
+an unproven gap and later claim the sweep was clear. For the same reason,
+`Overlap` reports occupied when a populated program cannot rebase an extreme
+hierarchical position into Q48.16; failure to represent a sample is not proof
+that a placement is clear.
 
 ## What "determinism" actually means here
 

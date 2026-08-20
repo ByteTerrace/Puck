@@ -53,13 +53,23 @@ A field evaluator behind a hierarchical world position evaluates the whole
 position. Reading only the cell-local offset aliases the field with the cell
 period and answers for the wrong copy, and a position constructor that
 re-anchors past half a cell reaches that state without any caller asking for
-it. A seam that cannot rebase must refuse the query; it may not answer.
+it. A field-only seam that cannot rebase refuses the sample. An authoritative
+obstruction verb resolves the undecidable point toward occupied; it may not
+answer clear.
 
 A CPU marcher over the same instruction stream is bound by the same step scale
 as the shader. Restricting the interpreted subset to rigid ops does not make the
 raw field value a safe advance: the chamfer family lives in the blend tail and
 an eccentric ellipsoid in the shape body, so a program every one of whose ops is
 an isometry can still overestimate distance and be tunnelled by a raw step.
+
+For a swept sphere, scale the field before subtracting the radius:
+`safeAdvance = field * stepScale - radius`. Scaling the clearance instead also
+scales down the radius and can overstate the empty gap. `Overlap` uses the same
+scaled field as a conservative separation test. If the safe advance falls below
+the smallest reliable fixed-point step before the raw hit threshold converges,
+the cast reports a bounded obstruction; replacing it with a larger step would
+discard the Lipschitz proof and can tunnel the body through a thin surface.
 
 The scale shortens every advance, so a fixed iteration budget shortens the
 distance a march covers before it gives up, in proportion. The budget must

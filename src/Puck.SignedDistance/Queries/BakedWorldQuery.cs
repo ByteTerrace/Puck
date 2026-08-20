@@ -264,7 +264,7 @@ public sealed class BakedWorldQuery : IWorldQuery {
         for (var row = firstRow; (row <= lastRow); row++) {
             var cellMinZRaw = RowMinZRaw(row: row);
             var closestZRaw = Math.Clamp(
-                max: (cellMinZRaw + m_artifact.CellSizeRaw),
+                max: RowMaxZRaw(row: row),
                 min: cellMinZRaw,
                 value: center.Z.Value
             );
@@ -296,7 +296,7 @@ public sealed class BakedWorldQuery : IWorldQuery {
 
                 var cellMinXRaw = ColumnMinXRaw(column: column);
                 var closestXRaw = Math.Clamp(
-                    max: (cellMinXRaw + m_artifact.CellSizeRaw),
+                    max: ColumnMaxXRaw(column: column),
                     min: cellMinXRaw,
                     value: center.X.Value
                 );
@@ -353,11 +353,14 @@ public sealed class BakedWorldQuery : IWorldQuery {
             );
         }
     }
-    private long ColumnMinXRaw(int column) =>
-        AddRawSaturating(
-            left: m_artifact.OriginXRaw,
-            right: (((long)column) * m_artifact.CellSizeRaw)
-        );
+    private long ColumnMinXRaw(int column) => GridCoordinate(
+        index: column,
+        originRaw: m_artifact.OriginXRaw
+    );
+    private long ColumnMaxXRaw(int column) => GridCoordinate(
+        index: (column + 1),
+        originRaw: m_artifact.OriginXRaw
+    );
     // Enumerates the cells the swept volume can reach, column by column in sweep order, and keeps the nearest
     // contact. A column contributes nothing beyond the running best once the sweep cannot enter it earlier than that
     // best, which is the whole early-out: no cell is visited twice and no cell outside the swept band is visited.
@@ -483,24 +486,29 @@ public sealed class BakedWorldQuery : IWorldQuery {
             ),
             Point: FixedPosition.FromLocal(local: new FixedVector3(
                 X: FixedQ4816.FromRawBits(value: Math.Clamp(
-                    max: (cellMinXRaw + m_artifact.CellSizeRaw),
+                    max: ColumnMaxXRaw(column: contact.Column),
                     min: cellMinXRaw,
                     value: centerXRaw
                 )),
                 Y: FixedQ4816.FromRawBits(value: (contact.Ground ? contact.HeightRaw : centerYRaw)),
                 Z: FixedQ4816.FromRawBits(value: Math.Clamp(
-                    max: (cellMinZRaw + m_artifact.CellSizeRaw),
+                    max: RowMaxZRaw(row: contact.Row),
                     min: cellMinZRaw,
                     value: centerZRaw
                 ))
             ))
         );
     }
-    private long RowMinZRaw(int row) =>
-        AddRawSaturating(
-            left: m_artifact.OriginZRaw,
-            right: (((long)row) * m_artifact.CellSizeRaw)
-        );
+    private long GridCoordinate(long originRaw, int index) =>
+        ((long)(((Int128)originRaw) + (((Int128)index) * m_artifact.CellSizeRaw)));
+    private long RowMinZRaw(int row) => GridCoordinate(
+        index: row,
+        originRaw: m_artifact.OriginZRaw
+    );
+    private long RowMaxZRaw(int row) => GridCoordinate(
+        index: (row + 1),
+        originRaw: m_artifact.OriginZRaw
+    );
     private void ScanColumn(in Sweep sweep, int column, long windowEnterRaw, long windowExitRaw, ref Contact contact) {
         // Both coordinates are linear in the sweep parameter, so the Z the sweep can reach inside this column is
         // bounded by its values at the window's two ends, dilated by the radius. One tick of slack absorbs the
@@ -528,12 +536,12 @@ public sealed class BakedWorldQuery : IWorldQuery {
             first: out var firstRow,
             highRaw: AddRawSaturating(
                 left: windowMaxZRaw,
-                right: (sweep.RadiusRaw + 1L)
+                right: sweep.PaddedRadiusRaw
             ),
             last: out var lastRow,
             lowRaw: SubtractRawSaturating(
                 left: windowMinZRaw,
-                right: (sweep.RadiusRaw + 1L)
+                right: sweep.PaddedRadiusRaw
             )
         )) {
             return;
@@ -565,7 +573,7 @@ public sealed class BakedWorldQuery : IWorldQuery {
                 enterRaw: ref enterRaw,
                 exitRaw: ref exitRaw,
                 highRaw: AddRawSaturating(
-                    left: (cellMinZRaw + m_artifact.CellSizeRaw),
+                    left: RowMaxZRaw(row: row),
                     right: sweep.RadiusRaw
                 ),
                 lowRaw: SubtractRawSaturating(
@@ -627,8 +635,9 @@ public sealed class BakedWorldQuery : IWorldQuery {
             return false;
         }
 
-        var columnLong = (x.Value - m_artifact.OriginXRaw).FloorDivide(divisor: m_artifact.CellSizeRaw);
-        var rowLong = (z.Value - m_artifact.OriginZRaw).FloorDivide(divisor: m_artifact.CellSizeRaw);
+        var cellSize = ((Int128)m_artifact.CellSizeRaw);
+        var columnLong = (((Int128)x.Value) - m_artifact.OriginXRaw).FloorDivide(divisor: cellSize);
+        var rowLong = (((Int128)z.Value) - m_artifact.OriginZRaw).FloorDivide(divisor: cellSize);
 
         if (
             (columnLong < 0L) ||
@@ -663,7 +672,7 @@ public sealed class BakedWorldQuery : IWorldQuery {
             enterRaw: ref enterRaw,
             exitRaw: ref exitRaw,
             highRaw: AddRawSaturating(
-                left: (cellMinXRaw + m_artifact.CellSizeRaw),
+                left: ColumnMaxXRaw(column: column),
                 right: sweep.RadiusRaw
             ),
             lowRaw: SubtractRawSaturating(
@@ -899,9 +908,14 @@ public sealed class BakedWorldQuery : IWorldQuery {
         public readonly long OriginXRaw;
         public readonly long OriginYRaw;
         public readonly long OriginZRaw;
+        public readonly long PaddedRadiusRaw;
         public readonly long RadiusRaw;
 
         public Sweep(FixedVector3 origin, FixedVector3 direction, long maxDistanceRaw, long radiusRaw) {
+            var paddedRadiusRaw = AddRawSaturating(
+                left: radiusRaw,
+                right: 1L
+            );
             var endXRaw = AddRawSaturating(
                 left: origin.X.Value,
                 right: ScaleRawSaturating(
@@ -919,18 +933,19 @@ public sealed class BakedWorldQuery : IWorldQuery {
                     val1: origin.X.Value,
                     val2: endXRaw
                 ),
-                right: (radiusRaw + 1L)
+                right: paddedRadiusRaw
             );
             MinXRaw = SubtractRawSaturating(
                 left: Math.Min(
                     val1: origin.X.Value,
                     val2: endXRaw
                 ),
-                right: (radiusRaw + 1L)
+                right: paddedRadiusRaw
             );
             OriginXRaw = origin.X.Value;
             OriginYRaw = origin.Y.Value;
             OriginZRaw = origin.Z.Value;
+            PaddedRadiusRaw = paddedRadiusRaw;
             RadiusRaw = radiusRaw;
         }
     }

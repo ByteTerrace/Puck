@@ -251,6 +251,58 @@ public sealed class BakedWorldQueryTests {
     }
 
     [Fact]
+    public void BakeRefusesItsAllocationBudgetBeforeAllocatingLayers() {
+        Assert.Throws<ArgumentException>(
+            paramName: "maxCellCount",
+            testCode: () => WorldQueryBaker.Bake(
+                blockers: [],
+                maxCellCount: 15,
+                maxX: 1f,
+                maxZ: 1f,
+                minX: 0f,
+                minZ: 0f,
+                terrain: []
+            )
+        );
+        Assert.Throws<ArgumentException>(
+            paramName: "maxCellCount",
+            testCode: () => WorldQueryBaker.Bake(
+                blockers: [],
+                maxX: 10_000f,
+                maxZ: 10_000f,
+                minX: 0f,
+                minZ: 0f,
+                terrain: []
+            )
+        );
+        Assert.Throws<ArgumentOutOfRangeException>(
+            paramName: "maxCellCount",
+            testCode: () => WorldQueryBaker.Bake(
+                blockers: [],
+                maxCellCount: 0,
+                maxX: 1f,
+                maxZ: 1f,
+                minX: 0f,
+                minZ: 0f,
+                terrain: []
+            )
+        );
+
+        Assert.Equal(
+            expected: 16,
+            actual: WorldQueryBaker.Bake(
+                blockers: [],
+                maxCellCount: 16,
+                maxX: 1f,
+                maxZ: 1f,
+                minX: 0f,
+                minZ: 0f,
+                terrain: []
+            ).CellCount
+        );
+    }
+
+    [Fact]
     public void BakeRefusesAGridBoundTheCoordinateCarrierCanOnlySaturate() {
         Assert.Throws<ArgumentException>(
             paramName: "maxX",
@@ -1460,5 +1512,81 @@ public sealed class BakedWorldQueryTests {
                 width: 1
             ).CellSizeRaw
         );
+    }
+
+    [Fact]
+    public void TheConstructorRefusesAnAxisWhoseFarEdgeOverflowsTheCarrier() {
+        Assert.Throws<ArgumentException>(
+            paramName: "width",
+            testCode: () => new WorldQueryArtifact(
+                blocked: [0UL,],
+                cellSizeRaw: long.MaxValue,
+                height: 1,
+                heightRaw: [],
+                originXRaw: 0L,
+                originZRaw: 0L,
+                width: 2
+            )
+        );
+
+        Assert.Equal(
+            expected: long.MaxValue,
+            actual: new WorldQueryArtifact(
+                blocked: [0UL,],
+                cellSizeRaw: long.MaxValue,
+                height: 1,
+                heightRaw: [],
+                originXRaw: 0L,
+                originZRaw: 0L,
+                width: 1
+            ).CellSizeRaw
+        );
+    }
+
+    [Fact]
+    public void ExtremeButRepresentableArtifactsDoNotOverflowQueryArithmetic() {
+        var widestCell = new BakedWorldQuery(artifact: new WorldQueryArtifact(
+            blocked: [1UL,],
+            cellSizeRaw: long.MaxValue,
+            height: 1,
+            heightRaw: [],
+            originXRaw: 0L,
+            originZRaw: 0L,
+            width: 1
+        ));
+
+        Assert.True(condition: widestCell.SphereCast(
+            dir: Direction(x: 1.0, y: 0.0, z: 0.0),
+            hit: out var hit,
+            maxDist: FixedQ4816.Epsilon,
+            origin: FixedPosition.Zero,
+            radius: FixedQ4816.FromRawBits(value: long.MaxValue)
+        ));
+        Assert.Equal(
+            expected: FixedQ4816.Zero,
+            actual: hit.Distance
+        );
+
+        const long largeCell = 4_000_000_000_000_000_000L;
+        var compensatedOrigin = long.MinValue;
+        var lastCellCenter = ((long)(((Int128)compensatedOrigin) + (3 * ((Int128)largeCell)) + (largeCell / 2)));
+        var compensated = new BakedWorldQuery(artifact: new WorldQueryArtifact(
+            blocked: [(1UL << 3),],
+            cellSizeRaw: largeCell,
+            height: 1,
+            heightRaw: [],
+            originXRaw: compensatedOrigin,
+            originZRaw: 0L,
+            width: 4
+        ));
+
+        Assert.True(condition: compensated.Overlap(
+            center: FixedPosition.FromLocal(local: new FixedVector3(
+                X: FixedQ4816.FromRawBits(value: lastCellCenter),
+                Y: FixedQ4816.Zero,
+                Z: FixedQ4816.FromRawBits(value: 1L)
+            )),
+            radius: FixedQ4816.Zero
+        ));
     }
 }

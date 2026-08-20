@@ -104,10 +104,18 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
             context: context,
             tokens: 5
         );
+    // discarded= is the boot-time disposal's read-back: a document the catalog could not admit was moved out of the
+    // directory once, and this is the only surface that still names it after the boot line has scrolled away.
     private string Describe() => $"[identity.list: {string.Join(
         separator: ", ",
         values: m_worlds.All.Select(selector: identity => $"{identity.Id}:{identity.Name}:{identity.ColorHex}")
-    )} root={m_worlds.FilePath}]";
+    )} root={m_worlds.FilePath} discarded={((m_worlds.Discarded.Count == 0)
+        ? "none"
+        : $"{m_worlds.Discarded.Count}:{string.Join(
+            separator: ",",
+            values: m_worlds.Discarded.Select(selector: entry => entry.FileName)
+        )}"
+    )}]";
     // identity.hud's read-back half: identity.show already reports every other identity-owned setting as one
     // space-delimited key=value line, so the panel state joins it in the SAME space-free-value shape (rather than a
     // separate no-arg identity.hud overload, which would collide with identity.hud's own required <panel-json>
@@ -373,7 +381,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
         yield return CommandDefinition.Verb(
             bindability: CommandBindability.Unbindable,
             name: "identity.list",
-            description: "Lists owned identity worlds and their paths.",
+            description: "Lists owned identity worlds, their paths, and any documents this catalog discarded at boot.",
             valueKind: CommandValueKind.Digital,
             handler: _ => new CommandResult(Output: Describe())
         );

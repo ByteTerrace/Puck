@@ -30,16 +30,16 @@ public sealed class SdfPackedContractLawTests {
         Op: SdfOp.ShapeBlend,
         Shape: shape
     );
-    private static SdfProgram Build(IReadOnlyList<SdfInstruction> instructions, IReadOnlyList<SdfInstanceRange>? instances = null, IReadOnlyList<SdfScreenSurface>? screenSurfaces = null) => new(
+    private static SdfProgram Build(IReadOnlyList<SdfInstruction> instructions, IReadOnlyList<SdfInstanceRange>? instances = null, IReadOnlyList<SdfScreenSurface>? screenSurfaces = null, IReadOnlyList<SdfMaterial>? materials = null) => new(
         instances: instances,
         instructions: instructions,
-        materials: OneMaterial,
+        materials: (materials ?? OneMaterial),
         screenSurfaces: screenSurfaces
     );
-    private static SdfScreenSurface Screen(int index = 0, Vector3? up = null, float halfWidth = 1f, float halfHeight = 1f) => new(
+    private static SdfScreenSurface Screen(int index = 0, Vector3? up = null, float halfWidth = 1f, float halfHeight = 1f, Vector3? origin = null) => new(
         HalfHeight: halfHeight,
         HalfWidth: halfWidth,
-        Origin: Vector3.Zero,
+        Origin: (origin ?? Vector3.Zero),
         Right: Vector3.UnitX,
         ScreenIndex: index,
         Up: (up ?? Vector3.UnitY)
@@ -190,6 +190,60 @@ public sealed class SdfPackedContractLawTests {
                 Slot: 0
             )],
             instructions: [Shape()]
+        );
+    }
+
+    [Fact]
+    public void TheConstructorRefusesInvalidPackedTableValues() {
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => Build(
+            instructions: [Shape()],
+            materials: [new SdfMaterial(Albedo: new Vector3(float.NaN, 1f, 1f))]
+        ));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => Build(
+            instructions: [Shape()],
+            materials: [new SdfMaterial(Albedo: Vector3.One, Emissive: -1f)]
+        ));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => Build(
+            instructions: [Shape()],
+            screenSurfaces: [Screen(origin: new Vector3(float.NaN, 0f, 0f))]
+        ));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => Build(
+            instructions: [Shape()],
+            screenSurfaces: [Screen(halfWidth: float.PositiveInfinity)]
+        ));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => Build(
+            instructions: [Shape()],
+            instances: [Instance(first: 0, end: 1) with { Center = new Vector3(float.NaN, 0f, 0f) }]
+        ));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => Build(
+            instructions: [Shape()],
+            instances: [Instance(first: 0, end: 1) with { Radius = -1f }]
+        ));
+
+        _ = Build(
+            instructions: [Shape()],
+            instances: [Instance(first: 0, end: 1)],
+            materials: OneMaterial,
+            screenSurfaces: [Screen()]
+        );
+    }
+
+    [Fact]
+    public void TheConstructorRefusesUnbalancedOrCrossOwnerFieldScopes() {
+        var push = Shape() with { Op = SdfOp.PushField };
+        var pop = Shape() with { Op = SdfOp.PopField };
+
+        _ = Assert.Throws<ArgumentException>(testCode: () => Build(instructions: [pop, Shape()]));
+        _ = Assert.Throws<ArgumentException>(testCode: () => Build(instructions: [Shape(), push, Shape()]));
+        _ = Assert.Throws<ArgumentException>(testCode: () => Build(instructions: [push, push, Shape(), pop, pop]));
+        _ = Assert.Throws<ArgumentException>(testCode: () => Build(
+            instructions: [push, Shape(), pop],
+            instances: [Instance(first: 1, end: 2)]
+        ));
+
+        _ = Build(
+            instructions: [push, Shape(), pop],
+            instances: [Instance(first: 0, end: 3)]
         );
     }
 

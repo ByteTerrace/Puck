@@ -10,8 +10,9 @@ namespace Puck.Maths;
 public enum WorldQueryConfidence {
     /// <summary>The answer is conservative rather than measured: a baked, resolution-quantized artifact (see the
     /// <c>Puck.SignedDistance.Queries</c> namespace remarks) — sign-correct and conservatively dilated, but not
-    /// sub-cell-exact — or an exact evaluator's march that ran out of iterations and resolved to the answer its verb
-    /// can survive being wrong about, at the last point it reached.</summary>
+    /// sub-cell-exact — or a live evaluator's march that could not complete a safe surface proof (because its
+    /// representable safe advance vanished or its iteration budget ended) and resolved to the answer its verb can
+    /// survive being wrong about, at the last point it reached.</summary>
     Bounded = 0,
     /// <summary>The answer came from a fixed-point evaluator against the live SDF program, and the march that produced
     /// it converged.</summary>
@@ -21,8 +22,10 @@ public enum WorldQueryConfidence {
 /// One raycast/spherecast hit — fully fixed-point, so a hit result can feed straight back into deterministic sim
 /// state without a float round-trip.
 /// </summary>
-/// <param name="Point">The world-space contact point on the touched geometry. For a sphere cast this is the surface
-/// the swept sphere first touches, which sits up to one radius off the sweeping center's own path.</param>
+/// <param name="Point">The world-space contact point on the touched geometry. For a resolved sphere cast this is the
+/// surface the swept sphere first touches, which sits up to one radius off the sweeping center's own path. A live
+/// evaluator's unresolved <see cref="WorldQueryConfidence.Bounded"/> obstruction instead carries the last center point
+/// its march safely reached; no contact surface was proven.</param>
 /// <param name="Normal">The surface normal at the hit point — per-provider, not a shared contract. A
 /// <see cref="WorldQueryConfidence.Bounded"/> answer (<c>BakedWorldQuery</c>) hardcodes constant world
 /// <c>+Y</c> — a heightfield's only honest answer, since the baked artifact carries no per-hit surface orientation.
@@ -66,9 +69,10 @@ public readonly record struct QueryCapabilities(bool HasHeightfield, bool HasBlo
 /// </para>
 /// <para>
 /// The cast and visibility verbs are CONSERVATIVE where they cannot decide: a provider that runs out of its own
-/// iteration budget mid-cast must resolve toward the answer a contact, sweep, or visibility consumer can survive being
-/// wrong about — an obstruction, marked <see cref="WorldQueryConfidence.Bounded"/> — never toward "clear". Every verb
-/// here is read by authoritative simulation, where a false "nothing there" changes state.
+/// proof mid-cast — because no representable safe advance remains or because its iteration budget ends — must resolve
+/// toward the answer a contact, sweep, or visibility consumer can survive being wrong about: an obstruction, marked
+/// <see cref="WorldQueryConfidence.Bounded"/>, never "clear". Every verb here is read by authoritative simulation,
+/// where a false "nothing there" changes state.
 /// </para>
 /// </summary>
 public interface IWorldQuery {

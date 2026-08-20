@@ -198,6 +198,33 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
     }
 
     [Fact]
+    public void OverlapTreatsAnUnrepresentableWorldPointAsObstructed() {
+        var outsideCarrier = new FixedPosition(
+            cellX: long.MaxValue,
+            cellY: 0L,
+            cellZ: 0L,
+            local: FixedVector3.Zero
+        );
+        var evaluator = BuildUnitSphere();
+
+        Assert.False(condition: evaluator.TryDistance(
+            distance: out _,
+            material: out _,
+            position: outsideCarrier
+        ));
+        Assert.True(condition: evaluator.Overlap(
+            center: outsideCarrier,
+            radius: FixedQ4816.Zero
+        ));
+
+        // Control: a shape-free program still means an empty world, not an undecidable point in a populated one.
+        Assert.False(condition: new SdfFieldEvaluator(program: new SdfProgramBuilder().Build()).Overlap(
+            center: outsideCarrier,
+            radius: FixedQ4816.Zero
+        ));
+    }
+
+    [Fact]
     public void QueryEvaluatesTheWholeHierarchicalPositionNotTheCellLocalOffset() {
         var evaluator = BuildUnitSphere();
         var cellSize = ((double)(1L << FixedPosition.CellSizeLog2));
