@@ -48,6 +48,7 @@ public sealed partial class SdfWorldEngine {
             format: Format,
             height: m_height,
             sourceImageHandle: m_storageImage.ImageHandle,
+            sourceLayout: GpuImageLayout.ShaderReadOnly,
             width: m_width
         );
     }
@@ -158,6 +159,7 @@ public sealed partial class SdfWorldEngine {
             format: Format,
             height: m_height,
             sourceImageHandle: m_storageImage.ImageHandle,
+            sourceLayout: GpuImageLayout.ShaderReadOnly,
             width: m_width
         );
         m_pipelinedFrameInFlight = true;

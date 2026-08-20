@@ -15,8 +15,8 @@ namespace Puck.Vulkan;
 /// <para>
 /// Asymmetry note: <see cref="VulkanSurfaceUpload"/> takes a surface (which carries its own
 /// extent/format) and creates the image it owns; this block does not own the image it reads, and the GPU
-/// surface variant exposes only a view handle, so the caller passes the source <c>VkImage</c> plus its extent
-/// and format explicitly. The source must be in the shader-read-only layout and is left in it.
+/// surface variant exposes only a view handle, so the caller passes the source <c>VkImage</c> plus its extent,
+/// format, and current layout explicitly. The source is restored to that layout after the copy.
 /// </para>
 /// </summary>
 public sealed class VulkanSurfaceReadback : IDisposable {
@@ -63,9 +63,10 @@ public sealed class VulkanSurfaceReadback : IDisposable {
         m_queueSubmitter = queueSubmitter;
     }
 
-    /// <summary>Reads a shader-readable color image back into tightly packed CPU pixels.</summary>
+    /// <summary>Reads a color image back into tightly packed CPU pixels.</summary>
     /// <param name="deviceContext">The device the source image lives on.</param>
-    /// <param name="sourceImageHandle">The native <c>VkImage</c> handle to read; must be in the shader-read-only layout.</param>
+    /// <param name="sourceImageHandle">The native <c>VkImage</c> handle to read.</param>
+    /// <param name="sourceLayout">The image's current layout, restored after the copy.</param>
     /// <param name="width">The width, in pixels, of the source image.</param>
     /// <param name="height">The height, in pixels, of the source image.</param>
     /// <param name="vulkanFormat">The <c>VkFormat</c> of the source image.</param>
@@ -73,7 +74,7 @@ public sealed class VulkanSurfaceReadback : IDisposable {
     /// <returns>The tightly packed pixel data read back from the image.</returns>
     /// <exception cref="ArgumentException"><paramref name="sourceImageHandle"/> is zero, or a dimension is zero.</exception>
     /// <exception cref="ObjectDisposedException">The instance has been disposed.</exception>
-    public ReadOnlyMemory<byte> Read(IVulkanDeviceContext deviceContext, nint sourceImageHandle, uint width, uint height, uint vulkanFormat, uint bytesPerPixel) {
+    public ReadOnlyMemory<byte> Read(IVulkanDeviceContext deviceContext, nint sourceImageHandle, uint width, uint height, uint vulkanFormat, uint bytesPerPixel, GpuImageLayout sourceLayout) {
         ArgumentNullException.ThrowIfNull(deviceContext);
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
@@ -105,7 +106,11 @@ public sealed class VulkanSurfaceReadback : IDisposable {
         var device = m_device!;
         var commandBufferHandle = m_commandResources!.CommandBufferHandles[0];
 
-        RecordReadback(commandBufferHandle: commandBufferHandle, sourceImageHandle: sourceImageHandle);
+        RecordReadback(
+            commandBufferHandle: commandBufferHandle,
+            sourceImageHandle: sourceImageHandle,
+            sourceLayout: sourceLayout
+        );
 
         Span<nint> commandBuffers = [commandBufferHandle];
 
@@ -121,7 +126,8 @@ public sealed class VulkanSurfaceReadback : IDisposable {
     /// non-blocking counterpart of <see cref="Read"/>. Poll <see cref="IsReadComplete"/> and then <see cref="MapPixels"/>
     /// to collect the pixels. At most one read may be in flight per instance.</summary>
     /// <param name="deviceContext">The device the source image lives on.</param>
-    /// <param name="sourceImageHandle">The native <c>VkImage</c> handle to read; must be in the shader-read-only layout.</param>
+    /// <param name="sourceImageHandle">The native <c>VkImage</c> handle to read.</param>
+    /// <param name="sourceLayout">The image's current layout, restored after the copy.</param>
     /// <param name="width">The width, in pixels, of the source image.</param>
     /// <param name="height">The height, in pixels, of the source image.</param>
     /// <param name="vulkanFormat">The <c>VkFormat</c> of the source image.</param>
@@ -129,7 +135,7 @@ public sealed class VulkanSurfaceReadback : IDisposable {
     /// <exception cref="ArgumentException"><paramref name="sourceImageHandle"/> is zero, or a dimension is zero.</exception>
     /// <exception cref="InvalidOperationException">A read is already in flight (map the previous one first).</exception>
     /// <exception cref="ObjectDisposedException">The instance has been disposed.</exception>
-    public void SubmitRead(IVulkanDeviceContext deviceContext, nint sourceImageHandle, uint width, uint height, uint vulkanFormat, uint bytesPerPixel) {
+    public void SubmitRead(IVulkanDeviceContext deviceContext, nint sourceImageHandle, uint width, uint height, uint vulkanFormat, uint bytesPerPixel, GpuImageLayout sourceLayout) {
         ArgumentNullException.ThrowIfNull(deviceContext);
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
@@ -165,7 +171,11 @@ public sealed class VulkanSurfaceReadback : IDisposable {
         var device = m_device!;
         var commandBufferHandle = m_commandResources!.CommandBufferHandles[0];
 
-        RecordReadback(commandBufferHandle: commandBufferHandle, sourceImageHandle: sourceImageHandle);
+        RecordReadback(
+            commandBufferHandle: commandBufferHandle,
+            sourceImageHandle: sourceImageHandle,
+            sourceLayout: sourceLayout
+        );
 
         Span<nint> commandBuffers = [commandBufferHandle];
 
@@ -213,10 +223,27 @@ public sealed class VulkanSurfaceReadback : IDisposable {
         return m_frameReadbackApi.ReadBuffer(buffer: m_readbackBuffer!);
     }
 
-    // The shared image->staging recording both Read and SubmitRead drive: transition to transfer-source, copy into the
-    // host-visible readback buffer, transition back to shader-read-only. The source is left exactly as it was found.
-    private void RecordReadback(nint commandBufferHandle, nint sourceImageHandle) {
+    // The source-state tuple must match the descriptor/producer contract; a mismatched old layout is undefined
+    // behavior on Vulkan and a mismatched resource state is undefined behavior on Direct3D 12.
+    private void RecordReadback(nint commandBufferHandle, nint sourceImageHandle, GpuImageLayout sourceLayout) {
         var device = m_device!;
+        var (vulkanSourceLayout, sourceAccessMask, sourceStageMask) = sourceLayout switch {
+            GpuImageLayout.General => (
+                VulkanImageLayout.General,
+                VulkanAccessFlags.ShaderRead | VulkanAccessFlags.ShaderWrite,
+                VulkanPipelineStageFlags.ComputeShader
+            ),
+            GpuImageLayout.ShaderReadOnly => (
+                VulkanImageLayout.ShaderReadOnlyOptimal,
+                VulkanAccessFlags.ShaderRead,
+                VulkanPipelineStageFlags.FragmentShader
+            ),
+            _ => throw new ArgumentOutOfRangeException(
+                paramName: nameof(sourceLayout),
+                actualValue: sourceLayout,
+                message: "Readback requires a General or ShaderReadOnly source image."
+            ),
+        };
 
         m_commandBufferRecordingApi.BeginCommandBuffer(
             commandBufferHandle: commandBufferHandle,
@@ -231,9 +258,9 @@ public sealed class VulkanSurfaceReadback : IDisposable {
             imageHandle: sourceImageHandle,
             mipLevelCount: 1,
             newLayout: VulkanImageLayout.TransferSourceOptimal,
-            oldLayout: VulkanImageLayout.ShaderReadOnlyOptimal,
-            sourceAccessMask: VulkanAccessFlags.ShaderRead,
-            sourceStageMask: VulkanPipelineStageFlags.FragmentShader
+            oldLayout: vulkanSourceLayout,
+            sourceAccessMask: sourceAccessMask,
+            sourceStageMask: sourceStageMask
         );
         m_commandBufferRecordingApi.CopyImageToBuffer(
             bufferHandle: m_readbackBuffer!.BufferHandle,
@@ -247,12 +274,12 @@ public sealed class VulkanSurfaceReadback : IDisposable {
         m_commandBufferRecordingApi.TransitionImageLayout(
             baseMipLevel: 0,
             commandBufferHandle: commandBufferHandle,
-            destinationAccessMask: VulkanAccessFlags.ShaderRead,
-            destinationStageMask: VulkanPipelineStageFlags.FragmentShader,
+            destinationAccessMask: sourceAccessMask,
+            destinationStageMask: sourceStageMask,
             deviceHandle: device.Handle,
             imageHandle: sourceImageHandle,
             mipLevelCount: 1,
-            newLayout: VulkanImageLayout.ShaderReadOnlyOptimal,
+            newLayout: vulkanSourceLayout,
             oldLayout: VulkanImageLayout.TransferSourceOptimal,
             sourceAccessMask: VulkanAccessFlags.TransferRead,
             sourceStageMask: VulkanPipelineStageFlags.Transfer

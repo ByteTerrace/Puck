@@ -67,6 +67,40 @@ public sealed partial class SdfWorldEngine {
             label: DebugLabel
         );
 
+        // Every descriptor-reachable image must have a defined layout before the first dispatch. In particular, the
+        // sky pre-pass writes the per-view sources before Stage 1, while screen content may sample the filler there.
+        if (!m_imageInitialized) {
+            foreach (var source in m_sourceTextures) {
+                if (source is null) {
+                    continue;
+                }
+
+                recorder.TransitionImageLayout(
+                    commandBufferHandle: commandBuffer,
+                    destinationAccessMask: GpuComputeAccess.ShaderWrite,
+                    destinationStageMask: GpuComputeStage.ComputeShader,
+                    deviceHandle: m_deviceHandle,
+                    imageHandle: source.ImageHandle,
+                    newLayout: GpuImageLayout.General,
+                    oldLayout: GpuImageLayout.Undefined,
+                    sourceAccessMask: GpuComputeAccess.None,
+                    sourceStageMask: GpuComputeStage.TopOfPipe
+                );
+            }
+
+            recorder.TransitionImageLayout(
+                commandBufferHandle: commandBuffer,
+                destinationAccessMask: GpuComputeAccess.ShaderRead,
+                destinationStageMask: GpuComputeStage.ComputeShader,
+                deviceHandle: m_deviceHandle,
+                imageHandle: m_screenSourceFiller.ImageHandle,
+                newLayout: GpuImageLayout.ShaderReadOnly,
+                oldLayout: GpuImageLayout.Undefined,
+                sourceAccessMask: GpuComputeAccess.None,
+                sourceStageMask: GpuComputeStage.TopOfPipe
+            );
+        }
+
         // FRAME-RING cross-frame gate: the GPU-written device-local scratch (tile / instance-mask / indirect-args /
         // cull-bounds buffers, the per-view source textures) is SHARED across ring slots, so with FrameRingSize
         // frames in flight this frame's first write must order after the PREVIOUS frame's last read of that scratch —
@@ -371,43 +405,6 @@ public sealed partial class SdfWorldEngine {
                 sourceAccessMask: GpuComputeAccess.ShaderWrite,
                 sourceStageMask: GpuComputeStage.ComputeShader
             );
-
-            // First frame: bring each per-view SDF source into the General (UAV) working layout Stage 1 writes it in.
-            // After that they persist in General (written each frame, then read by Stage 2 — never sampled as
-            // shader-readable). Child slots are null here — the child owns its image and already left it in General.
-            if (!m_imageInitialized) {
-                foreach (var source in m_sourceTextures) {
-                    if (source is null) {
-                        continue;
-                    }
-
-                    recorder.TransitionImageLayout(
-                        commandBufferHandle: commandBuffer,
-                        destinationAccessMask: GpuComputeAccess.ShaderWrite,
-                        destinationStageMask: GpuComputeStage.ComputeShader,
-                        deviceHandle: m_deviceHandle,
-                        imageHandle: source.ImageHandle,
-                        newLayout: GpuImageLayout.General,
-                        oldLayout: GpuImageLayout.Undefined,
-                        sourceAccessMask: GpuComputeAccess.None,
-                        sourceStageMask: GpuComputeStage.TopOfPipe
-                    );
-                }
-
-                // The screen-source filler: ShaderReadOnly once, forever — it is never written, only sampled (or not
-                // sampled at all, when every screen slot is bound to a real source).
-                recorder.TransitionImageLayout(
-                    commandBufferHandle: commandBuffer,
-                    destinationAccessMask: GpuComputeAccess.ShaderRead,
-                    destinationStageMask: GpuComputeStage.ComputeShader,
-                    deviceHandle: m_deviceHandle,
-                    imageHandle: m_screenSourceFiller.ImageHandle,
-                    newLayout: GpuImageLayout.ShaderReadOnly,
-                    oldLayout: GpuImageLayout.Undefined,
-                    sourceAccessMask: GpuComputeAccess.None,
-                    sourceStageMask: GpuComputeStage.TopOfPipe
-                );
-            }
 
             // Stage 1: render each viewport's SDF camera into its own source texture — dispatched INDIRECTLY from the
             // GPU-computed surviving-tile bbox; the all-empty margins are never dispatched; the kernel offsets each

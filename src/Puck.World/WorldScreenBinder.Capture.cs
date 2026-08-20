@@ -130,6 +130,8 @@ internal sealed partial class WorldScreenBinder {
         if (session.IsEnded) {
             session.Dispose();
             feed.Session = null;
+            // AppliedControls is session-scoped: a future replacement device must receive the authored state again.
+            feed.AppliedControls = null;
             feed.Live = false;
             feed.Fault = "camera disconnected";
 
@@ -273,6 +275,8 @@ internal sealed partial class WorldScreenBinder {
             feed.GpuTargets = images;
             feed.GpuImports = imports;
             feed.GpuImportedViews = importedViews;
+            // The idempotence cache belongs to the control surface, not the feed: this is a newly opened device.
+            feed.AppliedControls = null;
             session = opened;
             ApplyCameraControls(
                 desired: m_cameraControls,
@@ -281,11 +285,23 @@ internal sealed partial class WorldScreenBinder {
         }
 
         if (session.IsEnded) {
+            // Start only wakes the platform worker; opening the shared handles happens asynchronously. An end before
+            // the first published slot is therefore a refused GPU start (including an OpenSharedTexture failure), not
+            // a live camera disconnect, and must take the advertised CPU fallback instead of retrying GPU forever.
+            var publishedFrame = (session.LatestSlot >= 0);
+
             session.Dispose();
             feed.SharedSession = null;
+            feed.AppliedControls = null;
             feed.ReleaseGpuTargets();
             feed.Live = false;
-            feed.Fault = "camera disconnected";
+
+            if (!publishedFrame) {
+                Console.Error.WriteLine(value: "[camera] GPU tier ended before its first shared frame; falling back to the CPU tier.");
+                FallBackToCpuCamera(feed: feed);
+            } else {
+                feed.Fault = "camera disconnected";
+            }
 
             return;
         }
@@ -397,6 +413,9 @@ internal sealed partial class WorldScreenBinder {
     // cannot open at all.
     private void FallBackToCpuCamera(CameraFeed feed) {
         feed.GpuRoute = false;
+        // A prior GPU surface may have received the same authored record. The CPU session below is a different control
+        // surface and must not inherit that idempotence decision.
+        feed.AppliedControls = null;
 
         if (m_cameraCapture.TryOpenDefault(
             requestedWidth: feed.Profile.Width,
@@ -974,6 +993,7 @@ internal sealed partial class WorldScreenBinder {
             if (SharedSession is not null) {
                 SharedSession.Dispose();
                 SharedSession = null;
+                AppliedControls = null;
                 Live = false;
             }
 

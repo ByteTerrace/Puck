@@ -133,6 +133,7 @@ public sealed partial class SdfWorldEngine {
             format: Format,
             height: 1,
             sourceImageHandle: reportImage.ImageHandle,
+            sourceLayout: GpuImageLayout.ShaderReadOnly,
             width: 1
         );
     }

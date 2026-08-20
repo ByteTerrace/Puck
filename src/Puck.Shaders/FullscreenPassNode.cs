@@ -203,6 +203,7 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
             format: GpuPixelFormat.R8G8B8A8Unorm,
             height: m_height,
             sourceImageHandle: m_renderTarget!.ImageHandle,
+            sourceLayout: GpuImageLayout.ShaderReadOnly,
             width: m_width
         );
 

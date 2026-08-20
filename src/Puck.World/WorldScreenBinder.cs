@@ -550,6 +550,23 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
 
         m_cameraFeed?.NotifyDeviceLost();
 
+        // The Vulkan camera route's headless D3D12 device and the cached render LUID describe the OLD render adapter.
+        // Release the device only after the feed dropped every target allocated on it, then let the next Publish read
+        // the replacement renderer's LUID (which may identify a different physical adapter after recovery).
+        if (
+            (m_cameraTargetDevice is { } cameraTargetDevice) &&
+            OperatingSystem.IsWindowsVersionAtLeast(
+            major: 10,
+            minor: 0,
+            build: 10240
+        )
+        ) {
+            cameraTargetDevice.Dispose();
+            m_cameraTargetDevice = null;
+        }
+
+        m_renderAdapterLuid = null;
+
         foreach (var slot in m_slots.Values) {
             slot.Capture?.NotifyDeviceLost();
         }

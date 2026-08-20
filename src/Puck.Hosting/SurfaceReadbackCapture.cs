@@ -39,6 +39,7 @@ public static class SurfaceReadbackCapture {
             format: format,
             height: surface.Height,
             sourceImageHandle: imageHandle,
+            sourceLayout: GpuImageLayout.ShaderReadOnly,
             width: surface.Width
         );
 

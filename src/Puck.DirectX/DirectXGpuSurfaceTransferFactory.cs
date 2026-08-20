@@ -51,14 +51,15 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
         GpuPixelFormat format,
         uint width,
         uint height,
-        uint bytesPerPixel
+        uint bytesPerPixel,
+        GpuImageLayout sourceLayout
     ) {
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
 
         var device = ((ID3D12Device*)deviceContext.Device.Handle);
 
         EnsureReadbackBuffer(bytesPerPixel: bytesPerPixel, device: device, height: height, width: width);
-        RecordCopyCommandList(commandAllocator: out var commandAllocator, commandList: out var commandList, device: device, format: format, height: height, sourceImageHandle: sourceImageHandle, width: width);
+        RecordCopyCommandList(commandAllocator: out var commandAllocator, commandList: out var commandList, device: device, format: format, height: height, sourceImageHandle: sourceImageHandle, sourceLayout: sourceLayout, width: width);
 
         var executable = ((ID3D12CommandList*)commandList);
 
@@ -76,7 +77,8 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
         GpuPixelFormat format,
         uint width,
         uint height,
-        uint bytesPerPixel
+        uint bytesPerPixel,
+        GpuImageLayout sourceLayout
     ) {
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
 
@@ -88,7 +90,7 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
 
         EnsureReadbackBuffer(bytesPerPixel: bytesPerPixel, device: device, height: height, width: width);
         EnsureFence(device: device);
-        RecordCopyCommandList(commandAllocator: out var commandAllocator, commandList: out var commandList, device: device, format: format, height: height, sourceImageHandle: sourceImageHandle, width: width);
+        RecordCopyCommandList(commandAllocator: out var commandAllocator, commandList: out var commandList, device: device, format: format, height: height, sourceImageHandle: sourceImageHandle, sourceLayout: sourceLayout, width: width);
 
         var executable = ((ID3D12CommandList*)commandList);
         var queue = ((ID3D12CommandQueue*)deviceContext.CommandQueueHandle);
@@ -205,10 +207,19 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
         m_currentBytesPerPixel = bytesPerPixel;
         m_outputBuffer = new byte[(packedRowBytes * height)];
     }
-    // Creates a per-copy allocator + list and records barrier → CopyTextureRegion → barrier → Close: the source image
-    // (left in its pixel-shader-resource state) is copied into the readback buffer's placed footprint.
-    private void RecordCopyCommandList(ID3D12Device* device, nint sourceImageHandle, GpuPixelFormat format, uint width, uint height, out nint commandAllocator, out nint commandList) {
+    // The caller-supplied state is restored after the copy. ShaderReadOnly retains the original transition pair
+    // byte-for-byte; General names storage images whose D3D12 resource state is UNORDERED_ACCESS.
+    private void RecordCopyCommandList(ID3D12Device* device, nint sourceImageHandle, GpuPixelFormat format, uint width, uint height, GpuImageLayout sourceLayout, out nint commandAllocator, out nint commandList) {
         var dxgiFormat = DirectXGpuFormats.ToDxgiFormat(gpuPixelFormat: format);
+        var sourceState = sourceLayout switch {
+            GpuImageLayout.General => D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+            GpuImageLayout.ShaderReadOnly => D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+            _ => throw new ArgumentOutOfRangeException(
+                paramName: nameof(sourceLayout),
+                actualValue: sourceLayout,
+                message: "Readback requires a General or ShaderReadOnly source image."
+            ),
+        };
 
         device->CreateCommandAllocator(
             ppCommandAllocator: out var ca,
@@ -236,7 +247,7 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
 
         toCopySource.Anonymous.Transition = new D3D12_RESOURCE_TRANSITION_BARRIER {
             StateAfter = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_SOURCE,
-            StateBefore = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+            StateBefore = sourceState,
             Subresource = 0xFFFFFFFF,
             pResource = sourceResource,
         };
@@ -272,7 +283,7 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
         };
 
         toShaderResource.Anonymous.Transition = new D3D12_RESOURCE_TRANSITION_BARRIER {
-            StateAfter = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+            StateAfter = sourceState,
             StateBefore = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_SOURCE,
             Subresource = 0xFFFFFFFF,
             pResource = sourceResource,

@@ -53,21 +53,23 @@ public sealed class VulkanGpuSurfaceTransferFactory(
 }
 
 file sealed class VulkanGpuSurfaceReadback(VulkanSurfaceReadback inner) : IGpuSurfaceReadback {
-    public ReadOnlyMemory<byte> Read(IGpuDeviceContext deviceContext, nint sourceImageHandle, GpuPixelFormat format, uint width, uint height, uint bytesPerPixel) =>
+    public ReadOnlyMemory<byte> Read(IGpuDeviceContext deviceContext, nint sourceImageHandle, GpuPixelFormat format, uint width, uint height, uint bytesPerPixel, GpuImageLayout sourceLayout) =>
         inner.Read(
             bytesPerPixel: bytesPerPixel,
             deviceContext: ((IVulkanDeviceContext)deviceContext),
             height: height,
             sourceImageHandle: sourceImageHandle,
+            sourceLayout: sourceLayout,
             vulkanFormat: VulkanGpuFormats.ToVkFormat(gpuPixelFormat: format),
             width: width
         );
-    public void SubmitRead(IGpuDeviceContext deviceContext, nint sourceImageHandle, GpuPixelFormat format, uint width, uint height, uint bytesPerPixel) =>
+    public void SubmitRead(IGpuDeviceContext deviceContext, nint sourceImageHandle, GpuPixelFormat format, uint width, uint height, uint bytesPerPixel, GpuImageLayout sourceLayout) =>
         inner.SubmitRead(
             bytesPerPixel: bytesPerPixel,
             deviceContext: ((IVulkanDeviceContext)deviceContext),
             height: height,
             sourceImageHandle: sourceImageHandle,
+            sourceLayout: sourceLayout,
             vulkanFormat: VulkanGpuFormats.ToVkFormat(gpuPixelFormat: format),
             width: width
         );
