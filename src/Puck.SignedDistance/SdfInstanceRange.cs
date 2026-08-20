@@ -13,9 +13,10 @@ namespace Puck.SignedDistance;
 /// <param name="End">The instance's instruction end index (exclusive).</param>
 /// <param name="IsDynamic">Whether the bound center tracks a dynamic-transform slot (<see cref="Slot"/>) rather than
 /// being a fixed world-space point.</param>
-/// <param name="Center">A STATIC instance's world-space bound center; a DYNAMIC instance's pre-dynamic offset (added
-/// to the slot's per-frame position on the GPU — no quaternion rotate).</param>
-/// <param name="Radius">The bound radius (post-dynamic local geometry folded in for a dynamic instance).</param>
+/// <param name="Center">A STATIC instance's finite world-space bound center; a DYNAMIC instance's finite pre-dynamic
+/// offset (added to the slot's per-frame position on the GPU — no quaternion rotate).</param>
+/// <param name="Radius">The finite, non-negative bound radius (post-dynamic local geometry folded in for a dynamic
+/// instance).</param>
 /// <param name="Slot">The dynamic-transform slot index; meaningless when <see cref="IsDynamic"/> is <see langword="false"/>.</param>
 /// <param name="Active">Whether the instance participates in the tile-cull scan. A PARKED instance (<see langword="false"/>)
 /// still occupies its reserved instance/dynamic-transform slot (so a pool's live-emission always fits the once-sized

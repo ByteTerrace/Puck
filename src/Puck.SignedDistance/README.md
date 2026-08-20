@@ -58,8 +58,10 @@ writes straight into GPU words: shape/blend/material lane domains, finiteness
 of every operand lane except the reinterpreted integer fields (`Glyph`'s packed
 UV rect, `SampledRegion`'s packed dimensions and pool offset), the divisors an
 exact core projects by (a trapezoid's profile slant, a screen surface's two
-half-extents), the screen frame's orthonormality, and instance ranges that
-partition the instructions they claim rather than overlapping.
+half-extents), finite non-negative material values and instance bounds, finite
+screen origins, the screen frame's orthonormality, instance ranges that
+partition the instructions they claim rather than overlapping, and balanced
+one-deep field scopes that never cross an instance boundary.
 
 ## 🔍 The CPU query layer (`Puck.SignedDistance.Queries`)
 
@@ -77,7 +79,18 @@ per-tick exactness. Both providers rebase every position against the world
 origin, so a `FixedPosition`'s hierarchy cell is part of the query; the baked
 provider additionally refuses by name a radius spanning more than
 `BakedWorldQuery.MaxRadiusCells` of its artifact's cells, its cell walk being
-quadratic in the radius with no occupancy hierarchy behind it.
+quadratic in the radius with no occupancy hierarchy behind it. `WorldQueryBaker`
+also refuses a grid above `DefaultMaxCellCount` before allocating either layer;
+callers with a measured larger budget can pass it explicitly.
+
+The live evaluator applies `SdfProgram.StepScale` before subtracting a swept
+sphere's radius. If that lower bound becomes too small to prove another
+fixed-point step is safe before the raw field converges, the cast reports a
+`Bounded` obstruction and `Overlap` resolves toward occupied. That conservative
+answer prevents a chamfer or eccentric ellipsoid from turning an uncertain
+sweep into a false clear result. `Overlap` likewise reports occupied when a
+populated program cannot rebase an extreme hierarchical position into Q48.16;
+an unrepresentable point is not evidence of empty space.
 
 The evaluator's constructor walks the instruction stream once, asserting
 every op/shape is in the supported rigid subset — it throws naming the first

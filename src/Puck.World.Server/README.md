@@ -468,7 +468,15 @@ the WASM guest ABI decode, the addon.mutate refusal catalog — is
 `WorldOwnedWorlds` loads one `puck.world.def.v1` file per identity from
 `owned-worlds` beneath the state root, plus any hand-placed basis chain link
 under its `owned-worlds/basis/` subdirectory (outside the catalog's own
-directory glob, so a link never enumerates as a second owned world). The
+directory glob, so a link never enumerates as a second owned world). A document
+the catalog cannot parse or validate is DISCARDED, not tolerated: the file moves
+once into `owned-worlds/unloadable/` (also outside the glob, so it never
+enumerates again), and the whole sweep reports as one stderr line grouping the
+discarded file names by their shared reason. Nothing distinguishes a retired
+document shape from a corrupt file here, so neither is silently eaten and
+neither is migrated — the catalog left empty re-seeds from
+`playerDefaults.identities`, and `identity.list`'s `discarded=` column is the
+read-back. The
 machine-local installation id stays separate in `machine.id`; controller
 recognition is stored through named text state rows in the owned world.
 `--user-id` and `--state-dir` still resolve who is playing and where those

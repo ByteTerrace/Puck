@@ -16,6 +16,11 @@ public static class WorldQueryBaker {
     /// (no rounding), like the walk grid's cell size.</summary>
     public const float CellSize = 0.25f;
 
+    /// <summary>The default maximum number of cells one bake may allocate. At the default resolution this admits a
+    /// square up to 512 world units on each side (2048 by 2048 cells) and retains about 32.5 MiB across the height and
+    /// blocked layers. Call the overload taking <c>maxCellCount</c> to choose a different explicit budget.</summary>
+    public const int DefaultMaxCellCount = 4_194_304;
+
     // A rectangle edge that is not finite has no cell span: NaN compares false against every bound and quantizes to
     // 0, and an infinity quantizes to the Q48.16 carrier's extreme. Either one bakes as authored geometry
     // indistinguishable from a real edge, so both are refused here rather than at the cell loop.
@@ -244,10 +249,41 @@ public static class WorldQueryBaker {
     /// <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">A grid bound, a rectangle edge, or a terrain height is not finite; a grid
     /// bound or a terrain height lies outside the Q48.16 range the artifact stores; a maximum edge lies below its
-    /// minimum; or the grid spans more cells than a 32-bit cell index addresses.</exception>
-    public static WorldQueryArtifact Bake(float minX, float minZ, float maxX, float maxZ, IEnumerable<WorldQueryTerrainInput> terrain, IEnumerable<WorldQueryBlockerInput> blockers) {
+    /// minimum; the grid spans more cells than a 32-bit cell index addresses; or the grid exceeds
+    /// <see cref="DefaultMaxCellCount"/>.</exception>
+    public static WorldQueryArtifact Bake(float minX, float minZ, float maxX, float maxZ, IEnumerable<WorldQueryTerrainInput> terrain, IEnumerable<WorldQueryBlockerInput> blockers) =>
+        Bake(
+            blockers: blockers,
+            maxCellCount: DefaultMaxCellCount,
+            maxX: maxX,
+            maxZ: maxZ,
+            minX: minX,
+            minZ: minZ,
+            terrain: terrain
+        );
+
+    /// <summary>Bakes an artifact under an explicit allocation ceiling. The grid is refused before either per-cell
+    /// layer is allocated when its dimensions exceed <paramref name="maxCellCount"/>.</summary>
+    /// <param name="minX">The grid's minimum X bound (world units).</param>
+    /// <param name="minZ">The grid's minimum Z bound.</param>
+    /// <param name="maxX">The grid's maximum X bound.</param>
+    /// <param name="maxZ">The grid's maximum Z bound.</param>
+    /// <param name="terrain">Terrain rectangles, applied in order.</param>
+    /// <param name="blockers">Blocker rectangles; any covered cell is marked blocked.</param>
+    /// <param name="maxCellCount">The maximum number of cells this call may allocate; must be positive.</param>
+    /// <returns>The baked artifact.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="terrain"/> or <paramref name="blockers"/> is
+    /// <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="maxCellCount"/> is not positive.</exception>
+    /// <exception cref="ArgumentException">An authored value is invalid, the grid exceeds the coordinate/index
+    /// carriers, or its cell count exceeds <paramref name="maxCellCount"/>.</exception>
+    public static WorldQueryArtifact Bake(float minX, float minZ, float maxX, float maxZ, IEnumerable<WorldQueryTerrainInput> terrain, IEnumerable<WorldQueryBlockerInput> blockers, int maxCellCount) {
         ArgumentNullException.ThrowIfNull(argument: terrain);
         ArgumentNullException.ThrowIfNull(argument: blockers);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(
+            paramName: nameof(maxCellCount),
+            value: maxCellCount
+        );
 
         var originXRaw = QuantizeBound(
             paramName: nameof(minX),
@@ -296,6 +332,13 @@ public static class WorldQueryBaker {
             throw new ArgumentException(
                 message: $"A {width}x{height} grid holds {cellCountLong} cells, which overflows a 32-bit cell index.",
                 paramName: nameof(maxX)
+            );
+        }
+
+        if (cellCountLong > maxCellCount) {
+            throw new ArgumentException(
+                message: $"A {width}x{height} grid holds {cellCountLong} cells, above this bake's {maxCellCount}-cell allocation budget. Raise maxCellCount explicitly or bake a smaller/coarser artifact.",
+                paramName: nameof(maxCellCount)
             );
         }
 
@@ -356,7 +399,9 @@ public static class WorldQueryBaker {
             blockerIndex++;
         }
 
-        return new WorldQueryArtifact(
+        // The baker created these arrays exclusively for the artifact, so transfer them instead of cloning both full
+        // layers and doubling the bake's transient working set. Public WorldQueryArtifact construction still copies.
+        return WorldQueryArtifact.CreateOwned(
             blocked: blocked,
             cellSizeRaw: CellSizeRaw,
             height: height,

@@ -19,6 +19,11 @@ public sealed partial class SdfProgram {
 
     private static readonly string[] OperandLaneNames = ["Data0.x", "Data0.y", "Data0.z", "Data0.w", "Data1.x", "Data1.y", "Data1.z", "Data1.w"];
 
+    private static bool IsFinite(Vector3 value) =>
+        float.IsFinite(f: value.X) &&
+        float.IsFinite(f: value.Y) &&
+        float.IsFinite(f: value.Z);
+
     private bool DeclaresScreenIndex(int screenIndex) {
         foreach (var surface in m_screenSurfaces) {
             if (surface.ScreenIndex == screenIndex) {
@@ -75,6 +80,31 @@ public sealed partial class SdfProgram {
             );
         }
     }
+    // The public constructor is an equal admission door to SdfProgramBuilder.Build: callers may assemble the packed
+    // tables directly, so material values need the same finite/non-negative domain AddMaterial enforces.
+    private static void RequirePackedMaterials(IReadOnlyList<SdfMaterial> materials, string paramName) {
+        for (var index = 0; (index < materials.Count); index++) {
+            var material = materials[index];
+
+            if (
+                !IsFinite(value: material.Albedo) ||
+                (material.Albedo.X < 0f) ||
+                (material.Albedo.Y < 0f) ||
+                (material.Albedo.Z < 0f) ||
+                !float.IsFinite(f: material.Emissive) ||
+                (material.Emissive < 0f) ||
+                !float.IsFinite(f: material.Specular) ||
+                (material.Specular < 0f) ||
+                !float.IsFinite(f: material.Shininess) ||
+                (material.Shininess < 0f)
+            ) {
+                throw new ArgumentOutOfRangeException(
+                    paramName: paramName,
+                    message: $"Material {index} must carry finite, non-negative albedo, emissive, specular, and shininess values; got {material}."
+                );
+            }
+        }
+    }
     // Instance ranges must PARTITION the instructions they claim. The segment walk attributes each segment to ONE owner,
     // so a second instance naming an instruction the first already owns packs the empty segment range [0, 0) while still
     // carrying a real cull bound: its geometry then renders only where the winner's mask bit happens to be set, and
@@ -108,6 +138,67 @@ public sealed partial class SdfProgram {
                     paramName: paramName
                 );
             }
+        }
+    }
+    // A PushField/PopField pair saves one accumulator slot in every interpreter. A hand-assembled stream must obey
+    // the same one-deep, balanced, single-owner discipline as the builder: crossing an instance boundary would let a
+    // masked segment observe a save or restore emitted by a different mask bit (or by the unmasked world stream).
+    private void RequireBalancedFieldScopes(string paramName) {
+        var instructionOwners = BuildInstructionOwners();
+        var scopeDepth = 0;
+        var scopeOwner = -1;
+
+        for (var index = 0; (index < m_instructions.Length); index++) {
+            var instruction = m_instructions[index];
+
+            if (
+                (scopeDepth > 0) &&
+                (instructionOwners[index] != scopeOwner)
+            ) {
+                throw new ArgumentException(
+                    message: $"The field scope opened before instruction {index} crosses from instruction owner {scopeOwner} to {instructionOwners[index]}. A scope must stay wholly inside one instance slice or wholly in the world stream.",
+                    paramName: paramName
+                );
+            }
+
+            if (instruction.Op == SdfOp.PushField) {
+                scopeDepth++;
+
+                if (scopeDepth > SdfProgramBuilder.MaxFieldScopeDepth) {
+                    throw new ArgumentException(
+                        message: $"Instruction {index} opens field-scope depth {scopeDepth}, above the supported maximum {SdfProgramBuilder.MaxFieldScopeDepth}.",
+                        paramName: paramName
+                    );
+                }
+
+                scopeOwner = instructionOwners[index];
+
+                continue;
+            }
+
+            if (instruction.Op != SdfOp.PopField) {
+                continue;
+            }
+
+            if (scopeDepth == 0) {
+                throw new ArgumentException(
+                    message: $"Instruction {index} closes a field scope when no PushField is open.",
+                    paramName: paramName
+                );
+            }
+
+            scopeDepth--;
+
+            if (scopeDepth == 0) {
+                scopeOwner = -1;
+            }
+        }
+
+        if (scopeDepth != 0) {
+            throw new ArgumentException(
+                message: "The instruction stream ends with an open PushField scope. Every field scope must close with PopField.",
+                paramName: paramName
+            );
         }
     }
     // The exact trapezoid core projects onto the slanted side by dividing by that side's squared length, so a profile
@@ -159,7 +250,9 @@ public sealed partial class SdfProgram {
     // ranges claiming one instruction leave the loser packing an empty segment range behind a live cull bound. Each is
     // refused by name here, at the type, rather than surfacing as an incidental IndexOutOfRangeException from a packing
     // loop or as pixels nobody can explain.
-    private void ValidatePackedContract(int materialCount, string instancesParamName, string instructionsParamName, string screenSurfacesParamName) {
+    private void ValidatePackedContract(IReadOnlyList<SdfMaterial> materials, string instancesParamName, string instructionsParamName, string screenSurfacesParamName) {
+        var materialCount = materials.Count;
+
         // Ids from SdfProgramBuilder.ScreenMaterialId up decode as screen shading, so a palette reaching that far
         // carries rows no instruction can name (SdfProgramBuilder.AddMaterial refuses the same row at its own door).
         if (materialCount > SdfProgramBuilder.ScreenMaterialId) {
@@ -168,6 +261,11 @@ public sealed partial class SdfProgram {
                 paramName: "materials"
             );
         }
+
+        RequirePackedMaterials(
+            materials: materials,
+            paramName: "materials"
+        );
 
         for (var index = 0; (index < m_instructions.Length); index++) {
             var instruction = m_instructions[index];
@@ -263,11 +361,20 @@ public sealed partial class SdfProgram {
 
             seenScreenIndices |= bit;
 
+            if (!IsFinite(value: surface.Origin)) {
+                throw new ArgumentOutOfRangeException(
+                    paramName: screenSurfacesParamName,
+                    message: $"A screen surface's origin must be finite; got {surface.Origin}."
+                );
+            }
+
             // sampleScreenSurface resolves the UV as dot(local, right)/right.w and dot(local, up)/up.w, so a zero (or
             // NaN) half-extent maps every hit on a reachable surface to a non-finite UV. KEEP IN SYNC with
             // SdfProgramBuilder's indexed ScreenSlab overload, which refuses the same face naming halfExtents. The
             // slab's DEPTH half-extent is unconstrained here: nothing divides by it.
             if (
+                !float.IsFinite(f: surface.HalfWidth) ||
+                !float.IsFinite(f: surface.HalfHeight) ||
                 !(surface.HalfWidth > 0f) ||
                 !(surface.HalfHeight > 0f)
             ) {
@@ -294,9 +401,20 @@ public sealed partial class SdfProgram {
                     message: $"An instance range must satisfy 0 <= First <= End <= {m_instructions.Length}; got [{instance.First}, {instance.End})."
                 );
             }
+            if (
+                !IsFinite(value: instance.Center) ||
+                !float.IsFinite(f: instance.Radius) ||
+                (instance.Radius < 0f)
+            ) {
+                throw new ArgumentOutOfRangeException(
+                    paramName: instancesParamName,
+                    message: $"An instance bound must carry a finite center and a finite, non-negative radius; got center {instance.Center} and radius {instance.Radius}."
+                );
+            }
         }
 
         RequireDisjointInstanceRanges(paramName: instancesParamName);
+        RequireBalancedFieldScopes(paramName: instructionsParamName);
     }
     public void ValidateIsa() {
         for (var index = 0; (index < m_instructions.Length); index++) {

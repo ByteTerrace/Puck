@@ -111,6 +111,12 @@ decode to a direct screen-surface index. Both ends of the band are bounded on
 the host, and the shader bounds the decoded index before it reads any screen
 table, so an out-of-range identifier cannot resolve to a driver-dependent read.
 
+Every material component is finite and non-negative at both admission doors:
+`SdfProgramBuilder.AddMaterial` and the public packed-program constructor. The
+latter also validates finite screen origins and finite, non-negative instance
+bounds. These values are uploaded as table data rather than instruction operand
+lanes, so the instruction finiteness sweep cannot cover them.
+
 ## Text tiers
 
 `Glyph` creates marchable extruded geometry from the atlas distance channel.

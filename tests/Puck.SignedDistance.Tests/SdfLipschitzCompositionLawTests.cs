@@ -269,6 +269,51 @@ public sealed class SdfLipschitzCompositionLawTests {
         );
     }
 
+    /// <summary>A radius must be subtracted after the field is scaled. Once that lower bound can no longer prove the
+    /// sphere is separated, authoritative queries must resolve toward obstruction instead of continuing to a raw-field
+    /// threshold that lies inside the true contact envelope.</summary>
+    [Fact]
+    public void ChamferedFieldUsesTheStepScaleForSphereQueries() {
+        var program = BuildChamferStack(
+            slabCount: 3,
+            plateBottomY: -100f
+        );
+        var evaluator = new SdfFieldEvaluator(program: program);
+        var top = ScanTopSurface(
+            evaluator: evaluator,
+            startY: 3.0,
+            stopY: 0.0
+        );
+        var radius = FixedQ4816.FromDouble(value: 0.1);
+        var overlapCenterY = (top + 0.09);
+        var rawDistance = FieldAt(
+            evaluator: evaluator,
+            y: overlapCenterY
+        );
+
+        Assert.True(condition: (rawDistance > radius));
+        Assert.True(condition: ((rawDistance * FixedQ4816.FromDouble(value: program.StepScale)) <= radius));
+        Assert.True(condition: evaluator.Overlap(
+            center: Position(y: overlapCenterY),
+            radius: radius
+        ));
+
+        var trueContactTravel = (6.0 - (top + 0.1));
+
+        Assert.True(condition: evaluator.SphereCast(
+            dir: Down,
+            hit: out var hit,
+            maxDist: FixedQ4816.FromDouble(value: (trueContactTravel + 0.002)),
+            origin: Position(y: 6.0),
+            radius: radius
+        ));
+        Assert.Equal(
+            expected: WorldQueryConfidence.Bounded,
+            actual: hit.Confidence
+        );
+        Assert.True(condition: (((double)hit.Distance) <= (trueContactTravel + 0.001)));
+    }
+
     [Fact]
     public void ChamferFreeCastIsUnchangedByTheStepClamp() {
         // The other control: a warp-free program bakes stepScale 1.0f, so its cast advances by the raw field exactly as

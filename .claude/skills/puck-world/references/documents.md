@@ -890,9 +890,22 @@ CONSTRUCTION — two identities can no more share a file than they can share an
 id. A loaded file whose name does not match `WorldOwnedWorldFileName.For` of
 its OWN declared identity `id` is refused by name (`[identity] owned world
 refused: …`, distinguishing "the file already holding that id" from "a name
-it does not carry") rather than silently renamed or merged; a document that
-fails to parse/validate is refused the same way and simply excluded from the
-catalog — never a hard boot failure.
+it does not carry") rather than silently renamed or merged — that document
+parses, so it stays where it is and the refusal names the remedy.
+
+A document that fails to PARSE or VALIDATE is DISCARDED instead, once, and
+never a hard boot failure: the file moves into the `unloadable/` subdirectory
+(outside the catalog's `*.world.json` top-directory glob, like `basis/`), so
+the next boot has nothing left to refuse. The whole sweep narrates as ONE
+stderr line — `[identity] discarded N unloadable owned world(s) into '…'` —
+grouping the discarded file names by their shared reason, so one retired
+document shape across a directory reads as one group and a lone corrupt file
+stands in a group of its own. There is no migration and no read-side tolerance
+for a retired shape: an emptied catalog re-seeds from
+`playerDefaults.identities`, and a catalog that still holds documents simply
+lacks the discarded ids. Read back with `WorldOwnedWorlds.Discarded` and
+`identity.list`'s `discarded=` column; the moved bytes stay readable under
+`unloadable/`.
 
 **Seeding.** When the identity directory holds zero admitted documents,
 `WorldOwnedWorlds` seeds one owned world per `playerDefaults.identities` row
