@@ -62,7 +62,7 @@ public enum WorldSeatYawReference : byte {
 /// <param name="Layouts">The authored named layouts (empty = the built-in ladder).</param>
 /// <param name="CameraRig">The program a seat's view resolves through while its published mode state targets
 /// <see cref="WorldSeatModeState.CameraTarget"/> — <see langword="null"/> for a world that authors no
-/// camera-targeting mode state. Resolved through the ordinary <c>Puck.World.WorldCameraRigCompiler</c> pipeline
+/// camera-targeting mode state. Resolved through the ordinary <c>Puck.World.Client.WorldCameraRigCompiler</c> pipeline
 /// against whichever body the seat currently perceives from (the possessed camera body — see
 /// <c>Puck.World.Server.WorldEngagement</c>), exactly like <see cref="SeatRig"/> resolves against the seat's own
 /// avatar; no bespoke per-frame integrator reads this field.</param>

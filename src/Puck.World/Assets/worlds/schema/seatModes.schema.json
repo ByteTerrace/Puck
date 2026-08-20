@@ -33,7 +33,7 @@
               "type": "string"
             },
             "target": {
-              "description": "The control application this state drives, or null for an ordinary state (the seat drives its own body normally). \u0022camera\u0022 is the only admitted value: entering the state diverts the seat\u0027s own body intent to Idle (the existing player.control idle contract) and drives the world-authored views.flyRig from the seat\u0027s channels instead.",
+              "description": "The control application this state drives, or null for an ordinary state (the seat drives its own body normally). \u0022camera\u0022 is the only admitted value: entering the state possesses the seat\u0027s declared camera body (see CameraPlacementIdPrefix) through the ordinary Engage door (PlayerCommandModule.Mode.cs), diverting the seat\u0027s own body intent to Idle and resolving its view through views.cameraRig instead.",
               "type": [
                 "string",
                 "null"

@@ -191,8 +191,8 @@ Facts a script needs:
   machine host is core state that boots and steps in every shape, and the
   binder is CORE too, since `world.faces`/`player.engage` read its bound/
   no-signal state even headless — every server-safe command module including
-  `ScreenCommandModule`, and the fly camera application (`WorldSeatFlyRig`,
-  the `player.mode` verb) — for command-vocabulary parity: a world's binding document commits
+  `ScreenCommandModule`, and the camera control application (the `player.mode`
+  and `player.camera` verbs) — for command-vocabulary parity: a world's binding document commits
   that vocabulary in every boot shape, and the validator checks it against what
   the shape registers) vs. everything genuinely presentation-only (the GPU host,
   render root, overlays, the audio device, gamepads). `WorldUiCommandModule`

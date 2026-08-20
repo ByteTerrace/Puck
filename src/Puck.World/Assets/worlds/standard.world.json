@@ -373,9 +373,9 @@
         ],
         "contexts": [
           {
-            "family": "editing",
+            "family": "camera",
             "group": "flying",
-            "state": "on"
+            "state": "free"
           }
         ],
         "modifiers": [

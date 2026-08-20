@@ -157,7 +157,7 @@ internal sealed class WorldOverlayFacts {
         slot: slot,
         visible: out var visible
     ) && visible),
-        OverlayFact.SeatFlying => m_seatBindings.IsCameraModeActive(slot: slot),
+        OverlayFact.SeatCameraApplication => m_seatBindings.IsCameraModeActive(slot: slot),
         _ => false,
     };
 

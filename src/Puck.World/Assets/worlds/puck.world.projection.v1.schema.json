@@ -1655,7 +1655,7 @@
                 "additionalProperties": false
               },
               {
-                "description": "Rides the smoothed CENTROID of a set of population entities \u2014 the establishing-shot anchor. Also publishes the set\u0027s SPREAD (mean distance from the centroid), which Follow consumes through its SpreadPullback. A group has no facing, so its orientation resolves to identity.",
+                "description": "Rides the smoothed CENTROID of a set of population entities \u2014 the establishing-shot anchor. Also publishes the set\u0027s SPREAD (mean distance from the centroid), which a camera program\u0027s Offset consumes through its SpreadPullback. A group has no facing, so its orientation resolves to identity.",
                 "properties": {
                   "$type": {
                     "const": "group"
@@ -1687,285 +1687,474 @@
             "description": "The independent local motion, aim, and lens axes.",
             "type": "object",
             "properties": {
-              "motion": {
-                "description": "The camera-local eye motion evaluated after its reference frame resolves.",
-                "type": "object",
-                "required": [
-                  "$type"
-                ],
-                "anyOf": [
-                  {
-                    "description": "A free camera driven directly by a seat\u0027s channel-role input rather than a reference frame \u2014 the live eye/yaw/pitch are presentation-carried state (never authored per instance), advanced each frame from the SAME move/look samples a body seat\u0027s channels carry. Never resolved through Puck.World.WorldCameraRigCompiler (it has no reference frame to resolve against); the seat\u0027s own fly-rig integrator (Client.WorldSeatFlyRig) reads only these tunables.",
-                    "properties": {
-                      "$type": {
-                        "const": "fly"
-                      },
-                      "minSpeed": {
-                        "description": "The slowest operator-settable fly speed, world units per second.",
-                        "type": "number"
-                      },
-                      "maxSpeed": {
-                        "description": "The fastest operator-settable fly speed, world units per second.",
-                        "type": "number"
-                      },
-                      "defaultSpeed": {
-                        "description": "The fly speed a seat starts at on entry, clamped to [MinSpeed, MaxSpeed].",
-                        "type": "number"
-                      },
-                      "lookRateRadiansPerSecond": {
-                        "description": "The look input\u0027s angular rate at full deflection.",
-                        "type": "number"
-                      },
-                      "maxPitchRadians": {
-                        "description": "The pitch clamp, symmetric about level.",
-                        "type": "number"
-                      }
-                    },
-                    "required": [
-                      "minSpeed",
-                      "maxSpeed",
-                      "defaultSpeed",
-                      "lookRateRadiansPerSecond",
-                      "maxPitchRadians"
-                    ],
-                    "additionalProperties": false
-                  },
-                  {
-                    "description": "Follows the reference frame at a fixed offset.",
-                    "properties": {
-                      "$type": {
-                        "const": "follow"
-                      },
-                      "offset": {
-                        "description": "The eye offset in world or reference-local axes."
-                      },
-                      "worldAxes": {
-                        "description": "Whether Offset uses world axes.",
-                        "type": "boolean"
-                      },
-                      "spreadPullback": {
-                        "description": "The group-spread multiplier applied to the offset.",
-                        "type": "number"
-                      }
-                    },
-                    "required": [
-                      "offset",
-                      "worldAxes",
-                      "spreadPullback"
-                    ],
-                    "additionalProperties": false
-                  },
-                  {
-                    "description": "Orbits a reference-frame pivot.",
-                    "properties": {
-                      "$type": {
-                        "const": "orbit"
-                      },
-                      "distance": {
-                        "description": "The orbit distance.",
-                        "type": "number"
-                      },
-                      "yaw": {
-                        "description": "The orbit heading in radians.",
-                        "type": "number"
-                      },
-                      "pitch": {
-                        "description": "The orbit tilt in radians.",
-                        "type": "number"
-                      },
-                      "pivotOffset": {
-                        "description": "The world-axis offset from the reference-frame origin to the pivot."
-                      }
-                    },
-                    "required": [
-                      "distance",
-                      "yaw",
-                      "pitch",
-                      "pivotOffset"
-                    ],
-                    "additionalProperties": false
-                  },
-                  {
-                    "description": "Holds an eye position in world or reference-local axes.",
-                    "properties": {
-                      "$type": {
-                        "const": "static"
-                      },
-                      "position": {
-                        "description": "The eye position or offset."
-                      },
-                      "worldAxes": {
-                        "description": "Whether Position is an absolute world position.",
-                        "type": "boolean"
-                      }
-                    },
-                    "required": [
-                      "position",
-                      "worldAxes"
-                    ],
-                    "additionalProperties": false
-                  },
-                  {
-                    "description": "Evaluates a durable camera track through separate playback state.",
-                    "properties": {
-                      "$type": {
-                        "const": "track"
-                      },
-                      "definition": {
-                        "description": "The durable keyframes, interpolation, and clock domain.",
-                        "type": "object",
-                        "properties": {
-                          "clockDomain": {
-                            "description": "The clock that advances the track.",
-                            "enum": [
-                              "PresentationTime",
-                              "AuthoritativeTick"
-                            ]
-                          },
-                          "interpolation": {
-                            "description": "The interpolation applied between adjacent keyframes.",
-                            "enum": [
-                              "Step",
-                              "Linear"
-                            ]
-                          },
-                          "keyframes": {
-                            "description": "The keyframes in strictly increasing tick order.",
-                            "type": "array",
-                            "items": {
-                              "description": "One camera-track keyframe at a clock-relative tick.",
-                              "type": [
-                                "object",
-                                "null"
-                              ],
+              "name": {
+                "description": "The stable name a Blend op selects this program by.",
+                "type": "string"
+              },
+              "version": {
+                "description": "The instruction-set version.",
+                "type": "string"
+              },
+              "operations": {
+                "description": "The selected ops, in authored evaluation order.",
+                "type": "array",
+                "items": {
+                  "description": "One instruction in an authored camera program\u0027s ordered op list \u2014 the presentation-side pose algebra bodyMotionPrograms established for sim-side movement, promoted to cameras: an authored rig is an ordered list of these trivial ops rather than a bespoke closed motion/aim union, so a new camera behavior is authored data, never new engine code. This is the AUTHORING vocabulary only: Puck.World.Client.WorldCameraRigCompiler translates it to Puck.SdfVm.Views.SdfCameraOp and resolves each frame\u0027s bindings and subject poses, and Puck.SdfVm.Views.SdfCameraProgramEvaluator \u2014 which parses no document \u2014 walks the result. Floats throughout; presentation carries no fixed-point burden.",
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "required": [
+                    "$type"
+                  ],
+                  "anyOf": [
+                    {
+                      "description": "Establishes the CURRENT subject \u2014 the pose Offset/Orbit place the eye relative to, and LookAt aims along the facing of when it names no subject of its own. Also re-seeds the eye at the resolved subject\u0027s own position (the \u0022first person\u0022 default before any Offset/Orbit runs). At most one per program, and it must be the first operation when present; a program that omits it starts from Reference implicitly.",
+                      "properties": {
+                        "$type": {
+                          "const": "anchor"
+                        },
+                        "subject": {
+                          "description": "The subject to resolve.",
+                          "type": "object",
+                          "required": [
+                            "$type"
+                          ],
+                          "anyOf": [
+                            {
+                              "description": "The program\u0027s externally supplied reference pose \u2014 a named camera\u0027s own WorldAnchor, or a seat rig\u0027s currently perceived body (the seat\u0027s own avatar, or a possessed camera body). Resolved outside the program and handed to it as the SdfAnchor the compiled rig receives every frame.",
                               "properties": {
-                                "tick": {
-                                  "description": "The non-negative track-relative tick.",
-                                  "type": "integer"
+                                "$type": {
+                                  "const": "reference"
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            {
+                              "description": "Rides a placement\u0027s authored stamped transform (position only \u2014 a placement carries no live facing through this static resolve, the same limitation a placeable camera\u0027s own Placement arm and a speaker share).",
+                              "properties": {
+                                "$type": {
+                                  "const": "placement"
                                 },
-                                "position": {
-                                  "description": "The camera position at the tick."
+                                "placementId": {
+                                  "description": "The referenced Id (must resolve).",
+                                  "type": "string"
+                                },
+                                "shapeId": {
+                                  "description": "The referenced creation\u0027s own shape to ride, or null for the placement\u0027s stamped root transform.",
+                                  "type": [
+                                    "integer",
+                                    "null"
+                                  ],
+                                  "default": null
                                 }
                               },
                               "required": [
-                                "tick",
-                                "position"
+                                "placementId"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "description": "A fixed world-space point.",
+                              "properties": {
+                                "$type": {
+                                  "const": "worldPoint"
+                                },
+                                "point": {
+                                  "description": "The world-space position."
+                                }
+                              },
+                              "required": [
+                                "point"
                               ],
                               "additionalProperties": false
                             }
-                          }
+                          ]
                         },
-                        "required": [
-                          "clockDomain",
-                          "interpolation",
-                          "keyframes"
-                        ],
-                        "additionalProperties": false
+                        "opcode": {
+                          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
                       },
-                      "playback": {
-                        "description": "The playback start and loop policy.",
-                        "type": "object",
-                        "properties": {
-                          "startTick": {
-                            "description": "The selected clock\u0027s absolute tick at which playback starts.",
-                            "type": "integer"
-                          },
-                          "loopMode": {
-                            "description": "The end-of-track playback policy.",
-                            "enum": [
-                              "Once",
-                              "Loop",
-                              "PingPong"
-                            ]
-                          }
-                        },
-                        "required": [
-                          "startTick",
-                          "loopMode"
-                        ],
-                        "additionalProperties": false
-                      },
-                      "worldAxes": {
-                        "description": "Whether evaluated positions are absolute world positions.",
-                        "type": "boolean"
-                      }
+                      "required": [
+                        "subject"
+                      ],
+                      "additionalProperties": false
                     },
-                    "required": [
-                      "definition",
-                      "playback",
-                      "worldAxes"
-                    ],
-                    "additionalProperties": false
-                  }
-                ]
+                    {
+                      "description": "Places the eye at an offset from the current subject\u0027s pose.",
+                      "properties": {
+                        "$type": {
+                          "const": "offset"
+                        },
+                        "value": {
+                          "description": "The offset."
+                        },
+                        "worldAxes": {
+                          "description": "Whether Value uses world axes rather than the subject\u0027s own.",
+                          "type": "boolean",
+                          "default": false
+                        },
+                        "spreadPullback": {
+                          "description": "The group-spread multiplier applied to the offset \u2014 meaningful only when the program\u0027s OWN externally supplied reference is a Group establishing shot (zero, and thus inert, everywhere else).",
+                          "type": "number",
+                          "default": 0
+                        },
+                        "opcode": {
+                          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Sets the aim target.",
+                      "properties": {
+                        "$type": {
+                          "const": "lookAt"
+                        },
+                        "subject": {
+                          "description": "The subject to look at, or null to look along the current subject\u0027s own forward axis from the eye, at FocusDistance.",
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "required": [
+                            "$type"
+                          ],
+                          "anyOf": [
+                            {
+                              "description": "The program\u0027s externally supplied reference pose \u2014 a named camera\u0027s own WorldAnchor, or a seat rig\u0027s currently perceived body (the seat\u0027s own avatar, or a possessed camera body). Resolved outside the program and handed to it as the SdfAnchor the compiled rig receives every frame.",
+                              "properties": {
+                                "$type": {
+                                  "const": "reference"
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            {
+                              "description": "Rides a placement\u0027s authored stamped transform (position only \u2014 a placement carries no live facing through this static resolve, the same limitation a placeable camera\u0027s own Placement arm and a speaker share).",
+                              "properties": {
+                                "$type": {
+                                  "const": "placement"
+                                },
+                                "placementId": {
+                                  "description": "The referenced Id (must resolve).",
+                                  "type": "string"
+                                },
+                                "shapeId": {
+                                  "description": "The referenced creation\u0027s own shape to ride, or null for the placement\u0027s stamped root transform.",
+                                  "type": [
+                                    "integer",
+                                    "null"
+                                  ],
+                                  "default": null
+                                }
+                              },
+                              "required": [
+                                "placementId"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "description": "A fixed world-space point.",
+                              "properties": {
+                                "$type": {
+                                  "const": "worldPoint"
+                                },
+                                "point": {
+                                  "description": "The world-space position."
+                                }
+                              },
+                              "required": [
+                                "point"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "targetOffset": {
+                          "description": "An offset from the resolved Subject\u0027s pose; ignored when Subject is null.",
+                          "default": null
+                        },
+                        "worldAxes": {
+                          "description": "Whether TargetOffset uses world axes rather than the subject\u0027s own.",
+                          "type": "boolean",
+                          "default": false
+                        },
+                        "focusDistance": {
+                          "description": "The finite target distance along the current subject\u0027s forward axis, used only when Subject is null.",
+                          "type": "number",
+                          "default": 6
+                        },
+                        "opcode": {
+                          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "subject"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Places the eye by orbiting the current subject\u0027s pose. The seat-view pipeline adds a joined seat\u0027s live look input to Yaw/Pitch for an interactive program (see Puck.World.Client.WorldSeatCameraResolver); a non-interactive program (a named camera) renders the authored angles unchanged. At most one per program.",
+                      "properties": {
+                        "$type": {
+                          "const": "orbit"
+                        },
+                        "distance": {
+                          "description": "The orbit distance.",
+                          "type": "number"
+                        },
+                        "yaw": {
+                          "description": "The orbit heading in radians.",
+                          "type": "number"
+                        },
+                        "pitch": {
+                          "description": "The orbit tilt in radians.",
+                          "type": "number"
+                        },
+                        "pivotOffset": {
+                          "description": "The world-axis offset from the current subject\u0027s origin to the pivot.",
+                          "default": null
+                        },
+                        "opcode": {
+                          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "distance",
+                        "yaw",
+                        "pitch"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Sets the presentation-only exponential response rate (per second) the resolved eye/target boom eases at; zero disables smoothing. Read by the caller after resolving a frame \u2014 never affects the resolved pose itself. At most one per program.",
+                      "properties": {
+                        "$type": {
+                          "const": "smooth"
+                        },
+                        "rate": {
+                          "description": "The non-negative response rate.",
+                          "type": "number"
+                        },
+                        "opcode": {
+                          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "rate"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Clamps the effective pitch the NEXT Orbit op resolves with (its authored Pitch plus any live seat delta) to [MinPitch, MaxPitch]. At most one per program; must precede the Orbit op it governs. A joined seat\u0027s own views.seatControl band already clamps its LIVE delta before this ever runs \u2014 this op exists for a program with no seat behind it (a named camera orbiting a state-bound pitch).",
+                      "properties": {
+                        "$type": {
+                          "const": "clampPitch"
+                        },
+                        "minPitch": {
+                          "description": "The minimum pitch, radians.",
+                          "type": "number"
+                        },
+                        "maxPitch": {
+                          "description": "The maximum pitch, radians.",
+                          "type": "number"
+                        },
+                        "opcode": {
+                          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "minPitch",
+                        "maxPitch"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Sets the rendered vertical field of view, radians \u2014 a literal, or a state.\u003Crow\u003E[.\u003Ckey\u003E] binding so a world rule can pull focus or frame a moment (decisions in the sim, framing in presentation). At most one per program.",
+                      "properties": {
+                        "$type": {
+                          "const": "fov"
+                        },
+                        "fieldOfViewRadians": {
+                          "description": "The field of view."
+                        },
+                        "opcode": {
+                          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "fieldOfViewRadians"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Evaluates two other authored programs by name and linearly interpolates their resolved eye, target, and field of view \u2014 the whole document\u0027s camera-program table (every cameras[].rig plus views.seatRig/views.cameraRig) is the namespace A/B resolve against. At most one per program; refused when it would create a reference cycle.",
+                      "properties": {
+                        "$type": {
+                          "const": "blend"
+                        },
+                        "a": {
+                          "description": "The program resolved at Weight 0.",
+                          "type": "string"
+                        },
+                        "b": {
+                          "description": "The program resolved at Weight 1.",
+                          "type": "string"
+                        },
+                        "weight": {
+                          "description": "The blend weight in [0, 1] \u2014 a literal, or a state binding."
+                        },
+                        "opcode": {
+                          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "a",
+                        "b",
+                        "weight"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
               },
-              "aim": {
-                "description": "The framing policy that selects a target from the resolved eye and reference frame.",
-                "type": "object",
-                "required": [
-                  "$type"
+              "anchorOp": {
+                "description": "Gets the program\u0027s Anchor op, or null when absent (an absent anchor starts from Reference implicitly).",
+                "type": [
+                  "object",
+                  "null"
                 ],
-                "anyOf": [
-                  {
-                    "description": "Looks at an offset from the resolved reference frame.",
-                    "properties": {
-                      "$type": {
-                        "const": "anchor"
-                      },
-                      "offset": {
-                        "description": "The target offset."
-                      },
-                      "worldAxes": {
-                        "description": "Whether Offset uses world axes.",
-                        "type": "boolean"
-                      }
-                    },
-                    "required": [
-                      "offset",
-                      "worldAxes"
-                    ],
-                    "additionalProperties": false
+                "properties": {
+                  "subject": {
+                    "$ref": "#/properties/cameras/items/properties/rig/properties/operations/items/anyOf/0/properties/subject"
                   },
-                  {
-                    "description": "Looks along the reference frame\u0027s forward axis.",
-                    "properties": {
-                      "$type": {
-                        "const": "forward"
-                      },
-                      "focusDistance": {
-                        "description": "The finite target distance along forward.",
-                        "type": "number"
-                      }
-                    },
-                    "required": [
-                      "focusDistance"
-                    ],
-                    "additionalProperties": false
-                  },
-                  {
-                    "description": "Looks at a fixed world-space point.",
-                    "properties": {
-                      "$type": {
-                        "const": "worldPoint"
-                      },
-                      "target": {
-                        "description": "The world-space target."
-                      }
-                    },
-                    "required": [
-                      "target"
-                    ],
-                    "additionalProperties": false
+                  "opcode": {
+                    "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   }
-                ]
+                },
+                "required": [
+                  "subject"
+                ],
+                "additionalProperties": false
               },
-              "lens": {
-                "description": "The optical state applied to the rendered camera.",
-                "type": "object",
+              "blendOp": {
+                "description": "Gets the program\u0027s Blend op, or null.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "a": {
+                    "description": "The program resolved at Weight 0.",
+                    "type": "string"
+                  },
+                  "b": {
+                    "description": "The program resolved at Weight 1.",
+                    "type": "string"
+                  },
+                  "weight": {
+                    "description": "The blend weight in [0, 1] \u2014 a literal, or a state binding."
+                  },
+                  "opcode": {
+                    "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "a",
+                  "b",
+                  "weight"
+                ],
+                "additionalProperties": false
+              },
+              "clampPitchOp": {
+                "description": "Gets the program\u0027s ClampPitch op, or null.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "minPitch": {
+                    "description": "The minimum pitch, radians.",
+                    "type": "number"
+                  },
+                  "maxPitch": {
+                    "description": "The maximum pitch, radians.",
+                    "type": "number"
+                  },
+                  "opcode": {
+                    "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "minPitch",
+                  "maxPitch"
+                ],
+                "additionalProperties": false
+              },
+              "fovOp": {
+                "description": "Gets the program\u0027s Fov op, or null.",
+                "type": [
+                  "object",
+                  "null"
+                ],
                 "properties": {
                   "fieldOfViewRadians": {
-                    "description": "The vertical field of view in radians.",
-                    "type": "number"
+                    "description": "The field of view."
+                  },
+                  "opcode": {
+                    "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   }
                 },
                 "required": [
@@ -1973,16 +2162,143 @@
                 ],
                 "additionalProperties": false
               },
-              "smoothRate": {
-                "description": "The presentation-only exponential response rate (per second) the resolved eye eases at; zero disables smoothing. Applies to whichever motion the rig carries.",
-                "type": "number",
-                "default": 0
+              "lookAtOp": {
+                "description": "Gets the program\u0027s LookAt op, or null.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "subject": {
+                    "$ref": "#/properties/cameras/items/properties/rig/properties/operations/items/anyOf/2/properties/subject"
+                  },
+                  "targetOffset": {
+                    "description": "An offset from the resolved Subject\u0027s pose; ignored when Subject is null.",
+                    "default": null
+                  },
+                  "worldAxes": {
+                    "description": "Whether TargetOffset uses world axes rather than the subject\u0027s own.",
+                    "type": "boolean",
+                    "default": false
+                  },
+                  "focusDistance": {
+                    "description": "The finite target distance along the current subject\u0027s forward axis, used only when Subject is null.",
+                    "type": "number",
+                    "default": 6
+                  },
+                  "opcode": {
+                    "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "subject"
+                ],
+                "additionalProperties": false
+              },
+              "offsetOp": {
+                "description": "Gets the program\u0027s Offset op, or null.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "value": {
+                    "description": "The offset."
+                  },
+                  "worldAxes": {
+                    "description": "Whether Value uses world axes rather than the subject\u0027s own.",
+                    "type": "boolean",
+                    "default": false
+                  },
+                  "spreadPullback": {
+                    "description": "The group-spread multiplier applied to the offset \u2014 meaningful only when the program\u0027s OWN externally supplied reference is a Group establishing shot (zero, and thus inert, everywhere else).",
+                    "type": "number",
+                    "default": 0
+                  },
+                  "opcode": {
+                    "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "value"
+                ],
+                "additionalProperties": false
+              },
+              "orbitOp": {
+                "description": "Gets the program\u0027s Orbit op, or null.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "distance": {
+                    "description": "The orbit distance.",
+                    "type": "number"
+                  },
+                  "yaw": {
+                    "description": "The orbit heading in radians.",
+                    "type": "number"
+                  },
+                  "pitch": {
+                    "description": "The orbit tilt in radians.",
+                    "type": "number"
+                  },
+                  "pivotOffset": {
+                    "description": "The world-axis offset from the current subject\u0027s origin to the pivot.",
+                    "default": null
+                  },
+                  "opcode": {
+                    "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "distance",
+                  "yaw",
+                  "pitch"
+                ],
+                "additionalProperties": false
+              },
+              "smoothOp": {
+                "description": "Gets the program\u0027s Smooth op, or null (rate 0 \u2014 no smoothing \u2014 when absent).",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "rate": {
+                    "description": "The non-negative response rate.",
+                    "type": "number"
+                  },
+                  "opcode": {
+                    "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "rate"
+                ],
+                "additionalProperties": false
               }
             },
             "required": [
-              "motion",
-              "aim",
-              "lens"
+              "name",
+              "version",
+              "operations"
             ],
             "additionalProperties": false
           },
@@ -4393,7 +4709,7 @@
                           "PointerMotion",
                           "WheelOpen",
                           "ConsoleOpen",
-                          "SeatFlying"
+                          "SeatCameraApplication"
                         ]
                       }
                     },
@@ -4414,7 +4730,7 @@
                           "PointerMotion",
                           "WheelOpen",
                           "ConsoleOpen",
-                          "SeatFlying"
+                          "SeatCameraApplication"
                         ]
                       },
                       "windowSeconds": {
@@ -4457,7 +4773,7 @@
                                     "PointerMotion",
                                     "WheelOpen",
                                     "ConsoleOpen",
-                                    "SeatFlying"
+                                    "SeatCameraApplication"
                                   ]
                                 }
                               },
@@ -4478,7 +4794,7 @@
                                     "PointerMotion",
                                     "WheelOpen",
                                     "ConsoleOpen",
-                                    "SeatFlying"
+                                    "SeatCameraApplication"
                                   ]
                                 },
                                 "windowSeconds": {
@@ -4548,7 +4864,7 @@
                                             "PointerMotion",
                                             "WheelOpen",
                                             "ConsoleOpen",
-                                            "SeatFlying"
+                                            "SeatCameraApplication"
                                           ]
                                         }
                                       },
@@ -4569,7 +4885,7 @@
                                             "PointerMotion",
                                             "WheelOpen",
                                             "ConsoleOpen",
-                                            "SeatFlying"
+                                            "SeatCameraApplication"
                                           ]
                                         },
                                         "windowSeconds": {
@@ -5533,7 +5849,7 @@
                     "additionalProperties": false
                   },
                   {
-                    "description": "Rides the smoothed CENTROID of a set of population entities \u2014 the establishing-shot anchor. Also publishes the set\u0027s SPREAD (mean distance from the centroid), which Follow consumes through its SpreadPullback. A group has no facing, so its orientation resolves to identity.",
+                    "description": "Rides the smoothed CENTROID of a set of population entities \u2014 the establishing-shot anchor. Also publishes the set\u0027s SPREAD (mean distance from the centroid), which a camera program\u0027s Offset consumes through its SpreadPullback. A group has no facing, so its orientation resolves to identity.",
                     "properties": {
                       "$type": {
                         "const": "group"
@@ -5895,25 +6211,46 @@
           "description": "The chase framing every seat\u0027s view resolves through by default.",
           "type": "object",
           "properties": {
-            "motion": {
-              "$ref": "#/properties/cameras/items/properties/rig/properties/motion"
+            "name": {
+              "description": "The stable name a Blend op selects this program by.",
+              "type": "string"
             },
-            "aim": {
-              "$ref": "#/properties/cameras/items/properties/rig/properties/aim"
+            "version": {
+              "description": "The instruction-set version.",
+              "type": "string"
             },
-            "lens": {
-              "$ref": "#/properties/cameras/items/properties/rig/properties/lens"
+            "operations": {
+              "$ref": "#/properties/cameras/items/properties/rig/properties/operations"
             },
-            "smoothRate": {
-              "description": "The presentation-only exponential response rate (per second) the resolved eye eases at; zero disables smoothing. Applies to whichever motion the rig carries.",
-              "type": "number",
-              "default": 0
+            "anchorOp": {
+              "$ref": "#/properties/cameras/items/properties/rig/properties/anchorOp"
+            },
+            "blendOp": {
+              "$ref": "#/properties/cameras/items/properties/rig/properties/blendOp"
+            },
+            "clampPitchOp": {
+              "$ref": "#/properties/cameras/items/properties/rig/properties/clampPitchOp"
+            },
+            "fovOp": {
+              "$ref": "#/properties/cameras/items/properties/rig/properties/fovOp"
+            },
+            "lookAtOp": {
+              "$ref": "#/properties/cameras/items/properties/rig/properties/lookAtOp"
+            },
+            "offsetOp": {
+              "$ref": "#/properties/cameras/items/properties/rig/properties/offsetOp"
+            },
+            "orbitOp": {
+              "$ref": "#/properties/cameras/items/properties/rig/properties/orbitOp"
+            },
+            "smoothOp": {
+              "$ref": "#/properties/cameras/items/properties/rig/properties/smoothOp"
             }
           },
           "required": [
-            "motion",
-            "aim",
-            "lens"
+            "name",
+            "version",
+            "operations"
           ],
           "additionalProperties": false
         },
@@ -5975,32 +6312,53 @@
           ],
           "additionalProperties": false
         },
-        "flyRig": {
-          "description": "The free-camera rig a seat\u0027s control application swaps to while flying (see Target) \u2014 null for a world that authors no camera-targeting mode state. Its motion must be Fly when present.",
+        "cameraRig": {
+          "description": "The program a seat\u0027s view resolves through while its published mode state targets CameraTarget \u2014 null for a world that authors no camera-targeting mode state. Resolved through the ordinary Puck.World.Client.WorldCameraRigCompiler pipeline against whichever body the seat currently perceives from (the possessed camera body \u2014 see Puck.World.Server.WorldEngagement), exactly like SeatRig resolves against the seat\u0027s own avatar; no bespoke per-frame integrator reads this field.",
           "type": [
             "object",
             "null"
           ],
           "properties": {
-            "motion": {
-              "$ref": "#/properties/cameras/items/properties/rig/properties/motion"
+            "name": {
+              "description": "The stable name a Blend op selects this program by.",
+              "type": "string"
             },
-            "aim": {
-              "$ref": "#/properties/cameras/items/properties/rig/properties/aim"
+            "version": {
+              "description": "The instruction-set version.",
+              "type": "string"
             },
-            "lens": {
-              "$ref": "#/properties/cameras/items/properties/rig/properties/lens"
+            "operations": {
+              "$ref": "#/properties/cameras/items/properties/rig/properties/operations"
             },
-            "smoothRate": {
-              "description": "The presentation-only exponential response rate (per second) the resolved eye eases at; zero disables smoothing. Applies to whichever motion the rig carries.",
-              "type": "number",
-              "default": 0
+            "anchorOp": {
+              "$ref": "#/properties/cameras/items/properties/rig/properties/anchorOp"
+            },
+            "blendOp": {
+              "$ref": "#/properties/cameras/items/properties/rig/properties/blendOp"
+            },
+            "clampPitchOp": {
+              "$ref": "#/properties/cameras/items/properties/rig/properties/clampPitchOp"
+            },
+            "fovOp": {
+              "$ref": "#/properties/cameras/items/properties/rig/properties/fovOp"
+            },
+            "lookAtOp": {
+              "$ref": "#/properties/cameras/items/properties/rig/properties/lookAtOp"
+            },
+            "offsetOp": {
+              "$ref": "#/properties/cameras/items/properties/rig/properties/offsetOp"
+            },
+            "orbitOp": {
+              "$ref": "#/properties/cameras/items/properties/rig/properties/orbitOp"
+            },
+            "smoothOp": {
+              "$ref": "#/properties/cameras/items/properties/rig/properties/smoothOp"
             }
           },
           "required": [
-            "motion",
-            "aim",
-            "lens"
+            "name",
+            "version",
+            "operations"
           ],
           "additionalProperties": false,
           "default": null
@@ -6279,7 +6637,7 @@
                             "PointerMotion",
                             "WheelOpen",
                             "ConsoleOpen",
-                            "SeatFlying"
+                            "SeatCameraApplication"
                           ]
                         }
                       },
@@ -6300,7 +6658,7 @@
                             "PointerMotion",
                             "WheelOpen",
                             "ConsoleOpen",
-                            "SeatFlying"
+                            "SeatCameraApplication"
                           ]
                         },
                         "windowSeconds": {
@@ -6392,7 +6750,7 @@
                         "PointerMotion",
                         "WheelOpen",
                         "ConsoleOpen",
-                        "SeatFlying"
+                        "SeatCameraApplication"
                       ]
                     }
                   },
@@ -6413,7 +6771,7 @@
                         "PointerMotion",
                         "WheelOpen",
                         "ConsoleOpen",
-                        "SeatFlying"
+                        "SeatCameraApplication"
                       ]
                     },
                     "windowSeconds": {
@@ -6555,7 +6913,7 @@
                           "PointerMotion",
                           "WheelOpen",
                           "ConsoleOpen",
-                          "SeatFlying"
+                          "SeatCameraApplication"
                         ]
                       }
                     },
@@ -6576,7 +6934,7 @@
                           "PointerMotion",
                           "WheelOpen",
                           "ConsoleOpen",
-                          "SeatFlying"
+                          "SeatCameraApplication"
                         ]
                       },
                       "windowSeconds": {

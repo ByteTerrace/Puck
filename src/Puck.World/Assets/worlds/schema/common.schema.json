@@ -739,7 +739,7 @@
       }
     },
     "WorldAnchorGroup": {
-      "description": "Rides the smoothed CENTROID of a set of population entities \u2014 the establishing-shot anchor. Also publishes the set\u0027s SPREAD (mean distance from the centroid), which Follow consumes through its SpreadPullback. A group has no facing, so its orientation resolves to identity.",
+      "description": "Rides the smoothed CENTROID of a set of population entities \u2014 the establishing-shot anchor. Also publishes the set\u0027s SPREAD (mean distance from the centroid), which a camera program\u0027s Offset consumes through its SpreadPullback. A group has no facing, so its orientation resolves to identity.",
       "properties": {
         "$type": {
           "const": "group"
@@ -759,69 +759,187 @@
       ],
       "additionalProperties": false
     },
-    "WorldCameraMotionFly": {
-      "description": "A free camera driven directly by a seat\u0027s channel-role input rather than a reference frame \u2014 the live eye/yaw/pitch are presentation-carried state (never authored per instance), advanced each frame from the SAME move/look samples a body seat\u0027s channels carry. Never resolved through Puck.World.WorldCameraRigCompiler (it has no reference frame to resolve against); the seat\u0027s own fly-rig integrator (Client.WorldSeatFlyRig) reads only these tunables.",
+    "WorldCameraSubjectReference": {
+      "description": "The program\u0027s externally supplied reference pose \u2014 a named camera\u0027s own WorldAnchor, or a seat rig\u0027s currently perceived body (the seat\u0027s own avatar, or a possessed camera body). Resolved outside the program and handed to it as the SdfAnchor the compiled rig receives every frame.",
       "properties": {
         "$type": {
-          "const": "fly"
+          "const": "reference"
+        }
+      },
+      "additionalProperties": false
+    },
+    "WorldCameraSubjectPlacement": {
+      "description": "Rides a placement\u0027s authored stamped transform (position only \u2014 a placement carries no live facing through this static resolve, the same limitation a placeable camera\u0027s own Placement arm and a speaker share).",
+      "properties": {
+        "$type": {
+          "const": "placement"
         },
-        "minSpeed": {
-          "description": "The slowest operator-settable fly speed, world units per second.",
-          "type": "number"
+        "placementId": {
+          "description": "The referenced Id (must resolve).",
+          "type": "string"
         },
-        "maxSpeed": {
-          "description": "The fastest operator-settable fly speed, world units per second.",
-          "type": "number"
-        },
-        "defaultSpeed": {
-          "description": "The fly speed a seat starts at on entry, clamped to [MinSpeed, MaxSpeed].",
-          "type": "number"
-        },
-        "lookRateRadiansPerSecond": {
-          "description": "The look input\u0027s angular rate at full deflection.",
-          "type": "number"
-        },
-        "maxPitchRadians": {
-          "description": "The pitch clamp, symmetric about level.",
-          "type": "number"
+        "shapeId": {
+          "description": "The referenced creation\u0027s own shape to ride, or null for the placement\u0027s stamped root transform.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
         }
       },
       "required": [
-        "minSpeed",
-        "maxSpeed",
-        "defaultSpeed",
-        "lookRateRadiansPerSecond",
-        "maxPitchRadians"
+        "placementId"
       ],
       "additionalProperties": false
     },
-    "WorldCameraMotionFollow": {
-      "description": "Follows the reference frame at a fixed offset.",
+    "WorldCameraSubjectWorldPoint": {
+      "description": "A fixed world-space point.",
       "properties": {
         "$type": {
-          "const": "follow"
+          "const": "worldPoint"
         },
-        "offset": {
-          "description": "The eye offset in world or reference-local axes."
+        "point": {
+          "description": "The world-space position."
+        }
+      },
+      "required": [
+        "point"
+      ],
+      "additionalProperties": false
+    },
+    "WorldCameraSubject": {
+      "description": "The subject an Anchor/LookAt op resolves against \u2014 the closed \u0022what a camera program can key off\u0022 vocabulary. Distinct from WorldAnchor (WHERE a whole placeable camera or speaker rides, resolved OUTSIDE the program and handed in as one reference pose): this is presentation math INSIDE the program, so it stays float and needs no live entity table \u2014 a placement\u0027s pose resolves through the same static stamped-transform math a placeable camera\u0027s own anchor and a speaker read (Puck.World.Client.WorldAnchorGeometry).",
+      "type": "object",
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/WorldCameraSubjectReference"
+        },
+        {
+          "$ref": "#/$defs/WorldCameraSubjectPlacement"
+        },
+        {
+          "$ref": "#/$defs/WorldCameraSubjectWorldPoint"
+        }
+      ]
+    },
+    "WorldCameraProgramOpAnchor": {
+      "description": "Establishes the CURRENT subject \u2014 the pose Offset/Orbit place the eye relative to, and LookAt aims along the facing of when it names no subject of its own. Also re-seeds the eye at the resolved subject\u0027s own position (the \u0022first person\u0022 default before any Offset/Orbit runs). At most one per program, and it must be the first operation when present; a program that omits it starts from Reference implicitly.",
+      "properties": {
+        "$type": {
+          "const": "anchor"
+        },
+        "subject": {
+          "$ref": "#/$defs/WorldCameraSubject",
+          "description": "The subject to resolve."
+        },
+        "opcode": {
+          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "subject"
+      ],
+      "additionalProperties": false
+    },
+    "WorldCameraProgramOpOffset": {
+      "description": "Places the eye at an offset from the current subject\u0027s pose.",
+      "properties": {
+        "$type": {
+          "const": "offset"
+        },
+        "value": {
+          "description": "The offset."
         },
         "worldAxes": {
-          "description": "Whether Offset uses world axes.",
-          "type": "boolean"
+          "description": "Whether Value uses world axes rather than the subject\u0027s own.",
+          "type": "boolean",
+          "default": false
         },
         "spreadPullback": {
-          "description": "The group-spread multiplier applied to the offset.",
-          "type": "number"
+          "description": "The group-spread multiplier applied to the offset \u2014 meaningful only when the program\u0027s OWN externally supplied reference is a Group establishing shot (zero, and thus inert, everywhere else).",
+          "type": "number",
+          "default": 0
+        },
+        "opcode": {
+          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
-        "offset",
-        "worldAxes",
-        "spreadPullback"
+        "value"
       ],
       "additionalProperties": false
     },
-    "WorldCameraMotionOrbit": {
-      "description": "Orbits a reference-frame pivot.",
+    "WorldCameraSubjectNullable": {
+      "description": "The subject an Anchor/LookAt op resolves against \u2014 the closed \u0022what a camera program can key off\u0022 vocabulary. Distinct from WorldAnchor (WHERE a whole placeable camera or speaker rides, resolved OUTSIDE the program and handed in as one reference pose): this is presentation math INSIDE the program, so it stays float and needs no live entity table \u2014 a placement\u0027s pose resolves through the same static stamped-transform math a placeable camera\u0027s own anchor and a speaker read (Puck.World.Client.WorldAnchorGeometry).",
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/WorldCameraSubjectReference"
+        },
+        {
+          "$ref": "#/$defs/WorldCameraSubjectPlacement"
+        },
+        {
+          "$ref": "#/$defs/WorldCameraSubjectWorldPoint"
+        }
+      ]
+    },
+    "WorldCameraProgramOpLookAt": {
+      "description": "Sets the aim target.",
+      "properties": {
+        "$type": {
+          "const": "lookAt"
+        },
+        "subject": {
+          "$ref": "#/$defs/WorldCameraSubjectNullable",
+          "description": "The subject to look at, or null to look along the current subject\u0027s own forward axis from the eye, at FocusDistance."
+        },
+        "targetOffset": {
+          "description": "An offset from the resolved Subject\u0027s pose; ignored when Subject is null.",
+          "default": null
+        },
+        "worldAxes": {
+          "description": "Whether TargetOffset uses world axes rather than the subject\u0027s own.",
+          "type": "boolean",
+          "default": false
+        },
+        "focusDistance": {
+          "description": "The finite target distance along the current subject\u0027s forward axis, used only when Subject is null.",
+          "type": "number",
+          "default": 6
+        },
+        "opcode": {
+          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "subject"
+      ],
+      "additionalProperties": false
+    },
+    "WorldCameraProgramOpOrbit": {
+      "description": "Places the eye by orbiting the current subject\u0027s pose. The seat-view pipeline adds a joined seat\u0027s live look input to Yaw/Pitch for an interactive program (see Puck.World.Client.WorldSeatCameraResolver); a non-interactive program (a named camera) renders the authored angles unchanged. At most one per program.",
       "properties": {
         "$type": {
           "const": "orbit"
@@ -839,240 +957,90 @@
           "type": "number"
         },
         "pivotOffset": {
-          "description": "The world-axis offset from the reference-frame origin to the pivot."
+          "description": "The world-axis offset from the current subject\u0027s origin to the pivot.",
+          "default": null
+        },
+        "opcode": {
+          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
         "distance",
         "yaw",
-        "pitch",
-        "pivotOffset"
+        "pitch"
       ],
       "additionalProperties": false
     },
-    "WorldCameraMotionStatic": {
-      "description": "Holds an eye position in world or reference-local axes.",
+    "WorldCameraProgramOpSmooth": {
+      "description": "Sets the presentation-only exponential response rate (per second) the resolved eye/target boom eases at; zero disables smoothing. Read by the caller after resolving a frame \u2014 never affects the resolved pose itself. At most one per program.",
       "properties": {
         "$type": {
-          "const": "static"
+          "const": "smooth"
         },
-        "position": {
-          "description": "The eye position or offset."
-        },
-        "worldAxes": {
-          "description": "Whether Position is an absolute world position.",
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "position",
-        "worldAxes"
-      ],
-      "additionalProperties": false
-    },
-    "WorldCameraTrackKeyframe": {
-      "description": "One camera-track keyframe at a clock-relative tick.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "tick": {
-          "description": "The non-negative track-relative tick.",
-          "type": "integer"
-        },
-        "position": {
-          "description": "The camera position at the tick."
-        }
-      },
-      "required": [
-        "tick",
-        "position"
-      ],
-      "additionalProperties": false
-    },
-    "WorldCameraTrack": {
-      "description": "A durable camera track with an explicit clock domain.",
-      "type": "object",
-      "properties": {
-        "clockDomain": {
-          "description": "The clock that advances the track.",
-          "enum": [
-            "PresentationTime",
-            "AuthoritativeTick"
-          ]
-        },
-        "interpolation": {
-          "description": "The interpolation applied between adjacent keyframes.",
-          "enum": [
-            "Step",
-            "Linear"
-          ]
-        },
-        "keyframes": {
-          "description": "The keyframes in strictly increasing tick order.",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/WorldCameraTrackKeyframe"
-          }
-        }
-      },
-      "required": [
-        "clockDomain",
-        "interpolation",
-        "keyframes"
-      ],
-      "additionalProperties": false
-    },
-    "WorldCameraTrackPlayback": {
-      "description": "The mutable-by-replacement playback state for a camera track.",
-      "type": "object",
-      "properties": {
-        "startTick": {
-          "description": "The selected clock\u0027s absolute tick at which playback starts.",
-          "type": "integer"
-        },
-        "loopMode": {
-          "description": "The end-of-track playback policy.",
-          "enum": [
-            "Once",
-            "Loop",
-            "PingPong"
-          ]
-        }
-      },
-      "required": [
-        "startTick",
-        "loopMode"
-      ],
-      "additionalProperties": false
-    },
-    "WorldCameraMotionTrack": {
-      "description": "Evaluates a durable camera track through separate playback state.",
-      "properties": {
-        "$type": {
-          "const": "track"
-        },
-        "definition": {
-          "$ref": "#/$defs/WorldCameraTrack",
-          "description": "The durable keyframes, interpolation, and clock domain."
-        },
-        "playback": {
-          "$ref": "#/$defs/WorldCameraTrackPlayback",
-          "description": "The playback start and loop policy."
-        },
-        "worldAxes": {
-          "description": "Whether evaluated positions are absolute world positions.",
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "definition",
-        "playback",
-        "worldAxes"
-      ],
-      "additionalProperties": false
-    },
-    "WorldCameraMotion": {
-      "description": "Defines presentation-only eye motion relative to a camera\u0027s resolved reference frame.",
-      "type": "object",
-      "required": [
-        "$type"
-      ],
-      "anyOf": [
-        {
-          "$ref": "#/$defs/WorldCameraMotionFly"
-        },
-        {
-          "$ref": "#/$defs/WorldCameraMotionFollow"
-        },
-        {
-          "$ref": "#/$defs/WorldCameraMotionOrbit"
-        },
-        {
-          "$ref": "#/$defs/WorldCameraMotionStatic"
-        },
-        {
-          "$ref": "#/$defs/WorldCameraMotionTrack"
-        }
-      ]
-    },
-    "WorldCameraAimAnchor": {
-      "description": "Looks at an offset from the resolved reference frame.",
-      "properties": {
-        "$type": {
-          "const": "anchor"
-        },
-        "offset": {
-          "description": "The target offset."
-        },
-        "worldAxes": {
-          "description": "Whether Offset uses world axes.",
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "offset",
-        "worldAxes"
-      ],
-      "additionalProperties": false
-    },
-    "WorldCameraAimForward": {
-      "description": "Looks along the reference frame\u0027s forward axis.",
-      "properties": {
-        "$type": {
-          "const": "forward"
-        },
-        "focusDistance": {
-          "description": "The finite target distance along forward.",
+        "rate": {
+          "description": "The non-negative response rate.",
           "type": "number"
+        },
+        "opcode": {
+          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
-        "focusDistance"
+        "rate"
       ],
       "additionalProperties": false
     },
-    "WorldCameraAimWorldPoint": {
-      "description": "Looks at a fixed world-space point.",
+    "WorldCameraProgramOpClampPitch": {
+      "description": "Clamps the effective pitch the NEXT Orbit op resolves with (its authored Pitch plus any live seat delta) to [MinPitch, MaxPitch]. At most one per program; must precede the Orbit op it governs. A joined seat\u0027s own views.seatControl band already clamps its LIVE delta before this ever runs \u2014 this op exists for a program with no seat behind it (a named camera orbiting a state-bound pitch).",
       "properties": {
         "$type": {
-          "const": "worldPoint"
+          "const": "clampPitch"
         },
-        "target": {
-          "description": "The world-space target."
+        "minPitch": {
+          "description": "The minimum pitch, radians.",
+          "type": "number"
+        },
+        "maxPitch": {
+          "description": "The maximum pitch, radians.",
+          "type": "number"
+        },
+        "opcode": {
+          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
-        "target"
+        "minPitch",
+        "maxPitch"
       ],
       "additionalProperties": false
     },
-    "WorldCameraAim": {
-      "description": "Defines how a camera frames from its resolved eye.",
-      "type": "object",
-      "required": [
-        "$type"
-      ],
-      "anyOf": [
-        {
-          "$ref": "#/$defs/WorldCameraAimAnchor"
-        },
-        {
-          "$ref": "#/$defs/WorldCameraAimForward"
-        },
-        {
-          "$ref": "#/$defs/WorldCameraAimWorldPoint"
-        }
-      ]
-    },
-    "WorldCameraLens": {
-      "description": "Defines presentation-only camera optics.",
-      "type": "object",
+    "WorldCameraProgramOpFov": {
+      "description": "Sets the rendered vertical field of view, radians \u2014 a literal, or a state.\u003Crow\u003E[.\u003Ckey\u003E] binding so a world rule can pull focus or frame a moment (decisions in the sim, framing in presentation). At most one per program.",
       "properties": {
+        "$type": {
+          "const": "fov"
+        },
         "fieldOfViewRadians": {
-          "description": "The vertical field of view in radians.",
-          "type": "number"
+          "description": "The field of view."
+        },
+        "opcode": {
+          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -1080,32 +1048,375 @@
       ],
       "additionalProperties": false
     },
-    "WorldCameraRig": {
-      "description": "Composes a camera\u0027s local motion, framing policy, and lens as independent presentation axes.",
-      "type": "object",
+    "WorldCameraProgramOpBlend": {
+      "description": "Evaluates two other authored programs by name and linearly interpolates their resolved eye, target, and field of view \u2014 the whole document\u0027s camera-program table (every cameras[].rig plus views.seatRig/views.cameraRig) is the namespace A/B resolve against. At most one per program; refused when it would create a reference cycle.",
       "properties": {
-        "motion": {
-          "$ref": "#/$defs/WorldCameraMotion",
-          "description": "The camera-local eye motion evaluated after its reference frame resolves."
+        "$type": {
+          "const": "blend"
         },
-        "aim": {
-          "$ref": "#/$defs/WorldCameraAim",
-          "description": "The framing policy that selects a target from the resolved eye and reference frame."
+        "a": {
+          "description": "The program resolved at Weight 0.",
+          "type": "string"
         },
-        "lens": {
-          "$ref": "#/$defs/WorldCameraLens",
-          "description": "The optical state applied to the rendered camera."
+        "b": {
+          "description": "The program resolved at Weight 1.",
+          "type": "string"
         },
-        "smoothRate": {
-          "description": "The presentation-only exponential response rate (per second) the resolved eye eases at; zero disables smoothing. Applies to whichever motion the rig carries.",
-          "type": "number",
-          "default": 0
+        "weight": {
+          "description": "The blend weight in [0, 1] \u2014 a literal, or a state binding."
+        },
+        "opcode": {
+          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
-        "motion",
-        "aim",
-        "lens"
+        "a",
+        "b",
+        "weight"
+      ],
+      "additionalProperties": false
+    },
+    "WorldCameraProgramOp": {
+      "description": "One instruction in an authored camera program\u0027s ordered op list \u2014 the presentation-side pose algebra bodyMotionPrograms established for sim-side movement, promoted to cameras: an authored rig is an ordered list of these trivial ops rather than a bespoke closed motion/aim union, so a new camera behavior is authored data, never new engine code. This is the AUTHORING vocabulary only: Puck.World.Client.WorldCameraRigCompiler translates it to Puck.SdfVm.Views.SdfCameraOp and resolves each frame\u0027s bindings and subject poses, and Puck.SdfVm.Views.SdfCameraProgramEvaluator \u2014 which parses no document \u2014 walks the result. Floats throughout; presentation carries no fixed-point burden.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/WorldCameraProgramOpAnchor"
+        },
+        {
+          "$ref": "#/$defs/WorldCameraProgramOpOffset"
+        },
+        {
+          "$ref": "#/$defs/WorldCameraProgramOpLookAt"
+        },
+        {
+          "$ref": "#/$defs/WorldCameraProgramOpOrbit"
+        },
+        {
+          "$ref": "#/$defs/WorldCameraProgramOpSmooth"
+        },
+        {
+          "$ref": "#/$defs/WorldCameraProgramOpClampPitch"
+        },
+        {
+          "$ref": "#/$defs/WorldCameraProgramOpFov"
+        },
+        {
+          "$ref": "#/$defs/WorldCameraProgramOpBlend"
+        }
+      ]
+    },
+    "WorldCameraProgramOpList": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/WorldCameraProgramOp"
+      }
+    },
+    "WorldCameraProgramOpAnchorNullable": {
+      "description": "Establishes the CURRENT subject \u2014 the pose Offset/Orbit place the eye relative to, and LookAt aims along the facing of when it names no subject of its own. Also re-seeds the eye at the resolved subject\u0027s own position (the \u0022first person\u0022 default before any Offset/Orbit runs). At most one per program, and it must be the first operation when present; a program that omits it starts from Reference implicitly.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "subject": {
+          "$ref": "#/$defs/WorldCameraSubject",
+          "description": "The subject to resolve."
+        },
+        "opcode": {
+          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "subject"
+      ],
+      "additionalProperties": false
+    },
+    "WorldCameraProgramOpBlendNullable": {
+      "description": "Evaluates two other authored programs by name and linearly interpolates their resolved eye, target, and field of view \u2014 the whole document\u0027s camera-program table (every cameras[].rig plus views.seatRig/views.cameraRig) is the namespace A/B resolve against. At most one per program; refused when it would create a reference cycle.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "a": {
+          "description": "The program resolved at Weight 0.",
+          "type": "string"
+        },
+        "b": {
+          "description": "The program resolved at Weight 1.",
+          "type": "string"
+        },
+        "weight": {
+          "description": "The blend weight in [0, 1] \u2014 a literal, or a state binding."
+        },
+        "opcode": {
+          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "a",
+        "b",
+        "weight"
+      ],
+      "additionalProperties": false
+    },
+    "WorldCameraProgramOpClampPitchNullable": {
+      "description": "Clamps the effective pitch the NEXT Orbit op resolves with (its authored Pitch plus any live seat delta) to [MinPitch, MaxPitch]. At most one per program; must precede the Orbit op it governs. A joined seat\u0027s own views.seatControl band already clamps its LIVE delta before this ever runs \u2014 this op exists for a program with no seat behind it (a named camera orbiting a state-bound pitch).",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "minPitch": {
+          "description": "The minimum pitch, radians.",
+          "type": "number"
+        },
+        "maxPitch": {
+          "description": "The maximum pitch, radians.",
+          "type": "number"
+        },
+        "opcode": {
+          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "minPitch",
+        "maxPitch"
+      ],
+      "additionalProperties": false
+    },
+    "WorldCameraProgramOpFovNullable": {
+      "description": "Sets the rendered vertical field of view, radians \u2014 a literal, or a state.\u003Crow\u003E[.\u003Ckey\u003E] binding so a world rule can pull focus or frame a moment (decisions in the sim, framing in presentation). At most one per program.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "fieldOfViewRadians": {
+          "description": "The field of view."
+        },
+        "opcode": {
+          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "fieldOfViewRadians"
+      ],
+      "additionalProperties": false
+    },
+    "WorldCameraProgramOpLookAtNullable": {
+      "description": "Sets the aim target.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "subject": {
+          "$ref": "#/$defs/WorldCameraSubjectNullable",
+          "description": "The subject to look at, or null to look along the current subject\u0027s own forward axis from the eye, at FocusDistance."
+        },
+        "targetOffset": {
+          "description": "An offset from the resolved Subject\u0027s pose; ignored when Subject is null.",
+          "default": null
+        },
+        "worldAxes": {
+          "description": "Whether TargetOffset uses world axes rather than the subject\u0027s own.",
+          "type": "boolean",
+          "default": false
+        },
+        "focusDistance": {
+          "description": "The finite target distance along the current subject\u0027s forward axis, used only when Subject is null.",
+          "type": "number",
+          "default": 6
+        },
+        "opcode": {
+          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "subject"
+      ],
+      "additionalProperties": false
+    },
+    "WorldCameraProgramOpOffsetNullable": {
+      "description": "Places the eye at an offset from the current subject\u0027s pose.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "value": {
+          "description": "The offset."
+        },
+        "worldAxes": {
+          "description": "Whether Value uses world axes rather than the subject\u0027s own.",
+          "type": "boolean",
+          "default": false
+        },
+        "spreadPullback": {
+          "description": "The group-spread multiplier applied to the offset \u2014 meaningful only when the program\u0027s OWN externally supplied reference is a Group establishing shot (zero, and thus inert, everywhere else).",
+          "type": "number",
+          "default": 0
+        },
+        "opcode": {
+          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "WorldCameraProgramOpOrbitNullable": {
+      "description": "Places the eye by orbiting the current subject\u0027s pose. The seat-view pipeline adds a joined seat\u0027s live look input to Yaw/Pitch for an interactive program (see Puck.World.Client.WorldSeatCameraResolver); a non-interactive program (a named camera) renders the authored angles unchanged. At most one per program.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "distance": {
+          "description": "The orbit distance.",
+          "type": "number"
+        },
+        "yaw": {
+          "description": "The orbit heading in radians.",
+          "type": "number"
+        },
+        "pitch": {
+          "description": "The orbit tilt in radians.",
+          "type": "number"
+        },
+        "pivotOffset": {
+          "description": "The world-axis offset from the current subject\u0027s origin to the pivot.",
+          "default": null
+        },
+        "opcode": {
+          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "distance",
+        "yaw",
+        "pitch"
+      ],
+      "additionalProperties": false
+    },
+    "WorldCameraProgramOpSmoothNullable": {
+      "description": "Sets the presentation-only exponential response rate (per second) the resolved eye/target boom eases at; zero disables smoothing. Read by the caller after resolving a frame \u2014 never affects the resolved pose itself. At most one per program.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "rate": {
+          "description": "The non-negative response rate.",
+          "type": "number"
+        },
+        "opcode": {
+          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "rate"
+      ],
+      "additionalProperties": false
+    },
+    "WorldCameraProgram": {
+      "description": "An authored camera program \u2014 the ordered op list a rig resolves through every frame.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The stable name a Blend op selects this program by.",
+          "type": "string"
+        },
+        "version": {
+          "description": "The instruction-set version.",
+          "type": "string"
+        },
+        "operations": {
+          "$ref": "#/$defs/WorldCameraProgramOpList",
+          "description": "The selected ops, in authored evaluation order."
+        },
+        "anchorOp": {
+          "$ref": "#/$defs/WorldCameraProgramOpAnchorNullable",
+          "description": "Gets the program\u0027s Anchor op, or null when absent (an absent anchor starts from Reference implicitly)."
+        },
+        "blendOp": {
+          "$ref": "#/$defs/WorldCameraProgramOpBlendNullable",
+          "description": "Gets the program\u0027s Blend op, or null."
+        },
+        "clampPitchOp": {
+          "$ref": "#/$defs/WorldCameraProgramOpClampPitchNullable",
+          "description": "Gets the program\u0027s ClampPitch op, or null."
+        },
+        "fovOp": {
+          "$ref": "#/$defs/WorldCameraProgramOpFovNullable",
+          "description": "Gets the program\u0027s Fov op, or null."
+        },
+        "lookAtOp": {
+          "$ref": "#/$defs/WorldCameraProgramOpLookAtNullable",
+          "description": "Gets the program\u0027s LookAt op, or null."
+        },
+        "offsetOp": {
+          "$ref": "#/$defs/WorldCameraProgramOpOffsetNullable",
+          "description": "Gets the program\u0027s Offset op, or null."
+        },
+        "orbitOp": {
+          "$ref": "#/$defs/WorldCameraProgramOpOrbitNullable",
+          "description": "Gets the program\u0027s Orbit op, or null."
+        },
+        "smoothOp": {
+          "$ref": "#/$defs/WorldCameraProgramOpSmoothNullable",
+          "description": "Gets the program\u0027s Smooth op, or null (rate 0 \u2014 no smoothing \u2014 when absent)."
+        }
+      },
+      "required": [
+        "name",
+        "version",
+        "operations"
       ],
       "additionalProperties": false
     },
@@ -1511,7 +1822,6 @@
       "additionalProperties": false
     },
     "ActionFact": {
-      "description": "An engine-published per-body sim fact the action predicates gate on. Facts are engine code.",
       "enum": [
         "Grounded",
         "Airborne",
@@ -1557,7 +1867,6 @@
       "additionalProperties": false
     },
     "ActionStateComparison": {
-      "description": "A fixed comparison admitted by CompareState.",
       "enum": [
         "Equal",
         "NotEqual",
@@ -2070,7 +2379,7 @@
         "PointerMotion",
         "WheelOpen",
         "ConsoleOpen",
-        "SeatFlying"
+        "SeatCameraApplication"
       ]
     },
     "OverlayPredicateNow": {

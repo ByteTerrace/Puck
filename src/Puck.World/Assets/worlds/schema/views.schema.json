@@ -5,7 +5,7 @@
   ],
   "properties": {
     "seatRig": {
-      "$ref": "./common.schema.json#/$defs/WorldCameraRig",
+      "$ref": "./common.schema.json#/$defs/WorldCameraProgram",
       "description": "The chase framing every seat\u0027s view resolves through by default."
     },
     "seatControl": {
@@ -66,35 +66,62 @@
       ],
       "additionalProperties": false
     },
-    "flyRig": {
-      "description": "The free-camera rig a seat\u0027s control application swaps to while flying (see Target) \u2014 null for a world that authors no camera-targeting mode state. Its motion must be Fly when present.",
+    "cameraRig": {
+      "description": "The program a seat\u0027s view resolves through while its published mode state targets CameraTarget \u2014 null for a world that authors no camera-targeting mode state. Resolved through the ordinary Puck.World.Client.WorldCameraRigCompiler pipeline against whichever body the seat currently perceives from (the possessed camera body \u2014 see Puck.World.Server.WorldEngagement), exactly like SeatRig resolves against the seat\u0027s own avatar; no bespoke per-frame integrator reads this field.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
-        "motion": {
-          "$ref": "./common.schema.json#/$defs/WorldCameraMotion",
-          "description": "The camera-local eye motion evaluated after its reference frame resolves."
+        "name": {
+          "description": "The stable name a Blend op selects this program by.",
+          "type": "string"
         },
-        "aim": {
-          "$ref": "./common.schema.json#/$defs/WorldCameraAim",
-          "description": "The framing policy that selects a target from the resolved eye and reference frame."
+        "version": {
+          "description": "The instruction-set version.",
+          "type": "string"
         },
-        "lens": {
-          "$ref": "./common.schema.json#/$defs/WorldCameraLens",
-          "description": "The optical state applied to the rendered camera."
+        "operations": {
+          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpList",
+          "description": "The selected ops, in authored evaluation order."
         },
-        "smoothRate": {
-          "description": "The presentation-only exponential response rate (per second) the resolved eye eases at; zero disables smoothing. Applies to whichever motion the rig carries.",
-          "type": "number",
-          "default": 0
+        "anchorOp": {
+          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpAnchorNullable",
+          "description": "Gets the program\u0027s Anchor op, or null when absent (an absent anchor starts from Reference implicitly)."
+        },
+        "blendOp": {
+          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpBlendNullable",
+          "description": "Gets the program\u0027s Blend op, or null."
+        },
+        "clampPitchOp": {
+          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpClampPitchNullable",
+          "description": "Gets the program\u0027s ClampPitch op, or null."
+        },
+        "fovOp": {
+          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpFovNullable",
+          "description": "Gets the program\u0027s Fov op, or null."
+        },
+        "lookAtOp": {
+          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpLookAtNullable",
+          "description": "Gets the program\u0027s LookAt op, or null."
+        },
+        "offsetOp": {
+          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpOffsetNullable",
+          "description": "Gets the program\u0027s Offset op, or null."
+        },
+        "orbitOp": {
+          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpOrbitNullable",
+          "description": "Gets the program\u0027s Orbit op, or null."
+        },
+        "smoothOp": {
+          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpSmoothNullable",
+          "description": "Gets the program\u0027s Smooth op, or null (rate 0 \u2014 no smoothing \u2014 when absent)."
         }
       },
       "required": [
-        "motion",
-        "aim",
-        "lens"
+        "name",
+        "version",
+        "operations"
       ],
       "additionalProperties": false,
       "default": null

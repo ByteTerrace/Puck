@@ -30,7 +30,6 @@
         "description": "The selected domain operations; their phases are intrinsic and cannot be reordered.",
         "type": "array",
         "items": {
-          "description": "Identifies a body motion program instruction from the closed domain-operation vocabulary.",
           "enum": [
             "SenseNearestInCone",
             "ProduceWanderIntent",
@@ -76,28 +75,23 @@
         ],
         "anyOf": [
           {
-            "description": "Selects the nearest member of Scope inside a body-forward cone.",
             "properties": {
               "$type": {
                 "const": "sensed"
               },
               "scope": {
-                "description": "The population subset considered.",
                 "enum": [
                   "Seats",
                   "Bodies"
                 ]
               },
               "range": {
-                "description": "The cone\u0027s maximum world-space distance.",
                 "type": "number"
               },
               "halfAngleDegrees": {
-                "description": "The cone half-angle in degrees.",
                 "type": "number"
               },
               "requiresLineOfSight": {
-                "description": "Whether solid world geometry must leave the segment unobstructed.",
                 "type": "boolean"
               }
             },
@@ -110,13 +104,11 @@
             "additionalProperties": false
           },
           {
-            "description": "Reads the named target register owned by the body running the producer.",
             "properties": {
               "$type": {
                 "const": "designated"
               },
               "register": {
-                "description": "The authored Name.",
                 "type": "string"
               }
             },

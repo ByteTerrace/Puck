@@ -697,10 +697,11 @@ read (`world.row.set kits …` retunes it in place), so requiring it to already
 conform would refuse the exact past-the-cap retune the envelope exists to
 catch.
 
-`views.seatRig` (`WorldCameraRig`) carries `SmoothRate` (default
-`0` = the unsmoothed snap every world used before it existed) — a
-presentation-only low-pass on the seat's resolved eye/target, the same
-`WorldAnchor.Group.SmoothRate` shape reused for a seat's own chase framing.
+`views.seatRig` is a `WorldCameraProgram` — an ordered op list, not a kind
+union (see views.md for the op table). Its `smooth` op reports a rate the
+CALLER applies as a presentation-only ease on the boom, the same
+`WorldAnchor.Group.SmoothRate` shape reused for a seat's own chase framing; a
+program with no `smooth` op reports zero, the unsmoothed snap.
 
 ## The validator — the one thick gate
 
@@ -757,9 +758,9 @@ reserved derived-face band (`WorldPlacementPolicy.DerivedFaceBase` +
   `WorldScreenSource`
   (`none`/`testPattern`/`machine`/`camera`/`view`/`capture`/`console`/`qr`),
   `WorldLookSource`, `WorldSpawnPolicy`, `WorldAnchor`
-  (`entity`/`entityLeaf`/`placement`/`group`), `WorldCameraMotion`
-  (`follow`/`orbit`/`static`/`track`) and `WorldCameraAim`
-  (`anchor`/`forward`/`worldPoint`), `WorldSpeakerSource`
+  (`entity`/`entityLeaf`/`placement`/`group`), `WorldCameraProgramOp`
+  (`anchor`/`offset`/`lookAt`/`orbit`/`smooth`/`clampPitch`/`fov`/`blend`) and
+  `WorldCameraSubject` (`reference`/`placement`/`worldPoint`), `WorldSpeakerSource`
   (`none`/`machine`/`tune`/`synth`), `WorldStateRow`
   (`int`/`fixed`/`bool`/`text`). `$type` failures do NOT all surface as
   `JsonException` — `WorldJsonPayload.IsParseFailure` is the complete set;
@@ -1024,7 +1025,8 @@ over per-seat presentation facts (`OverlayPredicate` / `OverlayFact`,
 `WorldOverlayVisibility.cs`; evaluated by `WorldOverlayFacts`): `now {fact}`,
 `recently {fact, windowSeconds}`, `all`, `any`, `not`. Facts: `SeatInput` (a
 routed signal this tick), `PointerMotion`, `WheelOpen`, `ConsoleOpen`,
-`SeatFlying` (the seat's fly camera application is active — `WorldSeatFlyRig.IsFlying`).
+`SeatCameraApplication` (the seat's camera control application is active —
+`WorldSeatBindings.IsCameraModeActive`).
 Absent = always visible. `{ "$type": "recently", "fact":
 "SeatInput", "windowSeconds": 3 }` hides an element three seconds after the
 seat's last input and shows it on the next; a world-scope panel reads a fact as
@@ -1052,10 +1054,12 @@ scalar/keyed state; or an AUTHORED `seatModes` family (`WorldSeatModeFamily`,
 document top-level `seatModes`) — a world-declared name plus its admitted
 states, flipped by `player.mode <family> <state> [seat]` and validated
 strictly (unknown states refused, the name may not collide with a built-in
-family or the `state:` prefix). A state whose `target` is `"camera"` diverts
-the seat's own body intent to `player.control`'s idle contract and drives the
-world-authored `views.flyRig` from the seat's channels instead
-(`WorldSeatFlyRig`). Compile refuses a malformed/duplicate row or
+family or the `state:` prefix). A state whose `target` is `"camera"` composes the camera control application:
+the seat possesses its authored `camera-seat-<slot>` inhabited placement
+through the ordinary Engage door, its own body intent diverting to
+`player.control`'s idle contract, and its view resolving through
+`views.cameraRig` (see views.md). `player.camera [seat]` is the bindable
+no-token toggle onto the same state. Compile refuses a malformed/duplicate row or
 an undeclared group; the vocabulary gate refuses an unadmitted family/state —
 all by row. `player.bindings` leads with the derivation echo:
 `group=<active> (<step>)`, per-family `<family>=<state>→<group>
@@ -1166,8 +1170,9 @@ zone, and neutral-grace duration.
   `[Refusal(door, condition, kind)]` attribute, and the catalog entry shape
   `world.refusals` prints.
 - `WorldAnchor.cs` — WHERE a placeable thing rides (shared by cameras and
-  speakers); `WorldCameraRig.cs` — HOW a camera frames (compiles to one engine
-  `ISdfCameraRig`; see [views.md](views.md)).
+  speakers); `WorldCameraProgram.cs` — HOW a camera frames, as an authored op
+  list (`Puck.World.Client.WorldCameraRigCompiler` translates it to the
+  document-blind IR in `Puck.SdfVm.Views`; see [views.md](views.md)).
 - `WorldViews.cs` — the `views` section (slots, layouts, seat framing).
 - `WorldState.cs` — the `state` section: `WorldStateSection` (world/body/identity ownership lanes),
   `WorldStateRow` (the document-cell substrate — `kind` int/fixed/bool/text,

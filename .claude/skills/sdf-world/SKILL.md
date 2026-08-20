@@ -243,10 +243,18 @@ is `Views.SdfCameraView.Resolve` (a camera rig pose) — nothing reads
 `TryResolveAnchor` back into sim state. Safe by the same rule that makes
 `ViewStack`/`ViewTransition` presentation-only.
 
-**Views (`Puck.SdfVm.Views`).** `ISdfCameraRig` + five shapes — `OrbitRig`
+**Views (`Puck.SdfVm.Views`).** `ISdfCameraRig` + the fixed shapes — `OrbitRig`
 (shared `Offset(yaw, pitch, distance)` static, the trig every object-intent
-camera in this codebase used to hand-roll), `FollowRig`, `FixedRig`,
-`FirstPersonRig`/`DollyRig` (consumer-pending). `ViewStack` — the
+camera in this codebase used to hand-roll), `FollowRig`/`OrientedFollowRig`,
+`FixedRig`, `FirstPersonRig` — plus the PROGRAM path, which is the one a host
+with authored cameras uses: `SdfCameraProgram.cs` carries the IR
+(`SdfCameraOp`: anchor/offset/lookAt/orbit/smooth/clampPitch/fov/blend,
+`SdfCameraProgramSet` as the blend namespace by INDEX), the allocation-free
+`SdfCameraProgramEvaluator`, the `SdfCameraProgramRig` adapter whose
+`Subjects`/`Scalars`/`Look` buffers a host refills per frame, and
+`SdfCameraBoomSmoother`. Every number an op reads is an `SdfCameraScalar` —
+a literal or a per-frame slot — so a host's authored bindings resolve OUTSIDE
+this library and nothing here parses a document. `ViewStack` — the
 hypervisor-identity primitive that absorbed `CameraFeedPool`: `IViewContent`
 (`SdfCameraView`/`GuestSurfaceView`/`NestedWorldView`) registers by NAME
 (`ViewId`/`Register`/`Release`/`Resolve`/`ResolveGlow`/`IsLive`), budgeted

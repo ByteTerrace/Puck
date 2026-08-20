@@ -1140,32 +1140,39 @@ public static partial class WorldDefinitionValidator {
 
         // The whole document's camera-program name table (every cameras[].rig, plus views.seatRig/cameraRig) — the
         // namespace a blend op resolves against. Assembled once here so dangling names and blend cycles are checked
-        // exactly once, over the whole graph, never per-program.
+        // exactly once, over the whole graph, never per-program. A duplicated program name is refused: a blend
+        // resolves by name alone, so two programs under one name resolve nothing honestly.
         var cameraPrograms = new Dictionary<string, WorldCameraProgram>(comparer: StringComparer.Ordinal);
 
-        foreach (var camera in definition.Cameras) {
-            if (
-                (camera?.Rig is { Name: { Length: > 0 } } rig) &&
-                !cameraPrograms.ContainsKey(key: rig.Name)
-            ) {
-                cameraPrograms[rig.Name] = rig;
+        void AddCameraProgram(WorldCameraProgram? program, string path) {
+            if (program is not { Name: { Length: > 0 } }) {
+                return;
+            }
+
+            if (!cameraPrograms.TryAdd(
+                key: program.Name,
+                value: program
+            )) {
+                errors.Add(item: $"{path}.name '{program.Name}' is duplicated across the document's camera programs.");
             }
         }
 
-        if (definition.ViewsRaw is { } viewsForBlend) {
-            if (
-                (viewsForBlend.SeatRig is { Name: { Length: > 0 } } seatRig) &&
-                !cameraPrograms.ContainsKey(key: seatRig.Name)
-            ) {
-                cameraPrograms[seatRig.Name] = seatRig;
-            }
+        for (var index = 0; (index < definition.Cameras.Count); index++) {
+            AddCameraProgram(
+                path: $"cameras[{index}].rig",
+                program: definition.Cameras[index]?.Rig
+            );
+        }
 
-            if (
-                (viewsForBlend.CameraRig is { Name: { Length: > 0 } } cameraRigForBlend) &&
-                !cameraPrograms.ContainsKey(key: cameraRigForBlend.Name)
-            ) {
-                cameraPrograms[cameraRigForBlend.Name] = cameraRigForBlend;
-            }
+        if (definition.ViewsRaw is { } viewsForBlend) {
+            AddCameraProgram(
+                path: "views.seatRig",
+                program: viewsForBlend.SeatRig
+            );
+            AddCameraProgram(
+                path: "views.cameraRig",
+                program: viewsForBlend.CameraRig
+            );
         }
 
         ValidateCameraPrograms(

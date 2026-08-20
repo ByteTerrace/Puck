@@ -39,7 +39,7 @@
         ]
       },
       "rig": {
-        "$ref": "./common.schema.json#/$defs/WorldCameraRig",
+        "$ref": "./common.schema.json#/$defs/WorldCameraProgram",
         "description": "The independent local motion, aim, and lens axes."
       },
       "renderWidth": {

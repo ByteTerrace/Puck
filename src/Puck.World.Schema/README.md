@@ -81,7 +81,7 @@ frame its MoveAdvance/MoveStrafe channel rows are authored in
 (`channels[].frame`, `ChannelFrame`: `World` raw, `Camera` camera-relative and
 facing its travel, `Heading` body-relative with `Turn` steering — the stick's
 `player.move` is camera-framed by its own definition, so keyboard-in-heading
-beside stick-in-camera is one document), and `WorldCameraRig.SmoothRate`. The motion-model union's second arm is
+beside stick-in-camera is one document), and the seat rig's own `smooth` op. The motion-model union's second arm is
 `WorldMotionModel.Vehicle` — anisotropic body-frame drive (longitudinal
 accel/brake/coast, lateral grip/drift, speed-scaled steering, optional pitched
 flight) read by the `ResolveVehicleFrame`/`ShapeVehicleVelocity` operations;

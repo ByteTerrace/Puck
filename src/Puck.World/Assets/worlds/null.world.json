@@ -360,7 +360,7 @@
           },
           {
             "$type": "fov",
-            "fieldOfViewRadians": 0.6
+            "fieldOfViewRadians": "state.rtsFov"
           }
         ],
         "version": "puck.camera.v1"
@@ -1187,7 +1187,7 @@
         },
         "kit": "defaultKit",
         "look": null,
-        "source": "Idle"
+        "source": "Live"
       },
       "position": [
         0,
@@ -1527,6 +1527,11 @@
         "kind": "fixed",
         "name": "timeOfDay",
         "value": "0.3"
+      },
+      {
+        "kind": "fixed",
+        "name": "rtsFov",
+        "value": "0.6"
       },
       {
         "cells": [

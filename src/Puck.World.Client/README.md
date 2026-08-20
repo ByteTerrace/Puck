@@ -99,16 +99,24 @@ root-crossing dependency was the audio director, narrowed to
 - `WorldTextCatalog.cs` — deterministic glyph-atlas generation for a
   world-authored font.
 - `WorldCameraRigCompiler.cs`, `WorldAnchorGeometry.cs`, `WorldAvatarCatalog.cs`,
-  `WorldScreenTextDecal.cs` — compiled camera rigs, static placement/shape
-  anchor geometry, the avatar instance layout, and screen decal text.
-## The fly camera application
+  `WorldScreenTextDecal.cs` — the camera-program translation, static
+  placement/shape anchor geometry, the avatar instance layout, and screen decal
+  text.
 
-- `WorldSeatFlyRig.cs` — the per-seat fly control application `player.mode`
-  activates when a mode state's `target` is `"camera"`: a free camera driven
-  by the seat's own move/look samples and its `MoveUp`-role held channel,
-  seeded from the seat's current chase framing (no pose pop) and resolved
-  against the world-authored `views.flyRig`. Presentation-only client state,
-  like everything else in this section.
+## Camera programs
+
+- `WorldCameraRigCompiler.cs` translates an authored `WorldCameraProgram` into
+  the document-blind IR in `Puck.SdfVm.Views` and returns an
+  `IWorldCameraProgramRig`: authored subjects and `state.<row>[.<key>]` bindings
+  become per-frame slots the rig refills from the live document inside
+  `Resolve`, so no caller can evaluate against a stale binding by missing an
+  ordering step. `Retarget` repoints a cached rig at a newly delivered document;
+  `Look` carries the seat's live orbit delta (inert on a program compiled
+  non-interactive); `Spread` feeds an authored `spreadPullback`.
+- Free Cam is a possession, not a second integrator: a `seatModes` state
+  targeting `"camera"` possesses the seat's `camera-seat-<slot>` inhabited
+  placement through the ordinary Engage door, and the seat's view resolves
+  through `views.cameraRig` on this same pipeline.
 
 ## The binding-authoring layer
 

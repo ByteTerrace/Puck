@@ -54,16 +54,6 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
     private readonly IWorldScreenPresenter m_binder;
     private readonly WorldClient m_client;
     private readonly SdfCompositionFrameSource m_composed;
-    // One rig slot per local seat, chase (OrientedFollowRig) by default: its defaults (eye up-and-back along the
-    // anchor's +Z, target lifted a touch) frame that seat's avatar from behind, tracking its heading. The editor
-    // session swaps its own rig in per frame while a seat edits. Only local seats get cameras/views.
-    // The seat-chase smoothing gap: the authored camera program's smooth op rate (absent = off, the unsmoothed snap
-    // every shipped world used before this op existed) and, per slot, the previously resolved eye/target the
-    // exponential ease lags toward — see WorldSeatCameraResolver.Smooth (the same shared ease every traveling seat
-    // reuses, which mirrors the "seed un-smoothed on first resolve, alpha = 1 - e^(-rate * dt) after" shape
-    // WorldGroupAnchors already establishes for the establishing-shot centroid.
-    // Presentation-only: never read by anything that feeds back into the sim. Program-level (not per-op): every op
-    // in the rig shares one smoothing knob.
     // The window composer (layout selection + eased transitions; a shared singleton the world.view.state read also
     // observes), the group-anchor resolver (smoothed centroids for establishing shots), and the shared live
     // composition-override store (view.override layout/view.override camera). All presentation-only.
@@ -779,8 +769,8 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         return true;
     }
     // Frames the slot's view at the region's pixel size (region × window dims), so each split keeps its own aspect.
-    // The rig is the seat's chase rig by default; while the seat's fly application is active, the fly rig (advanced
-    // by this frame's presentation delta) frames it instead. The anchor is the render pose (interpolated and error-eased,
+    // The rig is the seat's chase rig by default; while its camera control application is active, views.cameraRig
+    // frames it instead. The anchor is the render pose (interpolated and error-eased,
     // resolved by the client view this frame) of the seat's PERCEIVED body — the perception anchor's resolution,
     // the seat's bound body or, while possessing, the routed body — so the chase camera tracks the pose the avatar
     // is drawn at and the orbit pivot rides it live. The audio listener follows by construction: the
@@ -814,16 +804,13 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
             bodyOrientation = m_client.Orientation(index: fallbackBody);
         }
 
-        // The one live-orbit mechanism: an authored Orbit seat rig feeds this seat's live pointer/stick offset into the
-        // document's own orbit vocabulary (authored yaw/pitch + the live offset) via WorldSeatCameraResolver — the
-        // same shared path every traveling seat uses, so a destination frames identically
-        // whether the seat sits at its boot or arrived through a portal. The merged seat-look's WorldAxes selects
-        // what the composed yaw rides on top of — false (today's shipped default) adds the body's own yaw so the
-        // orbit rides the body's heading (turn, and the camera swings with you); true drops it, an absolute orbit
-        // independent of facing. WorldAxes is rig STRUCTURE (the boot world's own playerDefaults.seatLook, never a
-        // joined profile's — see WorldSeatCameraResolver.ResolveSeatLook). Any other authored motion renders through the plain
-        // compiled chase untouched. m_client.Orientation (the sim body orientation) is never written — everything
-        // here is a local presentation-only derivation.
+        // The one live-orbit mechanism: the seat's live pointer/stick offset reaches the authored orbit op as the
+        // evaluator's look INPUT (WorldSeatCameraResolver.Look composes it), never as a recompiled program — the same
+        // shared path every traveling seat uses, so a destination frames identically whether the seat sits at its boot
+        // or arrived through a portal. views.seatControl.yawReference selects what the composed yaw rides on top of:
+        // Body adds the body's own heading (turn, and the camera swings with you); World drops it, an absolute orbit
+        // independent of facing. m_client.Orientation (the sim body orientation) is never written — everything here is
+        // a local presentation-only derivation.
         var definition = route.Endpoint.Definition;
         var view = (m_roster.Seat(slot: slot)?.View ?? throw new InvalidOperationException(message: "joined view has no seat controller"));
         var chase = view.ResolveChase(

@@ -9,12 +9,20 @@ Primary code:
 
 - `Puck.World.Schema/WorldViews.cs` — `WorldViewDefaults`,
   `WorldSeatViewControl`, layouts and slots.
-- `Puck.World.Schema/WorldCameraRig.cs` — motion/aim/lens unions.
+- `Puck.World.Schema/WorldCameraProgram.cs` — the authored op vocabulary and
+  its subject union. Authoring only: it parses and validates, and knows nothing
+  about how a frame resolves.
+- `Puck.SdfVm/Views/SdfCameraProgram.cs` — the compiled IR, the per-frame
+  evaluator, the `ISdfCameraRig` adapter, and the boom smoother. Parses no
+  document and references no `Puck.World*` project.
+- `Puck.World.Client/WorldCameraRigCompiler.cs` — the translation: authored ops
+  to IR, authored subjects and `state.<row>[.<key>]` bindings to per-frame
+  slots this rig refills from the live document.
 - `Puck.World.Schema/WorldSeatLook.cs` — portable input preference.
-- `Puck.World/Client/WorldSeatViewState.cs` — the one live state per occupied
-  seat, including yaw/pitch, live rig cache, and smoothing.
+- `Puck.World.Client/WorldSeatViewState.cs` — the one live state per occupied
+  seat, including yaw/pitch, the cached compiled rig, and smoothing.
 - `Puck.World/WorldSeatViewInput.cs` — stateless pointer adapter.
-- `Puck.World/Client/WorldFrameSource.cs`, `WorldAdjacencySceneEmitter.cs`, and
+- `Puck.World.Client/WorldFrameSource.cs`, `WorldAdjacencySceneEmitter.cs`, and
   `WorldContinuum.cs` — local and neighbouring-authority render callers of the
   same seat state and generation-addressed continuum.
 - `Puck.World/WorldViewCommandModule.cs` — read-back and composition verbs.
@@ -37,16 +45,14 @@ states its own:
     "maxPitch": 1.2
   },
   "seatRig": {
-    "motion": {
-      "$type": "orbit",
-      "distance": 5.4626,
-      "yaw": 0,
-      "pitch": 0.4145069,
-      "pivotOffset": [0, 0, 0]
-    },
-    "aim": { "$type": "anchor", "offset": [0, 1, 0], "worldAxes": false },
-    "lens": { "fieldOfViewRadians": 0.9599311 },
-    "smoothRate": 6
+    "name": "seatChase",
+    "version": "puck.camera.v1",
+    "operations": [
+      { "$type": "orbit", "distance": 5.4626001, "yaw": 0, "pitch": 0.4145069, "pivotOffset": [0, 0, 0] },
+      { "$type": "lookAt", "subject": { "$type": "reference" }, "targetOffset": [0, 1, 0], "worldAxes": false },
+      { "$type": "fov", "fieldOfViewRadians": 0.9599311 },
+      { "$type": "smooth", "rate": 6 }
+    ]
   },
   "layouts": []
 },
@@ -150,19 +156,35 @@ still write `Turn`, and vehicle kits may interpret their left-stick roles
 according to their own motion program. The standard left-stick press toggles
 the `run` channel; West and Left Shift remain ordinary hold-to-run sources.
 
-## Rigs and layouts
+## Camera programs and layouts
 
-`WorldCameraRig(Motion, Aim, Lens, SmoothRate)` composes:
+A camera rig is an authored PROGRAM — `{ name, version, operations }`, an
+ordered op list, the same shape `bodyMotionPrograms` uses for sim-side movement.
+There is no motion/aim/lens kind union: a new framing is a different op list,
+never a new engine type. `version` is `puck.camera.v1`; the op-count ceiling is
+`WorldCameraProgram.MaxOperations`.
 
-- motion: `Follow`, `Orbit`, `Static`, or `Track`;
-- aim: `Anchor`, `Forward`, or `WorldPoint`;
-- lens: vertical FOV radians;
-- `smoothRate`: non-negative exponential response; zero disables it.
+| op | does |
+|---|---|
+| `anchor` | sets the current SUBJECT and re-seeds the eye at it. At most one, and it must lead. Subject is `reference` (the pose the caller hands in), `placement` (a stamped placement transform, position only), or `worldPoint`. |
+| `offset` | places the eye at `value` from the subject — in the subject's own axes unless `worldAxes`. `spreadPullback` widens it by the group spread (only meaningful when the caller's reference is a `group` anchor). |
+| `lookAt` | aims. `subject: null` looks along the current subject's forward at `focusDistance`; a subject aims at its pose plus `targetOffset`. |
+| `orbit` | places the eye by orbiting the subject at `distance`/`yaw`/`pitch` about `pivotOffset`. At most one. On `views.seatRig` the seat's live look adds to yaw/pitch; everywhere else the authored angles render unchanged. |
+| `clampPitch` | bounds the pitch a later `orbit` resolves with, live delta included. At most one, and it must precede the orbit. |
+| `fov` | the rendered vertical FOV, radians. Every program needs one (or a `blend` that reaches ones that do). Bindable: a literal, or `state.<row>[.<key>]`. |
+| `smooth` | the exponential boom-ease rate the resolver REPORTS; the caller applies it. Zero is no ease. At most one. |
+| `blend` | lerps two other programs by NAME (eye, target, fov, and smooth rate) at `weight`, itself bindable. At most one. |
 
-The interactive `views.seatRig.motion` must be `Orbit`; validation refuses a
-non-interactive arm there because accepting right-stick yaw while rendering a
-rig that cannot express it would split movement from the visible camera. Use
-named `cameras` for `Follow`, `Static`, and `Track` views.
+The blend namespace is the whole document's program table: every
+`cameras[].rig`, plus `views.seatRig` and `views.cameraRig`. A dangling name, a
+reference cycle (carrying its trail), and a program name declared twice in that
+namespace are all refused by name.
+
+`views.seatRig` must contain an `orbit` op: `seatControl` declares a live
+yaw/pitch band, and only an orbit can express it. `views.cameraRig` — the
+first-person framing a camera control application resolves through — must author
+neither `orbit` nor `offset`, because it sits exactly at the possessed camera
+body's own pose.
 
 Named `cameras` resolve through authored anchors independently of the seat
 state. `views.layouts` maps normalized slots to joined seats or named cameras.
@@ -178,7 +200,7 @@ selection also publishes the `layout` context family every tick, so a world
 can flip a seat's binding group with the view (see documents.md, context
 rows).
 
-## Pointer, cursor, fly camera
+## Pointer, cursor, Free Cam
 
 `WorldPointerSink` is the one window observer. `WorldSeatViewInput` drains
 motion only for camera steering and asks the active preference whether the
@@ -188,12 +210,21 @@ the presentation projection only: the same relative motion, wheel, and button
 events independently enter `Puck.Commands` through `InputSources.Mouse` while
 absolute cursor position remains observer-only.
 
-`WorldSeatFlyRig` is the seat's fly control application: `player.mode`
-activates it (a mode state whose `target` is `"camera"`), seeding the fly
-camera from the seat's current chase framing (no pose pop) and resolving it
-against the world-authored `views.flyRig` each frame; the play chase state
-stays on the seat and resumes when the mode flips back. Named cameras and the
-fly rig do not alter the logical movement basis.
+Free Cam is a POSSESSION, not a second camera integrator. A `seatModes` state
+whose `target` is `"camera"` makes the seat possess its own authored
+`camera-seat-<0-based slot>` inhabited placement through the ordinary Engage
+door: the seat's own body intent diverts to Idle, and the camera body's pose
+becomes what the seat perceives, sees, and hears through. Its view resolves
+through `views.cameraRig` — the same compiler and evaluator every other program
+uses — and leaving the state disengages, restoring the seat's own body. A
+document authoring a camera-targeting state without a `views.cameraRig` or
+without an inhabited `camera-seat-` placement is refused by name.
+
+`player.camera [seat]` is the bindable no-token toggle a wheel sector or a pad
+chord fires: it resolves the seat's own camera-targeting family/state from the
+routed document and flips between it and the family's default, running the same
+authority check and Engage/Disengage path `player.mode` does. Named cameras and
+Free Cam do not alter the logical movement basis.
 
 ## Verbs
 
@@ -208,7 +239,9 @@ fly rig do not alter the logical movement basis.
   bindable: a bound dispatch (wheel sector / chord row, no tokens) selects the
   LAYOUT override by its constant Axis1D value — 0 or less clears to auto, n
   selects the nth authored `views.layouts` row (document order, 1-based).
-- `world.row.set views.seatRig <json>` — replace seat framing.
+- `player.camera [seat]` — toggles Free Cam (bindable, no tokens).
+- `world.row.set views.seatRig <json>` — replace seat framing (a whole camera
+  program).
 - `world.row.set views.seatControl <json>` — replace yaw reference/pitch band.
 - `world.row.set playerDefaults.seatLook <json>` — replace world-floor input
   preference.
@@ -237,3 +270,9 @@ forward, move right-stick X and prove the trajectory turns with heading. Repeat 
 a traveler crossing to prove the same seat state and destination structure are
 used. Refusal controls: omit `views.seatControl`, submit the old mixed
 `seatLook` members, invert the pitch interval, or name an unknown yaw reference.
+
+For a camera program: author an unknown op `$type`, put `anchor` anywhere but
+first, put `clampPitch` after its `orbit`, omit `fov`, name an undeclared
+program from a `blend`, or point two programs' blends at each other. Each is
+refused by name at load, the cycle carrying its trail. `world.view.camera`
+reports `cameraApplication=true` while a seat is in Free Cam.
