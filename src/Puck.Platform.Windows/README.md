@@ -44,7 +44,7 @@ Every graph's native objects belong to one MTA worker thread
 fails, disposal requests a stop and joins for a bounded interval, and a worker
 that outlives the join keeps its objects until the driver call returns.
 `Win32D3D11CameraFrameConverter` is the shared tier's compute kernel for the
-native YUY2/L8 surfaces; `Win32D3D11VideoDevice` is the source reader's DXVA
+native YUY2/NV12/L8 surfaces; `Win32D3D11VideoDevice` is the source reader's DXVA
 device; `Win32CameraControlSurface` maps the neutral control vocabulary onto
 either a WinRT `VideoDeviceController` or the legacy `IAMCameraControl`/
 `IAMVideoProcAmp` pair.

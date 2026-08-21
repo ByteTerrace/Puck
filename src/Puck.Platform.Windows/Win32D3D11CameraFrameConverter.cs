@@ -15,14 +15,30 @@ using WinRT;
 namespace Puck.Platform.Windows;
 
 /// <summary>Converts one native WinRT camera surface into consumer-owned RGBA shared targets without leaving the
-/// camera frame server's Direct3D 11 device. YUY2 is unpacked and color-converted by a compute shader; L8 is expanded
-/// to grayscale by a second shader. The source is first copied into a shader-readable texture because camera-driver
-/// surfaces are not required to carry <c>D3D11_BIND_SHADER_RESOURCE</c>; the shader writes a private UAV, then one
-/// GPU copy transfers the completed RGBA image into the cross-device shared ring. All work and completion waits stay
-/// on the dual-camera poll thread.</summary>
+/// camera frame server's Direct3D 11 device. Packed YUY2 (the BRIO) and two-plane NV12 (the Surface's front camera)
+/// color are unpacked and color-converted by a compute shader each; L8 is expanded to grayscale by a third. The source
+/// is first copied into a shader-readable texture because camera-driver surfaces are not required to carry
+/// <c>D3D11_BIND_SHADER_RESOURCE</c>; the shader writes a private UAV, then one GPU copy transfers the completed RGBA
+/// image into the cross-device shared ring. All work and completion waits stay on the dual-camera poll thread.</summary>
 [SupportedOSPlatform("windows10.0.19041")]
 internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
-    private const string ColorShader = """
+    // Limited-range BT.601 (the transport both UVC color subtypes carry), shared by every color kernel so the two
+    // cannot drift apart; chroma arrives biased by 0.5.
+    private const string ColorMath = """
+        float3 YuvToRgb(float y, float u, float v) {
+            u -= 0.5;
+            v -= 0.5;
+            y = max(0.0, ((y * 255.0) - 16.0) / 219.0);
+            return saturate(float3(
+                y + (1.596 * v),
+                y - (0.392 * u) - (0.813 * v),
+                y + (2.017 * u)
+            ));
+        }
+
+        """;
+    // YUY2 viewed as R8G8B8A8 at half width: each texel is one two-pixel macropixel, Y0/U/Y1/V.
+    private const string PackedColorShader = ColorMath + """
         Texture2D<float4> Source : register(t0);
         RWTexture2D<float4> Target : register(u0);
 
@@ -34,15 +50,25 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
 
             float4 pair = Source.Load(int3(position.x >> 1, position.y, 0));
             float y = (((position.x & 1) == 0) ? pair.r : pair.b);
-            float u = pair.g - 0.5;
-            float v = pair.a - 0.5;
-            y = max(0.0, ((y * 255.0) - 16.0) / 219.0);
-            float3 rgb = saturate(float3(
-                y + (1.596 * v),
-                y - (0.392 * u) - (0.813 * v),
-                y + (2.017 * u)
-            ));
-            Target[position.xy] = float4(rgb, 1.0);
+            Target[position.xy] = float4(YuvToRgb(y, pair.g, pair.a), 1.0);
+        }
+        """;
+    // NV12: a full-resolution luma plane (R8) and a half-resolution interleaved chroma plane (R8G8), each bound as its
+    // own view over the one NV12 texture — Direct3D selects the plane from the view format.
+    private const string PlanarColorShader = ColorMath + """
+        Texture2D<float> Luma : register(t0);
+        Texture2D<float2> Chroma : register(t1);
+        RWTexture2D<float4> Target : register(u0);
+
+        [numthreads(8, 8, 1)]
+        void main(uint3 position : SV_DispatchThreadID) {
+            uint width, height;
+            Target.GetDimensions(width, height);
+            if (position.x >= width || position.y >= height) return;
+
+            float y = Luma.Load(int3(position.xy, 0));
+            float2 uv = Chroma.Load(int3(position.xy >> 1, 0));
+            Target[position.xy] = float4(YuvToRgb(y, uv.x, uv.y), 1.0);
         }
         """;
     private const string InfraredShader = """
@@ -69,7 +95,7 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
     private bool m_disposed;
 
     private readonly ID3D11Texture2D* m_input;
-    private readonly ID3D11ShaderResourceView* m_inputView;
+    private readonly ID3D11ShaderResourceView*[] m_inputViews;
     private readonly ID3D10Multithread* m_multithread;
     private readonly ID3D11Texture2D* m_output;
     private readonly ID3D11UnorderedAccessView* m_outputView;
@@ -86,7 +112,7 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
         var description = default(D3D11_TEXTURE2D_DESC);
 
         source->GetDesc(pDesc: &description);
-        var (requiredFormat, viewFormat, shaderSource) = Kernel(subtype: subtype);
+        var (requiredFormat, viewFormats, shaderSource) = Kernel(subtype: subtype);
 
         if (
             (description.Width != width) ||
@@ -102,7 +128,7 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
         ID3D11DeviceContext* context = null;
         ID3D10Multithread* multithread = null;
         ID3D11Texture2D* input = null;
-        ID3D11ShaderResourceView* inputView = null;
+        var inputViews = new ID3D11ShaderResourceView*[viewFormats.Length];
         ID3D11Texture2D* output = null;
         ID3D11UnorderedAccessView* outputView = null;
         ID3D11ComputeShader* shader = null;
@@ -132,13 +158,19 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
 
             device->CreateTexture2D(pDesc: &inputDescription, pInitialData: null, ppTexture2D: &input);
 
-            var inputViewDescription = new D3D11_SHADER_RESOURCE_VIEW_DESC {
-                Format = viewFormat,
-                ViewDimension = D3D_SRV_DIMENSION.D3D11_SRV_DIMENSION_TEXTURE2D,
-            };
+            for (var index = 0; (index < viewFormats.Length); index++) {
+                var inputViewDescription = new D3D11_SHADER_RESOURCE_VIEW_DESC {
+                    Format = viewFormats[index],
+                    ViewDimension = D3D_SRV_DIMENSION.D3D11_SRV_DIMENSION_TEXTURE2D,
+                };
 
-            inputViewDescription.Anonymous.Texture2D.MipLevels = 1;
-            device->CreateShaderResourceView(pResource: ((ID3D11Resource*)input), pDesc: &inputViewDescription, ppSRView: &inputView);
+                inputViewDescription.Anonymous.Texture2D.MipLevels = 1;
+
+                ID3D11ShaderResourceView* inputView = null;
+
+                device->CreateShaderResourceView(pResource: ((ID3D11Resource*)input), pDesc: &inputViewDescription, ppSRView: &inputView);
+                inputViews[index] = inputView;
+            }
 
             var outputDescription = new D3D11_TEXTURE2D_DESC {
                 Width = checked((uint)width),
@@ -163,7 +195,7 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
             Release(value: shader);
             Release(value: outputView);
             Release(value: output);
-            Release(value: inputView);
+            Release(values: inputViews);
             Release(value: input);
             Release(value: multithread);
             Release(value: context);
@@ -176,7 +208,7 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
         m_shader = shader;
         m_outputView = outputView;
         m_output = output;
-        m_inputView = inputView;
+        m_inputViews = inputViews;
         m_input = input;
         m_multithread = multithread;
         m_context = context;
@@ -185,11 +217,13 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
     }
 
     // Native transport subtype (the WinRT MediaFrameFormat.Subtype FOURCC) to the surface format the frame server
-    // must deliver, the shader-resource view over it, and the kernel that unpacks it. A YUY2 view as R8G8B8A8 exposes
-    // each two-pixel macropixel as normalized Y0/U/Y1/V components at half width.
-    private static (DXGI_FORMAT Surface, DXGI_FORMAT View, string Shader) Kernel(string subtype) => (subtype.ToUpperInvariant() switch {
-        "YUY2" => (DXGI_FORMAT.DXGI_FORMAT_YUY2, DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM, ColorShader),
-        "L8" => (DXGI_FORMAT.DXGI_FORMAT_R8_UNORM, DXGI_FORMAT.DXGI_FORMAT_R8_UNORM, InfraredShader),
+    // must deliver, the shader-resource views over it (bound at t0, t1, … in order), and the kernel that unpacks it.
+    // A YUY2 view as R8G8B8A8 exposes each two-pixel macropixel as normalized Y0/U/Y1/V components at half width; an
+    // NV12 texture answers an R8 view with its luma plane and an R8G8 view with its half-resolution chroma plane.
+    private static (DXGI_FORMAT Surface, DXGI_FORMAT[] Views, string Shader) Kernel(string subtype) => (subtype.ToUpperInvariant() switch {
+        "YUY2" => (DXGI_FORMAT.DXGI_FORMAT_YUY2, [DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM], PackedColorShader),
+        "NV12" => (DXGI_FORMAT.DXGI_FORMAT_NV12, [DXGI_FORMAT.DXGI_FORMAT_R8_UNORM, DXGI_FORMAT.DXGI_FORMAT_R8G8_UNORM], PlanarColorShader),
+        "L8" => (DXGI_FORMAT.DXGI_FORMAT_R8_UNORM, [DXGI_FORMAT.DXGI_FORMAT_R8_UNORM], InfraredShader),
         _ => throw new NotSupportedException(message: $"no GPU conversion kernel for the native camera subtype '{subtype}'"),
     });
 
@@ -257,11 +291,15 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
             pSrcResource: ((ID3D11Resource*)sourceTexture)
         );
 
-        var inputView = m_inputView;
+        var viewCount = checked((uint)m_inputViews.Length);
         var targetView = m_outputView;
 
         m_context->CSSetShader(pComputeShader: m_shader, NumClassInstances: 0, ppClassInstances: null);
-        m_context->CSSetShaderResources(StartSlot: 0, NumViews: 1, ppShaderResourceViews: &inputView);
+
+        fixed (ID3D11ShaderResourceView** inputViews = m_inputViews) {
+            m_context->CSSetShaderResources(StartSlot: 0, NumViews: viewCount, ppShaderResourceViews: inputViews);
+        }
+
         m_context->CSSetUnorderedAccessViews(StartSlot: 0, NumUAVs: 1, ppUnorderedAccessViews: &targetView, pUAVInitialCounts: null);
         m_context->Dispatch(
             ThreadGroupCountX: checked((uint)((m_width + 7) / 8)),
@@ -269,10 +307,14 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
             ThreadGroupCountZ: 1
         );
 
-        ID3D11ShaderResourceView* noInput = null;
+        var noInputs = stackalloc ID3D11ShaderResourceView*[m_inputViews.Length];
         ID3D11UnorderedAccessView* noTarget = null;
 
-        m_context->CSSetShaderResources(StartSlot: 0, NumViews: 1, ppShaderResourceViews: &noInput);
+        for (var index = 0; (index < m_inputViews.Length); index++) {
+            noInputs[index] = null;
+        }
+
+        m_context->CSSetShaderResources(StartSlot: 0, NumViews: viewCount, ppShaderResourceViews: noInputs);
         m_context->CSSetUnorderedAccessViews(StartSlot: 0, NumUAVs: 1, ppUnorderedAccessViews: &noTarget, pUAVInitialCounts: null);
         m_context->CSSetShader(pComputeShader: null, NumClassInstances: 0, ppClassInstances: null);
         m_context->CopySubresourceRegion(
@@ -300,7 +342,7 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
         Release(value: m_shader);
         Release(value: m_outputView);
         Release(value: m_output);
-        Release(value: m_inputView);
+        Release(values: m_inputViews);
         Release(value: m_input);
         Release(value: m_multithread);
         Release(value: m_context);

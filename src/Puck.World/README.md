@@ -435,7 +435,8 @@ local producer — actually holds the slot). A camera source row picks its
 `sensor` (`color` default, or `infrared` — its own shared feed; two-sensor
 worlds prefer the device's Windows Face Authentication Profile V2 and its
 driver-declared simultaneous native format pair. On Windows, Puck first asks
-the frame server for both native GPU surfaces: BRIO's YUY2 color and L8 IR are
+the frame server for both native GPU surfaces: YUY2 (BRIO) or NV12 (Surface)
+color and L8 IR are
 converted by D3D11 compute into private RGBA textures, copied into two shared
 three-slot rings, and sampled directly by either renderer without host pixels.
 Each sampled slot stays acquired until the SDF frame-ring fence proves that GPU
