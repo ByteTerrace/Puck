@@ -32,8 +32,8 @@ public sealed class DirectXGpuSurfaceExportFactory : IGpuSurfaceExportFactory {
     /// <c>ALLOW_SIMULTANEOUS_ACCESS</c>, so a Direct3D 11 device can open and write it while this device merely owns
     /// the allocation. The D3D11 producer writes a private texture and copies into this render-target-bindable shared
     /// allocation. Not part of the neutral interface: the caller is Windows-specific by construction.
-    /// <para>This path supports the GPU-resident zero-copy camera tier and is consumed by
-    /// <c>Win32MediaFoundationSharedCameraSession</c> and the coordinated FaceAuth GPU session.</para></summary>
+    /// <para>This path supports the GPU-resident zero-copy camera tier: the Windows camera graphs' shared-texture
+    /// leaves write into the textures it creates.</para></summary>
     /// <param name="deviceContext">The Direct3D 12 device context that allocates the texture.</param>
     /// <param name="format">The neutral <see cref="GpuPixelFormat"/>.</param>
     /// <param name="width">The image width in pixels.</param>

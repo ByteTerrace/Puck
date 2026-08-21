@@ -352,6 +352,28 @@
       ],
       "additionalProperties": false
     },
+    "WorldMachineCable": {
+      "description": "One machine\u0027s cable-port declaration \u2014 the machine-tier home of cable linking. A cable is the SET of declared machine sources naming the same cable name, derived by MachineCableGroups; no port ever points at another port, so reciprocity holds by construction and a one-port cable is a validation refusal rather than a dangling half-pair.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "name": {
+          "description": "The cable\u0027s stable kebab-case name, shared by every plugged port.",
+          "type": "string"
+        },
+        "position": {
+          "description": "This machine\u0027s 0-based place in cable order \u2014 contiguous across the cable\u0027s ports (validated), and what decides the linking engine\u0027s deterministic player order.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "position"
+      ],
+      "additionalProperties": false
+    },
     "WorldScreenSourceMachine": {
       "description": "An arbitrary deterministic machine\u0027s unresampled framebuffer \u2014 resolved against a registered IScreenMachineEngine by Engine id. The world never names a concrete machine: the engine owns its Options vocabulary (a GamingBrick reads a dmg/cgb/agb model \u002B a dmgspeed pin).",
       "properties": {
@@ -372,6 +394,11 @@
             "string",
             "null"
           ]
+        },
+        "cable": {
+          "$ref": "#/$defs/WorldMachineCable",
+          "description": "This machine\u0027s cable port (see WorldMachineCable), or null for an unlinked machine. Legal only on a declared screens row\u0027s own source \u2014 a magazine entry or a placement face\u0027s source is refused one (validated), because a cable is a standing physical connection of the machine that owns the slot, not of whatever content happens to rotate through it. Omitted from the wire when null, so every machine source authored before cables existed round-trips unchanged.",
+          "default": null
         }
       },
       "required": [
@@ -400,6 +427,153 @@
       },
       "additionalProperties": false
     },
+    "WorldCameraVendorControl": {
+      "description": "One raw vendor-extension write on the shared camera (see WorldCameraControls\u0027s Vendor member): a byte-sized selector on the device\u0027s vendor unit and the value to write. Deliberately semantics-free \u2014 the honest vocabulary for device controls no standard names.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "id": {
+          "description": "The vendor extension unit\u0027s control selector.",
+          "type": "integer"
+        },
+        "value": {
+          "description": "The byte value to write (0..255; the device clamps or refuses out-of-range writes).",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "WorldCameraControls": {
+      "description": "The authored control state for the shared physical camera \u2014 one device-wide state across its color and infrared streams \u2014 and the standard UVC camera/image controls (pan/tilt/zoom, exposure, focus, color). Every member is optional: an ABSENT member leaves that control at the device\u0027s own driver default (automatic where the device supports it), and a PRESENT member drives the control manually at that value. The device remains authoritative \u2014 a value outside the device\u0027s reported range is clamped (and step-snapped) at apply, a control the device lacks is skipped, and screen.camera reads the resulting live state (each control\u0027s device range, mode, and current value) back over the pipe. Removing a previously authored member restores that control\u0027s driver default on the next apply. Ranges are device-specific by design, so validation admits any integer rather than guessing one device\u0027s envelope.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "pan": {
+          "description": "Horizontal framing offset (digital pan on webcams).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "tilt": {
+          "description": "Vertical framing offset (digital tilt on webcams).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "zoom": {
+          "description": "Magnification \u2014 on sensor-cropping webcams a region-of-interest zoom (e.g. 100..500 = 1x..5x on a Logitech BRIO), which pairs with Pan/Tilt to frame a region.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "exposure": {
+          "description": "Manual exposure time, typically log2 seconds (e.g. -5 = 1/32 s); absent = auto exposure.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "focus": {
+          "description": "Manual focus distance; absent = autofocus.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "brightness": {
+          "description": "Image brightness offset.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "contrast": {
+          "description": "Image contrast.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "saturation": {
+          "description": "Color saturation (0 is grayscale on most devices).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "sharpness": {
+          "description": "Edge sharpening strength.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "gain": {
+          "description": "Sensor gain (ISO-like amplification).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "whiteBalance": {
+          "description": "Manual white-balance color temperature in kelvin; absent = auto white balance.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "backlightCompensation": {
+          "description": "Backlight compensation (devices commonly report a 0..1 toggle).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "fieldOfView": {
+          "description": "The lens field of view in DEGREES \u2014 a vendor-extension control (hardware-verified on the Logitech BRIO: discrete 90/78/65, a true sensor crop composing with Zoom); the device snaps to its nearest supported value, and a camera without the vendor unit skips it. Absent = the device default (widest).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "vendor": {
+          "description": "Raw vendor-extension writes \u2014 byte-sized (selector, value) pairs on the device\u0027s vendor unit, applied in order after the named controls. The engine assigns NO semantics: the author names the selector, the device decides what it means (e.g. the BRIO\u0027s unconfirmed HDR candidate is selector 12), and a removed row is NOT restored (its default is unknowable). screen.camera reads each authored selector back. Omitted from the wire when null.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/WorldCameraVendorControl"
+          },
+          "default": null
+        }
+      },
+      "additionalProperties": false
+    },
     "WorldScreenSourceCamera": {
       "description": "The platform\u0027s default live camera feed, with an explicit preferred capture profile. The platform may negotiate a nearby extent; every screen sampling the same physical default device shares one session.",
       "properties": {
@@ -409,6 +583,19 @@
         "profile": {
           "$ref": "#/$defs/WorldFeedProfile",
           "description": "The preferred capture extent and maximum upload cadence."
+        },
+        "controls": {
+          "$ref": "#/$defs/WorldCameraControls",
+          "description": "The authored device-control state (WorldCameraControls), or null to leave every control at its driver default. One physical device carries one control state across color and infrared, so the FIRST declared camera screen authoring this wins regardless of sensor (matching the shared-device model); a later UpsertScreen mutation re-resolves and applies the change live. Omitted from the wire when null.",
+          "default": null
+        },
+        "sensor": {
+          "description": "Which physical sensor this row\u0027s shared feed opens: Color (the default) or Infrared \u2014 the infrared frame source a Windows Hello capable device carries. Each sensor gets its own shared feed, so different rows may request different sensors at once; the engine honors a Windows Face Authentication Profile V2 when published and admits simultaneous capture only after both native streams prove live. A legacy provider available only to the Windows biometric broker is not a public dual-camera graph. An absent infrared source faults the bind loudly (the slot shows the no-signal card).",
+          "enum": [
+            "Color",
+            "Infrared"
+          ],
+          "default": "Color"
         }
       },
       "required": [
@@ -2907,6 +3094,56 @@
       ],
       "additionalProperties": false
     },
+    "WorldPlacementContribution": {
+      "description": "A placement\u0027s contribution facet: the row is a slot whose frame (id, pose, scale, and these lifecycle terms) is host-authored and whose creation a federation partner supplies through ordinary mutations. Null is an ordinary placement.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "tenure": {
+          "description": "The authored lifecycle.",
+          "enum": [
+            "Presence",
+            "Endowed"
+          ]
+        },
+        "slotCreationId": {
+          "description": "The host-owned Id the slot shows while unfilled and returns to on retraction. Must resolve to a declared creation row.",
+          "type": "string"
+        },
+        "link": {
+          "description": "The authored adjacencies row name the presence check watches \u2014 the same key the $link:\u003CadjacencyName\u003E reserved rule channel reads. Required for Presence, refused beside Endowed.",
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "graceSeconds": {
+          "description": "Seconds the watched link may stay unreachable before the piece retracts, compiled to simulation ticks through CompiledGrace at each sweep observation and stamped once into RetractDeadlineTick. Zero disables the grace (retract on the first observed outage); a rate-0 world compiles to Never, so nothing retracts. Refused beside Endowed unless zero.",
+          "type": "number",
+          "default": 0
+        },
+        "contributor": {
+          "description": "Server-stamped. The acting principal that filled the slot; null while unfilled. Never accepted from a submitted payload or an authored document.",
+          "default": null
+        },
+        "retractDeadlineTick": {
+          "description": "Server-stamped. The simulation tick at or after which the presence sweep retracts this slot; null while the link is reachable.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "tenure",
+        "slotCreationId"
+      ],
+      "additionalProperties": false
+    },
     "WorldPlacement": {
       "description": "One placement instance row \u2014 a creation asset stamped into the world by reference: transform \u002B facets as data, addressed by its stable Id. A placement whose creation carries timeline frames is animated: it replays client-side on the render clock through the reserved dynamic-transform pool (distribution/mirror facets are static-stamp-only and reject on an animated row). A placement carrying an Inhabit facet is a live population body rather than furniture (see WorldPlacementInhabit); its declared creation eyes derive WorldCamera feeds and its declared faces derive screens (both at the delivery boundary, never written to the document).",
       "type": "object",
@@ -2968,6 +3205,11 @@
         "attach": {
           "$ref": "#/$defs/WorldPlacementAttach",
           "description": "The placement\u0027s attach facet (see WorldPlacementAttach) \u2014 binds the row\u0027s resolved world pose to a live population body, or null for a static/authored transform (the default, unchanged behavior). Omitted from the wire when null.",
+          "default": null
+        },
+        "contribution": {
+          "$ref": "#/$defs/WorldPlacementContribution",
+          "description": "The placement\u0027s contribution facet (see WorldPlacementContribution) \u2014 marks the row a host-authored slot a federation partner fills, or null for an ordinary placement. Omitted from the wire when null. Composes with every other facet: the facet governs which creation the row shows and for how long, never its transform.",
           "default": null
         }
       },

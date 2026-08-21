@@ -4,7 +4,6 @@ using System.Text;
 using Microsoft.Win32.SafeHandles;
 using Windows.Graphics.DirectX.Direct3D11;
 using Windows.Win32;
-using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Direct3D;
 using Windows.Win32.Graphics.Direct3D10;
 using Windows.Win32.Graphics.Direct3D11;
@@ -195,6 +194,7 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
     });
 
     public bool IsStarted => (m_targets.Length != 0);
+    public int TargetCount => m_targets.Length;
 
     public void AttachTargets(IReadOnlyList<nint> sharedTargetHandles) {
         if (IsStarted) {
@@ -286,17 +286,7 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
             pSrcResource: ((ID3D11Resource*)m_output)
         );
 
-        m_context->End(pAsync: ((ID3D11Asynchronous*)m_query));
-        m_context->Flush();
-        BOOL done = false;
-
-        while (!done) {
-            m_context->GetData(DataSize: ((uint)sizeof(BOOL)), GetDataFlags: 0, pAsync: ((ID3D11Asynchronous*)m_query), pData: &done);
-
-            if (!done) {
-                Thread.SpinWait(iterations: 64);
-            }
-        }
+        Win32D3D11.WaitForCompletion(context: m_context, query: m_query);
     }
 
     public void Dispose() {

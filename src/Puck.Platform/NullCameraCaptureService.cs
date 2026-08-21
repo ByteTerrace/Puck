@@ -2,37 +2,21 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace Puck.Platform;
 
-/// <summary>The graceful "no camera" fallback: reports unsupported and never opens a device. Registered on platforms
-/// without a camera backend (or where Media Foundation / a device is unavailable), so a live-camera content source
-/// cleanly falls back rather than failing.</summary>
+/// <summary>The "no camera" fallback: reports unsupported and never opens a device. Registered on platforms without a
+/// camera backend, so a live-camera content source faults cleanly rather than failing.</summary>
 public sealed class NullCameraCaptureService : ICameraCaptureService {
     /// <inheritdoc/>
     public bool IsSupported => false;
 
     /// <inheritdoc/>
-    public bool TryOpenDefault(int requestedWidth, int requestedHeight, uint requestedRateHz, CameraSensor sensor, [NotNullWhen(true)] out ICameraCaptureSession? session) {
-        session = null;
+    public bool TryOpenPixels(ReadOnlySpan<CameraStreamRequest> streams, [NotNullWhen(true)] out ICameraGraph<ICameraPixelStream>? graph) {
+        graph = null;
 
         return false;
     }
     /// <inheritdoc/>
-    /// <inheritdoc/>
-    public bool TryOpenDualDefault(int colorWidth, int colorHeight, uint colorRateHz, int infraredWidth, int infraredHeight, uint infraredRateHz, [NotNullWhen(true)] out ICameraCaptureSession? colorSession, [NotNullWhen(true)] out ICameraCaptureSession? infraredSession) {
-        colorSession = null;
-        infraredSession = null;
-
-        return false;
-    }
-    /// <inheritdoc/>
-    public bool TryOpenSharedDefault(long adapterLuid, int requestedWidth, int requestedHeight, uint requestedRateHz, CameraSensor sensor, [NotNullWhen(true)] out ICameraSharedCaptureSession? session) {
-        session = null;
-
-        return false;
-    }
-    /// <inheritdoc/>
-    public bool TryOpenSharedDualDefault(long adapterLuid, int colorWidth, int colorHeight, uint colorRateHz, int infraredWidth, int infraredHeight, uint infraredRateHz, [NotNullWhen(true)] out ICameraSharedCaptureSession? colorSession, [NotNullWhen(true)] out ICameraSharedCaptureSession? infraredSession) {
-        colorSession = null;
-        infraredSession = null;
+    public bool TryOpenShared(long adapterLuid, ReadOnlySpan<CameraStreamRequest> streams, [NotNullWhen(true)] out ICameraGraph<ICameraSharedStream>? graph) {
+        graph = null;
 
         return false;
     }

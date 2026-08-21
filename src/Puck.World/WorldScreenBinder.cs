@@ -96,16 +96,15 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     private DirectXGpuSurfaceExportFactory? m_cameraExport;
     private DirectXDeviceContext? m_cameraTargetDevice;
 
-    // The per-sensor shared webcam feeds. A device may back both streams with one exclusive physical pipeline, so a
-    // dual capture is used only when both streams prove live; each feed is shared by every screen naming that sensor.
-    // Opened lazily on first demand; a failed open records the
-    // sensor's fault in m_cameraFaults instead (which doubles as the tried-once latch: a sensor in NEITHER dictionary
-    // has not been attempted).
+    // The one physical camera and its per-sensor feeds: every screen naming a sensor shares that sensor's feed, and
+    // every feed shares the device's one graph (CameraDevice). A sensor the platform cannot open at all records its
+    // fault in m_cameraFaults and gets no feed.
+    private readonly CameraDevice m_camera = new();
     private readonly Dictionary<WorldCameraSensor, CameraFeed> m_cameraFeeds = new();
     private readonly Dictionary<WorldCameraSensor, string> m_cameraFaults = new();
-    // The authored control state for the shared PHYSICAL device (the first camera row authoring controls wins, per
+    // The authored control state for the physical device (the first camera row authoring controls wins, per
     // ResolveSharedCameraControls) — resolved at boot and re-resolved by ReconcileScreens, so an UpsertScreen mutation
-    // moves the device live. Applied through the session facade that owns the graph's shared control surface.
+    // moves the device live through the per-frame service path.
     private WorldCameraControls? m_cameraControls;
     // The world's placeable-camera rows — booted from the definition and REPLACED by ReconcileCameras when a camera
     // mutation delivers, so a runtime screen.source <index> view (and every later resolve) reads the LIVE rows.
@@ -522,13 +521,9 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
             slot.Session?.Dispose();
         }
 
-        foreach (var cameraFeed in m_cameraFeeds.Values) {
-            cameraFeed.Dispose();
-        }
+        DisposeCamera();
 
-        m_cameraFeeds.Clear();
-
-        // After the feed: the camera's shared targets live on this headless device, so it must outlive them.
+        // After the feeds: the camera's shared targets live on this headless device, so it must outlive them.
         if (
             (m_cameraTargetDevice is { } cameraTargetDevice) &&
             OperatingSystem.IsWindowsVersionAtLeast(
@@ -563,9 +558,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
             }
         }
 
-        foreach (var cameraFeed in m_cameraFeeds.Values) {
-            cameraFeed.NotifyDeviceLost();
-        }
+        CameraDeviceLost();
 
         // The Vulkan camera route's headless D3D12 device and the cached render LUID describe the OLD render adapter.
         // Release the device only after the feed dropped every target allocated on it, then let the next Publish read
@@ -723,17 +716,9 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
             slot.DeclaredSource = screen.Source;
         }
 
-        // One physical camera has one authored control state. Re-resolve it from the mutated list and land it through
-        // whichever live feed owns the graph's control surface (a no-op on the other facade and when unchanged). A
-        // feed not yet live picks it up from the per-frame service path once frames flow.
+        // One physical camera has one authored control state. Re-resolve it from the mutated list; the per-frame service
+        // path lands it on the device at the next live frame (vendor writes are firmware-ignored on an idle stream).
         m_cameraControls = ResolveSharedCameraControls(screens: screens);
-
-        foreach (var cameraFeed in m_cameraFeeds.Values) {
-            ApplyCameraControls(
-                desired: m_cameraControls,
-                feed: cameraFeed
-            );
-        }
     }
     /// <summary>Clears a screen's live local producer — the runtime <c>screen.eject</c> path — for either kind this
     /// binder itself owns (the webcam, a window capture). Ejecting a machine is <c>ScreenCommandModule</c>'s

@@ -24,20 +24,25 @@ The Windows concrete backends behind `Puck.Platform`'s contracts.
 
 ## Camera capture
 
-Camera capture has two independent axes. A single sensor uses a Media
-Foundation source reader; coordinated color and infrared use one camera frame
-server graph selected from the device's public Windows Face Authentication
-Profile V2. Each graph can publish CPU pixels or, when the device and render
-adapter admit it, shared GPU textures. GPU refusal is atomic for a dual graph,
-so both sensors fall back together to the CPU-pixel graph.
+`Win32MediaFoundationCameraService` opens one `ICameraGraph` per request. A
+single sensor opens through a Media Foundation source reader
+(`Win32SourceReaderCameraGraph`); the color + infrared pair opens through the
+camera frame server's public Windows Face Authentication Profile V2 graph
+(`Win32FaceAuthenticationCapture` discovers and starts it,
+`Win32FaceAuthenticationCameraGraph` polls it). Each shape has a CPU-pixel leaf
+and a shared-texture leaf; the leaves differ only in reader configuration and
+in where a frame goes (`Win32PixelStream`'s latest-frame buffer, or a
+consumer-provisioned shared ring published through `Win32SharedStream`).
 
-`Win32FaceAuthenticationCapture` is the single owner of dual-device discovery,
-profile selection, native format metadata, reader startup, and shutdown. The
-CPU and GPU dual cores differ only after native acquisition: one publishes
-host buffers and the other converts the native Direct3D surfaces into shared
-RGBA rings. Capture workers retain their native objects when a bounded join
-times out; the worker releases them after the driver call returns, avoiding a
-cross-thread dispose race during device loss.
+Every graph's native objects belong to one MTA worker thread
+(`Win32CameraGraph`): construction blocks until the worker reports ready or
+fails, disposal requests a stop and joins for a bounded interval, and a worker
+that outlives the join keeps its objects until the driver call returns.
+`Win32D3D11CameraFrameConverter` is the shared tier's compute kernel for the
+native YUY2/L8 surfaces; `Win32D3D11VideoDevice` is the source reader's DXVA
+device; `Win32CameraControlSurface` maps the neutral control vocabulary onto
+either a WinRT `VideoDeviceController` or the legacy `IAMCameraControl`/
+`IAMVideoProcAmp` pair.
 
 ## `WindowsPlatformServiceRegistration`
 

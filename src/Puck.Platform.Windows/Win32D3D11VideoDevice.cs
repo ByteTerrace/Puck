@@ -1,6 +1,5 @@
 using System.Runtime.Versioning;
 using Microsoft.Win32.SafeHandles;
-using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Direct3D;
 using Windows.Win32.Graphics.Direct3D11;
 using Windows.Win32.Graphics.Dxgi;
@@ -87,21 +86,7 @@ internal sealed unsafe class Win32D3D11VideoDevice : IDisposable {
             pSrcBox: null,
             pSrcResource: ((ID3D11Resource*)sourceTexture)
         );
-        context->End(pAsync: ((ID3D11Asynchronous*)m_query));
-        context->Flush();
-
-        // Spin the event query to completion; at camera cadence (~30 fps) on the grabber thread this is a short,
-        // render-pump-invisible wait. GetData writes the BOOL only once everything before End has completed (S_OK);
-        // while pending (S_FALSE) it leaves it untouched.
-        BOOL done = false;
-
-        while (!done) {
-            context->GetData(DataSize: ((uint)sizeof(BOOL)), GetDataFlags: 0, pAsync: ((ID3D11Asynchronous*)m_query), pData: &done);
-
-            if (!done) {
-                Thread.SpinWait(iterations: 64);
-            }
-        }
+        Win32D3D11.WaitForCompletion(context: context, query: m_query);
     }
     /// <summary>Opens a consumer-provisioned shared texture (an NT handle) on this device; the caller owns the returned
     /// <c>ID3D11Texture2D*</c> and must release it via <see cref="ReleaseTexture"/>.</summary>

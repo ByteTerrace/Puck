@@ -127,9 +127,12 @@ internal sealed unsafe class Win32CameraControlSurface(object mediaSource) : ICa
             return true;
         }
 
-        if ((m_modern?.TryGetRange(control: control, range: out range) ?? false)) {
-            return true;
-        }
+        return ((m_modern?.TryGetRange(control: control, range: out range) ?? false) || TryLegacyRange(control: control, range: out range));
+    }
+    // The classic IAMCameraControl/IAMVideoProcAmp envelope; the WinRT projection answers first where it carries the
+    // control, so this is the fallback for members it lacks and for source-reader sessions.
+    private bool TryLegacyRange(CameraControl control, out CameraControlRange range) {
+        range = default;
 
         if (!TryMap(control: control, isCamera: out var isCamera, property: out var property)) {
             return false;
@@ -179,18 +182,14 @@ internal sealed unsafe class Win32CameraControlSurface(object mediaSource) : ICa
             return TryVendorWriteCore(selector: FovSelector, value: 0);
         }
 
-        if (!TryGetRangeCore(control: control, range: out var range)) {
-            return false;
+        if ((m_modern?.TryResetAuto(control: control) ?? false)) {
+            return true;
         }
 
         if (
-            (m_modern is { } modern) &&
-            modern.TryGetRange(control: control, range: out _)
+            !TryLegacyRange(control: control, range: out var range) ||
+            !TryMap(control: control, isCamera: out var isCamera, property: out var property)
         ) {
-            return modern.TryResetAuto(control: control);
-        }
-
-        if (!TryMap(control: control, isCamera: out var isCamera, property: out var property)) {
             return false;
         }
 
@@ -216,22 +215,18 @@ internal sealed unsafe class Win32CameraControlSurface(object mediaSource) : ICa
             return TryVendorWriteCore(selector: FovSelector, value: FovStep(degrees: value));
         }
 
-        if (!TryGetRangeCore(control: control, range: out var range)) {
+        if ((m_modern?.TrySet(control: control, value: value) ?? false)) {
+            return true;
+        }
+
+        if (
+            !TryLegacyRange(control: control, range: out var range) ||
+            !TryMap(control: control, isCamera: out var isCamera, property: out var property)
+        ) {
             return false;
         }
 
         var clamped = SnapToRange(range: range, value: value);
-
-        if (
-            (m_modern is { } modern) &&
-            modern.TryGetRange(control: control, range: out _)
-        ) {
-            return modern.TrySet(control: control, value: clamped);
-        }
-
-        if (!TryMap(control: control, isCamera: out var isCamera, property: out var property)) {
-            return false;
-        }
 
         return ((isCamera
             ? m_camera!.Set(Flags: FlagManual, Property: property, lValue: clamped)
