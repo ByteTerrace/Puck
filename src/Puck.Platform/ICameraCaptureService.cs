@@ -7,8 +7,9 @@ namespace Puck.Platform;
 /// engine's live-camera content source. The Windows implementation is Media Foundation; other platforms (and Windows
 /// without Media Foundation or a device) get <see cref="NullCameraCaptureService"/>. Two tiers, both behind this seam:
 /// the CPU-pixel tier (M2, <see cref="TryOpenDefault"/> — frames read back to host memory and uploaded) and the
-/// GPU-resident zero-copy tier (M3, <see cref="TryOpenSharedDefault"/> — frames converted on-GPU and copied into
-/// consumer-provisioned shared textures, never visiting host memory). The interface is OS-neutral.
+/// GPU-resident zero-copy tier (M3, <see cref="TryOpenSharedDefault"/> and <see cref="TryOpenSharedDualDefault"/> —
+/// frames converted on-GPU and copied into consumer-provisioned shared textures, never visiting host memory). The
+/// interface is OS-neutral.
 /// </summary>
 public interface ICameraCaptureService {
     /// <summary>Whether this platform can open camera devices at all (e.g. Media Foundation is present).</summary>
@@ -59,4 +60,19 @@ public interface ICameraCaptureService {
     /// <param name="session">When this returns <see langword="true"/>, the negotiated (not yet streaming) session; otherwise <see langword="null"/>.</param>
     /// <returns><see langword="true"/> if a device was opened on the GPU tier.</returns>
     bool TryOpenSharedDefault(long adapterLuid, int requestedWidth, int requestedHeight, uint requestedRateHz, CameraSensor sensor, [NotNullWhen(true)] out ICameraSharedCaptureSession? session);
+    /// <summary>Tries to open color and infrared through one Face Authentication Profile V2 graph while keeping both
+    /// native streams GPU-resident. Both returned facades must be started; the platform begins publication only after
+    /// both target rings are attached. Any unsupported native surface, adapter mismatch, or conversion capability
+    /// refuses the whole open so the caller can fall back atomically to <see cref="TryOpenDualDefault"/>.</summary>
+    /// <param name="adapterLuid">The consumer render adapter LUID.</param>
+    /// <param name="colorWidth">The desired color width; the driver profile remains authoritative.</param>
+    /// <param name="colorHeight">The desired color height.</param>
+    /// <param name="colorRateHz">The desired color rate.</param>
+    /// <param name="infraredWidth">The desired infrared width.</param>
+    /// <param name="infraredHeight">The desired infrared height.</param>
+    /// <param name="infraredRateHz">The desired infrared rate.</param>
+    /// <param name="colorSession">The color GPU session when successful.</param>
+    /// <param name="infraredSession">The infrared GPU session when successful.</param>
+    /// <returns><see langword="true"/> when both native GPU streams were opened and proved live.</returns>
+    bool TryOpenSharedDualDefault(long adapterLuid, int colorWidth, int colorHeight, uint colorRateHz, int infraredWidth, int infraredHeight, uint infraredRateHz, [NotNullWhen(true)] out ICameraSharedCaptureSession? colorSession, [NotNullWhen(true)] out ICameraSharedCaptureSession? infraredSession);
 }

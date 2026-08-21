@@ -4,22 +4,18 @@ using System.Runtime.Versioning;
 using Windows.Graphics.Imaging;
 using Windows.Media.Capture;
 using Windows.Media.Capture.Frames;
-using Windows.Media.MediaProperties;
 using WinRT;
 
 namespace Puck.Platform.Windows;
 
 /// <summary>
-/// The simultaneous dual-sensor camera core: ONE <see cref="MediaCapture"/> over the frame-source group that carries
-/// both color and infrared, fanned out to two <see cref="ICameraCaptureSession"/> facades. A modern Face Authentication
-/// Profile V2 declares the native media-type pair that the driver guarantees can run together, so the capture
-/// initializes against that profile without overriding either format; a camera without the declaration is rejected
-/// before any speculative two-pin open. Each pin then gets its OWN <see cref="MediaFrameReader"/> with polled
-/// acquisition: the profile pairs unrelated cadences (24 Hz color against 60 Hz strobed infrared on the Surface), and
-/// a <see cref="MultiSourceMediaFrameReader"/> over that same profile measured ZERO FrameArrived callbacks in five
-/// seconds on that hardware — the event-driven correlated set never materializes in this hosting shape, and nothing
-/// here needs correlation (each facade independently publishes its latest frame). Reader-start success alone is
-/// insufficient, so construction verifies that both pins actually produce a frame.
+/// The simultaneous dual-sensor camera core, fanned out to two <see cref="ICameraCaptureSession"/> facades. A modern
+/// Face Authentication Profile V2 initializes one <see cref="MediaCapture"/> against the driver's guaranteed pair;
+/// without that declaration the BRIO admits each pin separately but rejects the second concurrent reader. One
+/// native <see cref="MediaFrameReader"/> per pin runs inside that one capture. This preserves unrelated sensor
+/// cadences and avoids the correlated multi-source reader, which can start successfully yet deliver no sets on cameras
+/// such as the BRIO. The readers are polled and fanned out to independent latest-frame buffers; reader-start success
+/// alone is insufficient, so construction verifies that both pins actually produce a frame.
 /// The frame server stamps each infrared frame's
 /// <see cref="InfraredMediaFrame.IsIlluminated"/>, making the lit-frame gate here EXACT rather than the single-sensor
 /// session's luminance-envelope heuristic. The two facades share the core by refcount — the last disposal stops the
@@ -43,6 +39,8 @@ internal sealed class Win32MediaFoundationDualCameraCore {
     private byte[] m_colorScratch = [];
     private volatile bool m_ended;
     private byte[] m_infraredScratch = [];
+    private TimeSpan m_lastColorTime = TimeSpan.MinValue;
+    private TimeSpan m_lastInfraredTime = TimeSpan.MinValue;
     private int m_referenceCount = 2;
     private int m_shutdown;
     private volatile bool m_stop;
@@ -51,7 +49,7 @@ internal sealed class Win32MediaFoundationDualCameraCore {
     public LatestFrameBuffer ColorFrames { get; } = new();
     public LatestFrameBuffer InfraredFrames { get; } = new();
 
-    public Win32MediaFoundationDualCameraCore(int colorWidth, int colorHeight, uint colorRateHz, int infraredWidth, int infraredHeight, uint infraredRateHz) {
+    public Win32MediaFoundationDualCameraCore() {
         try {
             var (group, colorInfo, infraredInfo) = FindDualGroup();
             var faceAuthenticationProfile = (
@@ -61,7 +59,7 @@ internal sealed class Win32MediaFoundationDualCameraCore {
             );
 
             if (faceAuthenticationProfile is null) {
-                throw new NotSupportedException(message: "the camera does not publish a Face Authentication Profile V2 declaring a simultaneous color/infrared media-type pair");
+                throw new NotSupportedException(message: "the camera exposes color and infrared pins but does not publish a Face Authentication Profile V2 pair");
             }
 
             Name = group.DisplayName;
@@ -76,38 +74,40 @@ internal sealed class Win32MediaFoundationDualCameraCore {
 
             var colorSource = m_capture.FrameSources[colorInfo.Id];
             var infraredSource = m_capture.FrameSources[infraredInfo.Id];
-
-            _ = ConfigureFaceAuthentication(controller: infraredSource.Controller);
+            var colorDescription = DescribeFormat(format: colorSource.CurrentFormat);
+            var infraredDescription = DescribeFormat(format: infraredSource.CurrentFormat);
 
             ColorWidth = ((int)colorSource.CurrentFormat.VideoFormat.Width);
             ColorHeight = ((int)colorSource.CurrentFormat.VideoFormat.Height);
             InfraredWidth = ((int)infraredSource.CurrentFormat.VideoFormat.Width);
             InfraredHeight = ((int)infraredSource.CurrentFormat.VideoFormat.Height);
 
-            // One reader per pin, never a MultiSourceMediaFrameReader: the profile's pins run at unrelated cadences,
-            // and the multi-source event path delivered zero correlated sets on the hardware this path exists for (see
-            // the class remarks). The frame server converts both sensors to BGRA at the reader (infrared luminance
-            // lands as gray BGRA), so both publish paths share one shape.
-            m_colorReader = m_capture.CreateFrameReaderAsync(inputSource: colorSource, outputSubtype: MediaEncodingSubtypes.Bgra8).AsTask().GetAwaiter().GetResult();
-            m_infraredReader = m_capture.CreateFrameReaderAsync(inputSource: infraredSource, outputSubtype: MediaEncodingSubtypes.Bgra8).AsTask().GetAwaiter().GetResult();
-            m_colorReader.AcquisitionMode = MediaFrameReaderAcquisitionMode.Realtime;
-            m_infraredReader.AcquisitionMode = MediaFrameReaderAcquisitionMode.Realtime;
+            // Preserve the profile's native pair: requesting BGRA output changes the admitted topology and makes BRIO
+            // refuse the IR reader as OutputFormatNotSupported. Conversion happens only after native acquisition.
+            var captureMode = ConfigureFaceAuthentication(controller: infraredSource.Controller);
 
-            if (MediaFrameReaderStartStatus.Success != m_colorReader.StartAsync().AsTask().GetAwaiter().GetResult()) {
-                throw new InvalidOperationException(message: "the color frame reader refused to start");
-            }
-
-            if (MediaFrameReaderStartStatus.Success != m_infraredReader.StartAsync().AsTask().GetAwaiter().GetResult()) {
-                throw new InvalidOperationException(message: "the infrared frame reader refused to start");
-            }
-
-            // The WinRT VideoDeviceController answers the classic control interfaces through COM interop, so the shared
-            // control surface (UVC + vendor XU) rides the same wrapper the single-sensor sessions use.
+            ColorCaptureFormat = CaptureFormat(format: colorSource.CurrentFormat, mode: captureMode);
+            InfraredCaptureFormat = CaptureFormat(format: infraredSource.CurrentFormat, mode: captureMode);
             Controls = new Win32CameraControlSurface(mediaSource: m_capture.VideoDeviceController);
 
-            // POLLED acquisition, not FrameArrived: the readers deliver frames to TryAcquireLatestFrame either way, and
-            // the event path silently never fires in this hosting shape — a dedicated poll thread (the MF sessions'
-            // grabber pattern) is deterministic everywhere. Timestamps dedupe re-acquired frames.
+            m_colorReader = m_capture.CreateFrameReaderAsync(inputSource: colorSource).AsTask().GetAwaiter().GetResult();
+            m_infraredReader = m_capture.CreateFrameReaderAsync(inputSource: infraredSource).AsTask().GetAwaiter().GetResult();
+            m_colorReader.AcquisitionMode = MediaFrameReaderAcquisitionMode.Realtime;
+            m_infraredReader.AcquisitionMode = MediaFrameReaderAcquisitionMode.Realtime;
+            var starts = Task.WhenAll(
+                m_colorReader.StartAsync().AsTask(),
+                m_infraredReader.StartAsync().AsTask()
+            ).GetAwaiter().GetResult();
+
+            if (
+                (MediaFrameReaderStartStatus.Success != starts[0]) ||
+                (MediaFrameReaderStartStatus.Success != starts[1])
+            ) {
+                throw new InvalidOperationException(message: $"the color/infrared frame readers refused to start (color={starts[0]}, infrared={starts[1]})");
+            }
+
+            // POLLED acquisition, not FrameArrived: a dedicated poll thread mirrors the MF sessions' grabber pattern.
+            // Timestamps dedupe re-acquired frames.
             m_thread = new Thread(start: PollLoop) {
                 IsBackground = true,
                 Name = "camera-dual-poll",
@@ -130,13 +130,13 @@ internal sealed class Win32MediaFoundationDualCameraCore {
 
             if (ColorFrames.Version == 0L || InfraredFrames.Version == 0L) {
                 throw new InvalidOperationException(
-                    message: $"the device did not produce both streams within {FirstFrameTimeoutMilliseconds} ms (color={ColorFrames.Version} of {DescribeFormat(format: colorSource.CurrentFormat)}, infrared={InfraredFrames.Version} of {DescribeFormat(format: infraredSource.CurrentFormat)})"
+                    message: $"the device did not produce both streams within {FirstFrameTimeoutMilliseconds} ms (color={ColorFrames.Version} of {colorDescription}, infrared={InfraredFrames.Version} of {infraredDescription})"
                 );
             }
 
             // Announced only once both pins have proved live, so a log never carries a confident negotiation line for
             // a graph that then failed the liveness gate.
-            Console.Out.WriteLine(value: $"[camera] dual-sensor negotiation: Windows Face Authentication Profile V2 — color {DescribeFormat(format: colorSource.CurrentFormat)} + infrared {DescribeFormat(format: infraredSource.CurrentFormat)}.");
+            Console.Out.WriteLine(value: $"[camera] dual-sensor negotiation: Windows Face Authentication Profile V2 — color {colorDescription} + infrared {infraredDescription}.");
         } catch {
             var readersStarted = (m_thread is not null);
 
@@ -154,19 +154,32 @@ internal sealed class Win32MediaFoundationDualCameraCore {
     }
 
     public int ColorHeight { get; }
+    public CameraCaptureFormat ColorCaptureFormat { get; }
     public int ColorWidth { get; }
     public Win32CameraControlSurface? Controls { get; }
     public int InfraredHeight { get; }
+    public CameraCaptureFormat InfraredCaptureFormat { get; }
     public int InfraredWidth { get; }
     public bool IsEnded => m_ended;
     public string Name { get; } = "camera";
-    private static MediaCaptureVideoProfile? FindFaceAuthenticationProfile(string videoDeviceId) {
+    internal static MediaCaptureVideoProfile? FindFaceAuthenticationProfile(string videoDeviceId) {
         if (!MediaCapture.IsVideoProfileSupported(videoDeviceId: videoDeviceId)) {
             return null;
         }
 
         foreach (var profile in MediaCapture.FindAllVideoProfiles(videoDeviceId: videoDeviceId)) {
-            if (profile.Id.Contains(value: FaceAuthenticationProfileId, comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            if (!profile.Id.Contains(value: FaceAuthenticationProfileId, comparisonType: StringComparison.OrdinalIgnoreCase)) {
+                continue;
+            }
+
+            var hasColor = profile.FrameSourceInfos.Any(
+                predicate: source => (MediaFrameSourceKind.Color == source.SourceKind)
+            );
+            var hasInfrared = profile.FrameSourceInfos.Any(
+                predicate: source => (MediaFrameSourceKind.Infrared == source.SourceKind)
+            );
+
+            if (hasColor && hasInfrared) {
                 return profile;
             }
         }
@@ -174,17 +187,30 @@ internal sealed class Win32MediaFoundationDualCameraCore {
         return null;
     }
 
-    private static string DescribeFormat(MediaFrameFormat format) {
-        var denominator = format.FrameRate.Denominator;
-        var rate = ((denominator == 0)
-            ? 0.0
-            : (((double)format.FrameRate.Numerator) / denominator)
-        );
+    internal static string DescribeFormat(MediaFrameFormat format) {
+        var rate = FrameRateHz(format: format);
 
         return $"{format.VideoFormat.Width}x{format.VideoFormat.Height}@{rate:0.###} {format.Subtype}";
     }
+    internal static CameraCaptureFormat CaptureFormat(MediaFrameFormat format, string mode) {
+        return new CameraCaptureFormat(
+            Mode: mode,
+            RateHz: FrameRateHz(format: format),
+            Subtype: format.Subtype
+        );
+    }
+    private static double FrameRateHz(MediaFrameFormat format) {
+        var denominator = format.FrameRate.Denominator;
 
-    private static ulong ConfigureFaceAuthentication(MediaFrameSourceController controller) {
+        return ((denominator == 0)
+            ? 0.0
+            : (((double)format.FrameRate.Numerator) / denominator)
+        );
+    }
+
+    internal static string ConfigureFaceAuthentication(MediaFrameSourceController controller) {
+        const string ProfileName = "Windows Face Authentication Profile V2";
+
         var property = new byte[24];
 
         _ = ExtendedCameraControlPropertySet.TryWriteBytes(destination: property);
@@ -200,7 +226,7 @@ internal sealed class Win32MediaFoundationDualCameraCore {
         ) {
             Console.Out.WriteLine(value: $"[camera] face-authentication mode: unavailable ({get.Status}).");
 
-            return 0UL;
+            return ProfileName;
         }
 
         var capability = BinaryPrimitives.ReadUInt64LittleEndian(source: payload.AsSpan(start: 24));
@@ -215,7 +241,7 @@ internal sealed class Win32MediaFoundationDualCameraCore {
         if (mode == 0) {
             Console.Out.WriteLine(value: $"[camera] face-authentication mode: unsupported capabilities 0x{capability:X}.");
 
-            return 0UL;
+            return ProfileName;
         }
 
         BinaryPrimitives.WriteUInt64LittleEndian(destination: payload.AsSpan(start: 16), value: mode);
@@ -223,9 +249,14 @@ internal sealed class Win32MediaFoundationDualCameraCore {
 
         var status = controller.SetPropertyByExtendedIdAsync(extendedPropertyId: property, propertyValue: payload).AsTask().GetAwaiter().GetResult();
 
-        Console.Out.WriteLine(value: $"[camera] face-authentication mode: {((mode == FaceAuthenticationAlternativeFrameIllumination) ? "alternating-frame illumination" : "background subtraction")} ({status}).");
+        var modeName = ((mode == FaceAuthenticationAlternativeFrameIllumination) ? "alternating-frame illumination" : "background subtraction");
 
-        return ((MediaFrameSourceSetPropertyStatus.Success == status) ? mode : 0UL);
+        Console.Out.WriteLine(value: $"[camera] face-authentication mode: {modeName} ({status}).");
+
+        return ((MediaFrameSourceSetPropertyStatus.Success == status)
+            ? $"{ProfileName}, {modeName}"
+            : ProfileName
+        );
     }
 
     /// <summary>One facade released its half; the last release stops the readers and the capture.</summary>
@@ -243,6 +274,7 @@ internal sealed class Win32MediaFoundationDualCameraCore {
 
         m_ended = true;
         m_stop = true;
+
         _ = (m_thread?.Join(millisecondsTimeout: 2000) ?? true);
 
         try {
@@ -257,7 +289,7 @@ internal sealed class Win32MediaFoundationDualCameraCore {
         m_capture?.Dispose();
     }
 
-    private static (MediaFrameSourceGroup Group, MediaFrameSourceInfo Color, MediaFrameSourceInfo Infrared) FindDualGroup() {
+    internal static (MediaFrameSourceGroup Group, MediaFrameSourceInfo Color, MediaFrameSourceInfo Infrared) FindDualGroup() {
         var groups = MediaFrameSourceGroup.FindAllAsync().AsTask().GetAwaiter().GetResult();
 
         foreach (var group in groups) {
@@ -287,41 +319,16 @@ internal sealed class Win32MediaFoundationDualCameraCore {
         throw new InvalidOperationException(message: "no capture device offers color and infrared sources in one group");
     }
     private void PollLoop() {
-        var lastColorTime = TimeSpan.MinValue;
-        var lastInfraredTime = TimeSpan.MinValue;
-
         try {
             while (!m_stop) {
                 var progressed = false;
 
-                using (var frame = m_colorReader!.TryAcquireLatestFrame()) {
-                    if (
-                        (frame?.VideoMediaFrame?.SoftwareBitmap is { } bitmap) &&
-                        (frame.SystemRelativeTime is { } time) &&
-                        (time != lastColorTime)
-                    ) {
-                        lastColorTime = time;
-                        progressed = true;
-                        PublishBitmap(bitmap: bitmap, buffer: ColorFrames, scratch: ref m_colorScratch);
-                    }
+                using (var color = m_colorReader!.TryAcquireLatestFrame()) {
+                    progressed |= ProcessColorFrame(frame: color, lastTime: ref m_lastColorTime);
                 }
 
-                using (var frame = m_infraredReader!.TryAcquireLatestFrame()) {
-                    if (
-                        (frame?.VideoMediaFrame is { } video) &&
-                        (video.SoftwareBitmap is { } bitmap) &&
-                        (frame.SystemRelativeTime is { } time) &&
-                        (time != lastInfraredTime)
-                    ) {
-                        lastInfraredTime = time;
-                        progressed = true;
-
-                        // The EXACT lit-frame gate: the frame server stamps whether the IR illuminator fired for this
-                        // frame; the unlit half of a strobing stream never publishes. An unstamped frame publishes.
-                        if (video.InfraredMediaFrame is not { IsIlluminated: false }) {
-                            PublishBitmap(bitmap: bitmap, buffer: InfraredFrames, scratch: ref m_infraredScratch);
-                        }
-                    }
+                using (var infrared = m_infraredReader!.TryAcquireLatestFrame()) {
+                    progressed |= ProcessInfraredFrame(frame: infrared, lastTime: ref m_lastInfraredTime);
                 }
 
                 if (!progressed) {
@@ -335,6 +342,88 @@ internal sealed class Win32MediaFoundationDualCameraCore {
         } finally {
             m_ended = true;
         }
+    }
+    private bool ProcessColorFrame(MediaFrameReference? frame, ref TimeSpan lastTime) {
+        if (
+            (frame?.VideoMediaFrame?.SoftwareBitmap is not { } sourceBitmap) ||
+            (frame.SystemRelativeTime is not { } time) ||
+            (time == lastTime)
+        ) {
+            return false;
+        }
+
+        lastTime = time;
+        using var bitmap = sourceBitmap;
+
+        PublishBitmap(bitmap: bitmap, buffer: ColorFrames, scratch: ref m_colorScratch);
+
+        return true;
+    }
+    private bool ProcessInfraredFrame(MediaFrameReference? frame, ref TimeSpan lastTime) {
+        if (
+            (frame?.VideoMediaFrame is not { } video) ||
+            (video.SoftwareBitmap is not { } sourceBitmap) ||
+            (frame.SystemRelativeTime is not { } time) ||
+            (time == lastTime)
+        ) {
+            return false;
+        }
+
+        lastTime = time;
+        using var bitmap = sourceBitmap;
+
+        // The EXACT lit-frame gate: the frame server stamps whether the IR illuminator fired for this frame; the
+        // unlit half of a strobing stream never publishes. An unstamped frame publishes.
+        if (video.InfraredMediaFrame is not { IsIlluminated: false }) {
+            PublishInfraredBitmap(bitmap: bitmap);
+        }
+
+        return true;
+    }
+    // L8 is already the one-byte luminance shape Puck needs. Expanding it directly avoids constructing a converted
+    // SoftwareBitmap for every illuminated IR frame; the reusable output buffer is still published as opaque BGRA.
+    private unsafe void PublishInfraredBitmap(SoftwareBitmap bitmap) {
+        if (BitmapPixelFormat.Gray8 != bitmap.BitmapPixelFormat) {
+            PublishBitmap(bitmap: bitmap, buffer: InfraredFrames, scratch: ref m_infraredScratch);
+
+            return;
+        }
+
+        var width = bitmap.PixelWidth;
+        var height = bitmap.PixelHeight;
+
+        using var locked = bitmap.LockBuffer(mode: BitmapBufferAccessMode.Read);
+        using var reference = locked.CreateReference();
+
+        var plane = locked.GetPlaneDescription(index: 0);
+
+        reference.As<IMemoryBufferByteAccess>().GetBuffer(buffer: out var pixels, capacity: out var capacity);
+
+        if ((plane.Stride < width) || (plane.StartIndex < 0) || (((long)plane.StartIndex + (((long)(height - 1)) * plane.Stride) + width) > capacity)) {
+            throw new InvalidOperationException(message: "the camera returned an invalid L8 bitmap plane");
+        }
+
+        if (m_infraredScratch.Length != (width * height * 4)) {
+            m_infraredScratch = new byte[(width * height * 4)];
+        }
+
+        var destination = MemoryMarshal.Cast<byte, uint>(span: m_infraredScratch.AsSpan());
+
+        for (var row = 0; row < height; row++) {
+            var source = new ReadOnlySpan<byte>(
+                pointer: (pixels + plane.StartIndex + (((long)row) * plane.Stride)),
+                length: width
+            );
+            var output = destination.Slice(start: (row * width), length: width);
+
+            for (var column = 0; column < width; column++) {
+                var luminance = ((uint)source[column]);
+
+                output[column] = (0xFF000000u | (luminance * 0x00010101u));
+            }
+        }
+
+        InfraredFrames.Publish(height: height, pixels: m_infraredScratch, width: width);
     }
     // Tightly repacks the (possibly padded) BGRA bitmap rows into the reusable scratch and publishes. The one poll
     // thread is the only producer for both scratch buffers.
@@ -387,16 +476,18 @@ internal sealed class Win32MediaFoundationDualCameraCore {
 
 /// <summary>One sensor's <see cref="ICameraCaptureSession"/> view over the shared dual-sensor core.</summary>
 [SupportedOSPlatform("windows10.0.19041")]
-internal sealed class Win32MediaFoundationDualCameraSession(Win32MediaFoundationDualCameraCore core, bool infrared) : ICameraCaptureSession {
+internal sealed class Win32MediaFoundationDualCameraSession(Win32MediaFoundationDualCameraCore core, bool infrared) : ICameraCaptureSession, ICameraCaptureDiagnostics {
     private bool m_disposed;
     private byte[] m_pullBuffer = [];
 
     // A frame-source group has one VideoDeviceController, not one per sensor. Expose that shared physical control
-    // surface through the color facade only; otherwise independently authored per-sensor controls alternate writes
-    // against the same hardware on every pull.
+    // surface through the color facade only; the World binder routes its one device-wide authored state through this
+    // owner and the infrared facade remains a read-only frame view.
     private Win32CameraControlSurface? Controls => (infrared ? null : core.Controls);
     private LatestFrameBuffer Frames => (infrared ? core.InfraredFrames : core.ColorFrames);
 
+    /// <inheritdoc/>
+    public CameraCaptureFormat CaptureFormat => (infrared ? core.InfraredCaptureFormat : core.ColorCaptureFormat);
     /// <inheritdoc/>
     public long FrameVersion => Frames.Version;
     /// <inheritdoc/>

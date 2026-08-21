@@ -23,7 +23,7 @@ namespace Puck.Platform.Windows;
 /// feed.</para>
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
-internal sealed class Win32MediaFoundationSharedCameraSession : ICameraSharedCaptureSession {
+internal sealed class Win32MediaFoundationSharedCameraSession : ICameraSharedCaptureSession, ICameraCaptureDiagnostics {
     private readonly long m_adapterLuid;
 
     private readonly ManualResetEventSlim m_initDone = new(initialState: false);
@@ -40,6 +40,7 @@ internal sealed class Win32MediaFoundationSharedCameraSession : ICameraSharedCap
     // The device's control surface, created on the grabber thread beside the media source (the ctor's init-done wait
     // is the barrier that publishes it to the consumer side); null until initialization succeeds.
     private volatile Win32CameraControlSurface? m_controlSurface;
+    private CameraCaptureFormat m_captureFormat;
     private bool m_disposed;
     private volatile bool m_ended;
     private int m_height;
@@ -56,10 +57,11 @@ internal sealed class Win32MediaFoundationSharedCameraSession : ICameraSharedCap
     private int m_width;
 
     public Win32MediaFoundationSharedCameraSession(long adapterLuid, int requestedWidth, int requestedHeight, uint requestedRateHz, CameraSensor sensor) {
-        // The infrared stream's L8 luminance has no DXVA-to-ARGB32 path; refusing here routes the consumer onto the
-        // CPU tier's host-side expansion instead of opening the WRONG (color) stream on the GPU tier.
+        // A standalone infrared stream's L8 luminance has no source-reader DXVA-to-ARGB32 path; refusing here routes
+        // it to host-side expansion instead of opening the WRONG color pin. The coordinated FaceAuth GPU opener keeps
+        // native L8 and expands it with the camera-device compute path.
         if (CameraSensor.Infrared == sensor) {
-            throw new NotSupportedException(message: "the infrared sensor rides the CPU-pixel tier");
+            throw new NotSupportedException(message: "standalone infrared capture rides the CPU-pixel tier; use the coordinated dual GPU graph for color plus infrared");
         }
 
         m_adapterLuid = adapterLuid;
@@ -87,6 +89,8 @@ internal sealed class Win32MediaFoundationSharedCameraSession : ICameraSharedCap
     /// <inheritdoc/>
     public long FrameVersion => Interlocked.Read(location: ref m_version);
     /// <inheritdoc/>
+    public CameraCaptureFormat CaptureFormat => m_captureFormat;
+    /// <inheritdoc/>
     public bool IsEnded => m_ended;
     /// <inheritdoc/>
     public long LastFrameTimestamp => Interlocked.Read(location: ref m_lastTimestamp);
@@ -94,6 +98,8 @@ internal sealed class Win32MediaFoundationSharedCameraSession : ICameraSharedCap
     public int Height => m_height;
     /// <inheritdoc/>
     public int LatestSlot => m_latestSlot;
+    /// <inheritdoc/>
+    public SurfaceFormat TargetFormat => SurfaceFormat.B8G8R8A8Unorm;
     /// <inheritdoc/>
     public string Name => m_name;
     /// <inheritdoc/>
@@ -277,6 +283,11 @@ internal sealed class Win32MediaFoundationSharedCameraSession : ICameraSharedCap
             requestedHeight: m_requestedHeight,
             requestedRateHz: m_requestedRateHz,
             requestedWidth: m_requestedWidth
+        );
+        m_captureFormat = Win32CameraModeNegotiation.ReadNativeFormat(
+            reader: reader,
+            streamIndex: MfInterop.FirstVideoStream,
+            subtype: out _
         );
         Check(hr: TrySetOutputType(reader: reader));
 

@@ -434,26 +434,34 @@ routes to whichever half — machine or
 local producer — actually holds the slot). A camera source row picks its
 `sensor` (`color` default, or `infrared` — its own shared feed; two-sensor
 worlds prefer the device's Windows Face Authentication Profile V2 and its
-driver-declared simultaneous native format pair, then admit the capture only
-after both streams produce a frame. A legacy face-auth provider available only
+driver-declared simultaneous native format pair. On Windows, Puck first asks
+the frame server for both native GPU surfaces: BRIO's YUY2 color and L8 IR are
+converted by D3D11 compute into private RGBA textures, copied into two shared
+three-slot rings, and sampled directly by either renderer without host pixels.
+The pair is admitted only after both GPU surfaces prove live; an adapter,
+surface, shader, target, import, or copy refusal tears both facades down and
+atomically restores the established CPU FaceAuth graph. A legacy face-auth provider available only
 to the Windows biometric broker does not constitute a public dual-camera graph.
 Alternating IR strobes the illuminator across the declared transport rate, so
 half the frames arrive ambient and only the illuminated half ever publishes
 (a Surface declares 60 fps IR, so 30 lit frames reach the feed); a device
-that cannot stream the result keeps the first
-requested sensor while the other faults by name, and an absent IR source faults
-that feed loudly)
-and may author `controls` (the standard
+that cannot stream the public pair faults both feeds by name, and an absent IR
+source faults that feed loudly)
+and may author `controls` (one physical camera has one state across its color
+and IR streams, so the first controls-bearing camera row wins regardless of
+sensor; the standard
 UVC pan/tilt/zoom/exposure/focus/color surface plus the vendor-extension
 `fieldOfView` in degrees and raw `vendor` selector/value rows,
 `WorldCameraControls`): the values land on the physical device once its
 stream is live (vendor-extension writes are firmware-ignored on an idle
 filter), an `UpsertScreen` mutation (`world.row.set screens …`) moves the
 device live through the ordered domain, and `screen.camera` reads each
-sensor's section — device range, mode, current value, authored value, and
-raw vendor read-backs — over the pipe (the device stays authoritative —
-values clamp to its reported envelope, and absent members leave driver
-defaults untouched). A QR is the one source with no
+sensor's section — negotiated extent, native transport subtype/rate,
+coordinated capture mode, device range, mode, current value, the shared
+authored value, and raw vendor read-backs — over the pipe (the device stays
+authoritative: values clamp to its reported envelope, members never authored
+leave driver defaults untouched, and removing an applied member restores its
+default). A QR is the one source with no
 per-frame cost at all: `QrEncoder` (in `Puck.World.Schema`) resolves the module
 grid and the binder rasterizes it ONCE at author time, then re-uploads the
 unchanged buffer only after a device loss. `world.identify <screenIndex>

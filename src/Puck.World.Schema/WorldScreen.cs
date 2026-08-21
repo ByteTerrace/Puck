@@ -56,8 +56,9 @@ public abstract record WorldScreenSource {
     /// <param name="Profile">The preferred capture extent and maximum upload cadence.</param>
     /// <param name="Controls">The authored device-control state (<see cref="WorldCameraControls"/>), or
     /// <see langword="null"/> to leave every control at its driver default. One physical device carries one control
-    /// state, so the FIRST declared camera screen authoring this wins (matching the shared-session model); a later
-    /// <c>UpsertScreen</c> mutation re-resolves and applies the change live. Omitted from the wire when null.</param>
+    /// state across color and infrared, so the FIRST declared camera screen authoring this wins regardless of sensor
+    /// (matching the shared-device model); a later <c>UpsertScreen</c> mutation re-resolves and applies the change live.
+    /// Omitted from the wire when null.</param>
     /// <param name="Sensor">Which physical sensor this row's shared feed opens: <see cref="WorldCameraSensor.Color"/>
     /// (the default) or <see cref="WorldCameraSensor.Infrared"/> — the infrared frame source a Windows Hello capable
     /// device carries. Each sensor gets its own shared feed, so different rows may request different sensors at once;
@@ -210,7 +211,8 @@ public sealed record WorldMachineCable(string Name, int Position);
 /// <param name="Name">The cable's stable kebab-case name.</param>
 /// <param name="Screens">The engine screen indices in cable order (2 or more, no duplicates).</param>
 public sealed record WorldMachineCableGroup(string Name, IReadOnlyList<int> Screens);
-/// <summary>The authored control state for the shared physical camera — the standard UVC camera/image controls
+/// <summary>The authored control state for the shared physical camera — one device-wide state across its color and
+/// infrared streams — and the standard UVC camera/image controls
 /// (pan/tilt/zoom, exposure, focus, color). Every member is optional: an ABSENT member leaves that control at the
 /// device's own driver default (automatic where the device supports it), and a PRESENT member drives the control
 /// manually at that value. The device remains authoritative — a value outside the device's reported range is clamped

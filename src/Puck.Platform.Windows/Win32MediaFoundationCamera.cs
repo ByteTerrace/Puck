@@ -56,14 +56,7 @@ public sealed class Win32MediaFoundationCameraService : ICameraCaptureService {
         }
 
         try {
-            var core = new Win32MediaFoundationDualCameraCore(
-                colorHeight: colorHeight,
-                colorRateHz: colorRateHz,
-                colorWidth: colorWidth,
-                infraredHeight: infraredHeight,
-                infraredRateHz: infraredRateHz,
-                infraredWidth: infraredWidth
-            );
+            var core = new Win32MediaFoundationDualCameraCore();
 
             try {
                 colorSession = new Win32MediaFoundationDualCameraSession(core: core, infrared: false);
@@ -113,13 +106,53 @@ public sealed class Win32MediaFoundationCameraService : ICameraCaptureService {
             return false;
         }
     }
+    /// <inheritdoc/>
+    public bool TryOpenSharedDualDefault(long adapterLuid, int colorWidth, int colorHeight, uint colorRateHz, int infraredWidth, int infraredHeight, uint infraredRateHz, [NotNullWhen(true)] out ICameraSharedCaptureSession? colorSession, [NotNullWhen(true)] out ICameraSharedCaptureSession? infraredSession) {
+        colorSession = null;
+        infraredSession = null;
+
+        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041)) {
+            return false;
+        }
+
+        try {
+            var core = new Win32MediaFoundationDualSharedCameraCore(adapterLuid: adapterLuid);
+
+            try {
+                colorSession = new Win32MediaFoundationDualSharedCameraSession(core: core, infrared: false);
+                infraredSession = new Win32MediaFoundationDualSharedCameraSession(core: core, infrared: true);
+            } catch {
+                if (colorSession is null) {
+                    core.Release();
+                } else {
+                    colorSession.Dispose();
+                    colorSession = null;
+                }
+
+                if (infraredSession is null) {
+                    core.Release();
+                } else {
+                    infraredSession.Dispose();
+                    infraredSession = null;
+                }
+
+                throw;
+            }
+
+            return true;
+        } catch (Exception exception) {
+            Console.Error.WriteLine(value: $"[camera] Media Foundation dual GPU-tier open failed: {exception.Message}");
+
+            return false;
+        }
+    }
 }
 
 /// <summary>The live Media Foundation session: a dedicated MTA grabber thread owns all Media Foundation state (startup,
 /// device, source reader, the ReadSample loop, shutdown) and publishes each frame into a <see cref="LatestFrameBuffer"/>;
 /// <see cref="TryCapture"/> hands the newest one to the render-thread puller.</summary>
 [SupportedOSPlatform("windows")]
-internal sealed class Win32MediaFoundationCameraSession : ICameraCaptureSession {
+internal sealed class Win32MediaFoundationCameraSession : ICameraCaptureSession, ICameraCaptureDiagnostics {
     private readonly LatestFrameBuffer m_latest = new();
     private readonly ManualResetEventSlim m_initDone = new(initialState: false);
 
@@ -128,6 +161,7 @@ internal sealed class Win32MediaFoundationCameraSession : ICameraCaptureSession 
     // The device's control surface, created on the grabber thread beside the media source (the ctor's init-done wait
     // is the barrier that publishes it to the pull side); null until initialization succeeds.
     private volatile Win32CameraControlSurface? m_controlSurface;
+    private CameraCaptureFormat m_captureFormat;
     private int m_defaultStride;
     private bool m_disposed;
     // Whether the negotiated stream delivers L8 luminance the read loop expands to BGRA host-side (an infrared stream
@@ -181,6 +215,8 @@ internal sealed class Win32MediaFoundationCameraSession : ICameraCaptureSession 
 
     /// <inheritdoc/>
     public long FrameVersion => m_latest.Version;
+    /// <inheritdoc/>
+    public CameraCaptureFormat CaptureFormat => m_captureFormat;
     /// <inheritdoc/>
     public bool IsEnded => m_ended;
     /// <inheritdoc/>
@@ -300,48 +336,78 @@ internal sealed class Win32MediaFoundationCameraSession : ICameraCaptureSession 
         // MF_DEVICESTREAM_ATTRIBUTE_FRAMESOURCE_TYPES, never as their own capture device — and only a device without
         // such a stream falls back to the separate KSCATEGORY_SENSOR_CAMERA enumeration.
         var infrared = (CameraSensor.Infrared == m_sensor);
-        var (mediaSource, deviceName) = MfInterop.ActivateDefaultVideoSource(infrared: false);
+        var (mediaSource, deviceName) = MfInterop.ActivateDefaultVideoSource(infrared: false, extended: infrared);
 
         if (deviceName is not null) {
             m_name = deviceName;
         }
 
-        m_controlSurface = new Win32CameraControlSurface(mediaSource: mediaSource);
+        IMFMediaType? preparedInfraredType = null;
+        IMFPresentationDescriptor? preparedInfraredPresentation = null;
+        var preparedInfraredStream = MfInterop.FirstVideoStream;
 
-        // A video-processing source reader so Media Foundation inserts the NV12/YUY2 -> RGB32 converter for us.
-        Check(hr: MfInterop.MFCreateAttributes(cInitialSize: 1, ppMFAttributes: out var readerConfig));
+        if (
+            infrared &&
+            !MfInterop.TryPrepareInfraredStream(
+                mediaSource: mediaSource,
+                streamIdentifier: out preparedInfraredStream,
+                mediaType: out preparedInfraredType,
+                presentationDescriptor: out preparedInfraredPresentation
+            )
+        ) {
+            // No infrared stream on the color device: release it and take the sensor-camera category — the shape
+            // devices with a dedicated IR capture device use. Throws the loud "no infrared capture device" when that
+            // category is empty too.
+            _ = Marshal.ReleaseComObject(o: mediaSource);
+            (mediaSource, deviceName) = MfInterop.ActivateDefaultVideoSource(infrared: true, extended: true);
 
-        var enableVideoProcessing = MfInterop.MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING;
+            if (deviceName is not null) {
+                m_name = deviceName;
+            }
 
-        Check(hr: readerConfig.SetUINT32(guidKey: ref enableVideoProcessing, unValue: 1));
-        Check(hr: MfInterop.MFCreateSourceReaderFromMediaSource(pAttributes: readerConfig, pMediaSource: mediaSource, ppSourceReader: out var reader));
-
-        m_streamIndex = MfInterop.FirstVideoStream;
-
-        if (infrared) {
-            if (Win32CameraModeNegotiation.TryFindInfraredStream(reader: reader, streamIndex: out var infraredStream)) {
-                m_streamIndex = infraredStream;
-            } else {
-                // No infrared stream on the color device: release it and take the sensor-camera category — the shape
-                // devices with a dedicated IR capture device use. Throws the loud "no infrared capture device" when
-                // that category is empty too.
-                _ = Marshal.ReleaseComObject(o: reader);
-
-                (mediaSource, deviceName) = MfInterop.ActivateDefaultVideoSource(infrared: true);
-
-                if (deviceName is not null) {
-                    m_name = deviceName;
-                }
-
-                m_controlSurface = new Win32CameraControlSurface(mediaSource: mediaSource);
-                Check(hr: MfInterop.MFCreateSourceReaderFromMediaSource(pAttributes: readerConfig, pMediaSource: mediaSource, ppSourceReader: out reader));
+            if (!MfInterop.TryPrepareInfraredStream(
+                mediaSource: mediaSource,
+                streamIdentifier: out preparedInfraredStream,
+                mediaType: out preparedInfraredType,
+                presentationDescriptor: out preparedInfraredPresentation
+            )) {
+                throw new InvalidOperationException(message: "the infrared capture device exposes no native L8 stream");
             }
         }
+
+        m_controlSurface = new Win32CameraControlSurface(mediaSource: mediaSource);
+
+        // Color uses the video-processing reader for NV12/YUY2 -> RGB32 conversion. IR must stay native end-to-end:
+        // Windows' UVC IR contract supports no scaling or conversion, and enabling the processor can make a valid L8
+        // pin accept startup only to reject its first ReadSample.
+        Check(hr: MfInterop.MFCreateAttributes(cInitialSize: 1, ppMFAttributes: out var readerConfig));
+
+        if (!infrared) {
+            var enableVideoProcessing = MfInterop.MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING;
+
+            Check(hr: readerConfig.SetUINT32(guidKey: ref enableVideoProcessing, unValue: 1));
+        }
+
+        Check(hr: MfInterop.MFCreateSourceReaderFromMediaSource(pAttributes: readerConfig, pMediaSource: mediaSource, ppSourceReader: out var reader));
+
+        m_streamIndex = (infrared ? preparedInfraredStream : MfInterop.FirstVideoStream);
 
         // Exactly ONE stream stays selected — the second stream's bandwidth (and the driver's shared pipeline) must
         // not be spent on frames nothing reads.
         Check(hr: reader.SetStreamSelection(dwStreamIndex: MfInterop.AllStreams, fSelected: false));
         Check(hr: reader.SetStreamSelection(dwStreamIndex: m_streamIndex, fSelected: true));
+
+        if (infrared && (preparedInfraredType is not null)) {
+            try {
+                Check(hr: reader.SetCurrentMediaType(dwStreamIndex: m_streamIndex, pMediaType: preparedInfraredType, pdwReserved: IntPtr.Zero));
+            } finally {
+                _ = Marshal.ReleaseComObject(o: preparedInfraredType);
+
+                if (preparedInfraredPresentation is not null) {
+                    _ = Marshal.ReleaseComObject(o: preparedInfraredPresentation);
+                }
+            }
+        }
 
         // Resolution is chosen by selecting the native capture mode, or not at all: the reader converts only the
         // CURRENT native type (basic video processing inserts no scaler, and silently drops a frame size set on the
@@ -354,35 +420,36 @@ internal sealed class Win32MediaFoundationCameraSession : ICameraCaptureSession 
             streamIndex: m_streamIndex
         );
 
-        // Ask for RGB32 output; Media Foundation supplies the converter for the selected native mode. An infrared
-        // stream's L8 luminance frequently has no RGB32 converter — accept the native type there and expand the
-        // luminance host-side in the read loop instead.
-        Check(hr: MfInterop.MFCreateMediaType(ppMFType: out var outputType));
+        m_captureFormat = Win32CameraModeNegotiation.ReadNativeFormat(
+            reader: reader,
+            streamIndex: m_streamIndex,
+            subtype: out var nativeSubtype
+        );
 
-        var majorTypeKey = MfInterop.MF_MT_MAJOR_TYPE;
-        var video = MfInterop.MFMediaType_Video;
-
-        Check(hr: outputType.SetGUID(guidKey: ref majorTypeKey, guidValue: ref video));
-
-        var subTypeKey = MfInterop.MF_MT_SUBTYPE;
-        var rgb32 = MfInterop.MFVideoFormat_RGB32;
-
-        Check(hr: outputType.SetGUID(guidKey: ref subTypeKey, guidValue: ref rgb32));
-
-        if (reader.SetCurrentMediaType(dwStreamIndex: m_streamIndex, pMediaType: outputType, pdwReserved: IntPtr.Zero) < 0) {
-            Check(hr: reader.GetCurrentMediaType(dwStreamIndex: m_streamIndex, ppMediaType: out var nativeType));
-
-            var nativeSubType = MfInterop.MF_MT_SUBTYPE;
-            var l8 = MfInterop.MFVideoFormat_L8;
-
-            if ((nativeType.GetGUID(guidKey: ref nativeSubType, guidValue: out var subtype) < 0) || (l8 != subtype)) {
-                throw new InvalidOperationException(message: "the stream offers neither an RGB32 conversion nor L8 luminance");
+        if (infrared) {
+            if (MfInterop.MFVideoFormat_L8 != nativeSubtype) {
+                throw new InvalidOperationException(message: "the infrared stream does not offer native L8 luminance");
             }
 
             m_expandLuminance = true;
+        } else {
+            // Ask for RGB32 output; Media Foundation supplies the converter for the selected native color mode.
+            Check(hr: MfInterop.MFCreateMediaType(ppMFType: out var outputType));
+
+            var majorTypeKey = MfInterop.MF_MT_MAJOR_TYPE;
+            var video = MfInterop.MFMediaType_Video;
+
+            Check(hr: outputType.SetGUID(guidKey: ref majorTypeKey, guidValue: ref video));
+
+            var subTypeKey = MfInterop.MF_MT_SUBTYPE;
+            var rgb32 = MfInterop.MFVideoFormat_RGB32;
+
+            Check(hr: outputType.SetGUID(guidKey: ref subTypeKey, guidValue: ref rgb32));
+            Check(hr: reader.SetCurrentMediaType(dwStreamIndex: m_streamIndex, pMediaType: outputType, pdwReserved: IntPtr.Zero));
         }
 
-        // Read back the negotiated frame size.
+        // Read back the complete reader type. The presentation descriptor's L8 type is used only to choose the pin;
+        // its sparse source-level description is not the negotiated reader media type and may omit frame dimensions.
         Check(hr: reader.GetCurrentMediaType(dwStreamIndex: m_streamIndex, ppMediaType: out var currentType));
 
         var frameSizeKey = MfInterop.MF_MT_FRAME_SIZE;
@@ -647,5 +714,59 @@ internal static class Win32CameraModeNegotiation {
                 _ = Marshal.ReleaseComObject(o: best);
             }
         }
+    }
+    // Reads the selected NATIVE type before a tier replaces the reader's output subtype with RGB/ARGB. This is the
+    // USB/device transport authors need to diagnose bandwidth and profile choices, not Puck's presentation format.
+    public static CameraCaptureFormat ReadNativeFormat(IMFSourceReader reader, uint streamIndex, out Guid subtype) {
+        var frameRateKey = MfInterop.MF_MT_FRAME_RATE;
+        var subtypeKey = MfInterop.MF_MT_SUBTYPE;
+
+        Check(hr: reader.GetCurrentMediaType(dwStreamIndex: streamIndex, ppMediaType: out var mediaType));
+
+        try {
+            subtype = ((mediaType.GetGUID(guidKey: ref subtypeKey, guidValue: out var value) >= 0)
+                ? value
+                : Guid.Empty
+            );
+            var rate = (((mediaType.GetUINT64(guidKey: ref frameRateKey, punValue: out var packedRate) >= 0) && ((packedRate & 0xffffffff) != 0))
+                ? (((double)(packedRate >> 32)) / (packedRate & 0xffffffff))
+                : 0.0
+            );
+
+            return new CameraCaptureFormat(
+                RateHz: rate,
+                Subtype: SubtypeName(subtype: subtype)
+            );
+        } finally {
+            _ = Marshal.ReleaseComObject(o: mediaType);
+        }
+    }
+    private static string SubtypeName(Guid subtype) {
+        if (Guid.Empty == subtype) {
+            return "unknown";
+        }
+
+        if (MfInterop.MFVideoFormat_L8 == subtype) {
+            return "L8";
+        }
+
+        Span<byte> bytes = stackalloc byte[16];
+        _ = subtype.TryWriteBytes(destination: bytes);
+
+        if (
+            (bytes[0] is >= 0x20 and <= 0x7e) &&
+            (bytes[1] is >= 0x20 and <= 0x7e) &&
+            (bytes[2] is >= 0x20 and <= 0x7e) &&
+            (bytes[3] is >= 0x20 and <= 0x7e)
+        ) {
+            return new string([
+                ((char)bytes[0]),
+                ((char)bytes[1]),
+                ((char)bytes[2]),
+                ((char)bytes[3]),
+            ]);
+        }
+
+        return subtype.ToString(format: "D");
     }
 }

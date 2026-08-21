@@ -39,24 +39,30 @@ DISPLAYCONFIG_DEVICE_INFO_TYPE
 DISPLAYCONFIG_SOURCE_DEVICE_NAME
 DISPLAYCONFIG_TARGET_DEVICE_NAME
 
-// D3D11 platform feeds: the live-camera GPU tier's Media Foundation decode/processing device and the Windows
-// Graphics Capture staging/readback path, including DXGI adapter/device access and GPU copy/sync objects. The Media
+// D3D11 platform feeds: Media Foundation camera conversion (including the native FaceAuth YUY2/L8 compute path) and
+// Windows Graphics Capture staging/readback, with DXGI adapter/device access and GPU copy/sync objects. The Media
 // Foundation DXGI device manager and WinRT graphics-device bridge stay hand-rolled beside the generated interop.
 CreateDXGIFactory1
 D3D11CreateDevice
+D3DCompile
 D3D11_SDK_VERSION
 IUnknown
 ID3D10Multithread
+ID3DBlob
 ID3D11Device1
 ID3D11DeviceContext
+ID3D11ComputeShader
 ID3D11Resource
 ID3D11Query
+ID3D11ShaderResourceView
 ID3D11Texture2D
+ID3D11UnorderedAccessView
 IDXGIDevice
 IDXGIAdapter1
 IDXGIFactory1
 D3D11_CREATE_DEVICE_FLAG
 D3D11_QUERY_DESC
+D3D11_SHADER_RESOURCE_VIEW_DESC
 D3D11_MAPPED_SUBRESOURCE
 D3D11_TEXTURE2D_DESC
 D3D11_BIND_FLAG
@@ -67,6 +73,7 @@ D3D_FEATURE_LEVEL
 D3D11_MAP
 D3D11_MAP_FLAG
 D3D11_USAGE
+D3D_SRV_DIMENSION
 DXGI_FORMAT
 DXGI_SAMPLE_DESC
 DXGI_ERROR_NOT_FOUND

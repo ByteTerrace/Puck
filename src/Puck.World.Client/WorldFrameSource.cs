@@ -1490,7 +1490,6 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         // AFTER capture and BEFORE the source poll.
         m_binder.Publish(
             tick: m_simulation.Tick,
-            elapsedTicks: m_simulation.ElapsedTicks,
             deviceContext: deviceContext,
             gpu: gpu
         );

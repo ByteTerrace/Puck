@@ -4,7 +4,7 @@ namespace Puck.Platform;
 /// A live camera session on the GPU-resident zero-copy tier (M3): frames never visit host memory. The platform's
 /// decode/processing device (Media Foundation's D3D11 device on Windows) converts each captured frame on-GPU and copies
 /// it into one of the <em>consumer-provisioned</em> shared targets — textures the consumer created in shared GPU memory
-/// (sized <see cref="Width"/> × <see cref="Height"/>, B8G8R8A8) and handed over as opaque shared handles via
+/// (sized <see cref="Width"/> × <see cref="Height"/> in <see cref="TargetFormat"/>) and handed over as opaque shared handles via
 /// <see cref="Start"/>. The consumer imports those same handles once on its render device and, each frame, samples the
 /// slot named by <see cref="LatestSlot"/> when <see cref="FrameVersion"/> advances.
 /// <para>Two-phase open: construction negotiates the device + output size (so the consumer can size the targets), then
@@ -12,9 +12,9 @@ namespace Puck.Platform;
 /// CPU fence at the camera's cadence) <em>before</em> publishing the slot, so a published slot is always safe to sample
 /// — the render pump never waits.</para>
 /// <para>Both hosts' shared camera feeds open this tier through
-/// <see cref="ICameraCaptureService.TryOpenSharedDefault"/> — the Direct3D 12 host samples its own shared targets
-/// directly, the Vulkan host imports their NT handles — falling back to the CPU-pixel tier when the open
-/// refuses.</para>
+/// <see cref="ICameraCaptureService.TryOpenSharedDefault"/> or its coordinated dual counterpart — the Direct3D 12
+/// host samples its own shared targets directly, the Vulkan host imports their NT handles — falling back to the
+/// CPU-pixel tier when the open refuses.</para>
 /// </summary>
 public interface ICameraSharedCaptureSession : ICameraControlSurface, IDisposable {
     /// <summary>A monotonically increasing counter of frames published into the shared targets; a consumer compares it
@@ -31,6 +31,9 @@ public interface ICameraSharedCaptureSession : ICameraControlSurface, IDisposabl
     /// <summary>The index (into the <see cref="Start"/> target list) of the most recently published frame, or
     /// <c>-1</c> until the first frame arrives.</summary>
     int LatestSlot { get; }
+    /// <summary>The pixel format the consumer must use when provisioning the shared targets. Single-camera Media
+    /// Foundation conversion produces BGRA; coordinated native-surface compute conversion selects RGBA.</summary>
+    SurfaceFormat TargetFormat { get; }
     /// <summary>A human-readable device name, for diagnostics.</summary>
     string Name { get; }
     /// <summary>The negotiated frame width in pixels — the width the shared targets must be created with.</summary>
@@ -39,8 +42,8 @@ public interface ICameraSharedCaptureSession : ICameraControlSurface, IDisposabl
     /// <summary>Begins streaming into the given shared targets (opened on the platform's decode device); frames are
     /// then published round-robin across the slots.</summary>
     /// <param name="sharedTargetHandles">The consumer-provisioned shared textures (opaque NT handles on Windows), each
-    /// <see cref="Width"/> × <see cref="Height"/> B8G8R8A8; two or more slots keep the writer off the slot a consumer
-    /// is sampling.</param>
+    /// <see cref="Width"/> × <see cref="Height"/> in <see cref="TargetFormat"/>; two or more slots keep the writer off
+    /// the slot a consumer is sampling.</param>
     /// <exception cref="ArgumentException">No targets were provided.</exception>
     /// <exception cref="InvalidOperationException">The session already started, or a target could not be opened.</exception>
     void Start(IReadOnlyList<nint> sharedTargetHandles);

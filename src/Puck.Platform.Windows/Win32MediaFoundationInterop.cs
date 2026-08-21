@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 
@@ -15,6 +16,7 @@ internal static class MfInterop {
     public const uint EndOfStream = 0x00000002; // MF_SOURCE_READERF_ENDOFSTREAM
 
     public static Guid IID_IMFMediaSource = new(g: "279a808d-aec7-40c8-9c6b-a6b492c78a66");
+    public static Guid IID_IMFMediaSourceEx = new(g: "3c9b2eb9-86d5-4514-a394-f56664f9f0d8");
     public static Guid MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE = new(g: "c60ac5fe-252a-478f-a0ef-bc8fa5f7cad3");
     public static Guid MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP = new(g: "8ac3587a-4ae7-42d8-99e0-0a6013eef90f");
     public static Guid MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME = new(g: "60d0e559-52f8-4fa2-bbce-acdb34a8ec01");
@@ -79,10 +81,12 @@ internal static class MfInterop {
     /// what each does with the resulting source (reader configuration) differs.</summary>
     /// <param name="infrared">Whether to enumerate the sensor-camera category (the infrared stream a Windows Hello
     /// capable device exposes as its own capture device) instead of the default color-camera category.</param>
+    /// <param name="extended">Whether to activate the device through <c>IMFMediaSourceEx</c>, preserving non-color
+    /// capture streams exposed by a composite camera.</param>
     /// <returns>The activated media source (as <see cref="object"/>, the way <c>ActivateObject</c> yields it) and the
     /// device's friendly name (or <see langword="null"/> if the driver did not report one).</returns>
     /// <exception cref="InvalidOperationException">No matching video capture device was found.</exception>
-    public static (object MediaSource, string? Name) ActivateDefaultVideoSource(bool infrared = false) {
+    public static (object MediaSource, string? Name) ActivateDefaultVideoSource(bool infrared = false, bool extended = false) {
         Check(hr: MFCreateAttributes(cInitialSize: 2, ppMFAttributes: out var enumConfig));
 
         var sourceTypeKey = MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE;
@@ -120,14 +124,83 @@ internal static class MfInterop {
             ? deviceName
             : null);
 
-        var sourceIid = IID_IMFMediaSource;
+        // IMFMediaSourceEx is the capture-source activation contract that exposes non-color device streams. Asking
+        // only for IMFMediaSource can yield the ordinary video projection even when the same device has an L8 pin.
+        var sourceIid = (extended ? IID_IMFMediaSourceEx : IID_IMFMediaSource);
 
         Check(hr: activate.ActivateObject(ppv: out var mediaSource, riid: ref sourceIid));
 
         return (mediaSource, name);
     }
+    /// <summary>Selects the media source's native L8 infrared stream before a Source Reader is constructed.</summary>
+    /// <remarks>Some composite UVC cameras, including BRIO firmware, require the presentation descriptor and its
+    /// media-type handler to be configured first; selecting the same stream only after reader creation is too late.</remarks>
+    /// <param name="mediaSource">The activated capture source to inspect.</param>
+    /// <param name="streamIdentifier">The selected native stream identifier when the method returns <see langword="true"/>.</param>
+    /// <param name="mediaType">The selected native L8 media type when the method returns <see langword="true"/>.</param>
+    /// <param name="presentationDescriptor">The presentation descriptor that owns the selected stream when the method returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when an L8 infrared stream was selected; otherwise, <see langword="false"/>.</returns>
+    /// <exception cref="COMException">A Media Foundation operation fails while enumerating or selecting streams.</exception>
+    public static bool TryPrepareInfraredStream(
+        object mediaSource,
+        out uint streamIdentifier,
+        [NotNullWhen(true)] out IMFMediaType? mediaType,
+        [NotNullWhen(true)] out IMFPresentationDescriptor? presentationDescriptor
+    ) {
+        streamIdentifier = 0;
+        mediaType = null;
+        presentationDescriptor = null;
+
+        if (mediaSource is not IMFMediaSource source) {
+            return false;
+        }
+
+        Check(hr: source.CreatePresentationDescriptor(ppPresentationDescriptor: out var presentation));
+        Check(hr: presentation.GetStreamDescriptorCount(pdwDescriptorCount: out var descriptorCount));
+
+        for (uint index = 0; index < descriptorCount; index++) {
+            Check(hr: presentation.DeselectStream(dwDescriptorIndex: index));
+        }
+
+        for (uint descriptorIndex = 0; descriptorIndex < descriptorCount; descriptorIndex++) {
+            Check(hr: presentation.GetStreamDescriptorByIndex(dwIndex: descriptorIndex, pfSelected: out _, ppDescriptor: out var descriptor));
+            Check(hr: descriptor.GetMediaTypeHandler(ppMediaTypeHandler: out var handler));
+            Check(hr: handler.GetMediaTypeCount(pdwTypeCount: out var typeCount));
+
+            for (uint typeIndex = 0; typeIndex < typeCount; typeIndex++) {
+                Check(hr: handler.GetMediaTypeByIndex(dwIndex: typeIndex, ppType: out var candidate));
+
+                var subTypeKey = MF_MT_SUBTYPE;
+
+                if ((candidate.GetGUID(guidKey: ref subTypeKey, guidValue: out var subtype) < 0) || (MFVideoFormat_L8 != subtype)) {
+                    _ = Marshal.ReleaseComObject(o: candidate);
+
+                    continue;
+                }
+
+                Check(hr: descriptor.GetStreamIdentifier(pdwStreamIdentifier: out var candidateStreamIdentifier));
+                Check(hr: presentation.SelectStream(dwDescriptorIndex: descriptorIndex));
+                Check(hr: handler.SetCurrentMediaType(pMediaType: candidate));
+                streamIdentifier = candidateStreamIdentifier;
+                mediaType = candidate;
+                presentationDescriptor = presentation;
+                _ = Marshal.ReleaseComObject(o: handler);
+                _ = Marshal.ReleaseComObject(o: descriptor);
+
+                return true;
+            }
+
+            _ = Marshal.ReleaseComObject(o: handler);
+            _ = Marshal.ReleaseComObject(o: descriptor);
+        }
+
+        _ = Marshal.ReleaseComObject(o: presentation);
+
+        return false;
+    }
 }
-/// <summary>IMFAttributes — only SetUINT32 (slot 19) and SetGUID (slot 22) are called; earlier slots are placeholders.</summary>
+/// <summary>IMFAttributes — only SetUINT32 (slot 19) and SetGUID (slot 22) are called directly; the complete 30-method
+/// layout is retained because presentation and stream descriptors inherit this interface.</summary>
 [ComImport]
 [Guid("2cd2d921-c447-44a7-a13c-4adabfc247e3")]
 [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
@@ -158,6 +231,124 @@ internal interface IMFAttributes {
     [PreserveSig] int SetString();
     [PreserveSig] int SetBlob();
     [PreserveSig] int SetUnknown(ref Guid guidKey, [MarshalAs(UnmanagedType.IUnknown)] object punkValue);
+    [PreserveSig] int LockStore();
+    [PreserveSig] int UnlockStore();
+    [PreserveSig] int GetCount();
+    [PreserveSig] int GetItemByIndex();
+    [PreserveSig] int CopyAllItems();
+}
+/// <summary>IMFMediaSource — only CreatePresentationDescriptor (slot 6 after IMFMediaEventGenerator) is called.</summary>
+[ComImport]
+[Guid("279a808d-aec7-40c8-9c6b-a6b492c78a66")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+[SupportedOSPlatform("windows")]
+internal interface IMFMediaSource {
+    [PreserveSig] int GetEvent();
+    [PreserveSig] int BeginGetEvent();
+    [PreserveSig] int EndGetEvent();
+    [PreserveSig] int QueueEvent();
+    [PreserveSig] int GetCharacteristics();
+    [PreserveSig] int CreatePresentationDescriptor(out IMFPresentationDescriptor ppPresentationDescriptor);
+    [PreserveSig] int Start();
+    [PreserveSig] int Stop();
+    [PreserveSig] int Pause();
+    [PreserveSig] int Shutdown();
+}
+/// <summary>IMFPresentationDescriptor — stream enumeration and selection after the flattened 30-slot
+/// <c>IMFAttributes</c> prefix.</summary>
+[ComImport]
+[Guid("03cb2711-24d7-4db6-a17f-f3a7a479a536")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+[SupportedOSPlatform("windows")]
+internal interface IMFPresentationDescriptor {
+    [PreserveSig] int GetItem();
+    [PreserveSig] int GetItemType();
+    [PreserveSig] int CompareItem();
+    [PreserveSig] int Compare();
+    [PreserveSig] int GetUINT32();
+    [PreserveSig] int GetUINT64();
+    [PreserveSig] int GetDouble();
+    [PreserveSig] int GetGUID();
+    [PreserveSig] int GetStringLength();
+    [PreserveSig] int GetString();
+    [PreserveSig] int GetAllocatedString();
+    [PreserveSig] int GetBlobSize();
+    [PreserveSig] int GetBlob();
+    [PreserveSig] int GetAllocatedBlob();
+    [PreserveSig] int GetUnknown();
+    [PreserveSig] int SetItem();
+    [PreserveSig] int DeleteItem();
+    [PreserveSig] int DeleteAllItems();
+    [PreserveSig] int SetUINT32();
+    [PreserveSig] int SetUINT64();
+    [PreserveSig] int SetDouble();
+    [PreserveSig] int SetGUID();
+    [PreserveSig] int SetString();
+    [PreserveSig] int SetBlob();
+    [PreserveSig] int SetUnknown();
+    [PreserveSig] int LockStore();
+    [PreserveSig] int UnlockStore();
+    [PreserveSig] int GetCount();
+    [PreserveSig] int GetItemByIndex();
+    [PreserveSig] int CopyAllItems();
+    [PreserveSig] int GetStreamDescriptorCount(out uint pdwDescriptorCount);
+    [PreserveSig] int GetStreamDescriptorByIndex(uint dwIndex, [MarshalAs(UnmanagedType.Bool)] out bool pfSelected, out IMFStreamDescriptor ppDescriptor);
+    [PreserveSig] int SelectStream(uint dwDescriptorIndex);
+    [PreserveSig] int DeselectStream(uint dwDescriptorIndex);
+    [PreserveSig] int Clone(out IMFPresentationDescriptor ppPresentationDescriptor);
+}
+/// <summary>IMFStreamDescriptor — stream identifier and media-type handler after the flattened 30-slot
+/// <c>IMFAttributes</c> prefix.</summary>
+[ComImport]
+[Guid("56c03d9c-9dbb-45f5-ab4b-d80f47c05938")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+[SupportedOSPlatform("windows")]
+internal interface IMFStreamDescriptor {
+    [PreserveSig] int GetItem();
+    [PreserveSig] int GetItemType();
+    [PreserveSig] int CompareItem();
+    [PreserveSig] int Compare();
+    [PreserveSig] int GetUINT32();
+    [PreserveSig] int GetUINT64();
+    [PreserveSig] int GetDouble();
+    [PreserveSig] int GetGUID();
+    [PreserveSig] int GetStringLength();
+    [PreserveSig] int GetString();
+    [PreserveSig] int GetAllocatedString();
+    [PreserveSig] int GetBlobSize();
+    [PreserveSig] int GetBlob();
+    [PreserveSig] int GetAllocatedBlob();
+    [PreserveSig] int GetUnknown();
+    [PreserveSig] int SetItem();
+    [PreserveSig] int DeleteItem();
+    [PreserveSig] int DeleteAllItems();
+    [PreserveSig] int SetUINT32();
+    [PreserveSig] int SetUINT64();
+    [PreserveSig] int SetDouble();
+    [PreserveSig] int SetGUID();
+    [PreserveSig] int SetString();
+    [PreserveSig] int SetBlob();
+    [PreserveSig] int SetUnknown();
+    [PreserveSig] int LockStore();
+    [PreserveSig] int UnlockStore();
+    [PreserveSig] int GetCount();
+    [PreserveSig] int GetItemByIndex();
+    [PreserveSig] int CopyAllItems();
+    [PreserveSig] int GetStreamIdentifier(out uint pdwStreamIdentifier);
+    [PreserveSig] int GetMediaTypeHandler(out IMFMediaTypeHandler ppMediaTypeHandler);
+}
+/// <summary>IMFMediaTypeHandler — native stream media-type enumeration and selection.</summary>
+[ComImport]
+[Guid("e93dcf6c-4b07-4e1e-8123-aa16ed6eadf5")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+[SupportedOSPlatform("windows")]
+internal interface IMFMediaTypeHandler {
+    [PreserveSig] int IsMediaTypeSupported(IMFMediaType pMediaType, out IMFMediaType? ppMediaType);
+    [PreserveSig] int GetMediaTypeCount(out uint pdwTypeCount);
+    [PreserveSig] int GetMediaTypeByIndex(uint dwIndex, out IMFMediaType ppType);
+    [PreserveSig] int SetCurrentMediaType(IMFMediaType pMediaType);
+    [PreserveSig] int GetCurrentMediaType(out IMFMediaType ppMediaType);
+    [PreserveSig] int GetMajorType(out Guid pguidMajorType);
 }
 /// <summary>IMFActivate — GetAllocatedString (slot 11) + ActivateObject (slot 31) are called.</summary>
 [ComImport]
@@ -311,7 +502,6 @@ internal interface IMFMediaBuffer {
     [PreserveSig] int Unlock();
     [PreserveSig] int GetCurrentLength(out uint pcbCurrentLength);
 }
-/// <summary>IMFSourceReader — SetStreamSelection (2), GetCurrentMediaType (4), SetCurrentMediaType (5), ReadSample (7).</summary>
 /// <summary>Kernel Streaming's raw property door, answered by Media Foundation video capture sources — the route to a
 /// vendor extension unit's controls (a <c>KSP_NODE</c>-shaped property keyed by the XU's GUID + selector + topology
 /// node id, with <c>KSPROPERTY_TYPE_TOPOLOGY</c> OR'd into the flags).</summary>
@@ -346,6 +536,8 @@ internal interface IAMVideoProcAmp {
     [PreserveSig] int Set(int Property, int lValue, int Flags);
     [PreserveSig] int Get(int Property, out int lValue, out int pFlags);
 }
+/// <summary>IMFSourceReader — SetStreamSelection (2), GetCurrentMediaType (4), SetCurrentMediaType (5), ReadSample (7),
+/// and Flush (8).</summary>
 [ComImport]
 [Guid("70ae66f2-c809-4e4f-8915-bdcb406b7993")]
 [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
@@ -358,7 +550,7 @@ internal interface IMFSourceReader {
     [PreserveSig] int SetCurrentMediaType(uint dwStreamIndex, nint pdwReserved, IMFMediaType pMediaType);
     [PreserveSig] int SetCurrentPosition();
     [PreserveSig] int ReadSample(uint dwStreamIndex, uint dwControlFlags, out uint pdwActualStreamIndex, out uint pdwStreamFlags, out long pllTimestamp, out IMFSample? ppSample);
-    [PreserveSig] int Flush();
+    [PreserveSig] int Flush(uint dwStreamIndex);
     [PreserveSig] int GetServiceForStream();
     [PreserveSig] int GetPresentationAttribute(uint dwStreamIndex, ref Guid guidAttribute, out MfPropVariant pvarAttribute);
 }

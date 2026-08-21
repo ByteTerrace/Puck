@@ -107,10 +107,9 @@ internal sealed partial class WorldScreenBinder {
     /// their latest framebuffer (the one GPU call this project makes on a machine's behalf) and services
     /// presentation-only camera/window captures on source-owned cadences.</summary>
     /// <param name="tick">The world's completed-step ordinal driving deterministic pattern animation.</param>
-    /// <param name="elapsedTicks">The exact completed simulation time in engine ticks, used by feed deadlines.</param>
     /// <param name="deviceContext">The live GPU device context to upload on.</param>
     /// <param name="gpu">The neutral GPU compute services (resolves the upload factory).</param>
-    public void Publish(ulong tick, ulong elapsedTicks, IGpuDeviceContext deviceContext, IGpuComputeServices gpu) {
+    public void Publish(ulong tick, IGpuDeviceContext deviceContext, IGpuComputeServices gpu) {
         if (m_disposed) {
             return;
         }
@@ -144,7 +143,6 @@ internal sealed partial class WorldScreenBinder {
         // advanced. Window captures below each own an independent deadline from their declaration.
         CaptureCamera(
             deviceContext: deviceContext,
-            elapsedTicks: elapsedTicks,
             gpu: gpu
         );
         var cameraTicks = (timingEnabled
@@ -179,7 +177,7 @@ internal sealed partial class WorldScreenBinder {
             }
 
             if (slot.Capture is { } capture) {
-                if (capture.ShouldPull(elapsedTicks: elapsedTicks)) {
+                if (capture.ShouldPull()) {
                     phaseStart = (timingEnabled
                         ? Stopwatch.GetTimestamp()
                         : 0L

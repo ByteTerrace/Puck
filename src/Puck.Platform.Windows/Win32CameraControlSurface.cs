@@ -1,18 +1,19 @@
 using System.Buffers.Binary;
 using System.Runtime.Versioning;
 using WinRT;
+using Windows.Media.Devices;
 
 namespace Puck.Platform.Windows;
 
 /// <summary>
 /// The Windows <see cref="ICameraControlSurface"/> both camera sessions share: maps the neutral
-/// <see cref="CameraControl"/> vocabulary onto the media source's <see cref="IAMCameraControl"/>/
-/// <see cref="IAMVideoProcAmp"/> implementations (Media Foundation capture sources answer both, and the controls live
-/// on the SOURCE — independent of which tier reads frames, and live mid-stream). The process runs MTA throughout, so
-/// the render-pump thread calls the grabber-thread-created source directly, same-apartment. A set clamps and
-/// step-snaps into the device-reported range and switches the control to manual; a reset restores the driver default
-/// (automatic where the device supports it). A device without the control — or a source without the interface —
-/// reports <see langword="false"/>, never throws.
+/// <see cref="CameraControl"/> vocabulary onto a WinRT <see cref="VideoDeviceController"/> when MediaCapture owns the
+/// graph, or the media source's legacy <see cref="IAMCameraControl"/>/<see cref="IAMVideoProcAmp"/> implementations
+/// when a Media Foundation source reader owns it. Controls live on the physical source — independent of which tier
+/// reads frames, and live mid-stream. A set clamps and step-snaps into the device-reported range and switches the
+/// control to manual; a reset restores the driver default (automatic where the device supports it). Every projection
+/// and driver call is contained here: a device without the control — including a COM proxy whose interface query is
+/// deferred until first use — reports <see langword="false"/>, never throws.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal sealed unsafe class Win32CameraControlSurface(object mediaSource) : ICameraControlSurface {
@@ -29,6 +30,7 @@ internal sealed unsafe class Win32CameraControlSurface(object mediaSource) : ICa
     private readonly IAMVideoProcAmp? m_amp = QueryInterface<IAMVideoProcAmp>(source: mediaSource);
     private readonly IAMCameraControl? m_camera = QueryInterface<IAMCameraControl>(source: mediaSource);
     private readonly IKsControl? m_ksControl = QueryInterface<IKsControl>(source: mediaSource);
+    private readonly IModernCameraControlSurface? m_modern = CreateModernControlSurface(source: mediaSource);
 
     // The vendor XU's topology node id, discovered once by sweeping BASICSUPPORT on the FOV selector (node 6 on the
     // BRIO; devices differ): null = not yet probed, -1 = no Logitech video XU on this device.
@@ -39,6 +41,19 @@ internal sealed unsafe class Win32CameraControlSurface(object mediaSource) : ICa
         value = 0;
         auto = false;
 
+        try {
+            return TryGetCore(control: control, value: out value, auto: out auto);
+        } catch (Exception) {
+            value = 0;
+            auto = false;
+
+            return false;
+        }
+    }
+    private bool TryGetCore(CameraControl control, out int value, out bool auto) {
+        value = 0;
+        auto = false;
+
         if (CameraControl.FieldOfView == control) {
             if (!TryVendorRead(selector: FovSelector, value: out var step)) {
                 return false;
@@ -46,6 +61,10 @@ internal sealed unsafe class Win32CameraControlSurface(object mediaSource) : ICa
 
             value = FovDegrees(step: step);
 
+            return true;
+        }
+
+        if ((m_modern?.TryGet(control: control, value: out value, auto: out auto) ?? false)) {
             return true;
         }
 
@@ -76,6 +95,17 @@ internal sealed unsafe class Win32CameraControlSurface(object mediaSource) : ICa
     public bool TryGetRange(CameraControl control, out CameraControlRange range) {
         range = default;
 
+        try {
+            return TryGetRangeCore(control: control, range: out range);
+        } catch (Exception) {
+            range = default;
+
+            return false;
+        }
+    }
+    private bool TryGetRangeCore(CameraControl control, out CameraControlRange range) {
+        range = default;
+
         if (CameraControl.FieldOfView == control) {
             if (VendorNode() < 0) {
                 return false;
@@ -91,6 +121,10 @@ internal sealed unsafe class Win32CameraControlSurface(object mediaSource) : ICa
                 SupportsAuto: false
             );
 
+            return true;
+        }
+
+        if ((m_modern?.TryGetRange(control: control, range: out range) ?? false)) {
             return true;
         }
 
@@ -129,14 +163,29 @@ internal sealed unsafe class Win32CameraControlSurface(object mediaSource) : ICa
     }
     /// <inheritdoc/>
     public bool TryResetAuto(CameraControl control) {
+        try {
+            return TryResetAutoCore(control: control);
+        } catch (Exception) {
+            return false;
+        }
+    }
+    private bool TryResetAutoCore(CameraControl control) {
         if (CameraControl.FieldOfView == control) {
-            return TryVendorWrite(selector: FovSelector, value: 0);
+            return TryVendorWriteCore(selector: FovSelector, value: 0);
+        }
+
+        if (!TryGetRangeCore(control: control, range: out var range)) {
+            return false;
         }
 
         if (
-            !TryGetRange(control: control, range: out var range) ||
-            !TryMap(control: control, isCamera: out var isCamera, property: out var property)
+            (m_modern is { } modern) &&
+            modern.TryGetRange(control: control, range: out _)
         ) {
+            return modern.TryResetAuto(control: control);
+        }
+
+        if (!TryMap(control: control, isCamera: out var isCamera, property: out var property)) {
             return false;
         }
 
@@ -149,25 +198,32 @@ internal sealed unsafe class Win32CameraControlSurface(object mediaSource) : ICa
     }
     /// <inheritdoc/>
     public bool TrySet(CameraControl control, int value) {
+        try {
+            return TrySetCore(control: control, value: value);
+        } catch (Exception) {
+            return false;
+        }
+    }
+    private bool TrySetCore(CameraControl control, int value) {
         if (CameraControl.FieldOfView == control) {
-            return TryVendorWrite(selector: FovSelector, value: FovStep(degrees: value));
+            return TryVendorWriteCore(selector: FovSelector, value: FovStep(degrees: value));
         }
 
-        if (
-            !TryGetRange(control: control, range: out var range) ||
-            !TryMap(control: control, isCamera: out var isCamera, property: out var property)
-        ) {
+        if (!TryGetRangeCore(control: control, range: out var range)) {
             return false;
         }
 
-        var clamped = Math.Clamp(value: value, min: range.Minimum, max: range.Maximum);
+        var clamped = SnapToRange(value: value, range: range);
 
-        if (range.Step > 1) {
-            clamped = Math.Clamp(
-                value: (range.Minimum + ((((clamped - range.Minimum) + (range.Step / 2)) / range.Step) * range.Step)),
-                min: range.Minimum,
-                max: range.Maximum
-            );
+        if (
+            (m_modern is { } modern) &&
+            modern.TryGetRange(control: control, range: out _)
+        ) {
+            return modern.TrySet(control: control, value: clamped);
+        }
+
+        if (!TryMap(control: control, isCamera: out var isCamera, property: out var property)) {
+            return false;
         }
 
         return ((isCamera
@@ -178,6 +234,17 @@ internal sealed unsafe class Win32CameraControlSurface(object mediaSource) : ICa
 
     /// <inheritdoc/>
     public bool TryVendorRead(uint selector, out int value) {
+        value = 0;
+
+        try {
+            return TryVendorReadCore(selector: selector, value: out value);
+        } catch (Exception) {
+            value = 0;
+
+            return false;
+        }
+    }
+    private bool TryVendorReadCore(uint selector, out int value) {
         value = 0;
 
         var node = VendorNode();
@@ -198,6 +265,13 @@ internal sealed unsafe class Win32CameraControlSurface(object mediaSource) : ICa
     }
     /// <inheritdoc/>
     public bool TryVendorWrite(uint selector, int value) {
+        try {
+            return TryVendorWriteCore(selector: selector, value: value);
+        } catch (Exception) {
+            return false;
+        }
+    }
+    private bool TryVendorWriteCore(uint selector, int value) {
         var node = VendorNode();
 
         if (node < 0) {
@@ -223,10 +297,6 @@ internal sealed unsafe class Win32CameraControlSurface(object mediaSource) : ICa
     // One KSP_NODE-shaped property call against the Logitech video XU: 16-byte set GUID + selector + flags + node id
     // + reserved, all little-endian, exactly the wire shape ksproxy forwards to the UVC extension unit.
     private bool TryKs(uint selector, uint type, uint node, Span<byte> data) {
-        if (m_ksControl is not { } ksControl) {
-            return false;
-        }
-
         Span<byte> property = stackalloc byte[32];
 
         _ = MfInterop.LOGITECH_VIDEO_XU.TryWriteBytes(destination: property);
@@ -234,6 +304,14 @@ internal sealed unsafe class Win32CameraControlSurface(object mediaSource) : ICa
         BinaryPrimitives.WriteUInt32LittleEndian(destination: property[20..], value: type);
         BinaryPrimitives.WriteUInt32LittleEndian(destination: property[24..], value: node);
         BinaryPrimitives.WriteUInt32LittleEndian(destination: property[28..], value: 0u);
+
+        if ((m_modern?.TryKs(property: property, data: data, set: ((type & KsPropertyTypeSet) != 0)) ?? false)) {
+            return true;
+        }
+
+        if (m_ksControl is not { } ksControl) {
+            return false;
+        }
 
         fixed (byte* propertyPointer = property)
         fixed (byte* dataPointer = data) {
@@ -282,6 +360,165 @@ internal sealed unsafe class Win32CameraControlSurface(object mediaSource) : ICa
         } catch (Exception) {
             return null;
         }
+    }
+    private static IModernCameraControlSurface? CreateModernControlSurface(object source) {
+        if (
+            !OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: 15063) ||
+            (source is not VideoDeviceController controller)
+        ) {
+            return null;
+        }
+
+        return new ModernCameraControlSurface(controller: controller);
+    }
+    private static int SnapToRange(int value, CameraControlRange range) {
+        var clamped = Math.Clamp(value: value, min: range.Minimum, max: range.Maximum);
+
+        if (range.Step <= 1) {
+            return clamped;
+        }
+
+        var offset = ((long)clamped - range.Minimum);
+        var snapped = (((long)range.Minimum) + (((offset + (range.Step / 2L)) / range.Step) * range.Step));
+
+        return ((int)Math.Clamp(value: snapped, min: range.Minimum, max: range.Maximum));
+    }
+    private static bool TryInt(double value, out int result) {
+        if (!double.IsFinite(value) || (value < int.MinValue) || (value > int.MaxValue)) {
+            result = 0;
+
+            return false;
+        }
+
+        result = ((int)Math.Round(value: value, mode: MidpointRounding.AwayFromZero));
+
+        return true;
+    }
+    // Keeps WinRT's Windows-10 versioned surface behind an unannotated internal seam. Construction is guarded above,
+    // while the owning camera session can continue to support legacy Media Foundation sources on older Windows.
+    private interface IModernCameraControlSurface {
+        bool TryGet(CameraControl control, out int value, out bool auto);
+        bool TryGetRange(CameraControl control, out CameraControlRange range);
+        bool TryKs(ReadOnlySpan<byte> property, Span<byte> data, bool set);
+        bool TryResetAuto(CameraControl control);
+        bool TrySet(CameraControl control, int value);
+    }
+
+    [SupportedOSPlatform("windows10.0.15063")]
+    private sealed class ModernCameraControlSurface(VideoDeviceController controller) : IModernCameraControlSurface {
+        public bool TryGet(CameraControl control, out int value, out bool auto) {
+            value = 0;
+            auto = false;
+
+            var deviceControl = Resolve(control: control);
+
+            if (
+                (deviceControl is null) ||
+                !deviceControl.TryGetValue(value: out var current) ||
+                !TryInt(value: current, result: out value)
+            ) {
+                return false;
+            }
+
+            _ = deviceControl.TryGetAuto(value: out auto);
+
+            return true;
+        }
+        public bool TryGetRange(CameraControl control, out CameraControlRange range) {
+            range = default;
+
+            var deviceControl = Resolve(control: control);
+
+            if (deviceControl is null) {
+                return false;
+            }
+
+            var capabilities = deviceControl.Capabilities;
+
+            if (
+                !capabilities.Supported ||
+                !TryInt(value: capabilities.Min, result: out var modernMinimum) ||
+                !TryInt(value: capabilities.Max, result: out var modernMaximum) ||
+                !TryInt(value: capabilities.Step, result: out var modernStep) ||
+                !TryInt(value: capabilities.Default, result: out var modernDefault)
+            ) {
+                return false;
+            }
+
+            range = new CameraControlRange(
+                Default: modernDefault,
+                Maximum: modernMaximum,
+                Minimum: modernMinimum,
+                Step: Math.Max(val1: 1, val2: modernStep),
+                SupportsAuto: capabilities.AutoModeSupported
+            );
+
+            return true;
+        }
+        public bool TryKs(ReadOnlySpan<byte> property, Span<byte> data, bool set) {
+            if (set) {
+                return (VideoDeviceControllerSetDevicePropertyStatus.Success == controller.SetDevicePropertyByExtendedId(
+                    extendedPropertyId: property.ToArray(),
+                    propertyValue: data.ToArray()
+                ));
+            }
+
+            var result = controller.GetDevicePropertyByExtendedId(
+                extendedPropertyId: property.ToArray(),
+                maxPropertyValueSize: 128u
+            );
+
+            if (
+                (VideoDeviceControllerGetDevicePropertyStatus.Success != result.Status) ||
+                (result.Value is not byte[] bytes) ||
+                (bytes.Length < data.Length)
+            ) {
+                return false;
+            }
+
+            bytes.AsSpan(start: 0, length: data.Length).CopyTo(destination: data);
+
+            return true;
+        }
+        public bool TryResetAuto(CameraControl control) {
+            var deviceControl = Resolve(control: control);
+
+            if (deviceControl is null || !TryGetRange(control: control, range: out var range)) {
+                return false;
+            }
+
+            return (range.SupportsAuto
+                ? deviceControl.TrySetAuto(value: true)
+                : deviceControl.TrySetValue(value: range.Default)
+            );
+        }
+        public bool TrySet(CameraControl control, int value) {
+            var deviceControl = Resolve(control: control);
+
+            if (deviceControl is null || !TryGetRange(control: control, range: out var range)) {
+                return false;
+            }
+
+            if (range.SupportsAuto && !deviceControl.TrySetAuto(value: false)) {
+                return false;
+            }
+
+            return deviceControl.TrySetValue(value: SnapToRange(value: value, range: range));
+        }
+        // Not every classic VideoProcAmp member has a WinRT projection. Those members return null and deliberately
+        // fall through to the legacy COM map when the source supplies it.
+        private MediaDeviceControl? Resolve(CameraControl control) => (control switch {
+            CameraControl.Pan => controller.Pan,
+            CameraControl.Tilt => controller.Tilt,
+            CameraControl.Zoom => controller.Zoom,
+            CameraControl.Exposure => controller.Exposure,
+            CameraControl.Focus => controller.Focus,
+            CameraControl.Brightness => controller.Brightness,
+            CameraControl.Contrast => controller.Contrast,
+            CameraControl.WhiteBalance => controller.WhiteBalance,
+            CameraControl.BacklightCompensation => controller.BacklightCompensation,
+            _ => null,
+        });
     }
     // The two interfaces' own KSPROPERTY ordinals per neutral control.
     private static bool TryMap(CameraControl control, out bool isCamera, out int property) {

@@ -69,9 +69,9 @@ public sealed unsafe class DirectXGpuExportableStorageImage : IGpuExportableStor
             Type = D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT,
         };
         // The simultaneous-access (cross-API-writable) variant swaps UAV capability for RENDER_TARGET: its foreign
-        // Direct3D 11 writer opens the handle with D3D11-expressible binds (BGRA has no D3D11 UAV, so a UAV-flagged
-        // texture is refused with E_INVALIDARG), and this device never dispatches into it. The D3D12-writes shape
-        // keeps ALLOW_UNORDERED_ACCESS (the compute producer's UAV).
+        // Direct3D 11 writer opens the handle with D3D11-expressible binds, performs any compute work in a private UAV,
+        // and copies into this texture. This device never dispatches into it. The D3D12-writes shape keeps
+        // ALLOW_UNORDERED_ACCESS (the compute producer's UAV).
         var textureDesc = new D3D12_RESOURCE_DESC {
             DepthOrArraySize = 1,
             Dimension = D3D12_RESOURCE_DIMENSION.D3D12_RESOURCE_DIMENSION_TEXTURE2D,

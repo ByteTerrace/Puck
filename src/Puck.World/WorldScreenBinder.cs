@@ -103,10 +103,10 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     // has not been attempted).
     private readonly Dictionary<WorldCameraSensor, CameraFeed> m_cameraFeeds = new();
     private readonly Dictionary<WorldCameraSensor, string> m_cameraFaults = new();
-    // The authored device-control state per sensor (the first camera row OF THAT SENSOR wins, per
+    // The authored control state for the shared PHYSICAL device (the first camera row authoring controls wins, per
     // ResolveSharedCameraControls) — resolved at boot and re-resolved by ReconcileScreens, so an UpsertScreen mutation
-    // moves the physical device live. Applied to whichever tier's session is open (ApplyCameraControls).
-    private readonly WorldCameraControls?[] m_cameraControlsBySensor = new WorldCameraControls?[2];
+    // moves the device live. Applied through the session facade that owns the graph's shared control surface.
+    private WorldCameraControls? m_cameraControls;
     // The world's placeable-camera rows — booted from the definition and REPLACED by ReconcileCameras when a camera
     // mutation delivers, so a runtime screen.source <index> view (and every later resolve) reads the LIVE rows.
     private IReadOnlyList<WorldCamera> m_cameras;
@@ -205,8 +205,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
             ? new DirectXGpuSurfaceExportFactory()
             : null
         );
-        m_cameraControlsBySensor[((int)WorldCameraSensor.Color)] = ResolveSharedCameraControls(screens: screens, sensor: WorldCameraSensor.Color);
-        m_cameraControlsBySensor[((int)WorldCameraSensor.Infrared)] = ResolveSharedCameraControls(screens: screens, sensor: WorldCameraSensor.Infrared);
+        m_cameraControls = ResolveSharedCameraControls(screens: screens);
 
         foreach (var screen in screens) {
             _ = m_bootScreenIndices.Add(item: screen.Index);
@@ -724,16 +723,14 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
             slot.DeclaredSource = screen.Source;
         }
 
-        // Each sensor's authored control state re-resolves from the mutated list and lands on its physical device
-        // immediately when that feed is streaming (a no-op when unchanged) — the "changes in-game ride the mutation
-        // pipeline" half of the camera `controls` document member. A feed not yet live picks the state up from the
-        // per-frame service path once frames flow (ApplyCameraControls' live-stream contract).
-        m_cameraControlsBySensor[((int)WorldCameraSensor.Color)] = ResolveSharedCameraControls(screens: screens, sensor: WorldCameraSensor.Color);
-        m_cameraControlsBySensor[((int)WorldCameraSensor.Infrared)] = ResolveSharedCameraControls(screens: screens, sensor: WorldCameraSensor.Infrared);
+        // One physical camera has one authored control state. Re-resolve it from the mutated list and land it through
+        // whichever live feed owns the graph's control surface (a no-op on the other facade and when unchanged). A
+        // feed not yet live picks it up from the per-frame service path once frames flow.
+        m_cameraControls = ResolveSharedCameraControls(screens: screens);
 
         foreach (var cameraFeed in m_cameraFeeds.Values) {
             ApplyCameraControls(
-                desired: ControlsFor(sensor: cameraFeed.Sensor),
+                desired: m_cameraControls,
                 feed: cameraFeed
             );
         }

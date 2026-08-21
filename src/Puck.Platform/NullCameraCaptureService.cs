@@ -29,4 +29,11 @@ public sealed class NullCameraCaptureService : ICameraCaptureService {
 
         return false;
     }
+    /// <inheritdoc/>
+    public bool TryOpenSharedDualDefault(long adapterLuid, int colorWidth, int colorHeight, uint colorRateHz, int infraredWidth, int infraredHeight, uint infraredRateHz, [NotNullWhen(true)] out ICameraSharedCaptureSession? colorSession, [NotNullWhen(true)] out ICameraSharedCaptureSession? infraredSession) {
+        colorSession = null;
+        infraredSession = null;
+
+        return false;
+    }
 }

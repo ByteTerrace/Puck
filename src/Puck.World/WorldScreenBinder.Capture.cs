@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Numerics;
 using System.Runtime.InteropServices;
@@ -8,7 +9,6 @@ using Puck.DirectX.Apis;
 using Puck.DirectX.Interop;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
-using Puck.Hosting;
 using Puck.Platform;
 using Puck.SdfVm.Views;
 
@@ -103,17 +103,169 @@ internal sealed partial class WorldScreenBinder {
     // exactly once if the GPU open refuses (no adapter LUID, no device, a failed target or import). The CPU tier pulls
     // one frame on the capture cadence and publishes it to the shared surface, refreshing the handle + room glow. A
     // disconnected device drops its feed to unbound + fault on either tier.
-    private void CaptureCamera(ulong elapsedTicks, IGpuDeviceContext deviceContext, IGpuComputeServices gpu) {
+    private void CaptureCamera(IGpuDeviceContext deviceContext, IGpuComputeServices gpu) {
+        if (!EnsureCoordinatedDualCamera(deviceContext: deviceContext)) {
+            return;
+        }
+
         foreach (var feed in m_cameraFeeds.Values) {
             ServiceCameraFeed(
                 deviceContext: deviceContext,
-                elapsedTicks: elapsedTicks,
                 feed: feed,
                 gpu: gpu
             );
         }
     }
-    private void ServiceCameraFeed(CameraFeed feed, ulong elapsedTicks, IGpuDeviceContext deviceContext, IGpuComputeServices gpu) {
+    // Owns the all-or-nothing lifecycle of a color+IR pair. A dual feed never degrades into two independent opens:
+    // it first tries the native-surface GPU graph, and if any probe/target/import/conversion leg refuses, tears BOTH
+    // facades down and restores the proven CPU FaceAuth graph. Device loss likewise rebuilds the pair together.
+    private bool EnsureCoordinatedDualCamera(IGpuDeviceContext deviceContext) {
+        if (
+            !m_cameraFeeds.TryGetValue(key: WorldCameraSensor.Color, value: out var colorFeed) ||
+            !m_cameraFeeds.TryGetValue(key: WorldCameraSensor.Infrared, value: out var infraredFeed) ||
+            !colorFeed.Dual ||
+            !infraredFeed.Dual
+        ) {
+            return true;
+        }
+
+        if (
+            (colorFeed.SharedSession is { IsEnded: false }) &&
+            (infraredFeed.SharedSession is { IsEnded: false })
+        ) {
+            return true;
+        }
+
+        if (
+            (colorFeed.Session is { IsEnded: false }) &&
+            (infraredFeed.Session is { IsEnded: false })
+        ) {
+            return true;
+        }
+
+        if (
+            (colorFeed.SharedSession is not null) ||
+            (infraredFeed.SharedSession is not null) ||
+            (colorFeed.Session is not null) ||
+            (infraredFeed.Session is not null)
+        ) {
+            colorFeed.ResetSessions();
+            infraredFeed.ResetSessions();
+            // An established dual GPU graph ending is a runtime refusal/disconnect. Reopen through the CPU pair; a
+            // render-device loss already disposed both facades while preserving GpuRoute and therefore reaches the
+            // normal GPU attempt below instead.
+            colorFeed.GpuRoute = false;
+            infraredFeed.GpuRoute = false;
+        }
+
+        if (colorFeed.OpenRetryCountdown > 0) {
+            --colorFeed.OpenRetryCountdown;
+            return false;
+        }
+
+        if (colorFeed.GpuRoute && infraredFeed.GpuRoute) {
+            if (
+                (m_renderAdapterLuid is { } adapterLuid) &&
+                OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: 19041) &&
+                m_cameraCapture.TryOpenSharedDualDefault(
+                    adapterLuid: adapterLuid,
+                    colorWidth: colorFeed.Profile.Width,
+                    colorHeight: colorFeed.Profile.Height,
+                    colorRateHz: colorFeed.Profile.RefreshRateHz,
+                    infraredWidth: infraredFeed.Profile.Width,
+                    infraredHeight: infraredFeed.Profile.Height,
+                    infraredRateHz: infraredFeed.Profile.RefreshRateHz,
+                    colorSession: out var colorSession,
+                    infraredSession: out var infraredSession
+                )
+            ) {
+                var colorStarted = TryStartCameraGpuSession(
+                    adapterLuid: adapterLuid,
+                    deviceContext: deviceContext,
+                    opened: colorSession,
+                    images: out var colorImages,
+                    imports: out var colorImports,
+                    importedViews: out var colorViews,
+                    fault: out var colorFault
+                );
+                var infraredStarted = false;
+                IReadOnlyList<IGpuExportableStorageImage> infraredImages = [];
+                IGpuSurfaceImport[]? infraredImports = null;
+                nint[]? infraredViews = null;
+                var infraredFault = "";
+
+                if (colorStarted) {
+                    infraredStarted = TryStartCameraGpuSession(
+                        adapterLuid: adapterLuid,
+                        deviceContext: deviceContext,
+                        opened: infraredSession,
+                        images: out infraredImages,
+                        imports: out infraredImports,
+                        importedViews: out infraredViews,
+                        fault: out infraredFault
+                    );
+                }
+
+                if (colorStarted && infraredStarted) {
+                    colorFeed.SharedSession = colorSession;
+                    colorFeed.GpuTargets = colorImages;
+                    colorFeed.GpuImports = colorImports;
+                    colorFeed.GpuImportedViews = colorViews;
+                    infraredFeed.SharedSession = infraredSession;
+                    infraredFeed.GpuTargets = infraredImages;
+                    infraredFeed.GpuImports = infraredImports;
+                    infraredFeed.GpuImportedViews = infraredViews;
+                    colorFeed.AppliedControls = null;
+                    infraredFeed.AppliedControls = null;
+                    _ = m_cameraFaults.Remove(key: WorldCameraSensor.Color);
+                    _ = m_cameraFaults.Remove(key: WorldCameraSensor.Infrared);
+                    Console.Out.WriteLine(value: $"[camera] dual GPU tier: '{colorSession.Name}' color {colorSession.Width}x{colorSession.Height} + infrared {infraredSession.Width}x{infraredSession.Height}, three shared RGBA targets per sensor{(m_hostsOnDirectX ? "" : ", imported for Vulkan sampling")}.");
+                    return true;
+                }
+
+                // Short-circuiting means only the color resource set may exist here. Release anything the first start
+                // committed before refusing the whole coordinated graph.
+                if (colorStarted) {
+                    DisposeCameraGpuResources(images: colorImages, imports: colorImports);
+                }
+
+                Console.Error.WriteLine(value: $"[camera] dual GPU tier start refused ({(colorStarted ? infraredFault : colorFault)}); restoring the CPU dual graph.");
+                colorSession.Dispose();
+                infraredSession.Dispose();
+            }
+
+            colorFeed.GpuRoute = false;
+            infraredFeed.GpuRoute = false;
+        }
+
+        if (TryEnterDualCamera(
+            colorProfile: colorFeed.Profile,
+            infraredProfile: infraredFeed.Profile,
+            requestedProfile: colorFeed.Profile,
+            requestedSensor: WorldCameraSensor.Color
+        )) {
+            return true;
+        }
+
+        const string Fault = "the device did not provide coordinated color and infrared feeds";
+        colorFeed.Fault = Fault;
+        infraredFeed.Fault = Fault;
+        colorFeed.OpenRetryCountdown = 60;
+        return false;
+    }
+
+    private static void DisposeCameraGpuResources(IReadOnlyList<IGpuExportableStorageImage> images, IGpuSurfaceImport[]? imports) {
+        if (imports is not null) {
+            foreach (var import in imports) {
+                import.Dispose();
+            }
+        }
+
+        foreach (var image in images) {
+            image.Dispose();
+        }
+    }
+    private void ServiceCameraFeed(CameraFeed feed, IGpuDeviceContext deviceContext, IGpuComputeServices gpu) {
         if (
             feed.GpuRoute &&
             OperatingSystem.IsWindowsVersionAtLeast(
@@ -156,7 +308,7 @@ internal sealed partial class WorldScreenBinder {
             return;
         }
 
-        if (!feed.ShouldPull(elapsedTicks: elapsedTicks)) {
+        if (!feed.ShouldPull()) {
             return;
         }
 
@@ -187,7 +339,7 @@ internal sealed partial class WorldScreenBinder {
             // Controls land only once frames flow (see ApplyCameraControls' live-stream contract); the Equals guard
             // inside makes this a per-pull no-op after the first application.
             ApplyCameraControls(
-                desired: ControlsFor(sensor: feed.Sensor),
+                desired: m_cameraControls,
                 feed: feed
             );
         } else {
@@ -247,74 +399,23 @@ internal sealed partial class WorldScreenBinder {
                 return;
             }
 
-            var images = new IGpuExportableStorageImage[3];
-            var handles = new nint[images.Length];
-            IGpuSurfaceImport[]? imports = null;
-            nint[]? importedViews = null;
-
-            try {
-                var targetContext = (m_hostsOnDirectX
-                    ? deviceContext
-                    : (m_cameraTargetDevice ??= new DirectXDeviceContext(
-                        adapterLuid: adapterLuid,
-                        deviceApi: new DirectXNativeDeviceApi(),
-                        minimumFeatureLevel: DirectXFeatureLevel.Level110
-                    ))
-                );
-
-                var export = (m_cameraExport ??= new DirectXGpuSurfaceExportFactory());
-
-                for (var i = 0; (i < images.Length); ++i) {
-                    images[i] = export.CreateSimultaneousAccessStorageImage(
-                        deviceContext: targetContext,
-                        format: GpuPixelFormat.B8G8R8A8Unorm,
-                        height: ((uint)opened.Height),
-                        width: ((uint)opened.Width)
-                    );
-                    handles[i] = images[i].SharedHandle;
-                }
-
-                if (!m_hostsOnDirectX) {
-                    // One importer per slot — the Vulkan import caches a single image per importer, and the three
-                    // slots must all stay live for the round-robin publication to sample.
-                    var transfers = (m_surfaceTransfers ?? throw new InvalidOperationException(message: "the Vulkan camera GPU tier needs the surface-transfer factory (absent on a headless boot)"));
-
-                    imports = new IGpuSurfaceImport[images.Length];
-                    importedViews = new nint[images.Length];
-
-                    for (var i = 0; (i < images.Length); ++i) {
-                        imports[i] = transfers.CreateImport(deviceContext: deviceContext);
-                        importedViews[i] = imports[i].Import(
-                            deviceContext: deviceContext,
-                            format: GpuPixelFormat.B8G8R8A8Unorm,
-                            height: ((uint)opened.Height),
-                            sharedHandle: handles[i],
-                            width: ((uint)opened.Width)
-                        ).ImageViewHandle;
-                    }
-                }
-
-                opened.Start(sharedTargetHandles: handles);
-            } catch (Exception exception) {
-                Console.Error.WriteLine(value: $"[camera] GPU tier start failed: {exception.Message}; falling back to the CPU tier.");
-
-                if (imports is not null) {
-                    foreach (var import in imports) {
-                        import?.Dispose();
-                    }
-                }
-
-                foreach (var image in images) {
-                    image?.Dispose();
-                }
-
+            if (!TryStartCameraGpuSession(
+                adapterLuid: adapterLuid,
+                deviceContext: deviceContext,
+                opened: opened,
+                images: out var images,
+                imports: out var imports,
+                importedViews: out var importedViews,
+                fault: out var fault
+            )) {
+                Console.Error.WriteLine(value: $"[camera] GPU tier start failed: {fault}; falling back to the CPU tier.");
                 opened.Dispose();
                 FallBackToCpuCamera(feed: feed);
 
                 return;
             }
 
-            Console.Out.WriteLine(value: $"[camera] GPU tier: '{opened.Name}' {opened.Width}x{opened.Height}, {images.Length} shared targets on the render adapter{(m_hostsOnDirectX ? "" : ", imported for Vulkan sampling")}.");
+            Console.Out.WriteLine(value: $"[camera] GPU tier: '{opened.Name}' {opened.Width}x{opened.Height}, {images.Count} shared targets on the render adapter{(m_hostsOnDirectX ? "" : ", imported for Vulkan sampling")}.");
             feed.SharedSession = opened;
             feed.GpuTargets = images;
             feed.GpuImports = imports;
@@ -325,6 +426,13 @@ internal sealed partial class WorldScreenBinder {
         }
 
         if (session.IsEnded) {
+            if (feed.Dual) {
+                // The pair owner at CaptureCamera's head tears both facades down together on the next pump.
+                feed.Live = false;
+                feed.Fault = "coordinated camera graph ended";
+                return;
+            }
+
             // Start only wakes the platform worker; opening the shared handles happens asynchronously. An end before
             // the first published slot is therefore a refused GPU start (including an OpenSharedTexture failure), not
             // a live camera disconnect, and must take the advertised CPU fallback instead of retrying GPU forever.
@@ -356,9 +464,88 @@ internal sealed partial class WorldScreenBinder {
         // inside makes this a per-frame no-op after the first application.
         if (feed.Live) {
             ApplyCameraControls(
-                desired: ControlsFor(sensor: feed.Sensor),
+                desired: m_cameraControls,
                 feed: feed
             );
+        }
+    }
+    // Provisions and starts one negotiated shared-camera facade. Ownership transfers to the caller only on success;
+    // every partial D3D12 allocation or Vulkan import is released here on failure. The session declares its target
+    // format: the source-reader GPU tier uses BGRA, while the FaceAuth native-surface compute tier uses RGBA for its
+    // private UAV and same-format shared copy. Both are sampled directly, so no renderer-wide convention leaks out.
+    [SupportedOSPlatform("windows10.0.10240")]
+    private bool TryStartCameraGpuSession(long adapterLuid, IGpuDeviceContext deviceContext, ICameraSharedCaptureSession opened, out IReadOnlyList<IGpuExportableStorageImage> images, out IGpuSurfaceImport[]? imports, out nint[]? importedViews, out string fault) {
+        GpuPixelFormat pixelFormat;
+        var allocated = new IGpuExportableStorageImage[3];
+        var handles = new nint[allocated.Length];
+        IGpuSurfaceImport[]? createdImports = null;
+        nint[]? createdViews = null;
+
+        try {
+            pixelFormat = (opened.TargetFormat switch {
+                SurfaceFormat.B8G8R8A8Unorm => GpuPixelFormat.B8G8R8A8Unorm,
+                SurfaceFormat.R8G8B8A8Unorm => GpuPixelFormat.R8G8B8A8Unorm,
+                _ => throw new NotSupportedException(message: $"camera shared-target format {opened.TargetFormat} is unsupported"),
+            });
+            var targetContext = (m_hostsOnDirectX
+                ? deviceContext
+                : (m_cameraTargetDevice ??= new DirectXDeviceContext(
+                    adapterLuid: adapterLuid,
+                    deviceApi: new DirectXNativeDeviceApi(),
+                    minimumFeatureLevel: DirectXFeatureLevel.Level110
+                ))
+            );
+            var export = (m_cameraExport ??= new DirectXGpuSurfaceExportFactory());
+
+            for (var index = 0; index < allocated.Length; index++) {
+                allocated[index] = export.CreateSimultaneousAccessStorageImage(
+                    deviceContext: targetContext,
+                    format: pixelFormat,
+                    height: checked((uint)opened.Height),
+                    width: checked((uint)opened.Width)
+                );
+                handles[index] = allocated[index].SharedHandle;
+            }
+
+            if (!m_hostsOnDirectX) {
+                var transfers = (m_surfaceTransfers ?? throw new InvalidOperationException(message: "the Vulkan camera GPU tier needs the surface-transfer factory (absent on a headless boot)"));
+                createdImports = new IGpuSurfaceImport[allocated.Length];
+                createdViews = new nint[allocated.Length];
+
+                for (var index = 0; index < allocated.Length; index++) {
+                    createdImports[index] = transfers.CreateImport(deviceContext: deviceContext);
+                    createdViews[index] = createdImports[index].Import(
+                        deviceContext: deviceContext,
+                        format: pixelFormat,
+                        height: checked((uint)opened.Height),
+                        sharedHandle: handles[index],
+                        width: checked((uint)opened.Width)
+                    ).ImageViewHandle;
+                }
+            }
+
+            opened.Start(sharedTargetHandles: handles);
+            images = allocated;
+            imports = createdImports;
+            importedViews = createdViews;
+            fault = "";
+            return true;
+        } catch (Exception exception) {
+            if (createdImports is not null) {
+                foreach (var import in createdImports) {
+                    import?.Dispose();
+                }
+            }
+
+            foreach (var image in allocated) {
+                image?.Dispose();
+            }
+
+            images = [];
+            imports = null;
+            importedViews = null;
+            fault = exception.Message;
+            return false;
         }
     }
     // The document-member-to-platform-control pairing, stated once so ApplyCameraControls and DescribeCamera can never
@@ -419,9 +606,10 @@ internal sealed partial class WorldScreenBinder {
     }
 
     /// <summary>Describes every shared camera feed's live control surface — the <c>screen.camera</c> read-back: per
-    /// sensor, the device name, tier, negotiated extent, each device-supported control's current value/mode, device
-    /// envelope, and authored document value, plus the authored vendor rows read back raw. A sensor whose open faulted
-    /// reports its fault. Null when no feed was ever attempted.</summary>
+    /// sensor, the device name, tier, negotiated extent, native transport subtype/rate and coordinated mode when the
+    /// platform reports them, each device-supported control's current value/mode, device envelope, and the shared
+    /// authored document value, plus the authored vendor rows read back raw. A sensor whose open faulted reports its
+    /// fault. Null when no feed was ever attempted.</summary>
     /// <returns>The description, or <see langword="null"/> when no camera feed or fault exists.</returns>
     public string? DescribeCamera() {
         if ((0 == m_cameraFeeds.Count) && (0 == m_cameraFaults.Count)) {
@@ -475,11 +663,16 @@ internal sealed partial class WorldScreenBinder {
             ? (shared.Name, shared.Width, shared.Height)
             : (feed.Session!.Name, feed.Session!.Width, feed.Session!.Height)
         );
-        var controls = ControlsFor(sensor: feed.Sensor);
+        var controls = m_cameraControls;
+        var format = ((session as ICameraCaptureDiagnostics)?.CaptureFormat);
+        var transport = ((format is { } negotiated)
+            ? $" (native {negotiated.Subtype}{((negotiated.RateHz > 0.0) ? $"@{negotiated.RateHz.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)}" : "")}{((negotiated.Mode is { } mode) ? $"; {mode}" : "")})"
+            : ""
+        );
 
         _ = builder.Append(
             provider: CultureInfo.InvariantCulture,
-            handler: $"{sensorName} '{name}' {tier} {width}x{height}{(feed.Live ? "" : ((feed.Fault is { } liveFault) ? $" '{liveFault}'" : " (no frames)"))}"
+            handler: $"{sensorName} '{name}' {tier} {width}x{height}{transport}{(feed.Live ? "" : ((feed.Fault is { } liveFault) ? $" '{liveFault}'" : " (no frames)"))}"
         );
 
         foreach (var (control, label, select) in CameraControlMap) {
@@ -647,6 +840,17 @@ internal sealed partial class WorldScreenBinder {
                 otherFeed.GpuRoute = OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: 10240);
             }
 
+            if (OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: 10240)) {
+                var requestedFeed = GetOrCreateCameraFeed(profile: profile, sensor: sensor);
+                otherFeed.Dual = true;
+                requestedFeed.Dual = true;
+                otherFeed.GpuRoute = true;
+                requestedFeed.GpuRoute = true;
+                _ = m_cameraFaults.Remove(key: sensor);
+
+                return requestedFeed;
+            }
+
             if (!TryEnterDualCamera(colorProfile: colorProfile, infraredProfile: infraredProfile, requestedProfile: profile, requestedSensor: sensor)) {
                 m_cameraFaults[sensor] = "the device did not provide coordinated color and infrared feeds";
 
@@ -698,13 +902,6 @@ internal sealed partial class WorldScreenBinder {
 
         return feed;
     }
-    // The authored control record a sensor's feed applies (the first camera row of that sensor, re-resolved on every
-    // screens mutation).
-    private WorldCameraControls? ControlsFor(WorldCameraSensor sensor) => (sensor switch {
-        WorldCameraSensor.Color => m_cameraControlsBySensor[((int)WorldCameraSensor.Color)],
-        WorldCameraSensor.Infrared => m_cameraControlsBySensor[((int)WorldCameraSensor.Infrared)],
-        _ => null,
-    });
     private bool SiblingFeedStreams(WorldCameraSensor sensor) {
         var sibling = ((WorldCameraSensor.Color == sensor) ? WorldCameraSensor.Infrared : WorldCameraSensor.Color);
 
@@ -734,6 +931,8 @@ internal sealed partial class WorldScreenBinder {
         infraredFeed.ResetSessions();
         colorFeed.GpuRoute = false;
         infraredFeed.GpuRoute = false;
+        colorFeed.Dual = true;
+        infraredFeed.Dual = true;
         colorFeed.Session = colorSession;
         infraredFeed.Session = infraredSession;
         _ = m_cameraFaults.Remove(key: WorldCameraSensor.Color);
@@ -884,9 +1083,9 @@ internal sealed partial class WorldScreenBinder {
     // One physical device carries ONE control state, so — unlike the profile's richest-envelope merge below — the
     // FIRST declared camera screen authoring controls wins (two zoom values have no meaningful merge). Document order
     // is the author's priority statement.
-    private static WorldCameraControls? ResolveSharedCameraControls(IReadOnlyList<WorldScreen> screens, WorldCameraSensor sensor) {
+    private static WorldCameraControls? ResolveSharedCameraControls(IReadOnlyList<WorldScreen> screens) {
         foreach (var screen in screens) {
-            if (screen.Source is WorldScreenSource.Camera { Controls: { } controls } camera && (sensor == camera.Sensor)) {
+            if (screen.Source is WorldScreenSource.Camera { Controls: { } controls }) {
                 return controls;
             }
         }
@@ -1108,26 +1307,31 @@ internal sealed partial class WorldScreenBinder {
         return (Ok: true, Message: $"screen {index} capturing monitor {monitorIndex}");
     }
 
-    // One feed's PULL CLOCK, stated once so a webcam and a window capture cannot drift into different refresh
-    // policies: the first pull after arming always runs, and every later one waits out the profile's whole period.
-    // Rearming (a device loss, or a pull that produced nothing) makes the next pull immediate again.
-    private sealed class PullCadence(ulong cadenceTicks) {
-        private readonly ulong m_cadenceTicks = cadenceTicks;
+    // One feed's PRESENTATION CLOCK, stated once so a webcam and a window capture cannot drift into different refresh
+    // policies. Camera pixels are nondeterministic presentation input and must not freeze when authoritative simulation
+    // time is paused or absent. The first pull after arming always runs; later pulls wait out the profile's whole period.
+    private sealed class PullCadence(uint rateHz) {
+        private readonly long m_cadenceTicks = Math.Max(
+            val1: 1L,
+            val2: (Stopwatch.Frequency / Math.Max(val1: rateHz, val2: 1u))
+        );
 
-        private ulong m_lastPullTicks;
+        private long m_lastPullTicks;
         private bool m_pulled;
 
         public void Rearm() => m_pulled = false;
-        public bool ShouldPull(ulong elapsedTicks) {
+        public bool ShouldPull() {
+            var now = Stopwatch.GetTimestamp();
+
             if (
                 m_pulled &&
-                ((elapsedTicks - m_lastPullTicks) < m_cadenceTicks)
+                ((now - m_lastPullTicks) < m_cadenceTicks)
             ) {
                 return false;
             }
 
             m_pulled = true;
-            m_lastPullTicks = elapsedTicks;
+            m_lastPullTicks = now;
 
             return true;
         }
@@ -1141,6 +1345,9 @@ internal sealed partial class WorldScreenBinder {
         // The control state last pushed onto the device (ApplyCameraControls' idempotence + removed-member baseline);
         // null until a first apply, so an unauthored world never touches driver defaults.
         public WorldCameraControls? AppliedControls { get; set; }
+        // Both sensor feeds belong to one driver-declared FaceAuth graph. Their sessions and GPU resources are opened,
+        // failed over, and torn down as a pair; neither may silently reopen as an unrelated single-camera session.
+        public bool Dual { get; set; }
         public string? Fault { get; set; }
         // Render-frame countdown before retrying a transient CPU open failure. This prevents a busy device from being
         // reopened every frame while still allowing driver teardown and hot-plug recovery without a world rebuild.
@@ -1174,7 +1381,7 @@ internal sealed partial class WorldScreenBinder {
         public ICameraSharedCaptureSession? SharedSession { get; set; }
         public CpuSurfaceSource Surface { get; } = surface;
 
-        private PullCadence Cadence { get; } = new(cadenceTicks: EngineTicks.PerRate(ratePerSecond: profile.RefreshRateHz));
+        private PullCadence Cadence { get; } = new(rateHz: profile.RefreshRateHz);
 
         public void Dispose() {
             Session?.Dispose();
@@ -1261,7 +1468,7 @@ internal sealed partial class WorldScreenBinder {
             }
         }
         public void RetryPull() => Cadence.Rearm();
-        public bool ShouldPull(ulong elapsedTicks) => Cadence.ShouldPull(elapsedTicks: elapsedTicks);
+        public bool ShouldPull() => Cadence.ShouldPull();
     }
     // One compositor-capture feed: a producer (a desktop window by title, or a whole monitor by index), its GPU upload
     // adapter, and live/fault/glow state. MonitorIndex null is window mode; non-null is whole-monitor mode.
@@ -1295,7 +1502,7 @@ internal sealed partial class WorldScreenBinder {
         // samples the LatestGpuSlot image), rather than the CPU-pixel Surface. Fixed at construction by the host backend.
         public bool GpuRoute { get; } = gpuRoute;
 
-        private PullCadence Cadence { get; } = new(cadenceTicks: EngineTicks.PerRate(ratePerSecond: profile.RefreshRateHz));
+        private PullCadence Cadence { get; } = new(rateHz: profile.RefreshRateHz);
 
         public void Dispose() {
             ReleaseGpuTargets();
@@ -1339,7 +1546,7 @@ internal sealed partial class WorldScreenBinder {
                 image.Dispose();
             }
         }
-        public bool ShouldPull(ulong elapsedTicks) => Cadence.ShouldPull(elapsedTicks: elapsedTicks);
+        public bool ShouldPull() => Cadence.ShouldPull();
         public bool TryEnsureSource(long? adapterLuid) {
             if ((Source is { IsEnded: false })) {
                 return true;
