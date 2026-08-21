@@ -112,10 +112,23 @@ public sealed partial class SdfWorldEngine {
     /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">The frame has zero views or more than the provisioned capacity.</exception>
     /// <exception cref="InvalidOperationException">A pipelined preview frame is still in flight on this engine.</exception>
-    public void SubmitFrame(SdfFrame frame) {
+    public void SubmitFrame(SdfFrame frame) => SubmitFrameCore(
+        frame: frame,
+        onFrameSlotAvailable: null
+    );
+    // The live node's additive external-resource seam: keep the longstanding public SubmitFrame signature intact,
+    // while letting it retire/adopt leased screen sources in the exact frame-ring fence interval.
+    internal void SubmitFrameWithExternalResources(SdfFrame frame, Action<int> onFrameSlotAvailable) => SubmitFrameCore(
+        frame: frame,
+        onFrameSlotAvailable: onFrameSlotAvailable
+    );
+    private void SubmitFrameCore(SdfFrame frame, Action<int>? onFrameSlotAvailable) {
         ThrowIfPipelinedFrameInFlight();
 
-        var viewportCount = PrepareFrame(frame: frame);
+        var viewportCount = PrepareFrame(
+            frame: frame,
+            onFrameSlotAvailable: onFrameSlotAvailable
+        );
 
         Record(viewportCount: viewportCount);
         m_gpu.QueueSubmitter.Submit(

@@ -159,46 +159,64 @@ internal static class MfInterop {
         }
 
         Check(hr: source.CreatePresentationDescriptor(ppPresentationDescriptor: out var presentation));
-        Check(hr: presentation.GetStreamDescriptorCount(pdwDescriptorCount: out var descriptorCount));
+        var retainPresentation = false;
 
-        for (uint index = 0; (index < descriptorCount); index++) {
-            Check(hr: presentation.DeselectStream(dwDescriptorIndex: index));
-        }
+        try {
+            Check(hr: presentation.GetStreamDescriptorCount(pdwDescriptorCount: out var descriptorCount));
 
-        for (uint descriptorIndex = 0; (descriptorIndex < descriptorCount); descriptorIndex++) {
-            Check(hr: presentation.GetStreamDescriptorByIndex(dwIndex: descriptorIndex, pfSelected: out _, ppDescriptor: out var descriptor));
-            Check(hr: descriptor.GetMediaTypeHandler(ppMediaTypeHandler: out var handler));
-            Check(hr: handler.GetMediaTypeCount(pdwTypeCount: out var typeCount));
-
-            for (uint typeIndex = 0; (typeIndex < typeCount); typeIndex++) {
-                Check(hr: handler.GetMediaTypeByIndex(dwIndex: typeIndex, ppType: out var candidate));
-
-                var subTypeKey = MF_MT_SUBTYPE;
-
-                if ((candidate.GetGUID(guidKey: ref subTypeKey, guidValue: out var subtype) < 0) || (MFVideoFormat_L8 != subtype)) {
-                    _ = Marshal.ReleaseComObject(o: candidate);
-
-                    continue;
-                }
-
-                Check(hr: presentation.SelectStream(dwDescriptorIndex: descriptorIndex));
-                Check(hr: handler.SetCurrentMediaType(pMediaType: candidate));
-                streamIndex = descriptorIndex;
-                mediaType = candidate;
-                presentationDescriptor = presentation;
-                _ = Marshal.ReleaseComObject(o: handler);
-                _ = Marshal.ReleaseComObject(o: descriptor);
-
-                return true;
+            for (uint index = 0; (index < descriptorCount); index++) {
+                Check(hr: presentation.DeselectStream(dwDescriptorIndex: index));
             }
 
-            _ = Marshal.ReleaseComObject(o: handler);
-            _ = Marshal.ReleaseComObject(o: descriptor);
+            for (uint descriptorIndex = 0; (descriptorIndex < descriptorCount); descriptorIndex++) {
+                Check(hr: presentation.GetStreamDescriptorByIndex(dwIndex: descriptorIndex, pfSelected: out _, ppDescriptor: out var descriptor));
+                IMFMediaTypeHandler? handler = null;
+
+                try {
+                    Check(hr: descriptor.GetMediaTypeHandler(ppMediaTypeHandler: out handler));
+                    Check(hr: handler.GetMediaTypeCount(pdwTypeCount: out var typeCount));
+
+                    for (uint typeIndex = 0; (typeIndex < typeCount); typeIndex++) {
+                        Check(hr: handler.GetMediaTypeByIndex(dwIndex: typeIndex, ppType: out var candidate));
+                        var retainCandidate = false;
+
+                        try {
+                            var subTypeKey = MF_MT_SUBTYPE;
+
+                            if ((candidate.GetGUID(guidKey: ref subTypeKey, guidValue: out var subtype) < 0) || (MFVideoFormat_L8 != subtype)) {
+                                continue;
+                            }
+
+                            Check(hr: presentation.SelectStream(dwDescriptorIndex: descriptorIndex));
+                            Check(hr: handler.SetCurrentMediaType(pMediaType: candidate));
+                            streamIndex = descriptorIndex;
+                            mediaType = candidate;
+                            presentationDescriptor = presentation;
+                            retainCandidate = true;
+                            retainPresentation = true;
+
+                            return true;
+                        } finally {
+                            if (!retainCandidate) {
+                                _ = Marshal.ReleaseComObject(o: candidate);
+                            }
+                        }
+                    }
+                } finally {
+                    if (handler is not null) {
+                        _ = Marshal.ReleaseComObject(o: handler);
+                    }
+
+                    _ = Marshal.ReleaseComObject(o: descriptor);
+                }
+            }
+
+            return false;
+        } finally {
+            if (!retainPresentation) {
+                _ = Marshal.ReleaseComObject(o: presentation);
+            }
         }
-
-        _ = Marshal.ReleaseComObject(o: presentation);
-
-        return false;
     }
 }
 /// <summary>IMFAttributes — only SetUINT32 (slot 19) and SetGUID (slot 22) are called directly; the complete 30-method

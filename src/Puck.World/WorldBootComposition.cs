@@ -983,7 +983,7 @@ internal static class WorldBootComposition {
                     // The diegetic screens' source + light providers — the test-pattern screen's CPU feed and its
                     // room glow; an unbound screen has no provider (the engine's procedural fallback lights it).
                     ScreenLights = binder.ScreenLights,
-                    ScreenSources = binder.ScreenSources,
+                    ScreenSourceFrames = binder.ScreenSources,
                     ViewportCapacity = PlayerRoster.MaxSlots,
                 }
             );

@@ -310,7 +310,9 @@ internal sealed class Win32FaceAuthenticationSharedGraph : Win32FaceAuthenticati
             }
 
             var stream = StreamFor(sensor: sensor);
-            var slot = stream.Slots.NextSlot(targetCount: converter.TargetCount);
+            if (!stream.Slots.TryReserveWriteSlot(slot: out var slot)) {
+                return;
+            }
 
             converter.Convert(sourceTexture: texture, targetSlot: slot);
             stream.Slots.Publish(slot: slot);

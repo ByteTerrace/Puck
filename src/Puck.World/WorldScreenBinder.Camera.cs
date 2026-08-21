@@ -3,12 +3,13 @@ using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Text;
+using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
 using Puck.DirectX;
 using Puck.DirectX.Apis;
 using Puck.DirectX.Interop;
-using Puck.Abstractions.Gpu;
-using Puck.Abstractions.Presentation;
 using Puck.Platform;
+using Puck.SdfVm;
 using Puck.SdfVm.Views;
 
 namespace Puck.World;
@@ -18,7 +19,8 @@ internal sealed partial class WorldScreenBinder {
     // and its retry — long enough for a driver to finish tearing down, short enough that a replug recovers unaided.
     private const int CameraReopenFrames = 60;
     private const int CameraRefusalFrames = 120;
-    // Shared-target ring depth per stream: the writer lands on a slot the screen is never sampling.
+    // Shared-target ring depth per stream: enough room for the renderer's two in-flight frames plus one write target;
+    // explicit slot acquisitions enforce the guarantee when producer and renderer cadence diverge.
     private const int CameraTargetCount = 3;
 
     // The document-member-to-platform-control pairing, stated once so ApplyCameraControls and DescribeCamera can never
@@ -135,9 +137,24 @@ internal sealed partial class WorldScreenBinder {
                 return;
             }
 
-            // A sensor set change reopens at once; a disconnect waits for the driver to settle.
-            CloseCameraGraph(fault: (graph.IsEnded ? "camera disconnected" : null));
-            device.Countdown = (graph.IsEnded ? CameraReopenFrames : 0);
+            var sharedStartFailed = (
+                graph.IsEnded &&
+                (device.Shared is not null) &&
+                HasUnpublishedStream(graph: graph)
+            );
+
+            // Target handles are attached on the worker after Start returns. If that asynchronous setup ends the
+            // graph before every requested stream publishes, refuse the shared tier for exactly the next open so the
+            // ladder actually reaches CPU pixels instead of recreating the same failed GPU graph forever.
+            if (sharedStartFailed) {
+                Console.Error.WriteLine(value: "[camera] GPU tier ended before every stream produced a frame; opening the CPU tier.");
+                device.SharedRefused = true;
+            }
+
+            // A sensor set change and a shared-tier startup refusal reopen at once; a real disconnect after live
+            // streaming waits for the driver to settle.
+            CloseCameraGraph(fault: (graph.IsEnded ? (sharedStartFailed ? "camera GPU tier refused" : "camera disconnected") : null));
+            device.Countdown = ((graph.IsEnded && !sharedStartFailed) ? CameraReopenFrames : 0);
         }
 
         if (device.Countdown > 0) {
@@ -271,9 +288,12 @@ internal sealed partial class WorldScreenBinder {
             }
 
             feed.ReleaseGpuTargets();
-            feed.GpuTargets = images;
-            feed.GpuImports = imports;
-            feed.GpuImportedViews = views;
+            feed.GpuTargets = new CameraGpuTargetSet(
+                images: images,
+                importedViews: views,
+                imports: imports,
+                stream: stream
+            );
             provisioned.Add(item: feed);
         }
 
@@ -658,6 +678,15 @@ internal sealed partial class WorldScreenBinder {
 
         return string.Join(separator: " + ", value: parts);
     }
+    private static bool HasUnpublishedStream(ICameraGraph<ICameraStream> graph) {
+        foreach (var stream in graph.Streams) {
+            if (0 == stream.FrameVersion) {
+                return true;
+            }
+        }
+
+        return false;
+    }
     private static CameraSensor PlatformSensor(WorldCameraSensor sensor) => ((WorldCameraSensor.Infrared == sensor)
         ? CameraSensor.Infrared
         : CameraSensor.Color
@@ -733,9 +762,7 @@ internal sealed partial class WorldScreenBinder {
         private readonly PullCadence m_cadence = new(rateHz: profile.RefreshRateHz);
 
         public string? Fault { get; set; }
-        public IGpuSurfaceImport[]? GpuImports { get; set; }
-        public nint[]? GpuImportedViews { get; set; }
-        public IReadOnlyList<IGpuExportableStorageImage>? GpuTargets { get; set; }
+        public CameraGpuTargetSet? GpuTargets { get; set; }
         public long LastFrameVersion { get; set; } = -1L;
         public Vector3 Light { get; set; }
         public bool Live { get; set; }
@@ -773,50 +800,132 @@ internal sealed partial class WorldScreenBinder {
             ReleaseGpuTargets();
             Surface.Dispose();
         }
+        public SdfScreenSourceFrame AcquireFrame() {
+            if (!Live) {
+                return 0;
+            }
+
+            if (GpuTargets is { } targets) {
+                // The latest completed copy's image view, acquired until the SDF frame that samples it retires. The
+                // target set also defers its own destruction across a graph close while any such frame remains live.
+                return (targets.TryAcquire(frame: out var frame) ? frame : 0);
+            }
+
+            return Surface.CurrentHandle;
+        }
         public nint Handle() {
             if (!Live) {
                 return 0;
             }
 
-            if (
-                (SharedStream is { LatestSlot: >= 0 and var slot }) &&
-                (GpuTargets is { } targets) &&
-                (slot < targets.Count)
-            ) {
-                // The latest completed copy's image view — the Vulkan host's imported view of the slot, or the D3D12
-                // host's own resource view; the engine rebinds a bound source's descriptor every frame, so a different
-                // slot handle per copy is cheap.
-                return (((GpuImportedViews is { } views) && (slot < views.Length))
-                    ? views[slot]
-                    : targets[slot].ImageViewHandle
-                );
+            if ((SharedStream is { LatestSlot: >= 0 and var slot }) && (GpuTargets is { } targets)) {
+                return targets.Handle(slot: slot);
             }
 
             return Surface.CurrentHandle;
         }
         public void Rearm() => m_cadence.Rearm();
-        // Disposes the shared rings and the Vulkan host's importers over them (all device-owned). The importers go
-        // first — an importer's image binds the target's exported memory.
+        // Retires the shared ring. Its resources are destroyed immediately when no submitted frame samples them, or
+        // by the last frame retirement otherwise.
         public void ReleaseGpuTargets() {
-            if (GpuImports is { } imports) {
-                GpuImports = null;
-                GpuImportedViews = null;
+            var targets = GpuTargets;
 
-                foreach (var import in imports) {
+            GpuTargets = null;
+            targets?.Retire();
+        }
+        public bool ShouldPull() => m_cadence.ShouldPull();
+    }
+    // One shared stream's render-device-owned target ring. A screen-source frame acquires both the platform slot (so
+    // the camera producer cannot overwrite it) and this set's lifetime (so a graph close cannot destroy the texture
+    // while an already-submitted renderer frame still samples it). All methods run on the render thread except the
+    // platform publication's producer-side checks.
+    private sealed class CameraGpuTargetSet {
+        private readonly IReadOnlyList<IGpuExportableStorageImage> m_images;
+        private readonly nint[]? m_importedViews;
+        private readonly IGpuSurfaceImport[]? m_imports;
+        private readonly Action<int> m_release;
+        private readonly ICameraSharedStream m_stream;
+
+        private bool m_disposed;
+        private int m_outstanding;
+        private bool m_retired;
+
+        public CameraGpuTargetSet(IReadOnlyList<IGpuExportableStorageImage> images, nint[]? importedViews, IGpuSurfaceImport[]? imports, ICameraSharedStream stream) {
+            m_images = images;
+            m_importedViews = importedViews;
+            m_imports = imports;
+            m_stream = stream;
+            m_release = Release;
+        }
+
+        public void Retire() {
+            m_retired = true;
+
+            if (0 == m_outstanding) {
+                DisposeResources();
+            }
+        }
+        public nint Handle(int slot) {
+            if ((slot < 0) || (slot >= m_images.Count)) {
+                return 0;
+            }
+
+            return (((m_importedViews is { } views) && (slot < views.Length))
+                ? views[slot]
+                : m_images[slot].ImageViewHandle
+            );
+        }
+        public bool TryAcquire(out SdfScreenSourceFrame frame) {
+            if (m_retired || !m_stream.TryAcquireLatest(slot: out var slot)) {
+                frame = default;
+
+                return false;
+            }
+
+            if ((slot < 0) || (slot >= m_images.Count)) {
+                m_stream.Release(slot: slot);
+                frame = default;
+
+                return false;
+            }
+
+            ++m_outstanding;
+
+            var handle = Handle(slot: slot);
+
+            frame = new SdfScreenSourceFrame(
+                ImageViewHandle: handle,
+                Release: m_release,
+                ReleaseToken: slot
+            );
+
+            return true;
+        }
+
+        private void DisposeResources() {
+            if (m_disposed) {
+                return;
+            }
+
+            m_disposed = true;
+
+            if (m_imports is not null) {
+                foreach (var import in m_imports) {
                     import.Dispose();
                 }
             }
 
-            if (GpuTargets is not { } targets) {
-                return;
-            }
-
-            GpuTargets = null;
-
-            foreach (var image in targets) {
+            foreach (var image in m_images) {
                 image.Dispose();
             }
         }
-        public bool ShouldPull() => m_cadence.ShouldPull();
+        private void Release(int slot) {
+            m_stream.Release(slot: slot);
+            --m_outstanding;
+
+            if (m_retired && (0 == m_outstanding)) {
+                DisposeResources();
+            }
+        }
     }
 }

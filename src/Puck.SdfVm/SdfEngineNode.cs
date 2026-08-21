@@ -59,6 +59,10 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
     private readonly int m_programWordCapacity;
     private readonly bool? m_rayQueryEnabled;
     private readonly Dictionary<int, Func<Vector3>> m_screenLights;
+    private SdfScreenSourceFrame[] m_pendingScreenSourceFrames = [];
+    private SdfScreenSourceFrame[][] m_retainedScreenSourceFrames = BuildScreenSourceFrameRing(capacity: 0);
+    private readonly int[] m_retainedScreenSourceFrameCounts = new int[SdfWorldEngine.FrameRingSize];
+    private Dictionary<int, Func<SdfScreenSourceFrame>> m_screenSourceFrames = EmptyScreenSourceFrames;
     private readonly Dictionary<int, Func<nint>> m_screenSources;
     private readonly Dictionary<int, Func<SdfScreenSurfaceTransform?>> m_screenSurfaceTransforms;
     private readonly SdfViewGpuServices m_services;
@@ -100,6 +104,7 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
     // Concrete Dictionary<,> (not the read-only interface) so the per-frame foreach binds the struct enumerator
     // instead of boxing IEnumerator on the render thread every ProduceFrame; the ctor copies caller maps to match.
     private static readonly Dictionary<int, IRenderNode> EmptyChildren = new();
+    private static readonly Dictionary<int, Func<SdfScreenSourceFrame>> EmptyScreenSourceFrames = new();
     private static readonly Dictionary<int, Func<nint>> EmptyScreenSources = new();
     private static readonly Dictionary<int, Func<Vector3>> EmptyScreenLights = new();
     private static readonly Dictionary<int, Func<SdfScreenSurfaceTransform?>> EmptyScreenSurfaceTransforms = new();
@@ -108,6 +113,7 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
         SurfaceId: SurfaceId.New()
     );
     private Surface[] m_childSurfaces = [];
+    private int m_pendingScreenSourceFrameCount;
     private ISteppableRenderNode[] m_steppableChildren = [];
 
     private static int CaptureDelayFrames() {
@@ -118,6 +124,15 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
             ? frame
             : 0
         );
+    }
+    private static SdfScreenSourceFrame[][] BuildScreenSourceFrameRing(int capacity) {
+        var ring = new SdfScreenSourceFrame[SdfWorldEngine.FrameRingSize][];
+
+        for (var slot = 0; (slot < ring.Length); slot++) {
+            ring[slot] = new SdfScreenSourceFrame[capacity];
+        }
+
+        return ring;
     }
     private void EnsureEngine(IGpuDeviceContext gpuDevice, SdfFrame frame) {
         if (m_engine is not null) {
@@ -413,6 +428,46 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
             width: width
         );
     }
+    // A provider can acquire an externally-written image (the camera shared-target tier). Keep that acquisition with
+    // the SDF frame-ring slot whose command buffer samples it, and retire the old contents only after that slot's fence
+    // signals. The fixed arrays avoid allocating a closure/list every produced frame.
+    private void RetireAndAdoptScreenSourceFrames(int frameSlot) {
+        var retained = m_retainedScreenSourceFrames[frameSlot];
+        var retainedCount = m_retainedScreenSourceFrameCounts[frameSlot];
+
+        for (var index = 0; (index < retainedCount); index++) {
+            retained[index].Retire();
+            retained[index] = default;
+        }
+
+        m_pendingScreenSourceFrames.AsSpan(start: 0, length: m_pendingScreenSourceFrameCount).CopyTo(destination: retained);
+        m_retainedScreenSourceFrameCounts[frameSlot] = m_pendingScreenSourceFrameCount;
+        Array.Clear(array: m_pendingScreenSourceFrames, index: 0, length: m_pendingScreenSourceFrameCount);
+        m_pendingScreenSourceFrameCount = 0;
+    }
+    private void RetirePendingScreenSourceFrames() {
+        for (var index = 0; (index < m_pendingScreenSourceFrameCount); index++) {
+            m_pendingScreenSourceFrames[index].Retire();
+            m_pendingScreenSourceFrames[index] = default;
+        }
+
+        m_pendingScreenSourceFrameCount = 0;
+    }
+    private void RetireAllScreenSourceFrames() {
+        RetirePendingScreenSourceFrames();
+
+        for (var slot = 0; (slot < m_retainedScreenSourceFrames.Length); slot++) {
+            var retained = m_retainedScreenSourceFrames[slot];
+            var count = m_retainedScreenSourceFrameCounts[slot];
+
+            for (var index = 0; (index < count); index++) {
+                retained[index].Retire();
+                retained[index] = default;
+            }
+
+            m_retainedScreenSourceFrameCounts[slot] = 0;
+        }
+    }
 
     /// <inheritdoc/>
     public void Dispose() {
@@ -422,8 +477,8 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
 
         m_disposed = true;
 
-        // Drain before tearing down GPU resources: the per-frame submits are fire-and-forget (nothing fences them),
-        // so a frame could still be in flight at teardown. The engine's Dispose is wait-free by contract.
+        // Drain before tearing down GPU resources: the per-frame submits are fire-and-forget, so a frame may still be
+        // in flight. This also proves every retained external screen-source acquisition is safe to release below.
         m_deviceContext.TryWaitIdle();
 
         foreach (var child in m_children.Values) {
@@ -432,6 +487,7 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
 
         m_engine?.Dispose();
         m_engine = null;
+        RetireAllScreenSourceFrames();
     }
     /// <inheritdoc/>
     public void OnDeviceLost() {
@@ -447,6 +503,7 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
         m_frameSource.NotifyDeviceLost();
         m_engine?.Dispose();
         m_engine = null;
+        RetireAllScreenSourceFrames();
         m_glyphAtlasInitialized = false;
         m_uploadedGlyphAtlas = null;
         m_deviceContext = null;
@@ -577,11 +634,26 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
 
         // Screen sources: polled AFTER children have produced (a provider may read a just-produced child surface).
         // A provider returning 0 leaves the slot unbound this frame — the engine's material-shaded fallback applies.
+        RetirePendingScreenSourceFrames();
+
         foreach (var (screenIndex, provider) in m_screenSources) {
             m_engine!.SetScreenSource(
                 screenIndex: screenIndex,
                 imageViewHandle: provider()
             );
+        }
+
+        foreach (var (screenIndex, provider) in m_screenSourceFrames) {
+            var source = provider();
+
+            m_engine!.SetScreenSource(
+                screenIndex: screenIndex,
+                imageViewHandle: source.ImageViewHandle
+            );
+
+            if (source.RequiresRetirement) {
+                m_pendingScreenSourceFrames[m_pendingScreenSourceFrameCount++] = source;
+            }
         }
 
         // Screen LIGHTS: the colored glow each screen emits into the room (parallel to the source poll above).
@@ -641,7 +713,14 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
             : 0L
         );
 
-        m_engine!.SubmitFrame(frame: frame);
+        if (0 == m_screenSourceFrames.Count) {
+            m_engine!.SubmitFrame(frame: frame);
+        } else {
+            m_engine!.SubmitFrameWithExternalResources(
+                frame: frame,
+                onFrameSlotAvailable: RetireAndAdoptScreenSourceFrames
+            );
+        }
 
         if (cpuTimingEnabled) {
             ++m_cpuTimingFrame;
@@ -890,6 +969,20 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
         // gpu.timing switch, Puck.World's world.timing verb) works regardless of this seed. Idempotent, so seeding
         // here and at composition with the same value is harmless.
         _ = GpuTimingControl.Shared.TrySeed(armed: (m_timingEnabled ?? false));
+    }
+    // Builder-only additive seam: keeps the longstanding public constructor's Func<nint> screenSources parameter
+    // source-compatible while a render spec can opt particular indices into fence-retired frame acquisitions.
+    internal void SetScreenSourceFrames(IReadOnlyDictionary<int, Func<SdfScreenSourceFrame>>? screenSourceFrames) {
+        if (m_engine is not null) {
+            throw new InvalidOperationException(message: "screen-source frame providers must be configured before the first produced frame");
+        }
+
+        m_screenSourceFrames = ((screenSourceFrames is null)
+            ? EmptyScreenSourceFrames
+            : new Dictionary<int, Func<SdfScreenSourceFrame>>(collection: screenSourceFrames)
+        );
+        m_pendingScreenSourceFrames = new SdfScreenSourceFrame[m_screenSourceFrames.Count];
+        m_retainedScreenSourceFrames = BuildScreenSourceFrameRing(capacity: m_screenSourceFrames.Count);
     }
 
     /// <inheritdoc/>

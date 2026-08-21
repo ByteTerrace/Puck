@@ -438,9 +438,14 @@ driver-declared simultaneous native format pair. On Windows, Puck first asks
 the frame server for both native GPU surfaces: BRIO's YUY2 color and L8 IR are
 converted by D3D11 compute into private RGBA textures, copied into two shared
 three-slot rings, and sampled directly by either renderer without host pixels.
-The pair is admitted only after both GPU surfaces prove live; any refusal
-reopens the same sensor set on the CPU-pixel graph, and every open runs off the
-render thread. A legacy face-auth provider available only
+Each sampled slot stays acquired until the SDF frame-ring fence proves that GPU
+submission retired, so camera and renderer cadence cannot race an overwrite;
+closing a graph likewise defers the ring's destruction across those frames.
+The pair is admitted only after both GPU surfaces prove live; synchronous target
+provisioning failures and worker-side startup failures before every stream's
+first frame both reopen the same sensor set once on the CPU-pixel graph instead
+of retrying the failed GPU tier forever, and every open runs off the render
+thread. A legacy face-auth provider available only
 to the Windows biometric broker does not constitute a public dual-camera graph.
 Alternating IR strobes the illuminator across the declared transport rate, so
 half the frames arrive ambient and only the illuminated half ever publishes

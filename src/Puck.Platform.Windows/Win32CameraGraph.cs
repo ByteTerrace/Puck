@@ -133,15 +133,19 @@ internal sealed class Win32SharedStream(CameraSensor sensor, int width, int heig
     public int Width => width;
 
     public void CancelStart() => _ = m_targets.TrySetCanceled();
+    public void Release(int slot) => Slots.Release(slot: slot);
     public void Start(IReadOnlyList<nint> sharedTargetHandles) {
         ArgumentNullException.ThrowIfNull(sharedTargetHandles);
 
-        if (0 == sharedTargetHandles.Count) {
-            throw new ArgumentException(message: "At least one shared target is required.", paramName: nameof(sharedTargetHandles));
+        if (sharedTargetHandles.Count < 2) {
+            throw new ArgumentException(message: "At least two shared targets are required.", paramName: nameof(sharedTargetHandles));
         }
+
+        Slots.Configure(targetCount: sharedTargetHandles.Count);
 
         if (!m_targets.TrySetResult(result: [.. sharedTargetHandles])) {
             throw new InvalidOperationException(message: $"the {sensor} stream already started");
         }
     }
+    public bool TryAcquireLatest(out int slot) => Slots.TryAcquireLatest(slot: out slot);
 }

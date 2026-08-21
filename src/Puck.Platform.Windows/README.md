@@ -32,7 +32,12 @@ camera frame server's public Windows Face Authentication Profile V2 graph
 `Win32FaceAuthenticationCameraGraph` polls it). Each shape has a CPU-pixel leaf
 and a shared-texture leaf; the leaves differ only in reader configuration and
 in where a frame goes (`Win32PixelStream`'s latest-frame buffer, or a
-consumer-provisioned shared ring published through `Win32SharedStream`).
+consumer-provisioned shared ring published through `Win32SharedStream`). CPU
+frames are normalized from the negotiated signed stride into tightly packed,
+top-down BGRA before publication. A shared-ring consumer explicitly acquires a
+completed slot until its GPU submission retires; the camera drops an incoming
+frame when every other slot remains acquired instead of overwriting a texture
+still being sampled.
 
 Every graph's native objects belong to one MTA worker thread
 (`Win32CameraGraph`): construction blocks until the worker reports ready or

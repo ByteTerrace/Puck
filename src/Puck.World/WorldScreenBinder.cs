@@ -132,7 +132,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     // removal (the engine's own frozen key list still names it), while a genuinely new index (never in this set)
     // still cannot bind live.
     private readonly HashSet<int> m_bootScreenIndices = new();
-    private readonly Dictionary<int, Func<nint>> m_sources = new();
+    private readonly Dictionary<int, Func<SdfScreenSourceFrame>> m_sources = new();
     private readonly Dictionary<int, Func<Vector3>> m_lights = new();
     // SdfEngineNode copies m_sources/m_lights into its own dictionary once, at construction, and never re-reads
     // these dictionaries again — writing a new delegate into m_sources[index] after boot is invisible to the
@@ -227,10 +227,10 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
                     // do here; Handle()/Light() below read the host directly for a machine-owning index.
                     break;
                 case WorldScreenSource.Camera cameraSource:
-                    // The declared webcam: bind the row's SENSOR's shared feed — color and infrared are separate
-                    // physical devices, so both may stream at once. Opened here on first demand; on the GPU transport
-                    // it stays pending until the render adapter resolves at first publish. An absent device leaves the
-                    // slot unbound with a visible sensor-specific fault.
+                    // The declared webcam: bind the row's SENSOR's shared feed. Color and infrared may be two sensors
+                    // on one physical camera, so the platform opens them as one coordinated graph when both are
+                    // declared. On the GPU transport it stays pending until the render adapter resolves at first
+                    // publish. An absent device leaves the slot unbound with a visible sensor-specific fault.
                     if (EnsureCameraFeed(
                         profile: ResolveSharedCameraProfile(screens: screens, sensor: cameraSource.Sensor),
                         sensor: cameraSource.Sensor
@@ -317,7 +317,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
             var cell = new ScreenSourceCell { Slot = slot };
 
             m_sourceCells[screen.Index] = cell;
-            m_sources[screen.Index] = cell.ResolveHandle;
+            m_sources[screen.Index] = cell.ResolveFrame;
             m_lights[screen.Index] = cell.ResolveLight;
         }
     }
@@ -333,7 +333,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     /// <summary>Gets the screen-source providers keyed by screen index — the map the render spec's <c>ScreenSources</c> field
     /// takes. A provider is present for every declared screen; it returns 0 while the slot carries no producer, which the
     /// engine reads as unbound (the procedural fallback), so a runtime insert binds with no engine rebuild.</summary>
-    public IReadOnlyDictionary<int, Func<nint>> ScreenSources => m_sources;
+    public IReadOnlyDictionary<int, Func<SdfScreenSourceFrame>> ScreenSources => m_sources;
     /// <summary>Gets the current produced-frame divisor for jumbotron offscreen renders.</summary>
     public int ViewRefreshDivisor => m_viewRefreshDivisor;
 
@@ -694,7 +694,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
                     // would otherwise throw a KeyNotFoundException reading m_sources/m_lights.
                     cell = new ScreenSourceCell { Slot = slot };
                     m_sourceCells[screen.Index] = cell;
-                    m_sources[screen.Index] = cell.ResolveHandle;
+                    m_sources[screen.Index] = cell.ResolveFrame;
                     m_lights[screen.Index] = cell.ResolveLight;
                 }
             }
@@ -752,14 +752,14 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         public TestPatternSource Pattern { get; } = pattern;
         public CpuSurfaceSource Surface { get; } = surface;
     }
-    // The delegate indirection cell: ResolveHandle/ResolveLight are the stable delegate targets m_sources/m_lights
+    // The delegate indirection cell: ResolveFrame/ResolveLight are the stable delegate targets m_sources/m_lights
     // register. A cell is created once per boot-declared index and never replaced; only its Slot field is ever
     // reassigned (by ReconcileScreens, when a removed index is re-declared), so the renderer's one-time copy of
-    // ResolveHandle/ResolveLight keeps reading whichever ScreenSlot is current.
+    // ResolveFrame/ResolveLight keeps reading whichever ScreenSlot is current.
     private sealed class ScreenSourceCell {
         public required ScreenSlot Slot { get; set; }
 
-        public nint ResolveHandle() => Slot.Handle();
+        public SdfScreenSourceFrame ResolveFrame() => Slot.AcquireFrame();
         public Vector3 ResolveLight() => Slot.Light();
     }
     // One declared screen's slot: the persistent declared source (a test pattern, a QR code, or a jumbotron VIEW —
@@ -836,9 +836,25 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
             Camera = null;
             View = null;
         }
-        // The current source handle: the host's machine (if this index has one), else the highest-precedence local
-        // producer's, else the declared jumbotron view's, else the authored QR's, else the declared test pattern's,
-        // else 0.
+        // The current source for one submitted frame: the host's machine (if this index has one), else the highest-
+        // precedence local producer's, else the declared jumbotron view's, authored QR, declared test pattern, or 0.
+        // Only the shared-camera branch carries a retirement callback; every engine-owned/stable source is handle-only.
+        public SdfScreenSourceFrame AcquireFrame() => (Machines.HasMachine(index: Index)
+            ? Machines.Handle(index: Index)
+            : ((Camera is { } camera)
+                ? camera.AcquireFrame()
+                : ((Capture is { } capture)
+                    ? capture.Handle()
+                    : ((View is { } view)
+                        ? view.Handle()
+                        : ((Session is { } session)
+                            ? session.Handle()
+                            : ((Qr is { } qr)
+                                ? qr.Surface.CurrentHandle
+                                 : (Pattern?.Surface.CurrentHandle ?? 0)
+        ))))));
+        // Diagnostic handle lookup only; unlike AcquireFrame it never submits GPU work and therefore does not acquire
+        // an asynchronously-written camera slot.
         public nint Handle() => (Machines.HasMachine(index: Index)
             ? Machines.Handle(index: Index)
             : ((Camera is { } camera)

@@ -89,19 +89,29 @@ public interface ICameraPixelStream : ICameraStream, IFrameCaptureSource;
 
 /// <summary>A shared-texture stream: the platform converts each frame on its own device and copies it into one of the
 /// consumer-provisioned shared targets (sized <see cref="ICameraStream.Width"/> × <see cref="ICameraStream.Height"/>
-/// in <see cref="TargetFormat"/>), completing the copy before publishing the slot, so a published slot is always safe
-/// to sample.</summary>
+/// in <see cref="TargetFormat"/>), completing the copy before publishing the slot. Consumers acquire the newest
+/// completed slot and release it only after asynchronous GPU sampling retires; the producer drops a frame when every
+/// non-current target remains acquired.</summary>
 public interface ICameraSharedStream : ICameraStream {
     /// <summary>Gets the index (into the <see cref="Start"/> target list) of the most recently published frame, or
-    /// <c>-1</c> until the first frame arrives.</summary>
+    /// <c>-1</c> until the first frame arrives. This is observational state; use <see cref="TryAcquireLatest"/> before
+    /// submitting work that samples the target.</summary>
     int LatestSlot { get; }
     /// <summary>Gets the pixel format the consumer must provision the shared targets in.</summary>
     SurfaceFormat TargetFormat { get; }
 
-    /// <summary>Begins streaming into the given shared targets; frames are published round-robin across the slots.</summary>
-    /// <param name="sharedTargetHandles">The consumer-provisioned shared textures (opaque NT handles on Windows); two or
-    /// more slots keep the writer off the slot a consumer is sampling.</param>
-    /// <exception cref="ArgumentException">No targets were provided.</exception>
+    /// <summary>Begins streaming into the given shared targets; frames are published across slots that have no active
+    /// consumer acquisition.</summary>
+    /// <param name="sharedTargetHandles">The consumer-provisioned shared textures (opaque NT handles on Windows).</param>
+    /// <exception cref="ArgumentException">Fewer than two targets were provided.</exception>
     /// <exception cref="InvalidOperationException">The stream already started.</exception>
     void Start(IReadOnlyList<nint> sharedTargetHandles);
+    /// <summary>Acquires the latest completed slot. A successful acquisition remains stable until paired with
+    /// <see cref="Release"/> after all GPU work sampling that slot has retired.</summary>
+    /// <param name="slot">When this returns <see langword="true"/>, the acquired target index.</param>
+    /// <returns>Whether a frame has been published.</returns>
+    bool TryAcquireLatest(out int slot);
+    /// <summary>Releases a slot acquired by <see cref="TryAcquireLatest"/>.</summary>
+    /// <param name="slot">The acquired target index.</param>
+    void Release(int slot);
 }

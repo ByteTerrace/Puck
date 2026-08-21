@@ -466,7 +466,7 @@ public sealed partial class SdfWorldEngine {
     // The shared per-frame front half of both submission paths: validate, (re)bind sources, pack + upload the
     // viewport/transform buffers, and rebuild both push-constant blocks from the LIVE regions (the camera director
     // animates the split layout, so a frozen first-frame layout composited stale/blank rects mid-transition).
-    private uint PrepareFrame(SdfFrame frame) {
+    private uint PrepareFrame(SdfFrame frame, Action<int>? onFrameSlotAvailable = null) {
         ArgumentNullException.ThrowIfNull(frame);
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
@@ -498,6 +498,7 @@ public sealed partial class SdfWorldEngine {
         m_currentSlot = slot;
         m_ringFrame++;
         m_frameFences[slot].Wait();
+        onFrameSlotAvailable?.Invoke(obj: slot);
 
         BindSources(viewportCount: viewportCount);
         BindScreenSources();
