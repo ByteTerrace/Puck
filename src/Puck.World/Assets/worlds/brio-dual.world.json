@@ -1,32 +1,114 @@
 {
-  "basis": "null-seat.world.json",
   "$schema": "./puck.world.def.v1.schema.json",
+  "basis": "null-seat.world.json",
   "documentId": "brio-dual",
   "host": {
-    "presentation": "Windowed",
     "backend": "auto",
-    "width": 1280,
-    "height": 720,
-    "surfaceFormat": "r8g8b8a8",
-    "fullscreen": false,
-    "presentMode": "Immediate",
-    "targetHertz": 0,
     "exitAfterSeconds": 0,
-    "rayQuery": true,
-    "timing": false,
+    "fullscreen": false,
     "genlock": null,
-    "listen": null
+    "height": 720,
+    "listen": null,
+    "presentation": "Windowed",
+    "presentMode": "Immediate",
+    "rayQuery": true,
+    "surfaceFormat": "r8g8b8a8",
+    "targetHertz": 0,
+    "timing": false,
+    "width": 1280
   },
+  "metadata": {
+    "description": "An unobstructed two-screen Logitech BRIO capture demo with enlarged RGB and infrared panels.",
+    "tags": [
+      "camera",
+      "brio",
+      "infrared"
+    ],
+    "title": "BRIO RGB + IR"
+  },
+  "screens": [
+    {
+      "halfDepth": 0.08,
+      "halfHeight": 1.5,
+      "halfWidth": 2.0,
+      "index": 0,
+      "origin": [
+        -2.15,
+        1.5,
+        -6.5
+      ],
+      "right": [
+        1,
+        0,
+        0
+      ],
+      "round": 0.08,
+      "route": {
+        "autoInsert": false,
+        "engageable": false,
+        "engageRadius": 0
+      },
+      "source": {
+        "$type": "camera",
+        "profile": {
+          "height": 600,
+          "refreshRateHz": 30,
+          "width": 800
+        },
+        "sensor": "Color"
+      },
+      "up": [
+        0,
+        1,
+        0
+      ]
+    },
+    {
+      "halfDepth": 0.08,
+      "halfHeight": 1.5,
+      "halfWidth": 1.5,
+      "index": 1,
+      "origin": [
+        1.7,
+        1.5,
+        -6.5
+      ],
+      "right": [
+        1,
+        0,
+        0
+      ],
+      "round": 0.08,
+      "route": {
+        "autoInsert": false,
+        "engageable": false,
+        "engageRadius": 0
+      },
+      "source": {
+        "$type": "camera",
+        "profile": {
+          "height": 340,
+          "refreshRateHz": 30,
+          "width": 340
+        },
+        "sensor": "Infrared"
+      },
+      "up": [
+        0,
+        1,
+        0
+      ]
+    }
+  ],
   "views": {
     "layouts": [],
     "seatControl": {
-      "yawReference": "World",
+      "maxPitch": 1.2,
       "minPitch": -0.35,
-      "maxPitch": 1.2
+      "yawReference": "World"
     },
     "seatRig": {
       "name": "brio-dual-fixed",
-      "version": "puck.camera.v1",
       "operations": [
         {
           "$type": "anchor",
@@ -42,13 +124,13 @@
         {
           "$type": "orbit",
           "distance": 0.001,
-          "yaw": 0,
           "pitch": 0,
           "pivotOffset": [
             0,
             0,
             0
-          ]
+          ],
+          "yaw": 0
         },
         {
           "$type": "lookAt",
@@ -65,90 +147,8 @@
           "$type": "fov",
           "fieldOfViewRadians": 0.9599311
         }
-      ]
+      ],
+      "version": "puck.camera.v1"
     }
-  },
-  "screens": [
-    {
-      "index": 0,
-      "origin": [
-        -2.15,
-        1.5,
-        -6.5
-      ],
-      "right": [
-        1,
-        0,
-        0
-      ],
-      "up": [
-        0,
-        1,
-        0
-      ],
-      "halfWidth": 2.0,
-      "halfHeight": 1.5,
-      "halfDepth": 0.08,
-      "round": 0.08,
-      "source": {
-        "$type": "camera",
-        "profile": {
-          "width": 800,
-          "height": 600,
-          "refreshRateHz": 30
-        },
-        "sensor": "Color"
-      },
-      "route": {
-        "engageable": false,
-        "engageRadius": 0,
-        "autoInsert": false
-      }
-    },
-    {
-      "index": 1,
-      "origin": [
-        1.7,
-        1.5,
-        -6.5
-      ],
-      "right": [
-        1,
-        0,
-        0
-      ],
-      "up": [
-        0,
-        1,
-        0
-      ],
-      "halfWidth": 1.5,
-      "halfHeight": 1.5,
-      "halfDepth": 0.08,
-      "round": 0.08,
-      "source": {
-        "$type": "camera",
-        "profile": {
-          "width": 340,
-          "height": 340,
-          "refreshRateHz": 30
-        },
-        "sensor": "Infrared"
-      },
-      "route": {
-        "engageable": false,
-        "engageRadius": 0,
-        "autoInsert": false
-      }
-    }
-  ],
-  "metadata": {
-    "title": "BRIO RGB + IR",
-    "description": "An unobstructed two-screen Logitech BRIO capture demo with enlarged RGB and infrared panels.",
-    "tags": [
-      "camera",
-      "brio",
-      "infrared"
-    ]
   }
 }

@@ -18,7 +18,7 @@
         "description": "The front face\u0027s world-space center (the sampled surface origin); the geometry center sits one HalfDepth behind it along the face normal."
       },
       "right": {
-        "description": "The unit world axis the sampled U increases along (the slab\u0027s local \u002BX in world space). Must be orthogonal to Up: the client derives the slab\u0027s orientation and UV frame from the pair while the server\u0027s collider projects the half-extents onto it, so a skewed pair would render and collide as different solids."
+        "description": "The unit world axis the sampled U increases along (the slab\u0027s local \u002BX in world space)."
       },
       "up": {
         "description": "The unit world axis the sampled V increases against \u2014 V = 0 at the top (the slab\u0027s local \u002BY in world space)."

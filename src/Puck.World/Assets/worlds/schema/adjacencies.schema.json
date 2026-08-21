@@ -77,11 +77,6 @@
           "null"
         ],
         "default": null
-      },
-      "livenessGraceSeconds": {
-        "description": "How long this edge may go without a delivered neighbour refresh before the world calls the link dropped \u2014 the authored threshold behind the linkEstablished/linkDropped world event family and the $link:\u003Cname\u003E reserved rule channel (LinkPrefix). Authored in seconds \u2014 a physical unit, so a world\u0027s SimulationRateHz can change without silently retuning the window \u2014 and compiled per document through AdjacencyLivenessGraceTicks, exactly the population.reconnectGraceSeconds idiom. 0 (the default) disables liveness sensing for this edge outright: no link edge is emitted for it and $link: reads 0 forever, so a world authoring none is unchanged. Per row, not per world: each seam carries its own tolerance. A world whose rate is 0 has no tick mapping for a positive value (see CompiledTickDuration), which reads as never dropped.",
-        "type": "number",
-        "default": 0
       }
     },
     "required": [

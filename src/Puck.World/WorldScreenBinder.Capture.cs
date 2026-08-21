@@ -136,7 +136,29 @@ internal sealed partial class WorldScreenBinder {
             return true;
         }
 
+        // GPU eligibility is decided here, once per pump: a pair that can never reach the native-surface tier (no
+        // render adapter LUID on a headless boot, an older OS) keeps its CPU graph rather than being routed through
+        // ServiceCameraFeed into the single-camera GPU opener.
         if (
+            (m_renderAdapterLuid is null) ||
+            !OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: 19041)
+        ) {
+            colorFeed.GpuRoute = false;
+            infraredFeed.GpuRoute = false;
+        }
+
+        // Both feeds still carrying GpuRoute with no facade open is the bind-time CPU pair awaiting its single upgrade
+        // attempt (or a render-device loss that disposed both facades while preserving the route). MediaCapture holds
+        // exclusive control, so the CPU pair releases the device first; a refusal restores it below.
+        var upgrade = (
+            colorFeed.GpuRoute &&
+            infraredFeed.GpuRoute &&
+            (colorFeed.SharedSession is null) &&
+            (infraredFeed.SharedSession is null)
+        );
+
+        if (
+            !upgrade &&
             (colorFeed.Session is { IsEnded: false }) &&
             (infraredFeed.Session is { IsEnded: false })
         ) {
@@ -151,11 +173,12 @@ internal sealed partial class WorldScreenBinder {
         ) {
             colorFeed.ResetSessions();
             infraredFeed.ResetSessions();
-            // An established dual GPU graph ending is a runtime refusal/disconnect. Reopen through the CPU pair; a
-            // render-device loss already disposed both facades while preserving GpuRoute and therefore reaches the
-            // normal GPU attempt below instead.
-            colorFeed.GpuRoute = false;
-            infraredFeed.GpuRoute = false;
+
+            if (!upgrade) {
+                // An established dual graph ending is a runtime refusal/disconnect. Reopen through the CPU pair.
+                colorFeed.GpuRoute = false;
+                infraredFeed.GpuRoute = false;
+            }
         }
 
         if (colorFeed.OpenRetryCountdown > 0) {
@@ -840,7 +863,10 @@ internal sealed partial class WorldScreenBinder {
                 otherFeed.GpuRoute = OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: 10240);
             }
 
-            if (OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: 10240)) {
+            // Keep the GPU and CPU dual opens independent. A modern device may expose a valid native-surface FaceAuth
+            // graph even when its CPU-memory graph refuses; first publish tries the GPU pair, and only that refusal
+            // opens the CPU fallback. Older Windows has no shared-dual tier and proves the CPU graph here.
+            if (OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: 19041)) {
                 var requestedFeed = GetOrCreateCameraFeed(profile: profile, sensor: sensor);
                 otherFeed.Dual = true;
                 requestedFeed.Dual = true;

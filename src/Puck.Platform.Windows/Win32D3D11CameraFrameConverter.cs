@@ -66,23 +66,28 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
     private readonly ID3D11DeviceContext* m_context;
     private readonly ID3D11Device* m_device;
     private readonly ID3D11Device1* m_device1;
+
     private bool m_disposed;
+
     private readonly ID3D11Texture2D* m_input;
     private readonly ID3D11ShaderResourceView* m_inputView;
+    private readonly ID3D10Multithread* m_multithread;
     private readonly ID3D11Texture2D* m_output;
     private readonly ID3D11UnorderedAccessView* m_outputView;
     private readonly ID3D11Query* m_query;
     private readonly ID3D11ComputeShader* m_shader;
+
     private ID3D11Texture2D*[] m_targets = [];
 
-    public Win32D3D11CameraFrameConverter(nint sourceTexture, long adapterLuid, int width, int height, bool infrared) {
+    public Win32D3D11CameraFrameConverter(nint sourceTexture, long adapterLuid, int width, int height, string subtype) {
         m_height = height;
         m_width = width;
 
         var source = ((ID3D11Texture2D*)sourceTexture);
         var description = default(D3D11_TEXTURE2D_DESC);
+
         source->GetDesc(pDesc: &description);
-        var requiredFormat = (infrared ? DXGI_FORMAT.DXGI_FORMAT_R8_UNORM : DXGI_FORMAT.DXGI_FORMAT_YUY2);
+        var (requiredFormat, viewFormat, shaderSource) = Kernel(subtype: subtype);
 
         if (
             (description.Width != width) ||
@@ -90,26 +95,29 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
             (description.Format != requiredFormat) ||
             (description.SampleDesc.Count != 1)
         ) {
-            throw new NotSupportedException(message: $"the native {(infrared ? "infrared" : "color")} GPU surface is {description.Width}x{description.Height} {description.Format}, expected {width}x{height} {requiredFormat}");
+            throw new NotSupportedException(message: $"the native {subtype} GPU surface is {description.Width}x{description.Height} {description.Format}, expected {width}x{height} {requiredFormat}");
         }
 
         ID3D11Device* device = null;
         ID3D11Device1* device1 = null;
         ID3D11DeviceContext* context = null;
+        ID3D10Multithread* multithread = null;
         ID3D11Texture2D* input = null;
         ID3D11ShaderResourceView* inputView = null;
         ID3D11Texture2D* output = null;
         ID3D11UnorderedAccessView* outputView = null;
         ID3D11ComputeShader* shader = null;
         ID3D11Query* query = null;
+
         source->GetDevice(ppDevice: &device);
 
         try {
             var device1Iid = ID3D11Device1.IID_Guid;
+
             Win32D3D11.ThrowIfFailed(hr: ((IUnknown*)device)->QueryInterface(ppvObject: out var device1Pointer, riid: in device1Iid), operation: "QueryInterface(ID3D11Device1)");
             device1 = ((ID3D11Device1*)device1Pointer);
             device->GetImmediateContext(ppImmediateContext: &context);
-            ProtectMultithreaded(device: device);
+            multithread = ProtectMultithreaded(device: device);
             ValidateAdapter(device: device, expectedLuid: adapterLuid);
 
             var inputDescription = new D3D11_TEXTURE2D_DESC {
@@ -122,13 +130,14 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
                 Usage = D3D11_USAGE.D3D11_USAGE_DEFAULT,
                 BindFlags = D3D11_BIND_FLAG.D3D11_BIND_SHADER_RESOURCE,
             };
+
             device->CreateTexture2D(pDesc: &inputDescription, pInitialData: null, ppTexture2D: &input);
 
             var inputViewDescription = new D3D11_SHADER_RESOURCE_VIEW_DESC {
-                // A YUY2 SRV exposes each two-pixel macropixel as normalized Y0/U/Y1/V components.
-                Format = (infrared ? DXGI_FORMAT.DXGI_FORMAT_R8_UNORM : DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM),
+                Format = viewFormat,
                 ViewDimension = D3D_SRV_DIMENSION.D3D11_SRV_DIMENSION_TEXTURE2D,
             };
+
             inputViewDescription.Anonymous.Texture2D.MipLevels = 1;
             device->CreateShaderResourceView(pResource: ((ID3D11Resource*)input), pDesc: &inputViewDescription, ppSRView: &inputView);
 
@@ -142,11 +151,13 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
                 Usage = D3D11_USAGE.D3D11_USAGE_DEFAULT,
                 BindFlags = D3D11_BIND_FLAG.D3D11_BIND_UNORDERED_ACCESS,
             };
+
             device->CreateTexture2D(pDesc: &outputDescription, pInitialData: null, ppTexture2D: &output);
             device->CreateUnorderedAccessView(pResource: ((ID3D11Resource*)output), pDesc: null, ppUAView: &outputView);
-            shader = CompileShader(device: device, source: (infrared ? InfraredShader : ColorShader));
+            shader = CompileShader(device: device, source: shaderSource);
 
             var queryDescription = new D3D11_QUERY_DESC { Query = D3D11_QUERY.D3D11_QUERY_EVENT };
+
             device->CreateQuery(pQueryDesc: &queryDescription, ppQuery: &query);
         } catch {
             Release(value: query);
@@ -155,6 +166,7 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
             Release(value: output);
             Release(value: inputView);
             Release(value: input);
+            Release(value: multithread);
             Release(value: context);
             Release(value: device1);
             Release(value: device);
@@ -167,10 +179,20 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
         m_output = output;
         m_inputView = inputView;
         m_input = input;
+        m_multithread = multithread;
         m_context = context;
         m_device1 = device1;
         m_device = device;
     }
+
+    // Native transport subtype (the WinRT MediaFrameFormat.Subtype FOURCC) to the surface format the frame server
+    // must deliver, the shader-resource view over it, and the kernel that unpacks it. A YUY2 view as R8G8B8A8 exposes
+    // each two-pixel macropixel as normalized Y0/U/Y1/V components at half width.
+    private static (DXGI_FORMAT Surface, DXGI_FORMAT View, string Shader) Kernel(string subtype) => (subtype.ToUpperInvariant() switch {
+        "YUY2" => (DXGI_FORMAT.DXGI_FORMAT_YUY2, DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM, ColorShader),
+        "L8" => (DXGI_FORMAT.DXGI_FORMAT_R8_UNORM, DXGI_FORMAT.DXGI_FORMAT_R8_UNORM, InfraredShader),
+        _ => throw new NotSupportedException(message: $"no GPU conversion kernel for the native camera subtype '{subtype}'"),
+    });
 
     public bool IsStarted => (m_targets.Length != 0);
 
@@ -182,12 +204,14 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
         var targets = new ID3D11Texture2D*[sharedTargetHandles.Count];
 
         try {
-            for (var index = 0; index < targets.Length; index++) {
+            for (var index = 0; (index < targets.Length); index++) {
                 using var handle = new SafeFileHandle(ownsHandle: false, preexistingHandle: sharedTargetHandles[index]);
+
                 m_device1->OpenSharedResource1(hResource: handle, ppResource: out var opened, returnedInterface: ID3D11Texture2D.IID_Guid);
                 targets[index] = ((ID3D11Texture2D*)opened);
 
                 var description = default(D3D11_TEXTURE2D_DESC);
+
                 targets[index]->GetDesc(pDesc: &description);
 
                 if (
@@ -205,12 +229,23 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
             throw;
         }
     }
-
     public void Convert(nint sourceTexture, int targetSlot) {
-        if ((uint)targetSlot >= (uint)m_targets.Length) {
+        if (((uint)targetSlot) >= ((uint)m_targets.Length)) {
             throw new ArgumentOutOfRangeException(paramName: nameof(targetSlot));
         }
 
+        // The context is the frame server's own immediate context; multithread protection serializes single calls
+        // only, so the device critical section is held across the whole bind/dispatch/copy/wait sequence.
+        m_multithread->Enter();
+
+        try {
+            ConvertLocked(sourceTexture: sourceTexture, targetSlot: targetSlot);
+        } finally {
+            m_multithread->Leave();
+        }
+    }
+
+    private void ConvertLocked(nint sourceTexture, int targetSlot) {
         m_context->CopySubresourceRegion(
             DstSubresource: 0,
             DstX: 0,
@@ -224,6 +259,7 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
 
         var inputView = m_inputView;
         var targetView = m_outputView;
+
         m_context->CSSetShader(pComputeShader: m_shader, NumClassInstances: 0, ppClassInstances: null);
         m_context->CSSetShaderResources(StartSlot: 0, NumViews: 1, ppShaderResourceViews: &inputView);
         m_context->CSSetUnorderedAccessViews(StartSlot: 0, NumUAVs: 1, ppUnorderedAccessViews: &targetView, pUAVInitialCounts: null);
@@ -235,6 +271,7 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
 
         ID3D11ShaderResourceView* noInput = null;
         ID3D11UnorderedAccessView* noTarget = null;
+
         m_context->CSSetShaderResources(StartSlot: 0, NumViews: 1, ppShaderResourceViews: &noInput);
         m_context->CSSetUnorderedAccessViews(StartSlot: 0, NumUAVs: 1, ppUnorderedAccessViews: &noTarget, pUAVInitialCounts: null);
         m_context->CSSetShader(pComputeShader: null, NumClassInstances: 0, ppClassInstances: null);
@@ -275,6 +312,7 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
         Release(value: m_output);
         Release(value: m_inputView);
         Release(value: m_input);
+        Release(value: m_multithread);
         Release(value: m_context);
         Release(value: m_device1);
         Release(value: m_device);
@@ -313,6 +351,7 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
             }
 
             ID3D11ComputeShader* shader;
+
             device->CreateComputeShader(pShaderBytecode: code->GetBufferPointer(), BytecodeLength: code->GetBufferSize(), pClassLinkage: null, ppComputeShader: &shader);
 
             return shader;
@@ -321,20 +360,19 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
             Release(value: code);
         }
     }
-
-    private static void ProtectMultithreaded(ID3D11Device* device) {
+    private static ID3D10Multithread* ProtectMultithreaded(ID3D11Device* device) {
         var iid = ID3D10Multithread.IID_Guid;
+
         Win32D3D11.ThrowIfFailed(hr: ((IUnknown*)device)->QueryInterface(ppvObject: out var pointer, riid: in iid), operation: "QueryInterface(ID3D10Multithread)");
+        var multithread = ((ID3D10Multithread*)pointer);
 
-        try {
-            _ = ((ID3D10Multithread*)pointer)->SetMultithreadProtected(bMTProtect: true);
-        } finally {
-            _ = ((IUnknown*)pointer)->Release();
-        }
+        _ = multithread->SetMultithreadProtected(bMTProtect: true);
+
+        return multithread;
     }
-
     private static void ValidateAdapter(ID3D11Device* device, long expectedLuid) {
         var iid = IDXGIDevice.IID_Guid;
+
         Win32D3D11.ThrowIfFailed(hr: ((IUnknown*)device)->QueryInterface(ppvObject: out var pointer, riid: in iid), operation: "QueryInterface(IDXGIDevice)");
         var dxgiDevice = ((IDXGIDevice*)pointer);
         IDXGIAdapter* adapter = null;
@@ -352,7 +390,6 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
             Release(value: dxgiDevice);
         }
     }
-
     private static void Release<T>(T* value) where T : unmanaged {
         if (value is not null) {
             _ = ((IUnknown*)value)->Release();
@@ -373,6 +410,7 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
 
     public static nint GetTexture(IDirect3DSurface surface, out object access) {
         var dxgiAccess = surface.As<IDirect3DDxgiInterfaceAccess>();
+
         access = dxgiAccess;
 
         return dxgiAccess.GetInterface(iid: ID3D11Texture2D.IID_Guid);

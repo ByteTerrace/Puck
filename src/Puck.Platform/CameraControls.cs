@@ -37,8 +37,8 @@ public enum CameraControl {
 }
 
 /// <summary>Which sensor stream a session opens: the default color stream, or the infrared stream exposed by a
-/// Windows Hello capable device. The streams can share one physical pipeline and therefore are not necessarily usable
-/// concurrently.</summary>
+/// Windows Hello capable device. Independent single-sensor opens can contend for one physical pipeline; callers that
+/// need both sensors use the capture service's coordinated dual open.</summary>
 public enum CameraSensor {
     /// <summary>The default color camera.</summary>
     Color,

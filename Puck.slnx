@@ -62,6 +62,7 @@
         <Project Path="tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj" />
         <Project Path="tests/Puck.Networking.Tests/Puck.Networking.Tests.csproj" />
         <Project Path="tests/Puck.Physics.Tests/Puck.Physics.Tests.csproj" />
+        <Project Path="tests/Puck.Platform.Windows.Tests/Puck.Platform.Windows.Tests.csproj" />
         <Project Path="tests/Puck.Recording.Tests/Puck.Recording.Tests.csproj" />
         <Project Path="tests/Puck.SdfVm.Tests/Puck.SdfVm.Tests.csproj" />
         <Project Path="tests/Puck.ShaderVm.Tests/Puck.ShaderVm.Tests.csproj" />

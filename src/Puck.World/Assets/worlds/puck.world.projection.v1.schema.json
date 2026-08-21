@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "puck.world.projection.v1",
   "title": "Puck world projection (puck.world.projection.v1)",
-  "description": "puck.world.projection.v1 \u2014 what an authority hands a peer holding the Presentation tier. A separate versioned document rather than a WorldDefinition with sections nulled out: a partial definition either refuses at WorldDefinitionValidator or misreports what it carries. This type\u0027s member list is the disclosure decision: a section that must not leave an authority below the replica tier has no member here. Absent by construction: rules, grants, state, market, admission, generation, generators, groups, properties, addons, storage, host, authoring, identity, inputHold, targetRegisters, bodyMotionPrograms, portals, and every kit\u0027s producers/actions (see WorldProjectedKit). Adjacencies, Destinations, References, and Interactions cross because TryDeriveOverlap reads them from both sides of a seam and must derive the same depth on each; withholding one side\u0027s inputs desymmetrizes it silently. Metadata crosses in reduced form: WorldProjectedMetadata carries title/description only \u2014 a world\u0027s authored name and blurb are harmless to a presentation-tier peer. authors, tags, and custom never cross; custom in particular is an unbounded author scratch bag that may hold notes never meant to leave the authority.",
+  "description": "puck.world.projection.v1 \u2014 what an authority hands a peer holding the Presentation tier. A separate versioned document rather than a WorldDefinition with sections nulled out, because WorldDefinition requires 33 sections and a partial one either refuses at RequireSections or misreports what it carries. This type\u0027s member list is the disclosure decision: a section that must not leave an authority below the replica tier has no member here. Absent by construction: rules, grants, state, market, admission, generation, generators, groups, properties, addons, storage, host, authoring, identity, inputHold, targetRegisters, bodyMotionPrograms, portals, and every kit\u0027s producers/actions (see WorldProjectedKit). Adjacencies, Destinations, References, and Interactions cross because TryDeriveOverlap reads them from both sides of a seam and must derive the same depth on each; withholding one side\u0027s inputs desymmetrizes it silently. Metadata crosses in reduced form: WorldProjectedMetadata carries title/description only \u2014 a world\u0027s authored name and blurb are harmless to a presentation-tier peer. authors, tags, and custom never cross; custom in particular is an unbounded author scratch bag that may hold notes never meant to leave the authority.",
   "type": [
     "object",
     "null"
@@ -821,7 +821,7 @@
             "description": "The front face\u0027s world-space center (the sampled surface origin); the geometry center sits one HalfDepth behind it along the face normal."
           },
           "right": {
-            "description": "The unit world axis the sampled U increases along (the slab\u0027s local \u002BX in world space). Must be orthogonal to Up: the client derives the slab\u0027s orientation and UV frame from the pair while the server\u0027s collider projects the half-extents onto it, so a skewed pair would render and collide as different solids."
+            "description": "The unit world axis the sampled U increases along (the slab\u0027s local \u002BX in world space)."
           },
           "up": {
             "description": "The unit world axis the sampled V increases against \u2014 V = 0 at the top (the slab\u0027s local \u002BY in world space)."
@@ -899,29 +899,6 @@
                       "string",
                       "null"
                     ]
-                  },
-                  "cable": {
-                    "description": "This machine\u0027s cable port (see WorldMachineCable), or null for an unlinked machine. Legal only on a declared screens row\u0027s own source \u2014 a magazine entry or a placement face\u0027s source is refused one (validated), because a cable is a standing physical connection of the machine that owns the slot, not of whatever content happens to rotate through it. Omitted from the wire when null, so every machine source authored before cables existed round-trips unchanged.",
-                    "type": [
-                      "object",
-                      "null"
-                    ],
-                    "properties": {
-                      "name": {
-                        "description": "The cable\u0027s stable kebab-case name, shared by every plugged port.",
-                        "type": "string"
-                      },
-                      "position": {
-                        "description": "This machine\u0027s 0-based place in cable order \u2014 contiguous across the cable\u0027s ports (validated), and what decides the linking engine\u0027s deterministic player order.",
-                        "type": "integer"
-                      }
-                    },
-                    "required": [
-                      "name",
-                      "position"
-                    ],
-                    "additionalProperties": false,
-                    "default": null
                   }
                 },
                 "required": [
@@ -955,159 +932,6 @@
                       }
                     },
                     "additionalProperties": false
-                  },
-                  "controls": {
-                    "description": "The authored device-control state (WorldCameraControls), or null to leave every control at its driver default. One physical device carries one control state, so the FIRST declared camera screen authoring this wins (matching the shared-session model); a later UpsertScreen mutation re-resolves and applies the change live. Omitted from the wire when null.",
-                    "type": [
-                      "object",
-                      "null"
-                    ],
-                    "properties": {
-                      "pan": {
-                        "description": "Horizontal framing offset (digital pan on webcams).",
-                        "type": [
-                          "integer",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "tilt": {
-                        "description": "Vertical framing offset (digital tilt on webcams).",
-                        "type": [
-                          "integer",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "zoom": {
-                        "description": "Magnification \u2014 on sensor-cropping webcams a region-of-interest zoom (e.g. 100..500 = 1x..5x on a Logitech BRIO), which pairs with Pan/Tilt to frame a region.",
-                        "type": [
-                          "integer",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "exposure": {
-                        "description": "Manual exposure time, typically log2 seconds (e.g. -5 = 1/32 s); absent = auto exposure.",
-                        "type": [
-                          "integer",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "focus": {
-                        "description": "Manual focus distance; absent = autofocus.",
-                        "type": [
-                          "integer",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "brightness": {
-                        "description": "Image brightness offset.",
-                        "type": [
-                          "integer",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "contrast": {
-                        "description": "Image contrast.",
-                        "type": [
-                          "integer",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "saturation": {
-                        "description": "Color saturation (0 is grayscale on most devices).",
-                        "type": [
-                          "integer",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "sharpness": {
-                        "description": "Edge sharpening strength.",
-                        "type": [
-                          "integer",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "gain": {
-                        "description": "Sensor gain (ISO-like amplification).",
-                        "type": [
-                          "integer",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "whiteBalance": {
-                        "description": "Manual white-balance color temperature in kelvin; absent = auto white balance.",
-                        "type": [
-                          "integer",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "backlightCompensation": {
-                        "description": "Backlight compensation (devices commonly report a 0..1 toggle).",
-                        "type": [
-                          "integer",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "fieldOfView": {
-                        "description": "The lens field of view in DEGREES \u2014 a vendor-extension control (hardware-verified on the Logitech BRIO: discrete 90/78/65, a true sensor crop composing with Zoom); the device snaps to its nearest supported value, and a camera without the vendor unit skips it. Absent = the device default (widest).",
-                        "type": [
-                          "integer",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "vendor": {
-                        "description": "Raw vendor-extension writes \u2014 byte-sized (selector, value) pairs on the device\u0027s vendor unit, applied in order after the named controls. The engine assigns NO semantics: the author names the selector, the device decides what it means (e.g. the BRIO\u0027s unconfirmed HDR candidate is selector 12), and a removed row is NOT restored (its default is unknowable). screen.camera reads each authored selector back. Omitted from the wire when null.",
-                        "type": [
-                          "array",
-                          "null"
-                        ],
-                        "items": {
-                          "description": "One raw vendor-extension write on the shared camera (see WorldCameraControls\u0027s Vendor member): a byte-sized selector on the device\u0027s vendor unit and the value to write. Deliberately semantics-free \u2014 the honest vocabulary for device controls no standard names.",
-                          "type": [
-                            "object",
-                            "null"
-                          ],
-                          "properties": {
-                            "id": {
-                              "description": "The vendor extension unit\u0027s control selector.",
-                              "type": "integer"
-                            },
-                            "value": {
-                              "description": "The byte value to write (0..255; the device clamps or refuses out-of-range writes).",
-                              "type": "integer"
-                            }
-                          },
-                          "required": [
-                            "id",
-                            "value"
-                          ],
-                          "additionalProperties": false
-                        },
-                        "default": null
-                      }
-                    },
-                    "additionalProperties": false,
-                    "default": null
-                  },
-                  "sensor": {
-                    "description": "Which physical sensor this row\u0027s shared feed opens: Color (the default) or Infrared \u2014 the infrared frame source a Windows Hello capable device carries. Each sensor gets its own shared feed, so different rows may request different sensors at once; the engine honors a Windows Face Authentication Profile V2 when published and admits simultaneous capture only after both native streams prove live. A legacy provider available only to the Windows biometric broker is not a public dual-camera graph. An absent infrared source faults the bind loudly (the slot shows the no-signal card).",
-                    "enum": [
-                      "Color",
-                      "Infrared"
-                    ],
-                    "default": "Color"
                   }
                 },
                 "required": [
@@ -1466,10 +1290,6 @@
                             "string",
                             "null"
                           ]
-                        },
-                        "cable": {
-                          "$ref": "#/properties/screens/items/properties/source/anyOf/2/properties/cable",
-                          "default": null
                         }
                       },
                       "required": [
@@ -1487,18 +1307,6 @@
                         },
                         "profile": {
                           "$ref": "#/properties/screens/items/properties/source/anyOf/3/properties/profile"
-                        },
-                        "controls": {
-                          "$ref": "#/properties/screens/items/properties/source/anyOf/3/properties/controls",
-                          "default": null
-                        },
-                        "sensor": {
-                          "description": "Which physical sensor this row\u0027s shared feed opens: Color (the default) or Infrared \u2014 the infrared frame source a Windows Hello capable device carries. Each sensor gets its own shared feed, so different rows may request different sensors at once; the engine honors a Windows Face Authentication Profile V2 when published and admits simultaneous capture only after both native streams prove live. A legacy provider available only to the Windows biometric broker is not a public dual-camera graph. An absent infrared source faults the bind loudly (the slot shows the no-signal card).",
-                          "enum": [
-                            "Color",
-                            "Infrared"
-                          ],
-                          "default": "Color"
                         }
                       },
                       "required": [
@@ -5598,10 +5406,6 @@
                             "string",
                             "null"
                           ]
-                        },
-                        "cable": {
-                          "$ref": "#/properties/screens/items/properties/source/anyOf/2/properties/cable",
-                          "default": null
                         }
                       },
                       "required": [
@@ -5619,18 +5423,6 @@
                         },
                         "profile": {
                           "$ref": "#/properties/screens/items/properties/source/anyOf/3/properties/profile"
-                        },
-                        "controls": {
-                          "$ref": "#/properties/screens/items/properties/source/anyOf/3/properties/controls",
-                          "default": null
-                        },
-                        "sensor": {
-                          "description": "Which physical sensor this row\u0027s shared feed opens: Color (the default) or Infrared \u2014 the infrared frame source a Windows Hello capable device carries. Each sensor gets its own shared feed, so different rows may request different sensors at once; the engine honors a Windows Face Authentication Profile V2 when published and admits simultaneous capture only after both native streams prove live. A legacy provider available only to the Windows biometric broker is not a public dual-camera graph. An absent infrared source faults the bind loudly (the slot shows the no-signal card).",
-                          "enum": [
-                            "Color",
-                            "Infrared"
-                          ],
-                          "default": "Color"
                         }
                       },
                       "required": [
@@ -5931,57 +5723,6 @@
             "required": [
               "bodyIndex",
               "localOffset"
-            ],
-            "additionalProperties": false,
-            "default": null
-          },
-          "contribution": {
-            "description": "The placement\u0027s contribution facet (see WorldPlacementContribution) \u2014 marks the row a host-authored slot a federation partner fills, or null for an ordinary placement. Omitted from the wire when null. Composes with every other facet: the facet governs which creation the row shows and for how long, never its transform.",
-            "type": [
-              "object",
-              "null"
-            ],
-            "properties": {
-              "tenure": {
-                "description": "The authored lifecycle.",
-                "enum": [
-                  "Presence",
-                  "Endowed"
-                ]
-              },
-              "slotCreationId": {
-                "description": "The host-owned Id the slot shows while unfilled and returns to on retraction. Must resolve to a declared creation row.",
-                "type": "string"
-              },
-              "link": {
-                "description": "The authored adjacencies row name the presence check watches \u2014 the same key the $link:\u003CadjacencyName\u003E reserved rule channel reads. Required for Presence, refused beside Endowed.",
-                "default": null,
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "graceSeconds": {
-                "description": "Seconds the watched link may stay unreachable before the piece retracts, compiled to simulation ticks through CompiledGrace at each sweep observation and stamped once into RetractDeadlineTick. Zero disables the grace (retract on the first observed outage); a rate-0 world compiles to Never, so nothing retracts. Refused beside Endowed unless zero.",
-                "type": "number",
-                "default": 0
-              },
-              "contributor": {
-                "description": "Server-stamped. The acting principal that filled the slot; null while unfilled. Never accepted from a submitted payload or an authored document.",
-                "default": null
-              },
-              "retractDeadlineTick": {
-                "description": "Server-stamped. The simulation tick at or after which the presence sweep retracts this slot; null while the link is reachable.",
-                "type": [
-                  "integer",
-                  "null"
-                ],
-                "default": null
-              }
-            },
-            "required": [
-              "tenure",
-              "slotCreationId"
             ],
             "additionalProperties": false,
             "default": null
@@ -6918,6 +6659,35 @@
         "rows"
       ],
       "additionalProperties": false
+    },
+    "links": {
+      "description": "The screen links.",
+      "type": "array",
+      "items": {
+        "description": "A cable-linked group of screens whose machines advance as one interleaved unit. The binder steps the link, never its members individually, so the engine\u0027s deterministic interleave \u2014 not the host\u0027s frame order \u2014 decides who runs when. Every member must resolve to a machine from the same engine, and that engine must implement IMachineLinkingEngine; a link whose members do not currently satisfy that is reported dormant, never silently dropped.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "description": "The link\u0027s stable kebab-case name (its mutation address).",
+            "type": "string"
+          },
+          "screens": {
+            "description": "The engine screen indices in cable order (2 or more, no duplicates).",
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          }
+        },
+        "required": [
+          "name",
+          "screens"
+        ],
+        "additionalProperties": false
+      }
     },
     "hud": {
       "description": "The HUD section.",
@@ -7977,10 +7747,6 @@
                             "attach": {
                               "$ref": "#/properties/placements/items/properties/attach",
                               "default": null
-                            },
-                            "contribution": {
-                              "$ref": "#/properties/placements/items/properties/contribution",
-                              "default": null
                             }
                           },
                           "required": [
@@ -8277,11 +8043,6 @@
               "null"
             ],
             "default": null
-          },
-          "livenessGraceSeconds": {
-            "description": "How long this edge may go without a delivered neighbour refresh before the world calls the link dropped \u2014 the authored threshold behind the linkEstablished/linkDropped world event family and the $link:\u003Cname\u003E reserved rule channel (LinkPrefix). Authored in seconds \u2014 a physical unit, so a world\u0027s SimulationRateHz can change without silently retuning the window \u2014 and compiled per document through AdjacencyLivenessGraceTicks, exactly the population.reconnectGraceSeconds idiom. 0 (the default) disables liveness sensing for this edge outright: no link edge is emitted for it and $link: reads 0 forever, so a world authoring none is unchanged. Per row, not per world: each seam carries its own tolerance. A world whose rate is 0 has no tick mapping for a positive value (see CompiledTickDuration), which reads as never dropped.",
-            "type": "number",
-            "default": 0
           }
         },
         "required": [
@@ -8350,6 +8111,7 @@
     "views",
     "looks",
     "lookAssignment",
+    "links",
     "hud"
   ],
   "additionalProperties": false,

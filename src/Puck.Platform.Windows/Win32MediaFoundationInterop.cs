@@ -33,7 +33,9 @@ internal static class MfInterop {
     // Per-stream frame-source classification (readable through IMFSourceReader.GetPresentationAttribute with a stream
     // index): a VT_UI4 flag set — Color = 0x1, Infrared = 0x2, Depth = 0x4.
     public static Guid MF_DEVICESTREAM_ATTRIBUTE_FRAMESOURCE_TYPES = new(g: "17145fd1-1b2b-423c-8001-2b6833ed3588");
+
     public const uint FrameSourceTypeInfrared = 0x2;
+
     // 8-bit luminance — the format IR streams commonly deliver; the video processor cannot always convert it to
     // RGB32, so the session may accept it natively and expand host-side.
     public static Guid MFVideoFormat_L8 = new(g: "00000032-0000-0010-8000-00aa00389b71");
@@ -136,18 +138,19 @@ internal static class MfInterop {
     /// <remarks>Some composite UVC cameras, including BRIO firmware, require the presentation descriptor and its
     /// media-type handler to be configured first; selecting the same stream only after reader creation is too late.</remarks>
     /// <param name="mediaSource">The activated capture source to inspect.</param>
-    /// <param name="streamIdentifier">The selected native stream identifier when the method returns <see langword="true"/>.</param>
+    /// <param name="streamIndex">The selected stream's zero-based presentation-descriptor index (the Source Reader's
+    /// <c>dwStreamIndex</c>, which is not the driver-assigned stream identifier) when the method returns <see langword="true"/>.</param>
     /// <param name="mediaType">The selected native L8 media type when the method returns <see langword="true"/>.</param>
     /// <param name="presentationDescriptor">The presentation descriptor that owns the selected stream when the method returns <see langword="true"/>.</param>
     /// <returns><see langword="true"/> when an L8 infrared stream was selected; otherwise, <see langword="false"/>.</returns>
     /// <exception cref="COMException">A Media Foundation operation fails while enumerating or selecting streams.</exception>
     public static bool TryPrepareInfraredStream(
         object mediaSource,
-        out uint streamIdentifier,
+        out uint streamIndex,
         [NotNullWhen(true)] out IMFMediaType? mediaType,
         [NotNullWhen(true)] out IMFPresentationDescriptor? presentationDescriptor
     ) {
-        streamIdentifier = 0;
+        streamIndex = 0;
         mediaType = null;
         presentationDescriptor = null;
 
@@ -158,16 +161,16 @@ internal static class MfInterop {
         Check(hr: source.CreatePresentationDescriptor(ppPresentationDescriptor: out var presentation));
         Check(hr: presentation.GetStreamDescriptorCount(pdwDescriptorCount: out var descriptorCount));
 
-        for (uint index = 0; index < descriptorCount; index++) {
+        for (uint index = 0; (index < descriptorCount); index++) {
             Check(hr: presentation.DeselectStream(dwDescriptorIndex: index));
         }
 
-        for (uint descriptorIndex = 0; descriptorIndex < descriptorCount; descriptorIndex++) {
+        for (uint descriptorIndex = 0; (descriptorIndex < descriptorCount); descriptorIndex++) {
             Check(hr: presentation.GetStreamDescriptorByIndex(dwIndex: descriptorIndex, pfSelected: out _, ppDescriptor: out var descriptor));
             Check(hr: descriptor.GetMediaTypeHandler(ppMediaTypeHandler: out var handler));
             Check(hr: handler.GetMediaTypeCount(pdwTypeCount: out var typeCount));
 
-            for (uint typeIndex = 0; typeIndex < typeCount; typeIndex++) {
+            for (uint typeIndex = 0; (typeIndex < typeCount); typeIndex++) {
                 Check(hr: handler.GetMediaTypeByIndex(dwIndex: typeIndex, ppType: out var candidate));
 
                 var subTypeKey = MF_MT_SUBTYPE;
@@ -178,10 +181,9 @@ internal static class MfInterop {
                     continue;
                 }
 
-                Check(hr: descriptor.GetStreamIdentifier(pdwStreamIdentifier: out var candidateStreamIdentifier));
                 Check(hr: presentation.SelectStream(dwDescriptorIndex: descriptorIndex));
                 Check(hr: handler.SetCurrentMediaType(pMediaType: candidate));
-                streamIdentifier = candidateStreamIdentifier;
+                streamIndex = descriptorIndex;
                 mediaType = candidate;
                 presentationDescriptor = presentation;
                 _ = Marshal.ReleaseComObject(o: handler);

@@ -65,7 +65,7 @@
           "null"
         ],
         "items": {
-          "description": "One machine-memory watch row \u2014 an addon\u0027s declaration of one byte range on one screen\u0027s machine to poll for value-changed edges (the achievements-shaped primitive: works on any ROM with a known memory layout). The address space is the machine\u0027s whole bus view (IMachineMemoryPeek already covers WRAM and external/battery RAM uniformly \u2014 a single flat address, never a split WRAM-vs-SRAM shape). The peek provider registers when the server-owned machine host composes a screen\u0027s machine, presentation and headless hosts alike (see Server.WorldEventFeed\u0027s own remarks).",
+          "description": "One machine-memory watch row \u2014 an addon\u0027s declaration of one byte range on one screen\u0027s machine to poll for value-changed edges (the achievements-shaped primitive: works on any ROM with a known memory layout). The address space is the machine\u0027s whole bus view (IMachineMemoryPeek already covers WRAM and external/battery RAM uniformly \u2014 a single flat address, never a split WRAM-vs-SRAM shape). Publishes nothing on a headless host: the peek provider is registered only when presentation composes a screen\u0027s machine (see Puck.World.WorldScreenBinder\u0027s registration and Server.WorldEventFeed\u0027s own remarks) \u2014 the retired arcade.world.json proof world this family was built for was local play, so this is a stated, permanent scope, not a gap to close later. No shipped world authors a memory-watch row today.",
           "type": [
             "object",
             "null"
@@ -92,11 +92,6 @@
           "additionalProperties": false
         },
         "default": null
-      },
-      "revision": {
-        "description": "The instance-revision token: any change from what a currently-mounted guest was prepared under means fresh guest instantiation (a clean reset to the module\u0027s initial state), even when every other field is unchanged. NOT promised monotonic: world.undo and a whole-document load legitimately move it backward (configuration undo, not time travel \u2014 the pre-undo guest\u0027s memory is not part of the document and is never restored), while an author driving it forward is expected to increment with checked overflow so a wrapped value can never alias an earlier revision. Defaults to 0.",
-        "type": "integer",
-        "default": 0
       }
     },
     "required": [
