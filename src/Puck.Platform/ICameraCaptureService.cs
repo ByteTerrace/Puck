@@ -26,16 +26,19 @@ public interface ICameraCaptureService {
     /// <param name="session">When this returns <see langword="true"/>, the opened live session; otherwise <see langword="null"/>.</param>
     /// <returns><see langword="true"/> if a device was opened.</returns>
     bool TryOpenDefault(int requestedWidth, int requestedHeight, uint requestedRateHz, CameraSensor sensor, [NotNullWhen(true)] out ICameraCaptureSession? session);
-    /// <summary>Tries to open the default device's color and infrared streams through one capture graph. The open
-    /// succeeds only after both streams have produced a frame; drivers that expose both streams but can run only one
-    /// at a time are rejected. Each returned session is one sensor's view (negotiated independently per the
-    /// <see cref="TryOpenDefault"/> envelope rule); disposing both closes the graph.</summary>
+    /// <summary>Tries to open the default device's color and infrared sensors as one coordinated logical graph. A
+    /// Windows device that publishes a Face Authentication Profile V2 uses its driver-declared simultaneous format
+    /// pair and FaceAuth processing mode. A legacy provider that exposes its paired topology only to the Windows
+    /// biometric broker is not treated as a public dual-camera graph. The open succeeds only after both streams have
+    /// produced a frame. Each returned session is one sensor's view; disposing both closes the graph.</summary>
     /// <param name="colorWidth">The desired color extent's width.</param>
     /// <param name="colorHeight">The desired color extent's height.</param>
-    /// <param name="colorRateHz">The desired color capture rate; zero prefers the fastest mode.</param>
+    /// <param name="colorRateHz">The desired color capture rate; zero prefers the fastest mode. A simultaneous
+    /// FaceAuth profile instead uses its driver-declared color cadence.</param>
     /// <param name="infraredWidth">The desired infrared extent's width.</param>
     /// <param name="infraredHeight">The desired infrared extent's height.</param>
-    /// <param name="infraredRateHz">The desired infrared capture rate; zero prefers the fastest mode.</param>
+    /// <param name="infraredRateHz">The desired infrared capture rate; zero prefers the fastest mode. A simultaneous
+    /// FaceAuth profile instead uses the cadence required by its active illumination mode.</param>
     /// <param name="colorSession">The color sensor's session when the open succeeds.</param>
     /// <param name="infraredSession">The infrared sensor's session when the open succeeds.</param>
     /// <returns><see langword="true"/> if the device opened with both streams.</returns>

@@ -432,11 +432,16 @@ capture, or a jumbotron view — bound through `screen.source <index> <kind>`
 present machine first, through the ordered domain) and `screen.eject` (which
 routes to whichever half — machine or
 local producer — actually holds the slot). A camera source row picks its
-`sensor` (`color` default, or `infrared` — its own shared feed; a two-sensor
-open is admitted only after both frame-server readers produce a frame, and
-a device that cannot stream both concurrently keeps the first requested
-sensor while the other faults by name; an absent IR source faults that
-feed loudly) and may author `controls` (the standard
+`sensor` (`color` default, or `infrared` — its own shared feed; two-sensor
+worlds prefer the device's Windows Face Authentication Profile V2 and its
+driver-declared simultaneous native format pair, then admit the capture only
+after both streams produce a frame. A legacy face-auth provider available only
+to the Windows biometric broker does not constitute a public dual-camera graph.
+Alternating IR uses 30 transport frames per second to supply 15 illuminated
+plus 15 ambient frames; a device that cannot stream the result keeps the first
+requested sensor while the other faults by name, and an absent IR source faults
+that feed loudly)
+and may author `controls` (the standard
 UVC pan/tilt/zoom/exposure/focus/color surface plus the vendor-extension
 `fieldOfView` in degrees and raw `vendor` selector/value rows,
 `WorldCameraControls`): the values land on the physical device once its

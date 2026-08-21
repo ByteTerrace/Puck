@@ -630,35 +630,25 @@ internal sealed partial class WorldScreenBinder {
             return null;
         }
 
-        // The OTHER sensor already streams: both sensors of one multiplexing device (the BRIO) cannot run as two
-        // independent sessions — each open kills the other's stream at the firmware — so entering two-sensor
-        // operation rebuilds BOTH feeds onto the platform's single-reader dual session (color rides the CPU tier in
-        // this mode). The feeds keep their object identity; only their sessions swap.
+        // The OTHER sensor already streams: a multiplexing device cannot run as two unrelated sessions, so entering
+        // two-sensor operation rebuilds BOTH feeds onto the platform's coordinated graph. The platform admits it only
+        // when a public driver profile sustains both streams and proves both live. The feeds keep their object identity;
+        // only their sessions swap.
         var other = ((WorldCameraSensor.Color == sensor) ? WorldCameraSensor.Infrared : WorldCameraSensor.Color);
 
         if (m_cameraFeeds.TryGetValue(key: other, value: out var otherFeed)) {
             var colorProfile = ((WorldCameraSensor.Color == sensor) ? profile : otherFeed.Profile);
             var infraredProfile = ((WorldCameraSensor.Infrared == sensor) ? profile : otherFeed.Profile);
-            var otherDeviceName = (otherFeed.Session?.Name ?? otherFeed.SharedSession?.Name);
-
-            // The platform has hardware-proven this model's single-pipe topology. Preserve an already-live first
-            // sensor instead of tearing it down for a dual upgrade that the platform will deterministically reject.
-            if (string.Equals(a: otherDeviceName, b: "Logitech BRIO", comparisonType: StringComparison.OrdinalIgnoreCase)) {
-                m_cameraFaults[sensor] = "the device did not provide concurrent color and infrared streams";
-
-                return null;
-            }
-
             // MediaCapture requests exclusive control. A live single-sensor session must release the device before a
-            // two-reader upgrade can be attempted; if the upgrade is refused, leave the established feed pending so
-            // the normal service path reopens it on the next publish.
+            // coordinated upgrade can be attempted; if it is refused, leave the established feed pending so the normal
+            // service path reopens it on the next publish.
             if ((otherFeed.Session is not null) || (otherFeed.SharedSession is not null)) {
                 otherFeed.ResetSessions();
                 otherFeed.GpuRoute = OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: 10240);
             }
 
             if (!TryEnterDualCamera(colorProfile: colorProfile, infraredProfile: infraredProfile, requestedProfile: profile, requestedSensor: sensor)) {
-                m_cameraFaults[sensor] = "the device did not provide concurrent color and infrared streams";
+                m_cameraFaults[sensor] = "the device did not provide coordinated color and infrared feeds";
 
                 return null;
             }
@@ -720,9 +710,9 @@ internal sealed partial class WorldScreenBinder {
 
         return (m_cameraFeeds.TryGetValue(key: sibling, value: out var feed) && feed.Live);
     }
-    // Rebuilds both sensors' feeds onto the platform's single-reader dual session (see EnsureCameraFeed's two-sensor
-    // note). Sessions swap IN PLACE on the existing feed objects — slots hold feed references, so a bound screen
-    // follows its feed across the swap; the requested sensor's feed is created here when it did not exist yet.
+    // Rebuilds both sensors' feeds onto the platform's coordinated dual session (see EnsureCameraFeed's two-sensor
+    // note). Sessions swap IN PLACE on the existing feed objects — slots hold feed references, so a bound screen follows
+    // its feed across the swap; the requested sensor's feed is created here when it did not exist yet.
     private bool TryEnterDualCamera(WorldFeedProfile colorProfile, WorldFeedProfile infraredProfile, WorldFeedProfile requestedProfile, WorldCameraSensor requestedSensor) {
         if (!m_cameraCapture.TryOpenDualDefault(
             colorWidth: colorProfile.Width,
@@ -748,7 +738,7 @@ internal sealed partial class WorldScreenBinder {
         infraredFeed.Session = infraredSession;
         _ = m_cameraFaults.Remove(key: WorldCameraSensor.Color);
         _ = m_cameraFaults.Remove(key: WorldCameraSensor.Infrared);
-        Console.Out.WriteLine(value: $"[camera] dual-sensor session: '{colorSession.Name}' color {colorSession.Width}x{colorSession.Height} + infrared {infraredSession.Width}x{infraredSession.Height} on one reader.");
+        Console.Out.WriteLine(value: $"[camera] dual-sensor session: '{colorSession.Name}' color {colorSession.Width}x{colorSession.Height} + infrared {infraredSession.Width}x{infraredSession.Height} on one coordinated graph.");
 
         return true;
     }

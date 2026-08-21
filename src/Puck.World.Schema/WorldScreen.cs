@@ -61,9 +61,10 @@ public abstract record WorldScreenSource {
     /// <param name="Sensor">Which physical sensor this row's shared feed opens: <see cref="WorldCameraSensor.Color"/>
     /// (the default) or <see cref="WorldCameraSensor.Infrared"/> — the infrared frame source a Windows Hello capable
     /// device carries. Each sensor gets its own shared feed, so different rows may request different sensors at once;
-    /// the engine admits a two-sensor capture only after both streams prove live, and a device that cannot stream both
-    /// concurrently keeps the first requested sensor while the other faults by name. An absent infrared source
-    /// faults the bind loudly (the slot shows the no-signal card).</param>
+    /// the engine honors a Windows Face Authentication Profile V2 when published and admits simultaneous capture only
+    /// after both native streams prove live. A legacy provider available only to the Windows biometric broker is not a
+    /// public dual-camera graph. An absent infrared source faults the bind loudly (the slot shows the no-signal card).
+    /// </param>
     public sealed record Camera(WorldFeedProfile Profile,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCameraControls? Controls = null,
         WorldCameraSensor Sensor = WorldCameraSensor.Color) : WorldScreenSource;
