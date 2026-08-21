@@ -298,6 +298,7 @@ internal sealed class Win32FaceAuthenticationSharedGraph : Win32FaceAuthenticati
 
             converter ??= new Win32D3D11CameraFrameConverter(
                 adapterLuid: m_adapterLuid,
+                colorimetry: native.Colorimetry,
                 height: native.Height,
                 sourceTexture: texture,
                 subtype: native.CaptureFormat.Subtype,

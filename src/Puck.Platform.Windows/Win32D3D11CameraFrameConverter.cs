@@ -22,23 +22,39 @@ namespace Puck.Platform.Windows;
 /// image into the cross-device shared ring. All work and completion waits stay on the dual-camera poll thread.</summary>
 [SupportedOSPlatform("windows10.0.19041")]
 internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
-    // Limited-range BT.601 (the transport both UVC color subtypes carry), shared by every color kernel so the two
-    // cannot drift apart; chroma arrives biased by 0.5.
-    private const string ColorMath = """
+    private const string LimitedRangeMath = """
         float3 YuvToRgb(float y, float u, float v) {
-            u -= 0.5;
-            v -= 0.5;
             y = max(0.0, ((y * 255.0) - 16.0) / 219.0);
+            u = ((u * 255.0) - 128.0) / 224.0;
+            v = ((v * 255.0) - 128.0) / 224.0;
+
+        """;
+    private const string FullRangeMath = """
+        float3 YuvToRgb(float y, float u, float v) {
+            u = ((u * 255.0) - 128.0) / 255.0;
+            v = ((v * 255.0) - 128.0) / 255.0;
+
+        """;
+    private const string Bt709MatrixMath = """
             return saturate(float3(
-                y + (1.596 * v),
-                y - (0.392 * u) - (0.813 * v),
-                y + (2.017 * u)
+                y + (1.5748 * v),
+                y - (0.187324 * u) - (0.468124 * v),
+                y + (1.8556 * u)
+            ));
+        }
+
+        """;
+    private const string Bt601MatrixMath = """
+            return saturate(float3(
+                y + (1.402 * v),
+                y - (0.344136 * u) - (0.714136 * v),
+                y + (1.772 * u)
             ));
         }
 
         """;
     // YUY2 viewed as R8G8B8A8 at half width: each texel is one two-pixel macropixel, Y0/U/Y1/V.
-    private const string PackedColorShader = ColorMath + """
+    private const string PackedColorKernel = """
         Texture2D<float4> Source : register(t0);
         RWTexture2D<float4> Target : register(u0);
 
@@ -55,7 +71,7 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
         """;
     // NV12: a full-resolution luma plane (R8) and a half-resolution interleaved chroma plane (R8G8), each bound as its
     // own view over the one NV12 texture — Direct3D selects the plane from the view format.
-    private const string PlanarColorShader = ColorMath + """
+    private const string PlanarColorKernel = """
         Texture2D<float> Luma : register(t0);
         Texture2D<float2> Chroma : register(t1);
         RWTexture2D<float4> Target : register(u0);
@@ -66,8 +82,26 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
             Target.GetDimensions(width, height);
             if (position.x >= width || position.y >= height) return;
 
+            uint chromaWidth, chromaHeight;
+            Chroma.GetDimensions(chromaWidth, chromaHeight);
+            float2 chromaPosition = ((float2(position.xy) - ChromaOffset) * 0.5);
+            int2 chromaBase = int2(floor(chromaPosition));
+            float2 chromaBlend = frac(chromaPosition);
+            int2 chromaMaximum = int2(chromaWidth - 1, chromaHeight - 1);
+            int2 chroma00 = clamp(chromaBase, int2(0, 0), chromaMaximum);
+            int2 chroma11 = clamp(chromaBase + 1, int2(0, 0), chromaMaximum);
+            float2 top = lerp(
+                Chroma.Load(int3(chroma00, 0)),
+                Chroma.Load(int3(chroma11.x, chroma00.y, 0)),
+                chromaBlend.x
+            );
+            float2 bottom = lerp(
+                Chroma.Load(int3(chroma00.x, chroma11.y, 0)),
+                Chroma.Load(int3(chroma11, 0)),
+                chromaBlend.x
+            );
             float y = Luma.Load(int3(position.xy, 0));
-            float2 uv = Chroma.Load(int3(position.xy >> 1, 0));
+            float2 uv = lerp(top, bottom, chromaBlend.y);
             Target[position.xy] = float4(YuvToRgb(y, uv.x, uv.y), 1.0);
         }
         """;
@@ -104,7 +138,7 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
 
     private ID3D11Texture2D*[] m_targets = [];
 
-    public Win32D3D11CameraFrameConverter(nint sourceTexture, long adapterLuid, int width, int height, string subtype) {
+    public Win32D3D11CameraFrameConverter(nint sourceTexture, long adapterLuid, int width, int height, string subtype, Win32CameraColorimetry colorimetry) {
         m_height = height;
         m_width = width;
 
@@ -112,7 +146,7 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
         var description = default(D3D11_TEXTURE2D_DESC);
 
         source->GetDesc(pDesc: &description);
-        var (requiredFormat, viewFormats, shaderSource) = Kernel(subtype: subtype);
+        var (requiredFormat, viewFormats, shaderSource) = Kernel(colorimetry: colorimetry, subtype: subtype);
 
         if (
             (description.Width != width) ||
@@ -168,7 +202,13 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
 
                 ID3D11ShaderResourceView* inputView = null;
 
+                // CsWin32's generated COM projection throws on a failed HRESULT. Keep the postcondition explicit too:
+                // a missing plane must refuse this converter so the graph reopens on the CPU tier.
                 device->CreateShaderResourceView(pResource: ((ID3D11Resource*)input), pDesc: &inputViewDescription, ppSRView: &inputView);
+                if (inputView is null) {
+                    throw new InvalidOperationException(message: $"D3D11 camera plane {index} view creation returned no view");
+                }
+
                 inputViews[index] = inputView;
             }
 
@@ -220,9 +260,9 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
     // must deliver, the shader-resource views over it (bound at t0, t1, … in order), and the kernel that unpacks it.
     // A YUY2 view as R8G8B8A8 exposes each two-pixel macropixel as normalized Y0/U/Y1/V components at half width; an
     // NV12 texture answers an R8 view with its luma plane and an R8G8 view with its half-resolution chroma plane.
-    private static (DXGI_FORMAT Surface, DXGI_FORMAT[] Views, string Shader) Kernel(string subtype) => (subtype.ToUpperInvariant() switch {
-        "YUY2" => (DXGI_FORMAT.DXGI_FORMAT_YUY2, [DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM], PackedColorShader),
-        "NV12" => (DXGI_FORMAT.DXGI_FORMAT_NV12, [DXGI_FORMAT.DXGI_FORMAT_R8_UNORM, DXGI_FORMAT.DXGI_FORMAT_R8G8_UNORM], PlanarColorShader),
+    private static (DXGI_FORMAT Surface, DXGI_FORMAT[] Views, string Shader) Kernel(string subtype, Win32CameraColorimetry colorimetry) => (subtype.ToUpperInvariant() switch {
+        "YUY2" => (DXGI_FORMAT.DXGI_FORMAT_YUY2, [DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM], ColorMath(colorimetry: colorimetry) + PackedColorKernel),
+        "NV12" => (DXGI_FORMAT.DXGI_FORMAT_NV12, [DXGI_FORMAT.DXGI_FORMAT_R8_UNORM, DXGI_FORMAT.DXGI_FORMAT_R8G8_UNORM], PlanarColorShader(colorimetry: colorimetry)),
         "L8" => (DXGI_FORMAT.DXGI_FORMAT_R8_UNORM, [DXGI_FORMAT.DXGI_FORMAT_R8_UNORM], InfraredShader),
         _ => throw new NotSupportedException(message: $"no GPU conversion kernel for the native camera subtype '{subtype}'"),
     });
@@ -352,6 +392,23 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
     }
 
     private static ID3D11ComputeShader* CompileShader(ID3D11Device* device, string source) {
+        var code = CompileShaderBytecode(source: source);
+
+        try {
+            ID3D11ComputeShader* shader = null;
+
+            device->CreateComputeShader(pShaderBytecode: code->GetBufferPointer(), BytecodeLength: code->GetBufferSize(), pClassLinkage: null, ppComputeShader: &shader);
+
+            if (shader is null) {
+                throw new InvalidOperationException(message: "D3D11 camera shader creation returned no shader");
+            }
+
+            return shader;
+        } finally {
+            Release(value: code);
+        }
+    }
+    private static ID3DBlob* CompileShaderBytecode(string source) {
         var bytes = Encoding.UTF8.GetBytes(s: source);
         ID3DBlob* code = null;
         ID3DBlob* errors = null;
@@ -382,15 +439,37 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
                 }
             }
 
-            ID3D11ComputeShader* shader;
+            if (code is null) {
+                throw new InvalidOperationException(message: "camera conversion shader compilation returned no bytecode");
+            }
 
-            device->CreateComputeShader(pShaderBytecode: code->GetBufferPointer(), BytecodeLength: code->GetBufferSize(), pClassLinkage: null, ppComputeShader: &shader);
-
-            return shader;
+            return code;
+        } catch {
+            Release(value: code);
+            throw;
         } finally {
             Release(value: errors);
-            Release(value: code);
         }
+    }
+    internal static string ShaderForTesting(string subtype, Win32CameraColorimetry colorimetry) => Kernel(colorimetry: colorimetry, subtype: subtype).Shader;
+    internal static void ValidateShaderForTesting(string subtype, Win32CameraColorimetry colorimetry) {
+        var code = CompileShaderBytecode(source: ShaderForTesting(colorimetry: colorimetry, subtype: subtype));
+
+        Release(value: code);
+    }
+    private static string ColorMath(Win32CameraColorimetry colorimetry) {
+        var conversion = colorimetry.Resolve();
+        var range = ((Win32YuvRange.Limited == conversion.Range) ? LimitedRangeMath : FullRangeMath);
+        var matrix = ((Win32YuvMatrix.Bt709 == conversion.Matrix) ? Bt709MatrixMath : Bt601MatrixMath);
+
+        return (range + matrix);
+    }
+    private static string PlanarColorShader(Win32CameraColorimetry colorimetry) {
+        var conversion = colorimetry.Resolve();
+        var horizontalOffset = (conversion.ChromaHorizontallyCosited ? "0.0" : "0.5");
+        var verticalOffset = (conversion.ChromaVerticallyCosited ? "0.0" : "0.5");
+
+        return (ColorMath(colorimetry: colorimetry) + $"static const float2 ChromaOffset = float2({horizontalOffset}, {verticalOffset});\n\n" + PlanarColorKernel);
     }
     private static ID3D10Multithread* ProtectMultithreaded(ID3D11Device* device) {
         var iid = ID3D10Multithread.IID_Guid;

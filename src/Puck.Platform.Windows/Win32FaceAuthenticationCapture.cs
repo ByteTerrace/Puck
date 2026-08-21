@@ -132,6 +132,7 @@ internal sealed class Win32FaceAuthenticationCapture : IDisposable {
                 RateHz: FrameRateHz(format: format),
                 Subtype: format.Subtype
             ),
+            Colorimetry: Win32CameraColorimetry.From(format: format),
             Description: DescribeFormat(format: format),
             Height: height,
             Reader: reader,
@@ -320,6 +321,7 @@ internal sealed class Win32FaceAuthenticationCapture : IDisposable {
 /// <summary>One native stream in a coordinated Face Authentication capture.</summary>
 internal readonly record struct Win32FaceAuthenticationStream(
     CameraCaptureFormat CaptureFormat,
+    Win32CameraColorimetry Colorimetry,
     string Description,
     int Height,
     MediaFrameReader Reader,
