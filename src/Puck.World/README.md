@@ -437,8 +437,10 @@ worlds prefer the device's Windows Face Authentication Profile V2 and its
 driver-declared simultaneous native format pair, then admit the capture only
 after both streams produce a frame. A legacy face-auth provider available only
 to the Windows biometric broker does not constitute a public dual-camera graph.
-Alternating IR uses 30 transport frames per second to supply 15 illuminated
-plus 15 ambient frames; a device that cannot stream the result keeps the first
+Alternating IR strobes the illuminator across the declared transport rate, so
+half the frames arrive ambient and only the illuminated half ever publishes
+(a Surface declares 60 fps IR, so 30 lit frames reach the feed); a device
+that cannot stream the result keeps the first
 requested sensor while the other faults by name, and an absent IR source faults
 that feed loudly)
 and may author `controls` (the standard
