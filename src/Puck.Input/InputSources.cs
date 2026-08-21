@@ -304,4 +304,19 @@ public static class InputSources {
         [InputSourceValue(kind: CommandValueKind.Digital)]
         public const string TouchpadLeft = "gamepad.touchpadLeft";
     }
+    /// <summary>
+    /// Camera-probes axes — an open-ended family minted by a world document's own <c>probes.bindings[].source</c>
+    /// row rather than a fixed constant set. Every id resolves to <see cref="CommandValueKind.Axis1D"/>, non-relative
+    /// (a deflection about a neutral, like a stick, never a delta).
+    /// </summary>
+    public static class Probe {
+        /// <summary>Gets the source id for a sense axis.</summary>
+        /// <param name="name">The axis binding row's own <c>source</c> name.</param>
+        /// <returns>The source id <c>probe.&lt;name&gt;</c>.</returns>
+        public static string Axis(string name) {
+            ArgumentException.ThrowIfNullOrEmpty(argument: name);
+
+            return $"probe.{name}";
+        }
+    }
 }

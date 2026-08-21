@@ -592,6 +592,11 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
 
+        ValidateProbes(
+            definition: definition,
+            errors: errors
+        );
+
         ValidateRenderLighting(
             definition: definition,
             lighting: definition.Render.Lighting,

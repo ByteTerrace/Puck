@@ -108,6 +108,16 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldJudgeRow))]
 [JsonSerializable(typeof(WorldAudioDefaults))]
 [JsonSerializable(typeof(WorldAudioCue))]
+// The probes section rows (the document `probes` section). WorldProbeInput.Camera collides by simple name with
+// WorldScreenSource.Camera; explicit TypeInfoPropertyName entries resolve the source-gen collision (SYSLIB1031),
+// following the WorldSpeaker/WorldLook precedent above, and are applied uniformly across every arm here.
+[JsonSerializable(typeof(WorldProbe))]
+[JsonSerializable(typeof(WorldProbeInput.Camera), TypeInfoPropertyName = "WorldProbeInputCamera")]
+[JsonSerializable(typeof(WorldProbeInput.Track), TypeInfoPropertyName = "WorldProbeInputTrack")]
+[JsonSerializable(typeof(WorldProbeBinding.Axis), TypeInfoPropertyName = "WorldProbeBindingAxis")]
+[JsonSerializable(typeof(WorldProbeBinding.Parameter), TypeInfoPropertyName = "WorldProbeBindingParameter")]
+[JsonSerializable(typeof(WorldProbeBinding.Control), TypeInfoPropertyName = "WorldProbeBindingControl")]
+[JsonSerializable(typeof(WorldProbeParameterTarget.Extension), TypeInfoPropertyName = "WorldProbeParameterTargetExtension")]
 // The host-section defaults row (the world.row.set host payload shape + the document `host` section). WorldBackendPreference
 // and SurfaceFormat ride explicit name-map converters (below) rather than the camelCase enum policy, which would emit
 // "directX" / "r8G8B8A8Unorm"; PresentMode keeps the generic camelCase converter (immediate/adaptive/…).

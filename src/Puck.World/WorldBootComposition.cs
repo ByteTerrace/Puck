@@ -15,6 +15,7 @@ using Puck.Overlays;
 using Puck.Platform;
 using Puck.Platform.Audio;
 using Puck.Platform.Linux;
+using Puck.Platform.Probes;
 using Puck.Platform.Windows;
 using Puck.SdfVm;
 using Puck.Shaders;
@@ -93,7 +94,7 @@ internal static class WorldBootComposition {
         // The rebind surface — player.bind (live session remap + chord rows) / player.bindings (echo the composed
         // active mapping) / player.signal (synthesized raw input over the pipe) / identity.bindings.save (fold
         // session rebinds into the seat's owned identity world). A SEPARATE module to keep each class
-        // under its analyzer ceilings. The router reaches the module LAZILY: the router's factory consumes the
+        // under its probe ceilings. The router reaches the module LAZILY: the router's factory consumes the
         // CommandRegistry, which aggregates every ICommandModule — a direct dependency would cycle the container.
         services.AddSingleton<Func<InputRouter>>(implementationFactory: static sp => (() => sp.GetRequiredService<InputRouter>()));
         // The registry reaches this module the same lazy way, for the same cycle: world.affordances reads the built
@@ -225,9 +226,29 @@ internal static class WorldBootComposition {
         // touch neither package.
         if (OperatingSystem.IsWindows()) {
             services.AddWindowsCameraCapture();
+
+            // The sense kernel host needs a device on a specific driver floor (windows10.0.19041) narrower than the
+            // camera capture branch above; guarded separately so a Windows build below that floor still boots with
+            // the null host (a KERNEL probe faults by name rather than never resolving one at all).
+            if (OperatingSystem.IsWindowsVersionAtLeast(
+                major: 10,
+                minor: 0,
+                build: 19041
+            )) {
+                services.AddWindowsProbes();
+            } else {
+                services.AddNullProbes();
+            }
         } else {
             services.AddLinuxCameraCapture();
+            services.AddNullProbes();
         }
+
+        // The camera-probes host: probe lifecycle, axis-to-command capture, and parameter/control writes — an
+        // ISnapshotInputCapture contribution both host loops service once per host frame. Core, not presentation:
+        // a track-input probe and its axis bindings need no window, and a camera-input probe headless simply
+        // faults by name (no camera GPU tier) while a parameter binding finds no composed pass to write.
+        services.AddWorldProbes();
 
         // The screen-machine engines — read from WorldScreenMachineEngines.All, the ONLY place a concrete engine type
         // is named in World (WorldDataHookInstaller reads the SAME list to install the load-time registered-key
@@ -296,7 +317,7 @@ internal static class WorldBootComposition {
         services.AddSingleton<ICommandModule, WorldPopulationCommandModule>();
         // The world-mutation verb surface — world.kit.default, world.population.defaults, world.placement.get,
         // world.grant.set/.remove, world.reset/.load/.reload/.undo/.save/.status/.references. A separate
-        // module from WorldCommandModule to keep that class under its analyzer ceilings.
+        // module from WorldCommandModule to keep that class under its probe ceilings.
         services.AddSingleton<ICommandModule, WorldMutationCommandModule>();
         // The general document-row verb pair — world.row.set/.remove — that replaced the one-verb-per-section RMW
         // sugar the console had accumulated (a dotted document member path selects the section), plus world.kits
@@ -883,6 +904,7 @@ internal static class WorldBootComposition {
                                     services: postRenderServices,
                                     width: width
                                 );
+                                sp.GetRequiredService<WorldPostRenderExtensionPasses>().Add(id: entry.Id, pass: (FullscreenPassNode)composed);
                             }
                         }
 

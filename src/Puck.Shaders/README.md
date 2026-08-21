@@ -134,24 +134,94 @@ untouched forwards the request to its inner node instead.
 Schema object; `manifest.TryBindConfig(config, out values, out reason)` is
 the non-throwing bind. `IShaderModuleLoader`/`ShaderModuleLoader` load and
 validate one shader stage's bytes from an `IAssetSource`, cached by content
-hash, for a caller building its own pipelines.
+hash, for a caller building its own pipelines. `pass.TrySetConfig(field,
+value)` overwrites one scalar-`float` config field's live value (and, when a
+push-constant slot sources it, the slot's bytes for the next frame) — the
+write a presentation binding drives per frame; it refuses an unknown field or
+any non-`float` type by return value. `pass.Config` reads the live values back.
 
 | Type | Role |
 |------|------|
 | `ShaderSetManifest` | A parsed, validated `puck.shader.v1` document with its resolved `PushConstantLayout` and load `Directory`. |
 | `ShaderSetCatalog` | The shipped sets under a directory tree, by id. |
 | `ShaderConfigField` / `ShaderConfigValues` | One config schema field; a document's bound values. |
+| `ShaderConfigBinding` | The config-schema binder every manifest with a `config` block shares — `TryBind`, `JsonSchema`, `ValidateSchema`. |
 | `ShaderPushConstantBlock` / `ShaderPushConstantField` / `ShaderPushConstantLayout` | The authored block; one field; the resolved offsets and parsed sources. |
 | `ShaderValueType` | `float`…`int4`, with component count and kind. |
 | `FullscreenPassNode` / `IFullscreenPassServices` | The node that runs a graphics set as one pass over an inner `IRenderNode`; its GPU seam. |
 | `IShaderModuleLoader` / `ShaderModuleLoader` / `ShaderStageInfo` / `ShaderStage` | Per-stage bytecode loading with content-hash caching. |
+| `ProbeKindManifest` / `ProbeKindCatalog` | A `puck.probe.v1` probe kind and the shipped kinds under a directory tree, by id. |
+
+## 👁️ Probe kinds (`puck.probe.v1`)
+
+An probe kind is data the same way a shader set is: one `<id>.puck.probe.json`
+manifest, found by `ProbeKindCatalog.Scan` under a deploy's `Assets/Probes`
+tree. A KERNEL-class kind also ships an HLSL source beside it — compiled at
+run time (`cs_5_0`) by a kernel host on the camera's own device, not by this
+project's build recipe. `Puck.World`'s probes document rows (`probes.
+probes[].kind`) select a kind by id; the document never states where it
+runs, only the kind's own `class`.
+
+```json
+{
+  "$schema": "puck.probe.v1",
+  "name": "ir-blob",
+  "class": "kernel",
+  "input": { "sensor": "infrared", "tier": "shared" },
+  "kernel": { "source": "ir-blob.hlsl", "accumulate": "accumulate", "finalize": "finalize" },
+  "channels": [
+    { "name": "x", "min": -1, "max": 1, "neutral": 0 },
+    { "name": "y", "min": -1, "max": 1, "neutral": 0 },
+    { "name": "coverage", "min": 0, "max": 1, "neutral": 0 },
+    { "name": "luminance", "min": 0, "max": 1, "neutral": 0 }
+  ],
+  "config": {
+    "threshold": { "type": "float", "default": 0.5, "min": 0, "max": 1 },
+    "minCoverage": { "type": "float", "default": 0.02, "min": 0, "max": 1 }
+  }
+}
+```
+
+| Key | Meaning |
+|-----|---------|
+| `$schema` | `puck.probe.v1`. |
+| `name` | The kind's id; must equal the file stem before `.puck.probe.json`. |
+| `class` | `kernel` (handwritten GPU compute on the camera's own device/thread) or `model` (an out-of-process host; no host runs a `model` kind yet). |
+| `input` | `{ sensor: "color"\|"infrared", tier: "shared" }` — which camera stream the kind reads, at the shared GPU tier. |
+| `kernel` | `{ source, accumulate, finalize }`, required for a `kernel`-class kind; `source` is an HLSL file beside the manifest. |
+| `channels[]` | `{ name, min, max, neutral, description }`, `1..8` entries (a `ProbeReading` carries at most 8 channels); `neutral` must lie in `[min, max]`. |
+| `config` | Same shape as a shader set's `config` — bound through the same `ShaderConfigBinding`. |
+
+### Kernel ABI
+
+A kernel's HLSL reads the manifest's declared bindings by convention, not
+reflection:
+
+| Binding | Declares |
+|---------|----------|
+| `Texture2D<float4> Source : register(t0)` | The camera's shared target the manifest's `input` names. |
+| `cbuffer ProbeConfig : register(b0)` | The bound config, packed via `ProbeKindManifest.ConstantsBlock` in declaration order (HLSL constant-buffer packing — the same rule as a shader set's push-constant block) and padded to a 16-byte multiple, the D3D11 constant-buffer granule. |
+| `RWStructuredBuffer<uint> Accumulate : register(u0)` | Scratch space, cleared before `accumulate` dispatches over the frame. |
+| `RWStructuredBuffer<float> Channels : register(u1)` | `channels.Count + 1` floats, written once by `finalize`: the kind's channels in declaration order, then confidence. |
+
+`ir-blob.hlsl` (the shipped `ir-blob` kind) is the reference: an 8×8
+`accumulate` pass weighs each pixel by how far its luminance clears
+`threshold`, group-reduces, and atomically adds fixed-point sums into
+`Accumulate` (the scale is derived from the frame's pixel count so no
+resolution overflows a `uint` slot); a single-thread `finalize` divides out
+the weighted centroid (`x` right-positive, `y` up-positive like a stick),
+the above-threshold coverage, and the mean luminance of the above-threshold
+pixels, and writes `Channels`. It measures the brightest lit mass over the
+infrared frame — not illumination-response (lit minus unlit) — because the
+FaceAuth camera graph publishes only the lit half.
 
 ## 🧪 Verification
 
 `dotnet test tests/Puck.Shaders.Tests -c Release`: the packing law against
 the compiled fixture, manifest loading and refusals, config binding and
-schema emission, catalog lookup. `puck parity` holds the film-grain pass to
-cross-backend agreement on the real windowed game.
+schema emission, catalog lookup, `FullscreenPassNode.TrySetConfig`, and the
+same for `ProbeKindManifest`/`ProbeKindCatalog`. `puck parity` holds the
+film-grain pass to cross-backend agreement on the real windowed game.
 
 ## 📦 Packaging
 

@@ -1,0 +1,23 @@
+{
+  "$schema": "./puck.world.def.v1.schema.json",
+  "basis": "brio-probe.world.json",
+  "documentId": "brio-probe-track",
+  "metadata": {
+    "description": "The brio-probe vertical replayed from a recorded puck.probe-track.v1 track instead of the live BRIO — the hardware-free leg.",
+    "tags": [
+      "camera",
+      "probes",
+      "track"
+    ],
+    "title": "BRIO Probe (track)"
+  },
+  "probes": [
+    {
+      "id": "head",
+      "input": {
+        "$type": "track",
+        "path": "../probes/tracks/brio-head.probe-track.json"
+      }
+    }
+  ]
+}

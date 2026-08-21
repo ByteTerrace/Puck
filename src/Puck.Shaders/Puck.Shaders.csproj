@@ -16,4 +16,10 @@
         <None Include="$(MSBuildThisFileDirectory)..\..\build\PuckShaderHashSidecars.cs" Pack="true" PackagePath="buildTransitive\PuckShaderHashSidecars.cs" Visible="false" />
         <None Include="$(MSBuildThisFileDirectory)..\..\build\Shaders.targets" Pack="true" PackagePath="buildTransitive\ByteTerrace.Puck.Shaders.targets" Visible="false" />
     </ItemGroup>
+    <ItemGroup>
+        <!-- puck.probe.v1 kind manifests and their kernel HLSL sources: plain content, never fed to the
+             HLSL-to-SPIR-V/DXIL recipe (build/Shaders.targets), since a kernel compiles at cs_5_0 on its own device
+             at run time (Win32D3D11ProbeKernelRunner), not ahead of time. -->
+        <Content Include="Assets\Probes\**" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
 </Project>

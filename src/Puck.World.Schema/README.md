@@ -54,6 +54,9 @@ seam one process wires and another does not cannot exist:
   `render.extensions[]` key against the catalogs in `Puck.World.Server`; those
   two arrive as parameters to the shared installer, since `Puck.World.Client`
   does not reference `Puck.World.Server` either.
+- `WorldProbeVocabularyHook.cs` checks a `probes[].kind` key
+  against the catalog in `Puck.World.Server`, the same required, arrives-as-a-
+  parameter shape `WorldExtensionVocabularyHook.cs` uses.
 
 Every validation path is covered without this project ever naming `Puck.Input`,
 `Puck.World.Client`, or `Puck.World.Protocol`.
@@ -78,7 +81,7 @@ the section list is the `WorldSection` enum in `WorldGrant.cs` (kits,
 screens, cameras, spawns, motion, population, render, addons,
 bindings, creations, placements, authoring, speakers, tunes, patches, audio,
 collision, host, views, looks, grants, hud, state, input hold, rules,
-groups, properties, interactions, player defaults, market). Worlds live as data
+groups, properties, interactions, player defaults, market, probes). Worlds live as data
 under `../Puck.World/Assets/worlds/`. Four are the four-world charter's whole
 game roster: `nexus` (the overworld hub — a floating island above a field of
 planetoids, and the shipped boot default; carries the `references` section
@@ -776,6 +779,27 @@ mutation (`UpsertWorldRule`/`RemoveWorldRule`, `Mutate`/`section:rules`); a
 rule's own EFFECTS act as `WorldPrincipal.World`, which the server's admission
 predicate exempts STRUCTURALLY — the same standing a per-body `ActionEffect`
 always had.
+
+## The `probes` section — probe and binding rows
+
+`WorldProbesSection` (`WorldProbes.cs`) declares two lists: `probes`
+(`WorldProbe` — an id, a registered kind, an input arm of
+`WorldProbeInput` (`camera { sensor }` or a recorded `track { path }`), a
+rate ceiling in Hz, and an opaque `config`) and `bindings` (`WorldProbeBinding`
+— `axis`, `parameter`, or `control`, each naming a declared probe and
+channel). A kind is checked against the registered vocabulary at load
+(`WorldProbeVocabularyHook.IsRegisteredProbeKind`, a required hook installed
+the same way `WorldExtensionVocabularyHook`'s post-render check is); a channel
+name is not — the manifest behind that hook is not reachable here, so a
+binding's `channel` is checked only for presence, and by name once a kind's own
+manifest is consulted at boot. An `axis` binding's `source` mints the bindable
+input source `probe.<source>` (`Puck.Input.InputSources.Probe.Axis`); a
+`parameter` binding's `target` must name an entry the document's own
+`render.extensions` composes; a `control` binding's `control` field must name a
+`WorldCameraControls` member. Like `judges`/`music`, the section is
+boot-authored only — no `WorldMutation` kind targets it and `world.row.set
+probes` refuses by name enumerating siblings — though it does carry its own
+`WorldSection.Probes` grant subject for a section-scoped hold.
 
 ## The egress documents — what leaves an authority
 

@@ -27,6 +27,10 @@ namespace Puck.Commands;
 /// </param>
 /// <param name="Transient">Whether an active analog sample is an impulse rather than persistent device state.
 /// Transient channel destinations receive an automatic inactive edge on the following tick.</param>
+/// <param name="Slot">The lane the signal addresses directly, for a source whose seat is authored rather than
+/// discovered (a document-bound sense measurement), or <see cref="UnresolvedSlot"/> to resolve the lane from
+/// <paramref name="DeviceId"/> through the slot resolver. An authored-lane signal never seats a device and never
+/// counts as player activity.</param>
 public readonly record struct InputSignal(
     string Source,
     InputDeviceId DeviceId,
@@ -34,8 +38,12 @@ public readonly record struct InputSignal(
     CommandPhase Phase,
     string? Text = null,
     ulong CaptureTick = 0UL,
-    bool Transient = false
+    bool Transient = false,
+    int Slot = InputSignal.UnresolvedSlot
 ) {
+    /// <summary>The <see cref="Slot"/> value meaning "resolve the lane from the device".</summary>
+    public const int UnresolvedSlot = -1;
+
     /// <summary>A two-dimensional axis activation (for example, a pointer delta), as a continuous update.</summary>
     public static InputSignal Axis(string source, Vector2 value, InputDeviceId deviceId = default, ulong captureTick = 0UL, bool transient = false) {
         return new InputSignal(

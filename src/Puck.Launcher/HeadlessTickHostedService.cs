@@ -13,8 +13,9 @@ namespace Puck.Launcher;
 /// <see cref="FixedStepPump"/> the windowed <see cref="LauncherWindowHostedService"/> drives, off a high-resolution
 /// waitable-timer wait instead of a present cadence — wall clock paces, it never enters simulation state
 /// (<see cref="TickClock"/> converts the sampled delta to engine ticks exactly, same as windowed). The console pump
-/// (stdin → <see cref="CommandRegistry"/>) runs every iteration exactly like the windowed loop, so a headless session
-/// is scriptable over stdin/stdout identically.
+/// (stdin → <see cref="CommandRegistry"/>) and every registered <see cref="ISnapshotInputCapture"/> contribution run
+/// every iteration exactly like the windowed loop, so a headless session is scriptable over stdin/stdout identically
+/// and a frame-serviced input source (a probes host's track playback) lands in the tape.
 /// </summary>
 public sealed class HeadlessTickHostedService : BackgroundService {
     private readonly IHostApplicationLifetime m_applicationLifetime;
@@ -26,6 +27,7 @@ public sealed class HeadlessTickHostedService : BackgroundService {
     private readonly IPrecisionWaiter? m_precisionWaiter;
     private readonly CommandRegistry m_registry;
     private readonly IFixedStepSimulation? m_simulation;
+    private readonly ISnapshotInputCapture[] m_snapshotInputCaptures;
     private readonly TerminalControl m_terminal;
     private readonly TextCommandSource m_textSource;
 
@@ -38,6 +40,7 @@ public sealed class HeadlessTickHostedService : BackgroundService {
         IEnumerable<InputRouter> inputRouters,
         IEnumerable<IFixedStepSimulation> simulations,
         IEnumerable<IPrecisionWaiter> precisionWaiters,
+        IEnumerable<ISnapshotInputCapture> snapshotInputCaptures,
         CommandRegistry registry,
         TextCommandSource textSource,
         TerminalControl terminal
@@ -50,6 +53,7 @@ public sealed class HeadlessTickHostedService : BackgroundService {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(precisionWaiters);
         ArgumentNullException.ThrowIfNull(registry);
+        ArgumentNullException.ThrowIfNull(snapshotInputCaptures);
         ArgumentNullException.ThrowIfNull(textSource);
         ArgumentNullException.ThrowIfNull(terminal);
 
@@ -65,6 +69,7 @@ public sealed class HeadlessTickHostedService : BackgroundService {
         m_options = options;
         m_precisionWaiter = precisionWaiters.FirstOrDefault();
         m_registry = registry;
+        m_snapshotInputCaptures = [.. snapshotInputCaptures];
         m_textSource = textSource;
         m_simulation = LauncherHostLoop.SingleOrDefault(
             items: simulations,
@@ -125,6 +130,7 @@ public sealed class HeadlessTickHostedService : BackgroundService {
             }
 
             var spinThreshold = ((frequency / 1000L) * LauncherHostLoop.SpinThresholdMilliseconds);
+            var hostFrame = 0UL;
             var nextDeadline = Stopwatch.GetTimestamp();
             var exitAfterTimestamp = ((m_options.ExitAfter is { } exitAfter)
                 ? (nextDeadline + ((long)(exitAfter.TotalSeconds * frequency)))
@@ -148,6 +154,14 @@ public sealed class HeadlessTickHostedService : BackgroundService {
                 if (m_terminal.TryConsumeExit()) {
                     break;
                 }
+
+                // The per-host-frame snapshot contributions (a probes host's track/axis servicing, for one), in the
+                // same place the windowed loop services them: after the text drain, before the due ticks apply.
+                for (var captureIndex = 0; (captureIndex < m_snapshotInputCaptures.Length); captureIndex++) {
+                    m_snapshotInputCaptures[captureIndex].CaptureFrame(frameKey: hostFrame);
+                }
+
+                hostFrame++;
 
                 var deltaTicks = clock.Sample();
                 // Re-resolved every iteration — see ResolveRatePerSecond's own remarks above.

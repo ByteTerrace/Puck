@@ -105,6 +105,33 @@ internal sealed partial class WorldScreenBinder {
         return (Ok: true, Message: $"screen {index} showing the {SensorName(sensor: sensor)} webcam");
     }
 
+    /// <summary>Reads one sensor's live camera attachment for the probes host: the shared-tier stream, its GPU
+    /// target handles, the render adapter's LUID, and the open device's control surface. A sensor with no feed or no
+    /// started shared-tier stream answers <see langword="false"/> with a default attachment — the probes host reads
+    /// that as "no camera GPU tier available yet" and records its own fault rather than throwing.</summary>
+    /// <param name="sensor">Which physical sensor to read.</param>
+    /// <param name="attachment">The live attachment, set only when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when a shared-tier stream is open for the sensor.</returns>
+    public bool TryGetCameraAttachment(WorldCameraSensor sensor, out WorldCameraAttachment attachment) {
+        if (
+            !m_cameraFeeds.TryGetValue(key: sensor, value: out var feed) ||
+            (feed.SharedStream is not { } shared)
+        ) {
+            attachment = default;
+
+            return false;
+        }
+
+        attachment = new WorldCameraAttachment(
+            AdapterLuid: m_renderAdapterLuid,
+            Controls: m_camera.Graph?.Controls,
+            Shared: shared,
+            SharedHandles: (feed.GpuTargets?.SharedHandles ?? []),
+            TargetSet: feed.GpuTargets
+        );
+
+        return true;
+    }
     // Services the device's lifecycle, then every sensor feed. Opens run on the thread pool (a Media Foundation open
     // can block for seconds proving a graph live); the render thread only adopts a finished open.
     private void CaptureCamera(IGpuDeviceContext deviceContext, IGpuComputeServices gpu) {
@@ -844,11 +871,16 @@ internal sealed partial class WorldScreenBinder {
         private readonly nint[]? m_importedViews;
         private readonly IGpuSurfaceImport[]? m_imports;
         private readonly Action<int> m_release;
+        private readonly nint[] m_sharedHandles;
         private readonly ICameraSharedStream m_stream;
 
         private bool m_disposed;
         private int m_outstanding;
         private bool m_retired;
+
+        /// <summary>Gets the ring's exportable target images' shared handles, in slot order — fixed for the life of
+        /// the set, so a per-frame reader never re-derives them.</summary>
+        public IReadOnlyList<nint> SharedHandles => m_sharedHandles;
 
         public CameraGpuTargetSet(IReadOnlyList<IGpuExportableStorageImage> images, nint[]? importedViews, IGpuSurfaceImport[]? imports, ICameraSharedStream stream) {
             m_images = images;
@@ -856,6 +888,11 @@ internal sealed partial class WorldScreenBinder {
             m_imports = imports;
             m_stream = stream;
             m_release = Release;
+            m_sharedHandles = new nint[images.Count];
+
+            for (var index = 0; (index < images.Count); index++) {
+                m_sharedHandles[index] = images[index].SharedHandle;
+            }
         }
 
         public void Retire() {

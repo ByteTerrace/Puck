@@ -19,7 +19,6 @@ namespace Puck.Shaders;
 /// </summary>
 public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
     private readonly IGpuCommandRecorder m_commandRecorder;
-    private readonly ShaderConfigValues m_config;
     private readonly Func<uint, uint, IGpuRenderTarget> m_createRenderTarget;
     private readonly NodeDescriptor m_descriptor;
     private readonly IGpuDescriptorAllocator m_descriptorAllocator;
@@ -40,6 +39,7 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
     private readonly uint m_width;
 
     private bool m_captureUnavailable;
+    private ShaderConfigValues m_config;
     private nint m_descriptorPool;
     private nint m_descriptorSet;
     private bool m_disposed;
@@ -47,6 +47,8 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
     private IGpuSubmissionFence? m_frameFence;
     private IGpuShaderModule? m_fragmentShader;
     private nint m_lastImageViewHandle;
+    private Dictionary<string, ShaderConfigValue>? m_liveConfig;
+    private Dictionary<string, byte[]>? m_liveConfigBytes;
     private string? m_pendingCapturePath;
     private IGpuPipeline? m_pipeline;
     private IGpuSurfaceReadback? m_readback;
@@ -106,6 +108,9 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
         FillStaticPushConstants();
     }
 
+    /// <summary>Gets the pass's live config values — the manifest's bound config, as overwritten by any
+    /// <see cref="TrySetConfig"/> call since.</summary>
+    public ShaderConfigValues Config => m_config;
     /// <inheritdoc/>
     public NodeDescriptor Descriptor => m_descriptor;
     /// <inheritdoc/>
@@ -178,6 +183,54 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
     /// <inheritdoc/>
     public void RequestCapture(string path) {
         m_pendingCapturePath = path;
+    }
+    /// <summary>Overwrites one scalar-float config field's live value, and — when a push-constant slot sources it —
+    /// the slot's bytes for the next frame. The write a presentation binding drives per frame; the manifest's
+    /// originally bound config is unaffected. Allocates only on a field's first write; later writes to the same
+    /// field update the live bytes in place.</summary>
+    /// <param name="field">The config field's name.</param>
+    /// <param name="value">The new value; must be finite and inside the field's declared range.</param>
+    /// <returns><see langword="true"/> when <paramref name="field"/> names a <c>float</c>-typed config field of this
+    /// pass's manifest and <paramref name="value"/> satisfies its schema; <see langword="false"/> for an unknown
+    /// field, any other type (a vector, <c>uint</c>, or <c>int</c> field), or a value the field's own
+    /// <c>min</c>/<c>max</c> would refuse at bind time.</returns>
+    public bool TrySetConfig(string field, float value) {
+        if ((m_manifest.Config is not { } schema) || !schema.TryGetValue(key: field, value: out var declared) || (declared.Type != ShaderValueType.Float)) {
+            return false;
+        }
+        if (!float.IsFinite(f: value) || !ShaderConfigBinding.InRange(field: declared, value: value)) {
+            return false;
+        }
+
+        if (m_liveConfig is not { } live) {
+            live = new Dictionary<string, ShaderConfigValue>(comparer: StringComparer.Ordinal);
+
+            foreach (var name in m_config.Names) {
+                live[name] = m_config[name];
+            }
+
+            m_liveConfig = live;
+            m_liveConfigBytes = new Dictionary<string, byte[]>(comparer: StringComparer.Ordinal);
+            m_config = new ShaderConfigValues(values: live);
+        }
+
+        if (!m_liveConfigBytes!.TryGetValue(key: field, value: out var bytes)) {
+            bytes = new byte[ShaderValueTypes.ComponentBytes];
+            m_liveConfigBytes[field] = bytes;
+            live[field] = new ShaderConfigValue(Type: ShaderValueType.Float, Bytes: bytes);
+        }
+
+        BinaryPrimitives.WriteSingleLittleEndian(destination: bytes, value: value);
+
+        if (m_pushConstantLayout is { } layout) {
+            foreach (var slot in layout.Slots) {
+                if ((slot.Kind == ShaderPushConstantSourceKind.Config) && string.Equals(a: slot.ConfigField, b: field, comparisonType: StringComparison.Ordinal)) {
+                    bytes.CopyTo(destination: m_pushConstantData.AsSpan(start: ((int)slot.Offset)));
+                }
+            }
+        }
+
+        return true;
     }
 
     // Reads back this pass's own render target (the composed result — what the player sees when nothing draws over

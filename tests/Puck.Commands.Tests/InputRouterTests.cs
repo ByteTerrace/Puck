@@ -44,6 +44,28 @@ public sealed class InputRouterTests {
         Assert.False(condition: router.IsCommandHeld(command: Command, slot: 0));
     }
     [Fact]
+    public void AuthoredLaneSignalBypassesTheSlotResolverAndLeavesNoPresence() {
+        // The resolver knows no device: an ordinary signal finds no lane, an authored-lane signal lands on its seat.
+        var router = new InputRouter(
+            registry: new CommandRegistry(modules: [new DigitalModule(command: Command)]),
+            bindings: new FixedBindings(binding: new CommandBinding(Command: Command)),
+            principalResolver: new ConsolePrincipal(),
+            slotResolver: static _ => -1
+        );
+        var device = InputDeviceId.FromConnectionKey(key: "sense:3");
+
+        router.Capture(signal: InputSignal.Press(source: "key.w", deviceId: device));
+        Assert.Empty(collection: router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue).Lanes);
+
+        router.Capture(signal: InputSignal.Press(source: "key.w", deviceId: device) with { Slot = 2 });
+
+        var lane = Assert.Single(collection: router.SnapshotForTick(tick: 2UL, windowEndTick: ulong.MaxValue).Lanes);
+
+        Assert.Equal(expected: 2, actual: lane.Slot);
+        Assert.True(condition: router.IsCommandHeld(command: Command, slot: 2));
+        Assert.False(condition: router.TryGetLastInputTick(slot: 2, tick: out _));
+    }
+    [Fact]
     public void DeviceDisconnectCancelsAndDropsTheHoldItCarried() {
         var router = new InputRouter(
             registry: new CommandRegistry(modules: [new DigitalModule(command: Command)]),

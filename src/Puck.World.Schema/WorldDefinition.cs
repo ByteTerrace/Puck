@@ -73,7 +73,8 @@ public sealed record WorldDefinition(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldUpdateDefaults? Update = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldMusicRow>? Music = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldJudgeRow>? Judges = null,
-    [property: JsonPropertyName("seatModes"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldSeatModeFamily>? SeatModesRaw = null
+    [property: JsonPropertyName("seatModes"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldSeatModeFamily>? SeatModesRaw = null,
+    [property: JsonPropertyName("probes"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldProbe>? ProbesRaw = null
 ) {
     /// <summary>The document schema version. A loader rejects any other value; the canonical writer always emits it.</summary>
     public const string SchemaVersion = "puck.world.def.v1";
@@ -309,6 +310,9 @@ public sealed record WorldDefinition(
     /// <summary>Gets the diegetic screens standing in the plaza — ABSENT resolves to none.</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldScreen> Screens => (ScreensRaw ?? []);
+    /// <summary>Gets the declared probe rows — ABSENT resolves to none.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<WorldProbe> Probes => (ProbesRaw ?? []);
     /// <summary>Gets the effective simulation rate in Hz — <see cref="Simulation"/>'s authored
     /// <see cref="WorldSimulationDefaults.RateHz"/>, or <c>0</c> (a resident, non-stepping world) when this world
     /// authors no <see cref="Simulation"/> section; the standard 240 Hz is authored in <c>standard.world.json</c>.

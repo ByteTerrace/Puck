@@ -403,13 +403,18 @@ public sealed class InputRouter {
     private void ApplySignal(Dictionary<int, List<CommandEntry>> workingBySlot, InputSignal signal, ulong tick, bool focusExemptOnly) {
         // Resolve activity before repeat de-duplication: an OS repeat is not a second command edge, but it is still
         // fresh physical activity for idle/away accounting.
-        var slot = m_slotResolver(arg: signal.DeviceId);
+        // An authored lane (InputSignal.Slot) is never a device: it bypasses the resolver, seats nothing, and does not
+        // count as the player's own activity.
+        var authoredLane = (signal.Slot >= 0);
+        var slot = (authoredLane ? signal.Slot : m_slotResolver(arg: signal.DeviceId));
 
         if (slot < 0) {
             return;
         }
 
-        m_lastInputTickBySlot[slot] = tick;
+        if (!authoredLane) {
+            m_lastInputTickBySlot[slot] = tick;
+        }
         var activeCommands = ModalityFor(slot: slot).ActiveCommands;
 
         var physicalControl = new HeldControlId(
@@ -569,10 +574,10 @@ public sealed class InputRouter {
                 sourceCommandActive &&
                 !acceptedBinding
             ) {
-                assignedSlot = (m_inputSlotResolver?.CommitSlot(
+                assignedSlot = (!authoredLane && (m_inputSlotResolver?.CommitSlot(
                     device: signal.DeviceId,
                     slot: slot
-                ) ?? false);
+                ) ?? false));
                 acceptedBinding = true;
             }
 

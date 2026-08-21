@@ -179,6 +179,9 @@
     "seatModes": {
       "$ref": "./schema/seatModes.schema.json"
     },
+    "probes": {
+      "$ref": "./schema/probes.schema.json"
+    },
     "basis": {
       "$ref": "./schema/basis.schema.json"
     },

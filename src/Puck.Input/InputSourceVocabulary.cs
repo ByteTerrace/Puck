@@ -171,6 +171,32 @@ public static class InputSourceVocabulary {
     private static bool TryResolveParametricKind(string sourceId, out CommandValueKind kind) {
         kind = default;
 
+        const string ProbePrefix = "probe.";
+
+        if (sourceId.StartsWith(comparisonType: StringComparison.Ordinal, value: ProbePrefix)) {
+            var name = sourceId.AsSpan(start: ProbePrefix.Length);
+
+            if (
+                name.IsEmpty ||
+                (name.Length > 64)
+            ) {
+                return false;
+            }
+
+            foreach (var character in name) {
+                if (
+                    !char.IsAsciiLetterLower(c: character) &&
+                    !char.IsAsciiDigit(c: character) &&
+                    (character != '-')
+                ) {
+                    return false;
+                }
+            }
+
+            kind = CommandValueKind.Axis1D;
+            return true;
+        }
+
         const string MouseButtonPrefix = "mouse.button";
 
         if (sourceId.StartsWith(comparisonType: StringComparison.Ordinal, value: MouseButtonPrefix)) {

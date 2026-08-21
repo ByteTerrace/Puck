@@ -15,7 +15,7 @@ namespace Puck.World;
 /// changes route <see cref="CommandRouting.Simulation"/> (they gate sim behavior) and apply synchronously at submit
 /// (like a command), so a following <c>world.grants</c> read behind the stdin barrier sees the settled table; the
 /// server prints the loud accept/reject line. This is a separate module from the mutation surface to keep both under
-/// their analyzer ceilings.
+/// their probe ceilings.
 /// </summary>
 /// <remarks>Principal tokens: <c>seat1</c>..<c>seat4</c> | <c>console</c> | <c>addon:&lt;name&gt;</c> |
 /// <c>peer:&lt;n&gt;:&lt;generation&gt;</c> (a population entity index and its current admission generation). Capability

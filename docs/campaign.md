@@ -67,6 +67,7 @@ come back.
 | Every world authors per-body action logic | the same documents' `actions` lanes carry `predicates`/`effects`; a quilt variant inherits its base's lanes through `basis` instead of repeating them |
 | **No shipped world authors WORLD-SCOPE rules** — none carries a `rules` or `interactions` section; the two scenario documents under `Assets/scenarios/` do | the same read; `rules.schema.json` and `interactions.schema.json` both exist |
 | Similar worlds compose instead of redefining everything — the five quilts are `basis` deltas over the `quilt-base` template | read any `quilt-*.world.json`'s `basis` member; `world.status` echoes `basis <path>`; `tests/Puck.World.Tests/DocumentBasisLawTests.cs` |
+| A camera reading reaches per-tick input and a presentation parameter — the `ir-blob` probe's `x` lands as seat 1's `turn` channel and its `luminance` drives `sdf-film-grain.intensity` | windowed on the BRIO: `(sleep 8; echo probe.status; echo 'player.channels 1'; echo wire.errors; sleep 3) \| dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/brio-probe.world.json --exit-after-seconds 16` — `probe.status` echoes `state=running tier=gpu`, its `axis head-x … captured=<v>` equals `player.channels`' `turn … h=<v>`, `parameter … writes=` is positive, `wire.errors: 0`; hardware-free: the same verbs against `brio-probe-track.world.json --headless` (the recorded `Assets/probes/tracks/brio-head.probe-track.json` drives the axis; parameter writes stay 0 headless by design); `tests/Puck.Platform.Windows.Tests/ProbeKernelRunnerTests.cs` proves the kernel's numbers on a synthetic frame |
 
 **The foundation is complete and overshot.** Three motion arms (grounded, vehicle, swim); the portal
 lane end to end — step into a frame and the whole party transfers, all-or-nothing across capacity
@@ -372,7 +373,7 @@ target policy must express as enforceable admission semantics before allocation)
 | Proximity co-location on the document's interaction flag, bound preemptively while people walk; occlusion-aware candidacy DERIVED from whether every declared interaction respects cover; transfer stability (asymmetric hysteresis + deterministic tie-break); co-location acceptance (a standing declaration in the body's own document, asymmetric, fails closed); junction headroom; contention facts with authored responses — a refusal must carry a consequence, or declining becomes the dominant strategy; adjacency as scheduling affinity; tick health as an observable fact | seamless crossing (shipped) |
 | Contact-counterpart / region-occupant targets | a body-to-body contact seam |
 | Threat tables | a keyed-table primitive; slots are scalars |
-| Spatial partitioning for proximity — nothing yet establishes the capacity-wide scan as the dominant cost; ranking separate from filtering | measurement |
+| Spatial partitioning for proximity — nothing yet establishes the capacity-wide scan as the dominant cost; ranking separate from filtering | reading |
 | Native AOT for the game | replacing reflection-based JSON and built-in COM interop |
 
 **Open questions** — each changes a design rather than a detail: the pre-allocation embodiment
@@ -388,7 +389,7 @@ perceive*.
 
 **Unmeasured, deliberately:** contact sampling budgets, the compound-collider volume ceiling,
 mirrored stamps doubling instance-grid contribution, per-tick input-hold bookkeeping, and N
-simulations per host. Measurement waits until the model stops moving.
+simulations per host. Reading waits until the model stops moving.
 
 ## Work list carried out of retired plans
 

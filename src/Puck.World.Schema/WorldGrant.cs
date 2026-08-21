@@ -185,6 +185,10 @@ public enum WorldSection : byte {
     /// <see cref="WorldPrincipal.World"/>, the same structural exemption <see cref="Groups"/>' escrow reclaim uses —
     /// never gated by a grant.</summary>
     Market,
+
+    /// <summary>The <c>probes</c> section — the probe and binding rows, targeted by the section-scoped grant
+    /// hold alone; no <c>WorldMutation</c> kind targets it yet (the section is boot-authored only).</summary>
+    Probes,
 }
 /// <summary>Which flavor of subject a <see cref="GrantSubject"/> addresses.</summary>
 public enum GrantSubjectKind : byte {

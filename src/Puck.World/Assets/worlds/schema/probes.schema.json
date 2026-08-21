@@ -1,0 +1,246 @@
+{
+  "type": [
+    "array",
+    "null"
+  ],
+  "items": {
+    "description": "One probes row: a registered probe kind reading a declared input at a bounded rate, and the bindings that route its channels. A world declares no probes rows when it wants no camera-derived reading at all. Boot-authored only: no WorldSection dispatch axis carries a live mutation kind for it yet (see Probes), the same standing judges carries.",
+    "type": [
+      "object",
+      "null"
+    ],
+    "properties": {
+      "id": {
+        "description": "The probe\u0027s own name \u2014 WorldSafeName-shaped, unique among the rows; probe.status and probe.record address it.",
+        "type": "string"
+      },
+      "kind": {
+        "description": "The registered probe kind id (a puck.probe.v1 manifest\u0027s file stem) \u2014 checked against the shipped vocabulary at document load (IsRegisteredProbeKind), never interpreted here. The document never states where the kind runs; the kind\u0027s own registration decides kernel-on-device versus out-of-process model.",
+        "type": "string"
+      },
+      "input": {
+        "description": "The stream this probe reads.",
+        "type": "object",
+        "required": [
+          "$type"
+        ],
+        "anyOf": [
+          {
+            "description": "Reads a physical camera\u0027s shared-tier stream \u2014 the same sensor a Camera row names.",
+            "properties": {
+              "$type": {
+                "const": "camera"
+              },
+              "sensor": {
+                "description": "Which physical sensor the probe reads.",
+                "enum": [
+                  "Color",
+                  "Infrared"
+                ]
+              }
+            },
+            "required": [
+              "sensor"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "description": "Plays a recorded puck.probe-track.v1 document instead of a live device \u2014 probe.record\u0027s own output shape.",
+            "properties": {
+              "$type": {
+                "const": "track"
+              },
+              "path": {
+                "description": "The track document\u0027s path, resolved against the world document\u0027s own directory.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "rateHz": {
+        "description": "The probe\u0027s cadence ceiling, 1..240 Hz \u2014 a rate its host may run slower than (latest-wins throughout the pipeline), never faster.",
+        "type": "integer"
+      },
+      "config": {
+        "description": "The kind\u0027s config values, or null when the kind declares none or every field has a default. Not validated at document load \u2014 the kind\u0027s own manifest config schema validates it at boot, matching Config\u0027s shallow-then-deep precedent.",
+        "default": null
+      },
+      "bindings": {
+        "description": "What this probe\u0027s channels drive, or null for a probe that is only read back.",
+        "type": [
+          "array",
+          "null"
+        ],
+        "items": {
+          "description": "One probes[].bindings row: routes one of the enclosing probe\u0027s channels to a command axis, a presentation parameter, or a camera control. The $type string is the JSON discriminator.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "required": [
+            "$type"
+          ],
+          "anyOf": [
+            {
+              "description": "Conditions a channel into a per-tick command axis, sampled through Puck.Commands exactly like a stick axis: deadband with hysteresis, optional fixed-point EMA, quantization, and a declared MaxAgeSeconds after which the axis returns to neutral and confidence to zero.",
+              "properties": {
+                "$type": {
+                  "const": "axis"
+                },
+                "channel": {
+                  "description": "The probe channel name \u2014 checked against the kind\u0027s manifest at boot, never here.",
+                  "type": "string"
+                },
+                "source": {
+                  "description": "The axis\u0027 own name \u2014 kebab-case, 1..64 characters, unique among every probe\u0027s axis bindings. Publishes the input source id probe.\u003CSource\u003E (Puck.Input.InputSources.Probe.Axis), an ordinary bindable Axis1D source any binding overlay may map like a stick.",
+                  "type": "string"
+                },
+                "deadband": {
+                  "description": "The deadband about the channel\u0027s neutral, in [0, 1) of the mapped [-1, 1] axis range.",
+                  "type": "number",
+                  "default": 0
+                },
+                "hysteresis": {
+                  "description": "The hysteresis band width, in [0, 1), applied at the deadband edge.",
+                  "type": "number",
+                  "default": 0
+                },
+                "smoothing": {
+                  "description": "The fixed-point EMA smoothing factor, in [0, 1] \u2014 0 disables smoothing.",
+                  "type": "number",
+                  "default": 0
+                },
+                "quantizeBits": {
+                  "description": "The output quantization width, 1..16 bits.",
+                  "type": "integer",
+                  "default": 8
+                },
+                "maxAgeSeconds": {
+                  "description": "How long a reading stays live before the axis returns to neutral and confidence to zero. Must be finite and positive.",
+                  "type": "number",
+                  "default": 0.25
+                },
+                "seat": {
+                  "description": "The 1-based local seat this axis is captured for.",
+                  "type": "integer",
+                  "default": 1
+                }
+              },
+              "required": [
+                "channel",
+                "source"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "description": "Writes a channel into a presentation-float shader-extension config field, lerped over Range. Presentation-only \u2014 the destination never feeds simulation state.",
+              "properties": {
+                "$type": {
+                  "const": "parameter"
+                },
+                "channel": {
+                  "description": "The probe channel name \u2014 checked against the kind\u0027s manifest at boot, never here.",
+                  "type": "string"
+                },
+                "target": {
+                  "description": "The presentation destination.",
+                  "type": "object",
+                  "required": [
+                    "$type"
+                  ],
+                  "anyOf": [
+                    {
+                      "description": "Writes a shader-extension config field on a composed render.extensions entry.",
+                      "properties": {
+                        "$type": {
+                          "const": "extension"
+                        },
+                        "id": {
+                          "description": "The render.extensions[].id entry this targets \u2014 must name an entry the document itself composes.",
+                          "type": "string"
+                        },
+                        "field": {
+                          "description": "The extension\u0027s config field name \u2014 checked against its manifest at boot, never here (the same shallow-then-deep precedent every kind-vocabulary field follows).",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "field"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "range": {
+                  "description": "The [min, max] presentation range a channel\u0027s mapped [-1, 1] axis value lerps across. Must be finite with X \u003C Y."
+                },
+                "maxAgeSeconds": {
+                  "description": "How long a reading stays live before this binding stops writing. Must be finite and positive.",
+                  "type": "number",
+                  "default": 0.5
+                }
+              },
+              "required": [
+                "channel",
+                "target",
+                "range"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "description": "Writes a channel onto the existing WorldCameraControls surface, mapped over [Minimum, Maximum].",
+              "properties": {
+                "$type": {
+                  "const": "control"
+                },
+                "channel": {
+                  "description": "The probe channel name \u2014 checked against the kind\u0027s manifest at boot, never here.",
+                  "type": "string"
+                },
+                "control": {
+                  "description": "The WorldCameraControls member this binding writes \u2014 one of pan, tilt, zoom, exposure, focus, brightness, contrast, saturation, sharpness, gain, whiteBalance, backlightCompensation, or fieldOfView.",
+                  "type": "string"
+                },
+                "minimum": {
+                  "description": "The control value a channel\u0027s mapped -1 resolves to.",
+                  "type": "integer"
+                },
+                "maximum": {
+                  "description": "The control value a channel\u0027s mapped 1 resolves to. Must exceed Minimum.",
+                  "type": "integer"
+                },
+                "maxAgeSeconds": {
+                  "description": "How long a reading stays live before this binding stops writing. Must be finite and positive.",
+                  "type": "number",
+                  "default": 0.5
+                }
+              },
+              "required": [
+                "channel",
+                "control",
+                "minimum",
+                "maximum"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "default": null
+      }
+    },
+    "required": [
+      "id",
+      "kind",
+      "input",
+      "rateHz"
+    ],
+    "additionalProperties": false
+  },
+  "default": null
+}

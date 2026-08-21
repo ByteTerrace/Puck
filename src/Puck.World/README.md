@@ -436,9 +436,10 @@ local producer — actually holds the slot). A camera source row picks its
 worlds prefer the device's Windows Face Authentication Profile V2 and its
 driver-declared simultaneous native format pair. On Windows, Puck first asks
 the frame server for both native GPU surfaces: YUY2 (BRIO) or NV12 (Surface)
-color and L8 IR are
-converted by D3D11 compute into private RGBA textures, copied into two shared
-three-slot rings, and sampled directly by either renderer without host pixels.
+color and L8 IR are converted by D3D11 compute with the native format's declared
+matrix, range, and chroma siting into private RGBA textures, copied into two
+shared three-slot rings, and sampled directly by either renderer without host
+pixels.
 Each sampled slot stays acquired until the SDF frame-ring fence proves that GPU
 submission retired, so camera and renderer cadence cannot race an overwrite;
 closing a graph likewise defers the ring's destruction across those frames.
@@ -512,6 +513,62 @@ and can reduce live throughput; `world.fps` exposes that impact while
 A `Timecode` overlay reads its own clock and is not rebased, while the
 container timeline is, so the burnt-in number leads playback position by the
 arm-to-first-packet latency.
+
+## Probes
+
+A document's optional `probes` rows (`WorldProbe`, boot-authored only) each
+declare a registered `puck.probe.v1` kind reading a camera sensor or a
+recorded `puck.probe-track.v1` track, and carry the bindings that route one of
+its channels to a command axis (a `probe.<name>` source, an
+ordinary bindable stick-like input any binding overlay may map), a
+presentation float (a `render.extensions` config field), or the existing
+camera control surface. `WorldProbes` services every declared row from the
+host loop's per-frame capture in both boot shapes (headless, a camera-input
+probe faults by name for want of a camera feed and a parameter binding
+finds no composed pass; a track-input probe and every axis binding run in
+full), polling `WorldScreenBinder.TryGetCameraAttachment` for a camera-input
+probe's live shared stream and (re)starting its `IProbeKernelHost` run when
+the attachment's target-ring generation changes. A probe is not a device and
+never occupies a seat: an axis binding addresses its authored seat's lane
+directly (`InputSignal.Slot`), its `probe:<seat>` device id is only the
+router's held-state key, it never counts as player activity, and it loses its
+carried sample whenever the terminal takes focus, exactly as a pad does. Shipped kinds are
+the lit-frame blob centroid `ir-blob` (bright-mass centroid/coverage/mean
+luminance of the above-threshold pixels over the FaceAuth infrared stream —
+the honest first kernel, since the off-limits FaceAuth graph publishes only
+the lit half, never a lit-minus-unlit illumination response) — GPU-tier only
+today.
+
+`probe.status` echoes every probe's run state (or fault), tier, rate,
+cycles/drops, latest capture age, channel values and confidence, and every
+binding's conditioned value and write count — a query, always echoing even
+under `wire.ack quiet`. `probe.record <probe> <path> <seconds>` arms a live
+recording of one probe's fresh readings to a `puck.probe-track.v1`
+document, sampled once per host frame (an probe faster than the host frame
+rate records its latest reading per frame); each sample carries its own
+capture time, and playback follows those times, so completion narrates on
+stderr with the sample count and the recorded cadence replays as recorded. The
+recorded document plugs into a track-input probe in place of a live device
+— the hardware-free proof leg every probe admits.
+
+`Assets/worlds/brio-probe.world.json` (basis `brio-dual.world.json`) is the
+end-to-end vertical: the `ir-blob` probe over the BRIO's infrared stream,
+bound to the seat's `turn` channel through an ordinary binding overlay
+(`probe.head-x`), `sdf-film-grain.intensity` (a presentation parameter), and
+`brightness` (a camera control). Run it windowed, in front of the camera:
+
+```
+dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/brio-probe.world.json --exit-after-seconds 16
+```
+
+`Assets/worlds/brio-probe-track.world.json` (basis `brio-probe.world.json`)
+swaps the `head` probe's input for the checked-in
+`Assets/probes/tracks/brio-head.probe-track.json` recording — the
+hardware-free leg, runnable headless on a machine with no camera:
+
+```
+dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/brio-probe-track.world.json --headless --exit-after-seconds 6
+```
 
 ## Graphics options
 
