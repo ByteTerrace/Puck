@@ -56,7 +56,7 @@ public sealed partial class WorldServer {
                 tick: tick,
                 connectionId: mutate.ConnectionId,
                 correlationId: mutate.CorrelationId,
-                preMetered: (mutate.SourceAddonIndex >= 0)
+                preMetered: (mutate.SourceAddonInstanceId >= 0L)
             ),
                 PendingOp.Rebuild rebuild => ApplyRebuild(
                 request: rebuild.Request,
@@ -72,21 +72,13 @@ public sealed partial class WorldServer {
                 connectionId: undo.ConnectionId,
                 correlationId: undo.CorrelationId
             ),
-                PendingOp.AddonLifecycle lifecycle => TryApplyAddonLifecycle(
-                lifecycle: lifecycle.Lifecycle,
-                principal: lifecycle.Principal,
-                connectionId: lifecycle.ConnectionId,
-                correlationId: lifecycle.CorrelationId
-            ),
                 _ => false,
             };
 
-            // An addon-lifecycle op never touches WorldDefinition (see TryApplyAddonLifecycle's own remarks), so its
-            // outcome must never fold into `applied` below — that flag exists to trigger ONE redundant-free
-            // DeliverDefinition when the document actually moved, and a mount/unmount redelivering the SAME
-            // definition would be a wasted send masquerading as a document change.
-            if (op is PendingOp.AddonLifecycle) {
-                continue;
+            // The tape's own completion field: fires exactly once, for exactly the ops ApplyEnvelope's own dispatch
+            // threaded one onto — see EnqueueMutation's own remarks.
+            if (op is PendingOp.Mutate { OutcomeObserved: { } outcomeObserved }) {
+                outcomeObserved(obj: ok);
             }
 
             // The addon mutation seam's I2: an addon-sourced Mutate op's OUTCOME — never its application, which
@@ -96,9 +88,9 @@ public sealed partial class WorldServer {
             // which verdict that staging will use. A well-formed mutation the document-apply pipeline itself
             // refused (a validation/capacity/cross-row failure — TryApplyMutation already printed the loud reason)
             // answers Rejected, distinct from every dispatch-door refusal the seam's earlier stages produce.
-            if ((op is PendingOp.Mutate { SourceAddonIndex: >= 0 } addonMutate)) {
+            if ((op is PendingOp.Mutate { SourceAddonInstanceId: >= 0L } addonMutate)) {
                 m_addons?.CompleteMutation(
-                    addonIndex: addonMutate.SourceAddonIndex,
+                    addonInstanceId: addonMutate.SourceAddonInstanceId,
                     actOrdinal: addonMutate.ActOrdinal,
                     applied: ok
                 );
@@ -979,15 +971,19 @@ public sealed partial class WorldServer {
     // envelope's connection/correlation identity (see EnqueueMutation's own remarks) so its eventual WorldEditEcho —
     // fired later, from inside DrainPendingOps, not at submit time — still names the right submitter.
     private abstract record PendingOp {
-        // SourceAddonIndex/ActOrdinal are the addon mutation seam's completion fields (Phase-3 plan AXIS 2, I1):
-        // -1/0 for every non-addon submitter (a console/client mutation has no act to complete). A Mutate op WITH a
-        // source addon carries them through DrainPendingOps -> WorldAddonRuntime.CompleteMutation so the reserved
-        // Answer cell EmitDisclosures already withheld space for gets its verdict staged at ResolveReads(T), for
-        // delivery in the guest's batch T+1 — never applied here, only routed.
-        public sealed record Mutate(WorldMutation Mutation, int ConnectionId, long CorrelationId, int SourceAddonIndex = -1, ushort ActOrdinal = 0) : PendingOp;
+        // SourceAddonInstanceId/ActOrdinal are the addon mutation seam's completion fields: -1/0 for every non-addon
+        // submitter (a console/client mutation has no act to complete). A Mutate op WITH a source addon carries them
+        // through DrainPendingOps -> WorldAddonRuntime.CompleteMutation so the reserved Answer cell EmitDisclosures
+        // already withheld space for gets its verdict staged at ResolveReads(T), for delivery in the guest's batch
+        // T+1 — never applied here, only routed. SourceAddonInstanceId names the mounted instance's own stable
+        // token (WorldAddonRuntime.MountedAddon.InstanceId), never a positional index — a queued removal or reorder
+        // draining ahead of this op must not deliver its completion to whatever guest now sits where the source
+        // guest used to. OutcomeObserved is the tape's own completion field (see EnqueueMutation's own remarks):
+        // non-null only for the one dispatch point (ApplyEnvelope) MutationTap already covers, invoked exactly
+        // once, right after this op's own TryApplyMutation outcome is known.
+        public sealed record Mutate(WorldMutation Mutation, int ConnectionId, long CorrelationId, long SourceAddonInstanceId = -1L, ushort ActOrdinal = 0, Action<bool>? OutcomeObserved = null) : PendingOp;
         public sealed record Rebuild(WorldRebuildRequest Request, WorldPrincipal Principal, int ConnectionId, long CorrelationId, string? ExpectedContentHash = null, string? PreparationFailure = null) : PendingOp;
         public sealed record Undo(int Count, WorldPrincipal Principal, int ConnectionId, long CorrelationId) : PendingOp;
-        public sealed record AddonLifecycle(WorldAddonLifecycle Lifecycle, WorldPrincipal Principal, int ConnectionId, long CorrelationId) : PendingOp;
     }
     // One entry in the ordered domain (see m_ordered's own remarks): the envelope plus the completion its submitter
     // supplied (null when the caller does not need one).

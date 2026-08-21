@@ -499,6 +499,21 @@ public sealed class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateResolver 
             return false;
         }
 
+        // The silo genuinely cannot mount an addon guest — refuse an initial candidate that names one enabled BY
+        // NAME, before any server exists to install it, rather than accepting the document and running it addon-
+        // less. WorldNoAddonHost.TryPrepare is the identical door the attached live host below enforces; reusing it
+        // here means this refusal and that one can never disagree.
+        if (!new WorldNoAddonHost().TryPrepare(
+            current: null,
+            candidate: definition!,
+            plan: out _,
+            reason: out var addonReason
+        )) {
+            Console.Error.WriteLine(value: $"[silo.activate: '{RowKey(identity: identity)}' refused (addon {addonReason})]");
+
+            return false;
+        }
+
         var checkpointBlob = await m_store.LoadLatestAsync(
             cancellationToken: ct,
             identity: identity
@@ -556,6 +571,13 @@ public sealed class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateResolver 
         }
 
         server.Neighbours = origin.Neighbours;
+        // Attached BEFORE journal-tail replay and live admission. TryApplyMutation and ApplyRebuild both refuse an
+        // addon-affecting operation outright when NO host is attached at all, so this is not what stops those two —
+        // it is what closes world.undo's own gap: WorldServer.AddonsCanPrepare treats a null m_addons as vacuously
+        // nothing to check, so an undo that restores an enabled addon row would otherwise install silently on a
+        // server with no host attached at all. WorldNoAddonHost.TryPrepare refuses that row BY NAME instead, the
+        // identical door the initial-candidate check above already used, so the two refusals can never disagree.
+        server.AttachAddons(runtime: new WorldNoAddonHost());
 
         if (checkpointBlob is { } tailBlob) {
             var tail = await m_store.LoadJournalTailAsync(

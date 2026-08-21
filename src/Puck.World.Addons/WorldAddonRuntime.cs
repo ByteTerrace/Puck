@@ -1,4 +1,3 @@
-using Puck.Assets;
 using Puck.Scripting;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -47,19 +46,33 @@ public sealed partial class WorldAddonRuntime : IWorldAddonHost {
     // body. Such an act was already answered when it was folded and takes no part in the second pass.
     private const int NoBody = -1;
 
-    // The world's own channel table, compiled once at construction — every guest's declared names resolve against
-    // it, at boot AND at a live Mount, so an act's ordinal IS a PlayerIntent ordinal on either path and the fold
-    // never needs a second mapping of its own.
-    private readonly WorldChannelTable m_channels;
-    private readonly List<MountedAddon> m_mounted = [];
-    // Recorded AT MOUNT, in mount order, for every guest that actually reached the tickable set — a row that faulted
-    // or failed to register produces no receipt, which is what makes a missing receipt the honest report of a mount
-    // that did not happen.
-    private readonly List<WorldAddonReceipt> m_receipts = [];
+    // The world's own channel table — every guest's declared names resolve against it, at boot AND at every later
+    // prepare, so an act's ordinal IS a PlayerIntent ordinal on either path and the fold never needs a second
+    // mapping of its own. Reassigned WHOLESALE by Commit, alongside m_mounted/m_receipts, when a prepare pass finds
+    // the candidate's own channel declarations changed (a whole-document rebuild/undo, never a live mutation — no
+    // live mutation kind touches the channels section for a running server's whole life).
+    private WorldChannelTable m_channels;
+    // The exact declaration list m_channels was last compiled from — TryPrepare's own channel-table dependency
+    // check compares a candidate's Channels against this by content, never by reference (a freshly deserialized
+    // rebuild/undo candidate never shares object identity with what booted).
+    private IReadOnlyList<WorldChannel> m_channelsSource;
     private readonly WorldServer m_server;
 
     private bool m_disposed;
     private AddonHost? m_host;
+    // The MountedAddon.InstanceId source: pre-incremented every time TryPrepare instantiates a genuinely fresh
+    // guest (never on a reuse, which carries the existing object and its existing id forward). Advances even inside
+    // a plan that is later discarded (a refused mutation, an undo probe) — the exact value is never printed or
+    // hashed, only compared for identity, so a gap left by a discarded plan costs nothing.
+    private long m_nextInstanceId;
+    // Both reassigned WHOLESALE by Commit — a single reference swap, never mutated element-by-element — so an
+    // unrelated read mid-tick (Mutations/Queries/Events/Pump, all in this partial class) always sees either the
+    // fully-prior or the fully-new set, never a half-built one.
+    private List<MountedAddon> m_mounted = [];
+    // Recorded AT MOUNT, in mount order, for every guest that actually reached the tickable set — a row that faulted
+    // or failed to prepare produces no receipt, which is what makes a missing receipt the honest report of a mount
+    // that did not happen.
+    private List<WorldAddonReceipt> m_receipts = [];
     // The addon mutation seam's GLOBAL per-tick byte meter — shared across every mounted addon, reset at the top of
     // each TickAddons call. AddonAbi.MaxMutationBytesPerTickAllAddons bounds host-side JSON decode work per tick
     // regardless of how many guests are mounted or how their individual per-addon budgets are set.
@@ -67,126 +80,8 @@ public sealed partial class WorldAddonRuntime : IWorldAddonHost {
 
     private WorldAddonRuntime(WorldDefinition definition, WorldServer server) {
         m_server = server;
-
-        // The world's own channel table is what every guest's declared names resolve against — compiled once here
-        // and handed to the host as the resolver, so an act's ordinal IS a PlayerIntent ordinal and the fold needs
-        // no second mapping of its own.
-        var channels = WorldChannelTable.Compile(channels: definition.Channels);
-
-        m_channels = channels;
-
-        // Mount order is DOCUMENT order, and it stays the order every pump point walks: an addon's position in the
-        // world file is the one thing an author controls about when its contribution lands relative to another's.
-        foreach (var row in definition.Addons) {
-            if (!row.Enabled) {
-                continue;
-            }
-
-            // Deferred host construction: only pay the Wasmtime engine when a world enables an addon. The host owns
-            // the engine and the loader shares it (the loader compiles modules the host instantiates); the host
-            // disposes the engine on Dispose.
-            if (m_host is null) {
-                var engine = new ScriptingEngine(options: ScriptingEngineOptions.Deterministic);
-
-                m_host = new AddonHost(
-                    channelResolver: new WorldAddonChannelResolver(channels: channels),
-                    engine: engine,
-                    loader: new WasmModuleLoader(
-                        engine: engine,
-                        assetSource: new FileSystemAssetSource()
-                    )
-                );
-            }
-
-            var descriptor = new AddonDescriptor(
-                Name: row.Name,
-                ModulePath: ResolvePath(modulePath: row.ModulePath),
-                // The document gate requires a hash; the empty→null translation stays defensive, because the neutral
-                // descriptor is reachable from hosts that have no document gate in front of them.
-                ModuleHash: (string.IsNullOrEmpty(value: row.Hash)
-                ? null
-                : row.Hash),
-                FuelPerTick: ((row.Fuel == 0UL)
-                ? null
-                : (long)row.Fuel),
-                Enabled: true
-            );
-
-            m_host.Add(descriptor: in descriptor);
-
-            if (!m_host.TryGet(
-                instance: out var instance,
-                name: row.Name
-            )) {
-                // Unreachable — Add registers under exactly this name — but the only mount outcome with no line
-                // would otherwise be this one, and a silent non-mount is the disease this surface exists to kill.
-                Console.Error.WriteLine(value: $"[world.addon: {row.Name} did not register under its own name after Add — not mounted]");
-
-                continue;
-            }
-
-            if (instance.State != AddonState.Enabled) {
-                Console.Error.WriteLine(value: $"[world.addon: {row.Name} faulted — {instance.Fault.Detail}]");
-
-                continue;
-            }
-
-            // A manifest that requests a capability but declares no Response channel can never receive a verdict,
-            // disclosure, or minted handle — every such answer routes through the Response channel (StageBatch
-            // below) — so refuse the mount rather than admit a guest permanently incapable of using anything it
-            // might be granted. A row with no requests at all is unaffected.
-            if (
-                (row.Requests is { Count: > 0 }) &&
-                (ResolveResponseChannel(instance: instance) < 0)
-            ) {
-                instance.Disable();
-                Console.Error.WriteLine(value: $"[world.addon: {row.Name} refused — requests {row.Requests.Count} capabilit{((row.Requests.Count == 1)
-                    ? "y"
-                    : "ies")} but declares no Response channel, so no verdict or disclosure could ever reach it and no requested handle could ever be learned; not mounted]");
-
-                continue;
-            }
-
-            // The capability disclosure — the whole point (the capability-channels campaign's "a manifest requests; a
-            // grant approves a subset; nothing is implicit"): reports what this addon's principal actually HOLDS in the
-            // SETTLED table (the permissive seed — empty for an addon — plus any WorldDefinition.Grants row the
-            // server's constructor already applied), matched against what the row's manifest asked for. Runs BEFORE
-            // Admit, so the report describes the table the guest's own puck_init will act against.
-            ReportCapabilityDisclosure(
-                name: row.Name,
-                requests: row.Requests,
-                grants: server.Grants
-            );
-
-            // Admission runs the guest's optional puck_init under the fuel budget, after every mount gate is in place.
-            // A trap here faults the instance exactly like a tick trap.
-            instance.Admit();
-
-            if (instance.State != AddonState.Enabled) {
-                Console.Error.WriteLine(value: $"[world.addon: {row.Name} faulted — {instance.Fault.Detail}]");
-
-                continue;
-            }
-
-            m_mounted.Add(item: new MountedAddon(
-                instance: instance,
-                requests: row.Requests,
-                populationCapacity: m_server.Population.Capacity,
-                memoryWatches: row.MemoryWatches
-            ));
-            // The receipt is taken from the INSTANCE, never from the row: the row is the author's pin, the instance is
-            // what mounted under it.
-            m_receipts.Add(item: new WorldAddonReceipt(
-                Name: instance.Name,
-                Hash: instance.Hash.ToString(),
-                Fuel: ((ulong)instance.FuelPerTick)
-            ));
-            Console.Error.WriteLine(value: $"[world.addon: mounted {row.Name} ({instance.Hash}) fuel {instance.FuelPerTick} — grant it a body to drive, e.g. world.grant addon:{row.Name} drive body:1 budget:60 (and observe body:1 budget:60 to let it read its pose — both are untrusted-principal dispatch budgets and are required)]");
-            ReportInertChannelDeclarations(
-                bindings: instance.ChannelBindings,
-                name: row.Name
-            );
-        }
+        m_channels = WorldChannelTable.Compile(channels: definition.Channels);
+        m_channelsSource = definition.Channels;
     }
 
     /// <summary>Gets a value indicating whether any mounted addon has ever had an admitted execution attempted — the OR of every mounted

@@ -10,7 +10,7 @@ boundary; this file carries the World-relevant surface.
 
 ## Contents
 
-- The row and mounting
+- The row, mounting, and the prepare/commit transaction
 - The three pump points
 - Channels and the wire
 - Requests, queries, verdicts
@@ -21,32 +21,98 @@ boundary; this file carries the World-relevant surface.
 - The shipped example
 - Puck.Scripting in one paragraph
 
-## The row and mounting
+## The row, mounting, and the prepare/commit transaction
 
 `WorldAddonRow(Name, ModulePath, Hash, Fuel, Enabled, Requests?,
-MemoryWatches?)`. The old lane axis is deleted. `Hash` is REQUIRED
-(`sha256-64/<16 hex>`):
-an unpinned guest makes state depend on a file on disk — a determinism hole
+MemoryWatches?, Revision)`. `Hash` is REQUIRED (`sha256-64/<16 hex>`): an
+unpinned guest makes state depend on a file on disk — a determinism hole
 before a security one. The hash is verified BEFORE descriptor decode, so
-the pin covers the channel table too; a mismatch is a load fault.
+the pin covers the channel table too; a mismatch is a load fault. `Revision`
+(`ulong`, default 0) is the instance-revision token: any change from what a
+currently-mounted guest was prepared under means fresh guest instantiation,
+even when every other field is unchanged — the document-authored equivalent
+of a reload. It is NOT promised monotonic (undo and a whole-document load
+legitimately move it backward — configuration undo, not time travel: the
+pre-undo guest's memory is not part of the document and is never restored);
+an author driving it forward is expected to increment with checked overflow.
 
-Mounting happens in `WorldAddonRuntime.Create(definition, server)` — called
-AFTER the `WorldServer` constructor has applied the document's grant rows,
-so the mount-time disclosure reports a settled table. Rows mount in
-document order; the Wasmtime host is constructed lazily on the first
-enabled row (an addon-free world pays nothing). Per-row gates: enabled →
-compile under the pin → the Response-channel gate (a row with `Requests`
-but no Response channel is refused at mount — no verdict could ever reach
-it) → the capability-disclosure line → `Admit()` (runs `puck_init` under
-fuel; init can never emit — the host zeroes the output ring before every
-tick) → receipt.
+**The doors are `world.row.set addons <row-json>` / `world.row.remove addons
+<name>`** — the ordinary document-mutation pipeline (`WorldMutation.UpsertAddon`/
+`RemoveAddon`), nothing else. There is no separate runtime-facing lifecycle
+surface: mounting, unmounting, reloading, enabling, and disabling an addon are
+all expressed through the SAME row, gated by `Enabled` and `Revision`. Mounting
+a guest — compile under the pin, ABI admit, instantiate, run `puck_init` — is
+prepared as the addon runtime's own half of `IWorldAddonHost.TryPrepare`, the
+LAST fallible gate `WorldServer.TryApplyMutation` runs (after authority,
+compose, whole-document validation, capacity, and solids). A LIVE mutation
+reaches it only when it touches the `addons` section (`UpsertAddon`/
+`RemoveAddon` — every other mutation kind never calls it); a whole-document
+swap (`world.reset`/`.load`/`.reload`, and the final step of `world.undo`)
+reaches it UNCONDITIONALLY, because any section can move a channel-table
+dependency the row-level predicate cannot see. Preparation builds a
+disposable, uncommitted `PreparedAddonInstall` covering the WHOLE runtime
+delta (every guest the candidate document would mount, plus the complete
+replacement `AddonHost` registry and, when the candidate's channel
+declarations moved, a freshly staged channel table and host). A row reuses
+its guest — memory AND fault state alike — only when it is STRUCTURALLY
+equal to the row that guest was last prepared under (every field, including
+`Requests`/`MemoryWatches` content) AND the channel table is unchanged;
+runtime fault state never participates, so a sticky-faulted guest stays
+faulted until ITS OWN row's structural identity moves, and resubmitting an
+identical row never resets a healthy guest's memory either. A channel-table
+change replaces every enabled row's guest at once, even one that compares
+structurally equal to its own prior self. `IWorldAddonHost.Commit` then
+publishes the whole plan by reference adoption alone — no I/O, allocation,
+compilation, or fallible call; narration and superseded-guest disposal wait
+for a separate `Finish` call the caller makes only after its own
+document/journal publication is itself durable. An enabled row that cannot
+prepare refuses the WHOLE mutation (or rebuild, or undo), the candidate
+discarded, the live document byte-identical, the tick surviving. A server
+with no addon host attached refuses an addon-affecting mutation by name
+rather than accepting it with no effect. A disabled row is never compiled —
+it reports `DISABLED` in `world.addons` (see "Verbs" below) but has no
+runtime entry.
 
-The disclosure line prints for EVERY row: requested vs granted vs withheld
-vs `holds beyond its manifest (inert — never materialized)`. **Requesting is
-not receiving** (deny-by-default regardless of manifest), and **a hold
-outside the manifest mints no handle** — authority materializes only at
-`requested ∧ granted`. See [authority.md](authority.md) for the untrusted
-class rules (budgets required, handles, reach masks, no wildcards).
+Boot uses the identical contract: `WorldAddonRuntime.TryCreate(definition, server)`
+(called AFTER the `WorldServer` constructor has applied the document's grant
+rows, so the mount-time disclosure reports a settled table) runs `TryPrepare`
+against no prior state and `Commit`s it — an enabled row that cannot prepare
+refuses the whole world installation rather than silently booting without it.
+The composition root (`WorldPostBuildWiring.Install`) resolves the runtime
+explicitly and turns that refusal into an ordinary attributed boot refusal
+(stderr line, clean non-crashing exit) — the same `false` + printed-reason
+shape every sibling boot gate uses; `Create` is the throwing wrapper
+`TryCreate` powers for the one caller (the replay tape's `addonHostFactory`
+delegate) that must return a value or throw. `world.undo` joins the same door: every addon-bearing
+intermediate journal candidate is proved via a throwaway prepare-and-dispose
+probe before the kept prefix is accepted, and the FINAL restored document runs
+one real prepare-and-commit: a kept journal entry whose pinned module has gone
+missing refuses the WHOLE undo. Per-row gates inside a prepare pass: enabled →
+compile under the pin → the Response-channel gate (a row with `Requests` but no
+Response channel refuses — no verdict could ever reach it) → the
+capability-disclosure line (staged as a thunk — evaluated only at `Finish`,
+against whatever grant table is live when it prints, so a rebuild's disclosure
+reads the candidate's own newly-installed grants)
+→ `Admit()` (runs `puck_init` under fuel, against the staged guest's own
+private memory only — no host imports, contributions, handles, or output
+escape) → receipt. Mount order is document order. The Wasmtime host is
+constructed lazily on the first prepare pass that actually needs one (an
+addon-free world pays nothing); a discarded plan disposes only the host IT
+itself constructed, never one it merely reused.
+
+**Narration is staged, not printed, until commit.** The mount/disclosure lines
+below are built during prepare (against the settled grant table, which cannot
+move before the caller's own synchronous commit) but held on the plan and
+printed only once `Commit` actually publishes it — a refused mutation must
+never have printed a mount claim that never became true.
+
+The disclosure line prints for EVERY freshly-prepared row: requested vs
+granted vs withheld vs `holds beyond its manifest (inert — never
+materialized)`. **Requesting is not receiving** (deny-by-default regardless of
+manifest), and **a hold outside the manifest mints no handle** — authority
+materializes only at `requested ∧ granted`. See [authority.md](authority.md)
+for the untrusted class rules (budgets required, handles, reach masks, no
+wildcards).
 
 ## The three pump points
 
@@ -150,76 +216,57 @@ capability), `Control = 1<<3`, `Mutate = 1<<4`, `Edit = 1<<5`.
 ## Fuel
 
 Per-row `Fuel` (0 → `AddonAbi.DefaultFuelPerTick` = 1,000,000). Measured
-every tick regardless of outcome (determinism); totals saturate. Exhaustion
-traps deterministically → `OutOfFuel`, a sticky fault: the guest is skipped
-every tick until `world.addon.enable` re-instantiates and re-admits (a
-genuine spin loop will exhaust again). Fuel bounds a guest's COMPUTE, never
-its authority.
+every tick regardless of outcome (determinism); totals saturate — a
+lifetime figure that survives an unrelated reprepare pass reusing this guest
+untouched (including a resubmission of the byte-identical row), and also
+survives a sticky fault (a faulted guest is reused, not rebuilt, by an
+unrelated reprepare pass — see "The row, mounting, and the prepare/commit
+transaction" above), but resets for a guest a reprepare actually
+re-instantiated (a `revision` bump or any other structural row change),
+since that is a genuinely fresh instance. Exhaustion traps deterministically
+→ `OutOfFuel`, a sticky fault: the guest is skipped every tick until its own
+row's structural identity moves (bump `revision`, or change any other
+field) — resubmitting the byte-identical row never restarts it. Fuel bounds
+a guest's COMPUTE, never its authority.
 
 ## Receipts and replay
 
 `WorldAddonReceipt(Name, Hash, Fuel)` — taken from the INSTANCE that
 mounted, never the row; only guests that reached the admitted set get one.
-The replay tape pins the receipts at record-start and refuses a re-drive
-whose fresh mounts disagree (see [replay.md](replay.md)). The ABI's
-`AbiVersion` (permanently `1`, a shape-identity token) and the tape magic
-are the two independent re-key boundaries, coupled one-way: an ABI break
-invalidates existing tapes through receipt mismatch even when the tape
-layout is untouched. `world.addon.reload`/`.enable`/`.disable` (the SIDE
-PATH) are REFUSED outright while a recording is armed — a live change
-through them is invisible to the tape, so `RefuseIfArmed` blocks the call
-rather than letting it silently invalidate the recording. `world.addon.mount`/
-`.unmount` are the opposite: NOT refused while
-armed, because they ride the tape through their own leaf codec and
-`WorldReplayEntry.AddonLifecycle` — a recorded mount/unmount is exactly what
-`replay.verify` re-executes, not a gap it has to guard against.
+The replay tape pins the receipts at record-start (and Drive re-checks them
+before tick zero on every re-drive) and refuses a re-drive whose fresh
+mounts disagree (see [replay.md](replay.md)). The ABI's `AbiVersion`
+(permanently `1`, a shape-identity token) and the tape magic are the two
+independent re-key boundaries, coupled one-way: an ABI break invalidates
+existing tapes through receipt mismatch even when the tape layout is
+untouched. A live `world.row.set addons`/`world.row.remove addons` mutation
+is captured and re-executed on replay through the ordinary tape-covered
+mutation leaf (see [replay.md](replay.md)'s mutation-outcome pin) — there is
+no separate lifecycle leaf left to reason about arming against.
 
 ## Verbs
 
-- `world.addon.mount <name> <modulePath> <hash> <fuel> [<capability>
-  <subject>]...` / `world.addon.unmount <name>` — the ORDERED-DOMAIN
-  lifecycle pair: a `WorldSubmissionPayload.AddonLifecycle` kind
-  (`Protocol.WorldAddonLifecycle.Mount`/`.Unmount`), one canonical leaf codec
-  in `WorldSubmissionCodec`. Simulation-routed but BUFFERED to the tick
-  boundary through `WorldServer.EnqueueAddonLifecycle` → `DrainPendingOps` —
-  the SAME door a document mutation drains through, gated on `Mutate` over
-  `section:addons` against the envelope's principal before the runtime is
-  touched, with the accept/reject line printed when the buffered op applies
-  (never a synchronous console return). `Mount` mirrors the boot-time
-  per-row sequence (lazy host, compile under the required hash pin, the
-  Response-channel-required-for-Requests gate, disclosure, admit) and
-  refuses a name already mounted — it never re-admits (`.reload` still owns
-  that). Trailing `<capability> <subject>` pairs declare the manifest,
-  reusing `world.grant`'s own token grammar (`WorldGrantCommandModule.TryParseCapability`/
-  `TryParseSubject`) — omit them for a guest that asks for nothing and
-  therefore reaches nothing (deny-by-default holds regardless of a later
-  grant). `Unmount` is STRONGER than `.disable`: the guest leaves
-  `Receipts`/`world.addons` entirely, not merely tracked-but-skipped. Both
-  are captured on the replay tape (see [replay.md](replay.md)) and are
-  therefore NOT refused while a recording is armed — a live mount/unmount
-  rides the tape now instead of invalidating it.
-- `world.addon.reload <name>` / `world.addon.enable <name>` /
-  `world.addon.disable <name>` — the SIDE PATH: Simulation-routed (so a
-  following `world.addons` read waits for settled state). Once the routed
-  handler runs, they apply synchronously by calling `WorldAddonRuntime` rather
-  than through an ordered-domain leaf; gated on `Mutate` over
-  `section:addons` against the acting principal BEFORE the runtime is
-  touched. Reload with an unchanged content hash reuses the module cache;
-  a hash-pinned content change refuses and leaves last-known-good mounted;
-  a successful re-admit replaces the mounted entry wholesale (carrying
-  forward only the saturating totals). Enable cannot recover a LOAD fault
-  (hash mismatch / bad export) — use reload. Because these three never
-  reach the ordered domain or the tape, `RefuseIfArmed` still refuses all
-  three outright while a `replay.record` is active — `world.addon.mount`/
-  `.unmount` are the ordered alternative that does not need that gate.
-  Unifying reload/enable/disable into the ordered domain, and unifying
-  mount/unmount with the pre-existing document-only `world.row.set addons`/
-  `.remove` mutations, are both open follow-ups, not done here.
-- `world.addons` — Immediate, ungated: per-guest
-  `<name> <ENABLED|DISABLED|FAULTED(detail)> fuel-budget fuel-last-tick
-  fuel-total answers-dropped-total` — the cost surface. A guest `.unmount`ed
-  no longer appears here at all; a `.disable`d guest still does, as
-  `DISABLED`.
+- `world.row.set addons <row-json>` / `world.row.remove addons <name>` — the
+  ONE door. `Enabled` and `Revision` express the whole lifecycle: an absent
+  row is unmounted; an `Enabled: false` row is disabled (never compiled); a
+  STRUCTURAL change to an already-mounted, still-enabled row (content,
+  `Revision`, or any other field — including `Requests`/`MemoryWatches`
+  content) is a reload — fresh guest instantiation, memory wiped, lifetime
+  fuel counters restarted; resubmitting the byte-identical row is a no-op
+  for the runtime (the existing guest, healthy or faulted, is reused
+  untouched). Buffers and applies at the tick boundary like any mutation;
+  the addon-prepare gate (see above) is the LAST fallible step, so a bad
+  row's refusal is loud, names the reason, and leaves the document (and the
+  mounted set) untouched.
+- `world.addons` — Immediate, ungated: one segment per DOCUMENT row, in
+  document order — the joined configuration/runtime read-back, never a
+  mounted-guest-only enumeration. A disabled row reads `DISABLED` with no
+  cost figures; an enabled row always reads
+  `<name> <ENABLED|FAULTED(detail)> fuel-budget fuel-last-tick fuel-total
+  answers-dropped-total` — the cost surface — because an enabled row that
+  cannot prepare refuses the whole mutation/rebuild/boot that would have
+  installed it, so the document and the runtime can never disagree about
+  what is actually mounted.
 
 ## World events
 

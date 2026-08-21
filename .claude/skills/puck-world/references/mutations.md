@@ -22,8 +22,10 @@ The exact per-tick order, transcribed from `Step`:
    validates, applies nothing (a guest's effect never depends on where in the
    tick it was pumped).
 2. `DrainPendingOps` — drain the buffered live edits FIFO (mutations,
-   whole-document swaps, undo, addon lifecycle), each applying at this tick boundary; deliver
-   the new definition to the client sink ONCE if at least one applied.
+   whole-document swaps, undo), each applying at this tick boundary; deliver
+   the new definition to the client sink ONCE if at least one applied. An
+   `UpsertAddon`/`RemoveAddon` mutation carries its own addon-prepare gate —
+   the LAST fallible step before install — see [addons.md](addons.md).
 3. Drain the tick's buffered intents (`m_intents` → `ApplyIntentSubmission`,
    under the per-tick Drive check).
 4. `WorldAddonRuntime.ApplyContributions` — the guests' staged contributions

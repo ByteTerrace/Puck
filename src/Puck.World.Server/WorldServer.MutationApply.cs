@@ -194,8 +194,8 @@ public sealed partial class WorldServer {
     }
     // Dispatches one envelope to the apply method its payload kind names, stamping the envelope's connection/
     // correlation identity onto the WorldEditEcho those methods emit. Grant/Revoke's actor and Session/Mutation/
-    // Definition/Undo/Composition/Lever/AddonLifecycle's acting principal are ALWAYS the envelope's own Principal —
-    // the one field every submission kind funnels its acting identity through now, never a second copy.
+    // Definition/Undo/Composition/Lever's acting principal are ALWAYS the envelope's own Principal — the one field
+    // every submission kind funnels its acting identity through now, never a second copy.
     private WorldSubmissionResult ApplyEnvelope(SubmissionEnvelope envelope) {
         switch (envelope.Payload) {
             case WorldSubmissionPayload.Command command:
@@ -246,7 +246,16 @@ public sealed partial class WorldServer {
                 EnqueueMutation(
                     mutation: mutation.Value,
                     connectionId: envelope.ConnectionId,
-                    correlationId: envelope.CorrelationId
+                    correlationId: envelope.CorrelationId,
+                    // Threaded through the buffered op itself, never a generic drain-wide firing: only THIS dispatch
+                    // point — the one MutationTap above also covers — ever supplies a completion, so a guest's
+                    // decoded act and a rule's generate effect (both call EnqueueMutation directly) never produce one.
+                    outcomeObserved: ((MutationOutcomeTap is { } outcomeTap)
+                    ? (applied => outcomeTap(
+                        arg1: mutation.Value,
+                        arg2: applied
+                    ))
+                    : null)
                 );
 
                 return WorldSubmissionResult.Ack.Instance;
@@ -282,15 +291,6 @@ public sealed partial class WorldServer {
                     query: query.Value,
                     principal: envelope.Principal
                 ));
-            case WorldSubmissionPayload.AddonLifecycle lifecycle:
-                EnqueueAddonLifecycle(
-                    lifecycle: lifecycle.Value,
-                    principal: envelope.Principal,
-                    connectionId: envelope.ConnectionId,
-                    correlationId: envelope.CorrelationId
-                );
-
-                return WorldSubmissionResult.Ack.Instance;
             case WorldSubmissionPayload.ScreenOp screenOp:
                 // Synchronous, like Command/Grant/Revoke — never buffered to the tick boundary — so a following
                 // WorldCommand.ComposeControl submitted in the same batch (player.engage's auto-insert precheck) observes
@@ -528,14 +528,89 @@ public sealed partial class WorldServer {
             return false;
         }
 
-        SwapSolids(solids: rebuildSolids);
-        if (request.Kind != WorldRebuildKind.Reset) {
-            m_machines.SetDocumentPath(documentPath: request.PathHint);
+        // Reconcile the addon runtime against the CANDIDATE document — unconditional, never gated on a per-mutation
+        // classification the way TryApplyMutation's own AffectsAddons predicate is: a whole-document swap can move
+        // ANY section, including the channel table TryPrepare's own dependency check watches for. Unconditional is
+        // cheap here too — a reused row costs a structural compare, never a recompile. A server with no addon host
+        // attached (a test double; the silo attaches its own refusing WorldNoAddonHost instead of leaving this null)
+        // is vacuous only for a candidate whose addon rows are all absent or disabled — an ENABLED row is refused by
+        // name below, the identical shape TryApplyMutation's own no-host gate and WorldNoAddonHost.TryPrepare use,
+        // rather than installing a candidate that claims a mounted addon no host can ever run.
+        IWorldAddonPreparedPlan? rebuildAddonPlan = null;
+        int[]? newRebuildTickWrittenEntity = null;
+        WorldPrincipal[]? newRebuildTickWrittenPrincipal = null;
+        bool[]? newRebuildTickCollided = null;
+        var rebuildAddonPlanCommitted = false;
+
+        // The whole sequence from here through Commit runs under ONE try/finally — see TryApplyMutation's identical
+        // shape for why: rebuildAddonPlan starts null, so a return before TryPrepare ever succeeds leaves the
+        // finally a no-op, and a downstream throw from contention-array staging, Install, or Commit alike still
+        // disposes an uncommitted plan.
+        try {
+            if (m_addons is { } addonsForRebuild) {
+                if (!addonsForRebuild.TryPrepare(
+                    current: m_definition,
+                    candidate: candidate,
+                    plan: out rebuildAddonPlan,
+                    reason: out var rebuildAddonReason
+                )) {
+                    RejectRebuild(
+                        connectionId: connectionId,
+                        correlationId: correlationId,
+                        reason: $"addon {rebuildAddonReason}",
+                        verb: verb
+                    );
+
+                    return false;
+                }
+
+                if (rebuildAddonPlan is not null) {
+                    StageAddonContentionArrays(
+                        mountedCount: rebuildAddonPlan.MountedCount,
+                        entity: out newRebuildTickWrittenEntity,
+                        principal: out newRebuildTickWrittenPrincipal,
+                        collided: out newRebuildTickCollided
+                    );
+                }
+            } else if (TryFindEnabledAddonRow(
+                candidate: candidate,
+                name: out var enabledRowName
+            )) {
+                RejectRebuild(
+                    connectionId: connectionId,
+                    correlationId: correlationId,
+                    reason: $"addon '{enabledRowName}' cannot mount — no addon host is attached to this server",
+                    verb: verb
+                );
+
+                return false;
+            }
+
+            SwapSolids(solids: rebuildSolids);
+            if (request.Kind != WorldRebuildKind.Reset) {
+                m_machines.SetDocumentPath(documentPath: request.PathHint);
+            }
+            Install(
+                definition: candidate,
+                rebuildPopulation: true
+            );
+
+            if (rebuildAddonPlan is not null) {
+                m_addons!.Commit(plan: rebuildAddonPlan);
+                rebuildAddonPlanCommitted = true;
+
+                if (newRebuildTickWrittenEntity is not null) {
+                    m_tickWrittenEntity = newRebuildTickWrittenEntity;
+                    m_tickWrittenPrincipal = newRebuildTickWrittenPrincipal!;
+                    m_tickCollided = newRebuildTickCollided!;
+                }
+            }
+        } finally {
+            if (!rebuildAddonPlanCommitted) {
+                rebuildAddonPlan?.Dispose();
+            }
         }
-        Install(
-            definition: candidate,
-            rebuildPopulation: true
-        );
+
         m_journal.Clear();
 
         // Snapshot, for every CURRENTLY CONNECTED (admitted, not parked) peer, exactly
@@ -591,6 +666,14 @@ public sealed partial class WorldServer {
             candidate: candidate,
             preRebuildPeerRows: preRebuildPeerRows
         );
+
+        // Finish runs here, AFTER the candidate's own grants have installed, never earlier: its capability
+        // disclosure narration is computed lazily against the LIVE grant table at the moment each line actually
+        // prints (see WorldAddonRuntime.Finish), so a rebuild that also moves Grants reports what the addon is
+        // ACTUALLY granted under the candidate, never a mount report pinned to the table this rebuild just replaced.
+        if (rebuildAddonPlanCommitted) {
+            m_addons!.Finish(plan: rebuildAddonPlan!);
+        }
 
         // Reset targets the base WITHOUT moving it (the whole point: repeated resets always land on the same base
         // until the next save/load). Load/Reload REPLACE the base — the newly installed document becomes what the
@@ -779,6 +862,23 @@ public sealed partial class WorldServer {
             CorrelationId: correlationId
         ));
     }
+    // ApplyRebuild's own null-host gate: with no addon host attached, a candidate whose addon rows are all absent or
+    // disabled is vacuous (nothing to mount either way), but an ENABLED row names a guest that would install into
+    // the document with no runtime ever able to run it — the same shape TryApplyMutation's own no-host gate and
+    // WorldNoAddonHost.TryPrepare both refuse.
+    private static bool TryFindEnabledAddonRow(WorldDefinition candidate, out string name) {
+        foreach (var row in candidate.Addons) {
+            if (row.Enabled) {
+                name = row.Name;
+
+                return true;
+            }
+        }
+
+        name = string.Empty;
+
+        return false;
+    }
     // The screen index(es) an op's Control check runs over — see TryCheckScreenOpControl's own remarks for Link/
     // Unlink's multi-member shape.
     private IReadOnlyList<int> ScreenOpTargets(WorldScreenOp op) {
@@ -814,83 +914,6 @@ public sealed partial class WorldServer {
             m_solids = solids;
             m_solidRevision++;
         }
-    }
-    // Apply one buffered addon-lifecycle op at the tick boundary — the SAME door TryApplyMutation runs (Mutate over
-    // section:addons, checked BEFORE the runtime is touched, so a denial changes nothing), drained from the SAME
-    // queue a document mutation drains from. Never journaled (it is not a WorldMutation and is not undo-able through
-    // world.undo — a runtime lifecycle change is not a document edit) and never touches WorldDefinition.Addons (that
-    // stays world.row.set addons/world.row.remove addons's document-only territory); this is the RUNTIME's own half.
-    private bool TryApplyAddonLifecycle(WorldAddonLifecycle lifecycle, WorldPrincipal principal, int connectionId, long correlationId) {
-        var verb = ((lifecycle is WorldAddonLifecycle.Mount)
-            ? "world.addon.mount"
-            : "world.addon.unmount"
-        );
-
-        if (m_grants.Allows(
-            principal: principal,
-            capability: WorldCapability.Mutate,
-            subject: GrantSubject.Section(section: WorldSection.Addons)
-        ) is { IsAllowed: false } verdict) {
-            var denial = $"{principal.Describe()} cannot mutate section:addons ({verdict.DescribeDenial()}) — {verb} dropped";
-
-            Console.Error.WriteLine(value: $"[world.grant denied: {denial}]");
-            EchoTap?.Invoke(obj: new WorldEditEcho(
-                Message: denial,
-                Rejected: true,
-                Kind: WorldEditEchoKind.AddonLifecycle,
-                Denied: true,
-                ConnectionId: connectionId,
-                CorrelationId: correlationId
-            ));
-
-            return false;
-        }
-
-        if (m_addons is not { } addons) {
-            var refusal = $"{verb} refused — this world enables no addon; there is no runtime to mount into";
-
-            Console.Error.WriteLine(value: $"[{verb}: {refusal}]");
-            EchoTap?.Invoke(obj: new WorldEditEcho(
-                Message: refusal,
-                Rejected: true,
-                Kind: WorldEditEchoKind.AddonLifecycle,
-                ConnectionId: connectionId,
-                CorrelationId: correlationId
-            ));
-
-            return false;
-        }
-
-        var status = lifecycle switch {
-            WorldAddonLifecycle.Mount mount => addons.Mount(
-            name: mount.Name,
-            modulePath: mount.ModulePath,
-            hash: mount.Hash,
-            fuel: mount.Fuel,
-            requests: mount.Requests
-        ),
-            WorldAddonLifecycle.Unmount unmount => addons.Unmount(name: unmount.Name),
-            _ => throw new ArgumentOutOfRangeException(
-            paramName: nameof(lifecycle),
-            actualValue: lifecycle,
-            message: $"no {nameof(TryApplyAddonLifecycle)} arm for addon lifecycle kind '{lifecycle.GetType().Name}'."
-        ),
-        };
-        // Both Mount and Unmount report failure as a leading quote-mark on the status line ("'name' ...") — the same
-        // convention Reload/SetEnabled already use, so this narrow check is the one place that turns their prose back
-        // into the Rejected/Denied-shaped WorldEditEcho every other apply path emits.
-        var rejected = status.StartsWith(value: '\'');
-
-        Console.Error.WriteLine(value: $"[{verb}: {status}]");
-        EchoTap?.Invoke(obj: new WorldEditEcho(
-            Message: status,
-            Rejected: rejected,
-            Kind: WorldEditEchoKind.AddonLifecycle,
-            ConnectionId: connectionId,
-            CorrelationId: correlationId
-        ));
-
-        return !rejected;
     }
     // Apply one mutation at the tick boundary: authority through the ONE admission predicate → compose a candidate
     // (with-expression) → revalidate the WHOLE document → capacity-check scene/screen edits against the probed render
@@ -1086,15 +1109,94 @@ public sealed partial class WorldServer {
             m_solidRevision++;
         }
 
-        Install(
-            definition: candidate,
-            rebuildPopulation: (AffectsPopulation(mutation: mutation) || (solidAffecting && WorldContactSelection.RequiresField(collision: candidate.Collision)))
-        );
+        // THE LAST FALLIBLE GATE — expensive compilation after every cheap refusal above. Only an Addons-affecting
+        // mutation ever reaches here (AffectsAddons); every other mutation leaves the addon runtime untouched, both
+        // this call and TryPrepare's own diff. A server with no addon host attached refuses an addon-affecting
+        // mutation BY NAME rather than silently accepting configuration with no effect. Prepare-refusal rejects the
+        // WHOLE mutation with the candidate discarded and m_definition byte-identical — the tick still survives.
+        // The whole sequence from here through Commit runs under ONE try/finally: addonPlan starts null and TryPrepare
+        // only ever sets it on success, so the finally is a no-op for every path that never obtains a plan, and a
+        // downstream throw — from contention-array staging, Install, or Commit alike — still disposes an uncommitted
+        // plan rather than leaking it.
+        IWorldAddonPreparedPlan? addonPlan = null;
+        int[]? newTickWrittenEntity = null;
+        WorldPrincipal[]? newTickWrittenPrincipal = null;
+        bool[]? newTickCollided = null;
+        var addonPlanCommitted = false;
+
+        try {
+            if (AffectsAddons(mutation: mutation)) {
+                if (m_addons is not { } addonsForPrepare) {
+                    Reject(
+                        connectionId: connectionId,
+                        correlationId: correlationId,
+                        mutation: mutation,
+                        reason: "no addon host is attached to this server — addon-affecting mutations are refused"
+                    );
+
+                    return false;
+                }
+
+                if (!addonsForPrepare.TryPrepare(
+                    current: m_definition,
+                    candidate: candidate,
+                    plan: out addonPlan,
+                    reason: out var addonReason
+                )) {
+                    Reject(
+                        connectionId: connectionId,
+                        correlationId: correlationId,
+                        mutation: mutation,
+                        reason: (addonReason ?? "addon preparation refused")
+                    );
+
+                    return false;
+                }
+
+                if (addonPlan is not null) {
+                    StageAddonContentionArrays(
+                        mountedCount: addonPlan.MountedCount,
+                        entity: out newTickWrittenEntity,
+                        principal: out newTickWrittenPrincipal,
+                        collided: out newTickCollided
+                    );
+                }
+            }
+
+            // Commit runs only after Install below succeeds, so nothing observable (registration, disclosure
+            // narration, disposal of a superseded guest) moves until then. Narration and superseded-guest disposal
+            // (Finish) run only AFTER the journal write below, so neither can still be unwound by what Finish
+            // itself does.
+            Install(
+                definition: candidate,
+                rebuildPopulation: (AffectsPopulation(mutation: mutation) || (solidAffecting && WorldContactSelection.RequiresField(collision: candidate.Collision)))
+            );
+
+            if (addonPlan is not null) {
+                m_addons!.Commit(plan: addonPlan);
+                addonPlanCommitted = true;
+
+                if (newTickWrittenEntity is not null) {
+                    m_tickWrittenEntity = newTickWrittenEntity;
+                    m_tickWrittenPrincipal = newTickWrittenPrincipal!;
+                    m_tickCollided = newTickCollided!;
+                }
+            }
+        } finally {
+            if (!addonPlanCommitted) {
+                addonPlan?.Dispose();
+            }
+        }
+
         m_journal.Add(item: new JournalEntry(
             Mutation: mutation,
             Tick: tick
         ));
         MutationJournalTap?.Invoke(tick, mutation);
+
+        if (addonPlanCommitted) {
+            m_addons!.Finish(plan: addonPlan!);
+        }
 
         // A defaults-class mutation edits what the NEXT boot wakes on while the live
         // session levers keep their values (world.save folds them); every other mutation applies live on delivery.
@@ -1624,16 +1726,41 @@ public sealed partial class WorldServer {
 
         m_addons = runtime;
 
-        // Two lanes per mounted guest beside the seats: an addon holds Drive over as many bodies as it was granted, so
-        // this is a sized BOUND on how many distinct entities one tick's contention tracking follows, never a limit on
-        // how many a guest may drive. Past it, ReportContention's defensive length check stops recording new entities
-        // and contention reporting saturates — deliberately, because the cost of exactness here is a per-tick resize on
-        // the hot path to sharpen a diagnostic that nothing depends on.
-        var capacity = (Population.LocalSeatCount + (runtime.MountedCount * 2));
+        StageAddonContentionArrays(
+            mountedCount: runtime.MountedCount,
+            entity: out var entity,
+            principal: out var principal,
+            collided: out var collided
+        );
 
-        m_tickWrittenEntity = new int[capacity];
-        m_tickWrittenPrincipal = new WorldPrincipal[capacity];
-        m_tickCollided = new bool[capacity];
+        if (entity is not null) {
+            m_tickWrittenEntity = entity;
+            m_tickWrittenPrincipal = principal!;
+            m_tickCollided = collided!;
+        }
+    }
+    // Pre-sizes the per-tick addon contention tracking against a plan's own MountedCount (or, at boot/AttachAddons,
+    // the runtime's already-committed count) — called BEFORE the addon plan's own Commit, so the caller can adopt
+    // the new arrays by reference in the same breath as the plan itself publishes, with no allocation at that
+    // instant. Two lanes per mounted guest beside the seats: an addon holds Drive over as many bodies as it was
+    // granted, so this is a sized BOUND on how many distinct entities one tick's contention tracking follows, never
+    // a limit on how many a guest may drive. Past it, ReportContention's defensive length check stops recording new
+    // entities and contention reporting saturates. Every array stays null when the capacity did not move, so an
+    // addon-affecting mutation that leaves MountedCount unchanged allocates nothing here either.
+    private void StageAddonContentionArrays(int mountedCount, out int[]? entity, out WorldPrincipal[]? principal, out bool[]? collided) {
+        var capacity = (Population.LocalSeatCount + (mountedCount * 2));
+
+        if (capacity == m_tickWrittenEntity.Length) {
+            entity = null;
+            principal = null;
+            collided = null;
+
+            return;
+        }
+
+        entity = new int[capacity];
+        principal = new WorldPrincipal[capacity];
+        collided = new bool[capacity];
     }
     /// <summary>Attaches a client sink the per-tick snapshot is delivered to, immediately delivering the live
     /// definition followed by a primer snapshot of the current table, so the client renders the current state before
@@ -1695,25 +1822,6 @@ public sealed partial class WorldServer {
 
         return lease;
     }
-    /// <summary>Buffers a live addon-runtime lifecycle change (<c>world.addon.mount</c>/<c>world.addon.unmount</c>)
-    /// for the next <see cref="Step"/> — drained at the same door <see cref="EnqueueMutation"/> uses (before
-    /// intents), so a mount lands at the same defined tick-boundary point a document mutation does. Retains the
-    /// submitting envelope's connection/correlation identity — see <see cref="EnqueueMutation"/>'s own remarks.</summary>
-    /// <param name="lifecycle">The mount/unmount action.</param>
-    /// <param name="principal">The acting identity the change is checked against.</param>
-    /// <param name="connectionId">The submitting envelope's connection id.</param>
-    /// <param name="correlationId">The submitting envelope's correlation id.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="lifecycle"/> is <see langword="null"/>.</exception>
-    public void EnqueueAddonLifecycle(WorldAddonLifecycle lifecycle, WorldPrincipal principal, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0) {
-        ArgumentNullException.ThrowIfNull(argument: lifecycle);
-
-        m_pending.Enqueue(item: new PendingOp.AddonLifecycle(
-            ConnectionId: connectionId,
-            CorrelationId: correlationId,
-            Lifecycle: lifecycle,
-            Principal: principal
-        ));
-    }
     /// <summary>Buffers one live world mutation for the next <see cref="Step"/> (drained before intents). Retains the
     /// submitting envelope's connection/correlation identity so the eventual accept/reject <see cref="WorldEditEcho"/>
     /// routes back to the submitter (see <see cref="WorldEditEcho.ConnectionId"/>) — a deferred op's echo fires later
@@ -1721,12 +1829,16 @@ public sealed partial class WorldServer {
     /// <param name="mutation">The mutation to apply.</param>
     /// <param name="connectionId">The submitting envelope's connection id.</param>
     /// <param name="correlationId">The submitting envelope's correlation id.</param>
-    /// <param name="sourceAddonIndex">The mounted addon index this mutation was decoded from, or <c>-1</c> for a
-    /// console/client submission (the addon mutation seam's completion field — see <see cref="PendingOp.Mutate"/>).</param>
+    /// <param name="sourceAddonInstanceId">The mounted addon instance token this mutation was decoded from, or
+    /// <c>-1</c> for a console/client submission (the addon mutation seam's completion field — see
+    /// <see cref="PendingOp.Mutate"/>).</param>
     /// <param name="actOrdinal">The addon's own output-batch ordinal this mutation answers, when
-    /// <paramref name="sourceAddonIndex"/> is not <c>-1</c>.</param>
+    /// <paramref name="sourceAddonInstanceId"/> is not <c>-1</c>.</param>
+    /// <param name="outcomeObserved">Invoked once, with whether this exact mutation applied, the moment
+    /// <see cref="Step"/> drains and applies it — <see langword="null"/> for every caller but
+    /// <see cref="ApplyEnvelope"/>'s own dispatch (see <see cref="MutationOutcomeTap"/>).</param>
     /// <exception cref="ArgumentNullException"><paramref name="mutation"/> is <see langword="null"/>.</exception>
-    public void EnqueueMutation(WorldMutation mutation, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0, int sourceAddonIndex = -1, ushort actOrdinal = 0) {
+    public void EnqueueMutation(WorldMutation mutation, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0, long sourceAddonInstanceId = -1L, ushort actOrdinal = 0, Action<bool>? outcomeObserved = null) {
         ArgumentNullException.ThrowIfNull(argument: mutation);
 
         m_pending.Enqueue(item: new PendingOp.Mutate(
@@ -1734,7 +1846,8 @@ public sealed partial class WorldServer {
             ConnectionId: connectionId,
             CorrelationId: correlationId,
             Mutation: mutation,
-            SourceAddonIndex: sourceAddonIndex
+            SourceAddonInstanceId: sourceAddonInstanceId,
+            OutcomeObserved: outcomeObserved
         ));
     }
     /// <summary>Buffers a whole-document rebuild-and-swap (<c>world.reset</c>/<c>world.load</c>/<c>world.reload</c>)

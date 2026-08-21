@@ -273,7 +273,7 @@ add-a-kind procedure: [references/mutations.md](references/mutations.md).
 | `player.engage`, control applications (the (target, kit) set a principal holds; capture as own-body membership), the kit pad map, server-internal merged pads, possession's co-drive path, machines | [references/engagement.md](references/engagement.md) |
 | Join/leave (local seat and peer), park-with-grace, the `$parked:` reserved rule channel, body-resume's identity match rule | [references/session-lifecycle.md](references/session-lifecycle.md) |
 | The replay tape: format/re-key, capture scope, pose hash, verify semantics, receipts | [references/replay.md](references/replay.md) |
-| Addon rows, mounting, pump points, channels, fuel, ABI verdicts, the `world.addon.mount` verb family | [references/addons.md](references/addons.md) |
+| Addon rows, the prepare/commit mount transaction, pump points, channels, fuel, ABI verdicts, `world.row.set addons`/`.remove` | [references/addons.md](references/addons.md) |
 | Command modules, routing, the stdin barrier, output contract, verb grammar, screenshots | [references/console.md](references/console.md) |
 
 Adjacent skills: `sdf-world` for the renderer and SDF VM the frame source

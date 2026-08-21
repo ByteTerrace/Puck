@@ -2,7 +2,7 @@ namespace Puck.World.Protocol;
 
 /// <summary>
 /// The closed payload union a <see cref="SubmissionEnvelope"/> carries — every non-intent submission kind
-/// (command/grant/revoke/session/rebuild/mutation/undo/composition/lever/query/addon-lifecycle/screen-op), one case
+/// (command/grant/revoke/session/rebuild/mutation/undo/composition/lever/query/screen-op/designation), one case
 /// per kind, so the server's ONE ordered domain never has to split by message kind to know what it is holding. Per-tick
 /// <see cref="IntentSubmission"/> is NOT a case here — intents keep their own separate buffer (arrival order is
 /// fold-independent), never this envelope.
@@ -42,10 +42,6 @@ public abstract record WorldSubmissionPayload {
     /// <summary>A read-back query (<c>player.where</c>, <c>player.channels</c>, …).</summary>
     /// <param name="Value">The query.</param>
     public sealed record Query(WorldQuery Value) : WorldSubmissionPayload;
-    /// <summary>A live addon-runtime lifecycle change (<c>world.addon.mount</c>/<c>world.addon.unmount</c>) — see
-    /// <see cref="Protocol.WorldAddonLifecycle"/>.</summary>
-    /// <param name="Value">The lifecycle action.</param>
-    public sealed record AddonLifecycle(WorldAddonLifecycle Value) : WorldSubmissionPayload;
     /// <summary>A live screen-machine lifecycle change (<c>screen.insert</c>/<c>.eject</c>/<c>.select</c>/
     /// <c>.options</c>/<c>.link</c>/<c>.unlink</c>) — see <see cref="Protocol.WorldScreenOp"/>.</summary>
     /// <param name="Value">The screen op.</param>

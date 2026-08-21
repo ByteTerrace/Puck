@@ -36,16 +36,18 @@ distinct:
   a button is a binary channel. Intents buffer per tick and drain at the
   server step; they are not envelope payloads.
 - **Everything else.** Every non-intent submission — command, grant, revoke,
-  session, definition swap, mutation, undo, composition, lever, query,
-  addon-lifecycle (`world.addon.mount`/`.unmount`), screen-op
+  session, definition swap, mutation (mounting, unmounting, reloading,
+  enabling, and disabling an addon all ride the ordinary `UpsertAddon`/
+  `RemoveAddon` mutation — there is no separate addon-lifecycle leaf), undo,
+  composition, lever, query, screen-op
   (`screen.insert`/`.eject`/`.select`/`.options`/`.link`/`.unlink`),
   designation (`player.designate`) —
   travels as one `SubmissionEnvelope` (`SubmissionEnvelope.cs`) carrying the
-  closed `WorldSubmissionPayload` union (13 kinds) and the acting
+  closed `WorldSubmissionPayload` union (12 kinds) and the acting
   `WorldPrincipal`, and resolves to a typed `WorldSubmissionResult` through
   an inline completion callback. The server drains envelopes through one
-  ordered domain in submission order; definition swaps, mutations, undo, and
-  addon-lifecycle buffer to the tick boundary, every other kind — including
+  ordered domain in submission order; definition swaps, mutations, and undo
+  buffer to the tick boundary, every other kind — including
   screen-op — applies at submit. The ordering contract lives with
   `WorldServer` (see [`Puck.World.Server`](../Puck.World.Server/README.md)).
 

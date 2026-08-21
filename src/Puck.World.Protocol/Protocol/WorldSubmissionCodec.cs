@@ -7,7 +7,10 @@ using Puck.Maths;
 
 namespace Puck.World.Protocol;
 
-/// <summary>The declared wire discriminants for the twelve submission payload leaves.</summary>
+/// <summary>The declared wire discriminants for the twelve submission payload leaves. Ordinal 11 (the retired
+/// addon-lifecycle leaf — mount/unmount now travel as document rows, <c>UpsertAddon</c>/<c>RemoveAddon</c>, through
+/// the ordinary <see cref="WorldSubmissionKind.Mutation"/> leaf) is unassigned and never reused, matching
+/// <c>WorldMutationKindCatalog</c>'s own retired-ordinal precedent.</summary>
 public enum WorldSubmissionKind : byte {
     /// <summary>An authority command.</summary>
     Command = 1,
@@ -29,8 +32,6 @@ public enum WorldSubmissionKind : byte {
     Lever = 9,
     /// <summary>A read-back query.</summary>
     Query = 10,
-    /// <summary>A live addon-runtime lifecycle change (mount/unmount).</summary>
-    AddonLifecycle = 11,
     /// <summary>A live screen-machine lifecycle change (insert/eject/select/options/link/unlink).</summary>
     ScreenOp = 12,
     /// <summary>A subject-bearing target-register write.</summary>
@@ -202,66 +203,6 @@ public static class WorldSubmissionCodec {
         20 => typeof(WorldQuery.JudgeState),
         _ => null,
     };
-    private static WorldAddonLifecycle ReadAddonLifecycle(BinaryReader reader) {
-        return reader.ReadByte() switch {
-            0 => ReadAddonLifecycleMount(reader: reader),
-            1 => new WorldAddonLifecycle.Unmount(Name: ReadRequiredString(
-            field: "Unmount.Name",
-            reader: reader
-        )),
-            var wire => throw new LeafCodecException(failure: Fail(
-            detail: $"addon lifecycle discriminant {wire} is not declared",
-            refusal: WorldCodecRefusal.LeafKindUnknown
-        )),
-        };
-    }
-    private static WorldAddonLifecycle.Mount ReadAddonLifecycleMount(BinaryReader reader) {
-        var name = ReadRequiredString(
-            field: "Mount.Name",
-            reader: reader
-        );
-        var modulePath = ReadRequiredString(
-            field: "Mount.ModulePath",
-            reader: reader
-        );
-        var hash = ReadRequiredString(
-            field: "Mount.Hash",
-            reader: reader
-        );
-        var fuel = reader.ReadUInt64();
-        var count = reader.ReadInt32();
-
-        if (count < 0) {
-            throw new LeafCodecException(failure: Fail(
-                detail: $"addon lifecycle mount request count {count} is negative",
-                refusal: WorldCodecRefusal.PayloadMalformed
-            ));
-        }
-
-        List<WorldCapabilityRequest>? requests = null;
-
-        if (count > 0) {
-            requests = new List<WorldCapabilityRequest>(capacity: count);
-
-            for (var index = 0; (index < count); index++) {
-                var capability = CapabilityFromWire(value: reader.ReadByte());
-                var subject = ReadSubject(reader: reader);
-
-                requests.Add(item: new WorldCapabilityRequest(
-                    Capability: capability,
-                    Subject: subject
-                ));
-            }
-        }
-
-        return new WorldAddonLifecycle.Mount(
-            Fuel: fuel,
-            Hash: hash,
-            ModulePath: modulePath,
-            Name: name,
-            Requests: requests
-        );
-    }
     private static WorldCommand ReadCommand(BinaryReader reader) {
         var principal = ReadPrincipal(reader: reader);
         var entity = reader.ReadInt32();
@@ -989,59 +930,6 @@ public static class WorldSubmissionCodec {
         WorldRebuildKind.Load or WorldRebuildKind.Reload => ((request.Definition is not null) && (request.PathHint is not null) && (request.ContentHash is not null)),
         _ => false,
     };
-    // The addon-lifecycle leaf's own tagged union: one discriminant byte, then Mount's descriptor/hash/fuel/manifest
-    // or Unmount's bare name. A binary leaf (like the command/grant leaves), not a JSON union — the shape is small
-    // and fixed, so it needs no reflection-serialization debt.
-    private static void WriteAddonLifecycle(BinaryWriter writer, WorldAddonLifecycle lifecycle) {
-        if (lifecycle is null) {
-            throw new LeafCodecException(failure: Fail(
-                detail: "addon lifecycle is null",
-                refusal: WorldCodecRefusal.PayloadMissing
-            ));
-        }
-        switch (lifecycle) {
-            case WorldAddonLifecycle.Mount value:
-                writer.Write(value: ((byte)0));
-                WriteRequiredString(
-                    writer,
-                    value.Name,
-                    "Mount.Name"
-                );
-                WriteRequiredString(
-                    writer,
-                    value.ModulePath,
-                    "Mount.ModulePath"
-                );
-                WriteRequiredString(
-                    writer,
-                    value.Hash,
-                    "Mount.Hash"
-                );
-                writer.Write(value: value.Fuel);
-                var requests = value.Requests;
-                writer.Write(value: (requests?.Count ?? 0));
-                if (requests is not null) {
-                    foreach (var request in requests) {
-                        writer.Write(value: CapabilityToWire(value: request.Capability));
-                        WriteSubject(
-                            writer,
-                            request.Subject
-                        );
-                    }
-                }
-                break;
-            case WorldAddonLifecycle.Unmount value:
-                writer.Write(value: ((byte)1));
-                WriteRequiredString(
-                    writer,
-                    value.Name,
-                    "Unmount.Name"
-                );
-                break;
-            default:
-                throw UnknownLeaf(value: lifecycle);
-        }
-    }
     private static void WriteCommand(BinaryWriter writer, WorldCommand command) {
         if (command is null) {
             throw new LeafCodecException(failure: Fail(
@@ -1547,16 +1435,6 @@ public static class WorldSubmissionCodec {
                     return true;
                 }
                 return false;
-            case WorldSubmissionKind.AddonLifecycle:
-                if (TryDecodeAddonLifecycle(
-                    bytes: bytes,
-                    failure: out failure,
-                    lifecycle: out var lifecycle
-                )) {
-                    payload = new WorldSubmissionPayload.AddonLifecycle(Value: lifecycle!);
-                    return true;
-                }
-                return false;
             case WorldSubmissionKind.ScreenOp:
                 if (TryDecodeScreenOp(
                     bytes: bytes,
@@ -1585,14 +1463,6 @@ public static class WorldSubmissionCodec {
                 return false;
         }
     }
-    /// <summary>Decodes the addon-lifecycle leaf.</summary>
-    public static bool TryDecodeAddonLifecycle(ReadOnlySpan<byte> bytes, out WorldAddonLifecycle? lifecycle, out WorldCodecFailure failure) =>
-        TryRead(
-            bytes: bytes,
-            failure: out failure,
-            read: ReadAddonLifecycle,
-            value: out lifecycle
-        );
     /// <summary>Decodes the command leaf.</summary>
     public static bool TryDecodeCommand(ReadOnlySpan<byte> bytes, out WorldCommand? command, out WorldCodecFailure failure) =>
         TryRead(
@@ -1826,13 +1696,6 @@ public static class WorldSubmissionCodec {
                     out bytes,
                     out failure
                 );
-            case WorldSubmissionPayload.AddonLifecycle lifecycle:
-                kind = WorldSubmissionKind.AddonLifecycle;
-                return TryEncodeAddonLifecycle(
-                    lifecycle.Value,
-                    out bytes,
-                    out failure
-                );
             case WorldSubmissionPayload.ScreenOp screenOp:
                 kind = WorldSubmissionKind.ScreenOp;
                 return TryEncodeScreenOp(
@@ -1858,16 +1721,6 @@ public static class WorldSubmissionCodec {
                 return false;
         }
     }
-    /// <summary>Encodes the addon-lifecycle leaf.</summary>
-    public static bool TryEncodeAddonLifecycle(WorldAddonLifecycle lifecycle, out byte[] bytes, out WorldCodecFailure failure) =>
-        TryWrite(
-            writer => WriteAddonLifecycle(
-                lifecycle: lifecycle,
-                writer: writer
-            ),
-            out bytes,
-            out failure
-        );
     /// <summary>Encodes the command leaf.</summary>
     public static bool TryEncodeCommand(WorldCommand command, out byte[] bytes, out WorldCodecFailure failure) =>
         TryWrite(

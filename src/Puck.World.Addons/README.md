@@ -16,36 +16,69 @@ Project references: `Puck.World.Server`, `Puck.Scripting` (the WASM guest
 ABI `AddonSimulationPump` validates against), `Puck.Maths`, and
 `Puck.Assets` (the module bytes a mount reads).
 
-## Mounting and the ABI
+## Mounting: a prepare/commit transaction
 
 A `WorldAddonRow` in the world document's `addons` section is a data-only
 descriptor (name, module path, content hash, fuel budget, enabled, requested
-capabilities). Mounting happens at boot: `WorldAddonRuntime.Create` compiles
-each enabled row's WebAssembly module through `Puck.Scripting`, pins its
-content hash, and prints one capability-disclosure line per guest naming
-what its manifest requested versus what the grant table actually holds —
-granted, withheld, and holds-beyond-manifest. Requesting is not receiving:
-deny-by-default holds regardless of the manifest, and authority materializes
-only where the row asked AND the table grants (a hold outside the manifest
-mints no handle). `WorldAddonWire.cs` is the fixed engine-owned mapping from
-a guest's validated acts onto `PlayerIntent` values.
+capabilities, a revision token). There is no separate runtime-facing
+lifecycle surface: `world.row.set addons`/`world.row.remove addons` — the
+ordinary document-mutation door (`WorldMutation.UpsertAddon`/`RemoveAddon`)
+— is the ONLY way to mount, unmount, reload, enable, or disable a guest.
+`Enabled` and the revision token express the whole lifecycle: a disabled row
+is never compiled at all; any STRUCTURAL change to an already-mounted row
+(content, revision, or `Requests`/`MemoryWatches` content) is a reload
+(fresh guest instantiation, memory wiped) — resubmitting a byte-identical
+row is a no-op for the runtime, and a sticky fault survives an unrelated
+reprepare pass untouched, since runtime fault state is never part of the
+reuse comparison.
 
-## Lifecycle verbs
+`IWorldAddonHost.TryPrepare(current, candidate, out plan, out reason)` is
+the whole runtime-delta computation — module resolve, hash pin, compile, ABI
+admit, instantiate, and `puck_init` against the staged guest's own private
+memory only — building a disposable, uncommitted `PreparedAddonInstall` that
+reuses an unchanged row's guest (and its memory and fault state) untouched,
+by explicit STRUCTURAL equality against the row it was last prepared under
+(never reference identity: `Requests`/`MemoryWatches` are interface-typed
+collections whose generated equality is reference equality, so the compare
+walks their contents). A candidate whose channel declarations moved
+invalidates every row's reuse eligibility at once and stages a fresh host
+bound to a fresh resolver. `Commit` then publishes the whole plan by
+reference adoption alone — no I/O, allocation, compilation, type dispatch
+beyond its own downcast, or fallible call — and a separate `Finish` call,
+made only after the caller's own document/journal publication is durable,
+prints the deferred capability-disclosure/mount narration and disposes
+every superseded guest (or the whole superseded host, when the channel
+table moved). `WorldServer.TryApplyMutation` calls the pair as the LAST
+fallible gate for an `UpsertAddon`/`RemoveAddon` mutation (refusing by name
+first when no addon host is attached at all), after every cheaper refusal;
+`WorldAddonRuntime.TryCreate` calls it at boot (against no prior state, and
+`WorldPostBuildWiring` turns a refusal into an ordinary boot refusal rather
+than an unhandled exception), `WorldServer.ApplyRebuild` calls it
+unconditionally for `world.reset`/`.load`/`.reload` (a whole-document swap
+can move any section, including the channel table), and `ApplyUndo` calls
+it both as a throwaway per-entry probe (proving an intermediate journal
+candidate COULD have mounted, disposed immediately either way) and once for
+real, at the end, for the final restored document. An enabled row that
+cannot prepare refuses the WHOLE mutation (or rebuild, or the whole world
+installation at boot, or the whole undo) — the candidate discarded, the
+live document byte-identical.
 
-`world.addon.mount`/`world.addon.unmount` live-mount a new guest, or fully
-remove one, through the ordered submission domain
-(`WorldSubmissionPayload.AddonLifecycle`, buffered to the tick boundary
-through the same `DrainPendingOps` door a document mutation drains through)
-and are captured on the replay tape through their own leaf codec — a
-recorded mount/unmount re-executes on `replay.verify`, so they are not
-refused while a recording is armed. `world.addon.reload`,
-`world.addon.enable`, and `world.addon.disable` are the older, still-live
-side path: they manage already-mounted guests synchronously, calling
-straight into the concrete `WorldAddonRuntime` outside the ordered domain
-and outside the tape, so they stay refused outright while a recording is
-armed. `world.addons` is the per-guest cost surface (lifecycle state, fuel
-budget, fuel consumed) — an unmounted guest no longer appears there at all.
-Guests are pumped only from inside `WorldServer.Step`'s three pinned points
+Requesting is not receiving: deny-by-default holds regardless of the
+manifest, and authority materializes only where the row asked AND the grant
+table holds (a hold outside the manifest mints no handle). `WorldAddonWire.cs`
+is the fixed engine-owned mapping from a guest's validated acts onto
+`PlayerIntent` values.
+
+## The read-back and the pump points
+
+`world.addons` is the joined configuration/runtime read-back — one segment
+per document row, in document order, never a mounted-guest-only
+enumeration: a disabled row reads `DISABLED` with no cost figures; an
+enabled row always has a committed runtime entry to join against (lifecycle
+state, fuel budget, fuel consumed), because an enabled row that cannot
+prepare refuses the whole mutation/rebuild/boot that would have installed
+it. Guests are pumped only from inside
+`WorldServer.Step`'s three pinned points
 (`IWorldAddonHost.TickAddons`/`ApplyContributions`/`ResolveReads`), which is
 what keeps guest driving reproducible under replay without recording it.
 

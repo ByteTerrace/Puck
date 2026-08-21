@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Puck.Commands;
 using Puck.Launcher;
 using Puck.Overlays;
+using Puck.World.Addons;
 using Puck.World.Client;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -50,6 +51,20 @@ internal static class WorldPostBuildWiring {
     /// <c>IHost.RunAsync</c>.</returns>
     public static bool Install(IServiceProvider services) {
         ArgumentNullException.ThrowIfNull(argument: services);
+
+        // The addon runtime resolves lazily as a DI singleton (WorldBootComposition), and WorldAddonCommandModule —
+        // one of the modules CommandRegistry aggregates below — takes it as a constructor dependency, so resolving
+        // CommandRegistry first would transitively construct it INSIDE that call, with no narrow catch around it.
+        // Resolving it explicitly here first gives it its own catch, matching every sibling boot gate's
+        // false + printed-reason shape; the transitive resolution CommandRegistry triggers moments later just
+        // returns this same cached singleton.
+        try {
+            _ = services.GetRequiredService<WorldAddonRuntime>();
+        } catch (WorldAddonInstallRefusedException refusal) {
+            Console.Error.WriteLine(value: $"[world] definition refused: {refusal.Message}");
+
+            return false;
+        }
 
         var consoleRegistry = services.GetRequiredService<CommandRegistry>();
 

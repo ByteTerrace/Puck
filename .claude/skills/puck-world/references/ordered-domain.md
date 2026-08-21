@@ -37,7 +37,7 @@ long CorrelationId, WorldPrincipal Principal, WorldSubmissionPayload Payload)`.
   a wire exists. `LoopbackTransport.Query` stamps `WorldPrincipal.Console`;
   `WorldTcpHost` stamps its admitted peer on the envelope.
 
-## The payload union: exactly 13 kinds
+## The payload union: exactly 12 kinds
 
 `WorldSubmissionPayload` (private ctor, nested sealed records):
 `Command(WorldCommand)`, `Grant(WorldGrant)`, `Revoke(WorldGrant)`,
@@ -46,10 +46,11 @@ long CorrelationId, WorldPrincipal Principal, WorldSubmissionPayload Payload)`.
 optional document, path hint, and CAS `sha256-64` content-hash pin, see
 [documents.md](documents.md); the replay tape covers the
 trio, see [replay.md](replay.md)),
-`Mutation(WorldMutation)`, `Undo(int Count)`,
+`Mutation(WorldMutation)` (mounting/unmounting/reloading/enabling/disabling
+an addon rides this leaf too — `UpsertAddon`/`RemoveAddon`, see
+[addons.md](addons.md); there is no separate addon-lifecycle leaf), `Undo(int Count)`,
 `Composition(WorldComposition)`, `Lever(WorldSessionLever)`,
-`Query(WorldQuery)`, `AddonLifecycle(WorldAddonLifecycle)`
-(`world.addon.mount`/`.unmount`, see [addons.md](addons.md)),
+`Query(WorldQuery)`,
 `ScreenOp(WorldScreenOp)` (`screen.insert`/`.eject`/`.select`/`.options`/
 `.link`/`.unlink`, see [engagement.md](engagement.md)),
 `Designation(WorldDesignation)` (a subject-bearing target-register write —
@@ -61,7 +62,8 @@ intents ride their own buffer (below).
 `WorldSubmissionKind` wire discriminants are fixed: `Command = 1`,
 `Grant = 2`, `Revoke = 3`, `Session = 4`, `Rebuild = 5`, `Mutation = 6`,
 `Undo = 7`, `Composition = 8`, `Lever = 9`, `Query = 10`,
-`AddonLifecycle = 11`, `ScreenOp = 12`, `Designation = 13`.
+`ScreenOp = 12`, `Designation = 13` — `11` (the retired addon-lifecycle leaf)
+is unassigned and never reused.
 
 Each kind has exactly one canonical encoder/decoder pair in
 `WorldSubmissionCodec.cs`. `WorldFrameCodec.cs` wraps a leaf as little-endian
@@ -92,7 +94,7 @@ drain rather than recursing). Per-kind application:
 | Kind | Applies |
 |---|---|
 | Command, Grant, Revoke, Session, Composition, Lever, Query, ScreenOp, Designation | synchronously at ordered-domain submit |
-| Rebuild, Mutation, Undo, AddonLifecycle | buffer (`PendingOp.Rebuild`/`Mutate`/`Undo`/`AddonLifecycle`) to the tick boundary; drained FIFO by `DrainPendingOps` at the top of `Step`, before intents |
+| Rebuild, Mutation, Undo | buffer (`PendingOp.Rebuild`/`Mutate`/`Undo`) to the tick boundary; drained FIFO by `DrainPendingOps` at the top of `Step`, before intents |
 
 Consequences for scripts: within one stdin batch, a grant submitted before a
 command is visible to that command (grant-then-warp applies the warp against
@@ -160,21 +162,25 @@ fields are plumbed for the wire, not consumed locally.
 
 ## The link
 
-- `IServerLink`: the client-facing 14-method surface (`SubmitIntent` plus
-  one `Submit*`/`Query` per payload kind, 13 of those today).
+- `IServerLink`: the client-facing 13-method surface (`SubmitIntent` plus
+  one `Submit*`/`Query` per payload kind, 12 of those today).
 - `IWorldServerHost` — deliberately 3 members (`AttachSink`, `EnqueueIntent`,
   `Submit`), so the transport never names `WorldServer`.
 - `IClientSink` — 5 deliveries: `DeliverSnapshot`, `DeliverAnswer`,
   `DeliverDefinition`, `DeliverComposition`, `DeliverSessionLever`.
 - `AttachSink` is a subscribe (multi-sink via `WorldOutputHub`, with a primer
   snapshot to the newly attached sink only).
-- `LoopbackTransport` carries one replay tap per submission kind (`IntentTap`,
-  `CommandTap`, `GrantTap`, `RevokeTap`, `SessionTap`, `DesignationTap`,
-  `AddonLifecycleTap`, `MutationTap`, `UndoTap`, `CompositionTap`, `QueryTap`),
+- `LoopbackTransport` carries one replay tap per LOCAL submission kind
+  (`IntentTap`, `CommandTap`, `GrantTap`, `RevokeTap`, `SessionTap`,
+  `DesignationTap`, `UndoTap`, `CompositionTap`, `QueryTap`),
   each firing immediately BEFORE the write reaches the server and after
-  canonical frame decode — a grant, a mount/unmount, or a mutation the door
+  canonical frame decode — a grant the door
   refuses is still taped, so the refusal reproduces identically on replay (see
-  [replay.md](replay.md)). `WorldServer.ServerEventTap` separately records the
+  [replay.md](replay.md)). `Mutation` is the one kind reachable from a socket
+  peer or a federation forwarder too, so its tap (`MutationTap`, plus
+  `MutationOutcomeTap` for the accept/refuse verdict) lives on `WorldServer`
+  itself, firing from `ApplyEnvelope`'s dispatch rather than the loopback.
+  `WorldServer.ServerEventTap` separately records the
   two server-event cases after their point of effect. `WorldServer.RebuildTap`
   and `ScreenOpTap` capture rebuilds and screen operations at their server apply
   points instead of at submission, because their CAS pin is not knowable any

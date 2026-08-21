@@ -93,6 +93,11 @@ public sealed partial class WorldServer {
             );
 
             // Cross-document claims were proved before the journal was admitted; replay repeats only local checks.
+            // Addon preparation joins these all-or-nothing gates: an intermediate candidate this pass builds but
+            // never installs still owes proof it COULD have mounted, because a kept entry whose pinned module has
+            // since gone missing must refuse the WHOLE undo rather than silently landing on a document that would
+            // boot differently than the one it names. The probe plan is disposed immediately either way — see
+            // AddonsCanPrepare.
             if (
                 !WorldDefinitionValidator.TryValidateLocally(
                 definition: next,
@@ -106,6 +111,10 @@ public sealed partial class WorldServer {
                 definition: next,
                 reason: out reason,
                 solids: out _
+            )) ||
+                (AffectsAddons(mutation: entry.Mutation) && !AddonsCanPrepare(
+                candidate: next,
+                reason: out reason
             ))
             ) {
                 var refusal = $"undo refused: replay failed at journal entry {index} ({Describe(mutation: entry.Mutation)}) — {reason}";
@@ -148,16 +157,111 @@ public sealed partial class WorldServer {
             return false;
         }
 
-        SwapSolids(solids: undoSolids);
-        Install(
-            definition: candidate,
-            rebuildPopulation: true
-        );
+        // The final current-to-candidate reconcile: unconditional (never gated on whether the kept journal touched
+        // Addons), because TryPrepare's own structural diff against the live m_mounted set already answers "does
+        // anything about addons actually differ" cheaply on its own — a restored document whose addon rows are
+        // structurally the ones already mounted reuses every guest's memory untouched. Commits only after Install
+        // succeeds, mirroring TryApplyMutation's identical gate-then-commit shape.
+        IWorldAddonPreparedPlan? addonPlan = null;
+        int[]? newTickWrittenEntity = null;
+        WorldPrincipal[]? newTickWrittenPrincipal = null;
+        bool[]? newTickCollided = null;
+        var addonPlanCommitted = false;
+
+        // The whole sequence from here through Commit runs under ONE try/finally — see TryApplyMutation's identical
+        // shape for why: addonPlan starts null, so a refusal before TryPrepare ever succeeds leaves the finally a
+        // no-op, and a downstream throw from contention-array staging, Install, or Commit alike still disposes an
+        // uncommitted plan.
+        try {
+            if (m_addons is { } addonsForUndo) {
+                if (!addonsForUndo.TryPrepare(
+                    current: m_definition,
+                    candidate: candidate,
+                    plan: out addonPlan,
+                    reason: out var addonReason
+                )) {
+                    var refusal = $"undo refused: the restored document's addon {addonReason}";
+
+                    Console.Error.WriteLine(value: $"[world.undo: {refusal}]");
+                    EchoTap?.Invoke(obj: new WorldEditEcho(
+                        Message: refusal,
+                        Rejected: true,
+                        Kind: WorldEditEchoKind.Mutation,
+                        ConnectionId: connectionId,
+                        CorrelationId: correlationId
+                    ));
+
+                    return false;
+                }
+
+                if (addonPlan is not null) {
+                    StageAddonContentionArrays(
+                        mountedCount: addonPlan.MountedCount,
+                        entity: out newTickWrittenEntity,
+                        principal: out newTickWrittenPrincipal,
+                        collided: out newTickCollided
+                    );
+                }
+            }
+
+            SwapSolids(solids: undoSolids);
+            Install(
+                definition: candidate,
+                rebuildPopulation: true
+            );
+
+            if (addonPlan is not null) {
+                m_addons!.Commit(plan: addonPlan);
+                addonPlanCommitted = true;
+
+                if (newTickWrittenEntity is not null) {
+                    m_tickWrittenEntity = newTickWrittenEntity;
+                    m_tickWrittenPrincipal = newTickWrittenPrincipal!;
+                    m_tickCollided = newTickCollided!;
+                }
+            }
+        } finally {
+            if (!addonPlanCommitted) {
+                addonPlan?.Dispose();
+            }
+        }
+
         m_journal.Clear();
         m_journal.AddRange(collection: kept);
         Console.Error.WriteLine(value: $"[world.undo: dropped {drop}, {m_journal.Count} remaining]");
 
+        if (addonPlanCommitted) {
+            m_addons!.Finish(plan: addonPlan!);
+        }
+
         return true;
+    }
+    // Undo's own throwaway addon-prepare probe for an INTERMEDIATE journal-replay candidate: proves the row set
+    // this candidate carries could still mount, without ever registering, disclosing, or journaling anything — the
+    // plan is disposed immediately regardless of outcome. Only the FINAL candidate's prepare (after the loop above)
+    // ever actually commits. A server with no addon runtime attached vacuously succeeds.
+    private bool AddonsCanPrepare(WorldDefinition candidate, out string reason) {
+        if (m_addons is not { } addons) {
+            reason = string.Empty;
+
+            return true;
+        }
+
+        if (addons.TryPrepare(
+            current: m_definition,
+            candidate: candidate,
+            plan: out var plan,
+            reason: out var addonReason
+        )) {
+            plan?.Dispose();
+            reason = string.Empty;
+
+            return true;
+        }
+
+        reason = (addonReason ?? string.Empty);
+
+        return false;
     }
 
     /// <summary>Buffers a journal undo of the last <paramref name="count"/> mutations for the next <see cref="Step"/>.

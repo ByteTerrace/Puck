@@ -31,6 +31,12 @@ public sealed partial class WorldServer {
         // kits — all must trigger Rebuild + ReconcileInhabitants. (R13: the third and last edit to this switch.)
         WorldMutation.UpsertPlacement or WorldMutation.RemovePlacement or
         WorldMutation.UpsertCreation or WorldMutation.RemoveCreation);
+    // Whether a mutation touches the addons section — the only door WorldAddonRow row content (or document order)
+    // moves through OUTSIDE a whole-document rebuild (ApplyRebuild carries its own unconditional prepare, which
+    // also covers a channel-table change by restaging the whole host), so a per-row structural diff gated on JUST
+    // these two kinds is the whole trigger a live mutation needs — see IWorldAddonHost.TryPrepare's own remarks.
+    private static bool AffectsAddons(WorldMutation mutation) => (mutation is
+        WorldMutation.UpsertAddon or WorldMutation.RemoveAddon);
     // Whether a mutation can grow the SDF program past the probed render envelope (screen slabs / creation stamps — an
     // UpsertCreation re-shapes every live placement of it, so it measures too).
     private static bool AffectsRenderEnvelope(WorldMutation mutation) => (mutation is

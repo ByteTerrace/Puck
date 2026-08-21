@@ -11,8 +11,7 @@ namespace Puck.World.Protocol;
 /// first's effect (the "walk over, press the button, the screen lights" one-act UX). Deliberately narrower than
 /// <see cref="WorldDefinition.Screens"/>' <c>UpsertScreen</c>/<c>RemoveScreen</c> mutations, which are document-only
 /// (what a screen declares) and never boot or step anything themselves: this union is the runtime-facing
-/// counterpart, exactly mirroring how <see cref="WorldAddonLifecycle"/> relates to the document-only
-/// <c>world.row.set addons</c>/<c>world.row.remove addons</c> mutations.
+/// counterpart.
 /// </summary>
 public abstract record WorldScreenOp {
     private WorldScreenOp() {

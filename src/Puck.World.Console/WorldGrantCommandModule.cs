@@ -55,10 +55,7 @@ namespace Puck.World;
 /// additionally accepts <c>body:&lt;n&gt;</c> naming a body that exists for any principal (an addon/peer must carry
 /// <c>budget:&lt;n&gt;</c>) or <c>all</c> (console/seat).</remarks>
 public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority, IServerLink link) : ICommandModule {
-    // public (not internal): Puck.World's WorldAddonCommandModule.Mount reuses this exact token grammar for its
-    // trailing <capability> <subject> manifest pairs, so "drive body:0" means the identical thing on both verbs —
-    // widened to the minimum needed rather than duplicating the parse.
-    public static bool TryParseCapability(ReadOnlySpan<char> token, out WorldCapability capability) {
+    private static bool TryParseCapability(ReadOnlySpan<char> token, out WorldCapability capability) {
         if (token.Equals(
             comparisonType: StringComparison.OrdinalIgnoreCase,
             other: "drive"
@@ -587,16 +584,14 @@ public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority, IS
         );
     }
     /// <summary>Parses a subject token (<c>all</c> | <c>body:&lt;n&gt;</c> | <c>screen:&lt;n&gt;</c> |
-    /// <c>section:&lt;name&gt;</c> | <c>state:&lt;name&gt;</c>) — shared with
-    /// <see cref="Puck.World.GrantSubjectJsonConverter"/>, so a document-sourced subject (a
-    /// <see cref="WorldCapabilityRequest.Subject"/>, a <see cref="WorldGrant.Subject"/> row) always canonicalizes
-    /// through the identical grammar a console token does; there is no other way to construct a denormalized
-    /// <see cref="GrantSubject"/> (a stray non-zero <c>Value</c>/<c>Id</c> the wildcard or section kinds do not use)
-    /// from either surface, which is what keeps a document subject and a live grant table entry comparable by value.</summary>
+    /// <c>section:&lt;name&gt;</c> | <c>state:&lt;name&gt;</c>) through <see cref="GrantSubject.TryParse"/> — the
+    /// identical grammar a document-sourced subject canonicalizes through (a <see cref="WorldCapabilityRequest.Subject"/>,
+    /// a <see cref="WorldGrant.Subject"/> row), which is what keeps a document subject and a live grant table entry
+    /// comparable by value.</summary>
     /// <param name="token">The token to parse.</param>
     /// <param name="subject">The parsed subject, on success.</param>
     /// <returns><see langword="true"/> when the token parsed.</returns>
-    public static bool TryParseSubject(ReadOnlySpan<char> token, out GrantSubject subject) => GrantSubject.TryParse(
+    private static bool TryParseSubject(ReadOnlySpan<char> token, out GrantSubject subject) => GrantSubject.TryParse(
         subject: out subject,
         token: token
     );

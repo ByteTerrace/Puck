@@ -238,8 +238,9 @@ composing writes. That is a defect class, not a shortcut.
 - Choose routing by determinism class, not convenience: anything that
   touches sim state is `Simulation`; a read-back is `Immediate`. Routing
   describes when the command handler runs. For example,
-  `world.addon.reload` is Simulation-routed but calls the addon runtime
-  synchronously once its handler runs, while `world.addon.mount` enqueues a
-  `PendingOp.AddonLifecycle` for the tick boundary. Both buy the drain
-  barrier, so a following read waits for settled state.
+  `world.row.set addons`/`world.row.remove addons` — the door that mounts,
+  unmounts, reloads, enables, and disables an addon — is Simulation-routed
+  and buffers a `PendingOp.Mutate` for the tick boundary, exactly like any
+  other `world.row.set`/`.remove`. The drain barrier makes a following
+  `world.addons` read wait for settled state.
 - New decision surface ⇒ read-back verb in the same change.

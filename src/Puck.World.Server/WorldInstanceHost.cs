@@ -47,7 +47,7 @@ namespace Puck.World;
 /// on the identical schedule with no skew. An authored rate of 0 is the durable stop (never divided by; the instance
 /// stays resident and readable, simply never steps) and is entirely independent of the live pause lever. Neither a
 /// stopped nor a paused instance is left inert, though: <see cref="Server.WorldServer.DrainAdministrative"/> still
-/// applies its buffered document mutations/rebuilds/undo/addon-lifecycle ops every master tick — otherwise a
+/// applies its buffered document mutations/rebuilds/undo ops every master tick — otherwise a
 /// document mutation that would rate a stopped world back up could never itself apply, a permanent self-lock.
 /// A desktop's boot row is governed by the identical rule, special-cased only where <see cref="WorldServerStepShell"/>'s
 /// own tape/wait-gate/socket bookkeeping requires (see <see cref="ShouldStepBoot"/>): the master pump's own cadence

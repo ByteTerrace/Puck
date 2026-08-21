@@ -3,8 +3,8 @@ namespace Puck.World.Protocol;
 /// <summary>The in-process transport binding one client to one <see cref="IWorldServerHost"/> (a
 /// <c>Puck.World.Server.WorldServer</c>, always, but this project names it only through the interface).</summary>
 /// <remarks>
-/// Every non-intent submission (command/grant/revoke/session/rebuild/mutation/undo/composition/lever/query/addon-
-/// lifecycle) travels as one <see cref="SubmissionEnvelope"/> through <see cref="IWorldServerHost.Submit"/> — the
+/// Every non-intent submission (command/grant/revoke/session/rebuild/mutation/undo/composition/lever/query/screen-
+/// op/designation) travels as one <see cref="SubmissionEnvelope"/> through <see cref="IWorldServerHost.Submit"/> — the
 /// server's single ordered domain — which this transport enqueues and drains inline, on the tick thread, before a
 /// <c>Submit*</c> call returns (the host's command-apply window immediately precedes the tick's step, so FIFO order
 /// and read-after-write are preserved — a byte transport would buffer to the same boundary instead). Per-tick
@@ -41,11 +41,6 @@ public sealed class LoopbackTransport : IServerLink {
         m_server = server;
     }
 
-    /// <summary>Gets an optional record tap invoked with every addon-lifecycle submission before it reaches the server,
-    /// carrying the action and the actor that submitted it — the same reasoning <see cref="GrantTap"/> carries: a
-    /// replay whose fresh world never re-mounted (or re-unmounted) a guest re-drives a differently-composed
-    /// simulation. <see langword="null"/> (the default) is a free pass-through.</summary>
-    public Action<WorldAddonLifecycle, WorldPrincipal>? AddonLifecycleTap { get; set; }
     /// <summary>Gets an optional record tap invoked with every window-composition submission before it reaches the
     /// server, carrying the composition and its actor. <see langword="null"/> (the default) is a free
     /// pass-through.</summary>
@@ -179,17 +174,6 @@ public sealed class LoopbackTransport : IServerLink {
             ));
         }
     }
-    // The tap fires before the envelope reaches the server, exactly like GrantTap/RevokeTap: replay re-applies a
-    // recorded entry through this identical door (WorldServer.EnqueueAddonLifecycle), so a mount/unmount the
-    // door goes on to refuse still reproduces as the identical refusal on replay rather than silently vanishing.
-    /// <inheritdoc/>
-    public void SubmitAddonLifecycle(WorldAddonLifecycle lifecycle, WorldPrincipal principal) =>
-        SubmitTapped(
-            payload: new WorldSubmissionPayload.AddonLifecycle(Value: lifecycle),
-            principal: principal,
-            selectValue: static payload => payload.Value,
-            tap: AddonLifecycleTap
-        );
     /// <inheritdoc/>
     public void SubmitCommand(WorldCommand command) {
         if (
@@ -255,7 +239,7 @@ public sealed class LoopbackTransport : IServerLink {
         );
     /// <inheritdoc/>
     public void SubmitScreenOp(WorldScreenOp op, WorldPrincipal principal) {
-        // No transport-level tap here — unlike AddonLifecycle/Grant/Revoke, a screen op's replay-relevant content
+        // No transport-level tap here — unlike Grant/Revoke, a screen op's replay-relevant content
         // hash (Insert only) is not knowable until the server reads the named path, which may only happen at apply
         // time. WorldServer.ScreenOpTap (fired from inside its own apply method, mirroring RebuildTap) is the tape's
         // capture point instead — see WorldServer.ApplyRebuild's own remarks for why this is the same shape.

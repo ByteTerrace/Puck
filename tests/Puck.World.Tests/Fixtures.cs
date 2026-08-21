@@ -685,23 +685,35 @@ internal sealed class NullAddonHost : IWorldAddonHost {
     public bool AnyEverPumped => false;
     /// <inheritdoc/>
     public int MountedCount => 0;
+    /// <summary>Gets how many times <see cref="TryPrepare"/> was actually called on THIS instance — the structural-
+    /// attach discriminator <see cref="ReplayAddonHostAttachLawTests"/> reads: a shadow server that never reached
+    /// this exact object leaves it at zero regardless of what the recorded stream submitted.</summary>
+    public int PrepareCallCount { get; private set; }
     /// <inheritdoc/>
     public IReadOnlyList<WorldAddonReceipt> Receipts => [];
 
     /// <inheritdoc/>
     public void ApplyContributions(ulong tick) { }
     /// <inheritdoc/>
-    public void CompleteMutation(int addonIndex, ushort actOrdinal, bool applied) { }
+    public void Commit(IWorldAddonPreparedPlan plan) { }
+    /// <inheritdoc/>
+    public void CompleteMutation(long addonInstanceId, ushort actOrdinal, bool applied) { }
     /// <inheritdoc/>
     public string? DescribeUndeclaredGrantedChannels(WorldPrincipal principal, ChannelReachMask? reach, WorldChannelTable channels) => null;
     /// <inheritdoc/>
     public void Dispose() { }
     /// <inheritdoc/>
-    public string Mount(string name, string modulePath, string hash, ulong fuel, IReadOnlyList<WorldCapabilityRequest>? requests) => $"'{name}' refused — no addon host is mounted (NullAddonHost)";
+    public void Finish(IWorldAddonPreparedPlan plan) { }
     /// <inheritdoc/>
     public void TickAddons(ulong tick) { }
     /// <inheritdoc/>
-    public string Unmount(string name) => $"'{name}' refused — no addon host is mounted (NullAddonHost)";
-    /// <inheritdoc/>
     public void ResolveReads(ulong tick) { }
+    /// <inheritdoc/>
+    public bool TryPrepare(WorldDefinition? current, WorldDefinition candidate, out IWorldAddonPreparedPlan? plan, out string? reason) {
+        ++PrepareCallCount;
+        plan = null;
+        reason = null;
+
+        return true;
+    }
 }

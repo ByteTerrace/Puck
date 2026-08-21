@@ -23,7 +23,6 @@ public static class WorldFrameCodec {
         WorldSubmissionKind.Composition => (16 * 1024),
         WorldSubmissionKind.Lever => 64,
         WorldSubmissionKind.Query => (4 * 1024),
-        WorldSubmissionKind.AddonLifecycle => (4 * 1024),
         // A screen.insert content path is a filesystem path, never file bytes — 4 KiB matches the other small
         // structural leaves (Command/Grant/Query) rather than Rebuild's document-embedding cap.
         WorldSubmissionKind.ScreenOp => (4 * 1024),

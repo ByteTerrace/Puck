@@ -178,7 +178,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                 ));
                 writer.WriteInt32(value: value.ConnectionId);
                 writer.WriteInt64(value: value.CorrelationId);
-                writer.WriteInt32(value: value.SourceAddonIndex);
+                writer.WriteInt64(value: value.SourceAddonInstanceId);
                 WriteUInt16(
                     writer: writer,
                     value: value.ActOrdinal
@@ -210,20 +210,6 @@ public static partial class WorldAuthorityCheckpointCodec {
                 writer.WriteInt32(value: value.ConnectionId);
                 writer.WriteInt64(value: value.CorrelationId);
                 break;
-            case WorldPendingOpCheckpoint.AddonLifecycle value:
-                writer.WriteByte(value: 3);
-                writer.WriteBlock(value: EncodeLeafBlock<WorldAddonLifecycle>(
-                    value: value.Lifecycle,
-                    what: "pending addon lifecycle",
-                    tryEncode: WorldSubmissionCodec.TryEncodeAddonLifecycle
-                ));
-                WritePrincipal(
-                    writer: writer,
-                    principal: value.Principal
-                );
-                writer.WriteInt32(value: value.ConnectionId);
-                writer.WriteInt64(value: value.CorrelationId);
-                break;
             default:
                 throw new InvalidOperationException(message: $"pending op '{op.GetType().Name}' has no wire discriminant");
         }
@@ -240,7 +226,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                     );
                     var connectionId = reader.ReadInt32();
                     var correlationId = reader.ReadInt64();
-                    var sourceAddonIndex = reader.ReadInt32();
+                    var sourceAddonInstanceId = reader.ReadInt64();
                     var actOrdinal = ReadUInt16(reader: ref reader);
 
                     return new WorldPendingOpCheckpoint.Mutate(
@@ -248,7 +234,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                         ConnectionId: connectionId,
                         CorrelationId: correlationId,
                         Mutation: mutation!,
-                        SourceAddonIndex: sourceAddonIndex
+                        SourceAddonInstanceId: sourceAddonInstanceId
                     );
                 }
             case 1: {
@@ -291,23 +277,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                         Principal: principal
                     );
                 }
-            case 3: {
-                    var lifecycle = ReadLeafBlock<WorldAddonLifecycle>(
-                        field: "pending addon lifecycle",
-                        reader: ref reader,
-                        tryDecode: WorldSubmissionCodec.TryDecodeAddonLifecycle
-                    );
-                    var principal = ReadPrincipal(reader: ref reader);
-                    var connectionId = reader.ReadInt32();
-                    var correlationId = reader.ReadInt64();
-
-                    return new WorldPendingOpCheckpoint.AddonLifecycle(
-                        ConnectionId: connectionId,
-                        CorrelationId: correlationId,
-                        Lifecycle: lifecycle!,
-                        Principal: principal
-                    );
-                }
+            // Discriminant 3 (the retired pending addon-lifecycle op) is unassigned and never reused.
             default:
                 if (!reader.Failed) {
                     reader.Fail(

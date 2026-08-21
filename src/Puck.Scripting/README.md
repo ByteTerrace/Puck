@@ -639,22 +639,18 @@ Every fault is loud and attributed. Detail lines are formatted for the console a
 addon's **name**, so an operator reading a run log sees which addon failed, why, and what to do:
 
 ```text
-addon ghost: OutOfFuel at tick 3140 — disabled; 'addon enable ghost' to retry
+addon ghost: OutOfFuel — disabled; re-instantiate ghost to retry
 ```
 
 `AddonHost.Describe()` narrates each addon with a `ContentPetname`
 (`Willow-Lantern-Nine  sha256-64/…  fuel 1000000  ENABLED`).
 
-**Hot reload** (`AddonHost.Reload(name)`) re-reads the declared module path, recompiles (a changed
-content hash misses the module cache; an unchanged one reuses it), and swaps in a fresh store — the
-in-session edit loop the `addon reload <name>` console verb drives. The status line names the change
-by petname (`Moss-Pouch-Two became Cinder-Locket-Five`) because the petname **is** the content hash;
-an unchanged module reports `unchanged (fresh store)`. A declared `moduleHash` pin **refuses** a
-content change on `Reload`, leaving the running instance untouched (remove the pin to hot-reload),
-and a broken edit swaps in a sticky faulted instance naming the reason. The reloaded addon runs
-regardless of its prior enabled/disabled state. The same pin is enforced on the initial mount too:
-there is no running instance to leave untouched at boot, so a mismatch there loads the addon
-straight into a sticky `HashMismatch` fault instead of refusing in place.
+**Hot reload** is a consumer-level act: re-`Prepare` the same descriptor (a changed content hash
+misses the module cache; an unchanged one reuses it) and publish the fresh instance through `Adopt`
+— Puck.World drives this as an addon-row revision change through
+`WorldAddonRuntime.TryPrepare`/`Commit` (see [Puck.World.Addons](../Puck.World.Addons/README.md)).
+A declared `moduleHash` pin is enforced at every load: a content mismatch loads the instance
+straight into a sticky `HashMismatch` fault naming the reason, at boot and re-prepare alike.
 
 ---
 

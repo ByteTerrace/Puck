@@ -98,6 +98,12 @@ public sealed class WorldReplayTape {
     // have no relative order left to preserve.
     private List<WorldReplayEntry> m_currentAuthority = new();
     private List<IntentSubmission> m_currentIntents = new();
+    // The FIFO correlation between a Mutation entry MutationTap just added (by its index into m_currentAuthority)
+    // and the MutationOutcomeTap call that will patch its Outcome later the SAME tick — see MutationTap/
+    // MutationOutcomeTap's own remarks. Always empty by the time NoteTick rotates m_currentAuthority (every
+    // mutation tapped this tick is also drained this tick), but cleared defensively alongside the rest of a
+    // recording's mutable state.
+    private readonly Queue<int> m_openMutationEntryIndices = new();
 
     /// <summary>Initializes the tape over the live server it snapshots the starting state from, the profile catalog a
     /// replay's seats re-resolve against, and the loopback whose per-tick submissions it taps.</summary>
@@ -183,12 +189,12 @@ public sealed class WorldReplayTape {
         m_transport.GrantTap = null;
         m_transport.RevokeTap = null;
         m_transport.SessionTap = null;
-        m_transport.AddonLifecycleTap = null;
         m_transport.UndoTap = null;
         m_transport.CompositionTap = null;
         m_transport.QueryTap = null;
         m_liveServer.LinkDeliveryTap = null;
         m_liveServer.MutationTap = null;
+        m_liveServer.MutationOutcomeTap = null;
         m_liveServer.RebuildTap = null;
         m_liveServer.ScreenOpTap = null;
         m_liveServer.ServerEventTap = null;
@@ -218,6 +224,7 @@ public sealed class WorldReplayTape {
         m_seats = null;
         m_ticks = null;
         m_liveHashes.Clear();
+        m_openMutationEntryIndices.Clear();
     }
 
     /// <summary>Aborts the active recording without persisting it: detaches the taps and drops the captured stream.</summary>
@@ -551,12 +558,15 @@ public sealed class WorldReplayTape {
     /// screen with no machine at all where the live session already has one.
     /// <para>On success: snapshots the record-start starting state (the live definition, the mounted addon
     /// receipts, and the active seats) and attaches the loopback taps — intent, command, grant, revoke, session, and
-    /// addon-lifecycle (submission-time) plus rebuild (apply-time, <see cref="Server.WorldServer.RebuildTap"/> — see
-    /// its own remarks for why) — so the next ticks' whole server-input stream is captured. The authority taps write
-    /// into one ordered list, which is what preserves the live interleaving between (for example) a driving command
-    /// and a grant change, or a mount and the grant that follows it. A rebuild's list position reflects when it
-    /// applied (drain order) rather than when it was submitted — the one known narrowing this apply-time capture
-    /// accepts, immaterial unless a rebuild and an addon-lifecycle change are submitted in the identical tick.</para></summary>
+    /// mutation (submission-time via <see cref="Server.WorldServer.MutationTap"/>, its outcome patched in at drain
+    /// via <see cref="Server.WorldServer.MutationOutcomeTap"/> — an addon row's mount/unmount/reload rides this same
+    /// leaf as an ordinary <c>UpsertAddon</c>/<c>RemoveAddon</c> mutation, never a separate lifecycle leaf) plus
+    /// rebuild (apply-time, <see cref="Server.WorldServer.RebuildTap"/> — see its own remarks for why) — so the next
+    /// ticks' whole server-input stream is captured. The authority taps write into one ordered list, which is what
+    /// preserves the live interleaving between (for example) a driving command and a grant change, or an addon
+    /// mount and the grant that follows it. A rebuild's list position reflects when it applied (drain order) rather
+    /// than when it was submitted — the one known narrowing this apply-time capture accepts, immaterial unless a
+    /// rebuild and an addon-affecting mutation are submitted in the identical tick.</para></summary>
     /// <param name="name">The name the recording will persist under at <see cref="StopRecording"/>.</param>
     /// <param name="refusal">The refusal reason, on failure; empty on success.</param>
     /// <returns><see langword="true"/> when recording armed.</returns>
@@ -604,17 +614,28 @@ public sealed class WorldReplayTape {
             Value: grant
         ));
         m_transport.SessionTap = request => m_currentAuthority.Add(item: new WorldReplayEntry.Session(Value: request));
-        m_transport.AddonLifecycleTap = (lifecycle, actor) => m_currentAuthority.Add(item: new WorldReplayEntry.AddonLifecycle(
-            Actor: actor,
-            Value: lifecycle
-        ));
         // Apply-time on the SERVER, not at the loopback: the loopback is only one of three mutation ingresses (a
         // local console/client write, an admitted socket peer, and a traveller's submission forwarded by its source
-        // authority), and only the envelope dispatch sees all three with the actor each one stamped.
-        m_liveServer.MutationTap = (mutation, actor) => m_currentAuthority.Add(item: new WorldReplayEntry.Mutation(
-            Actor: actor,
-            Value: mutation
-        ));
+        // authority), and only the envelope dispatch sees all three with the actor each one stamped. Outcome starts
+        // false — MutationOutcomeTap patches it to the real accept/refuse verdict before this SAME tick closes (both
+        // fire from within the one server.Step this entry's own tick belongs to; see the field's own remarks).
+        m_liveServer.MutationTap = (mutation, actor) => {
+            m_openMutationEntryIndices.Enqueue(item: m_currentAuthority.Count);
+            m_currentAuthority.Add(item: new WorldReplayEntry.Mutation(
+                Actor: actor,
+                Outcome: false,
+                Value: mutation
+            ));
+        };
+        m_liveServer.MutationOutcomeTap = (_, applied) => {
+            // Correlates by POSITION, never by decoding mutation content: MutationTap and MutationOutcomeTap fire in
+            // the identical FIFO order — both ultimately driven by the one m_pending queue every mutation kind
+            // shares — so the Nth open entry always answers the Nth outcome, even across several mutations pending
+            // in the same tick.
+            if (m_openMutationEntryIndices.TryDequeue(result: out var index) && (index < m_currentAuthority.Count) && (m_currentAuthority[index] is WorldReplayEntry.Mutation pending)) {
+                m_currentAuthority[index] = (pending with { Outcome = applied });
+            }
+        };
         m_liveServer.LinkDeliveryTap = adjacency => m_currentAuthority.Add(item: new WorldReplayEntry.LinkDelivery(Adjacency: adjacency));
         m_transport.UndoTap = (count, actor) => m_currentAuthority.Add(item: new WorldReplayEntry.Undo(
             Actor: actor,

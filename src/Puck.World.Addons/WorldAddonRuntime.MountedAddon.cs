@@ -8,7 +8,7 @@ public sealed partial class WorldAddonRuntime {
     // One mounted guest's whole host-side state. Every per-tick buffer is allocated once here, at mount, and reused with
     // a count — a tick allocates nothing on this path.
     private sealed class MountedAddon {
-        public MountedAddon(AddonInstance instance, IReadOnlyList<WorldCapabilityRequest>? requests, int populationCapacity, IReadOnlyList<WorldAddonMemoryWatch>? memoryWatches = null) {
+        public MountedAddon(long instanceId, AddonInstance instance, WorldAddonRow sourceRow, IReadOnlyList<WorldCapabilityRequest>? requests, int populationCapacity, IReadOnlyList<WorldAddonMemoryWatch>? memoryWatches = null) {
             ActBody = new int[AddonAbi.MaxOutCells];
             // A pose answer is the widest response shipping, so the worst case is every output cell being a query.
             Answers = new AddonInCell[(AddonAbi.MaxOutCells * AddonAbi.RequestVerbs.BodyPoseAnswerParts)];
@@ -25,6 +25,7 @@ public sealed partial class WorldAddonRuntime {
             // FoldActs (pump point 2 runs before StageBatch's own reset, which serves pump point 3's Observe meter).
             DriveDispatchCounts = new int[populationCapacity];
             Instance = instance;
+            InstanceId = instanceId;
             // The host-owned copy destination for stage 5's pointer-safety read — sized to the payload ceiling so
             // one buffer serves every act this guest ever submits, reused tick to tick, never per-act allocated.
             MutationPayloadBuffer = new byte[AddonAbi.MaxMutationPayloadBytes];
@@ -38,6 +39,7 @@ public sealed partial class WorldAddonRuntime {
             Pump = new AddonSimulationPump();
             Requests = requests;
             ResponseChannel = ResolveResponseChannel(instance: instance);
+            SourceRow = sourceRow;
             MemoryWatches = memoryWatches;
             MemoryWatchState = (((memoryWatches is { Count: > 0 })
                 ? new WatchState[memoryWatches.Count]
@@ -63,12 +65,6 @@ public sealed partial class WorldAddonRuntime {
         public BodyContribution[] Contributions { get; }
         public bool Disclosed { get; set; }
         public GrantSubject[] DisclosedDrive { get; set; }
-        // The instance Generation (AddonInstance.Generation) the disclosure above was computed against. A
-        // disable/enable cycle re-instantiates the SAME AddonInstance object in place (Puck.Scripting.AddonHost
-        // reuses it; only AddonHost.Reload swaps the object), so DisclosedRevision alone cannot tell a live,
-        // still-known guest apart from one whose linear memory was just wiped. -1 so the very first resolve always
-        // projects.
-        public int DisclosedGeneration { get; set; } = -1;
         public GrantSubject[] DisclosedObserve { get; set; }
         // -1 so the very first resolve always projects, even against a fresh table whose own Revision starts at 0.
         public int DisclosedRevision { get; set; } = -1;
@@ -109,16 +105,23 @@ public sealed partial class WorldAddonRuntime {
         public bool HasEverPumped { get; set; }
         /// <summary>Gets the guest instance.</summary>
         public AddonInstance Instance { get; }
+        /// <summary>Gets the monotonic token minted for this mounted instance the moment it was freshly instantiated —
+        /// carried forward unchanged across every later prepare pass that reuses this same object (a structurally
+        /// unchanged row), and never reused for a different instance. Addresses this guest for completion routing
+        /// (<see cref="WorldAddonRuntime.CompleteMutation"/>) independent of its current position in
+        /// <c>m_mounted</c>, which a queued removal or reorder can move mid-tick; a reload mints a new
+        /// <see cref="MountedAddon"/> object with a new token, so a completion captured against the retired
+        /// instance can never reach the fresh one.</summary>
+        public long InstanceId { get; }
         /// <summary>Gets the <see cref="EventGapCount"/> value last actually staged into a batch — an <c>EventGap</c>
         /// cell is only worth re-emitting when the count has moved since the last one that fit.</summary>
         public ulong LastReportedEventGap { get; set; }
         // The cost surface: fuel consumed is measured every tick. LastTickFuelConsumed is this tick's spend (0 on a
-        // tick the guest did not run — faulted, disabled, or skipped enabled-but-unadmitted); TotalFuelConsumed is a
-        // LIFETIME figure for this guest's name, since it was first mounted — SetEnabled never touches this object
-        // (a disable/enable mutates the same Instance in place), and Reload's wholesale MountedAddon replacement
-        // carries the prior value forward explicitly rather than re-zeroing it. DIAGNOSTIC ONLY: read by the
-        // world.addons verb, never by simulation state and never on a hashed path. Saturates at ulong.MaxValue
-        // rather than wrapping.
+        // tick the guest did not run — faulted, or skipped enabled-but-unadmitted); TotalFuelConsumed is a
+        // LIFETIME figure for this guest's name, since it was first mounted — a row change's wholesale MountedAddon
+        // replacement carries the prior value forward explicitly rather than re-zeroing it. DIAGNOSTIC ONLY: read
+        // by the world.addons verb, never by simulation state and never on a hashed path. Saturates at
+        // ulong.MaxValue rather than wrapping.
         public ulong LastTickFuelConsumed { get; set; }
         /// <summary>Gets the per-watch last-observed state, parallel to <see cref="MemoryWatches"/> by index; null when the
         /// row declares no watches.</summary>
@@ -141,10 +144,6 @@ public sealed partial class WorldAddonRuntime {
         /// <summary>Gets the host-owned scratch buffer stage 5's pointer-safety copy reads a <c>SubmitMutation</c>
         /// payload into, reused every act and every tick.</summary>
         public byte[] MutationPayloadBuffer { get; }
-        // The Generation twin of OverflowedAtRevision, for the identical reason DisclosedGeneration exists beside
-        // DisclosedRevision — a fresh store still deserves one honest attempt to fit, even if the previous
-        // (now-wiped) instance last overflowed at the same grant-table revision.
-        public int OverflowedAtGeneration { get; set; } = -1;
         // The revision an oversized disclosure set overflowed at — re-projection waits for the next grant-table
         // write, the only event that can shrink the set (-1 = never overflowed).
         public int OverflowedAtRevision { get; set; } = -1;
@@ -172,6 +171,12 @@ public sealed partial class WorldAddonRuntime {
         public int ResponseChannel { get; }
         /// <summary>Gets the route-engaged/disengaged cells delivered across this mount's lifetime; diagnostic only.</summary>
         public ulong RouteEventsDelivered { get; set; }
+        /// <summary>Gets the exact row this guest was prepared from — a later prepare pass reuses this guest,
+        /// keeping its memory AND its fault state, only when the candidate row is STRUCTURALLY equal to this one
+        /// (every field, including <c>Requests</c>/<c>MemoryWatches</c> content — see
+        /// <see cref="WorldAddonRuntime.RowsStructurallyEqual"/>) and the channel table this guest was prepared
+        /// against is unchanged.</summary>
+        public WorldAddonRow SourceRow { get; }
         public bool StaleHandleReported { get; set; }
         // A LIFETIME count of answer groups MergeAnswers found no cell for at all (the ring's own hard ceiling —
         // never recoverable by a bigger squeeze), the same saturating-ulong shape as TotalFuelConsumed and for the

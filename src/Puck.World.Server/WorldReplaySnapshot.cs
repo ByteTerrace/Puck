@@ -52,11 +52,18 @@ public abstract record WorldReplayEntry {
     internal sealed record Designation(WorldDesignation Value, WorldPrincipal Actor) : WorldReplayEntry;
     /// <summary>A submitted document mutation and its acting principal — buffered to the tick boundary on re-drive
     /// through the same <c>Server.WorldServer.EnqueueMutation</c> door a live submission uses, so the whole apply
-    /// pipeline (admission, compose, whole-document validate, capacity, install, journal) re-executes rather than a
-    /// recorded effect being replayed. A mutation the pipeline refuses reproduces as the identical refusal.</summary>
+    /// pipeline (admission, compose, whole-document validate, capacity, install, addon prepare, journal)
+    /// re-executes rather than a recorded effect being replayed. A mutation the pipeline refuses reproduces as the
+    /// identical refusal — proven, not merely hoped for, by <see cref="Outcome"/>.</summary>
     /// <param name="Value">The submitted mutation.</param>
     /// <param name="Actor">The principal that submitted it.</param>
-    internal sealed record Mutation(WorldMutation Value, WorldPrincipal Actor) : WorldReplayEntry;
+    /// <param name="Outcome">Whether this exact mutation was ACCEPTED live, recorded from
+    /// <c>Server.WorldServer.MutationOutcomeTap</c> the same tick it was recorded on. The re-drive's own outcome —
+    /// captured through the identical tap wired onto the shadow server — must agree, or the whole re-drive is a
+    /// FATAL replay refusal: once acceptance can depend on module bytes on disk (addon preparation), a live-
+    /// accepted-but-now-refused or live-refused-but-now-accepted disagreement is a real determinism finding, never
+    /// something a later-tick pose comparison alone could ever surface.</param>
+    internal sealed record Mutation(WorldMutation Value, WorldPrincipal Actor, bool Outcome) : WorldReplayEntry;
     /// <summary>A journal undo (<c>world.undo</c>) — buffered to the tick boundary on re-drive exactly as a live
     /// submission is, so the recorded journal tail is replayed back through the same all-or-nothing gates.</summary>
     /// <param name="Count">The number of journal entries to undo.</param>
@@ -79,13 +86,6 @@ public abstract record WorldReplayEntry {
     /// <summary>A server-authored peer disconnect, emitted at the point of effect.</summary>
     /// <param name="Value">The ordered disconnect event.</param>
     internal sealed record PeerDisconnected(WorldServerEvent.PeerDisconnected Value) : WorldReplayEntry;
-    /// <summary>A live addon-runtime lifecycle change (<c>world.addon.mount</c>/<c>world.addon.unmount</c>) — P5:
-    /// lifecycle joins the ordered domain, so a replay re-executes a recorded mount/unmount through the same
-    /// <c>Server.WorldServer.EnqueueAddonLifecycle</c> door the live session used, rather than the tape carrying no
-    /// record of it at all (the taint-bitset posture this replaces).</summary>
-    /// <param name="Value">The mount/unmount action.</param>
-    /// <param name="Actor">The principal that submitted it.</param>
-    internal sealed record AddonLifecycle(WorldAddonLifecycle Value, WorldPrincipal Actor) : WorldReplayEntry;
     /// <summary>A whole-document rebuild-and-swap (<c>world.reset</c>/<c>world.load</c>/<c>world.reload</c>) —
     /// CAS-pinned: <see cref="ContentHash"/> is the canonical <c>sha256-64/{hex}</c> pin of the exact bytes the live
     /// session consumed (Load/Reload, off disk) or of the base's canonical bytes at the moment the rebuild applied
@@ -259,7 +259,7 @@ public sealed class WorldReplaySnapshot {
     // artifact pins (Puck.Scripting.AddonAbi). A tape-shape change does not re-key the ABI, and an ABI break does
     // not re-key this constant — MountedAddons below records what actually mounted, so an ABI break invalidates an
     // existing tape through receipt mismatch without a byte-offset change here.
-    private const uint Magic = 0x504B_4C4Bu; // "PKLK" — puck replay tape; re-keyed for the link-delivery leaf. Retired: 0x504B_4341 ("PKCA").
+    private const uint Magic = 0x504B_4146u; // "PKAF" — puck replay tape; re-keyed for the addon-lifecycle fold (retired AddonLifecycle entry 5, added Mutation's Outcome field). Retired: 0x504B_4C4B ("PKLK"), 0x504B_4341 ("PKCA").
     // A shape-identity token, not a version sequence, pinned at 1 permanently: this build writes and reads exactly
     // one tape shape, so there is no older shape to be newer than. A token that disagrees refuses the file by name
     // (found vs. expected) instead of decoding it as nonsense.
@@ -388,25 +388,6 @@ public sealed class WorldReplaySnapshot {
         if (wire != Wire.AddonLaneReceiptConstant) {
             throw new InvalidDataException(message: $"unknown .puckreplay mounted-addon lane-slot wire value {wire} — the lane axis is deleted and this slot is now a pinned constant ({Wire.AddonLaneReceiptConstant}), carried only so the tape shape does not move ahead of its own re-key.");
         }
-    }
-    private static WorldAddonLifecycle ReadAddonLifecycleLeaf(BinaryReader reader) {
-        var bytes = ReadLeafBytes(
-            reader: reader,
-            what: "addon-lifecycle leaf"
-        );
-
-        if (
-            !WorldSubmissionCodec.TryDecodeAddonLifecycle(
-            bytes: bytes,
-            failure: out var failure,
-            lifecycle: out var lifecycle
-        ) ||
-            (lifecycle is null)
-        ) {
-            throw new InvalidDataException(message: $"Corrupt .puckreplay addon-lifecycle leaf: {failure}");
-        }
-
-        return lifecycle;
     }
     private static WorldCommand ReadCommandLeaf(BinaryReader reader) {
         var bytes = ReadLeafBytes(
@@ -544,10 +525,6 @@ public sealed class WorldReplaySnapshot {
         ),
             3 => new WorldReplayEntry.PeerAdmitted(Value: ReadPeerAdmitted(reader: reader)),
             4 => new WorldReplayEntry.PeerDisconnected(Value: ReadPeerDisconnected(reader: reader)),
-            5 => new WorldReplayEntry.AddonLifecycle(
-            Value: ReadAddonLifecycleLeaf(reader: reader),
-            Actor: ReadPrincipal(reader: reader)
-        ),
             6 => ReadRebuildEntry(reader: reader),
             7 => ReadScreenOpEntry(reader: reader),
             8 => new WorldReplayEntry.Session(Value: ReadSessionLeaf(reader: reader)),
@@ -559,7 +536,8 @@ public sealed class WorldReplaySnapshot {
             11 => ReadTransferEntry(reader: reader),
             12 => new WorldReplayEntry.Mutation(
             Value: ReadMutationLeaf(reader: reader),
-            Actor: ReadPrincipal(reader: reader)
+            Actor: ReadPrincipal(reader: reader),
+            Outcome: reader.ReadBoolean()
         ),
             13 => new WorldReplayEntry.Undo(
             Count: reader.ReadInt32(),
@@ -957,8 +935,10 @@ public sealed class WorldReplaySnapshot {
     }
     // The mount pin compares index-by-index: mount order is document order, and the recording pins the whole receipt
     // sequence — name, hash, and fuel, at each position — never merely the set of names. Position is load-bearing
-    // state (e.g. PendingOp.Mutate's sourceAddonIndex addresses a guest by index), not a cosmetic ordering. Duplicates
-    // are refused first and separately, so a collision reports as itself rather than a confusing index mismatch.
+    // simulation state (the order guests are pumped, disclosed, and fold their contributions), not a cosmetic
+    // ordering, even though a guest's mounted INDEX no longer addresses it for completion routing (see
+    // Addons.WorldAddonRuntime.MountedAddon.InstanceId). Duplicates are refused first and separately, so a
+    // collision reports as itself rather than a confusing index mismatch.
     private static void VerifyMountedAddons(IReadOnlyList<WorldAddonReceipt> recorded, IReadOnlyList<WorldAddonReceipt> fresh) {
         // Read refuses a duplicate name in a TAPE'S OWN mounted set (a name identifies exactly one mounted guest), but
         // Drive can also run over an IN-PROCESS recording that never passed through Read at all —
@@ -976,7 +956,7 @@ public sealed class WorldReplaySnapshot {
         );
 
         if (recorded.Count != fresh.Count) {
-            throw ReplayRefusal.PinnedAddonNotMounted.Raise(message: $"This .puckreplay recording pins {recorded.Count} addon(s), but the replay's fresh world mounts {fresh.Count} — the mounted SEQUENCE (not merely the set of names) is part of what a recording pins, because an addon's mount INDEX is load-bearing wire state (the mutation seam's completion fields address a guest by index).");
+            throw ReplayRefusal.PinnedAddonNotMounted.Raise(message: $"This .puckreplay recording pins {recorded.Count} addon(s), but the replay's fresh world mounts {fresh.Count} — the mounted SEQUENCE (not merely the set of names) is part of what a recording pins, because document order decides the order guests are pumped, disclosed, and fold their contributions.");
         }
 
         for (var index = 0; (index < recorded.Count); index++) {
@@ -1008,20 +988,6 @@ public sealed class WorldReplaySnapshot {
     // validating a byte even though WorldAddonReceipt no longer carries a Lane to encode.
     private static void WriteAddonLanePlaceholder(BinaryWriter writer) {
         writer.Write(value: Wire.AddonLaneReceiptConstant);
-    }
-    private static void WriteAddonLifecycleLeaf(BinaryWriter writer, WorldAddonLifecycle lifecycle) {
-        if (!WorldSubmissionCodec.TryEncodeAddonLifecycle(
-            bytes: out var bytes,
-            failure: out var failure,
-            lifecycle: lifecycle
-        )) {
-            throw new WorldReplayCodecException(message: $"the canonical addon-lifecycle leaf refused while writing .puckreplay: {failure}");
-        }
-
-        WriteLeafBytes(
-            bytes: bytes,
-            writer: writer
-        );
     }
     private static void WriteCommandLeaf(BinaryWriter writer, WorldCommand command) {
         if (!WorldSubmissionCodec.TryEncodeCommand(
@@ -1172,18 +1138,6 @@ public sealed class WorldReplaySnapshot {
                 );
 
                 break;
-            case WorldReplayEntry.AddonLifecycle lifecycle:
-                writer.Write(value: ((byte)5));
-                WriteAddonLifecycleLeaf(
-                    writer: writer,
-                    lifecycle: lifecycle.Value
-                );
-                WritePrincipal(
-                    writer: writer,
-                    principal: lifecycle.Actor
-                );
-
-                break;
             case WorldReplayEntry.Rebuild rebuild:
                 writer.Write(value: ((byte)6));
                 WriteRebuildLeaf(
@@ -1231,6 +1185,10 @@ public sealed class WorldReplaySnapshot {
                     writer: writer,
                     principal: mutation.Actor
                 );
+                // The recorded accept/refuse outcome — see WorldReplayEntry.Mutation's own remarks. Every entry this
+                // writer ever sees was resolved synchronously within the tick it was recorded on (the same tick
+                // MutationOutcomeTap fired), so Outcome is never speculative by the time it reaches here.
+                writer.Write(value: mutation.Outcome);
 
                 break;
             case WorldReplayEntry.Undo undo:
@@ -1431,9 +1389,9 @@ public sealed class WorldReplaySnapshot {
         );
         writer.Write(value: rebuild.ContentHash);
     }
-    // Reuses WorldSubmissionCodec's canonical screen-op leaf directly (the AddonLifecycle leaf's own precedent —
-    // unlike Rebuild, a screen op carries no embedded document either way, so there is no shape asymmetry forcing a
-    // fork here). The nullable ContentHash and the actor are tape-only metadata riding beside the shared leaf.
+    // Reuses WorldSubmissionCodec's canonical screen-op leaf directly — unlike Rebuild, a screen op carries no
+    // embedded document either way, so there is no shape asymmetry forcing a fork here. The nullable ContentHash and
+    // the actor are tape-only metadata riding beside the shared leaf.
     private static void WriteScreenOpLeaf(BinaryWriter writer, WorldReplayEntry.ScreenOp screenOp) {
         if (!WorldSubmissionCodec.TryEncodeScreenOp(
             screenOp: screenOp.Value,
@@ -1614,11 +1572,20 @@ public sealed class WorldReplaySnapshot {
 
         // Checked before the first tick: a guest that failed to mount, mounted from moved module bytes, or mounted
         // under a different budget would otherwise re-drive a different world and surface as an ordinary trajectory
-        // mismatch at some arbitrary tick instead of naming the real cause.
+        // mismatch at some arbitrary tick instead of naming the real cause. This is ALSO the initial-document-
+        // mounting half of the outcome pin below: comparing prepare receipts before tick zero refuses the drive on
+        // a boot-time mismatch the same way a per-mutation outcome disagreement refuses it later.
         VerifyMountedAddons(
             recorded: MountedAddons,
             fresh: addons.Receipts
         );
+
+        // The mutation outcome pin: this drive calls WorldServer.EnqueueMutation directly (never through
+        // ApplyEnvelope, which is what threads MutationOutcomeTap on the LIVE path — see its own remarks), so each
+        // Mutation case below passes its own completion straight to EnqueueMutation's outcomeObserved parameter,
+        // queued in enqueue order and drained in the SAME order immediately after each tick's server.Step call, so
+        // the Nth queued outcome always answers the Nth recorded Mutation entry that tick.
+        var replayedMutationOutcomes = new Queue<bool>();
 
         var stepTicks = ResolveStepWidth(
             simulationRate: SimulationRate,
@@ -1628,6 +1595,7 @@ public sealed class WorldReplaySnapshot {
 
         for (var tick = 0; (tick < Ticks.Count); tick++) {
             var input = Ticks[tick];
+            var expectedMutationOutcomes = new List<bool>();
 
             // In recorded order, at the same pre-Step position the live command-apply window applied them: a grant that
             // preceded a command live must precede it here, or the command is checked against a table the live one
@@ -1671,16 +1639,6 @@ public sealed class WorldReplaySnapshot {
                         server.ApplyServerEvent(serverEvent: disconnected.Value);
 
                         break;
-                    case WorldReplayEntry.AddonLifecycle lifecycle:
-                        // Same shape as a recorded mutation: buffer through the ordinary door, drained by THIS
-                        // tick's server.Step call below (DrainPendingOps), never applied directly here — a live
-                        // mount/unmount never applies synchronously either (see WorldServer.EnqueueAddonLifecycle).
-                        server.EnqueueAddonLifecycle(
-                            lifecycle: lifecycle.Value,
-                            principal: lifecycle.Actor
-                        );
-
-                        break;
                     case WorldReplayEntry.Rebuild rebuild:
                         // Deliberately NO Definition: Load/Reload re-read rebuild.PathHint fresh inside
                         // WorldServer.ApplyRebuild (called from DrainPendingOps below), which is the content-address
@@ -1717,8 +1675,14 @@ public sealed class WorldReplaySnapshot {
                     case WorldReplayEntry.Mutation mutation:
                         // Buffered to the tick boundary through the ordinary door, drained by THIS tick's
                         // server.Step call below (DrainPendingOps) — a live mutation never applies synchronously
-                        // either, so the whole apply pipeline re-executes at the same point it did live.
-                        server.EnqueueMutation(mutation: mutation.Value);
+                        // either, so the whole apply pipeline (including addon preparation) re-executes at the same
+                        // point it did live. The completion queues this mutation's REPLAYED outcome; the recorded
+                        // one is queued alongside it and both are compared right after server.Step below.
+                        server.EnqueueMutation(
+                            mutation: mutation.Value,
+                            outcomeObserved: applied => replayedMutationOutcomes.Enqueue(item: applied)
+                        );
+                        expectedMutationOutcomes.Add(item: mutation.Outcome);
 
                         break;
                     case WorldReplayEntry.Undo undo:
@@ -1786,6 +1750,31 @@ public sealed class WorldReplaySnapshot {
             );
 
             server.Step(context: in context);
+
+            // The outcome pin, right after the SAME tick's DrainPendingOps has resolved every mutation this tick
+            // enqueued: any disagreement — this tick's mutation count itself, or any one outcome within it — is a
+            // FATAL replay refusal, never a continue-with-divergence. Both directions matter: accepted live but now
+            // refused (e.g. a pinned module went missing), and refused live but now accepted.
+            for (var index = 0; (index < expectedMutationOutcomes.Count); index++) {
+                if (!replayedMutationOutcomes.TryDequeue(result: out var replayedOutcome)) {
+                    throw ReplayRefusal.MutationOutcomeMismatch.Raise(message: $"tick {tick}: {expectedMutationOutcomes.Count} mutation(s) were recorded this tick, but the replay produced only {index} outcome(s) — the mutation stream itself diverged, not merely a later tick's pose.");
+                }
+
+                var recordedOutcome = expectedMutationOutcomes[index];
+
+                if (replayedOutcome != recordedOutcome) {
+                    throw ReplayRefusal.MutationOutcomeMismatch.Raise(message: $"tick {tick}: mutation #{index} was {(recordedOutcome
+                        ? "ACCEPTED"
+                        : "REFUSED")} live but is {(replayedOutcome
+                        ? "ACCEPTED"
+                        : "REFUSED")} on replay — once acceptance can depend on module bytes on disk, this disagreement is a real determinism finding, never an ordinary later-tick pose drift.");
+                }
+            }
+
+            if (replayedMutationOutcomes.Count > 0) {
+                throw ReplayRefusal.MutationOutcomeMismatch.Raise(message: $"tick {tick}: the replay produced {replayedMutationOutcomes.Count} more mutation outcome(s) than were recorded — the mutation stream itself diverged, not merely a later tick's pose.");
+            }
+
             hashes[tick] = HashState(population: population);
         }
 

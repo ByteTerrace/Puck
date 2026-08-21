@@ -181,7 +181,7 @@ the same code. The addon seam
 refuses before decode so a guest cannot probe the decoder for free. It passes
 `rowScopedEditSubject: null` (a row name is only knowable after decode, so gate
 3 runs later at apply) and `meter: true`; the apply path then passes
-`preMetered: true` for that op (`PendingOp.Mutate.SourceAddonIndex`) so one
+`preMetered: true` for that op (`PendingOp.Mutate.SourceAddonInstanceId`) so one
 guest dispatch is never charged twice. Call-site duplication is fine; rule
 reimplementation is the defect class this predicate closed.
 

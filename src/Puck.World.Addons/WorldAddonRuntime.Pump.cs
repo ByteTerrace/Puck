@@ -634,18 +634,17 @@ public sealed partial class WorldAddonRuntime {
                 continue;
             }
 
-            // Enabled-but-unadmitted is a host sequencing state Admit runs at mount, and Reload/SetEnabled (below)
-            // re-run it immediately after re-instantiating — so this is unreachable through this runtime's own
-            // lifecycle verbs. It is kept as a defensive skip, not an armed trap, for any FUTURE caller that reaches
-            // AddonHost.Reload/SetEnabled directly rather than through this type's wrappers (ticking an unadmitted
-            // instance throws by contract).
+            // Enabled-but-unadmitted is a host sequencing state Admit closes during TryPrepare — so it is
+            // unreachable through the prepare/commit door. It is kept as a defensive skip, not an armed trap, for
+            // any FUTURE caller that reaches AddonHost directly rather than through this runtime (ticking an
+            // unadmitted instance throws by contract).
             if (!instance.Admitted) {
                 addon.LastTickFuelConsumed = 0UL;
 
                 if (!addon.DiscrepancyReported) {
                     ReportDiscrepancy(
                         addon: addon,
-                        detail: "instance is enabled but was never re-admitted after a reload/enable — skipped every tick (a caller bypassed WorldAddonRuntime.Reload/SetEnabled, which re-admit)"
+                        detail: "instance is enabled but was never admitted — skipped every tick (a caller bypassed the prepare/commit door, which admits during preparation)"
                     );
                 }
 
@@ -717,7 +716,6 @@ public sealed partial class WorldAddonRuntime {
             // in this SAME Step, before intents) applies whatever cleared the door.
             ResolveMutations(
                 addon: addon,
-                addonIndex: index,
                 tick: tick
             );
         }

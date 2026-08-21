@@ -93,16 +93,6 @@ public interface IServerLink {
     /// <param name="lever">The lever write.</param>
     /// <param name="principal">The acting identity the lever is checked against.</param>
     void SubmitSessionLever(WorldSessionLever lever, WorldPrincipal principal);
-    /// <summary>Submits a live addon-runtime lifecycle change (<c>world.addon.mount</c>/<c>world.addon.unmount</c>).
-    /// Buffers on the server and drains at the next step boundary before intents — the same door
-    /// <see cref="SubmitWorldMutation"/> uses: the server checks <paramref name="principal"/> holds
-    /// <see cref="WorldCapability.Mutate"/> over <see cref="GrantSubject.Section"/>(<see cref="WorldSection.Addons"/>)
-    /// before touching the runtime, and reports the outcome loudly on stderr and through
-    /// <c>WorldServer.EchoTap</c> — never as a synchronous return, so a following <c>world.addons</c> read (behind
-    /// the stdin drain barrier) observes the settled state.</summary>
-    /// <param name="lifecycle">The mount/unmount action.</param>
-    /// <param name="principal">The acting identity the change is checked against.</param>
-    void SubmitAddonLifecycle(WorldAddonLifecycle lifecycle, WorldPrincipal principal);
     /// <summary>Submits a live screen-machine lifecycle change (<c>screen.insert</c>/<c>.eject</c>/<c>.select</c>/
     /// <c>.options</c>/<c>.link</c>/<c>.unlink</c>). Applies synchronously on the server (like
     /// <see cref="SubmitCommand"/>/<see cref="SubmitGrant"/>, never buffered to the tick boundary) — the acting

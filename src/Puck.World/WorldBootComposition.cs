@@ -319,7 +319,8 @@ internal static class WorldBootComposition {
         // world.ownership.offer/.accept/.reclaim, world.groups. Kind rows are authored through
         // world.row.set groups.kinds/world.row.remove groups.kinds.
         services.AddSingleton<ICommandModule, WorldGroupCommandModule>();
-        // The live addon-runtime verb surface — world.addon.reload/.enable/.disable + world.addons.
+        // The addon cost-surface read-back — world.addons. Mounting/unmounting/reloading/enabling/disabling
+        // an addon rides world.row.set addons/.remove instead (WorldRowCommandModule), never a verb here.
         services.AddSingleton<ICommandModule, WorldAddonCommandModule>();
         // The local auction house verb surface — market.list/.bid/.buyout/.cancel + world.market.
         services.AddSingleton<ICommandModule, WorldMarketCommandModule>();

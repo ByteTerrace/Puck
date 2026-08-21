@@ -821,7 +821,7 @@
             "description": "The front face\u0027s world-space center (the sampled surface origin); the geometry center sits one HalfDepth behind it along the face normal."
           },
           "right": {
-            "description": "The unit world axis the sampled U increases along (the slab\u0027s local \u002BX in world space)."
+            "description": "The unit world axis the sampled U increases along (the slab\u0027s local \u002BX in world space). Must be orthogonal to Up: the client derives the slab\u0027s orientation and UV frame from the pair while the server\u0027s collider projects the half-extents onto it, so a skewed pair would render and collide as different solids."
           },
           "up": {
             "description": "The unit world axis the sampled V increases against \u2014 V = 0 at the top (the slab\u0027s local \u002BY in world space)."
@@ -955,6 +955,159 @@
                       }
                     },
                     "additionalProperties": false
+                  },
+                  "controls": {
+                    "description": "The authored device-control state (WorldCameraControls), or null to leave every control at its driver default. One physical device carries one control state, so the FIRST declared camera screen authoring this wins (matching the shared-session model); a later UpsertScreen mutation re-resolves and applies the change live. Omitted from the wire when null.",
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "pan": {
+                        "description": "Horizontal framing offset (digital pan on webcams).",
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "tilt": {
+                        "description": "Vertical framing offset (digital tilt on webcams).",
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "zoom": {
+                        "description": "Magnification \u2014 on sensor-cropping webcams a region-of-interest zoom (e.g. 100..500 = 1x..5x on a Logitech BRIO), which pairs with Pan/Tilt to frame a region.",
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "exposure": {
+                        "description": "Manual exposure time, typically log2 seconds (e.g. -5 = 1/32 s); absent = auto exposure.",
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "focus": {
+                        "description": "Manual focus distance; absent = autofocus.",
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "brightness": {
+                        "description": "Image brightness offset.",
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "contrast": {
+                        "description": "Image contrast.",
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "saturation": {
+                        "description": "Color saturation (0 is grayscale on most devices).",
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "sharpness": {
+                        "description": "Edge sharpening strength.",
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "gain": {
+                        "description": "Sensor gain (ISO-like amplification).",
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "whiteBalance": {
+                        "description": "Manual white-balance color temperature in kelvin; absent = auto white balance.",
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "backlightCompensation": {
+                        "description": "Backlight compensation (devices commonly report a 0..1 toggle).",
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "fieldOfView": {
+                        "description": "The lens field of view in DEGREES \u2014 a vendor-extension control (hardware-verified on the Logitech BRIO: discrete 90/78/65, a true sensor crop composing with Zoom); the device snaps to its nearest supported value, and a camera without the vendor unit skips it. Absent = the device default (widest).",
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "vendor": {
+                        "description": "Raw vendor-extension writes \u2014 byte-sized (selector, value) pairs on the device\u0027s vendor unit, applied in order after the named controls. The engine assigns NO semantics: the author names the selector, the device decides what it means (e.g. the BRIO\u0027s unconfirmed HDR candidate is selector 12), and a removed row is NOT restored (its default is unknowable). screen.camera reads each authored selector back. Omitted from the wire when null.",
+                        "type": [
+                          "array",
+                          "null"
+                        ],
+                        "items": {
+                          "description": "One raw vendor-extension write on the shared camera (see WorldCameraControls\u0027s Vendor member): a byte-sized selector on the device\u0027s vendor unit and the value to write. Deliberately semantics-free \u2014 the honest vocabulary for device controls no standard names.",
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "properties": {
+                            "id": {
+                              "description": "The vendor extension unit\u0027s control selector.",
+                              "type": "integer"
+                            },
+                            "value": {
+                              "description": "The byte value to write (0..255; the device clamps or refuses out-of-range writes).",
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "default": null
+                      }
+                    },
+                    "additionalProperties": false,
+                    "default": null
+                  },
+                  "sensor": {
+                    "description": "Which physical sensor this row\u0027s shared feed opens: Color (the default) or Infrared \u2014 the infrared frame source a Windows Hello capable device carries. Each sensor gets its own shared feed, so different rows may request different sensors at once; the engine honors a Windows Face Authentication Profile V2 when published and admits simultaneous capture only after both native streams prove live. A legacy provider available only to the Windows biometric broker is not a public dual-camera graph. An absent infrared source faults the bind loudly (the slot shows the no-signal card).",
+                    "enum": [
+                      "Color",
+                      "Infrared"
+                    ],
+                    "default": "Color"
                   }
                 },
                 "required": [
@@ -1334,6 +1487,18 @@
                         },
                         "profile": {
                           "$ref": "#/properties/screens/items/properties/source/anyOf/3/properties/profile"
+                        },
+                        "controls": {
+                          "$ref": "#/properties/screens/items/properties/source/anyOf/3/properties/controls",
+                          "default": null
+                        },
+                        "sensor": {
+                          "description": "Which physical sensor this row\u0027s shared feed opens: Color (the default) or Infrared \u2014 the infrared frame source a Windows Hello capable device carries. Each sensor gets its own shared feed, so different rows may request different sensors at once; the engine honors a Windows Face Authentication Profile V2 when published and admits simultaneous capture only after both native streams prove live. A legacy provider available only to the Windows biometric broker is not a public dual-camera graph. An absent infrared source faults the bind loudly (the slot shows the no-signal card).",
+                          "enum": [
+                            "Color",
+                            "Infrared"
+                          ],
+                          "default": "Color"
                         }
                       },
                       "required": [
@@ -5454,6 +5619,18 @@
                         },
                         "profile": {
                           "$ref": "#/properties/screens/items/properties/source/anyOf/3/properties/profile"
+                        },
+                        "controls": {
+                          "$ref": "#/properties/screens/items/properties/source/anyOf/3/properties/controls",
+                          "default": null
+                        },
+                        "sensor": {
+                          "description": "Which physical sensor this row\u0027s shared feed opens: Color (the default) or Infrared \u2014 the infrared frame source a Windows Hello capable device carries. Each sensor gets its own shared feed, so different rows may request different sensors at once; the engine honors a Windows Face Authentication Profile V2 when published and admits simultaneous capture only after both native streams prove live. A legacy provider available only to the Windows biometric broker is not a public dual-camera graph. An absent infrared source faults the bind loudly (the slot shows the no-signal card).",
+                          "enum": [
+                            "Color",
+                            "Infrared"
+                          ],
+                          "default": "Color"
                         }
                       },
                       "required": [

@@ -29,10 +29,6 @@ public enum WorldEditEchoKind {
     /// document edit.</summary>
     GrantTable,
 
-    /// <summary>A live addon-runtime lifecycle change (<c>world.addon.mount</c>/<c>world.addon.unmount</c>) —
-    /// runtime guest state, not a document edit.</summary>
-    AddonLifecycle,
-
     /// <summary>A whole-document rebuild-and-swap (<c>world.reset</c>/<c>world.load</c>/<c>world.reload</c>) —
     /// stronger than an ordinary <see cref="Mutation"/>: every section may have moved, the journal always clears,
     /// and admitted peer connections re-mint their admission grant.</summary>
@@ -446,6 +442,15 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// identically. The replay tape attaches only while armed; clients never receive this submission-only
     /// seam.</summary>
     public Action<WorldMutation, WorldPrincipal>? MutationTap { get; set; }
+    /// <summary>Observes the accept/refuse OUTCOME of a mutation <see cref="MutationTap"/> already observed at
+    /// submission, invoked once the SAME tick's <see cref="Step"/> has drained and applied it — never for the two
+    /// internal producers <see cref="MutationTap"/> itself excludes (a mounted guest's decoded act, a world rule's
+    /// <c>generate</c> effect), because only <see cref="ApplyEnvelope"/>'s own dispatch threads the completion
+    /// callback that reaches this tap; those two producers call <see cref="EnqueueMutation"/> directly with none.
+    /// This is what lets a recorded mutation's outcome be pinned on tape and a replay's disagreement — accepted live
+    /// but refused on replay, or the reverse — be told apart from an ordinary later-tick pose drift. The replay tape
+    /// attaches only while armed; clients never receive this submission-only seam.</summary>
+    public Action<WorldMutation, bool>? MutationOutcomeTap { get; set; }
     /// <summary>Observes each authored <c>adjacencies</c> row that received a delivered neighbour refresh this tick,
     /// by row name, at the pinned point in <see cref="Step"/> where the adjacency source has just frozen the tick's
     /// projection graph. The one taped link-liveness input — see <see cref="WorldEventFeed"/>'s own remarks. The

@@ -51,6 +51,8 @@ handlers touch `WorldClient`, `PlayerRoster`, the seat surface (e.g.
 stays in `Puck.World` instead — those verbs need a live player-facing session
 this project never carries. `Puck.World.Addons` is likewise out of reach (not
 in this project's reference set), so `WorldAddonCommandModule` (the
-`world.addon.*` lifecycle verbs) stays in `Puck.World` too.
+`world.addons` cost-surface read-back — mounting/unmounting/reloading/
+enabling/disabling an addon rides `world.row.set addons`/`.remove` instead,
+this project's own door) stays in `Puck.World` too.
 
 Inventory control: `puck declarations src/Puck.World.Console --kind class --name CommandModule`.

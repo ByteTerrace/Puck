@@ -15,9 +15,8 @@ namespace Puck.World.Addons;
 /// <param name="LastTickFuelConsumed">Fuel consumed by the most recent tick this guest actually ran; zero on a tick
 /// it was skipped (faulted, disabled, or enabled-but-unadmitted).</param>
 /// <param name="TotalFuelConsumed">Fuel consumed across every tick since this guest was first mounted — a lifetime
-/// figure that survives a disable/enable cycle and a live reload (see <see cref="WorldAddonRuntime.Reload"/>), never
-/// silently restarting while the guest stays mounted under the same name. Saturates at <see cref="ulong.MaxValue"/>
-/// rather than wrapping.</param>
+/// figure that survives an unrelated reprepare pass reusing this guest untouched, never silently restarting while
+/// the guest stays mounted under the same name. Saturates at <see cref="ulong.MaxValue"/> rather than wrapping.</param>
 /// <param name="TotalAnswersDropped">Answer groups dropped with no verdict cell at all, across this guest's whole
 /// lifetime (same survives-reload, saturating-lifetime shape as <paramref name="TotalFuelConsumed"/>) — the ring's
 /// own hard ceiling, past which even a single-cell <see cref="AddonVerdict.QuotaExhausted"/> squeeze has no room.
@@ -97,26 +96,16 @@ public sealed partial class WorldAddonRuntime {
     // use with StaleHandle, so the two mechanisms agree without either being load-bearing alone.
     private void EmitDisclosures(MountedAddon addon, int budget) {
         var grants = m_server.Grants;
-        var generation = addon.Instance.Generation;
-        // A disable/enable cycle re-instantiates the SAME AddonInstance in place (fresh store, wiped linear
-        // memory, every handle the guest learned gone) without the grant table ever being written, so the
-        // revision-only check below would read that as "already disclosed" and leave a recovered guest blind
-        // forever. Keying the shortcut on the instance's own Generation as well — never on which lifecycle verb
-        // ran — is what makes this hold for a reload's wholesale MountedAddon replacement (a fresh object, whose
-        // Generation already disagrees with any DisclosedGeneration default) and for any future re-instantiation
-        // path the same way.
-        var sameGeneration = (addon.DisclosedGeneration == generation);
 
         // The projection can only change when the grant table is written, so an unchanged revision is a total answer —
-        // this is what keeps the per-tick path free of the array ProjectSubjects allocates. Deliberately NOT sufficient
+        // this is what keeps the per-tick path free of the array ProjectSubjects allocates. (A guest whose store was
+        // wiped arrives here as a FRESH MountedAddon — every change replaces the object wholesale — so its -1 defaults
+        // always project the first time.) Deliberately NOT sufficient
         // on its own: the revision is process-global, so it moves for writes touching other principals entirely, and the
         // sequence compare below is what decides whether THIS addon's projection actually moved. An overflowed set is
         // gated on the same coordinate: only a grant-table write can shrink it (the budget is fixed per instance), so
         // re-projecting every tick while it stays oversized would be two array allocations per tick forever.
-        if (
-            sameGeneration &&
-            ((addon.DisclosedRevision == grants.Revision) || (addon.OverflowedAtRevision == grants.Revision))
-        ) {
+        if ((addon.DisclosedRevision == grants.Revision) || (addon.OverflowedAtRevision == grants.Revision)) {
             return;
         }
 
@@ -130,7 +119,6 @@ public sealed partial class WorldAddonRuntime {
         );
 
         if (
-            sameGeneration &&
             addon.Disclosed &&
             Same(
             a: addon.DisclosedDrive,
@@ -163,7 +151,6 @@ public sealed partial class WorldAddonRuntime {
             // last-disclosed state untouched so the set retries on the next grant-table write (the only thing that
             // can shrink it); the line prints once so a permanently-oversized projection does not flood stderr.
             addon.OverflowedAtRevision = grants.Revision;
-            addon.OverflowedAtGeneration = generation;
 
             if (!addon.DisclosureOverflowReported) {
                 addon.DisclosureOverflowReported = true;
@@ -188,7 +175,6 @@ public sealed partial class WorldAddonRuntime {
         addon.DisclosedDrive = drive;
         addon.DisclosedObserve = observe;
         addon.DisclosedRevision = grants.Revision;
-        addon.DisclosedGeneration = generation;
     }
     private static bool IsMaterialized(MountedAddon addon, WorldCapability capability, GrantSubject subject) =>
         ((subject.Kind == GrantSubjectKind.Body) && IsRequested(
@@ -198,13 +184,15 @@ public sealed partial class WorldAddonRuntime {
         ));
     // Requesting is not receiving, but the reverse gap is the dangerous one: reporting only the intersection of
     // "requested" and "held" lets a capability the addon holds but never declared go completely unmentioned. So this
-    // reports what the settled table says the addon's OWN principal HOLDS, right now, across every capability (via
+    // builds what the settled table says the addon's OWN principal HOLDS, right now, across every capability (via
     // WorldGrants.Held), and separately annotates the manifest's own wish list against that held set: granted
     // (requested and held), withheld (requested, not held), and unrequested (held, never requested). The unrequested
     // list is the INERT one: a hold outside the manifest materializes no handle (see IsRequested). Called for EVERY
     // row regardless of whether it declares Requests, because a document can grant an addon's principal something
-    // directly without the row ever asking for it.
-    private static void ReportCapabilityDisclosure(string name, IReadOnlyList<WorldCapabilityRequest>? requests, IWorldGrantsView grants) {
+    // directly without the row ever asking for it. Capability disclosure is narration: computed here, against the
+    // settled table as of PREPARE, but the caller stages the returned text and prints it only once the plan that
+    // produced it actually commits — a refused prepare must never have printed a mount claim that never became true.
+    private static string? BuildCapabilityDisclosureNarration(string name, IReadOnlyList<WorldCapabilityRequest>? requests, IWorldGrantsView grants) {
         var principal = WorldPrincipal.Addon(name: name);
         var held = grants.Held(principal: principal);
 
@@ -212,7 +200,7 @@ public sealed partial class WorldAddonRuntime {
             ((requests is null) || (requests.Count == 0)) &&
             (held.Count == 0)
         ) {
-            return;
+            return null;
         }
 
         var heldLabels = new HashSet<string>(capacity: held.Count);
@@ -248,7 +236,7 @@ public sealed partial class WorldAddonRuntime {
 
         var requestCount = (requests?.Count ?? 0);
 
-        Console.Error.WriteLine(value: ((((string)$"[world.addon: {name} requested {requestCount} capabilit{((requestCount == 1)
+        return ((((string)$"[world.addon: {name} requested {requestCount} capabilit{((requestCount == 1)
             ? "y"
             : "ies")} — granted: {((granted.Count > 0)
             ? string.Join(
@@ -267,13 +255,14 @@ public sealed partial class WorldAddonRuntime {
                 separator: ", ",
                 values: unrequested
             )
-            : "(none)")}]"));
+            : "(none)")}]");
     }
     // The mount-time report point 2 of the channel-name re-key requires: one line naming every declared channel
     // this guest's names did NOT resolve against the host table — report-and-inert, never a mount fault (see
-    // AddonChannelBinding). Runs once, right after the "mounted" line, over the handshake's own decoded bindings,
-    // so it can never drift from what the guest actually declared.
-    private static void ReportInertChannelDeclarations(ReadOnlySpan<AddonChannelBinding> bindings, string name) {
+    // AddonChannelBinding). Built once, right after the "mounted" line, over the handshake's own decoded bindings,
+    // so it can never drift from what the guest actually declared; staged and printed only once the plan commits,
+    // same as the capability disclosure above.
+    private static string? BuildInertChannelDeclarationNarration(ReadOnlySpan<AddonChannelBinding> bindings, string name) {
         var inert = new List<string>();
 
         foreach (var binding in bindings) {
@@ -282,12 +271,12 @@ public sealed partial class WorldAddonRuntime {
             }
         }
 
-        if (inert.Count > 0) {
-            Console.Error.WriteLine(value: $"[world.addon: {name} declares {inert.Count} channel name(s) the host table does not recognize — inert, never faults the mount: {string.Join(
+        return ((inert.Count > 0)
+            ? $"[world.addon: {name} declares {inert.Count} channel name(s) the host table does not recognize — inert, never faults the mount: {string.Join(
                 separator: ", ",
                 values: inert
-            )}]");
-        }
+            )}]"
+            : null);
     }
     // Resolve an addon module path: absolute as-is, else relative to the executable directory (Assets/** is
     // Content-copied beside the output, exactly how the world document itself is found at boot).
@@ -329,25 +318,566 @@ public sealed partial class WorldAddonRuntime {
         return true;
     }
 
-    /// <summary>Builds the runtime over a boot world document and attaches it to the server that will pump it. Mounting
-    /// runs here, which is after the server's constructor applied <see cref="WorldDefinition.Grants"/> — the disclosure
-    /// must report a settled table, because a report that lies at boot is worse than no report.</summary>
+    /// <summary>Builds the runtime over a boot world document and attaches it to the server that will pump it —
+    /// through the SAME prepare/commit contract a live mutation uses. See <see cref="TryCreate"/> for the
+    /// non-throwing form the composition root uses to turn a refusal into an ordinary boot refusal.</summary>
     /// <param name="definition">The boot world definition (its <c>addons</c> rows).</param>
     /// <param name="server">The authoritative server the guests act against and that drives the three pump points.</param>
-    /// <returns>The attached runtime.</returns>
+    /// <returns>The attached, committed runtime.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> or <paramref name="server"/> is <see langword="null"/>.</exception>
+    /// <exception cref="WorldAddonInstallRefusedException">An enabled row could not prepare — the world
+    /// installation is refused rather than silently booting without it.</exception>
     public static WorldAddonRuntime Create(WorldDefinition definition, WorldServer server) {
+        if (!TryCreate(
+            definition: definition,
+            server: server,
+            runtime: out var runtime,
+            reason: out var reason
+        )) {
+            throw new WorldAddonInstallRefusedException(message: $"world installation refused — addon {reason}");
+        }
+
+        return runtime!;
+    }
+    /// <summary>The non-throwing form of <see cref="Create"/> — the composition root's own boot-refusal seam: a
+    /// failed prepare leaves nothing to dispose (<see cref="TryPrepare"/>'s own ownership guard already released
+    /// everything it staged) and returns <see langword="false"/> with a reason, matching every sibling boot gate's
+    /// <c>false</c> + printed-reason shape instead of an unhandled exception through DI resolution.</summary>
+    /// <param name="definition">The boot world definition (its <c>addons</c> rows).</param>
+    /// <param name="server">The authoritative server the guests act against and that drives the three pump points.</param>
+    /// <param name="runtime">The attached, committed runtime, on success.</param>
+    /// <param name="reason">Why the installation was refused, on failure.</param>
+    /// <returns><see langword="true"/> when every enabled row prepared and the runtime attached.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> or <paramref name="server"/> is <see langword="null"/>.</exception>
+    public static bool TryCreate(WorldDefinition definition, WorldServer server, out WorldAddonRuntime? runtime, out string? reason) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: server);
 
-        var runtime = new WorldAddonRuntime(
+        var candidate = new WorldAddonRuntime(
             definition: definition,
             server: server
         );
 
-        server.AttachAddons(runtime: runtime);
+        if (!candidate.TryPrepare(
+            current: null,
+            candidate: definition,
+            plan: out var plan,
+            reason: out reason
+        )) {
+            runtime = null;
 
-        return runtime;
+            return false;
+        }
+
+        candidate.Commit(plan: plan!);
+        server.AttachAddons(runtime: candidate);
+        candidate.Finish(plan: plan!);
+        runtime = candidate;
+        reason = null;
+
+        return true;
+    }
+    /// <inheritdoc/>
+    public void Commit(IWorldAddonPreparedPlan plan) {
+        ArgumentNullException.ThrowIfNull(argument: plan);
+
+        if (plan is not PreparedAddonInstall install) {
+            throw new ArgumentException(
+                message: $"this runtime received a plan of type '{plan.GetType().Name}' it did not prepare.",
+                paramName: nameof(plan)
+            );
+        }
+
+        // Pure reference adoption: five field assignments (the host reference, the host's own three-collection
+        // registry swap, the mounted/receipt lists, and the channel table pair) — no I/O, allocation, compilation,
+        // guest execution, or recoverable failure anywhere in this method. Narration and superseded disposal wait
+        // for Finish, which the caller runs only after ITS OWN publication (document install, journal write) is
+        // itself durable.
+        m_host = install.Host;
+        // Null exactly when no row has ever enabled (an addon-free world, or every row disabled) — the Wasmtime
+        // host is lazily constructed, so there is nothing to adopt a registry into yet.
+        m_host?.Adopt(
+            byName: install.HostByName,
+            descriptors: install.HostDescriptors,
+            instances: install.HostInstances
+        );
+        m_mounted = install.Mounted;
+        m_receipts = install.Receipts;
+        m_channels = install.Channels;
+        m_channelsSource = install.ChannelsSource;
+        install.MarkCommitted();
+    }
+    /// <inheritdoc/>
+    public void Finish(IWorldAddonPreparedPlan plan) {
+        ArgumentNullException.ThrowIfNull(argument: plan);
+
+        if (plan is not PreparedAddonInstall install) {
+            throw new ArgumentException(
+                message: $"this runtime received a plan of type '{plan.GetType().Name}' it did not prepare.",
+                paramName: nameof(plan)
+            );
+        }
+
+        // Narration only NOW: a mount/disclosure line staged during a prepare that was never committed must never
+        // print, because it would claim a mount that never became true. Each entry is invoked here, not before —
+        // see PreparedAddonInstall.Narration — so a capability disclosure reads whatever grant table is live at
+        // THIS instant, never the one that was live when TryPrepare ran.
+        try {
+            foreach (var line in install.Narration) {
+                if (line() is { } text) {
+                    Console.Error.WriteLine(value: text);
+                }
+            }
+        }
+        finally {
+            // Replaced/removed guests are unreachable from the tick path the instant Commit's swap landed —
+            // retirement is unconditional once publication landed, so it runs even when a narration thunk or the
+            // console write throws; disposal happens here, after publication, never before.
+            foreach (var superseded in install.Superseded) {
+                superseded.Instance.Dispose();
+            }
+
+            // A channel-table change replaces the WHOLE host (see TryPrepare) rather than any individual guest, so
+            // its disposal is wholesale too — never entered into Superseded, which would double-dispose every
+            // instance the old host's own Dispose() already tears down.
+            install.SupersededHost?.Dispose();
+        }
+    }
+    /// <inheritdoc/>
+    public bool TryPrepare(WorldDefinition? current, WorldDefinition candidate, out IWorldAddonPreparedPlan? plan, out string? reason) {
+        ArgumentNullException.ThrowIfNull(argument: candidate);
+
+        // A candidate whose channel declarations differ from what the currently-mounted set was compiled against
+        // invalidates every row's reuse eligibility at once, even a row that compares structurally equal to its own
+        // prior self — an unchanged manifest still resolves its declared names against a table that just moved.
+        // Only a whole-document rebuild or undo can move this (no live mutation kind touches the channels section
+        // for a running server's whole life — see AffectsAddons' own remarks), so the live-mutation path pays this
+        // SequenceEqual's cost only on those rare calls, never on an ordinary UpsertAddon/RemoveAddon.
+        var channelsChanged = !m_channelsSource.SequenceEqual(second: candidate.Channels);
+        var stagedChannels = (channelsChanged
+            ? WorldChannelTable.Compile(channels: candidate.Channels)
+            : m_channels);
+
+        // Keyed by name so a row this pass reuses (or supersedes) can be looked up in O(1); whatever remains once
+        // every candidate row has been considered is exactly the set this pass replaces or drops entirely. Left
+        // empty when channels changed: every row reprepares below regardless of its own structural equality, so
+        // nothing here is ever a reuse candidate — see the loop's own remarks.
+        var previouslyMounted = new Dictionary<string, MountedAddon>(comparer: StringComparer.Ordinal);
+
+        if (
+            (current is not null) &&
+            !channelsChanged
+        ) {
+            foreach (var addon in m_mounted) {
+                previouslyMounted[addon.Instance.Name] = addon;
+            }
+        }
+
+        var mounted = new List<MountedAddon>();
+        var receipts = new List<WorldAddonReceipt>();
+        var freshlyPrepared = new List<(AddonDescriptor Descriptor, AddonInstance Instance)>();
+        // Deferred, not pre-built: each entry resolves its own text lazily, on the SAME thread, when Finish actually
+        // prints it — never at prepare time, when a caller (a rebuild) may still move the grant table this row's
+        // own disclosure line depends on before its plan ever commits.
+        var narration = new List<Func<string?>>();
+        // Every row this pass visits and does not reuse (a changed row still enabled) is moved here explicitly; a
+        // row this pass never visits at all (removed from the candidate, or authored disabled) is picked up after
+        // the loop from whatever the dictionary above still holds — the two paths together are the full superseded
+        // set, disposed by the caller only AFTER the new state publishes. Stays empty when channels changed — see
+        // supersededHost below for that case's own disposal unit.
+        var superseded = new List<MountedAddon>();
+        // The complete replacement AddonHost registry this pass is building — every reused AND freshly-prepared
+        // guest lands in all three, in mount order, so Commit's own AddonHost.Adopt call is pure reference adoption
+        // over an already-complete registry (never a per-name read-modify-write, which is what left a superseded
+        // name's stale entry behind before this cure).
+        var hostByName = new Dictionary<string, AddonInstance>(comparer: StringComparer.Ordinal);
+        var hostDescriptors = new Dictionary<string, AddonDescriptor>(comparer: StringComparer.Ordinal);
+        var hostInstances = new List<AddonInstance>();
+        var host = (channelsChanged
+            ? null
+            : m_host);
+        var hostIsNew = false;
+        // The host THIS pass is about to replace wholesale, only when channels moved and a host already existed —
+        // disposed by Finish, never entered into `superseded` (its own Dispose() already tears down every instance
+        // it still owns, so double-entering those same instances would double-dispose them).
+        var supersededHost = (channelsChanged
+            ? m_host
+            : null);
+        // Ownership guard: an exception anywhere in the loop below (an unexpected environment failure the guest
+        // load path did not already convert into an ordinary fault) still reaches the finally, which releases
+        // exactly what an explicit refusal already releases — every guest this pass compiled and the host it
+        // itself constructed, never a host or guest the currently-committed runtime still owns.
+        var owned = false;
+
+        try {
+            // Mount order is DOCUMENT order, and it stays the order every pump point walks: an addon's position in
+            // the world file is the one thing an author controls about when its contribution lands relative to
+            // another's.
+            foreach (var row in candidate.Addons) {
+                if (!row.Enabled) {
+                    // Disabled rows don't compile until enabled — never staged, never counted against a fresh
+                    // instance. A previously-mounted guest under this name (now disabled) is left in
+                    // previouslyMounted, picked up by the leftover sweep below.
+                    continue;
+                }
+
+                if (previouslyMounted.TryGetValue(
+                    key: row.Name,
+                    value: out var existing
+                )) {
+                    previouslyMounted.Remove(key: row.Name);
+
+                    if (RowsStructurallyEqual(
+                        a: existing.SourceRow,
+                        b: row
+                    )) {
+                        // Unchanged row: reused whole, keeping its memory AND its fault state alike — runtime
+                        // fault is not a preparation dependency, so a sticky-faulted guest stays faulted (never
+                        // silently recovered by an unrelated mutation, and never restarted by resubmitting the
+                        // identical row) until ITS OWN row's structural identity actually moves. No compile, no
+                        // admit, no reference this pass touches at all.
+                        mounted.Add(item: existing);
+                        receipts.Add(item: new WorldAddonReceipt(
+                            Name: existing.Instance.Name,
+                            Hash: existing.Instance.Hash.ToString(),
+                            Fuel: ((ulong)existing.Instance.FuelPerTick)
+                        ));
+                        hostByName[existing.Instance.Name] = existing.Instance;
+                        hostDescriptors[existing.Instance.Name] = DescriptorFor(row: row);
+                        hostInstances.Add(item: existing.Instance);
+
+                        continue;
+                    }
+
+                    // Same name, but the row changed (or the existing guest is no longer healthy) — the currently-
+                    // mounted guest is superseded by whatever this pass prepares below.
+                    superseded.Add(item: existing);
+                }
+
+                // Deferred host construction: only pay the Wasmtime engine when a world enables an addon, live or
+                // boot. hostIsNew tracks whether THIS pass is the one that built it, so a discarded plan disposes
+                // exactly the host it created and none it merely reused.
+                if (host is null) {
+                    var engine = new ScriptingEngine(options: ScriptingEngineOptions.Deterministic);
+
+                    host = new AddonHost(
+                        channelResolver: new WorldAddonChannelResolver(channels: stagedChannels),
+                        engine: engine,
+                        loader: new WasmModuleLoader(
+                            engine: engine,
+                            assetSource: new FileSystemAssetSource()
+                        )
+                    );
+                    hostIsNew = true;
+                }
+
+                var descriptor = DescriptorFor(row: row);
+
+                // Grown BEFORE the store exists so the Add below cannot allocate (and so cannot throw) — otherwise
+                // the instant between Prepare returning and ownership registering could leak the store.
+                freshlyPrepared.EnsureCapacity(capacity: (freshlyPrepared.Count + 1));
+
+                var instance = host.Prepare(descriptor: in descriptor);
+
+                // Ownership transfers to this pass the instant the store exists — before any further gate below is
+                // even reached — so the finally's DiscardPrepared releases it on EVERY non-commit exit from here on,
+                // including an exception thrown by a gate below, and none of those gates needs its own dispose call.
+                freshlyPrepared.Add(item: (descriptor, instance));
+
+                if (instance.State != AddonState.Enabled) {
+                    plan = null;
+                    reason = $"'{row.Name}' could not prepare — {instance.Fault.Detail}";
+
+                    return false;
+                }
+
+                // A manifest that requests a capability but declares no Response channel can never receive a
+                // verdict, disclosure, or minted handle — every such answer routes through the Response channel —
+                // so refuse rather than admit a guest permanently incapable of using anything it might be granted.
+                // A row with no requests at all is unaffected.
+                if (
+                    (row.Requests is { Count: > 0 }) &&
+                    (ResolveResponseChannel(instance: instance) < 0)
+                ) {
+                    plan = null;
+                    reason = $"'{row.Name}' refused — requests {row.Requests.Count} capabilit{((row.Requests.Count == 1)
+                        ? "y"
+                        : "ies")} but declares no Response channel, so no verdict or disclosure could ever reach it and no requested handle could ever be learned";
+
+                    return false;
+                }
+
+                // The capability disclosure — the whole point (the capability-channels campaign's "a manifest
+                // requests; a grant approves a subset; nothing is implicit"). NOT built now: a whole-document
+                // rebuild can move the grant table itself, AFTER this prepare pass but BEFORE Finish ever prints
+                // anything (see WorldServer.ApplyRebuild), so a string built against the table as it stands here
+                // could already be stale by the time it is safe to print. Deferred to a thunk this row's own
+                // narration entry evaluates lazily, against WHATEVER m_server.Grants IS at the moment Finish
+                // actually invokes it — the live, settled table for a plain mutation/undo (nothing moves it
+                // between here and Finish on those paths), the candidate's own newly-installed table for a rebuild.
+                narration.Add(item: () => BuildCapabilityDisclosureNarration(
+                    grants: m_server.Grants,
+                    name: row.Name,
+                    requests: row.Requests
+                ));
+
+                // Admission runs the guest's optional puck_init under the fuel budget, against the staged guest's
+                // own private memory only — no host imports, contributions, handles, or output escape this early.
+                instance.Admit();
+
+                if (instance.State != AddonState.Enabled) {
+                    plan = null;
+                    reason = $"'{row.Name}' faulted on puck_init — {instance.Fault.Detail}";
+
+                    return false;
+                }
+
+                mounted.Add(item: new MountedAddon(
+                    instanceId: ++m_nextInstanceId,
+                    instance: instance,
+                    sourceRow: row,
+                    requests: row.Requests,
+                    populationCapacity: m_server.Population.Capacity,
+                    memoryWatches: row.MemoryWatches
+                ));
+                // The receipt is taken from the INSTANCE, never from the row: the row is the author's pin, the
+                // instance is what prepared under it.
+                receipts.Add(item: new WorldAddonReceipt(
+                    Name: instance.Name,
+                    Hash: instance.Hash.ToString(),
+                    Fuel: ((ulong)instance.FuelPerTick)
+                ));
+                hostByName[instance.Name] = instance;
+                hostDescriptors[instance.Name] = descriptor;
+                hostInstances.Add(item: instance);
+
+                var mountedLine = $"[world.addon: mounted {row.Name} ({instance.Hash}) fuel {instance.FuelPerTick} — grant it a body to drive, e.g. world.grant addon:{row.Name} drive body:1 budget:60 (and observe body:1 budget:60 to let it read its pose — both are untrusted-principal dispatch budgets and are required)]";
+
+                narration.Add(item: () => mountedLine);
+
+                var inertLine = BuildInertChannelDeclarationNarration(
+                    bindings: instance.ChannelBindings,
+                    name: row.Name
+                );
+
+                narration.Add(item: () => inertLine);
+            }
+
+            // The leftover sweep: whatever the dictionary still holds is a row this pass never visited at all —
+            // removed from the candidate entirely, or authored disabled — joining whatever was explicitly
+            // superseded above.
+            superseded.AddRange(collection: previouslyMounted.Values);
+
+            plan = new PreparedAddonInstall(
+                channels: stagedChannels,
+                channelsSource: candidate.Channels,
+                freshlyPrepared: freshlyPrepared,
+                host: host,
+                hostByName: hostByName,
+                hostDescriptors: hostDescriptors,
+                hostInstances: hostInstances,
+                hostIsNew: hostIsNew,
+                mounted: mounted,
+                narration: narration,
+                receipts: receipts,
+                superseded: superseded,
+                supersededHost: supersededHost
+            );
+            reason = null;
+            owned = true;
+
+            return true;
+        } finally {
+            if (!owned) {
+                DiscardPrepared(
+                    freshlyPrepared: freshlyPrepared,
+                    host: host,
+                    hostIsNew: hostIsNew
+                );
+            }
+        }
+    }
+    // Reconstructs the neutral load descriptor a row prepares under — identical for a freshly-prepared row and a
+    // reused one (structural equality already proved every field, including Name/ModulePath/Hash/Fuel, matches),
+    // so the SAME helper serves both branches of TryPrepare's loop without a live AddonHost read.
+    private static AddonDescriptor DescriptorFor(WorldAddonRow row) => new(
+        Name: row.Name,
+        ModulePath: ResolvePath(modulePath: row.ModulePath),
+        // The document gate requires a hash; the empty→null translation stays defensive, because the neutral
+        // descriptor is reachable from hosts that have no document gate in front of them.
+        ModuleHash: (string.IsNullOrEmpty(value: row.Hash)
+        ? null
+        : row.Hash),
+        FuelPerTick: ((row.Fuel == 0UL)
+        ? null
+        : (long)row.Fuel),
+        Enabled: true
+    );
+    // Explicit structural row equality — never generated record equality, whose Requests/MemoryWatches fields are
+    // interface-typed collections that default to reference equality. Runtime fault state deliberately does NOT
+    // participate: an unchanged faulted guest stays faulted until ITS OWN row's structural identity changes, never
+    // because a DIFFERENT row's mutation happened to run this comparison.
+    private static bool RowsStructurallyEqual(WorldAddonRow a, WorldAddonRow b) =>
+        (ReferenceEquals(
+            objA: a,
+            objB: b
+        ) ||
+        ((a.Name == b.Name) &&
+        (a.ModulePath == b.ModulePath) &&
+        (a.Hash == b.Hash) &&
+        (a.Fuel == b.Fuel) &&
+        (a.Enabled == b.Enabled) &&
+        (a.Revision == b.Revision) &&
+        CapabilityRequestsEqual(
+            a: a.Requests,
+            b: b.Requests
+        ) &&
+        MemoryWatchesEqual(
+            a: a.MemoryWatches,
+            b: b.MemoryWatches
+        )));
+    private static bool CapabilityRequestsEqual(IReadOnlyList<WorldCapabilityRequest>? a, IReadOnlyList<WorldCapabilityRequest>? b) {
+        if (ReferenceEquals(
+            objA: a,
+            objB: b
+        )) {
+            return true;
+        }
+
+        var aCount = (a?.Count ?? 0);
+        var bCount = (b?.Count ?? 0);
+
+        if (aCount != bCount) {
+            return false;
+        }
+
+        for (var index = 0; (index < aCount); index++) {
+            if (!a![index].Equals(other: b![index])) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+    private static bool MemoryWatchesEqual(IReadOnlyList<WorldAddonMemoryWatch>? a, IReadOnlyList<WorldAddonMemoryWatch>? b) {
+        if (ReferenceEquals(
+            objA: a,
+            objB: b
+        )) {
+            return true;
+        }
+
+        var aCount = (a?.Count ?? 0);
+        var bCount = (b?.Count ?? 0);
+
+        if (aCount != bCount) {
+            return false;
+        }
+
+        for (var index = 0; (index < aCount); index++) {
+            if (!a![index].Equals(other: b![index])) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+    // Shared discard exit for TryPrepare's ownership guard: disposes every instance this pass has prepared but not
+    // yet returned as a plan — every instance the loop constructs joins this list the instant it exists, before any
+    // gate that might refuse it or throw — and the host this pass itself constructed, if any, never a host this
+    // pass merely reused, which the currently-committed runtime still owns.
+    private static void DiscardPrepared(List<(AddonDescriptor Descriptor, AddonInstance Instance)> freshlyPrepared, AddonHost? host, bool hostIsNew) {
+        foreach (var (_, instance) in freshlyPrepared) {
+            instance.Dispose();
+        }
+
+        if (hostIsNew) {
+            host?.Dispose();
+        }
+    }
+    /// <summary>The prepare/commit transaction handle this runtime produces from <see cref="TryPrepare"/> and
+    /// consumes in <see cref="Commit"/>/<see cref="Finish"/> — every collection a successful prepare pass built,
+    /// plus what disposing an uncommitted plan must release. Linear ownership: exactly one of <see cref="Commit"/>
+    /// or <see cref="Dispose"/> runs against a given instance, never both and never neither.</summary>
+    private sealed class PreparedAddonInstall(WorldChannelTable channels, IReadOnlyList<WorldChannel> channelsSource, List<(AddonDescriptor Descriptor, AddonInstance Instance)> freshlyPrepared, AddonHost? host, Dictionary<string, AddonInstance> hostByName, Dictionary<string, AddonDescriptor> hostDescriptors, List<AddonInstance> hostInstances, bool hostIsNew, List<MountedAddon> mounted, List<Func<string?>> narration, List<WorldAddonReceipt> receipts, List<MountedAddon> superseded, AddonHost? supersededHost) : IWorldAddonPreparedPlan {
+        private bool m_committed;
+        private bool m_disposed;
+
+        /// <summary>Gets the channel table <see cref="Commit"/> adopts — the runtime's existing table when
+        /// unchanged, or a freshly compiled one over the candidate's own declarations when the channels section
+        /// moved.</summary>
+        public WorldChannelTable Channels { get; } = channels;
+        /// <summary>Gets the exact declaration list <see cref="Channels"/> was compiled from — what the NEXT
+        /// prepare pass compares a future candidate's own channels against.</summary>
+        public IReadOnlyList<WorldChannel> ChannelsSource { get; } = channelsSource;
+        /// <summary>Gets the guests this pass compiled and admitted but has not yet registered — already folded
+        /// into <see cref="HostByName"/>/<see cref="HostDescriptors"/>/<see cref="HostInstances"/> for
+        /// <see cref="Commit"/>'s own adoption; this list exists only so an uncommitted plan's <see cref="Dispose"/>
+        /// knows exactly which instances it, rather than the currently-committed runtime, owns.</summary>
+        public List<(AddonDescriptor Descriptor, AddonInstance Instance)> FreshlyPrepared { get; } = freshlyPrepared;
+        /// <summary>Gets the host this plan commits into — the runtime's existing host when this pass reused one, or
+        /// the host this pass itself constructed when <see cref="HostIsNew"/>.</summary>
+        public AddonHost? Host { get; } = host;
+        /// <summary>Gets the complete replacement name-to-instance map <see cref="Puck.Scripting.AddonHost.Adopt"/>
+        /// installs by reference — every mounted guest, reused and fresh alike, and nothing a superseded name left
+        /// behind.</summary>
+        public Dictionary<string, AddonInstance> HostByName { get; } = hostByName;
+        /// <summary>Gets the complete replacement name-to-descriptor map, parallel to <see cref="HostByName"/>.</summary>
+        public Dictionary<string, AddonDescriptor> HostDescriptors { get; } = hostDescriptors;
+        /// <summary>Gets the complete replacement instance list, in mount order, parallel to <see cref="Mounted"/>.</summary>
+        public List<AddonInstance> HostInstances { get; } = hostInstances;
+        /// <summary>Gets a value indicating whether this pass constructed <see cref="Host"/> — the difference
+        /// between a discard that must dispose it and one that must leave a shared, already-committed host alone.</summary>
+        public bool HostIsNew { get; } = hostIsNew;
+        /// <summary>Gets the full ordered mounted set this plan installs — reused guests and freshly-prepared ones
+        /// interleaved in candidate document order.</summary>
+        public List<MountedAddon> Mounted { get; } = mounted;
+        /// <inheritdoc/>
+        public int MountedCount => Mounted.Count;
+        /// <summary>Gets the deferred stderr line producers (mount confirmations, capability disclosures,
+        /// inert-channel reports), evaluated and printed by <see cref="WorldAddonRuntime.Finish"/> only, never by
+        /// this type. A capability disclosure entry re-reads the grant table at the moment it is invoked, so a
+        /// caller that moves the table between this plan's own prepare pass and its eventual <c>Finish</c> call
+        /// (a whole-document rebuild replaying its candidate's own <c>Grants</c> section) still prints a line that
+        /// matches what actually installed; an entry that resolves to <see langword="null"/> prints nothing.</summary>
+        public List<Func<string?>> Narration { get; } = narration;
+        /// <summary>Gets the receipts parallel to <see cref="Mounted"/>, in the same order.</summary>
+        public List<WorldAddonReceipt> Receipts { get; } = receipts;
+        /// <summary>Gets the guests this plan replaces or drops by name (the channel table unchanged) — disposed by
+        /// <see cref="WorldAddonRuntime.Finish"/> only after the new set is published, never by this type (they are
+        /// still the live, committed guests until then).</summary>
+        public List<MountedAddon> Superseded { get; } = superseded;
+        /// <summary>Gets the host this plan replaces WHOLESALE (the channel table moved), or <see langword="null"/>
+        /// when <see cref="Host"/> is reused or freshly built with nothing to replace. Disposed by
+        /// <see cref="WorldAddonRuntime.Finish"/>, never entered into <see cref="Superseded"/>.</summary>
+        public AddonHost? SupersededHost { get; } = supersededHost;
+
+        /// <summary>Disposes every freshly-prepared guest store this plan was never committed with, and the host this
+        /// plan itself constructed, if any. A no-op once <see cref="MarkCommitted"/> has run, or on a second call.</summary>
+        public void Dispose() {
+            if (
+                m_disposed ||
+                m_committed
+            ) {
+                m_disposed = true;
+
+                return;
+            }
+
+            m_disposed = true;
+
+            foreach (var (_, instance) in FreshlyPrepared) {
+                instance.Dispose();
+            }
+
+            if (HostIsNew) {
+                Host?.Dispose();
+            }
+        }
+        /// <summary>Marks this plan committed, so a later <see cref="Dispose"/> call (a defensive
+        /// try/finally at the call site) becomes a no-op rather than tearing down state <see cref="Commit"/> just
+        /// published.</summary>
+        public void MarkCommitted() => m_committed = true;
     }
     /// <summary>Describes the live per-guest cost surface, in mount order — the <c>world.addons</c> read. Allocates one array per
     /// call; a console read, never the tick path.</summary>
@@ -432,352 +962,5 @@ public sealed partial class WorldAddonRuntime {
             separator: ", ",
             values: names
         );
-    }
-    /// <summary>Live-mounts a new guest — the runtime half of the <c>world.addon.mount</c> lifecycle submission
-    /// (<see cref="WorldServer"/>'s <c>AddonLifecycle</c> drain arm, reached only through the ordered domain: a live
-    /// mount now lands at the same defined tick-boundary point a document mutation does, and rides the replay tape
-    /// through <see cref="WorldSubmissionCodec"/>'s shared leaf — see <c>references/replay.md</c>). Mirrors the
-    /// boot-time per-row mount sequence this type's constructor runs: lazily builds the Wasmtime host (an addon-free
-    /// world still pays nothing until its first mount, live or boot), compiles under the declared hash pin, gates
-    /// the Response-channel-required-for-Requests rule, discloses capabilities against the settled grant table, and
-    /// admits under fuel — every gate the boot path runs, run here instead of duplicated by inspection: a live mount
-    /// and a boot mount must refuse identically. <b>Mount never re-admits an existing guest</b> — a name already
-    /// tracked in the mounted set refuses; <see cref="Reload"/> is the recovery/refresh verb for that case, kept
-    /// deliberately distinct so an operator's "bring this up" and "restart what is already up" never collide on one
-    /// name.</summary>
-    /// <param name="name">The addon's identifying name — must be unique among mounted guests.</param>
-    /// <param name="modulePath">The WASM module file path (machine-local, resolved exactly as a boot row's is).</param>
-    /// <param name="hash">The required content-address integrity pin (<c>sha256-64/{16 hex}</c>) — an unpinned guest
-    /// makes state depend on a file on disk, a determinism hole before a security one.</param>
-    /// <param name="fuel">The per-tick fuel budget; <c>0</c> selects <see cref="AddonAbi.DefaultFuelPerTick"/>.</param>
-    /// <param name="requests">The addon's manifest — what it asks for, as data; null/empty means it asks for
-    /// nothing and therefore reaches nothing (deny-by-default holds regardless).</param>
-    /// <returns>A human-readable status line.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="name"/>, <paramref name="modulePath"/>, or
-    /// <paramref name="hash"/> is <see langword="null"/>.</exception>
-    public string Mount(string name, string modulePath, string hash, ulong fuel, IReadOnlyList<WorldCapabilityRequest>? requests) {
-        ArgumentNullException.ThrowIfNull(argument: name);
-        ArgumentNullException.ThrowIfNull(argument: modulePath);
-        ArgumentNullException.ThrowIfNull(argument: hash);
-
-        if (m_mounted.Exists(match: candidate => string.Equals(
-            a: candidate.Instance.Name,
-            b: name,
-            comparisonType: StringComparison.Ordinal
-        ))) {
-            return $"'{name}' is already a mounted guest — mount never re-admits an existing guest; use world.addon.reload {name} to refresh it or world.addon.unmount {name} first";
-        }
-
-        // Deferred host construction, exactly as the constructor's own boot loop: only pay the Wasmtime engine when
-        // a guest actually mounts, live or boot.
-        if (m_host is null) {
-            var engine = new ScriptingEngine(options: ScriptingEngineOptions.Deterministic);
-
-            m_host = new AddonHost(
-                channelResolver: new WorldAddonChannelResolver(channels: m_channels),
-                engine: engine,
-                loader: new WasmModuleLoader(
-                    engine: engine,
-                    assetSource: new FileSystemAssetSource()
-                )
-            );
-        }
-
-        var descriptor = new AddonDescriptor(
-            Name: name,
-            ModulePath: ResolvePath(modulePath: modulePath),
-            ModuleHash: (string.IsNullOrEmpty(value: hash)
-            ? null
-            : hash),
-            FuelPerTick: ((fuel == 0UL)
-            ? null
-            : (long)fuel),
-            Enabled: true
-        );
-
-        m_host.Add(descriptor: in descriptor);
-
-        if (!m_host.TryGet(
-            instance: out var instance,
-            name: name
-        )) {
-            // Unreachable — Add registers under exactly this name — kept as the constructor's own defensive line is.
-            return $"'{name}' did not register under its own name after Add — not mounted";
-        }
-
-        if (instance.State != AddonState.Enabled) {
-            return $"'{name}' faulted — {instance.Fault.Detail}";
-        }
-
-        if (
-            (requests is { Count: > 0 }) &&
-            (ResolveResponseChannel(instance: instance) < 0)
-        ) {
-            instance.Disable();
-
-            return $"'{name}' refused — requests {requests.Count} capabilit{((requests.Count == 1)
-                ? "y"
-                : "ies")} but declares no Response channel, so no verdict or disclosure could ever reach it and no requested handle could ever be learned; not mounted";
-        }
-
-        ReportCapabilityDisclosure(
-            name: name,
-            requests: requests,
-            grants: m_server.Grants
-        );
-        instance.Admit();
-
-        if (instance.State != AddonState.Enabled) {
-            return $"'{name}' faulted on admit — {instance.Fault.Detail}";
-        }
-
-        m_mounted.Add(item: new MountedAddon(
-            instance: instance,
-            requests: requests,
-            populationCapacity: m_server.Population.Capacity
-        ));
-        m_receipts.Add(item: new WorldAddonReceipt(
-            Name: instance.Name,
-            Hash: instance.Hash.ToString(),
-            Fuel: ((ulong)instance.FuelPerTick)
-        ));
-        ReportInertChannelDeclarations(
-            bindings: instance.ChannelBindings,
-            name: name
-        );
-
-        return $"mounted {name} ({instance.Hash}) fuel {instance.FuelPerTick} — grant it capabilities to drive/observe, e.g. world.grant addon:{name} drive body:<n> budget:<n>";
-    }
-    /// <summary>Reloads a mounted guest from its declared module path and re-runs the admit sequence —
-    /// <see cref="AddonHost.Reload"/>'s own doc names the whole admit sequence as owed and, until this verb, unowned:
-    /// re-reads and recompiles the module through <see cref="AddonHost.Reload"/>, then, when the fresh instance
-    /// enabled, re-reports the capability disclosure against the same manifest and re-runs
-    /// <see cref="AddonInstance.Admit"/> before the guest can tick again — closing the enabled-but-unadmitted gap
-    /// <see cref="TickAddons"/> otherwise has to skip defensively. The receipt <see cref="Receipts"/> reports is
-    /// updated only on a successful re-admit, so a failed reload leaves the last-known-good receipt in place rather
-    /// than overwriting it with a fault. The tracked <c>MountedAddon</c> is replaced wholesale (its per-tick buffers
-    /// are sized to the fresh instance's channel geometry), but its <c>TotalFuelConsumed</c> lifetime counter carries
-    /// forward from the instance it replaces — a reload recovers the same guest, it does not start a new one.</summary>
-    /// <remarks>A row that never reached the mounted set (a boot load fault) is out of this verb's
-    /// reach: reviving one from nothing would re-run the whole boot mount sequence for a row this runtime never added
-    /// to <see cref="Receipts"/>, a bigger surface than this pass owes. <b>Tape caveat</b>: a saved replay pins its
-    /// mounted guests' receipts once, at record-start (<c>WorldReplaySnapshot</c>) — a live reload during an active
-    /// recording changes what is actually running without the tape ever learning of it. This method does not detect or
-    /// warn about that; the console verb that calls it does (see <c>WorldAddonCommandModule</c>).</remarks>
-    /// <param name="name">The addon name.</param>
-    /// <returns>A human-readable status line.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="name"/> is <see langword="null"/>.</exception>
-    public string Reload(string name) {
-        ArgumentNullException.ThrowIfNull(argument: name);
-
-        if (m_host is null) {
-            return $"'{name}' — this world enables no addon; there is no host to reload against";
-        }
-
-        var mountedIndex = m_mounted.FindIndex(match: candidate => string.Equals(
-            a: candidate.Instance.Name,
-            b: name,
-            comparisonType: StringComparison.Ordinal
-        ));
-
-        if (mountedIndex < 0) {
-            return $"'{name}' is not a mounted guest — a load-faulted row never joined the tick set and is out of this verb's reach";
-        }
-
-        var previous = m_mounted[mountedIndex];
-        var status = m_host.Reload(name: name);
-
-        if (!m_host.TryGet(
-            instance: out var fresh,
-            name: name
-        )) {
-            // Unreachable — AddonHost.Reload always re-registers under the same name — but this runtime must never
-            // silently drop a mounted guest from its own tracked set on the strength of an assumption alone.
-            return status;
-        }
-
-        if (ReferenceEquals(
-            objA: fresh,
-            objB: previous.Instance
-        )) {
-            // AddonHost.Reload's ONE no-swap outcome: a declared moduleHash pin refused the content change and left
-            // the running instance completely untouched — still admitted from before, so there is nothing to
-            // re-admit and calling Admit() again would throw (an instance may only be admitted once per store).
-            return status;
-        }
-
-        var outcome = string.Empty;
-
-        if (fresh.State == AddonState.Enabled) {
-            // Mirrors the mount-time sequence exactly (see the constructor): report the disclosure against the SAME
-            // manifest the row mounted with, then admit under the fresh store's own fuel budget.
-            ReportCapabilityDisclosure(
-                name: name,
-                requests: previous.Requests,
-                grants: m_server.Grants
-            );
-            fresh.Admit();
-
-            if (fresh.State == AddonState.Enabled) {
-                outcome = ", re-admitted";
-
-                var receiptIndex = m_receipts.FindIndex(match: receipt => string.Equals(
-                    a: receipt.Name,
-                    b: name,
-                    comparisonType: StringComparison.Ordinal
-                ));
-
-                if (receiptIndex >= 0) {
-                    // The receipt is taken from the INSTANCE, never the row — see the constructor's own remark; a
-                    // reload's receipt update follows the identical rule.
-                    m_receipts[receiptIndex] = new WorldAddonReceipt(
-                        Name: fresh.Name,
-                        Hash: fresh.Hash.ToString(),
-                        Fuel: ((ulong)fresh.FuelPerTick)
-                    );
-                }
-            } else {
-                outcome = $", but puck_init faulted on re-admit — {fresh.Fault.Detail}";
-            }
-        }
-
-        // Replace the tracked guest wholesale rather than mutate it in place: a reload is a fresh instance with its
-        // own channel geometry, so every per-tick buffer this type preallocates (Batch, Answers, Contributions, the
-        // dispatch/disclosure scratch) must be re-sized and re-zeroed exactly as mount does, never patched onto
-        // stale state sized for the PREVIOUS instance. The fuel/drop/event counters below carry forward because the
-        // guest's NAME is what world.addons reports against, and a reload recovers that same guest, not a new one.
-        m_mounted[mountedIndex] = new MountedAddon(
-            instance: fresh,
-            requests: previous.Requests,
-            populationCapacity: m_server.Population.Capacity,
-            memoryWatches: previous.MemoryWatches
-        ) {
-            CollisionEventsDelivered = previous.CollisionEventsDelivered,
-            EventCellsDelivered = previous.EventCellsDelivered,
-            EventGapCount = previous.EventGapCount,
-            RouteEventsDelivered = previous.RouteEventsDelivered,
-            TotalAnswersDropped = previous.TotalAnswersDropped,
-            TotalFuelConsumed = previous.TotalFuelConsumed,
-        };
-
-        return (status + outcome);
-    }
-    /// <summary>Enables or disables a mounted guest. Disabling releases nothing, because a contribution is per-tick and
-    /// expires on its own — a disabled guest simply stops producing one. Enabling re-instantiates the same
-    /// <see cref="AddonInstance"/> in place
-    /// (<see cref="AddonHost.SetEnabled"/>) and then re-runs the admit sequence this runtime's mount-time constructor
-    /// runs — <see cref="AddonInstance.Enable"/> itself does not, by its own doc, which is the "Enable is uncalled,
-    /// and nothing recovers a fault" gap this verb closes. A load fault (missing file, bad bytes, a hash-pin mismatch)
-    /// constructed the instance with no module at all, so enabling it is permanently a no-op — reported honestly
-    /// rather than claimed fixed; <see cref="Reload"/> (which re-reads the module from disk) is the recovery for
-    /// that case.</summary>
-    /// <param name="name">The addon name.</param>
-    /// <param name="enabled">Whether to enable or disable it.</param>
-    /// <returns>A human-readable status line.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="name"/> is <see langword="null"/>.</exception>
-    public string SetEnabled(string name, bool enabled) {
-        ArgumentNullException.ThrowIfNull(argument: name);
-
-        if (m_host is null) {
-            return $"'{name}' — this world enables no addon; there is no host to {(enabled
-                ? "enable"
-                : "disable")}";
-        }
-
-        var mountedIndex = m_mounted.FindIndex(match: candidate => string.Equals(
-            a: candidate.Instance.Name,
-            b: name,
-            comparisonType: StringComparison.Ordinal
-        ));
-
-        if (mountedIndex < 0) {
-            return $"'{name}' is not a mounted guest — {(enabled
-                ? "enable"
-                : "disable")} has nothing to act on (a load-faulted row never joined the tick set)";
-        }
-
-        var addon = m_mounted[mountedIndex];
-        var instance = addon.Instance;
-        // Snapshot BEFORE SetEnabled mutates the instance in place, so a load fault can be told apart from every
-        // other faulted state after re-instantiation has already overwritten it.
-        var wasLoadFault = ((instance.State == AddonState.Faulted) && (instance.Fault.Kind is AddonFaultKind.HashMismatch or AddonFaultKind.BadExport));
-
-        if (!m_host.SetEnabled(
-            enabled: enabled,
-            name: name
-        )) {
-            // Unreachable — the mounted-index check above already confirmed the host tracks this name.
-            return $"unknown addon '{name}'";
-        }
-
-        if (!enabled) {
-            // Nothing to release. A contribution is per-tick and expires on its own (the channel model's ruling), so a
-            // disabled guest simply stops producing one — the host holds no per-channel state between ticks that could
-            // outlive it, on this path or any other.
-            return $"{name} disabled";
-        }
-
-        if (instance.State != AddonState.Enabled) {
-            return (wasLoadFault
-                ? $"{name} — a LOAD fault ({instance.Fault.Kind}) constructed no module to re-instantiate; enable cannot recover it — fix the module and run world.addon.reload {name} instead"
-                : $"{name} — still faulted after re-instantiation: {instance.Fault.Detail}"
-            );
-        }
-
-        ReportCapabilityDisclosure(
-            name: name,
-            requests: addon.Requests,
-            grants: m_server.Grants
-        );
-        instance.Admit();
-
-        return ((instance.State == AddonState.Enabled)
-            ? $"{name} enabled and re-admitted"
-            : $"{name} — puck_init faulted on re-admit: {instance.Fault.Detail}"
-        );
-    }
-    /// <summary>Fully unmounts a guest by name — the runtime half of the <c>world.addon.unmount</c> lifecycle
-    /// submission. Stronger than <see cref="SetEnabled"/>'s disable: the guest leaves <see cref="Receipts"/> and
-    /// <see cref="MountedCount"/> entirely rather than staying tracked-but-skipped, so a later
-    /// <c>world.addons</c> read no longer lists it at all. Disables the instance first (releases nothing beyond what
-    /// disable already releases — a contribution is per-tick and expires on its own, per <see cref="SetEnabled"/>'s
-    /// own remarks) purely so the underlying <see cref="AddonHost"/> instance stops being tickable before this type
-    /// drops its own tracking of it; the host itself has no removal surface (<c>Puck.Scripting</c> keeps no such API)
-    /// so its record persists there, inert, exactly as a disabled-forever guest's would.</summary>
-    /// <param name="name">The addon name.</param>
-    /// <returns>A human-readable status line.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="name"/> is <see langword="null"/>.</exception>
-    public string Unmount(string name) {
-        ArgumentNullException.ThrowIfNull(argument: name);
-
-        var mountedIndex = m_mounted.FindIndex(match: candidate => string.Equals(
-            a: candidate.Instance.Name,
-            b: name,
-            comparisonType: StringComparison.Ordinal
-        ));
-
-        if (mountedIndex < 0) {
-            return $"'{name}' is not a mounted guest — unmount has nothing to act on";
-        }
-
-        var addon = m_mounted[mountedIndex];
-
-        if (addon.Instance.State == AddonState.Enabled) {
-            addon.Instance.Disable();
-        }
-
-        m_mounted.RemoveAt(index: mountedIndex);
-
-        var receiptIndex = m_receipts.FindIndex(match: receipt => string.Equals(
-            a: receipt.Name,
-            b: name,
-            comparisonType: StringComparison.Ordinal
-        ));
-
-        if (receiptIndex >= 0) {
-            m_receipts.RemoveAt(index: receiptIndex);
-        }
-
-        return $"{name} unmounted";
     }
 }

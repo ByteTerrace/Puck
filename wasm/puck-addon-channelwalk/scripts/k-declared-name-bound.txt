@@ -1,9 +1,10 @@
 # Case K: the declared-channel-name bound (AddonAbi.MaxChannelNames = 64), unresolved-name disclosure, and
-# per-act attenuation. All three addon rows mount at BOOT from the world document — there is no console verb to
-# mount one live (world.addon.reload/.enable/.disable only act on an ALREADY-mounted row) — so the mount/fault
-# outcomes below are already settled and printed to stderr before this script's first line ever runs; this
-# script's job is to confirm the settled STATE (world.addons) and to prove the unresolved `walkonly` channel's
-# continuous per-act attenuation never faults the guest over time, not to trigger the mount itself.
+# per-act attenuation. All three addon rows mount at BOOT from the world document (world.row.set addons could
+# mount any of them live too, through the ordinary UpsertAddon mutation, but this case does not exercise that
+# door) — so the mount/fault outcomes below are already settled and printed to stderr before this script's first
+# line ever runs; this script's job is to confirm the settled STATE (world.addons) and to prove the unresolved
+# `walkonly` channel's continuous per-act attenuation never faults the guest over time, not to trigger the mount
+# itself.
 #
 # Expect in the CAPTURED BOOT LOG (stderr, merged into stdout by the driver recipe), before line 1 below ever
 # runs:

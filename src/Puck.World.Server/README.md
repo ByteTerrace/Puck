@@ -452,9 +452,22 @@ current set.
 ## The addon host seam (`IWorldAddonHost.cs`, `WorldAddonReceipt.cs`)
 
 `IWorldAddonHost` is every member this project calls on the mounted addon
-guest host — the three tick-boundary pump points above, mount/unmount,
-mutation completion, and the undeclared-granted-channel disclosure.
-`WorldServer` holds one as `m_addons` and never names the concrete host
+guest host — the three tick-boundary pump points above, the
+`TryPrepare`/`Commit`/`Finish` prepare/commit/publish transaction
+`TryApplyMutation` (the `UpsertAddon`/`RemoveAddon` mutation's own last
+fallible gate, refusing by name first when no host is attached at all),
+`ApplyRebuild` (unconditional, for `world.reset`/`.load`/`.reload`),
+`WorldAddonRuntime.TryCreate` (boot), and `ApplyUndo` each call, mutation
+completion, and the undeclared-granted-channel disclosure. `Commit` is pure
+reference adoption; `Finish` — narration and superseded-guest disposal —
+runs only after the caller's own document/journal publication is durable,
+so neither can unwind it. The opaque plan
+crossing `TryPrepare`/`Commit` implements `IWorldAddonPreparedPlan`
+(`IWorldAddonPreparedPlan.cs`), a bare `IDisposable` marker (plus a
+`MountedCount` this project pre-sizes its per-tick addon contention
+tracking against) this project declares so it never names the concrete
+plan shape either.
+`WorldServer` holds the host as `m_addons` and never names the concrete host
 type; `WorldReplaySnapshot.Drive` takes an `addonHostFactory` delegate so an
 offline re-drive can mount its own fresh guest set. `WorldAddonReceipt`
 (one mounted guest's recorded-at-mount name/hash/fuel) stays here rather
@@ -611,16 +624,18 @@ rehydrates a fresh boot-image world, re-drives the stream offline, and
 reports MATCH or MISMATCH naming the first divergent tick (tick 0 indicts the
 starting state; any later tick is a real trajectory divergence). A receipt
 disagreement — the live tree moved past the recording — refuses loudly with
-no verdict, and a codec defect (`WorldReplayCodecException.cs`) reports as a
-host bug, never folded into that refusal. Presentation (screen pixels,
+no verdict; a recorded mutation's accept/refuse outcome disagreeing with what
+the replay's own apply pipeline produces refuses loudly by name too
+(`MutationOutcomeMismatch` — see [addons.md](../../.claude/skills/puck-world/references/addons.md)'s prepare/commit
+transaction); a codec defect (`WorldReplayCodecException.cs`) reports as a
+host bug, never folded into either refusal. Presentation (screen pixels,
 cameras, overlays, audio) is excluded by design: a match proves the
-authoritative pose trajectory, not the HUD. Known scope limits — the tape
-captures eight of the thirteen envelope payload kinds (command, grant, revoke,
-session, designation, rebuild, addon-lifecycle, and — as of the
-authoritative-machines campaign — screen-op) plus intents and the two
-peer-lifecycle server events; mutation, undo, composition, and query
-submissions remain bare passthroughs, and a mid-session capture honestly
-reports MISMATCH at tick 0 — are carried in
+authoritative pose trajectory, not the HUD. Known scope limit — the tape
+captures every one of the twelve envelope payload kinds except `Lever`
+(command, grant, revoke, session, designation, rebuild, mutation, undo,
+composition, query, and screen-op) plus intents and the two
+peer-lifecycle server events; a mid-session capture honestly reports
+MISMATCH at tick 0 — carried in
 [`docs/campaign.md`](../../docs/campaign.md).
 
 ## Verifying a change here

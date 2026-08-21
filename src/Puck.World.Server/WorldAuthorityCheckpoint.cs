@@ -10,13 +10,11 @@ namespace Puck.World.Server;
 /// checkpoint's record graph can hold.</summary>
 public abstract record WorldPendingOpCheckpoint {
     /// <summary>A buffered document mutation.</summary>
-    public sealed record Mutate(WorldMutation Mutation, int ConnectionId, long CorrelationId, int SourceAddonIndex, ushort ActOrdinal) : WorldPendingOpCheckpoint;
+    public sealed record Mutate(WorldMutation Mutation, int ConnectionId, long CorrelationId, long SourceAddonInstanceId, ushort ActOrdinal) : WorldPendingOpCheckpoint;
     /// <summary>A buffered whole-document rebuild-and-swap.</summary>
     public sealed record Rebuild(WorldRebuildRequest Request, WorldPrincipal Principal, int ConnectionId, long CorrelationId, string? ExpectedContentHash, string? PreparationFailure) : WorldPendingOpCheckpoint;
     /// <summary>A buffered journal undo.</summary>
     public sealed record Undo(int Count, WorldPrincipal Principal, int ConnectionId, long CorrelationId) : WorldPendingOpCheckpoint;
-    /// <summary>A buffered addon mount/unmount.</summary>
-    public sealed record AddonLifecycle(WorldAddonLifecycle Lifecycle, WorldPrincipal Principal, int ConnectionId, long CorrelationId) : WorldPendingOpCheckpoint;
 }
 /// <summary>One landed member's checkpointed state — the subset of the host engine's own private
 /// <c>WorldInstanceHost.LandedMember</c> that a co-hosted <c>Committed</c> resolution

@@ -16,7 +16,7 @@ public sealed partial class WorldAddonRuntime {
     // Step, at WorldServer.Step's DrainPendingOps, before intents. Every other outcome is DECIDED here but not yet
     // DELIVERED: every reserved slot's verdict is staged into the guest's next input batch by ResolveReads/
     // StageBatch — never here, and never by DrainPendingOps directly.
-    private void ResolveMutations(MountedAddon addon, int addonIndex, ulong tick) {
+    private void ResolveMutations(MountedAddon addon, ulong tick) {
         addon.ReservedCount = 0;
         addon.MutateBytesThisTick = 0;
 
@@ -112,7 +112,7 @@ public sealed partial class WorldAddonRuntime {
                 // TryApplyMutation, later THIS same Step) over the identical predicate.
                 //
                 // meter: true — THIS is the metering point for a guest act; the apply path knows not to charge it
-                // again (PendingOp.Mutate carries SourceAddonIndex for exactly that).
+                // again (PendingOp.Mutate carries SourceAddonInstanceId for exactly that).
                 var kindOrdinal = ((int)query.A);
                 var section = ((WorldSection)subject.Value);
 
@@ -232,10 +232,13 @@ public sealed partial class WorldAddonRuntime {
                 );
 
                 // STAGE 6 — the per-kind hand-walked decode. On success the mutation is NOT applied here: it
-                // enqueues as a PendingOp with this act's (addonIndex, ordinal) completion fields, drained the
-                // SAME Step at WorldServer.Step's DrainPendingOps (before intents) through the identical
+                // enqueues as a PendingOp with this act's (addon instance id, ordinal) completion fields, drained
+                // the SAME Step at WorldServer.Step's DrainPendingOps (before intents) through the identical
                 // compose->revalidate->swap path a console-submitted mutation runs — CompleteMutation stages the
-                // outcome (Applied or Rejected) into this slot once that drain decides it.
+                // outcome (Applied or Rejected) into this slot once that drain decides it. The instance id, not this
+                // guest's current position in m_mounted, is what travels with the pending op — a queued removal or
+                // reorder that drains before this act's own completion must not deliver it to whatever guest now
+                // occupies the old position.
                 if (
                     !WorldAddonMutationDecoder.TryDecode(
                     kindOrdinal: kindOrdinal,
@@ -261,7 +264,7 @@ public sealed partial class WorldAddonRuntime {
                     mutation: mutation,
                     connectionId: SubmissionEnvelope.LocalConnectionId,
                     correlationId: 0,
-                    sourceAddonIndex: addonIndex,
+                    sourceAddonInstanceId: addon.InstanceId,
                     actOrdinal: query.Ordinal
                 );
             }
@@ -314,23 +317,37 @@ public sealed partial class WorldAddonRuntime {
     /// cell — called by <see cref="WorldServer.Step"/>'s <c>DrainPendingOps</c>, in the
     /// same Step the act was decoded, immediately after the mutation's compose→revalidate→swap ran. Never applies
     /// anything itself; it only records which verdict <see cref="ResolveReads"/> will stage into the guest's next
-    /// batch. A no-op if <paramref name="addonIndex"/> no longer names a mounted guest (defensive — lifecycle verbs
-    /// refuse while a recording is armed, but a reload/enable/disable between decode and drain within an
-    /// unarmed session is not itself refused, and a stale index must never write into the wrong guest).</summary>
-    /// <param name="addonIndex">The mounted addon index the act was decoded from.</param>
+    /// batch. Addressed by the mounted instance's own stable token, captured at decode time, rather than its
+    /// position in <c>m_mounted</c> — a queued removal or reorder that drains before this completion would move a
+    /// positional index onto a DIFFERENT guest, but the token still names only the instance the act was actually
+    /// decoded from. A no-op when no currently-mounted guest carries <paramref name="addonInstanceId"/> — the
+    /// originating instance was removed, or reloaded into a fresh instance under a new token, since decode; a
+    /// reload's fresh guest never receives an act decoded from the instance it replaced.</summary>
+    /// <param name="addonInstanceId">The mounted addon instance token the act was decoded from.</param>
     /// <param name="actOrdinal">The addon's own output-batch ordinal the act answers.</param>
     /// <param name="applied">Whether the document-apply pipeline accepted the decoded mutation.</param>
-    public void CompleteMutation(int addonIndex, ushort actOrdinal, bool applied) {
-        if (((uint)addonIndex) >= ((uint)m_mounted.Count)) {
+    public void CompleteMutation(long addonInstanceId, ushort actOrdinal, bool applied) {
+        var addon = FindMountedByInstanceId(instanceId: addonInstanceId);
+
+        if (addon is null) {
             return;
         }
 
         SetReservedVerdict(
-            addon: m_mounted[addonIndex],
+            addon: addon,
             ordinal: actOrdinal,
             verdict: (applied
             ? AddonVerdict.Applied
             : AddonMutateRefusals.ToVerdict(reason: AddonMutateRefusal.ApplyRejected))
         );
+    }
+    private MountedAddon? FindMountedByInstanceId(long instanceId) {
+        for (var index = 0; (index < m_mounted.Count); ++index) {
+            if (m_mounted[index].InstanceId == instanceId) {
+                return m_mounted[index];
+            }
+        }
+
+        return null;
     }
 }

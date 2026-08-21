@@ -127,7 +127,6 @@ internal sealed class WorldFederatedServerLink(WorldRemoteAuthority authority) :
             Refused: (!ok || (body[0] != 0))
         ));
     }
-    public void SubmitAddonLifecycle(WorldAddonLifecycle lifecycle, WorldPrincipal principal) => _ = SubmitAny(payload: new WorldSubmissionPayload.AddonLifecycle(Value: lifecycle));
     public void SubmitCommand(WorldCommand command) => _ = Submit(
         bodyIndex: command.EntityIndex,
         payload: new WorldSubmissionPayload.Command(Value: command)

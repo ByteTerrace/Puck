@@ -21,10 +21,10 @@ reports MATCH or MISMATCH naming the first divergent tick. Files (all in
 
 - Extension `.puckreplay`, stored under `<WorldStateRoot.Resolve()>/Replays`
   (so `--state-dir` isolates replays too).
-- `Magic = 0x504B_4341` ("PKCA") + `ShapeToken = 1` (pinned permanently).
-  The current key covers the re-shaped control-application commands and the
-  mutation/undo/composition/query entry kinds.
-  The current key also covers the `LinkDelivery` leaf.
+- `Magic = 0x504B_4146` ("PKAF") + `ShapeToken = 1` (pinned permanently).
+  The current key covers the addon-lifecycle fold: the retired
+  `AddonLifecycle` entry kind (5, never reused) and the `Mutation` entry's
+  added `Outcome` field.
   A tape with any retired magic refuses by name (`ShapeMismatch`, no tolerant
   reader; re-record it). The full retirement
   chain (each value opaque, never a sequence) lives in the comment above
@@ -34,10 +34,12 @@ reports MATCH or MISMATCH naming the first divergent tick. Files (all in
   `Read` refuses a mismatch loudly (`ReplayRefusal.ShapeMismatch`, naming
   found vs expected) — there is NO tolerant reader, no version negotiation,
   no legacy branch. That is the contract: never write one.
-- The declared `replay.tape` refusal catalog has nine members: shape
+- The declared `replay.tape` refusal catalog has ten members: shape
   mismatch, rate mismatch, three addon-receipt mismatches, rebuild content
   mismatch, rebuild source unavailable, a rate-zero tape carrying recorded
-  ticks, and a tampered transfer content signature. `ScreenOpContentMismatch`
+  ticks, a tampered transfer content signature, and a recorded mutation
+  outcome disagreeing with what the replay's own apply pipeline produced.
+  `ScreenOpContentMismatch`
   is emitted by `WorldMachineHost` as a named screen-op refusal, not a
   `ReplayRefusal` enum member.
 - Command/grant/revoke/session bodies are length-prefixed instances of the same
@@ -70,28 +72,33 @@ session's.
 Per tick: ONE ordered authority/server-event list plus the intent list
 (`WorldReplayTickInput`). `WorldReplayEntry` discriminants:
 `Command` (0), `Grant(grant, actor)` (1), `Revoke(grant, actor)` (2),
-`PeerAdmitted` (3), `PeerDisconnected` (4), `AddonLifecycle(lifecycle, actor)`
-(5), `Rebuild(kind, pathHint, force, contentHash, actor)` (6),
-`ScreenOp(op, contentSignature, actor)` (7), `Session(request)` (8),
-`Designation(designation, actor)` (9), `RateLever(paused)` (10),
-`Transfer` (11), `Mutation(mutation, actor)` (12), `Undo(count, actor)` (13),
+`PeerAdmitted` (3), `PeerDisconnected` (4) — discriminant 5 (the retired
+`AddonLifecycle` entry) is unassigned and never reused, matching
+`WorldMutationKindCatalog`'s own retired-ordinal precedent — `Rebuild(kind,
+pathHint, force, contentHash, actor)` (6), `ScreenOp(op, contentSignature,
+actor)` (7), `Session(request)` (8), `Designation(designation, actor)` (9),
+`RateLever(paused)` (10), `Transfer` (11),
+`Mutation(mutation, actor, outcome)` (12), `Undo(count, actor)` (13),
 `Composition(composition, actor)` (14), `Query(query, actor)` (15), and
 `LinkDelivery(adjacencyName)` (16). The
 peer events
 carry generation-bearing identities and
 the grants minted/revoked through the ordinary server doors. The
 `LoopbackTransport` taps (`IntentTap`/`CommandTap`/`GrantTap`/`RevokeTap`/
-`SessionTap`/
-`AddonLifecycleTap`) fire BEFORE the server sees the write, so a grant (or a
-mount/unmount) the door refuses is still taped and reproduces as the
-identical refusal. **`MutationTap` lives on `WorldServer`, not the loopback**,
+`SessionTap`) fire BEFORE the server sees the write, so a grant the door
+refuses is still taped and reproduces as the identical refusal. **`MutationTap`
+lives on `WorldServer`, not the loopback**,
 firing in `ApplyEnvelope`'s `Mutation` arm — the one ingress a local write, an
 admitted socket peer's write, and a traveller's submission forwarded by its
 source authority (`WorldForwardedAuthority.TryApplySubmission`) all share, each
-carrying the acting principal its own envelope stamped. The two internal
-producers that reach `EnqueueMutation` directly (a guest's decoded act, a rule's
-`generate` effect) are deliberately outside it: both re-derive during the drive,
-so taping them would apply each twice. A tap that captured only the loopback
+carrying the acting principal its own envelope stamped. `MutationOutcomeTap`
+fires beside it, once the SAME tick's `Step` has drained and applied the
+mutation — the entry's `Outcome` field; `ApplyEnvelope` is the ONLY caller
+that ever threads a completion into `EnqueueMutation`'s `outcomeObserved`
+parameter, so the two internal producers that reach `EnqueueMutation` directly
+(a guest's decoded act, a rule's `generate` effect) never populate one — both
+re-derive during the drive, so taping them (mutation OR outcome) would apply
+each twice. A tap that captured only the loopback
 would silently drop every forwarded mutation — the rule is that any kind
 reachable from a socket or a forwarder belongs on the server twin. `WorldServer.ServerEventTap` records each lifecycle event
 after it takes effect, in drain order; `WorldServer.RebuildTap` is the same
@@ -102,15 +109,15 @@ rebuild the door goes on to refuse is still taped. Apply-time, not
 submission-time, because Reset's hash (the base's own canonical bytes) is
 only knowable once `ApplyRebuild` reads `m_base` — private server state that
 can move between submission and drain if another rebuild is queued ahead of
-it in the same tick. The one accepted narrowing: a rebuild's list POSITION
-reflects drain order rather than submission order, which only matters if a
-rebuild and an addon-lifecycle change are submitted in the identical tick.
-`Drive`'s re-run applies a recorded `AddonLifecycle`/`Rebuild` entry through
-`server.EnqueueAddonLifecycle`/`EnqueueRebuild` — the SAME buffered door
+it in the same tick.
+`Drive`'s re-run applies a recorded `Mutation`/`Rebuild` entry through
+`server.EnqueueMutation`/`EnqueueRebuild` — the SAME buffered door
 (`DrainPendingOps`, before intents) a live submission uses — so replay
-RE-EXECUTES the mount/unmount or rebuild (host construction/compile/
-disclosure/admit, or resolve/validate/install), never merely replays a
-recorded effect.
+RE-EXECUTES the mutation (including its own addon-prepare gate, see
+[addons.md](addons.md)) or rebuild (resolve/validate/install), never merely
+replays a recorded effect. A recorded `Mutation` entry additionally re-plays
+its own `outcomeObserved` completion against `Outcome`, right after that
+tick's `server.Step` returns — see "Verify semantics" below.
 
 `WorldServer.ScreenOpTap` records screen operations at synchronous apply
 time. `Insert` and a machine-booting `Select` carry the content signature
@@ -121,8 +128,8 @@ absent, or hashed content differs in either direction. Other screen ops carry
 no content signature. An authority denial is also taped, with no signature,
 so the denial replays through the same Control check.
 
-**Capture scope: every one of the 13 envelope payload kinds except `Lever`**
-(Command, Grant, Revoke, Session, AddonLifecycle, Rebuild, ScreenOp,
+**Capture scope: every one of the 12 envelope payload kinds except `Lever`**
+(Command, Grant, Revoke, Session, Rebuild, ScreenOp,
 Designation, Mutation, Undo, Composition, Query), the two server-event kinds,
 plus the separate intent buffer. The boot instance's own schedule lever is
 captured under its own `RateLever` entry instead of the payload leaf. All six `SessionRequest` variants are
@@ -132,8 +139,11 @@ player document to construct a detached profile catalog, so a replayed
 `SetPlayerSection` changes neither the live catalog nor persistent state.
 `Mutation`/`Undo` re-enqueue through the ordinary buffered door
 (`EnqueueMutation`/`EnqueueUndo`, drained by the SAME tick's `DrainPendingOps`),
-so the whole apply pipeline re-executes and a refusal reproduces as the
-identical refusal; `Composition` applies synchronously; a `Query` is
+so the whole apply pipeline (including an `UpsertAddon`/`RemoveAddon`'s own
+addon-prepare gate) re-executes and a refusal reproduces as the
+identical refusal — proved for `Mutation` specifically by the entry's own
+`Outcome` pin, compared against the replay's actual result the instant that
+tick's drain resolves it; `Composition` applies synchronously; a `Query` is
 re-executed and its answer discarded, since a query moves no simulation state.
 Plus one non-envelope ingress: `LinkDelivery`, one entry per authored
 `adjacencies` row per tick whose delivered neighbour snapshot tick advanced
@@ -149,15 +159,13 @@ replay reproduces WHEN a seam went dark, never what the neighbour showed.
 Structural exclusions: a mounted guest's DRIVING is never recorded — it is RE-DERIVED
 by re-running the pinned guests during the drive (the stronger property);
 only the LIFECYCLE ACT of mounting/unmounting a guest is captured, not its
-per-tick output. `replay.*` verbs never reach the loopback. Machine state is
+per-tick output — as the `UpsertAddon`/`RemoveAddon` mutation entry the
+ordinary mutation leaf already carries, gated (and outcome-pinned) exactly
+like any other mutation, never a lifecycle-specific leaf. `replay.*` verbs
+never reach the loopback. Machine state is
 not recorded directly: the fresh replay `WorldMachineHost` boots from the
 embedded definition, re-applies taped screen operations, and steps from
 re-derived pads. Pixels, camera rigs, overlays, and audio remain excluded.
-`world.addon.reload`/`.enable`/`.disable` are one side path — they apply
-synchronously, never cross the loopback, and are REFUSED outright by
-`WorldAddonCommandModule.RefuseIfArmed` while a recording is active (rather
-than silently uncaptured); `world.addon.mount`/`.unmount` are the ordered
-alternative and are NOT refused while armed.
 
 **Replay verification is side-effect-free (owner ruling, 2026-08-06).** Replay
 is faithful re-execution of the captured submission/intent stream from a
@@ -271,7 +279,17 @@ recorded world authored), hash.
 - Receipt disagreements refuse LOUDLY with no verdict, by name:
   `PinnedAddonNotMounted`, `AddonModuleMismatch` (content hash),
   `AddonFuelMismatch`. Comparison is index-by-index over the mounted
-  sequence, including count, name, hash, and fuel, before the first tick.
+  sequence, including count, name, hash, and fuel, before the first tick —
+  the boot-time half of the addon-prepare contract (see
+  [addons.md](addons.md)), since initial-document mounting IS a prepare pass
+  with no prior state.
+- A recorded `Mutation` entry's `Outcome` is compared against the replay's
+  own apply-pipeline result the instant that tick's `server.Step` resolves
+  it (never at end-of-drive): any disagreement — accepted live but refused
+  on replay, or the reverse — refuses LOUDLY by name
+  (`MutationOutcomeMismatch`), in EITHER direction, before the hash
+  comparison below ever gets a chance to blame a later tick's pose drift for
+  what was actually a prepare/validate/authority divergence.
 - The comparison is LIVE-vs-replay: the recorded per-tick hash trace against
   the shadow drive's trace; the verdict names the first divergence.
 - **Tick 0 indicts the STARTING STATE** — a mid-session capture the
