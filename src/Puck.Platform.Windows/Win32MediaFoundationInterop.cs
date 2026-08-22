@@ -13,7 +13,10 @@ internal static class MfInterop {
     public const uint FirstVideoStream = 0xFFFFFFFC; // MF_SOURCE_READER_FIRST_VIDEO_STREAM
     public const uint AllStreams = 0xFFFFFFFE; // MF_SOURCE_READER_ALL_STREAMS
     public const uint AnyStream = 0xFFFFFFFE; // MF_SOURCE_READER_ANY_STREAM (same value; ReadSample context)
+    public const uint Error = 0x00000001; // MF_SOURCE_READERF_ERROR
     public const uint EndOfStream = 0x00000002; // MF_SOURCE_READERF_ENDOFSTREAM
+    public const uint NativeMediaTypeChanged = 0x00000010; // MF_SOURCE_READERF_NATIVEMEDIATYPECHANGED
+    public const uint CurrentMediaTypeChanged = 0x00000020; // MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED
 
     public static Guid IID_IMFMediaSource = new(g: "279a808d-aec7-40c8-9c6b-a6b492c78a66");
     public static Guid IID_IMFMediaSourceEx = new(g: "3c9b2eb9-86d5-4514-a394-f56664f9f0d8");
@@ -92,25 +95,34 @@ internal static class MfInterop {
     /// capable device exposes as its own capture device) instead of the default color-camera category.</param>
     /// <param name="extended">Whether to activate the device through <c>IMFMediaSourceEx</c>, preserving non-color
     /// capture streams exposed by a composite camera.</param>
-    /// <returns>The activated media source (as <see cref="object"/>, the way <c>ActivateObject</c> yields it) and the
-    /// device's friendly name (or <see langword="null"/> if the driver did not report one).</returns>
+    /// <returns>The activated media source (as <see cref="object"/>, the way <c>ActivateObject</c> yields it), the
+    /// device's friendly name (or <see langword="null"/> if the driver did not report one), and the <see cref="IMFActivate"/>
+    /// that created the source. The Media Foundation activation contract requires <c>Shutdown()</c> on the source, then
+    /// <c>ShutdownObject()</c> on the returned activate, before either RCW is released; the caller owns that sequence.</returns>
     /// <exception cref="InvalidOperationException">No matching video capture device was found.</exception>
-    public static (object MediaSource, string? Name) ActivateDefaultVideoSource(string? symbolicLink = null, bool infrared = false, bool extended = false) {
+    public static (object MediaSource, string? Name, IMFActivate Activate) ActivateDefaultVideoSource(string? symbolicLink = null, bool infrared = false, bool extended = false) {
         Check(hr: MFCreateAttributes(cInitialSize: 2, ppMFAttributes: out var enumConfig));
 
-        var sourceTypeKey = MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE;
-        var vidcap = MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP;
+        uint count;
+        nint devices;
 
-        Check(hr: enumConfig.SetGUID(guidKey: ref sourceTypeKey, guidValue: ref vidcap));
+        try {
+            var sourceTypeKey = MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE;
+            var vidcap = MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP;
 
-        if (infrared) {
-            var categoryKey = MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_CATEGORY;
-            var sensorCategory = KSCATEGORY_SENSOR_CAMERA;
+            Check(hr: enumConfig.SetGUID(guidKey: ref sourceTypeKey, guidValue: ref vidcap));
 
-            Check(hr: enumConfig.SetGUID(guidKey: ref categoryKey, guidValue: ref sensorCategory));
+            if (infrared) {
+                var categoryKey = MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_CATEGORY;
+                var sensorCategory = KSCATEGORY_SENSOR_CAMERA;
+
+                Check(hr: enumConfig.SetGUID(guidKey: ref categoryKey, guidValue: ref sensorCategory));
+            }
+
+            Check(hr: MFEnumDeviceSources(pAttributes: enumConfig, pcSourceActivate: out count, pppSourceActivate: out devices));
+        } finally {
+            _ = Marshal.ReleaseComObject(o: enumConfig);
         }
-
-        Check(hr: MFEnumDeviceSources(pAttributes: enumConfig, pcSourceActivate: out var count, pppSourceActivate: out var devices));
 
         if ((0 == count) || (0 == devices)) {
             throw new InvalidOperationException(message: (infrared
@@ -122,22 +134,29 @@ internal static class MfInterop {
         try {
             var selectedIndex = ((symbolicLink is null) ? 0 : SelectDeviceIndex(count: count, devices: devices, symbolicLink: symbolicLink));
             var activate = ((IMFActivate)Marshal.GetObjectForIUnknown(pUnk: Marshal.ReadIntPtr(ptr: devices, ofs: (selectedIndex * IntPtr.Size))));
+            var retainActivate = false;
 
-            var nameKey = MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME;
-            var name = ((activate.GetAllocatedString(guidKey: ref nameKey, pcchLength: out _, ppwszValue: out var deviceName) >= 0)
-                ? deviceName
-                : null);
+            try {
+                var nameKey = MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME;
+                var name = ((activate.GetAllocatedString(guidKey: ref nameKey, pcchLength: out _, ppwszValue: out var deviceName) >= 0)
+                    ? deviceName
+                    : null);
 
-            // IMFMediaSourceEx is the capture-source activation contract that exposes non-color device streams. Asking
-            // only for IMFMediaSource can yield the ordinary video projection even when the same device has an L8 pin.
-            var sourceIid = (extended ? IID_IMFMediaSourceEx : IID_IMFMediaSource);
+                // IMFMediaSourceEx is the capture-source activation contract that exposes non-color device streams. Asking
+                // only for IMFMediaSource can yield the ordinary video projection even when the same device has an L8 pin.
+                var sourceIid = (extended ? IID_IMFMediaSourceEx : IID_IMFMediaSource);
 
-            Check(hr: activate.ActivateObject(ppv: out var mediaSource, riid: ref sourceIid));
+                Check(hr: activate.ActivateObject(ppv: out var mediaSource, riid: ref sourceIid));
+                retainActivate = true;
 
-            return (mediaSource, name);
+                return (mediaSource, name, activate);
+            } finally {
+                if (!retainActivate) {
+                    _ = Marshal.ReleaseComObject(o: activate);
+                }
+            }
         } finally {
-            // Release every raw device pointer the array owns (each candidate's RCW above holds its own ref) and free
-            // the array.
+            // Release every raw device pointer returned by MFEnumDeviceSources and free the array.
             for (var index = 0; (index < count); index++) {
                 _ = Marshal.Release(pUnk: Marshal.ReadIntPtr(ptr: devices, ofs: (index * IntPtr.Size)));
             }
@@ -153,11 +172,17 @@ internal static class MfInterop {
         for (var index = 0; (index < count); index++) {
             var candidate = ((IMFActivate)Marshal.GetObjectForIUnknown(pUnk: Marshal.ReadIntPtr(ptr: devices, ofs: (index * IntPtr.Size))));
 
-            if (
-                (candidate.GetAllocatedString(guidKey: ref linkKey, pcchLength: out _, ppwszValue: out var candidateLink) >= 0) &&
-                string.Equals(a: candidateLink, b: symbolicLink, comparisonType: StringComparison.OrdinalIgnoreCase)
-            ) {
-                return index;
+            try {
+                var hasLink = (candidate.GetAllocatedString(guidKey: ref linkKey, pcchLength: out _, ppwszValue: out var candidateLink) >= 0);
+
+                if (
+                    hasLink &&
+                    string.Equals(a: candidateLink, b: symbolicLink, comparisonType: StringComparison.OrdinalIgnoreCase)
+                ) {
+                    return index;
+                }
+            } finally {
+                _ = Marshal.ReleaseComObject(o: candidate);
             }
         }
 
@@ -286,7 +311,7 @@ internal interface IMFAttributes {
     [PreserveSig] int GetItemByIndex();
     [PreserveSig] int CopyAllItems();
 }
-/// <summary>IMFMediaSource — only CreatePresentationDescriptor (slot 6 after IMFMediaEventGenerator) is called.</summary>
+/// <summary>IMFMediaSource — CreatePresentationDescriptor (slot 6 after IMFMediaEventGenerator) and Shutdown are called.</summary>
 [ComImport]
 [Guid("279a808d-aec7-40c8-9c6b-a6b492c78a66")]
 [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
@@ -399,7 +424,8 @@ internal interface IMFMediaTypeHandler {
     [PreserveSig] int GetCurrentMediaType(out IMFMediaType ppMediaType);
     [PreserveSig] int GetMajorType(out Guid pguidMajorType);
 }
-/// <summary>IMFActivate — GetAllocatedString (slot 11) + ActivateObject (slot 31) are called.</summary>
+/// <summary>IMFActivate — GetAllocatedString (slot 11), ActivateObject (slot 31), and ShutdownObject (slot 32) are
+/// called.</summary>
 [ComImport]
 [Guid("7fee9e9a-4a89-47a6-899c-b6a53a70fb67")]
 [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
@@ -436,6 +462,7 @@ internal interface IMFActivate {
     [PreserveSig] int GetItemByIndex();
     [PreserveSig] int CopyAllItems();
     [PreserveSig] int ActivateObject(ref Guid riid, [MarshalAs(UnmanagedType.IUnknown)] out object ppv);
+    [PreserveSig] int ShutdownObject();
 }
 /// <summary>IMFMediaType — GetUINT32/GetUINT64, SetUINT64 (frame size), and SetGUID are called (all IMFAttributes-prefix slots).</summary>
 [ComImport]

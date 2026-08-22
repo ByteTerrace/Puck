@@ -35,7 +35,14 @@ internal sealed unsafe class KernelBench : IDisposable {
         m_context = context;
         m_device = device;
         m_device1 = device1;
+
+        var description = adapter->GetDesc1();
+
+        AdapterLuid = ((((long)description.AdapterLuid.HighPart) << 32) | description.AdapterLuid.LowPart);
     }
+
+    // Packed the same way Win32D3D11.FindAdapterByLuid matches it: (HighPart << 32) | LowPart.
+    public long AdapterLuid { get; }
 
     public static KernelBench? TryCreate() {
         var adapter = FindHardwareAdapter();

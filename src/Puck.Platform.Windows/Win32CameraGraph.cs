@@ -41,7 +41,8 @@ internal abstract class Win32CameraGraph<TStream> : ICameraGraph<TStream> where 
 
     /// <summary>Reports that the worker's negotiation failed; the constructor throws with this message.</summary>
     protected void Fail(string message) => _ = m_ready.TrySetResult(result: message);
-    /// <summary>Reports that every stream is negotiated (and, where the tier demands it, proved live).</summary>
+    /// <summary>Reports that every stream is negotiated and ready: on the CPU-pixel tier, every stream has published
+    /// its first frame; on the shared-texture tier, every stream has validated a live native sample.</summary>
     protected void Ready() => _ = m_ready.TrySetResult(result: null);
     /// <summary>Starts the worker and blocks until it is ready; a failure or timeout stops the worker and throws.</summary>
     protected void RunWorker(string threadName, int readyTimeoutMilliseconds, string readyTimeoutMessage) {

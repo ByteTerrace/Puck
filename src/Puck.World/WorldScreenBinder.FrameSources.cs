@@ -1,4 +1,5 @@
 using Puck.Abstractions.Gpu;
+using Puck.Commands;
 using Puck.SdfVm;
 using Puck.SdfVm.Views;
 
@@ -23,9 +24,9 @@ internal sealed partial class WorldScreenBinder {
 
     /// <summary>Declares that a <see cref="WorldFrameSource"/> is consumed outside any declared <c>screens</c> row (a
     /// HUD/overlay <c>Frame</c> element) and opens its feed through the same shared machinery a screen row would —
-    /// idempotent, safe to call at boot or on every definition/identity revision. A camera source names a seat, never
-    /// hardware: <paramref name="seat"/> is the enclosing seat scope's fallback, used only when the source's own
-    /// <c>Seat</c> is absent (<see cref="DeclareCameraDemand"/> is itself idempotent per (seat, sensor)); a view
+    /// idempotent, safe to call at boot or on every definition/identity revision. A camera source declares nothing
+    /// here — its demand is a live set recomputed every publish from actual consumers (<see cref="ReconcileCameraDemand"/>),
+    /// including <see cref="RetainFrameSource"/>'s reference table); a view
     /// camera renders every <see cref="ViewStack"/> refresh with no wired screen narrowing its round-robin turn
     /// (<see cref="RegisterCameraView"/>'s default <c>isLive</c> is always-true); a probe reads whatever its own
     /// kernel publishes; a capture opens through <see cref="TryCreateCaptureFeed"/>, the same ladder a declared
@@ -42,15 +43,9 @@ internal sealed partial class WorldScreenBinder {
         }
 
         switch (source) {
-            case WorldScreenSource.Camera camera:
-                if (m_cameraCapture.IsSupported) {
-                    DeclareCameraDemand(
-                        seat: (camera.Seat ?? seat),
-                        sensor: camera.Sensor,
-                        profile: camera.Profile
-                    );
-                }
-
+            case WorldScreenSource.Camera:
+                // ReconcileCameraDemand derives demand straight from live consumer state every publish — nothing to
+                // declare imperatively here.
                 break;
             case WorldScreenSource.View view:
                 if (ResolveCamera(name: view.CameraName) is { } resolvedCamera) {
@@ -96,8 +91,8 @@ internal sealed partial class WorldScreenBinder {
 
         switch (source) {
             case WorldScreenSource.Camera:
-                ReconcileFrameSourceCameraDemand();
-
+                // This table's membership feeds ReconcileCameraDemand directly at the next publish — nothing to
+                // open imperatively here.
                 break;
             default:
                 DeclareFrameSource(source: source, seat: seat);
@@ -128,8 +123,8 @@ internal sealed partial class WorldScreenBinder {
 
         switch (source) {
             case WorldScreenSource.Camera:
-                ReconcileFrameSourceCameraDemand();
-
+                // This table's membership drops out of ReconcileCameraDemand's next recompute — nothing to release
+                // imperatively here.
                 break;
             case WorldScreenSource.View view:
                 ReleaseOrphanedCameraView(name: view.CameraName);
@@ -158,7 +153,6 @@ internal sealed partial class WorldScreenBinder {
         }
 
         demands.Add(item: requested);
-        ReconcileFrameSourceCameraDemand();
     }
     private void ReleaseProbeCameraDemandCore(WorldScreenSource.Camera camera, int contextSeat) {
         var key = (camera.Seat ?? contextSeat, camera.Sensor);
@@ -179,8 +173,6 @@ internal sealed partial class WorldScreenBinder {
         if (demands.Count == 0) {
             _ = m_probeCameraDemand.Remove(key: key);
         }
-
-        ReconcileFrameSourceCameraDemand();
     }
     private bool HasRetainedCapture(WorldFrameSource source) {
         foreach (var entry in m_frameSourceReferences.Keys) {
@@ -216,10 +208,18 @@ internal sealed partial class WorldScreenBinder {
             : requested
         );
     }
-    // Rebuilds webcam demand from the live screen slots plus persistent probe declarations and active HUD references.
-    // This runs only when one of the latter two membership sets changes, never on a steady produced frame.
-    private void ReconcileFrameSourceCameraDemand() {
-        var next = new Dictionary<(int Seat, WorldCameraSensor Sensor), WorldFeedProfile>();
+    // Recomputes webcam demand from the live consumers — the screen slots whose current source is a camera, the
+    // persistent probe declarations, and the actively retained HUD frame sources (m_frameSourceReferences) — then
+    // syncs every device's open feeds to the result. Called once per publish (WorldScreenBinder.Camera.cs's
+    // CaptureCamera) rather than only on a membership change: a seat's DEMANDED (sensor, profile) can stay fixed
+    // while its RESOLVED device changes underneath it (player.assign moving a camera to a different seat), and only
+    // ReconcileCameraFeedsToDemand's per-device pass (driven by the roster's current seating) observes that — so it
+    // always runs, even when this method's rebuilt m_cameraDemand is byte-for-byte the same as last frame's. A
+    // screen/probe/HUD change and a roster reassignment therefore both resolve within one produced frame with no
+    // imperative "declare"/"undeclare" bookkeeping to keep in step (the one-publish seam). Zero-alloc: m_cameraDemand
+    // itself is the reused buffer (cleared and refilled in place; it holds at most a handful of (seat, sensor) pairs).
+    private void ReconcileCameraDemand() {
+        m_cameraDemand.Clear();
 
         foreach (var slot in m_slots.Values) {
             if ((slot.CameraSeat is not { } seat) || (slot.CameraSensorKind is not { } sensor)) {
@@ -235,7 +235,7 @@ internal sealed partial class WorldScreenBinder {
                 : WorldFeedProfile.Default;
             var key = (seat, sensor);
 
-            next[key] = (next.TryGetValue(key: key, value: out var existing)
+            m_cameraDemand[key] = (m_cameraDemand.TryGetValue(key: key, value: out var existing)
                 ? RichestProfile(left: existing, right: requested)
                 : requested
             );
@@ -243,7 +243,7 @@ internal sealed partial class WorldScreenBinder {
 
         foreach (var entry in m_probeCameraDemand) {
             foreach (var requested in entry.Value) {
-                next[entry.Key] = (next.TryGetValue(key: entry.Key, value: out var existing)
+                m_cameraDemand[entry.Key] = (m_cameraDemand.TryGetValue(key: entry.Key, value: out var existing)
                     ? RichestProfile(left: existing, right: requested)
                     : requested
                 );
@@ -252,43 +252,36 @@ internal sealed partial class WorldScreenBinder {
 
         foreach (var entry in m_frameSourceReferences.Keys) {
             if (entry.Source is WorldScreenSource.Camera camera) {
-                MergeCameraDemand(demands: next, camera: camera, fallbackSeat: entry.Seat);
+                MergeCameraDemand(demands: m_cameraDemand, camera: camera, fallbackSeat: entry.Seat);
             }
-        }
-
-        var changed = (next.Count != m_cameraDemand.Count);
-
-        if (!changed) {
-            foreach (var entry in next) {
-                if (!m_cameraDemand.TryGetValue(key: entry.Key, value: out var existing) || !Equals(objA: existing, objB: entry.Value)) {
-                    changed = true;
-
-                    break;
-                }
-            }
-        }
-
-        if (!changed) {
-            return;
-        }
-
-        m_cameraDemand.Clear();
-
-        foreach (var entry in next) {
-            m_cameraDemand.Add(key: entry.Key, value: entry.Value);
         }
 
         ReconcileCameraFeedsToDemand();
     }
+    // Syncs every known device's open feeds to m_cameraDemand under the roster's CURRENT seating: a device's feed
+    // whose (resolved seat, sensor) is no longer demanded is dropped (the device's graph then closes on the next
+    // ServiceCameraDeviceGraph pass once it carries no feeds); a feed whose demanded profile changed is replaced;
+    // every demand entry is then ensured against whichever device the roster resolves it to.
     private void ReconcileCameraFeedsToDemand() {
         foreach (var device in m_cameraDeviceOrder) {
             var seat = (m_roster.DeviceSlot(device: device.DeviceId) is { } slot ? (slot + 1) : 0);
+            // A slot can carry more than one camera at once (TryGetSeatDevice's own most-recently-assigned
+            // tie-break exists precisely because PlayerRoster allows this) — so mapping to a demanding seat is not
+            // enough to keep a feed open. Only the seat's RESOLVED device (the one TryFulfillCameraDemand/
+            // TryResolveCamera would themselves pick) may hold one; a co-habiting camera that lost the tie-break
+            // (the previous winner, after a player.assign seats a newer device on the same slot) is pruned here
+            // exactly like a camera the seat no longer demands at all.
+            var isResolvedDevice = (
+                (seat != 0) &&
+                m_roster.TryGetSeatDevice(slot: (seat - 1), kind: InputDeviceKind.Camera, device: out var resolvedDeviceId) &&
+                (resolvedDeviceId == device.DeviceId)
+            );
 
             for (var index = (device.Feeds.Count - 1); (index >= 0); index--) {
                 var feed = device.Feeds[index];
                 var key = (device.DeviceId, feed.Sensor);
 
-                if ((seat == 0) || !m_cameraDemand.TryGetValue(key: (seat, feed.Sensor), value: out var requested)) {
+                if (!isResolvedDevice || !m_cameraDemand.TryGetValue(key: (seat, feed.Sensor), value: out var requested)) {
                     _ = m_cameraFeeds.Remove(key: key);
                     device.Feeds.RemoveAt(index: index);
                     feed.Dispose();
@@ -297,7 +290,7 @@ internal sealed partial class WorldScreenBinder {
                     continue;
                 }
 
-                if (Equals(objA: requested, objB: feed.Profile)) {
+                if (requested == feed.Profile) {
                     continue;
                 }
 

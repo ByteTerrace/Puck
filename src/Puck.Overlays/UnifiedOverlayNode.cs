@@ -929,9 +929,18 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         // Device loss invalidates the submissions that could sample these host-owned images. Retire before dropping
         // the fence so capture/view producers do not retain acquisitions forever; waiting on a lost-device fence is
         // neither necessary nor safe.
-        m_frameSlots.RetireAll();
+        RetireForExit(exit: OverlayFrameExit.DeviceLost);
         ReleaseGpuResources();
         m_inner.OnDeviceLost();
+    }
+    // Routes every early-exit retirement through OverlayFrameRetirementPolicy's table so this method and the two
+    // early returns in ProduceFrame below cannot drift out of step on which exit retires immediately.
+    private void RetireForExit(OverlayFrameExit exit) {
+        if (OverlayFrameRetirementPolicy.RetiresImmediately(exit: exit)) {
+            m_frameSlots.RetireAll();
+        } else {
+            m_frameSlots.RetireAllAfter(fence: m_frameFence);
+        }
     }
     /// <inheritdoc/>
     public Surface ProduceFrame(in FrameContext context) {
@@ -950,7 +959,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
             ForwardPendingCapture();
             // No new overlay submit will provide the usual proving wait/retirement point. Drain the last submitted
             // pass before releasing its host-owned image handles.
-            m_frameSlots.RetireAllAfter(fence: m_frameFence);
+            RetireForExit(exit: OverlayFrameExit.NoInnerFrame);
 
             return inner;
         }
@@ -1038,7 +1047,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
             ForwardPendingCapture();
             // BeginFrame moved the previous pass's leases aside, and a writer may also have acquired a lease before
             // declining to emit. With no overlay submit, retire both sets after the prior pass's fence.
-            m_frameSlots.RetireAllAfter(fence: m_frameFence);
+            RetireForExit(exit: OverlayFrameExit.NoOverlayContent);
 
             return inner;
         }

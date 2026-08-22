@@ -424,7 +424,24 @@ feed), enumerating attached devices (and retiring vanished ones) roughly every
 two seconds; a seat with no camera, or whose camera lacks the requested
 sensor, reports that fault through `screen.state`/`screen.camera` rather than
 refusing the bind — reassigning a camera moves every consumer to the new
-device with no reopen, on the next produced frame.
+device with no reopen, on the next produced frame. A scan that fails (the
+platform enumeration call throws) is never read as "every camera unplugged" —
+the device table is left untouched and removals resume only once a scan
+completes again, and the failure narrates once per failure episode on stderr
+rather than on every retry.
+
+Camera demand — which (seat, sensor) pairs need an open feed, at what profile
+— is a live set, fully recomputed every produced frame from the actual
+consumers: camera-bound screen slots (`ScreenSlot.CameraSeat`/
+`CameraSensorKind`), retained probe sockets, and retained HUD `Frame`
+elements naming a camera; the richest requested profile wins when more than
+one consumer names the same pair. Nothing is declared once and remembered —
+`screen.source <i> camera …` moving away from a camera, `screen.eject`, a HUD
+panel losing its `Frame` element, and `player.assign` reseating a device all
+resolve within the same one-publish seam: the next produced frame's demand
+recompute drops what is no longer wanted and picks up what changed, closing a
+device's graph once none of its feeds are demanded any more (lazily reopened
+on the next demand, exactly like the first open).
 
 **A booted MACHINE is authoritative server state, not presentation-fed**
 (owner ruling, 2026-08-03). `Puck.World.Server.WorldMachineHost` owns
@@ -544,13 +561,17 @@ or seat 1 for a world-scope one) alongside the source, since a bare `camera`
 source (no authored `seat`) means "this panel's own seat" — the seat argument
 is what resolves that, not a value baked into the source record. They are the
 registry every non-screen consumer of a `WorldFrameSource` shares: the former
-records the (seat, sensor) demand the first time anything asks for it
-(idempotent — a camera seat/sensor no `screens` row names still opens through
-`DeclareCameraDemand`, a view renders every `ViewStack` refresh with no wired
+opens a non-camera producer's underlying feed the first time anything asks
+for it (idempotent — a view renders every `ViewStack` refresh with no wired
 screen narrowing its round-robin turn, a probe reads whatever its own kernel
 publishes, a capture opens through the same ladder a declared screen's capture
-source uses); the latter reads the current frame, render-thread-side, once per
-produced frame. `WorldOverlayFrameSources` (`Puck.Overlays.IOverlayFrameSources`)
+source uses); a `camera` source declares nothing here at all — it instead
+rides `RetainFrameSource`/`ReleaseFrameSource`'s reference-counted table,
+whose membership is one of the inputs `ReconcileCameraDemand`
+(`WorldScreenBinder.FrameSources.cs`) recomputes camera demand from every
+produced frame, alongside every camera-bound screen slot and retained probe
+socket — see the seated-camera section above; the latter (`TryAcquireFrame`)
+reads the current frame, render-thread-side, once per produced frame. `WorldOverlayFrameSources` (`Puck.Overlays.IOverlayFrameSources`)
 is the integer-keyed adapter the compositor addresses: `WorldHudFeed.BuildElements`
 resolves a `Frame` element's `Source` to a key on the structure rebuild (world
 panels at seat 1, a joined seat's own panel at its own seat), and the

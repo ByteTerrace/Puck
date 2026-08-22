@@ -15,6 +15,7 @@ public sealed class Win32MediaFoundationCameraService : ICameraCaptureService {
     public bool IsSupported => OperatingSystem.IsWindows();
 
     /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">The Media Foundation frame-source group scan failed.</exception>
     public IReadOnlyList<CameraDeviceInfo> EnumerateDevices() {
         if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 14393)) {
             return [];
@@ -23,9 +24,7 @@ public sealed class Win32MediaFoundationCameraService : ICameraCaptureService {
         try {
             return Win32CameraDeviceGroups.Enumerate();
         } catch (Exception exception) {
-            Console.Error.WriteLine(value: $"[camera] device enumeration failed: {exception.Message}");
-
-            return [];
+            throw new InvalidOperationException(message: $"camera device enumeration failed: {exception.Message}", innerException: exception);
         }
     }
     /// <inheritdoc/>

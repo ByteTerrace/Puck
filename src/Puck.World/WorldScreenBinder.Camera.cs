@@ -14,6 +14,7 @@ using Puck.Platform;
 using Puck.Platform.Probes;
 using Puck.SdfVm;
 using Puck.SdfVm.Views;
+using Puck.World.Client;
 
 namespace Puck.World;
 
@@ -111,7 +112,8 @@ internal sealed partial class WorldScreenBinder {
         slot.CameraSeat = seat;
         slot.CameraSensorKind = sensor;
         slot.DeclaredFault = null;
-        DeclareCameraDemand(seat: seat, sensor: sensor, profile: null);
+        // Demand resolves at the next publish (ReconcileCameraDemand reads CameraSeat/CameraSensorKind directly) —
+        // one produced frame's seam between this bind and the seat's device/feed appearing live.
 
         return (Ok: true, Message: $"screen {index} showing seat {seat}'s {SensorName(sensor: sensor)} webcam");
     }
@@ -160,7 +162,7 @@ internal sealed partial class WorldScreenBinder {
     // adopts a finished open.
     private void CaptureCamera(IGpuDeviceContext deviceContext, IGpuComputeServices gpu) {
         ServiceCameraDevices();
-        FulfillCameraDemand();
+        ReconcileCameraDemand();
 
         foreach (var device in m_cameraDeviceOrder) {
             if (
@@ -185,7 +187,9 @@ internal sealed partial class WorldScreenBinder {
     // a newly seen device is content-addressed (InputDeviceId.FromKey — reconnect-stable) and observed onto the
     // roster (its default-seating policy attaches it, or leaves it unassigned); a device that vanished has its graph
     // closed and every feed detached with a "camera disconnected" fault, then drops out of the table so a later
-    // reconnect (the SAME content-addressed id) starts fresh.
+    // reconnect (the SAME content-addressed id) starts fresh. A scan that FAILS (EnumerateDevices throws) is not
+    // read as "every camera unplugged" — the device table is left untouched and removals resume only once a scan
+    // completes again; the failure narrates once per episode rather than on every retry.
     private void ServiceCameraDevices() {
         var now = Stopwatch.GetTimestamp();
 
@@ -202,13 +206,32 @@ internal sealed partial class WorldScreenBinder {
             return;
         }
 
-        var seen = new HashSet<InputDeviceId>();
+        CameraDeviceScanOutcome outcome;
+        var infoById = new Dictionary<InputDeviceId, CameraDeviceInfo>();
 
-        foreach (var info in m_cameraCapture.EnumerateDevices()) {
-            var deviceId = InputDeviceId.FromKey(key: info.Id);
+        try {
+            foreach (var info in m_cameraCapture.EnumerateDevices()) {
+                infoById[InputDeviceId.FromKey(key: info.Id)] = info;
+            }
 
-            _ = seen.Add(item: deviceId);
+            outcome = new CameraDeviceScanOutcome.Success(Ids: infoById.Keys.ToHashSet());
+        } catch (InvalidOperationException exception) {
+            outcome = new CameraDeviceScanOutcome.Failure(Message: exception.Message);
+        }
 
+        var decision = CameraDeviceScanReconciler.Reconcile(knownIds: m_cameraDevices.Keys.ToHashSet(), outcome: outcome, wasFailing: m_cameraDeviceScanFailed);
+
+        m_cameraDeviceScanFailed = decision.IsFailing;
+
+        if (decision.Narrate) {
+            Console.Error.WriteLine(value: $"[camera] device scan failed: {((CameraDeviceScanOutcome.Failure)outcome).Message}");
+        }
+
+        if (outcome is CameraDeviceScanOutcome.Failure) {
+            return;
+        }
+
+        foreach (var (deviceId, info) in infoById) {
             if (m_cameraDevices.TryGetValue(key: deviceId, value: out var device)) {
                 device.Name = info.Name;
                 device.Sensors = info.Sensors;
@@ -221,30 +244,21 @@ internal sealed partial class WorldScreenBinder {
             m_roster.ObserveDevice(device: deviceId, kind: InputDeviceKind.Camera, name: info.Name);
         }
 
-        for (var index = (m_cameraDeviceOrder.Count - 1); (index >= 0); index--) {
-            var device = m_cameraDeviceOrder[index];
-
-            if (seen.Contains(item: device.DeviceId)) {
-                continue;
-            }
+        foreach (var deviceId in decision.ToRetire) {
+            var device = m_cameraDevices[deviceId];
 
             foreach (var feed in device.Feeds) {
                 _ = m_cameraFeeds.Remove(key: (device.DeviceId, feed.Sensor));
             }
 
             DisposeCameraDevice(device: device, fault: "camera disconnected");
-            _ = m_cameraDevices.Remove(key: device.DeviceId);
-            m_cameraDeviceOrder.RemoveAt(index: index);
+            _ = m_cameraDevices.Remove(key: deviceId);
+            _ = m_cameraDeviceOrder.Remove(item: device);
         }
     }
-    // Applies every recorded (seat, sensor) demand against the roster's current seating: a seat that now resolves to
-    // an enumerated device gets its feed ensured (declared, opening) at the richest profile any DeclareCameraDemand
-    // call recorded for it. Cheap — the demand table holds at most a handful of entries.
-    private void FulfillCameraDemand() {
-        foreach (var (seat, sensor) in m_cameraDemand.Keys) {
-            _ = TryFulfillCameraDemand(seat: seat, sensor: sensor);
-        }
-    }
+    // Ensures a (seat, sensor) demand entry's feed against the roster's current seating — called from
+    // ReconcileCameraFeedsToDemand (WorldScreenBinder.FrameSources.cs) once m_cameraDemand has been rebuilt for the
+    // frame. A seat with no enumerated camera, or whose camera lacks this sensor, simply has no feed yet.
     private bool TryFulfillCameraDemand(int seat, WorldCameraSensor sensor) {
         if (
             !m_roster.TryGetSeatDevice(slot: (seat - 1), kind: InputDeviceKind.Camera, device: out var deviceId) ||
@@ -260,24 +274,6 @@ internal sealed partial class WorldScreenBinder {
 
         return true;
     }
-    // Records that a (seat, sensor) pair is wanted at (at least) the given profile — the richest envelope any
-    // DeclareCameraDemand call for the same pair has ever recorded — then attempts an immediate resolve so a
-    // demand declared after the device already resolved does not wait a whole publish for its feed to appear.
-    private void DeclareCameraDemand(int seat, WorldCameraSensor sensor, WorldFeedProfile? profile) {
-        var requested = (profile ?? WorldFeedProfile.Default);
-        var key = (seat, sensor);
-
-        if (m_cameraDemand.TryGetValue(key: key, value: out var existing)) {
-            requested = new WorldFeedProfile(
-                Width: Math.Max(val1: existing.Width, val2: requested.Width),
-                Height: Math.Max(val1: existing.Height, val2: requested.Height),
-                RefreshRateHz: Math.Max(val1: existing.RefreshRateHz, val2: requested.RefreshRateHz)
-            );
-        }
-
-        m_cameraDemand[key] = requested;
-        _ = TryFulfillCameraDemand(seat: seat, sensor: sensor);
-    }
     /// <summary>Retains one live probe instance's camera feed demand at the socket's authored profile.</summary>
     public void RetainProbeCameraDemand(WorldScreenSource.Camera camera, int contextSeat) =>
         RetainProbeCameraDemandCore(camera: camera, contextSeat: contextSeat);
@@ -286,8 +282,8 @@ internal sealed partial class WorldScreenBinder {
         ReleaseProbeCameraDemandCore(camera: camera, contextSeat: contextSeat);
     // Resolves (seat, sensor) to the device currently seated there and its feed — the one lookup every camera
     // consumer (a screen slot, a probe socket, a HUD frame) makes each frame. A device already known but with no
-    // feed for this sensor yet is ensured here (default profile) so a bind that skipped DeclareCameraDemand (a
-    // direct screen.source camera call) still resolves the same frame it is issued.
+    // feed for this sensor yet is ensured here (default profile) so a resolve landing ahead of the next publish's
+    // ReconcileCameraDemand (the same produced frame a screen.source camera call binds on) still finds a feed.
     private bool TryResolveCamera(int seat, WorldCameraSensor sensor, out CameraDevice? device, out CameraFeed? feed, out string fault) {
         device = null;
         feed = null;
@@ -1011,33 +1007,6 @@ internal sealed partial class WorldScreenBinder {
         }
 
         return map;
-    }
-    // One seat's sensor feed is shared by every screen naming it. When several camera sources declare different
-    // preferences for the same (seat, sensor) pair, request the richest combined envelope rather than letting
-    // declaration order choose.
-    private static WorldFeedProfile ResolveCameraProfile(IReadOnlyList<WorldScreen> screens, int seat, WorldCameraSensor sensor) {
-        var profile = WorldFeedProfile.Default;
-        var found = false;
-
-        foreach (var screen in screens) {
-            if ((screen.Source is not WorldScreenSource.Camera camera) || ((camera.Seat ?? 1) != seat) || (sensor != camera.Sensor)) {
-                continue;
-            }
-
-            var requested = (camera.Profile ?? WorldFeedProfile.Default);
-
-            profile = (found
-                ? new WorldFeedProfile(
-                    Width: Math.Max(val1: profile.Width, val2: requested.Width),
-                    Height: Math.Max(val1: profile.Height, val2: requested.Height),
-                    RefreshRateHz: Math.Max(val1: profile.RefreshRateHz, val2: requested.RefreshRateHz)
-                )
-                : requested
-            );
-            found = true;
-        }
-
-        return profile;
     }
     private static string SensorName(WorldCameraSensor sensor) => sensor.ToString().ToLowerInvariant();
     private static WorldCameraSensor WorldSensor(CameraSensor sensor) => ((CameraSensor.Infrared == sensor)

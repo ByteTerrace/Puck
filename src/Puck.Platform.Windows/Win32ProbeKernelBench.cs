@@ -231,25 +231,33 @@ internal sealed unsafe class Win32ProbeKernelBench {
         views: views
     );
 
-    // Release views first because each view retains its texture. The injected release action is the smallest pure
-    // seam that lets a law prove partially populated acquisition arrays drain completely and in dependency order.
+    // Release views first because each view retains its texture. Each released slot is zeroed in place so a caller
+    // holding the same array (Attachment publishes textures/views before it knows whether the open will succeed) can
+    // read the release back. The injected release action is the smallest pure seam that lets a law prove partially
+    // populated acquisition arrays drain completely and in dependency order.
     private static void ReleaseRingResources(nint[]?[] textures, nint[]?[] views, Action<nint> release) {
         foreach (var slots in views) {
-            if (slots is not null) {
-                foreach (var view in slots) {
-                    if (view != 0) {
-                        release(obj: view);
-                    }
+            if (slots is null) {
+                continue;
+            }
+
+            for (var index = 0; (index < slots.Length); index++) {
+                if (slots[index] != 0) {
+                    release(obj: slots[index]);
+                    slots[index] = 0;
                 }
             }
         }
 
         foreach (var slots in textures) {
-            if (slots is not null) {
-                foreach (var texture in slots) {
-                    if (texture != 0) {
-                        release(obj: texture);
-                    }
+            if (slots is null) {
+                continue;
+            }
+
+            for (var index = 0; (index < slots.Length); index++) {
+                if (slots[index] != 0) {
+                    release(obj: slots[index]);
+                    slots[index] = 0;
                 }
             }
         }
@@ -287,6 +295,12 @@ internal sealed unsafe class Win32ProbeKernelBench {
             var inputs = Request.Inputs;
             var textures = new nint[]?[inputs.Count];
             var views = new nint[]?[inputs.Count];
+
+            // Published before the first native call (not only on success): RingViews/RingTextures then observe a
+            // partial acquisition's arrays too, zeroed in place by ReleaseRingResources's catch below when the open
+            // fails partway through.
+            m_ringTextures = textures;
+            m_ringViews = views;
 
             try {
                 for (var index = 0; (index < inputs.Count); index++) {
@@ -343,13 +357,16 @@ internal sealed unsafe class Win32ProbeKernelBench {
                 throw;
             }
 
-            m_ringTextures = textures;
-            m_ringViews = views;
             m_ringResourcesOpened = true;
         }
-        /// <summary>Gets the opened shared-resource views for the ring socket at <paramref name="index"/>, or
-        /// <see langword="null"/> when that socket is not a ring or resources are not yet open.</summary>
+        /// <summary>Gets the opened shared-resource views for the ring socket at <paramref name="index"/> — zeroed
+        /// entries once <see cref="RingResourcesOpened"/> reports <see langword="false"/> after a partial-open
+        /// failure released them — or <see langword="null"/> when that socket is not a ring or nothing has opened
+        /// yet.</summary>
         public nint[]? RingViews(int index) => m_ringViews[index];
+        /// <summary>Gets the opened textures for the ring socket at <paramref name="index"/>, with the same
+        /// zeroed-after-release contract as <see cref="RingViews"/>.</summary>
+        public nint[]? RingTextures(int index) => m_ringTextures[index];
         /// <summary>Releases every opened ring socket's shared resources.</summary>
         public void CloseRingResources() {
             ReleaseRingResources(textures: m_ringTextures, views: m_ringViews);

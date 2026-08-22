@@ -89,6 +89,32 @@ public sealed class OverlayFrameSlotsLawTests {
         Assert.Equal(expected: 0, actual: FrameSlots(node: node).BoundCount);
     }
 
+    [Theory]
+    [InlineData(OverlayFrameExit.NoInnerFrame, false)]
+    [InlineData(OverlayFrameExit.NoOverlayContent, false)]
+    [InlineData(OverlayFrameExit.DeviceLost, true)]
+    public void OnlyDeviceLossRetiresImmediately(OverlayFrameExit exit, bool expected) => Assert.Equal(
+        expected: expected,
+        actual: OverlayFrameRetirementPolicy.RetiresImmediately(exit: exit)
+    );
+
+    [Fact]
+    public void OverlayNodeDeviceLoss_RetiresItsHeldLeaseWithoutWaitingOnTheFence() {
+        var events = new List<string>();
+        var node = BuildNode(
+            events: events,
+            inner: new FixedRenderNode(surface: default)
+        );
+
+        Assert.Equal(expected: 0, actual: FrameSlots(node: node).Bind(key: 51));
+        FrameFence(node: node) = new RecordingFence(events: events);
+
+        node.OnDeviceLost();
+
+        Assert.Equal(expected: ["release:51"], actual: events);
+        Assert.Equal(expected: 0, actual: FrameSlots(node: node).BoundCount);
+    }
+
     [Fact]
     public void DeviceLossRetiresEveryHeldLeaseWithoutWaitingOnTheFence() {
         var events = new List<string>();
@@ -151,7 +177,7 @@ public sealed class OverlayFrameSlotsLawTests {
             CommandRecorder = null!,
             CreateRenderTarget = static (_, _) => null!,
             DescriptorAllocator = null!,
-            DeviceContext = null!,
+            DeviceContext = new FixedDeviceContext(),
             FrameSources = new RecordingFrameSources(events: events),
             PipelineFactory = null!,
             QueueSubmitter = null!,
@@ -199,6 +225,15 @@ public sealed class OverlayFrameSlotsLawTests {
 
             return true;
         }
+    }
+
+    // Only ReleaseGpuResources' unconditional DeviceHandle read needs a real instance (the null-service fields
+    // this suite's nodes carry are never exercised by an early-exit or device-loss path).
+    private sealed class FixedDeviceContext : IGpuDeviceContext {
+        public long AdapterLuid => 0L;
+        public nint DeviceHandle => 0;
+
+        public void WaitIdle() { }
     }
 
     private sealed class FixedRenderNode(Surface surface) : IRenderNode {

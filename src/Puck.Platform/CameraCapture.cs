@@ -37,26 +37,32 @@ public interface ICameraCaptureService {
     /// <summary>Gets a value indicating whether this platform can open camera devices at all.</summary>
     bool IsSupported { get; }
 
-    /// <summary>Enumerates every physical camera currently attached, in a stable order by <see cref="CameraDeviceInfo.Id"/>.</summary>
-    /// <returns>The attached cameras; empty when none are attached or the platform is unsupported.</returns>
+    /// <summary>Enumerates every physical camera currently attached, in a stable order by <see cref="CameraDeviceInfo.Id"/>.
+    /// A completed scan distinguishes itself from a failed one: an empty machine (or an unsupported platform) returns an
+    /// empty list, while the platform's scan mechanism itself failing throws instead — a caller must never read an empty
+    /// list as "every camera was unplugged".</summary>
+    /// <returns>The attached cameras from a completed scan; empty when none are attached or the platform is unsupported.</returns>
+    /// <exception cref="InvalidOperationException">The platform's device scan failed.</exception>
     IReadOnlyList<CameraDeviceInfo> EnumerateDevices();
     /// <summary>Tries to open the requested sensors of one physical camera as one CPU-pixel graph, negotiating each
     /// single-sensor stream near its envelope: the smallest native frame size covering the requested extent (else the
-    /// largest available), at the lowest native rate covering the requested rate (else the highest available).</summary>
+    /// largest available), at the lowest native rate covering the requested rate (else the highest available). A
+    /// successful open has already published at least one usable host frame from every returned stream.</summary>
     /// <param name="deviceId">The physical camera to open, from <see cref="EnumerateDevices"/>.</param>
     /// <param name="streams">The sensors to open, in the order their streams are returned.</param>
     /// <param name="graph">When this returns <see langword="true"/>, the open graph; otherwise <see langword="null"/>.</param>
-    /// <returns><see langword="true"/> if every requested sensor opened.</returns>
+    /// <returns><see langword="true"/> if every requested sensor opened and published a usable host frame.</returns>
     bool TryOpenPixels(string deviceId, ReadOnlySpan<CameraStreamRequest> streams, [NotNullWhen(true)] out ICameraGraph<ICameraPixelStream>? graph);
     /// <summary>Tries to open the requested sensors of one physical camera as one shared-texture graph on the
-    /// consumer's render adapter. The returned streams are negotiated but idle until each receives its targets through
-    /// <see cref="ICameraSharedStream.Start"/>; a coordinated graph publishes only after every stream has started.</summary>
+    /// consumer's render adapter. A successful open has validated a native GPU sample from every requested sensor. The
+    /// returned streams remain idle until each receives its targets through <see cref="ICameraSharedStream.Start"/>; a
+    /// coordinated graph publishes only after every stream has started.</summary>
     /// <param name="adapterLuid">The consumer render device's adapter LUID; the platform's device must share the adapter
     /// for the shared textures to be openable.</param>
     /// <param name="deviceId">The physical camera to open, from <see cref="EnumerateDevices"/>.</param>
     /// <param name="streams">The sensors to open, in the order their streams are returned.</param>
-    /// <param name="graph">When this returns <see langword="true"/>, the negotiated graph; otherwise <see langword="null"/>.</param>
-    /// <returns><see langword="true"/> if every requested sensor opened on the shared tier.</returns>
+    /// <param name="graph">When this returns <see langword="true"/>, the live source graph; otherwise <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> if every requested sensor opened and delivered a native GPU sample.</returns>
     bool TryOpenShared(long adapterLuid, string deviceId, ReadOnlySpan<CameraStreamRequest> streams, [NotNullWhen(true)] out ICameraGraph<ICameraSharedStream>? graph);
 }
 
@@ -99,8 +105,8 @@ public interface ICameraStream {
 }
 
 /// <summary>A CPU-pixel stream: <see cref="IFrameCaptureSource.TryCapture"/> returns the newest frame as
-/// <see cref="SurfaceFormat.B8G8R8A8Unorm"/> pixels (latest-frame-wins, stale frames dropped), or
-/// <see langword="false"/> until the first frame arrives.</summary>
+/// <see cref="SurfaceFormat.B8G8R8A8Unorm"/> pixels (latest-frame-wins, stale frames dropped). A stream returned by a
+/// successful <see cref="ICameraCaptureService.TryOpenPixels"/> already contains its first frame.</summary>
 public interface ICameraPixelStream : ICameraStream, IFrameCaptureSource;
 
 /// <summary>A shared-texture stream: the platform converts each frame on its own device and copies it into one of the

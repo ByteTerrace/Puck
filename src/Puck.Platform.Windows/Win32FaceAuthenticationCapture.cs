@@ -319,9 +319,38 @@ internal readonly record struct Win32FaceAuthenticationStream(
 /// </summary>
 [SupportedOSPlatform("windows10.0.14393")]
 internal static class Win32CameraDeviceGroups {
+    private static Win32CameraDeviceGroup[] s_groups = [];
+
     /// <summary>Enumerates every attached physical camera.</summary>
     public static IReadOnlyList<CameraDeviceInfo> Enumerate() {
-        var devices = new List<CameraDeviceInfo>();
+        var groups = Scan();
+
+        Volatile.Write(location: ref s_groups, value: groups);
+
+        var devices = new CameraDeviceInfo[groups.Length];
+
+        for (var index = 0; (index < groups.Length); index++) {
+            devices[index] = groups[index].Info;
+        }
+
+        return devices;
+    }
+    /// <summary>Finds the attached group matching <paramref name="deviceId"/> and its color/infrared source infos.</summary>
+    public static bool TryFind(string deviceId, out MediaFrameSourceGroup group, out MediaFrameSourceInfo? color, out MediaFrameSourceInfo? infrared) {
+        var groups = Volatile.Read(location: ref s_groups);
+
+        if (TryFind(groups: groups, deviceId: deviceId, group: out group, color: out color, infrared: out infrared)) {
+            return true;
+        }
+
+        groups = Scan();
+        Volatile.Write(location: ref s_groups, value: groups);
+
+        return TryFind(groups: groups, deviceId: deviceId, group: out group, color: out color, infrared: out infrared);
+    }
+
+    private static Win32CameraDeviceGroup[] Scan() {
+        var groups = new List<Win32CameraDeviceGroup>();
 
         foreach (var group in MediaFrameSourceGroup.FindAllAsync().AsTask().GetAwaiter().GetResult()) {
             var (color, infrared) = Sources(group: group);
@@ -340,20 +369,27 @@ internal static class Win32CameraDeviceGroups {
                 sensors.Add(item: CameraSensor.Infrared);
             }
 
-            devices.Add(item: new CameraDeviceInfo(Id: group.Id, Name: group.DisplayName, Sensors: sensors));
+            groups.Add(item: new Win32CameraDeviceGroup(
+                Color: color,
+                Group: group,
+                Info: new CameraDeviceInfo(Id: group.Id, Name: group.DisplayName, Sensors: sensors),
+                Infrared: infrared
+            ));
         }
 
-        return devices;
+        groups.Sort(comparison: static (left, right) => StringComparer.Ordinal.Compare(x: left.Info.Id, y: right.Info.Id));
+
+        return [.. groups];
     }
-    /// <summary>Finds the attached group matching <paramref name="deviceId"/> and its color/infrared source infos.</summary>
-    public static bool TryFind(string deviceId, out MediaFrameSourceGroup group, out MediaFrameSourceInfo? color, out MediaFrameSourceInfo? infrared) {
-        foreach (var candidate in MediaFrameSourceGroup.FindAllAsync().AsTask().GetAwaiter().GetResult()) {
-            if (!string.Equals(a: candidate.Id, b: deviceId, comparisonType: StringComparison.Ordinal)) {
+    private static bool TryFind(Win32CameraDeviceGroup[] groups, string deviceId, out MediaFrameSourceGroup group, out MediaFrameSourceInfo? color, out MediaFrameSourceInfo? infrared) {
+        foreach (var candidate in groups) {
+            if (!string.Equals(a: candidate.Info.Id, b: deviceId, comparisonType: StringComparison.Ordinal)) {
                 continue;
             }
 
-            (color, infrared) = Sources(group: candidate);
-            group = candidate;
+            color = candidate.Color;
+            group = candidate.Group;
+            infrared = candidate.Infrared;
 
             return true;
         }
@@ -386,4 +422,11 @@ internal static class Win32CameraDeviceGroups {
 
         return (color, infrared);
     }
+
+    private readonly record struct Win32CameraDeviceGroup(
+        MediaFrameSourceInfo? Color,
+        MediaFrameSourceGroup Group,
+        CameraDeviceInfo Info,
+        MediaFrameSourceInfo? Infrared
+    );
 }

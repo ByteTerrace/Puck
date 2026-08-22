@@ -14,9 +14,14 @@ plus the pieces that need no OS-specific code at all.
 - **Capture contracts** — `ICameraCaptureService`, `INativeImageCaptureService`,
   `IAudioRenderDeviceFactory`/`IAudioRenderDevice`. `ICameraCaptureService.EnumerateDevices`
   reports every attached physical camera as a `CameraDeviceInfo` (a platform-stable
-  `Id`, a `Name`, and its `Sensors`); `TryOpenPixels`/`TryOpenShared` open one
+  `Id`, a `Name`, and its `Sensors`) from a completed scan, empty only when the
+  machine truly has none; the platform's scan mechanism itself failing throws
+  `InvalidOperationException` instead, so a caller never reads a failed scan as
+  every camera unplugged. `TryOpenPixels`/`TryOpenShared` open one
   named device's sensors, and the returned `ICameraGraph.DeviceId` echoes back
-  which one opened.
+  which one opened. A successful pixel open has already published a usable host
+  frame from every stream; a successful shared open has validated native GPU
+  input before the consumer attaches its target textures.
 - **`Puck.Memory`** — the unmanaged allocator (mimalloc-backed, with a
   tracking wrapper and a plain native fallback), registered via
   `AddPuckAllocator`.

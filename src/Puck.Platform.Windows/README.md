@@ -48,16 +48,17 @@ completed slot until its GPU submission retires; the camera drops an incoming
 frame when every other slot remains acquired instead of overwriting a texture
 still being sampled.
 
-The attached-camera pixel delivery test is intentionally opt-in: set
-`PUCK_WINDOWS_CAMERA_FRAME_TESTS=1` before running
-`Win32MediaFoundationCameraServiceTests`. Its frame assertion remains a real
-hardware gate; the default test lane skips it rather than depending on an
-attached device and driver.
+`Win32MediaFoundationCameraServiceTests` exercises attached-camera enumeration
+and pixel delivery whenever a color camera is present. A machine without one
+skips those hardware assertions.
 
 Every graph's native objects belong to one MTA worker thread
 (`Win32CameraGraph`): construction blocks until the worker reports ready or
 fails, disposal requests a stop and joins for a bounded interval, and a worker
-that outlives the join keeps its objects until the driver call returns.
+that outlives the join keeps its objects until the driver call returns. A
+source-reader pixel graph reports ready only after publishing a usable host
+frame. A source-reader shared graph first validates that its native sample is a
+Direct3D texture, then waits for consumer targets after returning.
 `Win32D3D11CameraFrameConverter` is the shared tier's compute kernel for the
 native YUY2/NV12/L8 surfaces. Color conversion preserves the format's Media
 Foundation transfer-matrix, nominal-range, and chroma-siting attributes;

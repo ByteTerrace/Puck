@@ -109,15 +109,19 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     // One feed per (device, sensor) a consumer has resolved — shared by every screen/probe/HUD source landing on the
     // same device and sensor.
     private readonly Dictionary<(InputDeviceId Device, WorldCameraSensor Sensor), CameraFeed> m_cameraFeeds = new();
-    // The recorded (seat, sensor) demand from DeclareCameraDemand — the richest profile any declarer asked for —
-    // fulfilled against the roster's current seating every publish (FulfillCameraDemand) and, best-effort, at the
-    // moment it is declared.
+    // The live (seat, sensor) demand set, fully recomputed every publish (ReconcileCameraDemand) from the actual
+    // consumers — camera-bound screen slots, retained probe sockets, retained HUD frame sources — the richest
+    // profile any of them requests for the same pair, then synced against the roster's current seating
+    // (ReconcileCameraFeedsToDemand). Never mutated incrementally outside that pair of methods.
     private readonly Dictionary<(int Seat, WorldCameraSensor Sensor), WorldFeedProfile> m_cameraDemand = new();
     // The authored control state per seat (the first camera row authoring controls for a given seat wins, per
     // ResolveSeatCameraControls) — resolved at boot and re-resolved by ReconcileScreens, so an UpsertScreen mutation
     // moves the seat's device live through the per-frame service path.
     private Dictionary<int, WorldCameraControls?> m_seatCameraControls = new();
     private long m_nextCameraDeviceScanTimestamp;
+    // Narrates a scan failure once per failure episode (ServiceCameraDevices) rather than every ~2s retry; cleared
+    // the moment a scan succeeds again.
+    private bool m_cameraDeviceScanFailed;
     // The world's placeable-camera rows — booted from the definition and REPLACED by ReconcileCameras when a camera
     // mutation delivers, so a runtime screen.source <index> view (and every later resolve) reads the LIVE rows.
     private IReadOnlyList<WorldCamera> m_cameras;
@@ -250,15 +254,11 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
                     if (!m_cameraCapture.IsSupported) {
                         slot.DeclaredFault = "no camera device present";
                     } else {
-                        var cameraSeat = (cameraSource.Seat ?? 1);
-
-                        slot.CameraSeat = cameraSeat;
+                        // Demand for this (seat, sensor) is derived from this slot at the next publish
+                        // (ReconcileCameraDemand reads CameraSeat/CameraSensorKind plus DeclaredSource, already
+                        // assigned above/below) — nothing to declare imperatively here.
+                        slot.CameraSeat = (cameraSource.Seat ?? 1);
                         slot.CameraSensorKind = cameraSource.Sensor;
-                        DeclareCameraDemand(
-                            seat: cameraSeat,
-                            sensor: cameraSource.Sensor,
-                            profile: ResolveCameraProfile(screens: screens, seat: cameraSeat, sensor: cameraSource.Sensor)
-                        );
                     }
 
                     break;

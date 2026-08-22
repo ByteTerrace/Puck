@@ -18,6 +18,7 @@ namespace Puck.Platform.Windows;
 internal abstract class Win32SourceReaderCameraGraph<TStream> : Win32CameraGraph<TStream> where TStream : class, ICameraStream {
     private const int ReadyTimeoutMilliseconds = 15000;
 
+    private IMFActivate? m_activate;
     private Win32CameraControlSurface? m_controls;
     private object? m_mediaSource;
     private string m_name = "camera";
@@ -37,10 +38,12 @@ internal abstract class Win32SourceReaderCameraGraph<TStream> : Win32CameraGraph
     protected abstract void ConfigureReader(IMFAttributes config);
     /// <summary>Handles one sample on the worker thread; the sample is released by the caller.</summary>
     protected abstract void Deliver(IMFSample sample);
+    /// <summary>Gets whether the tier has proved its input live.</summary>
+    protected abstract bool IsLive { get; }
     /// <summary>Sets the tier's output type for the selected native mode and builds the stream at the negotiated
     /// extent.</summary>
     protected abstract TStream Negotiate(IMFSourceReader reader, uint streamIndex, Guid nativeSubtype, CameraCaptureFormat nativeFormat);
-    /// <summary>Runs after the graph is ready and before the first ReadSample; returning <see langword="false"/> ends
+    /// <summary>Runs after the source has proved live and the graph is ready; returning <see langword="false"/> ends
     /// the worker without streaming.</summary>
     protected virtual bool BeginStreaming() => true;
     /// <summary>Creates tier resources the reader depends on, before the device is activated.</summary>
@@ -48,7 +51,7 @@ internal abstract class Win32SourceReaderCameraGraph<TStream> : Win32CameraGraph
     /// <summary>Releases tier resources after the reader is gone.</summary>
     protected virtual void ReleaseTier() { }
     protected void Start(string threadName) => RunWorker(
-        readyTimeoutMessage: $"the camera did not negotiate within {ReadyTimeoutMilliseconds} ms",
+        readyTimeoutMessage: $"the camera did not deliver its first frame within {ReadyTimeoutMilliseconds} ms",
         readyTimeoutMilliseconds: ReadyTimeoutMilliseconds,
         threadName: threadName
     );
@@ -62,26 +65,56 @@ internal abstract class Win32SourceReaderCameraGraph<TStream> : Win32CameraGraph
             started = true;
             Prepare();
             reader = OpenReader(streamIndex: out var streamIndex);
+
+            ReadSamples(reader: reader, stopWhenLive: true, streamIndex: streamIndex);
+
+            if (Stopping) {
+                return;
+            }
+
             Ready();
 
             if (BeginStreaming()) {
-                ReadSamples(reader: reader, streamIndex: streamIndex);
+                ReadSamples(reader: reader, stopWhenLive: false, streamIndex: streamIndex);
             }
         } finally {
             if (reader is not null) {
                 _ = Marshal.ReleaseComObject(o: reader);
             }
 
-            if (m_mediaSource is not null) {
-                _ = Marshal.ReleaseComObject(o: m_mediaSource);
-                m_mediaSource = null;
-            }
+            m_controls = null;
 
+            ReleaseSource(source: ref m_mediaSource, activate: ref m_activate);
             ReleaseTier();
 
             if (started) {
                 _ = MFShutdown();
             }
+        }
+    }
+    // The activation contract, in one place so no teardown site can forget a step: Shutdown() on the media source,
+    // then ShutdownObject() on the IMFActivate that created it, then the RCWs release. Shared by the Work() teardown
+    // and the infrared-fallback re-activation in OpenReader, which must retire the color source's activation before
+    // starting the infrared one's.
+    private static void ReleaseSource(ref object? source, ref IMFActivate? activate) {
+        if (source is not null) {
+            if (source is IMFMediaSource mediaSource) {
+                _ = mediaSource.Shutdown();
+            }
+
+            // The activation contract: ShutdownObject() on the IMFActivate that created the source, once the source
+            // itself has shut down.
+            if (activate is not null) {
+                _ = activate.ShutdownObject();
+            }
+
+            _ = Marshal.ReleaseComObject(o: source);
+            source = null;
+        }
+
+        if (activate is not null) {
+            _ = Marshal.ReleaseComObject(o: activate);
+            activate = null;
         }
     }
 
@@ -90,18 +123,19 @@ internal abstract class Win32SourceReaderCameraGraph<TStream> : Win32CameraGraph
         // camera — and only a device without such a stream falls back to the separate sensor-camera category.
         var infrared = (CameraSensor.Infrared == Request.Sensor);
         var (colorLink, infraredLink) = ResolveDeviceLinks();
-        var (mediaSource, deviceName) = ActivateDefaultVideoSource(symbolicLink: colorLink, extended: infrared, infrared: false);
+        var (mediaSource, deviceName, activate) = ActivateDefaultVideoSource(symbolicLink: colorLink, extended: infrared, infrared: false);
         IMFMediaType? infraredType = null;
         IMFPresentationDescriptor? infraredPresentation = null;
 
         streamIndex = FirstVideoStream;
         m_mediaSource = mediaSource;
+        m_activate = activate;
 
         if (infrared && !TryPrepareInfraredStream(mediaSource: mediaSource, mediaType: out infraredType, presentationDescriptor: out infraredPresentation, streamIndex: out streamIndex)) {
-            _ = Marshal.ReleaseComObject(o: mediaSource);
-            m_mediaSource = null;
-            (mediaSource, deviceName) = ActivateDefaultVideoSource(symbolicLink: infraredLink, extended: true, infrared: true);
+            ReleaseSource(source: ref m_mediaSource, activate: ref m_activate);
+            (mediaSource, deviceName, activate) = ActivateDefaultVideoSource(symbolicLink: infraredLink, extended: true, infrared: true);
             m_mediaSource = mediaSource;
+            m_activate = activate;
 
             if (!TryPrepareInfraredStream(mediaSource: mediaSource, mediaType: out infraredType, presentationDescriptor: out infraredPresentation, streamIndex: out streamIndex)) {
                 throw new InvalidOperationException(message: "the infrared capture device exposes no native L8 stream");
@@ -179,7 +213,7 @@ internal abstract class Win32SourceReaderCameraGraph<TStream> : Win32CameraGraph
 
         return (color?.DeviceInformation.Id, infrared?.DeviceInformation.Id);
     }
-    private void ReadSamples(IMFSourceReader reader, uint streamIndex) {
+    private void ReadSamples(IMFSourceReader reader, uint streamIndex, bool stopWhenLive) {
         while (!Stopping) {
             var hr = reader.ReadSample(
                 dwControlFlags: 0,
@@ -191,12 +225,45 @@ internal abstract class Win32SourceReaderCameraGraph<TStream> : Win32CameraGraph
             );
 
             if (hr < 0) {
+                if (stopWhenLive) {
+                    var stream = m_streams.Single();
+
+                    throw new COMException(
+                        message: $"'{m_name}' refused its first {stream.NativeFormat.Subtype} {stream.Width}x{stream.Height}@{stream.NativeFormat.RateHz:G} frame (0x{hr:X8})",
+                        errorCode: hr
+                    );
+                }
+
                 Console.Error.WriteLine(value: $"[camera] '{m_name}' read loop stopped (0x{hr:X8}); the device may have been disconnected.");
 
                 return;
             }
 
+            if ((flags & Error) != 0) {
+                if (stopWhenLive) {
+                    throw new InvalidOperationException(message: $"'{m_name}' reported a source-reader error before its first frame");
+                }
+
+                Console.Error.WriteLine(value: $"[camera] '{m_name}' reported a source-reader error; the live feed has stopped.");
+
+                return;
+            }
+
+            if ((flags & (NativeMediaTypeChanged | CurrentMediaTypeChanged)) != 0) {
+                if (stopWhenLive) {
+                    throw new InvalidOperationException(message: $"'{m_name}' changed format before its first frame");
+                }
+
+                Console.Error.WriteLine(value: $"[camera] '{m_name}' changed format; the cached frame layout is no longer valid.");
+
+                return;
+            }
+
             if ((flags & EndOfStream) != 0) {
+                if (stopWhenLive) {
+                    throw new InvalidOperationException(message: $"'{m_name}' ended before its first frame");
+                }
+
                 Console.Error.WriteLine(value: $"[camera] '{m_name}' reported end of stream; the live feed has stopped.");
 
                 return;
@@ -210,6 +277,10 @@ internal abstract class Win32SourceReaderCameraGraph<TStream> : Win32CameraGraph
                 Deliver(sample: sample);
             } finally {
                 _ = Marshal.ReleaseComObject(o: sample);
+            }
+
+            if (stopWhenLive && IsLive) {
+                return;
             }
         }
     }
@@ -288,6 +359,8 @@ internal sealed class Win32SourceReaderPixelGraph : Win32SourceReaderCameraGraph
     public Win32SourceReaderPixelGraph(string deviceId, CameraStreamRequest request) : base(deviceId: deviceId, request: request) {
         Start(threadName: "camera-grabber");
     }
+
+    protected override bool IsLive => (m_stream?.FrameVersion > 0L);
 
     protected override void ConfigureReader(IMFAttributes config) {
         // Color rides the video-processing reader for the NV12/YUY2 -> RGB32 converter. Infrared stays native end to
@@ -449,6 +522,7 @@ internal sealed class Win32SourceReaderSharedGraph : Win32SourceReaderCameraGrap
     private readonly Win32ProbeKernelBench m_bench = new();
 
     private int m_latestSlot = -1;
+    private bool m_sourceLive;
     private nint[] m_targetViews = [];
 
     private Win32D3D11VideoDevice? m_device;
@@ -466,6 +540,8 @@ internal sealed class Win32SourceReaderSharedGraph : Win32SourceReaderCameraGrap
         m_adapterLuid = adapterLuid;
         Start(threadName: "camera-gpu-grabber");
     }
+
+    protected override bool IsLive => m_sourceLive;
 
     protected override void Prepare() {
         m_device = new Win32D3D11VideoDevice(adapterLuid: m_adapterLuid);
@@ -532,6 +608,12 @@ internal sealed class Win32SourceReaderSharedGraph : Win32SourceReaderCameraGrap
             }
 
             try {
+                if (!m_sourceLive) {
+                    m_sourceLive = true;
+
+                    return;
+                }
+
                 _ = dxgiBuffer.GetSubresourceIndex(puSubresource: out var subresource);
 
                 if (!m_stream!.Slots.TryReserveWriteSlot(slot: out var slot)) {
@@ -625,7 +707,8 @@ internal static class Win32CameraModeNegotiation {
     // Size first: the smallest native mode covering the requested extent (a diegetic panel downscales well; upscaling
     // a smaller feed is the blurry case), else the largest available. Rate second, at the chosen extent: the lowest
     // native rate covering the requested rate, else the highest available — also the whole rule when no rate was
-    // requested. A device that refuses the selection keeps its default mode; the caller reads the result back.
+    // requested. A device that refuses the selection throws (Check) rather than being tolerated and left on whatever
+    // mode was previously current.
     public static void SelectNativeType(IMFSourceReader reader, int requestedWidth, int requestedHeight, uint requestedRateHz, uint streamIndex = FirstVideoStream, Guid? requiredSubtype = null) {
         if ((requestedWidth <= 0) || (requestedHeight <= 0)) {
             return;
@@ -698,7 +781,7 @@ internal static class Win32CameraModeNegotiation {
 
         if (best is not null) {
             try {
-                _ = reader.SetCurrentMediaType(dwStreamIndex: streamIndex, pMediaType: best, pdwReserved: IntPtr.Zero);
+                Check(hr: reader.SetCurrentMediaType(dwStreamIndex: streamIndex, pMediaType: best, pdwReserved: IntPtr.Zero));
             } finally {
                 _ = Marshal.ReleaseComObject(o: best);
             }
