@@ -19,6 +19,7 @@ namespace Puck.World;
 [JsonDerivedType(typeof(WorldScreenSource.Qr), typeDiscriminator: "qr")]
 [JsonDerivedType(typeof(WorldScreenSource.Session), typeDiscriminator: "session")]
 [JsonDerivedType(typeof(WorldScreenSource.Text), typeDiscriminator: "text")]
+[JsonDerivedType(typeof(WorldScreenSource.Probe), typeDiscriminator: "probe")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record WorldScreenSource {
     private WorldScreenSource() {
@@ -72,6 +73,11 @@ public abstract record WorldScreenSource {
     /// <summary>A named view from the presentation view stack, such as a monitor showing another camera's output.</summary>
     /// <param name="CameraName">The registered view name this slot samples.</param>
     public sealed record View(string CameraName) : WorldScreenSource;
+    /// <summary>A declared probe's texture output — the frame a kind that declares an <c>output</c> writes each cycle
+    /// (a relit camera frame, a mask), published like a camera feed. The probe must be a <c>probes</c> row of this
+    /// document; whether its kind writes a texture is checked at boot against the kind's manifest.</summary>
+    /// <param name="Id">The <c>probes[].id</c> whose output this slot shows.</param>
+    public sealed record Probe(string Id) : WorldScreenSource;
     /// <summary>A live compositor capture feed — a desktop window keyed by title, or a whole monitor keyed by index. The
     /// selector is the altitude of the primitive: <paramref name="MonitorIndex"/> null is window mode; non-null is
     /// whole-monitor mode (and <paramref name="WindowTitle"/> is unused).</summary>

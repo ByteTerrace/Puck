@@ -5,7 +5,7 @@ namespace Puck.Platform.Windows;
 
 /// <summary>Preserves the Media Foundation color attributes attached to one native camera format until the GPU
 /// converter can either resolve them exactly or refuse the GPU tier.</summary>
-internal readonly record struct Win32CameraColorimetry(uint Matrix, uint NominalRange, uint ChromaSiting) {
+public readonly record struct Win32CameraColorimetry(uint Matrix, uint NominalRange, uint ChromaSiting) {
     private const uint InvalidAttribute = uint.MaxValue;
 
     private static readonly Guid YuvMatrixAttribute = new(g: "3e23d450-2c75-4d25-a00e-b91670d12327");
@@ -64,17 +64,17 @@ internal readonly record struct Win32CameraColorimetry(uint Matrix, uint Nominal
     }
 }
 
-internal enum Win32YuvMatrix {
+public enum Win32YuvMatrix {
     Bt709,
     Bt601,
 }
 
-internal enum Win32YuvRange {
+public enum Win32YuvRange {
     Limited,
     Full,
 }
 
-internal readonly record struct Win32YuvConversion(
+public readonly record struct Win32YuvConversion(
     Win32YuvMatrix Matrix,
     Win32YuvRange Range,
     bool ChromaHorizontallyCosited,

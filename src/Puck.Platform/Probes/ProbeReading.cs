@@ -33,13 +33,13 @@ public readonly struct ProbeReading {
     /// <param name="confidence">The unipolar confidence, nominally in <c>[0, 1]</c>.</param>
     /// <param name="channelCount">The number of valid leading slots in <paramref name="channels"/>.</param>
     /// <param name="channels">The channel values; only the first <paramref name="channelCount"/> slots are valid.</param>
-    /// <param name="maskSlot">The mask texture slot, or <c>-1</c> when this reading carries no mask.</param>
+    /// <param name="outputSlot">The mask texture slot, or <c>-1</c> when this reading carries no mask.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="channelCount"/> is negative or exceeds
-    /// <see cref="ProbeReadingLimits.MaxChannels"/>, or <paramref name="maskSlot"/> is less than <c>-1</c>.</exception>
-    public ProbeReading(long sequence, long captureTimestamp, long completionTimestamp, FixedQ4816 confidence, int channelCount, in ProbeChannelValues channels, int maskSlot = -1) {
+    /// <see cref="ProbeReadingLimits.MaxChannels"/>, or <paramref name="outputSlot"/> is less than <c>-1</c>.</exception>
+    public ProbeReading(long sequence, long captureTimestamp, long completionTimestamp, FixedQ4816 confidence, int channelCount, in ProbeChannelValues channels, int outputSlot = -1) {
         ArgumentOutOfRangeException.ThrowIfNegative(channelCount);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(channelCount, ProbeReadingLimits.MaxChannels);
-        ArgumentOutOfRangeException.ThrowIfLessThan(maskSlot, -1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(outputSlot, -1);
 
         Sequence = sequence;
         CaptureTimestamp = captureTimestamp;
@@ -47,7 +47,7 @@ public readonly struct ProbeReading {
         Confidence = confidence;
         ChannelCount = channelCount;
         Channels = channels;
-        MaskSlot = maskSlot;
+        OutputSlot = outputSlot;
     }
 
     /// <summary>Gets the publication ordinal.</summary>
@@ -63,7 +63,7 @@ public readonly struct ProbeReading {
     /// <summary>Gets the channel values; only the first <see cref="ChannelCount"/> slots are valid.</summary>
     public ProbeChannelValues Channels { get; }
     /// <summary>Gets the mask texture slot, or <c>-1</c> when this reading carries no mask.</summary>
-    public int MaskSlot { get; }
+    public int OutputSlot { get; }
 
     /// <summary>Reads one channel's value by ordinal.</summary>
     /// <param name="channel">The channel ordinal (<c>0..</c><see cref="ChannelCount"/><c>-1</c>).</param>

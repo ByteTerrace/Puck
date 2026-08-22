@@ -145,6 +145,7 @@ internal sealed partial class WorldScreenBinder {
             deviceContext: deviceContext,
             gpu: gpu
         );
+        ServiceProbeFeeds(deviceContext: deviceContext);
         var cameraTicks = (timingEnabled
             ? (Stopwatch.GetTimestamp() - phaseStart)
             : 0L
@@ -171,8 +172,9 @@ internal sealed partial class WorldScreenBinder {
                 continue;
             }
 
-            // The shared webcam is published once (in CaptureCamera above), so a camera screen only rides that feed.
-            if (slot.Camera is not null) {
+            // The shared webcam and every probe output are published once (in CaptureCamera and ServiceProbeFeeds
+            // above), so their screens only ride those feeds.
+            if ((slot.Camera is not null) || (slot.Probe is not null)) {
                 continue;
             }
 

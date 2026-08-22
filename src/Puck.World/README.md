@@ -521,23 +521,29 @@ declare a registered `puck.probe.v1` kind reading a camera sensor or a
 recorded `puck.probe-track.v1` track, and carry the bindings that route one of
 its channels to a command axis (a `probe.<name>` source, an
 ordinary bindable stick-like input any binding overlay may map), a
-presentation float (a `render.extensions` config field), or the existing
-camera control surface. `WorldProbes` services every declared row from the
+presentation float (a `render.extensions` config field, or another probe's
+kind config field — patched live into its running kernel), or the existing
+camera control surface. A kind that declares an `output` writes a texture each
+cycle, and a screen shows it as a `probe` source (`screen.source <index> probe
+<id>`); the binder provisions its shared ring at the declared sensor's extent
+on the render device, the same way it provisions a camera's. `WorldProbes` services every declared row from the
 host loop's per-frame capture in both boot shapes (headless, a camera-input
 probe faults by name for want of a camera feed and a parameter binding
 finds no composed pass; a track-input probe and every axis binding run in
 full), polling `WorldScreenBinder.TryGetCameraAttachment` for a camera-input
-probe's live shared stream and (re)starting its `IProbeKernelHost` run when
-the attachment's target-ring generation changes. A probe is not a device and
+probe's live shared stream and (re)attaching its kernel to the open graph
+(`ICameraKernelHost`) when the attachment's target-ring generation — or its
+output ring's — changes. Every camera sensor a kind reads must be declared by
+some camera screen, since that is what opens the feed. A probe is not a device and
 never occupies a seat: an axis binding addresses its authored seat's lane
 directly (`InputSignal.Slot`), its `probe:<seat>` device id is only the
 router's held-state key, it never counts as player activity, and it loses its
 carried sample whenever the terminal takes focus, exactly as a pad does. Shipped kinds are
 the lit-frame blob centroid `ir-blob` (bright-mass centroid/coverage/mean
-luminance of the above-threshold pixels over the FaceAuth infrared stream —
-the honest first kernel, since the off-limits FaceAuth graph publishes only
-the lit half, never a lit-minus-unlit illumination response) — GPU-tier only
-today.
+luminance of the above-threshold pixels over the FaceAuth infrared stream)
+and `faerie` (relights the color frame from a light orbiting an authored
+anchor, with the infrared strobe pair's lit-minus-unlit response as the
+height field; see `src/Puck.Shaders/README.md`) — GPU-tier only today.
 
 `probe.status` echoes every probe's run state (or fault), tier, rate,
 cycles/drops, latest capture age, channel values and confidence, and every
@@ -559,6 +565,15 @@ bound to the seat's `turn` channel through an ordinary binding overlay
 
 ```
 dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/brio-probe.world.json --exit-after-seconds 16
+```
+
+`Assets/worlds/brio-faerie.world.json` (basis `brio-dual.world.json`) is the
+texture-writing vertical: the `head` probe's centroid steers the `faerie`
+probe's anchor through two `probe`-target parameter bindings, and screen 0
+shows the faerie's relit color frame beside the raw infrared and color feeds:
+
+```
+dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/brio-faerie.world.json --exit-after-seconds 16
 ```
 
 `Assets/worlds/brio-probe-track.world.json` (basis `brio-probe.world.json`)

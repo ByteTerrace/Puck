@@ -49,7 +49,11 @@ Foundation transfer-matrix, nominal-range, and chroma-siting attributes;
 unsupported metadata or a failed Direct3D resource/view creation refuses the
 GPU tier so the coordinated pair reopens on CPU pixels.
 `Win32D3D11VideoDevice` is the source reader's DXVA
-device; `Win32CameraControlSurface` maps the neutral control vocabulary onto
+device. Both shared-tier graphs are `ICameraKernelHost`s: `Win32ProbeKernelBench`
+holds the attached `Win32D3D11ProbeKernel`s and runs them on the graph's worker,
+on the graph's own device, right after the trigger frame converts — the
+FaceAuth graph binds the converter's lit output and the unlit frame it keeps
+beside it, the source reader its latest published slot; `Win32CameraControlSurface` maps the neutral control vocabulary onto
 either a WinRT `VideoDeviceController` or the legacy `IAMCameraControl`/
 `IAMVideoProcAmp` pair.
 

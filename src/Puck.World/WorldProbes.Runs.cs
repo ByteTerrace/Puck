@@ -1,17 +1,17 @@
 using System.Diagnostics;
 using System.Text.Json;
+using Puck.Platform;
 using Puck.Platform.Probes;
 using Puck.Shaders;
 
 namespace Puck.World;
 
 internal sealed partial class WorldProbes {
-    // Loads and deep-validates one declared probe row: its kind manifest (must exist, must be KERNEL-class — a
-    // MODEL-class kind has no registered host yet, and its probe never resolves this platform's document
-    // vocabulary either, so no shipped kind reaches this branch today), its bound config, and — for a track-input
-    // row — the recorded document itself. Every reading ring is created here, once, so a binding against this
-    // probe always has somewhere to read from regardless of whether a live run ever starts.
-    private ProbeState BuildProbe(string documentDirectory, int index, WorldProbe row) {
+    // Loads and deep-validates one declared probe row: its kind manifest (must exist, must be kernel-class — a
+    // model-class kind has no registered host yet), its bound config, and — for a track-input row — the recorded
+    // document itself. Every reading ring is created here, once, so a binding against this probe always has
+    // somewhere to read from regardless of whether a live run ever starts.
+    private static ProbeState BuildProbe(string documentDirectory, int index, WorldProbe row) {
         var path = $"probes[{index}] ('{row.Id}')";
         ProbeKindManifest manifest;
 
@@ -33,15 +33,16 @@ internal sealed partial class WorldProbes {
         }
 
         var ring = new ProbeReadingRing();
+        var constants = manifest.ConstantsBlock(values: config).ToArray();
 
         switch (row.Input) {
             case WorldProbeInput.Camera camera:
-                if (ToProbeInputSensor(sensor: camera.Sensor) != manifest.Input.Sensor) {
-                    throw new InvalidOperationException(message: $"{path}.input.sensor '{camera.Sensor}' is not the '{manifest.Input.Sensor}' sensor kind '{row.Kind}' declares as its input.");
+                if (ToProbeInputSensor(sensor: camera.Sensor) != manifest.TriggerSensor) {
+                    throw new InvalidOperationException(message: $"{path}.input.sensor '{camera.Sensor}' is not the '{manifest.TriggerSensor}' sensor kind '{row.Kind}' runs on.");
                 }
 
                 return new ProbeState {
-                    Config = config,
+                    Constants = constants,
                     Manifest = manifest,
                     Ring = ring,
                     Row = row,
@@ -49,7 +50,7 @@ internal sealed partial class WorldProbes {
                 };
             case WorldProbeInput.Track track:
                 return new ProbeState {
-                    Config = config,
+                    Constants = constants,
                     Manifest = manifest,
                     Ring = ring,
                     Row = row,
@@ -90,15 +91,26 @@ internal sealed partial class WorldProbes {
             throw new InvalidOperationException(message: $"{path} track '{trackPath}' is invalid: {exception.Message}", innerException: exception);
         }
     }
+    private static CameraSensor ToCameraSensor(ProbeInputSensor sensor) => (sensor switch {
+        ProbeInputSensor.Color => CameraSensor.Color,
+        ProbeInputSensor.Infrared => CameraSensor.Infrared,
+        _ => throw new ArgumentOutOfRangeException(paramName: nameof(sensor), actualValue: sensor, message: "The probe input sensor is not defined."),
+    });
     private static ProbeInputSensor ToProbeInputSensor(WorldCameraSensor sensor) => (sensor switch {
         WorldCameraSensor.Color => ProbeInputSensor.Color,
         WorldCameraSensor.Infrared => ProbeInputSensor.Infrared,
         _ => throw new ArgumentOutOfRangeException(paramName: nameof(sensor), actualValue: sensor, message: "The camera sensor is not defined."),
     });
-    // Advances every track-input probe's player and services every camera-input probe's kernel run: restarts
-    // it when the binder's attachment names a new target-ring generation, and ends it when its own run has stopped
-    // (a device-loss/end-of-stream condition the runner surfaces as IsEnded) so the next frame's generation check
-    // starts a fresh one against whatever the binder now reports.
+    private static WorldCameraSensor ToWorldSensor(ProbeInputSensor sensor) => (sensor switch {
+        ProbeInputSensor.Color => WorldCameraSensor.Color,
+        ProbeInputSensor.Infrared => WorldCameraSensor.Infrared,
+        _ => throw new ArgumentOutOfRangeException(paramName: nameof(sensor), actualValue: sensor, message: "The probe input sensor is not defined."),
+    });
+    // Advances every track-input probe's player and services every camera-input probe's kernel run: restarts it
+    // when the binder's attachment names a new target-ring generation (or, for a texture-writing kind, a new
+    // output-ring generation), and ends it when its own run has stopped (a device-loss/end-of-stream condition the
+    // graph surfaces as IsEnded) so the next frame's generation check starts a fresh one against whatever the binder
+    // now reports.
     private void ServiceProbes() {
         var nowTimestamp = Stopwatch.GetTimestamp();
 
@@ -120,24 +132,36 @@ internal sealed partial class WorldProbes {
                 continue;
             }
 
-            if (!ReferenceEquals(objA: probe.TargetSet, objB: attachment.TargetSet)) {
+            object? outputSet = null;
+
+            if ((probe.Manifest.Output is { } output) && (OutputExtent(output: output) is { Width: > 0, Height: > 0 } extent)) {
+                _ = m_screens.TryGetProbeOutput(id: probe.Row.Id, width: extent.Width, height: extent.Height, output: out _, generation: out outputSet, fault: out _);
+            }
+
+            if (!ReferenceEquals(objA: probe.TargetSet, objB: attachment.TargetSet) || !ReferenceEquals(objA: probe.OutputSet, objB: outputSet)) {
                 RestartRun(probe: probe, attachment: in attachment);
 
                 continue;
             }
 
             if (probe.Run is { IsEnded: true } endedRun) {
-                probe.Fault = (endedRun.Fault ?? "the sense kernel run ended");
+                probe.Fault = (endedRun.Fault ?? "the probe kernel run ended");
                 endedRun.Dispose();
                 probe.Run = null;
-                // Force the next frame's generation check to retry against the SAME attachment (a transient GPU
-                // fault, not necessarily a reopen) rather than waiting for the binder to hand out a new TargetSet.
+                // Force the next frame's generation check to retry against the same attachment (a transient GPU
+                // fault, not necessarily a reopen) rather than waiting for the binder to hand out a new generation.
                 probe.TargetSet = null;
             }
         }
     }
-    // Ends and clears whatever run an probe currently holds, recording a fault when one is given. Used both when
-    // an attachment disappears and right before a restart attempt (so a failed restart never leaves a stale run
+    // The extent a texture-writing kind's output takes: the declared sensor's live stream extent, or (0, 0) while
+    // that sensor has no started shared stream — which the binder never provisions.
+    private (int Width, int Height) OutputExtent(ProbeKindOutput output) => (m_screens.TryGetCameraAttachment(sensor: ToWorldSensor(sensor: output.Of), attachment: out var attachment) && (attachment.Shared is { } shared)
+        ? (shared.Width, shared.Height)
+        : (0, 0)
+    );
+    // Ends and clears whatever run a probe currently holds, recording a fault when one is given. Used both when an
+    // attachment disappears and right before a restart attempt (so a failed restart never leaves a stale run
     // reference behind).
     private static void EndRun(ProbeState probe, string? fault) {
         probe.Run?.Dispose();
@@ -147,50 +171,74 @@ internal sealed partial class WorldProbes {
             probe.Fault = fault;
         }
     }
-    // The whole restart decision for one camera-input probe against a freshly observed attachment generation:
-    // end whatever ran before, adopt the new generation marker unconditionally (so a failed start does not retry
-    // every single frame against the same dead generation), and start a new run only when the attachment actually
-    // carries a live shared stream on a platform whose kernel host is supported.
+    // The whole restart decision for one camera-input probe against freshly observed generations: end whatever ran
+    // before, adopt the new generation markers unconditionally (so a failed start does not retry every single frame
+    // against the same dead generation), and attach a new kernel only when the attachment actually carries a live
+    // shared stream on a graph that hosts kernels and — for a texture-writing kind — the binder has provisioned the
+    // output ring at the declared sensor's extent.
     private void RestartRun(ProbeState probe, in WorldCameraAttachment attachment) {
         EndRun(probe: probe, fault: null);
         probe.TargetSet = attachment.TargetSet;
+        probe.OutputSet = null;
 
-        if ((attachment.Shared is not { } stream) || (attachment.TargetSet is null)) {
+        if ((attachment.Shared is null) || (attachment.TargetSet is null)) {
             probe.Fault = "probe needs the camera GPU tier";
 
             return;
         }
-        if (!m_kernelHost.IsSupported) {
-            probe.Fault = "no sense kernel host is registered on this platform";
+        if (attachment.Kernels is not { } kernels) {
+            probe.Fault = "the open camera graph hosts no kernels";
 
             return;
         }
-        if (attachment.AdapterLuid is not { } adapterLuid) {
-            probe.Fault = "the render adapter reports no LUID";
 
-            return;
+        ProbeKernelOutput? output = null;
+
+        if (probe.Manifest.Output is { } declaredOutput) {
+            var (width, height) = OutputExtent(output: declaredOutput);
+
+            if ((width <= 0) || (height <= 0)) {
+                probe.Fault = $"probe output needs the {declaredOutput.Of.ToString().ToLowerInvariant()} camera GPU tier";
+
+                return;
+            }
+            if (!m_screens.TryGetProbeOutput(id: probe.Row.Id, width: width, height: height, output: out var provisioned, generation: out var generation, fault: out var outputFault)) {
+                probe.Fault = outputFault;
+                // The ring arrives at a later publish; a null generation re-enters here on the next frame.
+                probe.TargetSet = null;
+
+                return;
+            }
+
+            output = provisioned;
+            probe.OutputSet = generation;
         }
 
         var kernel = (probe.Manifest.Kernel ?? throw new InvalidOperationException(message: $"probe kind '{probe.Manifest.Name}' is kernel-class but declares no kernel block."));
+        var inputs = new ProbeKernelInput[probe.Manifest.Inputs.Count];
+
+        for (var index = 0; (index < inputs.Length); index++) {
+            var input = probe.Manifest.Inputs[index];
+
+            inputs[index] = new ProbeKernelInput(Sensor: ToCameraSensor(sensor: input.Sensor), Previous: input.Previous);
+        }
+
         var request = new ProbeKernelRequest(
-            AccumulateEntry: kernel.Accumulate,
-            AdapterLuid: adapterLuid,
-            ChannelCount: probe.Manifest.Channels.Count,
-            FinalizeEntry: kernel.Finalize,
-            Height: stream.Height,
             KernelSource: File.ReadAllText(path: Path.Combine(path1: probe.Manifest.Directory, path2: kernel.Source)),
+            AccumulateEntry: kernel.Accumulate,
+            FinalizeEntry: kernel.Finalize,
+            Constants: probe.Constants,
+            ChannelCount: probe.Manifest.Channels.Count,
             RateHz: probe.Row.RateHz,
-            TargetFormat: stream.TargetFormat,
-            Width: stream.Width,
-            Constants: probe.Manifest.ConstantsBlock(values: probe.Config)
+            Inputs: inputs,
+            Trigger: ToCameraSensor(sensor: probe.Manifest.TriggerSensor),
+            Output: output
         );
 
-        if (m_kernelHost.TryStart(
+        if (kernels.TryAttachKernel(
             request: in request,
             ring: probe.Ring,
             run: out var run,
-            sharedTargetHandles: attachment.SharedHandles,
-            stream: stream,
             fault: out var fault
         )) {
             probe.Fault = null;

@@ -88,12 +88,28 @@ public static partial class WorldDefinitionValidator {
                     definition: definition,
                     errors: errors,
                     localSeats: localSeats,
-                    path: $"{path}.bindings[{bindingIndex}]"
+                    path: $"{path}.bindings[{bindingIndex}]",
+                    probeId: probe.Id
                 );
             }
         }
     }
-    private static void ValidateProbeBinding(WorldDefinition definition, WorldProbeBinding? binding, HashSet<string> axisSources, int localSeats, List<string> errors, string path) {
+    // A probe id reference resolves against the declared rows by name — the same shallow check a parameter target's
+    // extension id gets.
+    private static bool DeclaresProbe(WorldDefinition definition, string? id) {
+        if (string.IsNullOrWhiteSpace(value: id) || (definition.ProbesRaw is not { } probes)) {
+            return false;
+        }
+
+        foreach (var probe in probes) {
+            if ((probe is not null) && string.Equals(a: probe.Id, b: id, comparisonType: StringComparison.Ordinal)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    private static void ValidateProbeBinding(WorldDefinition definition, WorldProbeBinding? binding, HashSet<string> axisSources, int localSeats, List<string> errors, string path, string? probeId) {
         if (binding is null) {
             errors.Add(item: $"{path} is required.");
 
@@ -127,7 +143,8 @@ public static partial class WorldDefinitionValidator {
                     definition: definition,
                     errors: errors,
                     parameter: parameter,
-                    path: path
+                    path: path,
+                    probeId: probeId
                 );
 
                 break;
@@ -216,7 +233,7 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path}.seat {axis.Seat} is outside 1..{localSeats} for the authored local seat count.");
         }
     }
-    private static void ValidateProbeParameterBinding(WorldDefinition definition, WorldProbeBinding.Parameter parameter, List<string> errors, string path) {
+    private static void ValidateProbeParameterBinding(WorldDefinition definition, WorldProbeBinding.Parameter parameter, List<string> errors, string path, string? probeId) {
         switch (parameter.Target) {
             case null:
                 errors.Add(item: $"{path}.target is required.");
@@ -233,6 +250,18 @@ public static partial class WorldDefinitionValidator {
                     !extensions.Any(predicate: entry => ((entry is not null) && string.Equals(a: entry.Id, b: extension.Id, comparisonType: StringComparison.Ordinal)))
                 ) {
                     errors.Add(item: $"{path}.target.id '{extension.Id}' names no composed render.extensions entry.");
+                }
+
+                break;
+            case WorldProbeParameterTarget.Probe target:
+                if (string.IsNullOrWhiteSpace(value: target.Field)) {
+                    errors.Add(item: $"{path}.target.field is required.");
+                }
+
+                if (!DeclaresProbe(definition: definition, id: target.Id)) {
+                    errors.Add(item: $"{path}.target.id '{target.Id}' names no declared probe.");
+                } else if (string.Equals(a: target.Id, b: probeId, comparisonType: StringComparison.Ordinal)) {
+                    errors.Add(item: $"{path}.target.id '{target.Id}' is the binding's own probe; a probe cannot steer itself.");
                 }
 
                 break;

@@ -304,6 +304,12 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
                     slot.Text = text;
 
                     break;
+                case WorldScreenSource.Probe probe:
+                    // The declared probe output: the feed exists from here on, dark until the probes host declares
+                    // the probe writes a texture and its kernel publishes a first frame.
+                    slot.Probe = GetOrAddProbeFeed(id: probe.Id);
+
+                    break;
                 default:
                     // None: no producer — the provider returns 0 (procedural fallback).
                     break;
@@ -385,6 +391,10 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
             index: index,
             slot: slot,
             text: text
+        ),
+            WorldScreenSource.Probe probe => TryProbe(
+            index: index,
+            id: probe.Id
         ),
             _ => (Ok: false, Message: $"screen {index} source applies at next boot"),
         };
@@ -522,8 +532,10 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         }
 
         DisposeCamera();
+        DisposeProbeFeeds();
 
-        // After the feeds: the camera's shared targets live on this headless device, so it must outlive them.
+        // After the feeds: the camera's and every probe's shared targets live on this headless device, so it must
+        // outlive them.
         if (
             (m_cameraTargetDevice is { } cameraTargetDevice) &&
             OperatingSystem.IsWindowsVersionAtLeast(
@@ -770,15 +782,16 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     private sealed class ScreenSlot {
         public CameraFeed? Camera { get; set; }
         public CaptureFeed? Capture { get; set; }
+        public ProbeFeed? Probe { get; set; }
         // The ctor-time fault (an absent camera, an unopenable window capture, an unknown view camera); a live feed's
         // own fault is read from the feed instead (see CurrentFault). Machine faults are Machines.State's concern.
         public string? DeclaredFault { get; set; }
         // The WorldScreenSource this slot currently reflects — set at construction and updated by ReconcileScreens, so a
         // live UpsertScreen only re-applies its source through the runtime machinery when the source actually changed.
         public WorldScreenSource? DeclaredSource { get; set; }
-        // Whether a live (ejectable) LOCAL producer is bound — the webcam or a window capture (a machine is never
-        // local state on this slot; TryEject only ever ejects one of these two).
-        public bool HasLive => ((Camera is not null) || (Capture is not null));
+        // Whether a live (ejectable) local producer is bound — the webcam, a probe output, or a window capture (a
+        // machine is never local state on this slot).
+        public bool HasLive => ((Camera is not null) || (Capture is not null) || (Probe is not null));
         public required int Index { get; init; }
         // The authoritative screen-machine host — consulted FIRST by Handle()/Light()/CurrentFault() for this slot's
         // index, before any locally-owned producer.
@@ -799,6 +812,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         // lifetime); a window capture is per-slot and disposed.
         public void ClearLive() {
             Camera = null;
+            Probe = null;
             Capture?.Dispose();
             Capture = null;
             DeclaredFault = null;
@@ -821,6 +835,13 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
                 return captureFault;
             }
 
+            if (
+                (Probe is { Live: false } probe) &&
+                (probe.Fault is { } probeFault)
+            ) {
+                return probeFault;
+            }
+
             return DeclaredFault;
         }
         // Disposes everything this slot OWNS — its CPU test-pattern and QR surfaces and its per-slot window/monitor
@@ -834,6 +855,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
             Capture?.Dispose();
             Capture = null;
             Camera = null;
+            Probe = null;
             View = null;
         }
         // The current source for one submitted frame: the host's machine (if this index has one), else the highest-
@@ -843,47 +865,53 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
             ? Machines.Handle(index: Index)
             : ((Camera is { } camera)
                 ? camera.AcquireFrame()
-                : ((Capture is { } capture)
-                    ? capture.Handle()
-                    : ((View is { } view)
-                        ? view.Handle()
-                        : ((Session is { } session)
-                            ? session.Handle()
-                            : ((Qr is { } qr)
-                                ? qr.Surface.CurrentHandle
-                                 : (Pattern?.Surface.CurrentHandle ?? 0)
-        ))))));
+                : ((Probe is { } probe)
+                    ? probe.AcquireFrame()
+                    : ((Capture is { } capture)
+                        ? capture.Handle()
+                        : ((View is { } view)
+                            ? view.Handle()
+                            : ((Session is { } session)
+                                ? session.Handle()
+                                : ((Qr is { } qr)
+                                    ? qr.Surface.CurrentHandle
+                                    : (Pattern?.Surface.CurrentHandle ?? 0)
+        )))))));
         // Diagnostic handle lookup only; unlike AcquireFrame it never submits GPU work and therefore does not acquire
         // an asynchronously-written camera slot.
         public nint Handle() => (Machines.HasMachine(index: Index)
             ? Machines.Handle(index: Index)
             : ((Camera is { } camera)
                 ? camera.Handle()
-                : ((Capture is { } capture)
-                    ? capture.Handle()
-                    : ((View is { } view)
-                        ? view.Handle()
-                        : ((Session is { } session)
-                            ? session.Handle()
-                            : ((Qr is { } qr)
-                                ? qr.Surface.CurrentHandle
-                                : (Pattern?.Surface.CurrentHandle ?? 0)
-        ))))));
+                : ((Probe is { } probe)
+                    ? probe.Handle()
+                    : ((Capture is { } capture)
+                        ? capture.Handle()
+                        : ((View is { } view)
+                            ? view.Handle()
+                            : ((Session is { } session)
+                                ? session.Handle()
+                                : ((Qr is { } qr)
+                                    ? qr.Surface.CurrentHandle
+                                    : (Pattern?.Surface.CurrentHandle ?? 0)
+        )))))));
         // The current emitted light, in the same precedence as Handle.
         public Vector3 Light() => (Machines.HasMachine(index: Index)
             ? Machines.Light(index: Index)
             : ((Camera is { } camera)
                 ? camera.Light
-                : ((Capture is { } capture)
-                    ? capture.Light
-                    : ((View is { } view)
-                        ? view.Light()
-                        : ((Session is { } session)
-                            ? session.Light()
-                            : ((Qr is { } qr)
-                                ? qr.Light
-                                : (Pattern?.Light ?? Vector3.Zero)
-        ))))));
+                : ((Probe is { } probe)
+                    ? probe.Light
+                    : ((Capture is { } capture)
+                        ? capture.Light
+                        : ((View is { } view)
+                            ? view.Light()
+                            : ((Session is { } session)
+                                ? session.Light()
+                                : ((Qr is { } qr)
+                                    ? qr.Light
+                                    : (Pattern?.Light ?? Vector3.Zero)
+        )))))));
         // Drops the authored QR and disposes the upload surface it owns — the symmetric half of TryQr's acquire, run
         // whenever the slot stops showing that code (a re-author, or a declared source that no longer names one).
         public void ReleaseQr() {

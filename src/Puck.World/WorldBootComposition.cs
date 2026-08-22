@@ -15,7 +15,6 @@ using Puck.Overlays;
 using Puck.Platform;
 using Puck.Platform.Audio;
 using Puck.Platform.Linux;
-using Puck.Platform.Probes;
 using Puck.Platform.Windows;
 using Puck.SdfVm;
 using Puck.Shaders;
@@ -226,22 +225,8 @@ internal static class WorldBootComposition {
         // touch neither package.
         if (OperatingSystem.IsWindows()) {
             services.AddWindowsCameraCapture();
-
-            // The sense kernel host needs a device on a specific driver floor (windows10.0.19041) narrower than the
-            // camera capture branch above; guarded separately so a Windows build below that floor still boots with
-            // the null host (a KERNEL probe faults by name rather than never resolving one at all).
-            if (OperatingSystem.IsWindowsVersionAtLeast(
-                major: 10,
-                minor: 0,
-                build: 19041
-            )) {
-                services.AddWindowsProbes();
-            } else {
-                services.AddNullProbes();
-            }
         } else {
             services.AddLinuxCameraCapture();
-            services.AddNullProbes();
         }
 
         // The camera-probes host: probe lifecycle, axis-to-command capture, and parameter/control writes — an

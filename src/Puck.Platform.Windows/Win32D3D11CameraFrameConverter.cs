@@ -21,7 +21,7 @@ namespace Puck.Platform.Windows;
 /// <c>D3D11_BIND_SHADER_RESOURCE</c>; the shader writes a private UAV, then one GPU copy transfers the completed RGBA
 /// image into the cross-device shared ring. All work and completion waits stay on the dual-camera poll thread.</summary>
 [SupportedOSPlatform("windows10.0.19041")]
-internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
+public sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable, IProbeKernelDevice {
     private const string LimitedRangeMath = """
         float3 YuvToRgb(float y, float u, float v) {
             y = max(0.0, ((y * 255.0) - 16.0) / 219.0);
@@ -132,7 +132,11 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
     private readonly ID3D11ShaderResourceView*[] m_inputViews;
     private readonly ID3D10Multithread* m_multithread;
     private readonly ID3D11Texture2D* m_output;
+    private readonly ID3D11ShaderResourceView* m_outputSrv;
     private readonly ID3D11UnorderedAccessView* m_outputView;
+    private readonly ID3D11Texture2D* m_previous;
+    private readonly ID3D11ShaderResourceView* m_previousSrv;
+    private readonly ID3D11UnorderedAccessView* m_previousView;
     private readonly ID3D11Query* m_query;
     private readonly ID3D11ComputeShader* m_shader;
 
@@ -164,7 +168,11 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
         ID3D11Texture2D* input = null;
         var inputViews = new ID3D11ShaderResourceView*[viewFormats.Length];
         ID3D11Texture2D* output = null;
+        ID3D11ShaderResourceView* outputSrv = null;
         ID3D11UnorderedAccessView* outputView = null;
+        ID3D11Texture2D* previous = null;
+        ID3D11ShaderResourceView* previousSrv = null;
+        ID3D11UnorderedAccessView* previousView = null;
         ID3D11ComputeShader* shader = null;
         ID3D11Query* query = null;
 
@@ -220,11 +228,17 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
                 Format = DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM,
                 SampleDesc = new DXGI_SAMPLE_DESC { Count = 1 },
                 Usage = D3D11_USAGE.D3D11_USAGE_DEFAULT,
-                BindFlags = D3D11_BIND_FLAG.D3D11_BIND_UNORDERED_ACCESS,
+                // Readable by the kernels a probe attaches to the graph, which sample the converted frames in place.
+                BindFlags = (D3D11_BIND_FLAG.D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_FLAG.D3D11_BIND_SHADER_RESOURCE),
             };
 
             device->CreateTexture2D(pDesc: &outputDescription, pInitialData: null, ppTexture2D: &output);
             device->CreateUnorderedAccessView(pResource: ((ID3D11Resource*)output), pDesc: null, ppUAView: &outputView);
+            device->CreateShaderResourceView(pResource: ((ID3D11Resource*)output), pDesc: null, ppSRView: &outputSrv);
+            // The previous frame's conversion, kept for kernels that read a strobing stream's unlit half beside the lit one.
+            device->CreateTexture2D(pDesc: &outputDescription, pInitialData: null, ppTexture2D: &previous);
+            device->CreateUnorderedAccessView(pResource: ((ID3D11Resource*)previous), pDesc: null, ppUAView: &previousView);
+            device->CreateShaderResourceView(pResource: ((ID3D11Resource*)previous), pDesc: null, ppSRView: &previousSrv);
             shader = CompileShader(device: device, source: shaderSource);
 
             var queryDescription = new D3D11_QUERY_DESC { Query = D3D11_QUERY.D3D11_QUERY_EVENT };
@@ -233,7 +247,11 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
         } catch {
             Release(value: query);
             Release(value: shader);
+            Release(value: previousView);
+            Release(value: previousSrv);
+            Release(value: previous);
             Release(value: outputView);
+            Release(value: outputSrv);
             Release(value: output);
             Release(values: inputViews);
             Release(value: input);
@@ -247,7 +265,11 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
         m_query = query;
         m_shader = shader;
         m_outputView = outputView;
+        m_outputSrv = outputSrv;
         m_output = output;
+        m_previous = previous;
+        m_previousSrv = previousSrv;
+        m_previousView = previousView;
         m_inputViews = inputViews;
         m_input = input;
         m_multithread = multithread;
@@ -269,6 +291,17 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
 
     public bool IsStarted => (m_targets.Length != 0);
     public int TargetCount => m_targets.Length;
+    ID3D11DeviceContext* IProbeKernelDevice.Context => m_context;
+    ID3D11Device* IProbeKernelDevice.Device => m_device;
+    ID3D11Device1* IProbeKernelDevice.Device1 => m_device1;
+    /// <summary>Gets the shader-resource view over the most recent conversion.</summary>
+    public nint OutputView => ((nint)m_outputSrv);
+    /// <summary>Gets the shader-resource view over the conversion kept by <see cref="ConvertPrevious"/>.</summary>
+    public nint PreviousView => ((nint)m_previousSrv);
+
+    /// <summary>Holds the device's critical section across a multi-call sequence on its immediate context.</summary>
+    public void Enter() => m_multithread->Enter();
+    public void Leave() => m_multithread->Leave();
 
     public void AttachTargets(IReadOnlyList<nint> sharedTargetHandles) {
         if (IsStarted) {
@@ -313,13 +346,34 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
         m_multithread->Enter();
 
         try {
-            ConvertLocked(sourceTexture: sourceTexture, targetSlot: targetSlot);
+            Dispatch(sourceTexture: sourceTexture, target: m_outputView);
+            m_context->CopySubresourceRegion(
+                DstSubresource: 0,
+                DstX: 0,
+                DstY: 0,
+                DstZ: 0,
+                SrcSubresource: 0,
+                pDstResource: ((ID3D11Resource*)m_targets[targetSlot]),
+                pSrcBox: null,
+                pSrcResource: ((ID3D11Resource*)m_output)
+            );
+            Win32D3D11.WaitForCompletion(context: m_context, query: m_query);
+        } finally {
+            m_multithread->Leave();
+        }
+    }
+    /// <summary>Converts a frame into the previous-frame texture only; no ring slot is written or published.</summary>
+    public void ConvertPrevious(nint sourceTexture) {
+        m_multithread->Enter();
+
+        try {
+            Dispatch(sourceTexture: sourceTexture, target: m_previousView);
         } finally {
             m_multithread->Leave();
         }
     }
 
-    private void ConvertLocked(nint sourceTexture, int targetSlot) {
+    private void Dispatch(nint sourceTexture, ID3D11UnorderedAccessView* target) {
         m_context->CopySubresourceRegion(
             DstSubresource: 0,
             DstX: 0,
@@ -332,7 +386,7 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
         );
 
         var viewCount = checked((uint)m_inputViews.Length);
-        var targetView = m_outputView;
+        var targetView = target;
 
         m_context->CSSetShader(pComputeShader: m_shader, NumClassInstances: 0, ppClassInstances: null);
 
@@ -357,18 +411,6 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
         m_context->CSSetShaderResources(StartSlot: 0, NumViews: viewCount, ppShaderResourceViews: noInputs);
         m_context->CSSetUnorderedAccessViews(StartSlot: 0, NumUAVs: 1, ppUnorderedAccessViews: &noTarget, pUAVInitialCounts: null);
         m_context->CSSetShader(pComputeShader: null, NumClassInstances: 0, ppClassInstances: null);
-        m_context->CopySubresourceRegion(
-            DstSubresource: 0,
-            DstX: 0,
-            DstY: 0,
-            DstZ: 0,
-            SrcSubresource: 0,
-            pDstResource: ((ID3D11Resource*)m_targets[targetSlot]),
-            pSrcBox: null,
-            pSrcResource: ((ID3D11Resource*)m_output)
-        );
-
-        Win32D3D11.WaitForCompletion(context: m_context, query: m_query);
     }
 
     public void Dispose() {
@@ -380,7 +422,11 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
         Release(values: m_targets);
         Release(value: m_query);
         Release(value: m_shader);
+        Release(value: m_previousView);
+        Release(value: m_previousSrv);
+        Release(value: m_previous);
         Release(value: m_outputView);
+        Release(value: m_outputSrv);
         Release(value: m_output);
         Release(values: m_inputViews);
         Release(value: m_input);
@@ -451,9 +497,11 @@ internal sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable {
             Release(value: errors);
         }
     }
-    internal static string ShaderForTesting(string subtype, Win32CameraColorimetry colorimetry) => Kernel(colorimetry: colorimetry, subtype: subtype).Shader;
-    internal static void ValidateShaderForTesting(string subtype, Win32CameraColorimetry colorimetry) {
-        var code = CompileShaderBytecode(source: ShaderForTesting(colorimetry: colorimetry, subtype: subtype));
+    /// <summary>Composes the conversion shader for a native subtype under a colorimetry.</summary>
+    public static string Shader(string subtype, Win32CameraColorimetry colorimetry) => Kernel(colorimetry: colorimetry, subtype: subtype).Shader;
+    /// <summary>Compiles the conversion shader for a native subtype under a colorimetry, throwing on a compiler refusal.</summary>
+    public static void ValidateShader(string subtype, Win32CameraColorimetry colorimetry) {
+        var code = CompileShaderBytecode(source: Shader(colorimetry: colorimetry, subtype: subtype));
 
         Release(value: code);
     }

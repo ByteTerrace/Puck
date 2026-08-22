@@ -23,9 +23,10 @@ plus the pieces that need no OS-specific code at all.
 - **Probes contracts** (`Puck.Platform.Probes`) — `ProbeReading`, the
   neutral fixed-point currency between an probe and every binding that
   consumes it; `ProbeReadingRing`, its triple-buffered seqlock latest-wins
-  publication; `IProbeKernelHost`/`IProbeKernelRun`, the seam a KERNEL
-  probe's GPU compute runs behind; `ProbeTrackPlayer`, the hardware-free
-  recorded-reading substitute for a live probe input.
+  publication; `ICameraKernelHost`/`IProbeKernelRun`, the seam a kernel-class
+  probe attaches to a camera graph through (`ProbeKernelRequest` names the
+  inputs, the trigger sensor, and an optional output ring); `ProbeTrackPlayer`,
+  the hardware-free recorded-reading substitute for a live probe input.
 
 ## What does not live here
 

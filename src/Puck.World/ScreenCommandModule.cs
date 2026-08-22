@@ -13,7 +13,7 @@ namespace Puck.World;
 /// <c>.unlink</c> submit a <see cref="WorldScreenOp"/> through the ordered submission domain
 /// (<see cref="IServerLink.SubmitScreenOp"/>) — <see cref="Server.WorldMachineHost"/> applies it synchronously and
 /// authoritatively, so an agent scripts a cabinet over the pipe with no
-/// restart and the op reproduces on replay; <c>screen.source &lt;index&gt; &lt;kind&gt; [args…]</c> (kind: camera |
+/// restart and the op reproduces on replay; <c>screen.source &lt;index&gt; &lt;kind&gt; [args…]</c> (kind: camera | probe |
 /// capture | desktop | qr | view — absorbing the five former per-kind verbs into one dispatcher) stays genuinely
 /// presentation, calling <see cref="WorldScreenBinder"/> directly (never a machine, never tape-covered).
 /// <c>screen.state</c>/<c>screen.peek</c>/<c>screen.camera</c> are read-only queries that make the live state
@@ -68,7 +68,7 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "screen.source",
-            description: "Binds a declared screen's live PRESENTATION source, absorbing the five former per-kind verbs into one: screen.source <index> <kind> [args…] — <kind> is camera | capture | desktop | qr | view, each carrying its own former arg grammar unchanged: camera [color|infrared] (one shared feed per sensor; concurrent color and infrared are used only when the device proves both streams live; default color); capture <windowTitle...> (a case-insensitive substring match, may contain spaces); desktop [monitorIndex] (0-based, default 0 = primary); qr [payload] [ecLevel] [quietZoneModules] (payload a single token; ecLevel one of L|M|Q|H, default M; quietZoneModules default 4 — NO payload echoes the current authoring instead of changing it); view <cameraName> (the jumbotron recursion — one offscreen camera render, budgeted round-robin). Genuinely presentation for every kind (never a machine, never tape-covered) — a booted machine on the slot is ejected FIRST, through the ordered domain, exactly as each former verb did. Errors on an undeclared screen, an unresolved kind, or the kind's own refusal (a missing capture target, an unavailable capture service, an absent or incompatible sensor stream, an unknown camera name, an unrecognized EC-level letter, a negative quiet zone, a payload too large for the encoder).",
+            description: "Binds a declared screen's live PRESENTATION source, absorbing the five former per-kind verbs into one: screen.source <index> <kind> [args…] — <kind> is camera | capture | desktop | probe | qr | view, each carrying its own former arg grammar unchanged: camera [color|infrared] (one shared feed per sensor; concurrent color and infrared are used only when the device proves both streams live; default color); probe <probeId> (a declared probe whose kind writes a texture output); capture <windowTitle...> (a case-insensitive substring match, may contain spaces); desktop [monitorIndex] (0-based, default 0 = primary); qr [payload] [ecLevel] [quietZoneModules] (payload a single token; ecLevel one of L|M|Q|H, default M; quietZoneModules default 4 — NO payload echoes the current authoring instead of changing it); view <cameraName> (the jumbotron recursion — one offscreen camera render, budgeted round-robin). Genuinely presentation for every kind (never a machine, never tape-covered) — a booted machine on the slot is ejected FIRST, through the ordered domain, exactly as each former verb did. Errors on an undeclared screen, an unresolved kind, or the kind's own refusal (a missing capture target, an unavailable capture service, an absent or incompatible sensor stream, an unknown camera name, an unrecognized EC-level letter, a negative quiet zone, a payload too large for the encoder).",
             handler: SourceHandler,
             ackOnly: true
         );
@@ -653,6 +653,16 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
         }
         if (args.Is(
             index: 1,
+            value: "probe"
+        )) {
+            return SourceProbe(
+                args: in args,
+                index: index,
+                principal: principal
+            );
+        }
+        if (args.Is(
+            index: 1,
             value: "desktop"
         )) {
             return SourceDesktop(
@@ -726,6 +736,29 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
             ? args[3].ToString()
             : null),
             quietZoneModules: quietZoneModules
+        );
+
+        return (ok
+            ? Success(
+                args: in args,
+                message: $"[screen.source: {message}]"
+            )
+            : CommandResult.Error(output: $"[screen.source: {message}]")
+        );
+    }
+    private CommandResult SourceProbe(int index, WorldPrincipal principal, in WireArgs args) {
+        if (args.Count != 3) {
+            return CommandResult.Error(output: "[screen.source: probe expects <probeId>]");
+        }
+
+        EjectMachineFirst(
+            index: index,
+            principal: principal
+        );
+
+        var (ok, message) = m_binder.TryProbe(
+            index: index,
+            id: args[2].ToString()
         );
 
         return (ok

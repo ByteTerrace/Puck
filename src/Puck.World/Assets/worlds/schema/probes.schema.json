@@ -174,6 +174,27 @@
                         "field"
                       ],
                       "additionalProperties": false
+                    },
+                    {
+                      "description": "Writes a config field of another declared probe\u0027s kind, live, into its running kernel \u2014 one probe\u0027s reading steering another\u0027s computation (a tracked centroid placing a relighting kind\u0027s light).",
+                      "properties": {
+                        "$type": {
+                          "const": "probe"
+                        },
+                        "id": {
+                          "description": "The probes[].id this targets \u2014 a row of this document other than the binding\u0027s own.",
+                          "type": "string"
+                        },
+                        "field": {
+                          "description": "That probe\u0027s kind config field name \u2014 checked against its manifest at boot, never here.",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "field"
+                      ],
+                      "additionalProperties": false
                     }
                   ]
                 },

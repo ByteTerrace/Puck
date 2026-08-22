@@ -5,7 +5,7 @@ namespace Puck.Platform;
 /// <summary>The slot-ring counterpart of <see cref="LatestFrameBuffer"/>: a single producer publishes which
 /// consumer-owned shared texture holds the newest completed frame; the consumer reads the slot and version without
 /// copying or blocking.</summary>
-public sealed class LatestSlotPublication {
+public sealed class LatestSlotPublication : ISharedSlotRing {
     private volatile int m_latestSlot = -1;
     private int[]? m_readers;
     private long m_timestamp;

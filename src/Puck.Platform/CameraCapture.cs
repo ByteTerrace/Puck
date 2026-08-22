@@ -92,11 +92,7 @@ public interface ICameraPixelStream : ICameraStream, IFrameCaptureSource;
 /// in <see cref="TargetFormat"/>), completing the copy before publishing the slot. Consumers acquire the newest
 /// completed slot and release it only after asynchronous GPU sampling retires; the producer drops a frame when every
 /// non-current target remains acquired.</summary>
-public interface ICameraSharedStream : ICameraStream {
-    /// <summary>Gets the index (into the <see cref="Start"/> target list) of the most recently published frame, or
-    /// <c>-1</c> until the first frame arrives. This is observational state; use <see cref="TryAcquireLatest"/> before
-    /// submitting work that samples the target.</summary>
-    int LatestSlot { get; }
+public interface ICameraSharedStream : ICameraStream, ISharedSlotRing {
     /// <summary>Gets the pixel format the consumer must provision the shared targets in.</summary>
     SurfaceFormat TargetFormat { get; }
 
@@ -106,12 +102,19 @@ public interface ICameraSharedStream : ICameraStream {
     /// <exception cref="ArgumentException">Fewer than two targets were provided.</exception>
     /// <exception cref="InvalidOperationException">The stream already started.</exception>
     void Start(IReadOnlyList<nint> sharedTargetHandles);
-    /// <summary>Acquires the latest completed slot. A successful acquisition remains stable until paired with
-    /// <see cref="Release"/> after all GPU work sampling that slot has retired.</summary>
-    /// <param name="slot">When this returns <see langword="true"/>, the acquired target index.</param>
-    /// <returns>Whether a frame has been published.</returns>
+}
+
+/// <summary>A ring of consumer-owned slots with one producer: a consumer acquires the latest completed slot, samples
+/// it across an asynchronous submission, and releases it; the producer never writes a slot a consumer holds.</summary>
+public interface ISharedSlotRing {
+    /// <summary>Gets the most recently published slot, or <c>-1</c> before the first publication.</summary>
+    int LatestSlot { get; }
+
+    /// <summary>Acquires the latest completed slot; pair a <see langword="true"/> result with <see cref="Release"/>.</summary>
+    /// <param name="slot">When this returns <see langword="true"/>, the slot to sample.</param>
+    /// <returns>Whether a slot has been published.</returns>
     bool TryAcquireLatest(out int slot);
-    /// <summary>Releases a slot acquired by <see cref="TryAcquireLatest"/>.</summary>
-    /// <param name="slot">The acquired target index.</param>
+    /// <summary>Releases a slot acquired by <see cref="TryAcquireLatest"/> once the work sampling it has retired.</summary>
+    /// <param name="slot">The acquired slot.</param>
     void Release(int slot);
 }

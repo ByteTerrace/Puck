@@ -34,7 +34,6 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
     private readonly IInputClock m_clock;
     private readonly ControlState[] m_controlBindings;
     private readonly IInputFocus m_focus;
-    private readonly IProbeKernelHost m_kernelHost;
     private readonly WorldPostRenderExtensionPasses m_passes;
     private readonly ParameterState[] m_parameterBindings;
     private readonly InputRouter m_router;
@@ -50,27 +49,26 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
     /// <param name="definitionSource">The booted document and its source path, for the <c>probes</c> section and
     /// resolving a track binding's path against the document's own directory.</param>
     /// <param name="focus">The terminal input focus an axis binding's capture is gated through.</param>
-    /// <param name="kernelHost">The platform's KERNEL-class probe runner.</param>
     /// <param name="passes">The composed <c>render.extensions</c> passes a parameter binding writes into.</param>
     /// <param name="router">The command router an axis binding's conditioned sample is captured into.</param>
-    /// <param name="screens">The screen binder a camera-input probe reads its live attachment through.</param>
+    /// <param name="screens">The screen binder a camera-input probe reads its live attachment through and a
+    /// texture-writing probe publishes its output through.</param>
     /// <exception cref="ArgumentNullException">A required dependency is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">A <c>probes</c> row fails a deep check: an unloadable or
-    /// model-class kind, a camera sensor other than the kind's declared input, an invalid config, an unreadable or
+    /// model-class kind, a camera sensor other than the kind's trigger, an invalid config, an unreadable or
     /// channel-count-mismatched track document, an unresolved channel name, an unresolved or range-incompatible
-    /// extension config field, or an unresolved control name.</exception>
-    public WorldProbes(IInputClock clock, WorldDefinitionSource definitionSource, IInputFocus focus, IProbeKernelHost kernelHost, WorldPostRenderExtensionPasses passes, InputRouter router, WorldScreenBinder screens) {
+    /// extension or probe config field, an unresolved control name, or a screen showing a probe whose kind writes no
+    /// texture.</exception>
+    public WorldProbes(IInputClock clock, WorldDefinitionSource definitionSource, IInputFocus focus, WorldPostRenderExtensionPasses passes, InputRouter router, WorldScreenBinder screens) {
         ArgumentNullException.ThrowIfNull(argument: clock);
         ArgumentNullException.ThrowIfNull(argument: definitionSource);
         ArgumentNullException.ThrowIfNull(argument: focus);
-        ArgumentNullException.ThrowIfNull(argument: kernelHost);
         ArgumentNullException.ThrowIfNull(argument: passes);
         ArgumentNullException.ThrowIfNull(argument: router);
         ArgumentNullException.ThrowIfNull(argument: screens);
 
         m_clock = clock;
         m_focus = focus;
-        m_kernelHost = kernelHost;
         m_passes = passes;
         m_router = router;
         m_screens = screens;
@@ -85,6 +83,8 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
         var parameterBindings = new List<ParameterState>();
         var controlBindings = new List<ControlState>();
 
+        // Every probe exists before any binding resolves: a parameter binding may steer a probe declared after its
+        // own row.
         for (var index = 0; (index < probes.Count); index++) {
             var row = probes[index];
 
@@ -94,6 +94,20 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
                 row: row
             );
             m_probeIndexById[row.Id] = index;
+
+            if (m_probes[index].Manifest.Output is not null) {
+                screens.DeclareProbeOutput(id: row.Id);
+            }
+        }
+
+        foreach (var screen in definitionSource.Definition.Screens) {
+            if ((screen.Source is WorldScreenSource.Probe probeSource) && (m_probes[m_probeIndexById[probeSource.Id]].Manifest.Output is null)) {
+                throw new InvalidOperationException(message: $"screens[{screen.Index}] shows probe '{probeSource.Id}', whose kind writes no texture output.");
+            }
+        }
+
+        for (var index = 0; (index < probes.Count); index++) {
+            var row = probes[index];
 
             if (row.Bindings is not { } bindings) {
                 continue;
@@ -146,6 +160,10 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
 
         foreach (var probe in m_probes) {
             probe.Run?.Dispose();
+
+            if (probe.Manifest.Output is not null) {
+                m_screens.ReleaseProbeOutput(id: probe.Row.Id);
+            }
         }
     }
     /// <summary>Appends one line describing every declared probe and binding row's live state — the
@@ -292,6 +310,10 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
             builder.Append(value: " drops=").Append(value: run.Drops);
         }
 
+        if (probe.Manifest.Output is { } output) {
+            builder.Append(value: " output=").Append(value: output.Of.ToString().ToLowerInvariant());
+        }
+
         if (probe.Ring.TryReadLatest(reading: out var reading)) {
             var age = Stopwatch.GetElapsedTime(startingTimestamp: reading.CaptureTimestamp, endingTimestamp: nowTimestamp);
 
@@ -302,6 +324,10 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
             }
 
             builder.Append(value: " confidence=").Append(value: reading.Confidence.ToString());
+
+            if (reading.OutputSlot >= 0) {
+                builder.Append(value: " slot=").Append(value: reading.OutputSlot);
+            }
         } else {
             builder.Append(value: " no-reading");
         }
@@ -347,7 +373,12 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
         var channelName = m_probes[parameter.ProbeIndex].Manifest.Channels[parameter.Channel].Name;
 
         builder.Append(value: "parameter ").Append(value: m_probes[parameter.ProbeIndex].Row.Id).Append(value: '.').Append(value: channelName);
-        builder.Append(value: " -> extension ").Append(value: parameter.ExtensionId).Append(value: '.').Append(value: parameter.ExtensionField);
+
+        if (parameter.TargetProbeIndex >= 0) {
+            builder.Append(value: " -> probe ").Append(value: m_probes[parameter.TargetProbeIndex].Row.Id).Append(value: '.').Append(value: ((WorldProbeParameterTarget.Probe)parameter.Row.Target).Field);
+        } else {
+            builder.Append(value: " -> extension ").Append(value: parameter.ExtensionId).Append(value: '.').Append(value: parameter.ExtensionField);
+        }
 
         if (parameter.Writes == 0L) {
             builder.Append(value: " value=none writes=0");
@@ -459,13 +490,15 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
         return ((lowerSpan > 0.0) ? -Math.Clamp(value: ((neutral - raw) / lowerSpan), min: 0.0, max: 1.0) : 0.0);
     }
 
-    // One declared probe's live state: its loaded kind manifest and bound config, the reading ring every
-    // binding against it reads, and — for a camera-input probe — the last attachment generation its kernel run
-    // was started against and the run itself; for a track-input probe, the player advancing the SAME ring.
+    // One declared probe's live state: its loaded kind manifest, its packed constants (the bound config, patched in
+    // place by a parameter binding that steers this probe), the reading ring every binding against it reads, and —
+    // for a camera-input probe — the attachment and output-ring generations its kernel run was started against and
+    // the run itself; for a track-input probe, the player advancing the same ring.
     private sealed class ProbeState {
-        public required ShaderConfigValues Config { get; init; }
+        public required byte[] Constants { get; init; }
         public string? Fault { get; set; }
         public required ProbeKindManifest Manifest { get; init; }
+        public object? OutputSet { get; set; }
         public required ProbeReadingRing Ring { get; init; }
         public required WorldProbe Row { get; init; }
         public IProbeKernelRun? Run { get; set; }
@@ -501,16 +534,19 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
         public required WorldProbeBinding.Control Row { get; init; }
         public long Writes;
     }
-    // One declared parameter binding's live state — the last written config value (NaN until the first write), so an
-    // unchanged conditioned value never re-touches the pass.
+    // One declared parameter binding's live state — the last written value (NaN until the first write), so an
+    // unchanged conditioned value never re-touches its target. Exactly one target is set: an extension pass's config
+    // field, or another probe's constant at a byte offset of its packed block.
     private sealed class ParameterState {
         public required int ProbeIndex { get; init; }
         public required int Channel { get; init; }
-        public required string ExtensionField { get; init; }
-        public required string ExtensionId { get; init; }
+        public int ConstantOffset { get; init; }
+        public string? ExtensionField { get; init; }
+        public string? ExtensionId { get; init; }
         public float LastValue = float.NaN;
         public required long MaxAgeTicks { get; init; }
         public required WorldProbeBinding.Parameter Row { get; init; }
+        public int TargetProbeIndex { get; init; } = -1;
         public long Writes;
     }
     // One armed probe.record recording's live state — at most one at a time. LastSequence starts at -1 so the

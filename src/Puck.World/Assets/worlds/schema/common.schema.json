@@ -799,6 +799,22 @@
       ],
       "additionalProperties": false
     },
+    "WorldScreenSourceProbe": {
+      "description": "A declared probe\u0027s texture output \u2014 the frame a kind that declares an output writes each cycle (a relit camera frame, a mask), published like a camera feed. The probe must be a probes row of this document; whether its kind writes a texture is checked at boot against the kind\u0027s manifest.",
+      "properties": {
+        "$type": {
+          "const": "probe"
+        },
+        "id": {
+          "description": "The probes[].id whose output this slot shows.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
     "WorldScreenSource": {
       "description": "The signal carried by a WorldScreen\u0027s lit face. A source declares which provider feeds a slot; the engine resolves and samples it. The $type string is the JSON discriminator; a new source kind is a new derived record plus its JsonDerivedTypeAttribute line.",
       "type": "object",
@@ -835,6 +851,9 @@
         },
         {
           "$ref": "#/$defs/WorldScreenSourceText"
+        },
+        {
+          "$ref": "#/$defs/WorldScreenSourceProbe"
         }
       ]
     },

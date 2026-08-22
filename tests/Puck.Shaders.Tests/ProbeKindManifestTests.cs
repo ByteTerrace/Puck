@@ -14,8 +14,10 @@ public sealed class ProbeKindManifestTests {
 
         Assert.Equal(expected: "ir-blob", actual: manifest.Name);
         Assert.Equal(expected: ProbeKindClass.Kernel, actual: manifest.Class);
-        Assert.Equal(expected: ProbeInputSensor.Infrared, actual: manifest.Input.Sensor);
-        Assert.Equal(expected: ProbeInputTier.Shared, actual: manifest.Input.Tier);
+        Assert.Equal(expected: ProbeInputSensor.Infrared, actual: manifest.TriggerSensor);
+        Assert.Single(collection: manifest.Inputs);
+        Assert.False(condition: manifest.Inputs[0].Previous);
+        Assert.Null(@object: manifest.Output);
         Assert.Equal(expected: ["x", "y", "coverage", "luminance"], actual: manifest.Channels.Select(selector: channel => channel.Name).ToArray());
         Assert.Equal(expected: Path.GetDirectoryName(path: IrBlobManifestPath), actual: manifest.Directory);
 
@@ -184,7 +186,7 @@ public sealed class ProbeKindManifestTests {
     public void Catalog_finds_shipped_kinds_and_refuses_a_duplicate_id() {
         var catalog = ProbeKindCatalog.Scan(rootDirectory: ProbesDirectory);
 
-        Assert.Equal(expected: ["ir-blob"], actual: catalog.Ids);
+        Assert.Equal(expected: ["faerie", "ir-blob"], actual: catalog.Ids);
         Assert.True(condition: catalog.Contains(id: "ir-blob"));
         Assert.False(condition: catalog.Contains(id: "no-such-kind"));
         Assert.Equal(expected: "ir-blob", actual: catalog.Load(id: "ir-blob").Name);

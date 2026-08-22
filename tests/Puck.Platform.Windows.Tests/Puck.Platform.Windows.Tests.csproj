@@ -4,11 +4,15 @@
     </PropertyGroup>
     <PropertyGroup>
         <IsPackable>false</IsPackable>
-        <!-- Exercises internal capture-lifetime seams in the Windows projection, which is not AOT-compatible. -->
+        <!-- Exercises the Windows projection, which is not AOT-compatible. -->
         <IsAotCompatible>false</IsAotCompatible>
         <NoWarn>$(NoWarn);CS1591</NoWarn>
     </PropertyGroup>
     <ItemGroup>
+        <PackageReference Include="Microsoft.Windows.CsWin32" Version="[0.3.183]">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="[18.*, )" />
         <PackageReference Include="xunit.runner.visualstudio" Version="[3.*, )" />
         <PackageReference Include="xunit.v3" Version="[3.*, )" />

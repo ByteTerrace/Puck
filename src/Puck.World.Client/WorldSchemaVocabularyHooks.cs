@@ -23,13 +23,13 @@ public static class WorldSchemaVocabularyHooks {
     /// engine the caller's build ships (<c>Puck.World.WorldScreenMachineEngines.IsRegistered</c> in a real root).</param>
     /// <param name="postRenderExtensionCheck">Answers whether a document-declared post-render extension key is
     /// shipped (<c>Puck.World.WorldPostRenderExtensions.IsShipped</c> in a real root).</param>
-    /// <param name="senseKindCheck">Answers whether a document-declared <c>probes[].kind</c> key is
+    /// <param name="probeKindCheck">Answers whether a document-declared <c>probes[].kind</c> key is
     /// shipped (<c>Puck.World.WorldProbeKinds.IsShipped</c> in a real root).</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public static void Install(Func<string, bool> screenMachineEngineCheck, Func<string, bool> postRenderExtensionCheck, Func<string, bool> senseKindCheck) {
+    public static void Install(Func<string, bool> screenMachineEngineCheck, Func<string, bool> postRenderExtensionCheck, Func<string, bool> probeKindCheck) {
         ArgumentNullException.ThrowIfNull(argument: postRenderExtensionCheck);
         ArgumentNullException.ThrowIfNull(argument: screenMachineEngineCheck);
-        ArgumentNullException.ThrowIfNull(argument: senseKindCheck);
+        ArgumentNullException.ThrowIfNull(argument: probeKindCheck);
 
         BindingVocabularyHook.VocabularyCheck = WorldAffordances.Validate;
         ContextFamilyVocabularyHook.ReservedFamilyNames = WorldContextFamilies.Families;
@@ -39,6 +39,6 @@ public static class WorldSchemaVocabularyHooks {
         Protocol.MutationKindVocabularyHook.TryParse = Protocol.WorldMutationKindCatalog.TryParseMask;
         WorldExtensionVocabularyHook.PostRenderExtensionCheck = postRenderExtensionCheck;
         WorldExtensionVocabularyHook.ScreenMachineEngineCheck = screenMachineEngineCheck;
-        WorldProbeVocabularyHook.ProbeKindCheck = senseKindCheck;
+        WorldProbeVocabularyHook.ProbeKindCheck = probeKindCheck;
     }
 }

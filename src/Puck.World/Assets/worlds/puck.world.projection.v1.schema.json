@@ -1322,6 +1322,22 @@
                   "lines"
                 ],
                 "additionalProperties": false
+              },
+              {
+                "description": "A declared probe\u0027s texture output \u2014 the frame a kind that declares an output writes each cycle (a relit camera frame, a mask), published like a camera feed. The probe must be a probes row of this document; whether its kind writes a texture is checked at boot against the kind\u0027s manifest.",
+                "properties": {
+                  "$type": {
+                    "const": "probe"
+                  },
+                  "id": {
+                    "description": "The probes[].id whose output this slot shows.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id"
+                ],
+                "additionalProperties": false
               }
             ]
           },
@@ -1688,6 +1704,22 @@
                       },
                       "required": [
                         "lines"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "A declared probe\u0027s texture output \u2014 the frame a kind that declares an output writes each cycle (a relit camera frame, a mask), published like a camera feed. The probe must be a probes row of this document; whether its kind writes a texture is checked at boot against the kind\u0027s manifest.",
+                      "properties": {
+                        "$type": {
+                          "const": "probe"
+                        },
+                        "id": {
+                          "description": "The probes[].id whose output this slot shows.",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id"
                       ],
                       "additionalProperties": false
                     }
@@ -5820,6 +5852,22 @@
                       },
                       "required": [
                         "lines"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "A declared probe\u0027s texture output \u2014 the frame a kind that declares an output writes each cycle (a relit camera frame, a mask), published like a camera feed. The probe must be a probes row of this document; whether its kind writes a texture is checked at boot against the kind\u0027s manifest.",
+                      "properties": {
+                        "$type": {
+                          "const": "probe"
+                        },
+                        "id": {
+                          "description": "The probes[].id whose output this slot shows.",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id"
                       ],
                       "additionalProperties": false
                     }

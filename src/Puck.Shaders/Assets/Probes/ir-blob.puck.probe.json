@@ -3,7 +3,7 @@
   "name": "ir-blob",
   "class": "kernel",
   "description": "Bright-mass centroid over the lit infrared frame: the brightest connected mass's normalized center, its coverage of the frame, and the mean luminance above threshold. Not illumination-response (lit minus unlit) — the FaceAuth camera graph publishes only the lit half.",
-  "input": { "sensor": "infrared", "tier": "shared" },
+  "inputs": [{ "sensor": "infrared" }],
   "kernel": { "source": "ir-blob.hlsl", "accumulate": "accumulate", "finalize": "finalize" },
   "channels": [
     { "name": "x", "min": -1, "max": 1, "neutral": 0, "description": "The bright mass's horizontal center, -1 (left) to 1 (right)." },

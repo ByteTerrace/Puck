@@ -53,6 +53,7 @@ public abstract record WorldProbeInput {
 /// is the JSON discriminator; a future target (a view-rig op, an overlay layer transform) widens this union with
 /// another arm rather than adding parallel optional fields to the binding row.</summary>
 [JsonDerivedType(typeof(WorldProbeParameterTarget.Extension), typeDiscriminator: "extension")]
+[JsonDerivedType(typeof(WorldProbeParameterTarget.Probe), typeDiscriminator: "probe")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record WorldProbeParameterTarget {
     private WorldProbeParameterTarget() {
@@ -64,6 +65,11 @@ public abstract record WorldProbeParameterTarget {
     /// <param name="Field">The extension's config field name — checked against its manifest at boot, never here
     /// (the same shallow-then-deep precedent every kind-vocabulary field follows).</param>
     public sealed record Extension(string Id, string Field) : WorldProbeParameterTarget;
+    /// <summary>Writes a config field of another declared probe's kind, live, into its running kernel — one probe's
+    /// reading steering another's computation (a tracked centroid placing a relighting kind's light).</summary>
+    /// <param name="Id">The <c>probes[].id</c> this targets — a row of this document other than the binding's own.</param>
+    /// <param name="Field">That probe's kind config field name — checked against its manifest at boot, never here.</param>
+    public sealed record Probe(string Id, string Field) : WorldProbeParameterTarget;
 }
 /// <summary>One <c>probes[].bindings</c> row: routes one of the enclosing probe's channels to a command axis, a presentation
 /// parameter, or a camera control. The <c>$type</c> string is the JSON discriminator.</summary>

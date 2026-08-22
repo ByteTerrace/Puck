@@ -1,7 +1,9 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Windows.Graphics.Imaging;
 using Windows.Media.Capture;
+using Puck.Platform.Probes;
 using Windows.Media.Capture.Frames;
 using WinRT;
 
@@ -261,8 +263,9 @@ internal sealed class Win32FaceAuthenticationPixelGraph : Win32FaceAuthenticatio
 /// Both pins must expose a Direct3D surface to be live, and both rings attach before either publishes, so a refusal
 /// returns the whole pair to the CPU tier.</summary>
 [SupportedOSPlatform("windows10.0.19041")]
-internal sealed class Win32FaceAuthenticationSharedGraph : Win32FaceAuthenticationCameraGraph<Win32SharedStream> {
+internal sealed class Win32FaceAuthenticationSharedGraph : Win32FaceAuthenticationCameraGraph<Win32SharedStream>, ICameraKernelHost, IProbeInputResolver {
     private readonly long m_adapterLuid;
+    private readonly Win32ProbeKernelBench m_bench = new();
 
     private Win32D3D11CameraFrameConverter? m_colorConverter;
     private Win32D3D11CameraFrameConverter? m_infraredConverter;
@@ -305,8 +308,15 @@ internal sealed class Win32FaceAuthenticationSharedGraph : Win32FaceAuthenticati
                 width: native.Width
             );
 
-            // Probe every frame, but publish only once both rings are attached and, for infrared, only the lit half.
-            if (!converter.IsStarted || (infrared && (video.InfraredMediaFrame is { IsIlluminated: false }))) {
+            // Probe every frame, but convert only once both rings are attached. The unlit half of a strobing infrared
+            // stream never publishes; it is kept beside the lit frame for kernels that read the pair.
+            if (!converter.IsStarted) {
+                return;
+            }
+
+            if (infrared && (video.InfraredMediaFrame is { IsIlluminated: false })) {
+                converter.ConvertPrevious(sourceTexture: texture);
+
                 return;
             }
 
@@ -317,6 +327,7 @@ internal sealed class Win32FaceAuthenticationSharedGraph : Win32FaceAuthenticati
 
             converter.Convert(sourceTexture: texture, targetSlot: slot);
             stream.Slots.Publish(slot: slot);
+            m_bench.OnFrame(captureTimestamp: stream.LastFrameTimestamp, device: converter, resolver: this, sensor: sensor);
         } finally {
             Win32D3D11VideoDevice.ReleaseTexture(texture: texture);
             _ = Marshal.ReleaseComObject(o: access);
@@ -343,9 +354,55 @@ internal sealed class Win32FaceAuthenticationSharedGraph : Win32FaceAuthenticati
         }
     }
     protected override void ReleaseTier() {
+        m_bench.Close();
         m_colorConverter?.Dispose();
         m_colorConverter = null;
         m_infraredConverter?.Dispose();
         m_infraredConverter = null;
     }
+
+    /// <inheritdoc/>
+    public bool TryAttachKernel(in ProbeKernelRequest request, ProbeReadingRing ring, [NotNullWhen(true)] out IProbeKernelRun? run, out string fault) {
+        ArgumentNullException.ThrowIfNull(ring);
+
+        var triggered = false;
+
+        foreach (var input in request.Inputs) {
+            if (input.Sensor is not (CameraSensor.Color or CameraSensor.Infrared)) {
+                run = null;
+                fault = $"this graph carries no {input.Sensor} stream";
+
+                return false;
+            }
+            if (input.Previous && (CameraSensor.Infrared != input.Sensor)) {
+                run = null;
+                fault = "only the infrared stream keeps a previous (unlit) frame";
+
+                return false;
+            }
+
+            triggered |= (input.Sensor == request.Trigger);
+        }
+
+        if (!triggered) {
+            run = null;
+            fault = $"the trigger sensor {request.Trigger} is not among the kernel's inputs";
+
+            return false;
+        }
+
+        run = m_bench.Attach(request: in request, ring: ring);
+        fault = "";
+
+        return true;
+    }
+    nint IProbeInputResolver.Resolve(ProbeKernelInput input) => (input.Sensor switch {
+        CameraSensor.Color => (m_colorConverter?.OutputView ?? 0),
+        CameraSensor.Infrared => (input.Previous ? (m_infraredConverter?.PreviousView ?? 0) : (m_infraredConverter?.OutputView ?? 0)),
+        _ => 0,
+    });
+    (int Width, int Height) IProbeInputResolver.Extent(CameraSensor sensor) => ((CameraSensor.Infrared == sensor)
+        ? (Infrared.Width, Infrared.Height)
+        : (Color.Width, Color.Height)
+    );
 }

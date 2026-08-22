@@ -9,6 +9,7 @@ using Puck.DirectX;
 using Puck.DirectX.Apis;
 using Puck.DirectX.Interop;
 using Puck.Platform;
+using Puck.Platform.Probes;
 using Puck.SdfVm;
 using Puck.SdfVm.Views;
 
@@ -105,10 +106,10 @@ internal sealed partial class WorldScreenBinder {
         return (Ok: true, Message: $"screen {index} showing the {SensorName(sensor: sensor)} webcam");
     }
 
-    /// <summary>Reads one sensor's live camera attachment for the probes host: the shared-tier stream, its GPU
-    /// target handles, the render adapter's LUID, and the open device's control surface. A sensor with no feed or no
-    /// started shared-tier stream answers <see langword="false"/> with a default attachment — the probes host reads
-    /// that as "no camera GPU tier available yet" and records its own fault rather than throwing.</summary>
+    /// <summary>Reads one sensor's live camera attachment for the probes host: the shared-tier stream, the graph's
+    /// kernel host, and the open device's control surface. A sensor with no feed or no started shared-tier stream
+    /// answers <see langword="false"/> with a default attachment — the probes host reads that as "no camera GPU tier
+    /// available yet" and records its own fault rather than throwing.</summary>
     /// <param name="sensor">Which physical sensor to read.</param>
     /// <param name="attachment">The live attachment, set only when this returns <see langword="true"/>.</param>
     /// <returns><see langword="true"/> when a shared-tier stream is open for the sensor.</returns>
@@ -123,10 +124,9 @@ internal sealed partial class WorldScreenBinder {
         }
 
         attachment = new WorldCameraAttachment(
-            AdapterLuid: m_renderAdapterLuid,
             Controls: m_camera.Graph?.Controls,
+            Kernels: (m_camera.Shared as ICameraKernelHost),
             Shared: shared,
-            SharedHandles: (feed.GpuTargets?.SharedHandles ?? []),
             TargetSet: feed.GpuTargets
         );
 
@@ -306,7 +306,7 @@ internal sealed partial class WorldScreenBinder {
         foreach (var stream in graph.Streams) {
             var feed = m_cameraFeeds[WorldSensor(sensor: stream.Sensor)];
 
-            if (!TryStartCameraGpuStream(adapterLuid: adapterLuid, deviceContext: deviceContext, fault: out fault, images: out var images, importedViews: out var views, imports: out var imports, stream: stream)) {
+            if (!TryProvisionSharedRing(adapterLuid: adapterLuid, deviceContext: deviceContext, fault: out fault, format: stream.TargetFormat, height: stream.Height, images: out var images, importedViews: out var views, imports: out var imports, width: stream.Width)) {
                 foreach (var started in provisioned) {
                     started.ReleaseGpuTargets();
                 }
@@ -314,13 +314,29 @@ internal sealed partial class WorldScreenBinder {
                 return false;
             }
 
-            feed.ReleaseGpuTargets();
-            feed.GpuTargets = new CameraGpuTargetSet(
+            var targets = new CameraGpuTargetSet(
                 images: images,
                 importedViews: views,
                 imports: imports,
-                stream: stream
+                ring: stream
             );
+
+            try {
+                stream.Start(sharedTargetHandles: targets.SharedHandles);
+            } catch (Exception exception) {
+                targets.Retire();
+
+                foreach (var started in provisioned) {
+                    started.ReleaseGpuTargets();
+                }
+
+                fault = exception.Message;
+
+                return false;
+            }
+
+            feed.ReleaseGpuTargets();
+            feed.GpuTargets = targets;
             provisioned.Add(item: feed);
         }
 
@@ -328,21 +344,22 @@ internal sealed partial class WorldScreenBinder {
 
         return true;
     }
-    // Provisions and starts one shared stream. Ownership transfers to the caller only on success; every partial D3D12
-    // allocation or Vulkan import is released here on failure. The stream declares its target format: the source-reader
-    // tier uses BGRA, the coordinated compute tier RGBA. Both are sampled directly, so no renderer-wide convention leaks.
+    // Provisions one shared ring a platform producer (a camera stream, a probe kernel) writes into. Ownership transfers
+    // to the caller only on success; every partial D3D12 allocation or Vulkan import is released here on failure. The
+    // producer declares its format: the source-reader tier uses BGRA, the coordinated compute tier and every probe
+    // output RGBA. All are sampled directly, so no renderer-wide convention leaks.
     [SupportedOSPlatform("windows10.0.10240")]
-    private bool TryStartCameraGpuStream(long adapterLuid, IGpuDeviceContext deviceContext, ICameraSharedStream stream, out IReadOnlyList<IGpuExportableStorageImage> images, out IGpuSurfaceImport[]? imports, out nint[]? importedViews, out string fault) {
+    private bool TryProvisionSharedRing(long adapterLuid, IGpuDeviceContext deviceContext, SurfaceFormat format, int width, int height, out IReadOnlyList<IGpuExportableStorageImage> images, out IGpuSurfaceImport[]? imports, out nint[]? importedViews, out string fault) {
         var allocated = new IGpuExportableStorageImage[CameraTargetCount];
         var handles = new nint[allocated.Length];
         IGpuSurfaceImport[]? createdImports = null;
         nint[]? createdViews = null;
 
         try {
-            var pixelFormat = (stream.TargetFormat switch {
+            var pixelFormat = (format switch {
                 SurfaceFormat.B8G8R8A8Unorm => GpuPixelFormat.B8G8R8A8Unorm,
                 SurfaceFormat.R8G8B8A8Unorm => GpuPixelFormat.R8G8B8A8Unorm,
-                _ => throw new NotSupportedException(message: $"camera shared-target format {stream.TargetFormat} is unsupported"),
+                _ => throw new NotSupportedException(message: $"shared-target format {format} is unsupported"),
             });
             // The targets are Direct3D 12 shared simultaneous-access textures on both hosts: the D3D12 host samples its
             // own resources, the Vulkan host allocates them on a headless device pinned to the render adapter and
@@ -361,8 +378,8 @@ internal sealed partial class WorldScreenBinder {
                 allocated[index] = export.CreateSimultaneousAccessStorageImage(
                     deviceContext: targetContext,
                     format: pixelFormat,
-                    height: checked((uint)stream.Height),
-                    width: checked((uint)stream.Width)
+                    height: checked((uint)height),
+                    width: checked((uint)width)
                 );
                 handles[index] = allocated[index].SharedHandle;
             }
@@ -378,14 +395,13 @@ internal sealed partial class WorldScreenBinder {
                     createdViews[index] = createdImports[index].Import(
                         deviceContext: deviceContext,
                         format: pixelFormat,
-                        height: checked((uint)stream.Height),
+                        height: checked((uint)height),
                         sharedHandle: handles[index],
-                        width: checked((uint)stream.Width)
+                        width: checked((uint)width)
                     ).ImageViewHandle;
                 }
             }
 
-            stream.Start(sharedTargetHandles: handles);
             images = allocated;
             imports = createdImports;
             importedViews = createdViews;
@@ -862,17 +878,17 @@ internal sealed partial class WorldScreenBinder {
         }
         public bool ShouldPull() => m_cadence.ShouldPull();
     }
-    // One shared stream's render-device-owned target ring. A screen-source frame acquires both the platform slot (so
-    // the camera producer cannot overwrite it) and this set's lifetime (so a graph close cannot destroy the texture
-    // while an already-submitted renderer frame still samples it). All methods run on the render thread except the
-    // platform publication's producer-side checks.
+    // One platform producer's render-device-owned target ring — a camera stream's or a probe kernel output's. A
+    // screen-source frame acquires both the ring slot (so the producer cannot overwrite it) and this set's lifetime
+    // (so a producer close cannot destroy the texture while an already-submitted renderer frame still samples it).
+    // All methods run on the render thread except the ring's producer-side checks.
     private sealed class CameraGpuTargetSet {
         private readonly IReadOnlyList<IGpuExportableStorageImage> m_images;
         private readonly nint[]? m_importedViews;
         private readonly IGpuSurfaceImport[]? m_imports;
         private readonly Action<int> m_release;
         private readonly nint[] m_sharedHandles;
-        private readonly ICameraSharedStream m_stream;
+        private readonly ISharedSlotRing m_stream;
 
         private bool m_disposed;
         private int m_outstanding;
@@ -882,11 +898,11 @@ internal sealed partial class WorldScreenBinder {
         /// the set, so a per-frame reader never re-derives them.</summary>
         public IReadOnlyList<nint> SharedHandles => m_sharedHandles;
 
-        public CameraGpuTargetSet(IReadOnlyList<IGpuExportableStorageImage> images, nint[]? importedViews, IGpuSurfaceImport[]? imports, ICameraSharedStream stream) {
+        public CameraGpuTargetSet(IReadOnlyList<IGpuExportableStorageImage> images, nint[]? importedViews, IGpuSurfaceImport[]? imports, ISharedSlotRing ring) {
             m_images = images;
             m_importedViews = importedViews;
             m_imports = imports;
-            m_stream = stream;
+            m_stream = ring;
             m_release = Release;
             m_sharedHandles = new nint[images.Count];
 

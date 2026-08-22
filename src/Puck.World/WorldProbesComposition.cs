@@ -1,7 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Puck.Commands;
 using Puck.Hosting;
-using Puck.Platform.Probes;
 
 namespace Puck.World;
 
@@ -21,7 +20,6 @@ public static class WorldProbesComposition {
             clock: sp.GetRequiredService<IInputClock>(),
             definitionSource: sp.GetRequiredService<WorldDefinitionSource>(),
             focus: sp.GetRequiredService<IInputFocus>(),
-            kernelHost: sp.GetRequiredService<IProbeKernelHost>(),
             passes: sp.GetRequiredService<WorldPostRenderExtensionPasses>(),
             router: sp.GetRequiredService<InputRouter>(),
             screens: sp.GetRequiredService<WorldScreenBinder>()

@@ -194,6 +194,83 @@ public sealed class ProbesAuthoringValidationLawTests {
             ));
     }
     [Fact]
+    public void ParameterTargetingAnUndeclaredProbeRefusesWhileADeclaredOnePasses() {
+        Laws.RefusalWithControl(
+            lawId: "probes.parameter-probe-target",
+            deniedOutcome: () => WorldDefinitionValidator.TryValidateLocally(
+                definition: WithProbes(
+                probes: [BuildProbe(), BuildProbe(id: "faerie")],
+                bindings: [
+                    new WorldProbeBinding.Parameter(Channel: ChannelName, Target: new WorldProbeParameterTarget.Probe(Id: "not-declared", Field: "anchorX"), Range: new Vector2(x: -1f, y: 1f)),
+                ]
+            ),
+                reason: out _
+            ),
+            controlOutcome: () => WorldDefinitionValidator.TryValidateLocally(
+                definition: WithProbes(
+                probes: [BuildProbe(), BuildProbe(id: "faerie")],
+                bindings: [
+                    new WorldProbeBinding.Parameter(Channel: ChannelName, Target: new WorldProbeParameterTarget.Probe(Id: "faerie", Field: "anchorX"), Range: new Vector2(x: -1f, y: 1f)),
+                ]
+            ),
+                reason: out _
+            ));
+    }
+    [Fact]
+    public void ParameterTargetingItsOwnProbeRefusesWhileAnotherProbePasses() {
+        Laws.RefusalWithControl(
+            lawId: "probes.parameter-self-target",
+            deniedOutcome: () => WorldDefinitionValidator.TryValidateLocally(
+                definition: WithProbes(
+                probes: [BuildProbe(), BuildProbe(id: "faerie")],
+                bindings: [
+                    new WorldProbeBinding.Parameter(Channel: ChannelName, Target: new WorldProbeParameterTarget.Probe(Id: ProbeId, Field: "threshold"), Range: new Vector2(x: 0f, y: 1f)),
+                ]
+            ),
+                reason: out _
+            ),
+            controlOutcome: () => WorldDefinitionValidator.TryValidateLocally(
+                definition: WithProbes(
+                probes: [BuildProbe(), BuildProbe(id: "faerie")],
+                bindings: [
+                    new WorldProbeBinding.Parameter(Channel: ChannelName, Target: new WorldProbeParameterTarget.Probe(Id: "faerie", Field: "threshold"), Range: new Vector2(x: 0f, y: 1f)),
+                ]
+            ),
+                reason: out _
+            ));
+    }
+    [Fact]
+    public void ScreenShowingAnUndeclaredProbeRefusesWhileADeclaredOnePasses() {
+        static WorldDefinition WithProbeScreen(string probeId) => Fixtures.BuildDocument() with {
+            ProbesRaw = [BuildProbe()],
+            ScreensRaw = [
+                new WorldScreen(
+                    Index: 0,
+                    Origin: new Vector3(x: 0f, y: 1f, z: 0f),
+                    Right: new Vector3(x: 1f, y: 0f, z: 0f),
+                    Up: new Vector3(x: 0f, y: 1f, z: 0f),
+                    HalfWidth: 1f,
+                    HalfHeight: 1f,
+                    HalfDepth: 0.1f,
+                    Round: 0f,
+                    Source: new WorldScreenSource.Probe(Id: probeId),
+                    Route: WorldScreenRoute.Passive
+                ),
+            ],
+        };
+
+        Laws.RefusalWithControl(
+            lawId: "screens.probe-source",
+            deniedOutcome: () => WorldDefinitionValidator.TryValidateLocally(
+                definition: WithProbeScreen(probeId: "not-declared"),
+                reason: out _
+            ),
+            controlOutcome: () => WorldDefinitionValidator.TryValidateLocally(
+                definition: WithProbeScreen(probeId: ProbeId),
+                reason: out _
+            ));
+    }
+    [Fact]
     public void ControlNamingNoWorldCameraControlsMemberRefusesWhileABrightnessControlPasses() {
         Laws.RefusalWithControl(
             lawId: "probes.control-name",

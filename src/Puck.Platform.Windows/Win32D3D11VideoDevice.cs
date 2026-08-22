@@ -1,6 +1,7 @@
 using System.Runtime.Versioning;
 using Microsoft.Win32.SafeHandles;
 using Windows.Win32.Graphics.Direct3D;
+using Windows.Win32.Graphics.Direct3D10;
 using Windows.Win32.Graphics.Direct3D11;
 using Windows.Win32.Graphics.Dxgi;
 using Windows.Win32.System.Com;
@@ -17,11 +18,12 @@ namespace Puck.Platform.Windows;
 /// that grabber thread.
 /// </summary>
 [SupportedOSPlatform("windows8.0")]
-internal sealed unsafe class Win32D3D11VideoDevice : IDisposable {
+internal sealed unsafe class Win32D3D11VideoDevice : IDisposable, IProbeKernelDevice {
     private ID3D11DeviceContext* m_context;
     private ID3D11Device* m_device;
     private ID3D11Device1* m_device1;
     private bool m_disposed;
+    private ID3D10Multithread* m_multithread;
     private ID3D11Query* m_query;
 
     /// <summary>Initializes a new instance of the <see cref="Win32D3D11VideoDevice"/> class on the LUID-named adapter.</summary>
@@ -54,6 +56,11 @@ internal sealed unsafe class Win32D3D11VideoDevice : IDisposable {
             Win32D3D11.ThrowIfFailed(hr: ((IUnknown*)device)->QueryInterface(ppvObject: out var device1, riid: in device1Iid), operation: "QueryInterface(ID3D11Device1)");
             m_device1 = ((ID3D11Device1*)device1);
 
+            var multithreadIid = ID3D10Multithread.IID_Guid;
+
+            Win32D3D11.ThrowIfFailed(hr: ((IUnknown*)device)->QueryInterface(ppvObject: out var multithread, riid: in multithreadIid), operation: "QueryInterface(ID3D10Multithread)");
+            m_multithread = ((ID3D10Multithread*)multithread);
+
             // The event query CopyToTarget spins on: signaled when everything submitted before End has completed.
             var queryDesc = new D3D11_QUERY_DESC { Query = D3D11_QUERY.D3D11_QUERY_EVENT };
             ID3D11Query* query;
@@ -67,6 +74,14 @@ internal sealed unsafe class Win32D3D11VideoDevice : IDisposable {
 
     /// <summary>The device as an <c>IUnknown</c> pointer (for <c>IMFDXGIDeviceManager::ResetDevice</c>).</summary>
     public nint DevicePointer => ((nint)m_device);
+    public ID3D11DeviceContext* Context => m_context;
+    public ID3D11Device* Device => m_device;
+    public ID3D11Device1* Device1 => m_device1;
+
+    /// <summary>Holds the device's critical section across a multi-call sequence on its immediate context (Media
+    /// Foundation's transforms share the device).</summary>
+    public void Enter() => m_multithread->Enter();
+    public void Leave() => m_multithread->Leave();
 
     /// <summary>Copies a decoded frame into a shared target and blocks (on the calling grabber thread) until the copy
     /// has completed on the GPU — so the target may be published for another device to sample.</summary>
@@ -105,6 +120,17 @@ internal sealed unsafe class Win32D3D11VideoDevice : IDisposable {
 
         return ((nint)texture);
     }
+    /// <summary>Creates a shader-resource view over an opened target so a hosted kernel can sample it; the caller
+    /// releases it via <see cref="ReleaseTexture"/>.</summary>
+    /// <param name="texture">The <c>ID3D11Texture2D*</c> to view.</param>
+    /// <returns>The <c>ID3D11ShaderResourceView*</c>.</returns>
+    public nint CreateShaderResourceView(nint texture) {
+        ID3D11ShaderResourceView* view = null;
+
+        m_device->CreateShaderResourceView(pResource: ((ID3D11Resource*)texture), pDesc: null, ppSRView: &view);
+
+        return ((nint)view);
+    }
     /// <summary>Releases a COM pointer obtained from this device (an opened shared texture or a frame texture).</summary>
     /// <param name="texture">The texture pointer; zero is ignored.</param>
     public static void ReleaseTexture(nint texture) {
@@ -123,6 +149,11 @@ internal sealed unsafe class Win32D3D11VideoDevice : IDisposable {
         if (m_query is not null) {
             _ = ((IUnknown*)m_query)->Release();
             m_query = null;
+        }
+
+        if (m_multithread is not null) {
+            _ = ((IUnknown*)m_multithread)->Release();
+            m_multithread = null;
         }
 
         if (m_device1 is not null) {

@@ -1,5 +1,7 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using Puck.Platform.Probes;
 using static Puck.Platform.Windows.MfInterop;
 
 namespace Puck.Platform.Windows;
@@ -427,8 +429,12 @@ internal sealed class Win32SourceReaderPixelGraph : Win32SourceReaderCameraGraph
 /// device manager, the DXVA video processor converts each frame to ARGB32 on the GPU, and the worker copies the sample's
 /// texture into the next consumer-provisioned target, completing the copy before publishing the slot.</summary>
 [SupportedOSPlatform("windows10.0.10240")]
-internal sealed class Win32SourceReaderSharedGraph : Win32SourceReaderCameraGraph<Win32SharedStream> {
+internal sealed class Win32SourceReaderSharedGraph : Win32SourceReaderCameraGraph<Win32SharedStream>, ICameraKernelHost, IProbeInputResolver {
     private readonly long m_adapterLuid;
+    private readonly Win32ProbeKernelBench m_bench = new();
+
+    private int m_latestSlot = -1;
+    private nint[] m_targetViews = [];
 
     private Win32D3D11VideoDevice? m_device;
     private IMFDXGIDeviceManager? m_manager;
@@ -485,9 +491,11 @@ internal sealed class Win32SourceReaderSharedGraph : Win32SourceReaderCameraGrap
         }
 
         m_targets = new nint[handles.Length];
+        m_targetViews = new nint[handles.Length];
 
         for (var index = 0; (index < handles.Length); index++) {
             m_targets[index] = m_device!.OpenSharedTexture(sharedHandle: handles[index]);
+            m_targetViews[index] = m_device.CreateShaderResourceView(texture: m_targets[index]);
         }
 
         return true;
@@ -517,6 +525,8 @@ internal sealed class Win32SourceReaderSharedGraph : Win32SourceReaderCameraGrap
 
                 m_device!.CopyToTarget(sourceSubresource: subresource, sourceTexture: frameTexture, targetTexture: m_targets[slot]);
                 m_stream.Slots.Publish(slot: slot);
+                m_latestSlot = slot;
+                m_bench.OnFrame(captureTimestamp: m_stream.LastFrameTimestamp, device: m_device, resolver: this, sensor: CameraSensor.Color);
             } finally {
                 Win32D3D11VideoDevice.ReleaseTexture(texture: frameTexture);
             }
@@ -525,7 +535,46 @@ internal sealed class Win32SourceReaderSharedGraph : Win32SourceReaderCameraGrap
         }
     }
     protected override void OnStopping() => m_stream?.CancelStart();
+
+    /// <inheritdoc/>
+    public bool TryAttachKernel(in ProbeKernelRequest request, ProbeReadingRing ring, [NotNullWhen(true)] out IProbeKernelRun? run, out string fault) {
+        ArgumentNullException.ThrowIfNull(ring);
+
+        foreach (var input in request.Inputs) {
+            if ((CameraSensor.Color != input.Sensor) || input.Previous) {
+                run = null;
+                fault = "a single-sensor graph binds only its current color frame";
+
+                return false;
+            }
+        }
+
+        if ((request.Inputs.Count == 0) || (CameraSensor.Color != request.Trigger)) {
+            run = null;
+            fault = "the trigger sensor must be the graph's color stream";
+
+            return false;
+        }
+
+        run = m_bench.Attach(request: in request, ring: ring);
+        fault = "";
+
+        return true;
+    }
+    nint IProbeInputResolver.Resolve(ProbeKernelInput input) => (((m_latestSlot >= 0) && (CameraSensor.Color == input.Sensor) && !input.Previous)
+        ? m_targetViews[m_latestSlot]
+        : 0
+    );
+    (int Width, int Height) IProbeInputResolver.Extent(CameraSensor sensor) => (m_stream!.Width, m_stream.Height);
     protected override void ReleaseTier() {
+        m_bench.Close();
+
+        foreach (var view in m_targetViews) {
+            Win32D3D11VideoDevice.ReleaseTexture(texture: view);
+        }
+
+        m_targetViews = [];
+
         foreach (var target in m_targets) {
             Win32D3D11VideoDevice.ReleaseTexture(texture: target);
         }

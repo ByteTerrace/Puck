@@ -636,6 +636,12 @@ public static partial class WorldDefinitionValidator {
                 }
 
                 return false;
+            case WorldScreenSource.Probe probe:
+                if (!DeclaresProbe(definition: definition, id: probe.Id)) {
+                    errors.Add(item: $"{path}.probe.id '{probe.Id}' names no declared probe.");
+                }
+
+                return false;
             case WorldScreenSource.Capture capture:
                 // Selector: monitor mode validates the index; window mode requires a title (its unused counterpart).
                 if (capture.MonitorIndex is { } monitorIndex) {

@@ -34,7 +34,7 @@ public sealed class Win32CameraColorimetryTests {
     [Fact]
     [SupportedOSPlatform("windows10.0.19041")]
     public void Shader_selection_honors_colorimetry_and_chroma_siting() {
-        var shader = Win32D3D11CameraFrameConverter.ShaderForTesting(
+        var shader = Win32D3D11CameraFrameConverter.Shader(
             colorimetry: new Win32CameraColorimetry(Matrix: 2u, NominalRange: 1u, ChromaSiting: 0x6u),
             subtype: "NV12"
         );
@@ -51,7 +51,7 @@ public sealed class Win32CameraColorimetryTests {
     [InlineData("NV12", 1u, 2u, 0x6u)]
     [InlineData("L8", 0u, 0u, 0u)]
     public void Every_generated_kernel_compiles(string subtype, uint matrix, uint range, uint siting) {
-        Win32D3D11CameraFrameConverter.ValidateShaderForTesting(
+        Win32D3D11CameraFrameConverter.ValidateShader(
             colorimetry: new Win32CameraColorimetry(Matrix: matrix, NominalRange: range, ChromaSiting: siting),
             subtype: subtype
         );

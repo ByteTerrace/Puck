@@ -35,33 +35,6 @@ public sealed class ProbeInputSensorJsonConverter : JsonConverter<ProbeInputSens
         });
     }
 }
-/// <summary>The capture tier an probe's input is read from — today only the shared GPU tier a camera graph
-/// publishes.</summary>
-[JsonConverter(typeof(ProbeInputTierJsonConverter))]
-public enum ProbeInputTier {
-    /// <summary>The shared-texture GPU tier (<c>ICameraSharedStream</c>).</summary>
-    Shared = 0,
-}
-/// <summary>Converts <see cref="ProbeInputTier"/> to/from its lower camelCase JSON string. Hand-written (not a
-/// reflection-based <c>JsonStringEnumConverter</c> naming policy) to stay AOT/trim-safe.</summary>
-public sealed class ProbeInputTierJsonConverter : JsonConverter<ProbeInputTier> {
-    /// <inheritdoc/>
-    public override ProbeInputTier Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
-        var text = reader.GetString();
-
-        return text switch {
-            "shared" => ProbeInputTier.Shared,
-            _ => throw new JsonException(message: $"Unrecognized sense input tier '{text}'; expected shared."),
-        };
-    }
-    /// <inheritdoc/>
-    public override void Write(Utf8JsonWriter writer, ProbeInputTier value, JsonSerializerOptions options) {
-        writer.WriteStringValue(value: value switch {
-            ProbeInputTier.Shared => "shared",
-            _ => throw new ArgumentOutOfRangeException(nameof(value), value, "The sense input tier is not defined."),
-        });
-    }
-}
 /// <summary>Where a <see cref="ProbeKindManifest"/> probe kind runs, in the document's own vocabulary; the
 /// document never states a runtime, only this class.</summary>
 [JsonConverter(typeof(ProbeKindClassJsonConverter))]
@@ -95,8 +68,16 @@ public sealed class ProbeKindClassJsonConverter : JsonConverter<ProbeKindClass> 
 }
 /// <summary>A <see cref="ProbeKindManifest"/>'s declared input.</summary>
 /// <param name="Sensor">Which camera stream the kind reads.</param>
-/// <param name="Tier">The capture tier the kind reads it at.</param>
-public sealed record ProbeKindInput(ProbeInputSensor Sensor, ProbeInputTier Tier);
+/// <param name="Previous">Whether the kind reads the frame kept before the current one — for infrared, the unlit
+/// half of a strobing pair.</param>
+public sealed record ProbeKindInput(ProbeInputSensor Sensor, bool Previous = false);
+/// <summary>A kind's texture output: one <c>rgba8</c> ring at the extent of the named sensor's stream, published
+/// like a camera frame; a screen names the probe as its source to show it.</summary>
+/// <param name="Of">The sensor whose stream extent the output takes.</param>
+/// <param name="Format">The pixel format; only <c>rgba8</c> is admitted.</param>
+public sealed record ProbeKindOutput(ProbeInputSensor Of, string Format = ProbeKindOutput.Rgba8) {
+    public const string Rgba8 = "rgba8";
+}
 /// <summary>A KERNEL-class kind's compiled-shader entry points.</summary>
 /// <param name="Source">The HLSL source file's name, beside the manifest.</param>
 /// <param name="Accumulate">The per-pixel accumulation entry point.</param>
@@ -114,23 +95,32 @@ public sealed record ProbeKindKernel(string Source, string Accumulate, string Fi
 /// <param name="Schema">The schema tag; must equal <see cref="SchemaTag"/>.</param>
 /// <param name="Name">The kind's id; must equal the manifest's file stem (the text before <see cref="FileSuffix"/>).</param>
 /// <param name="Class">Where the kind runs.</param>
-/// <param name="Input">The kind's declared input.</param>
+/// <param name="Inputs">The kind's declared inputs, bound at <c>t0, t1, …</c> in this order.</param>
 /// <param name="Channels">The kind's channels, in declaration order; <c>1..</c><see cref="MaxChannels"/>.</param>
 /// <param name="Kernel">The kernel's source and entry points; required when <paramref name="Class"/> is
 /// <see cref="ProbeKindClass.Kernel"/>.</param>
 /// <param name="Description">What the kind measures; carried into the emitted config JSON Schema.</param>
 /// <param name="Config">The config schema, name → field, in the order a schema emits them; <see langword="null"/>
 /// when the kind takes no configuration.</param>
+/// <param name="Trigger">The sensor whose new frame starts a cycle; <see langword="null"/> takes the first input's.</param>
+/// <param name="Output">The texture the kind writes, or <see langword="null"/> when it only reports channels.</param>
 public sealed partial record ProbeKindManifest(
     [property: JsonPropertyName("$schema")] string Schema,
     string Name,
     ProbeKindClass Class,
-    ProbeKindInput Input,
+    IReadOnlyList<ProbeKindInput> Inputs,
     IReadOnlyList<ProbeChannelSpec> Channels,
     ProbeKindKernel? Kernel = null,
     string? Description = null,
-    IReadOnlyDictionary<string, ShaderConfigField>? Config = null
+    IReadOnlyDictionary<string, ShaderConfigField>? Config = null,
+    ProbeInputSensor? Trigger = null,
+    ProbeKindOutput? Output = null
 ) {
+    /// <summary>Gets the sensor whose new frame starts a cycle — <see cref="Trigger"/> when authored, else the first
+    /// input's sensor.</summary>
+    [JsonIgnore]
+    public ProbeInputSensor TriggerSensor => (Trigger ?? Inputs[0].Sensor);
+
     /// <summary>The file suffix every manifest carries; the text before it is the kind's id.</summary>
     public const string FileSuffix = ".puck.probe.json";
     /// <summary>The required <c>$schema</c> value of every <see cref="ProbeKindManifest"/> document.</summary>
@@ -177,6 +167,26 @@ public sealed partial record ProbeKindManifest(
 
         var directory = (Path.GetDirectoryName(path: Path.GetFullPath(path: manifestPath)) ?? "");
 
+        if ((manifest.Inputs is null) || (manifest.Inputs.Count == 0)) {
+            throw new InvalidDataException(message: $"'{manifest.Name}' manifest declares no inputs.");
+        }
+
+        var triggered = false;
+
+        foreach (var input in manifest.Inputs) {
+            if (input.Previous && (input.Sensor != ProbeInputSensor.Infrared)) {
+                throw new InvalidDataException(message: $"'{manifest.Name}' manifest asks for a previous frame of the {input.Sensor} sensor; only infrared keeps one.");
+            }
+
+            triggered |= (input.Sensor == manifest.TriggerSensor);
+        }
+
+        if (!triggered) {
+            throw new InvalidDataException(message: $"'{manifest.Name}' manifest's trigger sensor is not among its inputs.");
+        }
+        if ((manifest.Output is { } output) && !string.Equals(a: output.Format, b: ProbeKindOutput.Rgba8, comparisonType: StringComparison.Ordinal)) {
+            throw new InvalidDataException(message: $"'{manifest.Name}' manifest's output format '{output.Format}' is not {ProbeKindOutput.Rgba8}.");
+        }
         if (manifest.Channels.Count == 0) {
             throw new InvalidDataException(message: $"'{manifest.Name}' manifest declares no channels.");
         }
@@ -249,6 +259,47 @@ public sealed partial record ProbeKindManifest(
     /// 16, so <see cref="ConstantsBlock"/> pads the packed fields up to it.</summary>
     public const int ConstantsBlockAlignment = 16;
 
+    /// <summary>Finds where one config field sits inside <see cref="ConstantsBlock"/>'s packed bytes.</summary>
+    /// <param name="field">The config field name.</param>
+    /// <param name="offset">The field's byte offset, set only when this returns <see langword="true"/>.</param>
+    /// <param name="type">The field's value type, set only when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when the kind declares the field.</returns>
+    public bool TryGetConstantOffset(string field, out int offset, out ShaderValueType type) {
+        if (Config is null) {
+            offset = 0;
+            type = default;
+
+            return false;
+        }
+
+        var types = new ShaderValueType[Config.Count];
+        var index = 0;
+
+        foreach (var candidate in Config.Values) {
+            types[index] = candidate.Type;
+            index++;
+        }
+
+        var offsets = ShaderPushConstantLayout.ComputeOffsets(types: types, sizeBytes: out _);
+
+        index = 0;
+
+        foreach (var (name, candidate) in Config) {
+            if (string.Equals(a: name, b: field, comparisonType: StringComparison.Ordinal)) {
+                offset = ((int)offsets[index]);
+                type = candidate.Type;
+
+                return true;
+            }
+
+            index++;
+        }
+
+        offset = 0;
+        type = default;
+
+        return false;
+    }
     /// <summary>Packs bound config values into the kernel's constant-buffer bytes, in <see cref="Config"/>'s
     /// declaration order under the same packing rule as a shader set's push-constant block
     /// (<see cref="ShaderPushConstantLayout.ComputeOffsets"/>), then pads the block to a multiple of

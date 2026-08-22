@@ -186,8 +186,10 @@ runs, only the kind's own `class`.
 |-----|---------|
 | `$schema` | `puck.probe.v1`. |
 | `name` | The kind's id; must equal the file stem before `.puck.probe.json`. |
-| `class` | `kernel` (handwritten GPU compute on the camera's own device/thread) or `model` (an out-of-process host; no host runs a `model` kind yet). |
-| `input` | `{ sensor: "color"\|"infrared", tier: "shared" }` — which camera stream the kind reads, at the shared GPU tier. |
+| `class` | `kernel` (handwritten GPU compute on the camera graph's own device and worker) or `model` (an out-of-process host; no host runs a `model` kind yet). |
+| `inputs[]` | `{ sensor: "color"\|"infrared", previous?: bool }`, `1..8` entries bound at `t0, t1, …` in this order; `previous` reads the frame kept before the current one (infrared only — the unlit half of a strobe pair). |
+| `trigger` | The sensor whose new frame starts a cycle; defaults to `inputs[0].sensor`, must be among the inputs. |
+| `output` | `{ of: "color"\|"infrared", format?: "rgba8" }` — a texture the kind writes each cycle at that sensor's stream extent, published like a camera frame; a screen shows it as a `probe` source. Absent for a channels-only kind. |
 | `kernel` | `{ source, accumulate, finalize }`, required for a `kernel`-class kind; `source` is an HLSL file beside the manifest. |
 | `channels[]` | `{ name, min, max, neutral, description }`, `1..8` entries (a `ProbeReading` carries at most 8 channels); `neutral` must lie in `[min, max]`. |
 | `config` | Same shape as a shader set's `config` — bound through the same `ShaderConfigBinding`. |
@@ -199,10 +201,12 @@ reflection:
 
 | Binding | Declares |
 |---------|----------|
-| `Texture2D<float4> Source : register(t0)` | The camera's shared target the manifest's `input` names. |
-| `cbuffer ProbeConfig : register(b0)` | The bound config, packed via `ProbeKindManifest.ConstantsBlock` in declaration order (HLSL constant-buffer packing — the same rule as a shader set's push-constant block) and padded to a 16-byte multiple, the D3D11 constant-buffer granule. |
-| `RWStructuredBuffer<uint> Accumulate : register(u0)` | Scratch space, cleared before `accumulate` dispatches over the frame. |
+| `Texture2D<float4> … : register(t0, t1, …)` | The converted frames `inputs[]` names, in order (color as RGBA, infrared as `r`). |
+| `cbuffer ProbeConfig : register(b0)` | The bound config, packed via `ProbeKindManifest.ConstantsBlock` in declaration order (HLSL constant-buffer packing — the same rule as a shader set's push-constant block) and padded to a 16-byte multiple, the D3D11 constant-buffer granule. A `parameter` binding targeting the probe patches one float of it live. |
+| `cbuffer ProbeFrame : register(b1)` | `{ float time; float deltaTime; uint frame; uint pad; }` — seconds since the kernel attached, seconds since its last cycle, and the cycle ordinal. |
+| `RWStructuredBuffer<uint> Accumulate : register(u0)` | Scratch space, cleared before `accumulate` dispatches over the trigger frame (or the output extent, when the kind declares one). |
 | `RWStructuredBuffer<float> Channels : register(u1)` | `channels.Count + 1` floats, written once by `finalize`: the kind's channels in declaration order, then confidence. |
+| `RWTexture2D<float4> Output : register(u2)` | The declared `output`, when the kind has one; written by `accumulate`, copied to the published ring slot after `finalize`. |
 
 `ir-blob.hlsl` (the shipped `ir-blob` kind) is the reference: an 8×8
 `accumulate` pass weighs each pixel by how far its luminance clears
@@ -214,6 +218,17 @@ the above-threshold coverage, and the mean luminance of the above-threshold
 pixels, and writes `Channels`. It measures the brightest lit mass over the
 infrared frame — not illumination-response (lit minus unlit) — because the
 FaceAuth camera graph publishes only the lit half.
+
+`faerie.hlsl` (the shipped `faerie` kind) is the texture-writing reference:
+it reads the color frame plus the infrared strobe pair, takes lit-minus-unlit
+as the subject's illumination response (∝ albedo · cos θ / d², so ~0 on the
+background), raises a height field as `relief · sqrt(response)`, shades the
+color frame from a light orbiting an authored anchor (wrapped Lambert,
+Blinn-Phong with Fresnel, inverse-square-style falloff, a six-step shadow
+march up the height field, crease occlusion), draws the light as a sprite,
+and writes the frame to `Output`; its channels are the light's position, the
+mean response, and the responsive coverage. `irScale`/`irOffsetX`/`irOffsetY`
+align the infrared frame to the color frame.
 
 ## 🧪 Verification
 

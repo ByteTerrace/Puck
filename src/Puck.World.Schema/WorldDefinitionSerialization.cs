@@ -118,6 +118,8 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldProbeBinding.Parameter), TypeInfoPropertyName = "WorldProbeBindingParameter")]
 [JsonSerializable(typeof(WorldProbeBinding.Control), TypeInfoPropertyName = "WorldProbeBindingControl")]
 [JsonSerializable(typeof(WorldProbeParameterTarget.Extension), TypeInfoPropertyName = "WorldProbeParameterTargetExtension")]
+[JsonSerializable(typeof(WorldProbeParameterTarget.Probe), TypeInfoPropertyName = "WorldProbeParameterTargetProbe")]
+[JsonSerializable(typeof(WorldScreenSource.Probe), TypeInfoPropertyName = "WorldScreenSourceProbe")]
 // The host-section defaults row (the world.row.set host payload shape + the document `host` section). WorldBackendPreference
 // and SurfaceFormat ride explicit name-map converters (below) rather than the camelCase enum policy, which would emit
 // "directX" / "r8G8B8A8Unorm"; PresentMode keeps the generic camelCase converter (immediate/adaptive/…).
