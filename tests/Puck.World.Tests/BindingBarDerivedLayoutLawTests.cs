@@ -6,69 +6,46 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
-/// <summary>Pins the derived bank stack: a bank declares only its order, and the engine arranges the fan from that
-/// order plus the authored theme's spacing grid — deterministically, symmetrically, and only when the world authors
-/// a grid at all. An authored offset override still wins, carried through the composer untouched.</summary>
+/// <summary>Pins the derived bank stack: a bank declares only its order, and the engine nests each compass cluster
+/// inward on a fixed button-pitch grid — deterministically and symmetrically. An authored offset override still
+/// wins, carried through the composer untouched.</summary>
 public sealed class BindingBarDerivedLayoutLawTests {
     private const float ButtonSize = 0.075f;
-
-    private static readonly OverlayThemeValues.SpaceSet Grid = new(
-        HeightBadge: 24f, HeightBindBar: 64f, HeightChip: 40f, HeightConsoleHead: 38f, HeightModeRow: 30f,
-        HeightPromptRow: 34f, HeightTrackerBar: 52f, HeightTrackerCell: 26f,
-        Space0: 0f, Space1: 4f, Space2: 8f, Space3: 12f, Space4: 16f, Space5: 20f, Space6: 24f, Space8: 32f
-    );
 
     /// <summary>Order 0 sits on the shared anchor: the resting bank needs no authoring to be where the bar is.</summary>
     [Fact]
     public void OrderZeroSitsOnTheAnchor() =>
         Assert.Equal(expected: Vector2.Zero, actual: Offset(order: 0));
 
-    /// <summary>The fan alternates left/right within a row and climbs one row per pair — the shape five stacked
-    /// banks need, derived rather than authored five times.</summary>
+    /// <summary>The first four wings use the settled cross-nesting table: orders 1/2 pull both compass clusters two
+    /// pitches inward while stepping above/below, and orders 3/4 stay horizontally aligned four pitches above/below.</summary>
     [Fact]
-    public void TheFanAlternatesSidesAndClimbsOneRowPerPair() {
-        var lt = Offset(order: 1);
-        var rt = Offset(order: 2);
-        var ltrt = Offset(order: 3);
-        var rtlt = Offset(order: 4);
-
-        Assert.True(condition: (lt.X < 0f));
-        Assert.Equal(expected: -lt.X, actual: rt.X);
-        Assert.Equal(expected: lt.Y, actual: rt.Y);
-        Assert.True(condition: (lt.Y < 0f));
-
-        Assert.True(condition: (ltrt.X < 0f));
-        Assert.Equal(expected: -ltrt.X, actual: rtlt.X);
-        Assert.Equal(expected: ltrt.Y, actual: rtlt.Y);
-
-        // The second row draws in half as far and rises twice as high.
-        Assert.Equal(expected: (lt.X * 0.5f), actual: ltrt.X, tolerance: 1e-6f);
-        Assert.Equal(expected: (lt.Y * 2f), actual: ltrt.Y, tolerance: 1e-6f);
+    public void TheFirstFourWingsNestOnTheButtonPitchGrid() {
+        Assert.Equal(expected: new Vector2(x: (2f * ButtonSize), y: -ButtonSize), actual: Offset(order: 1, side: -1));
+        Assert.Equal(expected: new Vector2(x: (-2f * ButtonSize), y: -ButtonSize), actual: Offset(order: 1, side: 1));
+        Assert.Equal(expected: new Vector2(x: (2f * ButtonSize), y: (2f * ButtonSize)), actual: Offset(order: 2, side: -1));
+        Assert.Equal(expected: new Vector2(x: (-2f * ButtonSize), y: (2f * ButtonSize)), actual: Offset(order: 2, side: 1));
+        Assert.Equal(expected: new Vector2(x: 0f, y: (-4f * ButtonSize)), actual: Offset(order: 3, side: -1));
+        Assert.Equal(expected: new Vector2(x: 0f, y: (4f * ButtonSize)), actual: Offset(order: 4, side: 1));
     }
 
-    /// <summary>Same order, same grid, same button size — same offset, every call. The stack is a pure function of
-    /// what the document declares, so two seats showing the same bar cannot drift.</summary>
+    /// <summary>Same order, side, and button size — same offset, every call. Two seats showing the same bar cannot
+    /// drift.</summary>
     [Fact]
-    public void TheArrangementIsAPureFunctionOfOrderAndGrid() {
+    public void TheArrangementIsAPureFunctionOfOrderSideAndButtonSize() {
         for (var order = 0; (order < 8); order++) {
-            Assert.Equal(expected: Offset(order: order), actual: Offset(order: order));
+            Assert.Equal(expected: Offset(order: order, side: -1), actual: Offset(order: order, side: -1));
+            Assert.Equal(expected: Offset(order: order, side: 1), actual: Offset(order: order, side: 1));
         }
     }
 
-    /// <summary>A world with no authored spacing grid (the zeroed absent theme) stacks every bank on the anchor
-    /// rather than dividing by a zero grid unit.</summary>
+    /// <summary>Orders beyond the four-entry nesting table remain deterministic and alternate farther above and
+    /// below without a horizontal shift.</summary>
     [Fact]
-    public void AnUngriddedThemeStacksEveryBankOnTheAnchor() {
-        for (var order = 0; (order < 5); order++) {
-            Assert.Equal(
-                actual: BindingBarLayout.BankOffset(
-                    buttonSize: ButtonSize,
-                    order: order,
-                    space: in Unset
-                ),
-                expected: Vector2.Zero
-            );
-        }
+    public void LaterOrdersAlternateFartherAboveAndBelow() {
+        Assert.Equal(expected: new Vector2(x: 0f, y: (-6f * ButtonSize)), actual: Offset(order: 5, side: -1));
+        Assert.Equal(expected: new Vector2(x: 0f, y: (6f * ButtonSize)), actual: Offset(order: 6, side: 1));
+        Assert.Equal(expected: new Vector2(x: 0f, y: (-8f * ButtonSize)), actual: Offset(order: 7, side: 0));
     }
 
     /// <summary>An authored override rides the composed slot untouched, so the writer can prefer it over the derived
@@ -104,8 +81,6 @@ public sealed class BindingBarDerivedLayoutLawTests {
         Assert.Equal(expected: -1, actual: exoticIndex);
     }
 
-    private static readonly OverlayThemeValues.SpaceSet Unset = default;
-
     private static OverlayBindingSlot ComposeOne(int bankOrder, Vector2? bankOffsetOverride) {
         var destination = new OverlayBindingSlot[1];
 
@@ -115,6 +90,7 @@ public sealed class BindingBarDerivedLayoutLawTests {
             bankOrder: bankOrder,
             destination: destination,
             hideUnbound: false,
+            isCommandHeld: null,
             isPressed: null,
             resolveBadge: static _ => OverlayResolvedGlyph.None,
             resolveIcon: static _ => OverlayResolvedGlyph.None,
@@ -133,9 +109,9 @@ public sealed class BindingBarDerivedLayoutLawTests {
 
         return destination[0];
     }
-    private static Vector2 Offset(int order) => BindingBarLayout.BankOffset(
+    private static Vector2 Offset(int order, int side = -1) => BindingBarLayout.BankOffset(
         buttonSize: ButtonSize,
         order: order,
-        space: in Grid
+        side: side
     );
 }

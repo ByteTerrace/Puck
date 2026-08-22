@@ -361,6 +361,44 @@ public sealed class InputRouterTests {
         Assert.Equal(actual: lastInput, expected: 7UL);
     }
     [Fact]
+    public void RestBandAndPostureSamplesDoNotCountAsPlayerActivity() {
+        var router = new InputRouter(
+            registry: new CommandRegistry(modules: [new DigitalModule(command: Command)]),
+            bindings: new EmptyBindings(),
+            principalResolver: new ConsolePrincipal()
+        );
+
+        router.Capture(signal: new InputSignal(
+            Source: "gamepad.accelerometer",
+            DeviceId: default,
+            Value: CommandValue.Axis(value: new System.Numerics.Vector3(x: 0f, y: 1f, z: 0f)),
+            Phase: CommandPhase.Active,
+            Posture: true
+        ));
+        _ = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+
+        router.Capture(signal: new InputSignal(
+            Source: "gamepad.leftTrigger",
+            DeviceId: default,
+            Value: CommandValue.Axis(value: (InputRouter.ActivityRestBand - 0.01f)),
+            Phase: CommandPhase.Active
+        ));
+        _ = router.SnapshotForTick(tick: 2UL, windowEndTick: ulong.MaxValue);
+
+        Assert.False(condition: router.TryGetLastInputTick(slot: 0, tick: out _));
+
+        router.Capture(signal: new InputSignal(
+            Source: "gamepad.leftTrigger",
+            DeviceId: default,
+            Value: CommandValue.Axis(value: InputRouter.ActivityRestBand),
+            Phase: CommandPhase.Active
+        ));
+        _ = router.SnapshotForTick(tick: 3UL, windowEndTick: ulong.MaxValue);
+
+        Assert.True(condition: router.TryGetLastInputTick(slot: 0, tick: out var lastInput));
+        Assert.Equal(expected: 3UL, actual: lastInput);
+    }
+    [Fact]
     public void SnapshotIdentityIsStructuralAndExcludesLocalDeviceAnnotations() {
         var first = Router(registry: out _);
         var second = Router(registry: out _);

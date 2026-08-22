@@ -68,7 +68,7 @@ internal sealed class WorldInteractionCommandModule(IServerLink link) : ICommand
         yield return CommandDefinition.Verb(
             bindability: CommandBindability.Unbindable,
             name: "world.interactions",
-            description: "Reads every live compiled interaction back (Immediate): its name, its mode, its gate-held latch (latch=held means the co-occurrence held at the last evaluation — the 'an interaction fired' echo, on the SAME terms world.rules gives a rule), the co-occurrence gate's own resolved predicates, and its effects.",
+            description: "Reads every live compiled interaction back (Immediate): its name, its mode, its gate-held latch (latch=held means the co-occurrence held at the last evaluation — the 'an interaction fired' echo, on the SAME terms world.rules gives a rule), its co-occurrence (which tag rows or region, and the range), and its effects.",
             valueKind: CommandValueKind.Digital,
             handler: _ => {
                 var result = default(CommandResult);

@@ -145,17 +145,14 @@ public sealed class WorldSeatViewState {
             );
         }
     }
-    /// <summary>The follow camera's step: eases the live yaw so the total logical yaw closes on
+    /// <summary>The follow camera's step: eases the live facing yaw so it closes on
     /// <paramref name="targetYaw"/> (the body's heading — "behind the body") by the fraction
-    /// <c>1 - exp(-rate · dt)</c>. Presentation-only; a World yaw reference by validator rule, so the total yaw is
-    /// the authored orbit yaw plus the live delta.</summary>
+    /// <c>1 - exp(-rate · dt)</c>. Presentation-only; a World yaw reference is required by the validator. Camera
+    /// program orbit offsets are deliberately excluded, so a state-bound look-behind angle never turns the body.</summary>
     /// <param name="targetYaw">The heading to close on, in radians.</param>
     /// <param name="rate">The exponential closing rate per second.</param>
     /// <param name="deltaSeconds">The step.</param>
-    /// <param name="views">The seat views (for the authored orbit yaw).</param>
-    public void Follow(float targetYaw, float rate, float deltaSeconds, WorldViewDefaults views) {
-        ArgumentNullException.ThrowIfNull(argument: views);
-
+    public void Follow(float targetYaw, float rate, float deltaSeconds) {
         var fraction = (1f - MathF.Exp(x: (-rate * deltaSeconds)));
 
         lock (m_gate) {
@@ -165,12 +162,19 @@ public sealed class WorldSeatViewState {
             m_yaw = Wrap(radians: (m_yaw + (delta * fraction)));
         }
     }
-    /// <summary>Turns the camera round BEHIND the body: the live yaw is set so the facing is
+    /// <summary>Turns the camera round BEHIND the body: the live yaw is set so the resulting logical facing is
     /// <paramref name="targetYaw"/>. Presentation-only; the rig's own smoothing eases the turn.</summary>
-    /// <param name="targetYaw">The heading to sit behind, in radians.</param>
-    public void RecenterLook(float targetYaw) {
+    /// <param name="targetYaw">The world heading to sit behind, in radians.</param>
+    /// <param name="views">The live seat view structure, whose yaw reference determines whether the body heading
+    /// is already supplied by the rig's reference frame.</param>
+    public void RecenterLook(float targetYaw, WorldViewDefaults views) {
+        ArgumentNullException.ThrowIfNull(argument: views);
+
         lock (m_gate) {
-            m_yaw = Wrap(radians: targetYaw);
+            m_yaw = ((views.SeatControl.YawReference == WorldSeatYawReference.Body)
+                ? 0f
+                : Wrap(radians: targetYaw)
+            );
         }
     }
 

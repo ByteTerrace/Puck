@@ -110,6 +110,10 @@ namespace Puck.World;
 /// reason: <c>$</c> marks what the engine mints, and nothing mints a rule.</param>
 /// <param name="Effects">The effects applied in order when the rule fires.</param>
 /// <param name="Gate">The predicate that must hold, or <see langword="null"/> for always.</param>
+/// <param name="ForEach">A keyed state row to iterate, or <see langword="null"/> for one evaluation per tick. With
+/// a row named, the gate and effects evaluate once per cell the row holds at the top of the tick, with
+/// <c>$each</c> bound to that cell's key (a body index by convention) — the quantifier that lets one rule tick a
+/// status for every body carrying it. The latch is kept per key.</param>
 /// <param name="Mode">Whether the rule fires every tick the gate holds (<see cref="ActionTriggerMode.Level"/>, the
 /// default) or once per crossing (<see cref="ActionTriggerMode.Edge"/>). A rule that writes a row almost always wants
 /// <see cref="ActionTriggerMode.Edge"/>: level-firing an <c>addState</c> is what wrote 503 journal entries in 500
@@ -123,7 +127,8 @@ public sealed record WorldRule(
     // (the source-generated context enforces it), so an optional member must be able to carry one, which means
     // trailing the required ones. Document order is unaffected: JSON binds by name.
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ActionPredicate? Gate = null,
-    ActionTriggerMode Mode = ActionTriggerMode.Level
+    ActionTriggerMode Mode = ActionTriggerMode.Level,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ForEach = null
 );
 /// <summary>The reserved <see cref="ActionPredicate.CompareState"/> channels a world rule may compare against instead
 /// of a declared <see cref="WorldStateRow"/> — time, population, region occupancy, a screen-machine's live memory,
@@ -162,6 +167,14 @@ public static class WorldRuleFacts {
     /// on a <c>compareState</c> <c>key</c>/<c>comparandKey</c> and on a world-scope effect's <c>key</c>/<c>fromKey</c>;
     /// a body-reference token spells the same indirection as <c>cell:&lt;row&gt;:&lt;key&gt;</c>.</summary>
     public const string CellKeyPrefix = "$cell:";
+    /// <summary>The key token bound to a <see cref="WorldRule.ForEach"/> rule's iterated cell key; as a body-reference
+    /// token it is spelled <c>each</c>.</summary>
+    public const string EachKey = "$each";
+    /// <summary>The key token bound to an interaction's matched left carrier; body-reference token <c>left</c>.</summary>
+    public const string LeftKey = "$left";
+    /// <summary>The key token bound to an interaction's matched right carrier (Distance only); body-reference token
+    /// <c>right</c>.</summary>
+    public const string RightKey = "$right";
     /// <summary>The prefix; <c>$channel:&lt;seat&gt;:&lt;channelName&gt;</c> reads the 1-based local seat's current value of
     /// a declared <c>channels[]</c> row as its body integrates it that tick — the drained
     /// <see cref="Puck.Commands.CommandSnapshot"/> read folded with co-driving contributions and the admitted held
@@ -293,6 +306,10 @@ public enum CompiledBodyRefKind : byte {
 
     /// <summary>The body whose index a state cell (<c>Row</c>, <c>Key</c>) holds — <c>cell:&lt;row&gt;:&lt;key&gt;</c>.</summary>
     Cell,
+
+    /// <summary>The body a <see cref="RuleBinding"/> names this evaluation — <c>each</c>/<c>left</c>/<c>right</c>;
+    /// <c>Index</c> carries the binding.</summary>
+    Binding,
 }
 /// <summary>One resolved body reference — see <see cref="CompiledBodyRefKind"/>.</summary>
 /// <param name="Kind">How the body is named.</param>
@@ -305,7 +322,32 @@ public readonly record struct CompiledBodyRef(CompiledBodyRefKind Kind, int Inde
 /// (<see cref="WorldRuleFacts.CellKeyPrefix"/>).</summary>
 /// <param name="Row">The row holding the indirection cell.</param>
 /// <param name="Key">The indirection cell's key.</param>
-public readonly record struct CompiledCellRef(string Row, string Key);
+/// <param name="Binding">The bound body read as the key instead, when not <see cref="RuleBinding.None"/>; then
+/// <paramref name="Row"/>/<paramref name="Key"/> are empty.</param>
+public readonly record struct CompiledCellRef(string Row, string Key, RuleBinding Binding = RuleBinding.None);
+/// <summary>A name bound during one evaluation of a rule or interaction — the body index a key token
+/// <c>$each</c>/<c>$left</c>/<c>$right</c> or a body-reference token <c>each</c>/<c>left</c>/<c>right</c> reads.</summary>
+public enum RuleBinding : byte {
+    /// <summary>No binding — the literal key or body index applies.</summary>
+    None,
+
+    /// <summary>The iterated cell key of a <see cref="WorldRule.ForEach"/> rule.</summary>
+    Each,
+
+    /// <summary>The carrier matched as an interaction's <see cref="WorldInteraction.Left"/>.</summary>
+    Left,
+
+    /// <summary>The carrier matched as an interaction's <see cref="WorldInteraction.Right"/> (Distance only).</summary>
+    Right,
+}
+/// <summary>The co-occurrence an interaction evaluates over every carrier pair — compiled from
+/// <see cref="WorldInteraction"/>; the evaluator binds <see cref="RuleBinding.Left"/>/<see cref="RuleBinding.Right"/>
+/// per match.</summary>
+/// <param name="Left">The keyed tag row whose nonzero cells are the left carriers.</param>
+/// <param name="Right">The keyed tag row of right carriers (Distance), or the placement id (Region).</param>
+/// <param name="CoOccurrence">How a pair is detected.</param>
+/// <param name="Range">The Distance threshold.</param>
+public readonly record struct CompiledInteraction(string Left, string Right, WorldInteractionCoOccurrence CoOccurrence, FixedQ4816 Range);
 /// <summary>What a <see cref="CompiledWorldPredicate"/> reads at evaluation time.</summary>
 public enum WorldRuleFactKind : byte {
     /// <summary>A declared <see cref="WorldStateRow"/>'s named cell.</summary>
@@ -504,7 +546,9 @@ public readonly record struct CompiledWorldPose(FixedVector3 Position, FixedQ481
 /// <param name="Mode">Level or edge (see <see cref="ActionTriggerMode"/>).</param>
 /// <param name="Gate">The flattened conjunction; empty means "always".</param>
 /// <param name="Effects">The compiled effects, in authored order.</param>
-public sealed record CompiledWorldRule(string Name, ActionTriggerMode Mode, CompiledWorldPredicate[] Gate, CompiledWorldEffect[] Effects);
+/// <param name="ForEach">The keyed row a rule iterates (<see cref="WorldRule.ForEach"/>), or <see langword="null"/>.</param>
+/// <param name="Interaction">The co-occurrence an interaction evaluates, or <see langword="null"/> for a rule.</param>
+public sealed record CompiledWorldRule(string Name, ActionTriggerMode Mode, CompiledWorldPredicate[] Gate, CompiledWorldEffect[] Effects, string? ForEach = null, CompiledInteraction? Interaction = null);
 /// <summary>Names why a world rule was refused during compilation. Every member is tagged
 /// <see cref="RefusalAttribute"/> under the <c>world.rule.compile</c> door, so <c>world.refusals</c> lists the whole
 /// family: this enum is the one exception constructor (<see cref="WorldRuleException"/>) callers pick a reason

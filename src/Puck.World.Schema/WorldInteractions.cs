@@ -3,40 +3,29 @@ using Puck.Physics.Motion;
 
 namespace Puck.World;
 
-/// <summary>How a <see cref="WorldInteraction"/> detects that its two operands have come together — lowered to head
-/// 5's entity-addressable spatial rules (<see cref="WorldRuleFacts.DistancePrefix"/>/<see cref="WorldRuleFacts.RegionPrefix"/>),
-/// never a second co-occurrence engine.</summary>
+/// <summary>How a <see cref="WorldInteraction"/> detects that two carriers have come together.</summary>
 [JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<WorldInteractionCoOccurrence>))]
 public enum WorldInteractionCoOccurrence : byte {
-    /// <summary>The carrier most strongly tagged <see cref="WorldInteraction.Left"/> and the carrier most strongly
-    /// tagged <see cref="WorldInteraction.Right"/> (each resolved the same way a standalone <c>$argmax:</c> operand
-    /// would) sit within <see cref="WorldInteraction.Range"/> of one another — <c>property x property</c>.</summary>
+    /// <summary>Every pair of a body tagged <see cref="WorldInteraction.Left"/> and a different body tagged
+    /// <see cref="WorldInteraction.Right"/> within <see cref="WorldInteraction.Range"/> of one another —
+    /// <c>property x property</c>; the pair is bound as <c>$left</c>/<c>$right</c>.</summary>
     Distance,
 
-    /// <summary>Some carrier is tagged <see cref="WorldInteraction.Left"/>, and <see cref="WorldInteraction.Right"/>
-    /// (a placement id carrying a region facet) currently has at least one occupant — <c>property x region</c>. An
-    /// aggregate co-occurrence, on the same deliberate terms <see cref="WorldRuleFacts.RegionPrefix"/>'s own remarks
-    /// give for staying an occupant count rather than a per-body membership test (there is no "for every active body"
-    /// quantifier in the rule vocabulary this lowers to).</summary>
+    /// <summary>Every body tagged <see cref="WorldInteraction.Left"/> inside the region of the placement
+    /// <see cref="WorldInteraction.Right"/> names — <c>property x region</c>; the occupant is bound as <c>$left</c>.</summary>
     Region,
 }
 /// <summary>
 /// One row of the world's <c>interactions</c> section — an authorable <c>property x property</c> (or
-/// <c>property x region</c>) <c>-&gt; effect</c> table entry, the generalized A x B -&gt; F emergent-chemistry
-/// primitive. Not a second rule engine: <c>WorldRuleCompiler.CompileAllInteractions</c> desugars every row into a
-/// synthesized <see cref="WorldRule"/> — its co-occurrence spelled as an ordinary
-/// <see cref="ActionPredicate.CompareState"/>/<see cref="ActionPredicate.All"/> gate over the same reserved channels
-/// a hand-authored rule already reads — and compiles it through the identical <c>WorldRuleCompiler.Compile</c> path,
-/// so it rides the same per-tick evaluation, edge/level latch, journal, and undo a rule already has. This is a
-/// second authoring surface over one evaluation engine.
+/// <c>property x region</c>) <c>-&gt; effect</c> table entry, the A x B -&gt; F chemistry primitive. Evaluated over
+/// every carrier pair (or every occupant) each tick with the matched carriers bound as <c>$left</c>/<c>$right</c>,
+/// and compiled through the same effect compiler a <see cref="WorldRule"/> uses, so it rides the same edge/level
+/// latch (kept per pair), journal, and undo.
 /// </summary>
 /// <remarks>
 /// <para><see cref="Effects"/> carries the same <see cref="ActionEffect"/> vocabulary a <see cref="WorldRule"/>
-/// admits at world scope — a state write (<see cref="ActionEffect.SetState"/>/<see cref="ActionEffect.AddState"/>)
-/// and the spawn/despawn-carrier effect (<see cref="ActionEffect.UpsertPlacement"/>/<see cref="ActionEffect.RemovePlacement"/>).
-/// An effect names its target row/cell literally: the gate can address "whichever carrier is most hot" via
-/// <c>$argmax:</c>, but no effect can yet write to "whichever cell the gate resolved" — author the interacting
-/// carriers' own cells directly.</para>
+/// admits at world scope. An effect addresses the carriers that met through the bound keys —
+/// <c>setState burning key "$right"</c> — or any literal cell.</para>
 /// <para>Same-tick ordering is declaration order. Interactions evaluate as a whole array, in document order, after
 /// every ordinary rule (see <c>WorldServer.EvaluateWorldRules</c>), and the array is snapshotted before iterating so
 /// installing effects can never make an interaction skip its own siblings mid-tick.</para>
@@ -45,12 +34,10 @@ public enum WorldInteractionCoOccurrence : byte {
 /// reads, on the same deterministic, replayable per-tick evaluation order every other world-rule chain rides.</para>
 /// </remarks>
 /// <param name="Name">The interaction's stable name — unique within the section (a separate namespace from
-/// <see cref="WorldRule.Name"/>: an interaction desugars into its own synthesized rule rather than sharing the
-/// authored rule list, so the two may coincide without colliding). A <see cref="WorldCellName"/>, never
+/// <see cref="WorldRule.Name"/>, so the two may coincide without colliding). A <see cref="WorldCellName"/>, never
 /// <c>$</c>-prefixed — that prefix marks what the engine mints, and nothing mints an interaction.</param>
-/// <param name="Left">A property name, validated against the declared <c>properties</c> registry — the carrier a
-/// candidate co-occurrence is searched from (the <c>$argmax:</c> resolution — "the carrier most strongly tagged
-/// Left").</param>
+/// <param name="Left">A property name, validated against the declared <c>properties</c> registry — every body whose
+/// cell in that keyed row reads nonzero is a left carrier.</param>
 /// <param name="Right">For <see cref="WorldInteractionCoOccurrence.Distance"/>, a second property name, validated the
 /// same way as <see cref="Left"/>. For <see cref="WorldInteractionCoOccurrence.Region"/>, a placement id carrying a
 /// region facet — validated against the declared <c>placements</c> section instead, never against the property

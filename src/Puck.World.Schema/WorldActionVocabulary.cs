@@ -267,9 +267,12 @@ public abstract record ActionEffect {
     /// Exactly one of this and <paramref name="Position"/> is authored.</param>
     /// <param name="Position">A literal world position. Exactly one of this and <paramref name="SpawnPoint"/> is
     /// authored.</param>
-    /// <param name="YawDegrees">The yaw about +Y, degrees; read only with <paramref name="Position"/>.</param>
-    /// <param name="PitchDegrees">The pitch about the body right, degrees; read only with <paramref name="Position"/>.</param>
-    /// <param name="RollDegrees">The roll about the body forward, degrees; read only with <paramref name="Position"/>.</param>
+    /// <param name="YawDegrees">The yaw about +Y, degrees; legal only with <paramref name="Position"/> and required
+    /// to remain zero when <paramref name="SpawnPoint"/> supplies the pose.</param>
+    /// <param name="PitchDegrees">The pitch about the body right, degrees; legal only with
+    /// <paramref name="Position"/> and required to remain zero with <paramref name="SpawnPoint"/>.</param>
+    /// <param name="RollDegrees">The roll about the body forward, degrees; legal only with
+    /// <paramref name="Position"/> and required to remain zero with <paramref name="SpawnPoint"/>.</param>
     public sealed record Pose(
         string Key,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SpawnPoint = null,

@@ -12,14 +12,16 @@ namespace Puck.Commands;
 /// <remarks>Each of the three lookups is independently optional, and a caller missing one still gets the others: a
 /// caller with no registry passes a null <c>command</c> and keeps the channel checks; a caller with no channel table
 /// passes null <c>channel</c> and keeps the command checks. Nothing here couples one half's absence to the other's.
-/// <para>Three predicates, all per reference: the command must exist (an entry naming an unregistered command is
+/// <para>Four predicates, all per reference: the command must exist (an entry naming an unregistered command is
 /// exactly the binding the <see cref="InputRouter"/> silently drops at resolve time today); it must be
 /// <see cref="CommandBindability.Bindable"/> (an authority verb reached from a page would be an escalation the grant
-/// table never sees, because the page — not the principal — chose the destination); and the value kind the binding
+/// table never sees, because the page — not the principal — chose the destination); a row carrying authored text must
+/// target a command whose <see cref="CommandMetadata.AcceptsWireArgs"/> is true; and the value kind the binding
 /// dispatches — its constant <c>Value</c> when it carries one, else the physical source's declared kind when the
-/// caller can resolve it — must equal the command's declared <see cref="CommandMetadata.ValueKind"/>. A source the
-/// caller's catalog cannot resolve (its lookup answering <see langword="null"/>) skips the kind half only: existence
-/// and eligibility are always checked. Empty sources/commands are skipped entirely — they are the structural gate's
+/// caller can resolve it — must equal the command's declared <see cref="CommandMetadata.ValueKind"/>. A text-bearing
+/// ordinary source must also be digital because analog samples carry no press edge. A source the caller's catalog
+/// cannot resolve (its lookup answering <see langword="null"/>) skips the source-kind half only: existence and
+/// eligibility are always checked. Empty sources/commands are skipped entirely — they are the structural gate's
 /// findings, not this one's.</para></remarks>
 public static class BindingVocabularyCheck {
     private static void CheckChannel(
@@ -50,12 +52,19 @@ public static class BindingVocabularyCheck {
         List<string> errors,
         string unknownError,
         string unbindableError,
-        Func<CommandValueKind, CommandValueKind, string> mismatchError
+        Func<CommandValueKind, CommandValueKind, string> mismatchError,
+        bool requiresWireArgs = false,
+        string? wireArgsError = null
     ) {
         if (command(arg: commandName) is not { } declared) {
             errors.Add(item: unknownError);
         } else if (declared.Bindability != CommandBindability.Bindable) {
             errors.Add(item: unbindableError);
+        } else if (
+            requiresWireArgs &&
+            !declared.AcceptsWireArgs
+        ) {
+            errors.Add(item: wireArgsError!);
         } else if (
             (dispatched is { } actual) &&
             (actual != declared.ValueKind)
@@ -68,8 +77,8 @@ public static class BindingVocabularyCheck {
     }
     private static string Word(CommandValueKind kind) => kind.ToString().ToLowerInvariant();
 
-    /// <summary>Appends one error per unresolvable, unbindable, or kind-mismatched command or channel reference in
-    /// <paramref name="document"/>.</summary>
+    /// <summary>Appends one error per unresolvable, unbindable, argument-incompatible, or kind-mismatched command or
+    /// channel reference in <paramref name="document"/>.</summary>
     /// <param name="document">The binding document to check.</param>
     /// <param name="command">Resolves a command name (or alias) to its declared facts, answering <see langword="null"/>
     /// when no such command is registered — typically <see cref="CommandRegistry.TryGetMetadata"/>. Pass
@@ -190,6 +199,14 @@ public static class BindingVocabularyCheck {
                                 errors.Add(item: $"page \"{page.Id}\" binds {rawSource} to an axis component, but \"{baseSource}\" is not a two-dimensional axis control");
                             }
                         }
+
+                        if (
+                            (entry.Text is not null) &&
+                            (sourceKind?.Invoke(arg: rawSource) is { } textSourceKind) &&
+                            (textSourceKind != CommandValueKind.Digital)
+                        ) {
+                            errors.Add(item: $"page \"{page.Id}\" binds text arguments to {rawSource}, but a {Word(kind: textSourceKind)} source has no press edge");
+                        }
                     }
 
                     if (entry.Channel is { } channelRef) {
@@ -231,7 +248,9 @@ public static class BindingVocabularyCheck {
                             errors: errors,
                             unknownError: $"page \"{page.Id}\" binds {label} to \"{entry.Command}\", which names no registered command",
                             unbindableError: $"page \"{page.Id}\" binds {label} to \"{entry.Command}\", which is not bindable",
-                            mismatchError: (actual, declared) => $"page \"{page.Id}\" sends {Word(kind: actual)} from {label} to \"{entry.Command}\", which takes {Word(kind: declared)}"
+                            mismatchError: (actual, declared) => $"page \"{page.Id}\" sends {Word(kind: actual)} from {label} to \"{entry.Command}\", which takes {Word(kind: declared)}",
+                            requiresWireArgs: (entry.Text is not null),
+                            wireArgsError: $"page \"{page.Id}\" binds text arguments to \"{entry.Command}\", which accepts no wire arguments"
                         );
                     } else {
                         foreach (var dispatchSource in (entry.Sources ?? [])) {
@@ -242,7 +261,9 @@ public static class BindingVocabularyCheck {
                                 errors: errors,
                                 unknownError: $"page \"{page.Id}\" binds {label} to \"{entry.Command}\", which names no registered command",
                                 unbindableError: $"page \"{page.Id}\" binds {label} to \"{entry.Command}\", which is not bindable",
-                                mismatchError: (actual, declared) => $"page \"{page.Id}\" sends {Word(kind: actual)} from {dispatchSource} to \"{entry.Command}\", which takes {Word(kind: declared)}"
+                                mismatchError: (actual, declared) => $"page \"{page.Id}\" sends {Word(kind: actual)} from {dispatchSource} to \"{entry.Command}\", which takes {Word(kind: declared)}",
+                                requiresWireArgs: (entry.Text is not null),
+                                wireArgsError: $"page \"{page.Id}\" binds text arguments to \"{entry.Command}\", which accepts no wire arguments"
                             );
                         }
                     }
@@ -304,7 +325,9 @@ public static class BindingVocabularyCheck {
                     errors: errors,
                     unknownError: $"{chordLabel} fires \"{chordCommand.Command}\", which names no registered command",
                     unbindableError: $"{chordLabel} fires \"{chordCommand.Command}\", which is not bindable",
-                    mismatchError: (actual, declared) => $"{chordLabel} sends {Word(kind: actual)} to \"{chordCommand.Command}\", which takes {Word(kind: declared)}"
+                    mismatchError: (actual, declared) => $"{chordLabel} sends {Word(kind: actual)} to \"{chordCommand.Command}\", which takes {Word(kind: declared)}",
+                    requiresWireArgs: (chordCommand.Text is not null),
+                    wireArgsError: $"{chordLabel} binds text arguments to \"{chordCommand.Command}\", which accepts no wire arguments"
                 );
             }
         }

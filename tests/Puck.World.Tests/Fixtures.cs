@@ -369,8 +369,8 @@ internal static class Fixtures {
         Operations: [
             new WorldCameraProgramOp.Orbit(
                 Distance: 5.4626001f,
-                Yaw: 0f,
-                Pitch: 0.4145069f,
+                Yaw: new BindableScalar(literal: 0f),
+                Pitch: new BindableScalar(literal: 0.4145069f),
                 PivotOffset: new DocumentVector3(value: Vector3.Zero)
             ),
             new WorldCameraProgramOp.LookAt(

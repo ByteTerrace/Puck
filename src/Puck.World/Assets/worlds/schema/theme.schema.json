@@ -268,20 +268,45 @@
         "bloomHaloSpread": {
           "type": "number"
         },
-        "bloomHaloAlpha": {},
+        "bloomHaloAlpha": {
+          "type": [
+            "number",
+            "string"
+          ]
+        },
         "bloomRingWidth": {
           "type": "number"
         },
-        "bloomRingAlpha": {},
-        "bloomNeutralHaloAlpha": {},
-        "bloomNeutralRingAlpha": {},
+        "bloomRingAlpha": {
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "bloomNeutralHaloAlpha": {
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "bloomNeutralRingAlpha": {
+          "type": [
+            "number",
+            "string"
+          ]
+        },
         "bloomHeldInsetBlur": {
           "type": "number"
         },
         "bloomHeldInsetSpread": {
           "type": "number"
         },
-        "bloomHeldInsetAlpha": {},
+        "bloomHeldInsetAlpha": {
+          "type": [
+            "number",
+            "string"
+          ]
+        },
         "bloomAccent": {
           "$ref": "./common.schema.json#/$defs/WorldThemeBloomHue"
         },

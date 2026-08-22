@@ -56,7 +56,11 @@
         "type": "object",
         "properties": {
           "chipAlpha": {
-            "description": "The icon chip\u0027s opacity, in [0, 1]."
+            "description": "The icon chip\u0027s opacity, in [0, 1].",
+            "type": [
+              "number",
+              "string"
+            ]
           },
           "size": {
             "description": "The icon chip\u0027s plate half-extent, px. Positive.",
@@ -68,7 +72,12 @@
           },
           "ringAlpha": {
             "description": "The ring\u0027s opacity, in [0, 1]. Required exactly when Ring is authored; omitted otherwise.",
-            "default": null
+            "default": null,
+            "type": [
+              "number",
+              "string",
+              "null"
+            ]
           }
         },
         "required": [

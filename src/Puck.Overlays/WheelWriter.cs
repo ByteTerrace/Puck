@@ -1,10 +1,12 @@
 namespace Puck.Overlays;
 
 /// <summary>
-/// The radial-action-menu writer: renders each open seat's wheel from an <see cref="IWheelSource"/> snapshot — up to
-/// <see cref="MaxRings"/> concentric ring outlines around a hub dot, every ring's sector labels arranged clockwise
-/// from twelve o'clock, the ACTIVE ring stroked twice (a visibly heavier shell) with its label beside the hub, and
-/// the hovered sector's label lit in the accent hue with a marker dot on its angle — all inside a
+/// The radial-action-menu writer: renders each presented seat's wheel from an <see cref="IWheelSource"/> snapshot —
+/// up to <see cref="MaxRings"/> concentric bands of filled sector pieces around a hub, each piece carrying its
+/// resolved icon or text fallback. The active/hovered selection and a successfully dispatched command glow accent;
+/// a local dispatch failure glows danger while the whole wheel fades; the hovered/outcome label and active ring
+/// label sit in the hub.
+/// Everything stays inside a
 /// <see cref="OverlayFrameBuilder.BeginClip"/> scope on the seat's viewport rect, the <see cref="CursorWriter"/>
 /// discipline. Pure record emission; the geometry (center, radii, active/hovered indices) is the HOST's decision,
 /// published in the snapshot, so what this draws and what a release commits can never disagree.
@@ -51,6 +53,32 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
             seat: in seat
         );
 
+    private static void NoteRefusedSectors(OverlayFrameBuilder builder, ReadOnlySpan<OverlayWheelSector> sectors, int start) {
+        var elements = 0;
+        var textWords = 0;
+
+        for (var index = start; (index < sectors.Length); index++) {
+            var sector = sectors[index];
+
+            // Every sector owns its wedge, then either one icon record or one non-empty text fallback.
+            elements++;
+
+            if (sector.Icon.Glyph0 != 0) {
+                elements++;
+            } else if (!string.IsNullOrEmpty(value: sector.Label)) {
+                elements++;
+                textWords += Math.Min(
+                    val1: sector.Label.Length,
+                    val2: MaxSectorLabelChars
+                );
+            }
+        }
+
+        builder.NoteRefused(
+            elements: elements,
+            textWords: textWords
+        );
+    }
     private void EmitSeat(OverlayFrameBuilder builder, in OverlayWheelSeat seat) {
         var region = seat.Viewport;
 
@@ -69,6 +97,32 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
 
         if (ringCount == 0) {
             return;
+        }
+
+        // These are renderer-owned backstops rather than a silent Math.Min: a host that violates the authored wheel
+        // ceilings loses only its excess, and the ordinary own-cap narration names the loss.
+        if (ringCount < rings.Length) {
+            for (var ringIndex = ringCount; (ringIndex < rings.Length); ringIndex++) {
+                NoteRefusedSectors(
+                    builder: builder,
+                    sectors: rings[ringIndex].Sectors.Span,
+                    start: 0
+                );
+            }
+
+            if (((uint)seat.ActiveRing < (uint)rings.Length) && (seat.ActiveRing >= ringCount)) {
+                var refusedLabel = rings[seat.ActiveRing].Label;
+
+                if (!string.IsNullOrEmpty(value: refusedLabel)) {
+                    builder.NoteRefused(
+                        elements: 1,
+                        textWords: Math.Min(
+                            val1: refusedLabel.Length,
+                            val2: MaxRingLabelChars
+                        )
+                    );
+                }
+            }
         }
 
         var theme = m_theme.Current;
@@ -91,16 +145,20 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
         // seam: the pieces' angular gaps are the only seams the pie shows.
         var hubRadius = (seat.InnerRadius + 1f);
 
-        // After a commit or cancel the whole wheel stays, with the verdict glowing on it — the accepted piece
-        // positive, the refused piece or the hub danger — and fades out on the authored curve (seat.Fade). While
-        // open, Fade is 1 and the glow is the hover accent.
+        // After a dispatch attempt or cancel the whole wheel stays, with the local outcome glowing on it — a handed-
+        // off piece stays accent, while a local dispatch failure or the cancel hub turns danger — and fades out on
+        // the authored curve (seat.Fade). This never claims the later simulation/server verdict.
         var fade = seat.Fade;
-        var verdictOnHub = ((seat.Outcome is OverlayWheelOutcome.Cancelled or OverlayWheelOutcome.Errored) && (seat.OutcomeSector < 0));
-
+        var activeRing = (((uint)seat.ActiveRing < (uint)ringCount)
+            ? seat.ActiveRing
+            : -1
+        );
+        var hasHoveredSector = false;
+        var hasOutcomeSector = false;
         var hoveredLabel = seat.HubLabel.AsSpan();
 
         for (var ringIndex = 0; (ringIndex < ringCount); ringIndex++) {
-            var isActive = (ringIndex == seat.ActiveRing);
+            var isActive = (ringIndex == activeRing);
             var innerRadius = (seat.InnerRadius + (ringIndex * seat.RingWidth));
             var outerRadius = (innerRadius + seat.RingWidth);
             var centroid = (innerRadius + (seat.RingWidth * 0.5f));
@@ -112,6 +170,14 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
                 val1: sectors.Length,
                 val2: MaxSectorsPerRing
             );
+
+            if (sectorCount < sectors.Length) {
+                NoteRefusedSectors(
+                    builder: builder,
+                    sectors: sectors,
+                    start: sectorCount
+                );
+            }
 
             if (sectorCount == 0) {
                 continue;
@@ -129,11 +195,11 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
                 var angle = (seat.RotationRadians + ((direction * sectorIndex) * span));
                 var sector = sectors[sectorIndex];
                 var isHovered = (isActive && (sectorIndex == seat.HoveredSector));
-                var isOutcome = (isActive && (sectorIndex == seat.OutcomeSector));
-                // Selection and verdict are a GLOW on the piece's edge, never a different fill: the piece itself,
-                // and whatever the world shows beneath it, stay exactly as they were.
-                var glow = ((isOutcome && (seat.Outcome == OverlayWheelOutcome.Accepted))
-                    ? OverlayColorRole.Positive
+                var isOutcome = (isActive && (seat.Outcome != OverlayWheelOutcome.None) && (sectorIndex == seat.OutcomeSector));
+                // Selection and the local dispatch outcome are a GLOW on the piece's edge, never a different fill:
+                // the piece itself, and whatever the world shows beneath it, stay exactly as they were.
+                var glow = ((isOutcome && (seat.Outcome == OverlayWheelOutcome.Dispatched))
+                    ? OverlayColorRole.Accent
                     : ((isOutcome && (seat.Outcome == OverlayWheelOutcome.Errored))
                         ? OverlayColorRole.Danger
                         : (isHovered
@@ -160,9 +226,9 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
                 if (sector.Icon.Glyph0 != 0) {
                     // The action's icon chip: the same plate the binding bar draws, with no physical-button badge
                     // (the piece's position IS its selector), lifted to the accent tier while hovered — and, once
-                    // a verdict lands on this piece, blooming in the verdict's hue instead.
+                    // a dispatch outcome lands on this piece, blooming in the outcome's hue instead.
                     builder.WriteIcon(
-                        accent: (isHovered || (glow is { } chipGlow && chipGlow != OverlayColorRole.Accent)),
+                        accent: (isHovered || isOutcome),
                         accentRole: ((glow is { } chipRole && chipRole != OverlayColorRole.Accent)
                             ? chipRole
                             : null),
@@ -182,7 +248,7 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
                     );
                 } else {
                     // No icon resolved: the piece carries its text instead, so an un-iconed sector still reads.
-                    var label = sector.Label;
+                    var label = (sector.Label ?? string.Empty);
                     var width = builder.TextWidth(
                         chars: Math.Min(
                             val1: label.Length,
@@ -195,18 +261,21 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
                         alpha: ringAlpha,
                         cellHeight: cellHeight,
                         maxChars: MaxSectorLabelChars,
-                        role: (isHovered
-                        ? OverlayColorRole.Accent
-                        : OverlayColorRole.TextPrimary),
+                        role: (glow ?? OverlayColorRole.TextPrimary),
                         text: label,
                         x: (chipX - (width * 0.5f)),
                         y: (chipY - (cellHeight * 0.5f))
                     );
                 }
 
-                if (isHovered) {
-                    hoveredLabel = sector.Label;
+                // A committed sector remains the hub's subject through its outcome fade even when the host clears
+                // HoveredSector (an errored commit is no longer a live hover, but it still names the failed act).
+                if (isHovered || isOutcome) {
+                    hoveredLabel = sector.Label.AsSpan();
                 }
+
+                hasHoveredSector |= isHovered;
+                hasOutcomeSector |= isOutcome;
             }
         }
 
@@ -218,11 +287,15 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
             centerX: seat.CenterX,
             centerY: seat.CenterY,
             gap: 0f,
-            glow: (verdictOnHub
-                ? OverlayColorRole.Danger
-                : ((seat.Outcome == OverlayWheelOutcome.None) && (seat.HoveredSector < 0))
-                    ? OverlayColorRole.Accent
-                    : null),
+            glow: (!hasOutcomeSector
+                ? (seat.Outcome switch {
+                    OverlayWheelOutcome.Dispatched => OverlayColorRole.Accent,
+                    OverlayWheelOutcome.Cancelled or OverlayWheelOutcome.Errored => OverlayColorRole.Danger,
+                    _ => (!hasHoveredSector
+                        ? OverlayColorRole.Accent
+                        : null),
+                })
+                : null),
             innerRadius: 0f,
             outerRadius: hubRadius,
             role: OverlayColorRole.ScrimPanel,
@@ -254,11 +327,10 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
             hubTextY += (cellHeight + chrome.WheelHubLabelGap);
         }
 
-        var activeLabel = rings[Math.Clamp(
-            value: seat.ActiveRing,
-            min: 0,
-            max: (ringCount - 1)
-        )].Label;
+        var activeLabel = ((activeRing >= 0)
+            ? (rings[activeRing].Label ?? string.Empty)
+            : string.Empty
+        );
 
         if (activeLabel.Length > 0) {
             var activeWidth = builder.TextWidth(

@@ -182,7 +182,8 @@ world-scoped rule section — the SAME `ActionPredicate`/`ActionEffect`/
 `ActionTriggerMode` primitive a kit's per-body actions use, one level up.
 Optional deliberately: a new REQUIRED section would refuse every existing
 document at boot for declaring nothing. Only `all`/`compareState` predicates and
-`setState`/`addState`/`generate` effects are admissible at world scope — plus,
+`setState`/`addState`/`countdownState`/`generate`/`pose`/`save` effects are
+admissible at world scope — plus,
 each admitting an EXISTING `WorldMutation` kind into the rule effect set (riding
 the exact seam `generate` proved, never a new door), `upsertHudPanel`/
 `removeHudPanel` (a world-scoped HUD row) and `upsertPlacement`/`removePlacement`
@@ -206,8 +207,9 @@ value at every read/firing (effect `key`/`fromKey`, `compareState`
 same inside `$distance:`/`$los:`/`$nearest:`. `$nearest:<bodyRef>:<row>` is the
 nearest other active body whose cell in keyed `<row>` is nonzero (−1 for none,
 ties to the lowest index) — `elements.world.json`'s `auto-target` rule is
-`setState target.0 fromState $nearest:body:0:enemy`. `save` admits on DIFFERENT terms again: it is the ONE effect with no `WorldMutation` ordinal at
-all — it writes a session snapshot to the world's own loaded file
+`setState target.0 fromState $nearest:body:0:enemy`. `save` admits on DIFFERENT
+terms again: like `pose`, it has no `WorldMutation` ordinal — it writes a
+session snapshot to the world's own loaded file
 (`WorldDefinitionSource.SourcePath`, the SAME target the console's no-argument
 `world.save` resolves; no authored path, and no homeless-world refusal exists
 because every boot shape is file-backed), composing no candidate and journaling
@@ -591,7 +593,7 @@ any document whose `population.capacity` is nonzero — the same derived refusal
 `kits` carries, so a seatless document may still author neither. A world takes
 the standard set by naming `standard.world.json` as its `basis`;
 `null.world.json` does, authoring only its own `layouts` and
-`seatControl.swapRate` delta over it.
+other prototype-specific sections over it.
 
 **Kit motion model (`WorldKit.Motion`, a `WorldMotionModel` row).** A kit
 declares WHICH motion model it advances on, alongside `BodyMotionProgram`
@@ -1085,9 +1087,9 @@ bank renders the WHOLE authored `slotSet` against its OWN named page (a
 binding profile, checked after `BindingProfile.Compile` succeeds, since only the
 whole overlay stack's result can answer that), displaced from the bar's shared
 anchor by an arrangement the ENGINE derives from `order` alone (unique per row;
-`BindingBarLayout.BankOffset` fans alternate sides and climbs one row per pair,
-pitched off the authored theme's `space3`/`space2` steps times the button size,
-so a retheme re-pitches the stack without re-authoring a bank) — `offsetX`/
+`BindingBarLayout.BankOffset` uses a fixed nested-cross table in button pitches:
+order 1 nests up and inward, 2 down and inward, and 3/4 sit straight above/below;
+later orders alternate farther above and below) — `offsetX`/
 `offsetY` are optional per-axis overrides for a world that wants one bank placed
 by hand. Each draws at its authored `alpha` — or `activeAlpha`
 (default 1.0) when that bank's page is the seat's CURRENTLY active one. A

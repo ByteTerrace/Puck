@@ -33,6 +33,14 @@
           "Edge"
         ],
         "default": "Level"
+      },
+      "forEach": {
+        "description": "A keyed state row to iterate, or null for one evaluation per tick. With a row named, the gate and effects evaluate once per cell the row holds at the top of the tick, with $each bound to that cell\u0027s key (a body index by convention) \u2014 the quantifier that lets one rule tick a status for every body carrying it. The latch is kept per key.",
+        "type": [
+          "string",
+          "null"
+        ],
+        "default": null
       }
     },
     "required": [

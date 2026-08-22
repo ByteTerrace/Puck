@@ -464,7 +464,7 @@
             "description": "The stacked banks \u2014 at least one, at most MaxBanks, unique ids, each naming a page the composed binding profile actually declares.",
             "type": "array",
             "items": {
-              "description": "One stacked binding-bar bank: the page it renders and its position in the stack. Several banks of the SAME slot set render simultaneously, each showing what that bank\u0027s OWN page binds \u2014 the WoW-addon original\u0027s \u0022five banks of one compass\u0022 idea (resting, LT, RT, LT\u003ERT, RT\u003ELT are the natural five, though a bank may name any page). The engine ARRANGES the stack from Order alone, pitching it off the authored theme\u0027s spacing grid; the two offsets exist only for a world that wants to place one bank by hand.",
+              "description": "One stacked binding-bar bank: the page it renders and its position in the stack. Several banks of the SAME slot set render simultaneously, each showing what that bank\u0027s OWN page binds \u2014 the WoW-addon original\u0027s \u0022five banks of one compass\u0022 idea (resting, LT, RT, LT\u003ERT, RT\u003ELT are the natural five, though a bank may name any page). The engine ARRANGES the stack from Order alone on a fixed button-pitch nested-cross table; the two offsets exist only for a world that wants to place one bank by hand.",
               "type": [
                 "object",
                 "null"
@@ -479,7 +479,7 @@
                   "type": "string"
                 },
                 "order": {
-                  "description": "This bank\u0027s place in the derived stack (unique within the authoring row): 0 sits on the bar\u0027s shared anchor, and each higher order fans one step further out and up.",
+                  "description": "This bank\u0027s place in the derived stack (unique within the authoring row): 0 sits on the bar\u0027s shared anchor; 1 nests up and inward, 2 down and inward, and 3/4 sit straight above/below. Later orders alternate farther above and below.",
                   "type": "integer"
                 },
                 "alpha": {

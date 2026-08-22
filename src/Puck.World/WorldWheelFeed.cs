@@ -70,7 +70,6 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
     private readonly WorldPointer m_pointer;
     private readonly PlayerRoster m_roster;
     private readonly Func<InputRouter> m_router;
-    private readonly WorldClient m_client;
     private readonly WorldIconTable m_icons;
     private readonly WheelStore m_store;
     private readonly WorldSeatViewports m_viewports;
@@ -100,7 +99,7 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
         public BindingWheelView? RingCacheSource;
         // The sector text lives in a state row, so the cache is keyed on the definition delivery too: an applied
         // mutation bumps the revision and the labels re-resolve on the next frame.
-        public int RingCacheRevision = -1;
+        public WorldDefinition? RingCacheDefinition;
         public float RingScroll;
         public WorldWheelStatus Status;
         public BindingWheelView? Wheel;
@@ -112,8 +111,9 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
         public BindingWheelGestureState Gesture { get; } = new();
         public OverlayWheelRing[] RingCache = [];
         public string CommitLabel = string.Empty;
-        // The outcome flash: the seat as last drawn while open, re-emitted for FlashFrames frames after the wheel
-        // closes with the decided outcome's glow on it, so an accept or a refusal is SEEN rather than only logged.
+        // The outcome flash: the seat as last drawn while open, re-emitted after the wheel closes with the local
+        // dispatch outcome's glow. Dispatched means handed to the input router; a later simulation/server refusal is
+        // deliberately not overclaimed here.
         public OverlayWheelSeat LastSeat;
         public bool LastSeatKnown;
         public OverlayWheelOutcome FlashOutcome;
@@ -137,12 +137,10 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
     /// <param name="router">The input router a committed sector's activation enters — lazy, because the command
     /// registry aggregates <see cref="WorldWheelCommandModule"/>, which consumes this feed; a direct dependency
     /// would cycle the container.</param>
-    /// <param name="client">The world client whose live definition carries the state rows a sector's display text and icon resolve from.</param>
     /// <param name="icons">The world's icon table, resolving a sector's icon name to atlas content.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldWheelFeed(WorldPointer pointer, PlayerRoster roster, WorldSeatBindings bindings, WorldCursorFeed cursor, WorldSeatViewports viewports, WheelStore store, Func<InputRouter> router, WorldClient client, WorldIconTable icons) {
+    public WorldWheelFeed(WorldPointer pointer, PlayerRoster roster, WorldSeatBindings bindings, WorldCursorFeed cursor, WorldSeatViewports viewports, WheelStore store, Func<InputRouter> router, WorldIconTable icons) {
         ArgumentNullException.ThrowIfNull(argument: icons);
-        ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: pointer);
         ArgumentNullException.ThrowIfNull(argument: roster);
         ArgumentNullException.ThrowIfNull(argument: bindings);
@@ -155,7 +153,6 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
         m_cursor = cursor;
         m_pointer = pointer;
         m_roster = roster;
-        m_client = client;
         m_icons = icons;
         m_router = router;
         m_store = store;
@@ -186,7 +183,7 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
             state.ActiveRing = (((state.ActiveRing - 1) + wheel.Rings.Count) % wheel.Rings.Count);
         }
     }
-    private void Arm(SeatState state, BindingWheelView wheel, BindingWheelRingView ring, int hoverSector, string hoverReason) {
+    private void Arm(int slot, SeatState state, BindingWheelView wheel, BindingWheelRingView ring, int hoverSector, string hoverReason) {
         if (!state.Gesture.CanArm) {
             state.CommitArmed = false;
             state.CommitWheel = wheel;
@@ -216,6 +213,7 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
         state.CommitActivation = hovered?.Activation;
         state.CommitLabel = (((hovered is not null) ? SectorCell(
             rowReference: wheel.LabelRow,
+            slot: slot,
             sector: hovered
         ) : null) ?? (hovered?.Command ?? string.Empty));
         state.CommitReason = hoverReason;
@@ -225,35 +223,47 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
     // own id is the cell key, the cell's value is the text or icon name. The rows are ordinary live state, so
     // renaming or re-iconing a sector on screen is a state write — the binding row itself carries no presentation,
     // only what it does and which sector it is.
-    private string? SectorCell(string? rowReference, BindingWheelSectorView sector) {
+    private string? SectorCell(int slot, string? rowReference, BindingWheelSectorView sector) {
+        m_bindings.GetRoutedState(
+            slot: slot,
+            definition: out var definition,
+            tick: out var tick
+        );
+
         return (((sector.Id is { Length: > 0 } sectorId) && WorldStateBindingContext.TryParseRowReference(
             reference: rowReference,
             rowName: out var rowName
         ) && WorldStateReader.TryRead(
-            definition: m_client.Definition,
+            definition: definition,
             key: sectorId,
             rawValue: out _,
             row: out _,
             rowName: rowName,
             text: out var text,
-            tick: m_client.Tick
+            tick: tick
         ))
             ? text
             : null
         );
     }
-    private string? HubLabel(BindingWheelView wheel) {
+    private string? HubLabel(int slot, BindingWheelView wheel) {
+        m_bindings.GetRoutedState(
+            slot: slot,
+            definition: out var definition,
+            tick: out var tick
+        );
+
         return ((WorldStateBindingContext.TryParseRowReference(
             reference: wheel.LabelRow,
             rowName: out var rowName
         ) && WorldStateReader.TryRead(
-            definition: m_client.Definition,
+            definition: definition,
             key: HubLabelKey,
             rawValue: out _,
             row: out _,
             rowName: rowName,
             text: out var text,
-            tick: m_client.Tick
+            tick: tick
         ))
             ? text
             : null
@@ -274,13 +284,22 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
         state.BankedNotches = 0f;
         state.CenterKnown = false;
     }
-    private OverlayWheelSeat BuildSeat(SeatState state, BindingWheelView wheel, in WorldSeatView viewport, int hoverSector, float unit) {
+    private OverlayWheelSeat BuildSeat(int slot, SeatState state, BindingWheelView wheel, in WorldSeatView viewport, int hoverSector, float unit) {
+        m_bindings.GetRoutedState(
+            slot: slot,
+            definition: out var definition,
+            tick: out _
+        );
+
         if (
             !ReferenceEquals(
             objA: state.RingCacheSource,
             objB: wheel
         ) ||
-            (state.RingCacheRevision != m_client.DefinitionRevision)
+            !ReferenceEquals(
+                objA: state.RingCacheDefinition,
+                objB: definition
+            )
         ) {
             var rings = new OverlayWheelRing[wheel.Rings.Count];
 
@@ -294,10 +313,12 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
                     sectors[sectorIndex] = new OverlayWheelSector(
                         Icon: m_icons.ResolveIcon(name: SectorCell(
                             rowReference: wheel.IconRow,
+                            slot: slot,
                             sector: sector
                         )),
                         Label: (SectorCell(
                             rowReference: wheel.LabelRow,
+                            slot: slot,
                             sector: sector
                         ) ?? sector.Command)
                     );
@@ -310,7 +331,7 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
             }
 
             state.RingCache = rings;
-            state.RingCacheRevision = m_client.DefinitionRevision;
+            state.RingCacheDefinition = definition;
             state.RingCacheSource = wheel;
         }
 
@@ -334,7 +355,10 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
             RotationRadians: (wheel.Style.RotationDegrees * (MathF.PI / 180f)),
             Clockwise: wheel.Style.Clockwise,
             Rings: state.RingCache,
-            HubLabel: (HubLabel(wheel: wheel) ?? string.Empty)
+            HubLabel: (HubLabel(
+                slot: slot,
+                wheel: wheel
+            ) ?? string.Empty)
         );
     }
     private static void Close(int slot, SeatState state) {
@@ -537,6 +561,7 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
             var cancelAtNeutral = (state.Gesture.AxisNeutral && (gestureWheel.Style.SelectionGraceSeconds <= 0f));
 
             Arm(
+                slot: slot,
                 state: state,
                 wheel: gestureWheel,
                 ring: gestureWheel.Rings[state.ActiveRing],
@@ -602,7 +627,7 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
 
         Flash(
             outcome: ((outcome.Status == BindingWheelCommitStatus.Dispatched)
-                ? OverlayWheelOutcome.Accepted
+                ? OverlayWheelOutcome.Dispatched
                 : OverlayWheelOutcome.Errored),
             sector: state.CommitSector,
             state: state
@@ -741,9 +766,9 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
                                 x: t,
                                 y: state.FlashEase
                             )),
-                            // An accepted piece stays the hub's subject through the fade, so the hub reads what
-                            // was chosen; a cancel reads the hub's own label.
-                            HoveredSector = ((state.FlashOutcome == OverlayWheelOutcome.Accepted)
+                            // A dispatched piece stays the hub's subject through the fade, so the hub reads what
+                            // was handed off; a cancel reads the hub's own label.
+                            HoveredSector = ((state.FlashOutcome == OverlayWheelOutcome.Dispatched)
                                 ? state.FlashSector
                                 : -1),
                             Outcome = state.FlashOutcome,
@@ -921,11 +946,13 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
                 hoverReason: hoverReason,
                 hoverSector: hoverSector,
                 ring: ring,
+                slot: slot,
                 state: state,
                 wheel: wheel
             );
             var drawn = BuildSeat(
                 hoverSector: hoverSector,
+                slot: slot,
                 state: state,
                 unit: unit,
                 viewport: in viewport,

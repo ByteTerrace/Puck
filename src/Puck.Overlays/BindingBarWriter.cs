@@ -68,6 +68,13 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
         var regionAspect = (regionWidthPx / regionHeightPx);
         var slots = seat.Slots.Span;
 
+        builder.BeginClip(
+            h: regionHeightPx,
+            w: regionWidthPx,
+            x: regionOriginX,
+            y: regionOriginY
+        );
+
         for (var index = 0; (index < slots.Length); index++) {
             var slot = slots[index];
 
@@ -158,10 +165,6 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
             );
         }
 
-        if (modifiers.Length == 0) {
-            return;
-        }
-
         // The producer bounds the count: the feed's per-seat modifier array and this channel's lease reservation are
         // both sized from the document contract's modifier ceiling (WorldBindingBarCapacity.MaxModifiers, crossed as
         // OverlayCapacity.BindingBarMaxModifiers), which the document validator also refuses a composed profile past —
@@ -196,6 +199,8 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
         var hints = seat.Hints.Span;
 
         if (hints.Length == 0) {
+            builder.EndClip();
+
             return;
         }
 
@@ -255,6 +260,8 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
                 y: ((hintBaseY - (((hintCount - 1) - index) * hintLineStep)) - hintCell)
             );
         }
+
+        builder.EndClip();
     }
 
     /// <summary>Emits this frame's per-seat bars, when a snapshot has been published.</summary>

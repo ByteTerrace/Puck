@@ -9,10 +9,11 @@ namespace Puck.Commands;
 /// group table the per-slot resolution scopes to.
 /// </summary>
 /// <remarks>
-/// The two uniqueness rules a document must satisfy, rejected loudly otherwise: exactly one meaning per
-/// <c>(group, ordered chord)</c>, and exactly one resting (empty-chord) page per group — and the resting row must
-/// be a page, since an empty chord has no completion edge to fire a command with. Page ids are unique across the
-/// whole document (they address pages in editors and guided sessions). The first row's group is the default group.
+/// The key uniqueness rules a document must satisfy, rejected loudly otherwise: exactly one meaning per
+/// <c>(group, ordered chord)</c>, exactly one resting (empty-chord) page per group, and no repeated non-null entry id
+/// within an effective page. The resting row must be a page, since an empty chord has no completion edge to fire a
+/// command with. Page ids are unique across the whole document (they address pages in editors and guided sessions).
+/// The first row's group is the default group.
 /// </remarks>
 public static class BindingProfile {
     /// <summary>The command-name prefix a channel destination compiles down to (see
@@ -25,6 +26,10 @@ public static class BindingProfile {
     /// <summary>The group (and resting page id) the empty profile — a document with no chord rows — compiles to.
     /// Anonymous by design: it is the shape a slot with no bindings resolves in, never authored content.</summary>
     public const string EmptyGroup = "$empty";
+    /// <summary>The maximum UTF-16 length of a constant text payload authored on a page entry or chord command.
+    /// The payload is copied into a deterministic input snapshot when its binding fires, so the document gate bounds
+    /// it before it reaches that per-tick transport.</summary>
+    public const int MaxTextPayloadLength = 1024;
 
     private static string ActivatorIdentity(BindingActivatorDefinition activator) => $"{activator.Mode}\0{string.Join(
         separator: ',',
@@ -42,6 +47,7 @@ public static class BindingProfile {
         // BindingSourceComponent) — a case-variant duplicate ("Gamepad.LeftTrigger" vs "gamepad.leftTrigger") is
         // the SAME shadowed activator there and must be refused here too, not admitted as two distinct rows.
         var seenActivatorKeys = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
+        var seenEntryIds = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         for (var entryIndex = 0; (entryIndex < entries.Count); entryIndex++) {
             var entry = (entries[entryIndex]
@@ -49,6 +55,19 @@ public static class BindingProfile {
                 message: $"Page \"{page.Id}\" entry {entryIndex} is null.",
                 paramName: nameof(page)
             ));
+
+            if (
+                (entry.Id is { } entryId) &&
+                (
+                    (entryId.Length == 0) ||
+                    !seenEntryIds.Add(item: entryId)
+                )
+            ) {
+                throw new ArgumentException(
+                    message: $"Page \"{page.Id}\" entry {entryIndex} id \"{entryId}\" must be non-empty and unique within the page.",
+                    paramName: nameof(page)
+                );
+            }
 
             if (
                 !Enum.IsDefined(value: entry.Mode) ||
@@ -77,6 +96,25 @@ public static class BindingProfile {
                     paramName: nameof(page)
                 );
             }
+
+            if (
+                (entry.Text is not null) &&
+                (
+                    (entry.Channel is not null) ||
+                    (entry.ActivateOn is not (null or CommandPhase.Started))
+                )
+            ) {
+                throw new ArgumentException(
+                    message: $"Page \"{page.Id}\" entry for {label} carries text outside a command press — text is only meaningful on a command destination that activates on Started.",
+                    paramName: nameof(page)
+                );
+            }
+
+            ValidateTextPayload(
+                text: entry.Text,
+                path: $"Page \"{page.Id}\" entry for {label}",
+                paramName: nameof(page)
+            );
 
             ValidateValue(
                 value: entry.Value,
@@ -225,7 +263,8 @@ public static class BindingProfile {
                         ReleaseValue: CommandValue.Inactive(kind: pressValue.Kind),
                         Reassertable: ((channelScale is not null) && (entry.Mode == BindingEntryMode.Hold)),
                         Mode: entry.Mode,
-                        Source: BindingSourceIdentity.ForCommand(command: effectiveCommand)
+                        Source: BindingSourceIdentity.ForCommand(command: effectiveCommand),
+                        Text: entry.Text
                     )
                 ));
 
@@ -329,7 +368,9 @@ public static class BindingProfile {
                 // An activator entry has no Sources — its synthetic "activator[...]" label stands in, so a
                 // binding-bar consumer never renders a null/blank chip for it.
                 Source: entry.TriggerLabel,
-                Sources: (entry.Sources ?? [])
+                Sources: ((entry.Sources is { } sources)
+                ? sources.ToImmutableArray()
+                : [])
             );
         }
 
@@ -516,6 +557,29 @@ public static class BindingProfile {
         ) {
             throw new ArgumentException(
                 message: $"{path} Value components must be finite.",
+                paramName: paramName
+            );
+        }
+    }
+    private static void ValidateTextPayload(string? text, string path, string paramName) {
+        if (text is null) {
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(value: text)) {
+            throw new ArgumentException(
+                message: $"{path} text payload must contain a non-whitespace argument.",
+                paramName: paramName
+            );
+        }
+        if (text.Length > MaxTextPayloadLength) {
+            throw new ArgumentException(
+                message: $"{path} text payload exceeds the {MaxTextPayloadLength}-character bound.",
+                paramName: paramName
+            );
+        }
+        if (text.IndexOfAny(anyOf: ['\r', '\n', '\u0085', '\u2028', '\u2029']) >= 0) {
+            throw new ArgumentException(
+                message: $"{path} text payload must be a single line.",
                 paramName: paramName
             );
         }
@@ -800,6 +864,22 @@ public static class BindingProfile {
                         paramName: nameof(document)
                     );
                 }
+
+                if (
+                    (chordCommand.Text is not null) &&
+                    (chordCommand.Channel is not null)
+                ) {
+                    throw new ArgumentException(
+                        message: $"Chord row {rowIndex} (group \"{row.Group}\") carries text on a channel destination — text is only meaningful on a command press.",
+                        paramName: nameof(document)
+                    );
+                }
+
+                ValidateTextPayload(
+                    text: chordCommand.Text,
+                    path: $"Chord row {rowIndex} (group \"{row.Group}\")",
+                    paramName: nameof(document)
+                );
 
                 if (
                     (chordCommand.Mode == BindingEntryMode.Toggle) &&
@@ -1259,6 +1339,7 @@ public static class BindingProfile {
                 }
 
                 var sectorViews = new BindingWheelSectorView[sectorCount];
+                var seenSectorIds = new HashSet<string>(comparer: StringComparer.Ordinal);
 
                 for (var sectorIndex = 0; (sectorIndex < sectorCount); sectorIndex++) {
                     var sector = (ring.Entries![sectorIndex]
@@ -1267,6 +1348,19 @@ public static class BindingProfile {
                         paramName: nameof(document)
                     ));
                     var sectorPath = $"Wheel ring \"{ring.Id}\" (group \"{wheel.Group}\") sector {sectorIndex}";
+
+                    if (
+                        (sector.Id is { } sectorId) &&
+                        (
+                            (sectorId.Length == 0) ||
+                            !seenSectorIds.Add(item: sectorId)
+                        )
+                    ) {
+                        throw new ArgumentException(
+                            message: $"{sectorPath} id \"{sectorId}\" must be non-empty and unique within the ring page.",
+                            paramName: nameof(document)
+                        );
+                    }
 
                     if (string.IsNullOrEmpty(value: sector.Command)) {
                         throw new ArgumentException(
@@ -1304,6 +1398,12 @@ public static class BindingProfile {
                     if (sector.Mode != BindingEntryMode.Hold) {
                         throw new ArgumentException(
                             message: $"{sectorPath} sets mode {sector.Mode} — a sector carries no held state.",
+                            paramName: nameof(document)
+                        );
+                    }
+                    if (sector.Text is not null) {
+                        throw new ArgumentException(
+                            message: $"{sectorPath} carries text — a radial activation carries a value, not a submitted command line.",
                             paramName: nameof(document)
                         );
                     }

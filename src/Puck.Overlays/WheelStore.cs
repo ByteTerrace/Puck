@@ -22,8 +22,10 @@ public readonly record struct OverlayWheelRing(
 public enum OverlayWheelOutcome : byte {
     /// <summary>Nothing decided: the hovered piece (if any) glows in the accent hue.</summary>
     None,
-    /// <summary>A sector's command was dispatched: that piece glows positive while the wheel fades out.</summary>
-    Accepted,
+    /// <summary>A sector's command was handed to the input router: that piece keeps the accent glow while the wheel
+    /// fades out. This is deliberately not an acceptance verdict; a simulation-routed command may still refuse
+    /// later.</summary>
+    Dispatched,
     /// <summary>The gesture cancelled (released over nothing, or revoked): the hub glows danger while the wheel fades out.</summary>
     Cancelled,
     /// <summary>A sector committed but its command could not be dispatched: that piece glows danger while the wheel fades out.</summary>
@@ -68,8 +70,8 @@ public readonly record struct OverlayWheelSeat(
     string HubLabel = "",
     float Fade = 1f
 );
-/// <summary>The per-frame wheel snapshot — one entry per seat whose wheel is currently open (the host owns the
-/// open/close policy; an empty frame draws nothing, so closing is simply not publishing the seat).</summary>
+/// <summary>The per-frame wheel snapshot — one entry per seat whose wheel is open or lingering for its authored
+/// outcome fade. The host owns both lifetimes; an empty frame draws nothing.</summary>
 /// <param name="Seats">The wheel-presenting seats, in slot order.</param>
 public readonly record struct OverlayWheelFrame(
     ReadOnlyMemory<OverlayWheelSeat> Seats

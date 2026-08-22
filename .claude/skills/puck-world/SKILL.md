@@ -303,6 +303,8 @@ choosing fixed-point primitives on sim value paths.
   the document-global CPU/instance-grid ceiling. The separately recorded
   GPU-bound measurement is `0`, but it is not the governing admission term.
 - XInput caps at 4 Xbox-family pads locally; HID pads are uncapped.
-- The overlay reservation's tightest resource is panels (headroom 2) — a
-  HUD capacity bump fails the `Puck.Overlays` build until the leases move
-  with it ([references/hud.md](references/hud.md)).
+- The overlay reservation's tightest resource is text (14,433/16,384 words;
+  1,951 headroom). The other current totals are clips 24/32, elements
+  1,542/2,048, and panels 10/16. A HUD or binding-surface capacity bump fails
+  the `Puck.Overlays` build until the leases move with it
+  ([references/hud.md](references/hud.md)).

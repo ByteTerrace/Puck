@@ -23,8 +23,7 @@ namespace Puck.World;
 /// world's own live document are refused by name (see <c>WorldRowCommandModule.TryComposeRoutedSet</c>), and the
 /// routed cell write always carries the raw token for the destination's compose arm to resolve against ITS row
 /// kinds — this process cannot read them.</remarks>
-internal sealed class WorldRoutedRowCommandModule(PlayerRoster roster, WorldSeatAuthorityRouter seatRouter, IServerLink link, WorldClient client) : ICommandModule {
-    private readonly WorldClient m_client = client;
+internal sealed class WorldRoutedRowCommandModule(PlayerRoster roster, WorldSeatAuthorityRouter seatRouter, IServerLink link) : ICommandModule {
     private readonly IServerLink m_link = link;
     private readonly PlayerRoster m_roster = roster;
     private readonly WorldSeatAuthorityRouter m_seatRouter = seatRouter;
@@ -165,22 +164,6 @@ internal sealed class WorldRoutedRowCommandModule(PlayerRoster roster, WorldSeat
                 var key = args[1].ToString();
                 var a = args[2].ToString();
                 var b = args[3].ToString();
-                // The flip reads the live document: the cell currently AT <a> goes to <b>; anything else goes to <a>.
-                var atA = (WorldStateReader.TryRead(
-                    definition: m_client.Definition,
-                    key: key,
-                    rawValue: out var raw,
-                    row: out var stateRow,
-                    rowName: row,
-                    text: out _,
-                    tick: m_client.Tick
-                ) && (raw is { } current) && WorldStateCellWriter.TryParseNumericToken(
-                    kind: stateRow.Kind,
-                    reason: out _,
-                    token: a,
-                    value: out var rawA
-                ) && (current == rawA));
-
                 return Route(
                     context: context,
                     described: $"state cell '{row}'.'{key}' toggle",
@@ -191,9 +174,8 @@ internal sealed class WorldRoutedRowCommandModule(PlayerRoster roster, WorldSeat
                         Key: key,
                         Value: 0L,
                         Kind: WorldDocumentWriteKind.Set,
-                        RawToken: (atA
-                            ? b
-                            : a)
+                        RawToken: a,
+                        AlternateRawToken: b
                     ),
                     verb: "player.state.cell.toggle"
                 );

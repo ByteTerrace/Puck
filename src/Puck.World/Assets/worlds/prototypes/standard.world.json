@@ -214,8 +214,9 @@
               "actionWheel"
             ],
             "command": {
-              "command": "player.look.swap",
-              "label": "Look behind"
+              "command": "player.state.cell.toggle",
+              "label": "Look behind",
+              "text": "look behind 0 3.14159265"
             },
             "group": "state.bindingGroups.defaultActionGroup"
           },
@@ -291,8 +292,9 @@
               "actionWheel"
             ],
             "command": {
-              "command": "player.look.swap",
-              "label": "Look behind"
+              "command": "player.state.cell.toggle",
+              "label": "Look behind",
+              "text": "look behind 0 3.14159265"
             },
             "group": "state.bindingGroups.defaultActionGroup"
           },
@@ -413,27 +415,23 @@
                 "entries": [
                   {
                     "command": "console",
-                    "icon": "edit.op",
-                    "label": "Console",
-                    "sources": null
+                    "id": "console",
+                    "sources": []
                   },
                   {
                     "command": "player.camera",
-                    "icon": "view.freeCam",
-                    "label": "Free Cam",
-                    "sources": null
+                    "id": "freeCam",
+                    "sources": []
                   },
                   {
                     "command": "player.where",
-                    "icon": "action.target",
-                    "label": "Where",
-                    "sources": null
+                    "id": "where",
+                    "sources": []
                   },
                   {
                     "command": "player.disengage",
-                    "icon": "edit.exit",
-                    "label": "Disengage",
-                    "sources": null
+                    "id": "disengage",
+                    "sources": []
                   }
                 ],
                 "icon": null,
@@ -446,7 +444,9 @@
               "placement": "ViewportCenter",
               "selectionGraceSeconds": 0.13,
               "switchFraction": 0.4
-            }
+            },
+            "labelRow": "state.wheelLabels",
+            "iconRow": "state.actionIcons"
           }
         ]
       },
@@ -904,6 +904,76 @@
         ],
         "kind": "text",
         "name": "bindingGroups"
+      },
+      {
+        "cells": [
+          {
+            "key": "viewChase",
+            "value": "action.target"
+          },
+          {
+            "key": "viewRts",
+            "value": "edit.place"
+          },
+          {
+            "key": "console",
+            "value": "edit.op"
+          },
+          {
+            "key": "freeCam",
+            "value": "view.freeCam"
+          },
+          {
+            "key": "where",
+            "value": "action.target"
+          },
+          {
+            "key": "disengage",
+            "value": "edit.exit"
+          }
+        ],
+        "kind": "text",
+        "name": "actionIcons"
+      },
+      {
+        "cells": [
+          {
+            "key": "viewChase",
+            "value": "View Chase"
+          },
+          {
+            "key": "viewRts",
+            "value": "View RTS"
+          },
+          {
+            "key": "console",
+            "value": "Console"
+          },
+          {
+            "key": "freeCam",
+            "value": "Free Cam"
+          },
+          {
+            "key": "where",
+            "value": "Where"
+          },
+          {
+            "key": "disengage",
+            "value": "Disengage"
+          }
+        ],
+        "kind": "text",
+        "name": "wheelLabels"
+      },
+      {
+        "cells": [
+          {
+            "key": "behind",
+            "value": "0"
+          }
+        ],
+        "kind": "fixed",
+        "name": "look"
       }
     ]
   },
@@ -941,7 +1011,7 @@
             0,
             0
           ],
-          "yaw": 0
+          "yaw": "state.look.behind"
         },
         {
           "$type": "lookAt",

@@ -745,6 +745,18 @@ public sealed class WorldEventFeed {
 
         return true;
     }
+    /// <summary>Reports whether one body is inside a placement's region as of this tick's collection.</summary>
+    /// <param name="placementId">The placement carrying the region facet.</param>
+    /// <param name="body">The body's 0-based entity index.</param>
+    /// <returns><see langword="true"/> when the body is an occupant.</returns>
+    public bool IsOccupant(string placementId, int body) => (
+        m_regionOccupancy.TryGetValue(
+            key: placementId,
+            value: out var occupancy
+        ) &&
+        (((uint)body) < ((uint)occupancy.Length)) &&
+        occupancy[body]
+    );
     /// <summary>Returns the live occupant count of the placement region named <paramref name="placementId"/> as of the most
     /// recent <see cref="Collect"/> — the same per-(region, body) occupancy the region pass already tracks for the
     /// addon events feed, read directly for a world rule's <c>$region:&lt;id&gt;</c> reserved channel (see

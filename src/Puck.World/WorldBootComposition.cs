@@ -697,7 +697,6 @@ internal static class WorldBootComposition {
         // the feed.
         services.AddSingleton<WheelStore>();
         services.AddSingleton(implementationFactory: static sp => new WorldWheelFeed(
-            client: sp.GetRequiredService<WorldClient>(),
             icons: sp.GetRequiredService<WorldIconTable>(),
             pointer: sp.GetRequiredService<WorldPointer>(),
             roster: sp.GetRequiredService<PlayerRoster>(),
@@ -755,7 +754,6 @@ internal static class WorldBootComposition {
         services.AddSingleton(implementationFactory: static sp => new WorldOverlayFeed(
             bindingBar: sp.GetRequiredService<WorldBindingBarControl>(),
             bindings: sp.GetRequiredService<WorldSeatBindings>(),
-            client: sp.GetRequiredService<WorldClient>(),
             gamepads: sp.GetService<GamepadManager>(),
             icons: sp.GetRequiredService<WorldIconTable>(),
             roster: sp.GetRequiredService<PlayerRoster>(),

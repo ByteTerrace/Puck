@@ -48,8 +48,8 @@ public sealed class WorldCameraProgramValidationLawTests {
             new WorldCameraProgramOp.ClampPitch(MinPitch: -1f, MaxPitch: 1f),
             new WorldCameraProgramOp.Orbit(
                 Distance: 4f,
-                Yaw: 0.25f,
-                Pitch: 0.5f,
+                Yaw: new BindableScalar(literal: 0.25f),
+                Pitch: new BindableScalar(literal: 0.5f),
                 PivotOffset: new DocumentVector3(x: 0f, y: 1f, z: 0f)
             ),
             new WorldCameraProgramOp.LookAt(
@@ -75,7 +75,7 @@ public sealed class WorldCameraProgramValidationLawTests {
             actual: rig.Operations.Select(selector: static op => op.Opcode),
             expected: ["anchor", "clampPitch", "orbit", "lookAt", "fov", "smooth"]
         );
-        Assert.Equal(expected: 0.5f, actual: rig.OrbitOp!.Pitch);
+        Assert.Equal(expected: 0.5f, actual: rig.OrbitOp!.Pitch.Literal);
         Assert.Equal(expected: 3f, actual: rig.SmoothOp!.Rate);
         Assert.Equal(expected: new Vector3(x: 1f, y: 2f, z: 3f), actual: ((WorldCameraSubject.WorldPoint)rig.AnchorOp!.Subject).Point.Value);
     }
@@ -162,12 +162,12 @@ public sealed class WorldCameraProgramValidationLawTests {
         control: Program(
             "probe-rig",
             new WorldCameraProgramOp.ClampPitch(MinPitch: -1f, MaxPitch: 1f),
-            new WorldCameraProgramOp.Orbit(Distance: 4f, Yaw: 0f, Pitch: 0f),
+            new WorldCameraProgramOp.Orbit(Distance: 4f, Yaw: new BindableScalar(literal: 0f), Pitch: new BindableScalar(literal: 0f)),
             Fov()
         ),
         denied: Program(
             "probe-rig",
-            new WorldCameraProgramOp.Orbit(Distance: 4f, Yaw: 0f, Pitch: 0f),
+            new WorldCameraProgramOp.Orbit(Distance: 4f, Yaw: new BindableScalar(literal: 0f), Pitch: new BindableScalar(literal: 0f)),
             new WorldCameraProgramOp.ClampPitch(MinPitch: -1f, MaxPitch: 1f),
             Fov()
         ),
@@ -181,8 +181,8 @@ public sealed class WorldCameraProgramValidationLawTests {
     );
     [Fact]
     public void ANonPositiveOrbitDistanceIsRefusedByName() => Refuses(
-        control: Program("probe-rig", new WorldCameraProgramOp.Orbit(Distance: 4f, Yaw: 0f, Pitch: 0f), Fov()),
-        denied: Program("probe-rig", new WorldCameraProgramOp.Orbit(Distance: 0f, Yaw: 0f, Pitch: 0f), Fov()),
+        control: Program("probe-rig", new WorldCameraProgramOp.Orbit(Distance: 4f, Yaw: new BindableScalar(literal: 0f), Pitch: new BindableScalar(literal: 0f)), Fov()),
+        denied: Program("probe-rig", new WorldCameraProgramOp.Orbit(Distance: 0f, Yaw: new BindableScalar(literal: 0f), Pitch: new BindableScalar(literal: 0f)), Fov()),
         expected: ".distance must be positive and finite"
     );
     [Fact]

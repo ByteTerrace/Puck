@@ -64,6 +64,119 @@ public sealed class BindingProfileValidationTests {
             ReleaseThreshold: float.PositiveInfinity
         )));
     }
+    [Fact]
+    public void EntryIdsMustBeNonEmptyAndUniqueWithinTheirEffectivePage() {
+        _ = Assert.Throws<ArgumentException>(testCode: static () => BindingProfile.Compile(document: DocumentWithEntries(
+            new BindingPageEntryDefinition(Sources: ["key.a"], Command: "action", Id: string.Empty)
+        )));
+        _ = Assert.Throws<ArgumentException>(testCode: static () => BindingProfile.Compile(document: DocumentWithEntries(
+            new BindingPageEntryDefinition(Sources: ["key.a"], Command: "action", Id: "choice"),
+            new BindingPageEntryDefinition(Sources: ["key.b"], Command: "action", Id: "choice")
+        )));
+        _ = Assert.Throws<ArgumentException>(testCode: static () => BindingProfile.Compile(document: DocumentWithWheel(
+            new BindingPageEntryDefinition(Sources: null, Command: "action", Id: "choice"),
+            new BindingPageEntryDefinition(Sources: null, Command: "action", Id: "choice")
+        )));
+    }
+    [Fact]
+    public void TextIsRefusedWhereNoCommandPressCanDeliverIt() {
+        _ = Assert.Throws<ArgumentException>(testCode: static () => BindingProfile.Compile(document: Document(
+            modifiers: [],
+            entry: new BindingPageEntryDefinition(
+                Sources: ["key.a"],
+                Channel: new ChannelRef.Name(Value: "move"),
+                Text: "left"
+            )
+        )));
+        _ = Assert.Throws<ArgumentException>(testCode: static () => BindingProfile.Compile(document: Document(
+            modifiers: [],
+            entry: new BindingPageEntryDefinition(
+                Sources: ["key.a"],
+                Command: "action",
+                ActivateOn: CommandPhase.Completed,
+                Text: "argument"
+            )
+        )));
+        _ = Assert.Throws<ArgumentException>(testCode: static () => BindingProfile.Compile(document: new BindingProfileDocument(
+            Version: BindingProfileDocument.CurrentVersion,
+            Modifiers: [new BindingModifierDefinition(Id: "shift", Sources: ["key.shift"])],
+            Chords: [
+                new BindingChordDefinition(
+                    Group: "play",
+                    Chord: [],
+                    Page: new BindingPageDefinition(Id: "base", Entries: [])
+                ),
+                new BindingChordDefinition(
+                    Group: "play",
+                    Chord: ["shift"],
+                    Command: new BindingCommandDefinition(
+                        Channel: new ChannelRef.Name(Value: "move"),
+                        Text: "left"
+                    )
+                ),
+            ]
+        )));
+        _ = Assert.Throws<ArgumentException>(testCode: static () => BindingProfile.Compile(document: DocumentWithWheel(
+            new BindingPageEntryDefinition(Sources: null, Command: "action", Text: "argument"),
+            new BindingPageEntryDefinition(Sources: null, Command: "action")
+        )));
+    }
+    [Fact]
+    public void TextPayloadsMustBeNonblankSingleLineAndBounded() {
+        foreach (var text in new[] {
+            string.Empty,
+            " \t ",
+            "first\rsecond",
+            "first\nsecond",
+            "first\u0085second",
+            "first\u2028second",
+            "first\u2029second",
+            new string(c: 'a', count: (BindingProfile.MaxTextPayloadLength + 1)),
+        }) {
+            _ = Assert.Throws<ArgumentException>(testCode: () => BindingProfile.Compile(document: Document(
+                modifiers: [],
+                entry: new BindingPageEntryDefinition(
+                    Sources: ["key.a"],
+                    Command: "action",
+                    Text: text
+                )
+            )));
+        }
+
+        _ = Assert.Throws<ArgumentException>(testCode: static () => BindingProfile.Compile(document: new BindingProfileDocument(
+            Version: BindingProfileDocument.CurrentVersion,
+            Modifiers: [new BindingModifierDefinition(Id: "shift", Sources: ["key.shift"])],
+            Chords: [
+                new BindingChordDefinition(
+                    Group: "play",
+                    Chord: [],
+                    Page: new BindingPageDefinition(Id: "base", Entries: [])
+                ),
+                new BindingChordDefinition(
+                    Group: "play",
+                    Chord: ["shift"],
+                    Command: new BindingCommandDefinition(Command: "action", Text: "first\nsecond")
+                ),
+            ]
+        )));
+    }
+    [Fact]
+    public void TextPayloadPreservesOuterWhitespaceAndTreatsSeparatorsAsArguments() {
+        const string text = "  first; second && third | fourth  ";
+        var profile = BindingProfile.Compile(document: Document(
+            modifiers: [],
+            entry: new BindingPageEntryDefinition(
+                Sources: ["key.a"],
+                Command: "action",
+                Text: text
+            )
+        ));
+
+        Assert.Equal(
+            expected: text,
+            actual: Assert.Single(collection: new PagedInputBindings(profile: profile).Resolve(slot: 0, source: "key.a")!).Text
+        );
+    }
 
     private static BindingProfileDocument Document(
         IReadOnlyList<BindingModifierDefinition> modifiers,
@@ -76,6 +189,34 @@ public sealed class BindingProfileValidationTests {
                 Group: "play",
                 Chord: [],
                 Page: new BindingPageDefinition(Id: "base", Entries: [entry])
+            )]
+        );
+    }
+    private static BindingProfileDocument DocumentWithEntries(params BindingPageEntryDefinition[] entries) {
+        return new BindingProfileDocument(
+            Version: BindingProfileDocument.CurrentVersion,
+            Modifiers: [],
+            Chords: [new BindingChordDefinition(
+                Group: "play",
+                Chord: [],
+                Page: new BindingPageDefinition(Id: "base", Entries: entries)
+            )]
+        );
+    }
+    private static BindingProfileDocument DocumentWithWheel(params BindingPageEntryDefinition[] sectors) {
+        return new BindingProfileDocument(
+            Version: BindingProfileDocument.CurrentVersion,
+            Modifiers: [],
+            Chords: [new BindingChordDefinition(
+                Group: "play",
+                Chord: [],
+                Page: new BindingPageDefinition(Id: "hold", Entries: [])
+            )],
+            Wheels: [new BindingWheelDefinition(
+                Id: "wheel",
+                Group: "play",
+                HoldPages: ["hold"],
+                Rings: [new BindingPageDefinition(Id: "ring", Entries: sectors)]
             )]
         );
     }

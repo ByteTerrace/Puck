@@ -18,6 +18,8 @@ namespace Puck.Commands;
 /// <param name="Held">Whether the command is a HELD verb — its handler reads the phase, active on Started/Active
 /// and released on Completed/Canceled — so a plain-bound entry (no <c>activateOn</c>) delivers both edges, exactly
 /// as a channel destination does; an author binds it once and never authors a release twin.</param>
+/// <param name="AcceptsWireArgs">Whether the command accepts trailing wire arguments — required when a binding row
+/// carries <see cref="BindingPageEntryDefinition.Text"/>.</param>
 public readonly record struct CommandMetadata(
     string Name,
     CommandValueKind ValueKind,
@@ -25,5 +27,6 @@ public readonly record struct CommandMetadata(
     CommandBindability Bindability,
     CommandInputScope InputScope = CommandInputScope.Focused,
     string Map = CommandMaps.Global,
-    bool Held = false
+    bool Held = false,
+    bool AcceptsWireArgs = false
 );

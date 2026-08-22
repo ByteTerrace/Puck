@@ -8,8 +8,8 @@ namespace Puck.World;
 /// <summary>Evaluates <see cref="OverlayPredicate"/>s per local seat over the presentation facts an overlay element
 /// may read (<see cref="OverlayFact"/>). Facts come straight from their owners each evaluation — nothing is
 /// duplicated here — except the recency clocks, which remember the last tick each fact held. Simulation ticks
-/// (<see cref="WorldServer.NextInputTick"/>) are the time base, so a window in seconds compiles through
-/// <see cref="WorldSimulationTickConversion.CompiledDuration"/> exactly as an action's does.</summary>
+/// (<see cref="WorldServer.NextInputTick"/>) are the time base; presentation converts the elapsed integer tick
+/// distance to seconds only when resolving a fade.</summary>
 internal sealed class WorldOverlayFacts {
     private static readonly int FactCount = Enum.GetValues<OverlayFact>().Length;
 
@@ -121,7 +121,9 @@ internal sealed class WorldOverlayFacts {
             return 0f;
         }
 
-        var elapsedSeconds = (((float)(CompletedTick - lastHeldTick)) / rate);
+        // Keep the tick delta exact before converting to double. A float loses single-tick resolution after roughly
+        // 19 hours at 240 Hz, making short fades stick or jump during an ordinary long-running host session.
+        var elapsedSeconds = (((double)(CompletedTick - lastHeldTick)) / rate);
 
         if (elapsedSeconds < windowSeconds) {
             return 1f;
@@ -131,10 +133,10 @@ internal sealed class WorldOverlayFacts {
             return 0f;
         }
 
-        return Math.Clamp(
-            max: 1f,
-            min: 0f,
-            value: (1f - ((elapsedSeconds - windowSeconds) / fadeSeconds))
+        return (float)Math.Clamp(
+            max: 1.0,
+            min: 0.0,
+            value: (1.0 - ((elapsedSeconds - windowSeconds) / fadeSeconds))
         );
     }
     /// <summary>Evaluates a predicate's PRESENCE for one seat: 1 while it fully holds, 0 when it does not, and the

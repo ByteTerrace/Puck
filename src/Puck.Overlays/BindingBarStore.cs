@@ -10,8 +10,8 @@ namespace Puck.Overlays;
 /// <see cref="CategoryIndex"/>/<see cref="CategoryCount"/> are the geometry inputs the writer feeds
 /// <see cref="BindingBarLayout.Place"/> (the region's pixel aspect is a write-time fact, so the placement itself is
 /// resolved there, not here), and <see cref="BankOrder"/>/<see cref="BankOffsetOverride"/> carry that slot's owning
-/// bank's place in the stack — the writer derives the displacement from the live theme's spacing grid
-/// (<see cref="BindingBarLayout.BankOffset"/>) unless the override answers.</summary>
+/// bank's place in the stack — the writer derives the displacement from
+/// <see cref="BindingBarLayout.BankOffset"/>'s nested-cross table unless the override answers.</summary>
 /// <param name="BadgeGlyph0">The physical-button badge's first (or only) atlas glyph index — already family- and
 /// world-icon-table-resolved, 1-based, 0 = no badge (see <see cref="OverlayFrameBuilder.WriteIcon"/>).</param>
 /// <param name="BadgeGlyph1">The badge's second atlas glyph index (a 2-character label's second cell), 1-based,

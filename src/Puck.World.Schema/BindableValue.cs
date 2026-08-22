@@ -1,6 +1,7 @@
 using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Puck.Abstractions.Documents;
 using Puck.Forge.Authoring;
 using Puck.Maths;
 
@@ -225,7 +226,12 @@ public sealed class BindableColorJsonConverter : JsonConverter<BindableColor> {
     public override void Write(Utf8JsonWriter writer, BindableColor value, JsonSerializerOptions options) => writer.WriteStringValue(value: value.Raw);
 }
 /// <summary>Reads/writes <see cref="BindableScalar"/> as a JSON number (literal) or string (binding).</summary>
-public sealed class BindableScalarJsonConverter : JsonConverter<BindableScalar> {
+public sealed class BindableScalarJsonConverter : JsonConverter<BindableScalar>, IJsonSchemaTypeConverter {
+    private static readonly string[] AcceptedSchemaTypes = ["number", "string"];
+
+    /// <inheritdoc/>
+    public IReadOnlyList<string> SchemaTypes => AcceptedSchemaTypes;
+
     /// <inheritdoc/>
     public override BindableScalar Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
         if (reader.TokenType == JsonTokenType.Number) {

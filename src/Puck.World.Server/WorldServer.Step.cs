@@ -141,37 +141,184 @@ public sealed partial class WorldServer {
         }
 
         foreach (var rule in rules) {
-            var open = RuleGateOpen(
-                gate: rule.Gate,
+            if (rule.Interaction is { } interaction) {
+                applied |= EvaluateInteraction(
+                    interaction: interaction,
+                    latch: latch,
+                    rule: rule,
+                    stepTicks: stepTicks,
+                    tick: tick
+                );
+
+                continue;
+            }
+
+            if (rule.ForEach is { } forEach) {
+                // The keys are snapshotted before the first evaluation, so an effect minting a cell (a status
+                // applied to a new carrier) starts ticking next tick, never mid-iteration.
+                foreach (var key in CarrierKeys(row: forEach)) {
+                    m_boundEach = key;
+                    applied |= EvaluateOnce(
+                        latch: latch,
+                        latchKey: $"{rule.Name}#{key}",
+                        rule: rule,
+                        stepTicks: stepTicks,
+                        tick: tick
+                    );
+                }
+
+                m_boundEach = -1;
+
+                continue;
+            }
+
+            applied |= EvaluateOnce(
+                latch: latch,
+                latchKey: rule.Name,
+                rule: rule,
+                stepTicks: stepTicks,
                 tick: tick
             );
-            var wasOpen = latch.GetValueOrDefault(key: rule.Name);
+        }
 
-            latch[rule.Name] = open;
+        return applied;
+    }
+    // One gate-and-fire under the bindings already in place. EDGE fires on the CROSSING alone and re-arms only when
+    // the gate closes again; LEVEL fires every tick the gate holds — one vocabulary, the same ActionTriggerMode a
+    // per-body fact trigger reads. The latch is per evaluation key (a bound body or pair), never per rule alone.
+    private bool EvaluateOnce(CompiledWorldRule rule, Dictionary<string, bool> latch, string latchKey, ulong tick, ulong stepTicks) {
+        var open = RuleGateOpen(
+            gate: rule.Gate,
+            tick: tick
+        );
+        var wasOpen = latch.GetValueOrDefault(key: latchKey);
 
-            if (!open) {
-                continue;
-            }
+        latch[latchKey] = open;
 
-            // EDGE fires on the CROSSING alone and re-arms only when the gate closes again; LEVEL fires every tick
-            // the gate holds. One vocabulary, the same ActionTriggerMode a per-body fact trigger reads.
-            if (
-                (rule.Mode == ActionTriggerMode.Edge) &&
-                wasOpen
-            ) {
-                continue;
-            }
+        if (
+            !open ||
+            ((rule.Mode == ActionTriggerMode.Edge) && wasOpen)
+        ) {
+            return false;
+        }
 
-            foreach (var effect in rule.Effects) {
-                applied |= FireWorldRuleEffect(
-                    effect: effect,
+        var applied = false;
+
+        foreach (var effect in rule.Effects) {
+            applied |= FireWorldRuleEffect(
+                effect: effect,
+                stepTicks: stepTicks,
+                tick: tick
+            );
+        }
+
+        return applied;
+    }
+    // Every (left carrier, right carrier) pair within range, or every left carrier inside the region, fires the
+    // interaction once with left/right bound — the chemistry is evaluated over all carriers, never one argmax pair.
+    private bool EvaluateInteraction(CompiledWorldRule rule, CompiledInteraction interaction, Dictionary<string, bool> latch, ulong tick, ulong stepTicks) {
+        var applied = false;
+        var lefts = Carriers(
+            row: interaction.Left,
+            tick: tick
+        );
+
+        if (interaction.CoOccurrence == WorldInteractionCoOccurrence.Region) {
+            foreach (var left in lefts) {
+                if (!m_events.IsOccupant(
+                    body: left,
+                    placementId: interaction.Right
+                )) {
+                    continue;
+                }
+
+                m_boundLeft = left;
+                m_boundRight = -1;
+                applied |= EvaluateOnce(
+                    latch: latch,
+                    latchKey: $"{rule.Name}#{left}",
+                    rule: rule,
                     stepTicks: stepTicks,
                     tick: tick
                 );
             }
+        } else {
+            var rights = Carriers(
+                row: interaction.Right,
+                tick: tick
+            );
+
+            foreach (var left in lefts) {
+                if (Body(index: left) is not { } leftBody) {
+                    continue;
+                }
+
+                foreach (var right in rights) {
+                    if (
+                        (right == left) ||
+                        (Body(index: right) is not { } rightBody) ||
+                        ((rightBody.FixedPosition - leftBody.FixedPosition).Length > interaction.Range)
+                    ) {
+                        continue;
+                    }
+
+                    m_boundLeft = left;
+                    m_boundRight = right;
+                    applied |= EvaluateOnce(
+                        latch: latch,
+                        latchKey: $"{rule.Name}#{left}#{right}",
+                        rule: rule,
+                        stepTicks: stepTicks,
+                        tick: tick
+                    );
+                }
+            }
         }
 
+        m_boundLeft = -1;
+        m_boundRight = -1;
+
         return applied;
+    }
+    // The integer keys a keyed row holds at this moment, ascending — the iteration set of a forEach rule.
+    private List<int> CarrierKeys(string row) {
+        var keys = new List<int>();
+
+        if (WorldDefinitionRows.FindStateRow(
+            rows: m_definition.State,
+            name: row
+        ) is { Cells: { } cells }) {
+            foreach (var cell in cells) {
+                if (int.TryParse(
+                    s: cell.Key,
+                    style: System.Globalization.NumberStyles.Integer,
+                    provider: System.Globalization.CultureInfo.InvariantCulture,
+                    result: out var key
+                ) && (key >= 0)) {
+                    keys.Add(item: key);
+                }
+            }
+        }
+
+        keys.Sort();
+
+        return keys;
+    }
+    // The active bodies whose cell in a keyed tag row reads nonzero, ascending.
+    private List<int> Carriers(string row, ulong tick) {
+        var carriers = CarrierKeys(row: row);
+
+        carriers.RemoveAll(match: index => (
+            (index >= m_population.Capacity) ||
+            (Body(index: index) is null) ||
+            (ReadStateCell(
+                row: row,
+                key: index.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
+                tick: tick
+            ) == FixedQ4816.Zero)
+        ));
+
+        return carriers;
     }
     // Evaluates every compiled rule's gate and fires its effects, in DOCUMENT ORDER — then every compiled
     // INTERACTION's, same terms, AFTER every rule. That ordering (rules, then interactions, each internally in
@@ -230,7 +377,10 @@ public sealed partial class WorldServer {
         }
 
         if (effect.Kind == WorldRuleEffectKind.Pose) {
-            FirePoseEffect(effect: effect);
+            FirePoseEffect(
+                effect: effect,
+                tick: tick
+            );
 
             return false;
         }
@@ -436,9 +586,13 @@ public sealed partial class WorldServer {
     // Body state, not document state: the same WorldBody.Pose door ApplyCommand's SnapPose arm (player.pose) uses,
     // but as the world's own act — no drive-gate or grant check, since a gated body is one a rule still needs to
     // move.
-    private void FirePoseEffect(CompiledWorldEffect effect) {
+    private void FirePoseEffect(CompiledWorldEffect effect, ulong tick) {
         var bodyIndex = int.Parse(
-            s: effect.Key,
+            s: ResolveOperandKey(
+                key: effect.Key,
+                keyFrom: effect.KeyFrom,
+                tick: tick
+            ),
             provider: System.Globalization.CultureInfo.InvariantCulture
         );
 
@@ -492,9 +646,16 @@ public sealed partial class WorldServer {
             _ = live.Add(item: rule.Name);
         }
 
-        foreach (var name in latch.Keys.ToArray()) {
+        // A per-binding latch is keyed "<name>#<body>" or "<name>#<left>#<right>" and lives with its rule.
+        foreach (var key in latch.Keys.ToArray()) {
+            var hash = key.IndexOf(value: '#');
+            var name = ((hash < 0)
+                ? key
+                : key[..hash]
+            );
+
             if (!live.Contains(item: name)) {
-                _ = latch.Remove(key: name);
+                _ = latch.Remove(key: key);
             }
         }
     }

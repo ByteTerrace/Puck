@@ -3,17 +3,12 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
-/// <summary>Pins the icon referential-integrity contract to EVERY icon-bearing door a composed binding profile
-/// carries — the page and its entries, a modifier, and a wheel ring's sectors — not only the page-entry door: when
-/// the document authors an <c>icons</c> section, an authored icon string that names no row refuses by name, and the
-/// same door with a declared icon passes.</summary>
+/// <summary>Pins the icon referential-integrity contract to every icon-bearing door a composed binding profile
+/// carries directly — pages and modifiers — and pins the state-backed presentation-row gate used by entries and
+/// wheel sectors.</summary>
 public sealed class BindingIconReferentialIntegrityLawTests {
     private const string KnownIcon = "known.icon";
     private const string TypoIcon = "no.such.icon";
-
-    [Fact]
-    public void WheelSectorIconTypoRefusesWhileDeclaredIconPasses() =>
-        AssertDoorRefusesTypo(door: "wheel", document: WheelDocument);
 
     [Fact]
     public void ModifierIconTypoRefusesWhileDeclaredIconPasses() =>
@@ -24,8 +19,20 @@ public sealed class BindingIconReferentialIntegrityLawTests {
         AssertDoorRefusesTypo(door: "page", document: PageDocument);
 
     [Fact]
-    public void PageEntryIconTypoRefusesWhileDeclaredIconPasses() =>
-        AssertDoorRefusesTypo(door: "entry", document: PageEntryDocument);
+    public void WheelPresentationRowsRefuseUnknownWrongKindAndMissingSectorIdentity() {
+        var unknown = WithBindingDocument(document: WheelPresentationDocument(labelRow: "state.noSuch", iconRow: null, sectorId: "jump"));
+        var numeric = WithBindingDocument(document: WheelPresentationDocument(labelRow: null, iconRow: "state.numericPresentation", sectorId: "jump"));
+        var missingId = WithBindingDocument(document: WheelPresentationDocument(labelRow: "state.presentation", iconRow: null, sectorId: null));
+        var admitted = WithBindingDocument(document: WheelPresentationDocument(labelRow: "state.presentation", iconRow: "state.presentation", sectorId: "jump"));
+
+        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: unknown, neighbours: null, reason: out var unknownReason));
+        Assert.Contains(actualString: unknownReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "wheels row 0.labelRow 'state.noSuch' names no declared state row");
+        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: numeric, neighbours: null, reason: out var numericReason));
+        Assert.Contains(actualString: numericReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "wheels row 0.iconRow 'state.numericPresentation' names a Int row");
+        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: missingId, neighbours: null, reason: out var missingIdReason));
+        Assert.Contains(actualString: missingIdReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "wheels row 0.rings[0].entries[0].id is required");
+        Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: admitted, neighbours: null, reason: out var controlReason), userMessage: controlReason);
+    }
 
     private static void AssertDoorRefusesTypo(string door, Func<string, BindingProfileDocument> document) {
         var denied = WithBindingDocument(document: document(TypoIcon));
@@ -38,6 +45,10 @@ public sealed class BindingIconReferentialIntegrityLawTests {
     }
 
     private static WorldDefinition WithBindingDocument(BindingProfileDocument document) => Fixtures.BuildDocument() with {
+        StateRaw = new WorldStateSection(World: [
+            new WorldStateRow(Name: WorldCellName.Parse(candidate: "presentation"), Kind: CellKind.Text, Capacity: 8, Cells: [new WorldStateCell(Key: WorldCellName.Parse(candidate: "jump"), Text: KnownIcon)]),
+            new WorldStateRow(Name: WorldCellName.Parse(candidate: "numericPresentation"), Kind: CellKind.Int, Capacity: 8),
+        ]),
         IconsRaw = new WorldIconographySection(
             IconsRaw: [new WorldIconRow(Name: KnownIcon, Glyph: new WorldIconGlyphRef(Font: WorldIconFontCatalog.JetBrainsMonoRegular, Glyph: "U+2191"))]
         ),
@@ -53,11 +64,6 @@ public sealed class BindingIconReferentialIntegrityLawTests {
         Modifiers: [],
         Chords: [RestingPage(icon: icon)]
     );
-    private static BindingProfileDocument PageEntryDocument(string icon) => new(
-        Version: BindingProfileDocument.CurrentVersion,
-        Modifiers: [],
-        Chords: [RestingPage(entries: [new BindingPageEntryDefinition(Sources: ["gamepad.buttonSouth"], Command: "act.jump", Icon: icon)])]
-    );
     private static BindingProfileDocument ModifierDocument(string icon) => new(
         Version: BindingProfileDocument.CurrentVersion,
         Modifiers: [new BindingModifierDefinition(Id: "tab", Sources: ["keyboard.tab"], Icon: icon)],
@@ -66,7 +72,7 @@ public sealed class BindingIconReferentialIntegrityLawTests {
             new BindingChordDefinition(Group: "play", Chord: ["tab"], Page: new BindingPageDefinition(Id: "tab-page", Entries: [])),
         ]
     );
-    private static BindingProfileDocument WheelDocument(string icon) => new(
+    private static BindingProfileDocument WheelPresentationDocument(string? labelRow, string? iconRow, string? sectorId) => new(
         Version: BindingProfileDocument.CurrentVersion,
         Modifiers: [new BindingModifierDefinition(Id: "tab", Sources: ["keyboard.tab"])],
         Chords: [
@@ -82,11 +88,13 @@ public sealed class BindingIconReferentialIntegrityLawTests {
                     new BindingPageDefinition(
                         Id: "primary-ring",
                         Entries: [
-                            new BindingPageEntryDefinition(Sources: null, Command: "act.a", Icon: icon),
-                            new BindingPageEntryDefinition(Sources: null, Command: "act.b"),
+                            new BindingPageEntryDefinition(Sources: null, Command: "act.a", Id: sectorId),
+                            new BindingPageEntryDefinition(Sources: null, Command: "act.b", Id: "other"),
                         ]
                     ),
-                ]
+                ],
+                LabelRow: labelRow,
+                IconRow: iconRow
             ),
         ]
     );

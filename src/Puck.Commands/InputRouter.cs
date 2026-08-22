@@ -347,6 +347,7 @@ public sealed class InputRouter {
                 state.Entry = (entry with {
                     Dispatch = false,
                     Phase = CommandPhase.Active,
+                    Text = null,
                 });
                 state.HasEntry = true;
             } else if (
@@ -761,6 +762,7 @@ public sealed class InputRouter {
                         entry: entry with {
                             Dispatch = true,
                             Phase = CommandPhase.Active,
+                            Text = null,
                         },
                         slot: slot
                     );
@@ -783,6 +785,7 @@ public sealed class InputRouter {
                 state.Entry = (entry with {
                     Dispatch = (value.Kind != CommandValueKind.Digital),
                     Phase = CommandPhase.Active,
+                    Text = null,
                 });
                 state.HasEntry = true;
             } else if (
@@ -2072,8 +2075,8 @@ public sealed class InputRouter {
             _ => false,
         });
     }
-    /// <summary>Gets the simulation tick at which a seat most recently produced a physical or synthesized raw input
-    /// signal.</summary>
+    /// <summary>Gets the simulation tick at which a seat most recently produced a physical press/release or a live
+    /// digital/analog sample outside the rest band. Authored-lane and posture samples do not count.</summary>
     /// <param name="slot">The logical player slot.</param>
     /// <param name="tick">The last input tick, meaningful only when this returns <see langword="true"/>.</param>
     /// <returns><see langword="true"/> when the seat has produced an input signal.</returns>

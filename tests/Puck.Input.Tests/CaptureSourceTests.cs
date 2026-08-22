@@ -109,6 +109,40 @@ public sealed class CaptureSourceTests {
         capture.Capture(drains: [active]);
         Assert.Empty(collection: router.SnapshotForTick(tick: 3UL, windowEndTick: ulong.MaxValue).Lanes);
     }
+    [Fact]
+    public void GravityAndOrientationReportsDoNotCountAsPlayerActivity() {
+        var router = new InputRouter(
+            bindings: new EmptyBindings(),
+            principalResolver: new ConsolePrincipal(),
+            registry: new CommandRegistry(modules: [new AxisModule()])
+        );
+        var clock = new ManualInputClock { NowTicks = 1UL, };
+        var capture = new GamepadCaptureSource(router: router, clock: clock);
+        var deviceId = InputDeviceId.New();
+        var posture = new GamepadDrain(
+            DeviceId: deviceId,
+            Gyro: Vector3.Zero,
+            Latest: GamepadState.Neutral with {
+                Accelerometer = Vector3.UnitY,
+                Orientation = Quaternion.Identity,
+            },
+            Pressed: GamepadButtons.None,
+            PressEdges: default,
+            Released: GamepadButtons.None
+        );
+
+        capture.Capture(drains: [posture]);
+        _ = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+
+        Assert.False(condition: router.TryGetLastInputTick(slot: 0, tick: out _));
+
+        clock.NowTicks = 2UL;
+        capture.Capture(drains: [posture with { Gyro = Vector3.UnitX, }]);
+        _ = router.SnapshotForTick(tick: 2UL, windowEndTick: ulong.MaxValue);
+
+        Assert.True(condition: router.TryGetLastInputTick(slot: 0, tick: out var lastInput));
+        Assert.Equal(expected: 2UL, actual: lastInput);
+    }
 
     private static GamepadDrain Drain(InputDeviceId deviceId, GamepadTouchPoint touch) => new(
         DeviceId: deviceId,
@@ -124,6 +158,9 @@ public sealed class CaptureSourceTests {
 
         public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) =>
             ((source == InputSources.Gamepad.Touchpad0) ? Bindings : null);
+    }
+    private sealed class EmptyBindings : IInputBindings {
+        public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) => null;
     }
     private sealed class ConsolePrincipal : ICommandPrincipalResolver {
         public CommandPrincipal PrincipalOf(int slot) => CommandPrincipal.Console;

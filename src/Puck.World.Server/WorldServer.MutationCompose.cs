@@ -1212,6 +1212,13 @@ public sealed partial class WorldServer {
                     // reserved-cell refusal. TryComposeTextCell itself refuses BY NAME when row.Kind is not Text, which is
                     // this arm's ONE check for "a text operand against a numeric/bool row".
                     if (isTextWrite) {
+                        if (m.AlternateRawToken is not null) {
+                            candidate = current;
+                            reason = $"state row '{m.Row}' cell '{m.Key}' cannot combine text with a numeric toggle";
+
+                            return false;
+                        }
+
                         if (!WorldStateCellWriter.TryComposeTextCell(
                             row: row,
                             key: cellKey,
@@ -1256,6 +1263,16 @@ public sealed partial class WorldServer {
                         return false;
                     }
 
+                    if (
+                        (m.AlternateRawToken is not null) &&
+                        ((m.Kind != WorldDocumentWriteKind.Set) || (m.RawToken is null))
+                    ) {
+                        candidate = current;
+                        reason = $"state row '{m.Row}' cell '{m.Key}' toggle needs two raw tokens and a set write";
+
+                        return false;
+                    }
+
                     // The honest encoding for a payload whose SHAPE depends on the row's kind: a console write carries
                     // the un-interpreted wire token (RawToken) because it cannot know Fixed-vs-Int-vs-Bool before this
                     // row's kind resolves against the candidate; a caller that already knows the kind (the rule-effect
@@ -1296,6 +1313,32 @@ public sealed partial class WorldServer {
                         rawValue: out var addend,
                         text: out _
                     );
+
+                    if (m.AlternateRawToken is { } alternateRawToken) {
+                        if (!WorldStateCellWriter.TryParseNumericToken(
+                            kind: row.Kind,
+                            token: alternateRawToken,
+                            value: out var alternate,
+                            reason: out var alternateReason
+                        )) {
+                            candidate = current;
+                            reason = $"state row '{m.Row}' cell '{m.Key}' {alternateReason}";
+
+                            return false;
+                        }
+
+                        if (alternate == operand) {
+                            candidate = current;
+                            reason = $"state row '{m.Row}' cell '{m.Key}' toggle endpoints must differ";
+
+                            return false;
+                        }
+
+                        operand = ((addend == operand)
+                            ? alternate
+                            : operand
+                        );
+                    }
 
                     long value;
 

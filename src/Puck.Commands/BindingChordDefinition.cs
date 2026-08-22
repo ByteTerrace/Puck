@@ -66,7 +66,8 @@ public sealed record BindingChordDefinition(
 /// latch on each completion. Toggle is refused for a command destination.</param>
 /// <param name="Text">A constant text payload delivered with the press as the submitted line <c>&lt;command&gt; &lt;text&gt;</c>
 /// under the pressing seat's principal — any wire-args verb bindable with authored arguments. See
-/// <see cref="BindingPageEntryDefinition.Text"/>.</param>
+/// <see cref="BindingPageEntryDefinition.Text"/> for the single-line, nonblank, bounded payload contract. Refused on
+/// a <paramref name="Channel"/> destination.</param>
 [System.Text.Json.Serialization.JsonUnmappedMemberHandling(System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow)]
 public sealed record BindingCommandDefinition(
     string? Command = null,

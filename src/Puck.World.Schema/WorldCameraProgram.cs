@@ -97,6 +97,10 @@ public abstract record WorldCameraProgramOp {
     /// like <see cref="Fov"/>'s field of view: a seat rig whose yaw reads a state cell turns the CAMERA when that cell
     /// changes — look behind is <c>state.look.behind</c> flipping between 0 and π — while the seat's facing (what
     /// steering and movement resolve against) is untouched, because the facing never includes the rig's offsets.</summary>
+    /// <param name="Distance">The finite positive orbit distance.</param>
+    /// <param name="Yaw">The orbit heading in radians, as a literal or numeric state binding.</param>
+    /// <param name="Pitch">The orbit tilt in radians, as a literal or numeric state binding.</param>
+    /// <param name="PivotOffset">The world-axis offset from the current subject's origin to the pivot.</param>
     public sealed record Orbit(float Distance, BindableScalar Yaw, BindableScalar Pitch, DocumentVector3? PivotOffset = null) : WorldCameraProgramOp;
     /// <summary>Sets the presentation-only exponential response rate (per second) the resolved eye/target boom eases
     /// at; zero disables smoothing. Read by the caller after resolving a frame — never affects the resolved pose

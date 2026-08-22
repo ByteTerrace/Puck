@@ -49,7 +49,8 @@ public static class WorldStateBindingContext {
         };
     }
     /// <summary>Parses a <c>state.&lt;row&gt;</c> row reference — a document field naming a whole state row whose
-    /// CELL KEY comes from the runtime rather than the document (the binding bar's icon row). The dotted spelling is
+    /// CELL KEY comes from the runtime rather than the reference (a binding bar's icon row or a wheel's label/icon
+    /// row). The dotted spelling is
     /// the same one an authored value reference (<c>state.colors.paper</c>) and a HUD token (<c>state.&lt;row&gt;</c>)
     /// use; it stops at the row because the key is not knowable until draw time.</summary>
     /// <param name="reference">The reference text.</param>
@@ -65,13 +66,17 @@ public static class WorldStateBindingContext {
             return false;
         }
 
-        var name = reference[RowReferencePrefix.Length..];
+        var candidate = reference[RowReferencePrefix.Length..];
 
-        if ((name.Length == 0) || name.Contains(value: '.', comparisonType: StringComparison.Ordinal)) {
+        if (!WorldCellName.TryParse(
+            candidate: candidate,
+            name: out var name,
+            reason: out _
+        )) {
             return false;
         }
 
-        rowName = name;
+        rowName = name.ToString();
 
         return true;
     }
@@ -146,8 +151,8 @@ public static class WorldStateBindingContext {
 
         return true;
     }
-    /// <summary>Validates the state-backed context rows in a binding document against the routed world's state
-    /// declarations.</summary>
+    /// <summary>Validates the state-backed context and presentation rows in a binding document against the routed
+    /// world's state declarations.</summary>
     /// <param name="document">The binding document to validate.</param>
     /// <param name="stateRows">The routed world's state rows by name.</param>
     /// <param name="errors">The collection receiving refusal messages.</param>
@@ -211,6 +216,82 @@ public static class WorldStateBindingContext {
             )) {
                 errors.Add(item: $"contexts row {index} (family \"{context.Family}\") state \"{context.State}\" is not canonical; author \"{canonical}\"");
             }
+        }
+
+        var wheels = (document.Wheels ?? []);
+
+        for (var wheelIndex = 0; (wheelIndex < wheels.Count); wheelIndex++) {
+            if (wheels[wheelIndex] is not { } wheel) {
+                continue;
+            }
+
+            ValidatePresentationRowReference(
+                errors: errors,
+                path: $"wheels row {wheelIndex}.labelRow",
+                reference: wheel.LabelRow,
+                stateRows: stateRows
+            );
+            ValidatePresentationRowReference(
+                errors: errors,
+                path: $"wheels row {wheelIndex}.iconRow",
+                reference: wheel.IconRow,
+                stateRows: stateRows
+            );
+
+            if ((wheel.LabelRow is null) && (wheel.IconRow is null)) {
+                continue;
+            }
+
+            for (var ringIndex = 0; (ringIndex < wheel.Rings.Count); ringIndex++) {
+                if (wheel.Rings[ringIndex]?.Entries is not { } sectors) {
+                    continue;
+                }
+
+                for (var sectorIndex = 0; (sectorIndex < sectors.Count); sectorIndex++) {
+                    if (sectors[sectorIndex]?.Id is not { Length: > 0 }) {
+                        errors.Add(item: $"wheels row {wheelIndex}.rings[{ringIndex}].entries[{sectorIndex}].id is required when labelRow or iconRow is authored");
+                    }
+                }
+            }
+        }
+    }
+
+    /// <summary>Validates an optional state-row reference used as a keyed text presentation table.</summary>
+    /// <param name="reference">The optional <c>state.&lt;row&gt;</c> reference.</param>
+    /// <param name="path">The author-facing document path naming the field.</param>
+    /// <param name="stateRows">The routed world's state rows by name.</param>
+    /// <param name="errors">The collection receiving refusal messages.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="path"/>, <paramref name="stateRows"/>, or
+    /// <paramref name="errors"/> is <see langword="null"/>.</exception>
+    internal static void ValidatePresentationRowReference(string? reference, string path, IReadOnlyDictionary<string, WorldStateRow> stateRows, List<string> errors) {
+        ArgumentNullException.ThrowIfNull(argument: path);
+        ArgumentNullException.ThrowIfNull(argument: stateRows);
+        ArgumentNullException.ThrowIfNull(argument: errors);
+
+        if (reference is null) {
+            return;
+        }
+        if (!TryParseRowReference(
+            reference: reference,
+            rowName: out var rowName
+        )) {
+            errors.Add(item: $"{path} '{reference}' must be spelled state.<row> with a valid row name");
+
+            return;
+        }
+        if (!stateRows.TryGetValue(
+            key: rowName,
+            value: out var row
+        )) {
+            errors.Add(item: $"{path} '{reference}' names no declared state row");
+
+            return;
+        }
+        if (row.Kind != CellKind.Text) {
+            errors.Add(item: $"{path} '{reference}' names a {row.Kind} row; presentation rows must be text");
+        }
+        if (!row.IsKeyed) {
+            errors.Add(item: $"{path} '{reference}' names a scalar row; presentation rows must be keyed by action or sector id");
         }
     }
 }

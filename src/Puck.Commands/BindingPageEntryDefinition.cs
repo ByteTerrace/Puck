@@ -31,13 +31,18 @@ namespace Puck.Commands;
 /// channel destination other than the default.</param>
 /// <param name="ActivateOn">The phase the binding fires on, or <see langword="null"/> for the default (press/continuous, not release).
 /// Meaningless (and refused) beside <paramref name="Activator"/> — the activator's own transition IS the entry's edge.</param>
-/// <param name="Id">An optional stable identity for this row, unique within its page. IDENTITY, not presentation:
-/// it is the key a presentation surface looks the row up by (a wheel sector's text), so two rows activating the same
-/// command with different constants stay distinguishable — which their command name alone cannot do.</param>
+/// <param name="Id">An optional non-empty stable identity for this row, unique within its effective page. IDENTITY,
+/// not presentation: it is the key a presentation surface looks the row up by (a wheel sector's text), so two rows
+/// activating the same command with different constants stay distinguishable — which their command name alone
+/// cannot do.</param>
 /// <param name="Text">A constant text payload delivered with a <paramref name="Command"/> activation: the press
 /// submits the line <c>&lt;command&gt; &lt;text&gt;</c> under the pressing seat's principal, exactly as if typed, so
 /// any wire-args verb is bindable with authored arguments (<c>player.state.cell.toggle look behind 0 3.14159</c>).
-/// Press only; a release carries no line.</param>
+/// Press only; a release carries no line. When present, it must be nonblank, single-line, and no longer than
+/// <see cref="BindingProfile.MaxTextPayloadLength"/> UTF-16 characters. Leading/trailing whitespace is preserved as
+/// ordinary token whitespace; shell-like separators are ordinary argument characters because this line is never
+/// evaluated by a shell or command-list parser. Refused on a <paramref name="Channel"/> destination or beside an
+/// <paramref name="ActivateOn"/> phase other than <see cref="CommandPhase.Started"/>.</param>
 /// <param name="Label">An optional display label for the UI layer; opaque to the engine.</param>
 /// <param name="Value">A constant activation value a <paramref name="Command"/> destination's digital source sends
 /// instead of its own (a function key driving a fixed one-dimensional axis), or <see langword="null"/> to pass the

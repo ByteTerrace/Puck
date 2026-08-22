@@ -44,4 +44,24 @@ public sealed class OverlayLeaseTableFitsBackstopsLawTests {
         Assert.Contains(actualString: refusal.Message, expectedSubstring: "OverlayFrameBuilder.");
         Assert.NotNull(@object: new OverlayChannelLeases(capacity: control));
     }
+    /// <summary>An adversarial host count is multiplied exactly before the backstop check; it cannot wrap the four
+    /// per-seat clip reservations negative and masquerade as spare capacity.</summary>
+    [Fact]
+    public void OversubscribedCapacityArithmeticCannotWrapPastTheBackstop() {
+        var adversarial = new OverlayCapacity(
+            Seats: (1 << 30),
+            HudPanels: 0,
+            HudElementsPerPanel: 0,
+            HudSeatPanelsPerSeat: 0,
+            HudElementsPerSeatPanel: 0,
+            BindingBarMaxBanks: 0,
+            BindingBarMaxSlotsPerBank: 0,
+            BindingBarMaxModifiers: 0,
+            MarkerMaxChipsPerSeat: 0
+        );
+
+        var refusal = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new OverlayChannelLeases(capacity: adversarial));
+
+        Assert.Contains(actualString: refusal.Message, expectedSubstring: "4294967296");
+    }
 }

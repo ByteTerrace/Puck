@@ -77,9 +77,8 @@
                 "entries": [
                   {
                     "command": "view.override",
-                    "icon": "action.target",
-                    "label": "View Chase",
-                    "sources": null,
+                    "id": "viewChase",
+                    "sources": [],
                     "value": {
                       "kind": "Axis1D",
                       "raw": [
@@ -92,9 +91,8 @@
                   },
                   {
                     "command": "view.override",
-                    "icon": "edit.place",
-                    "label": "View RTS",
-                    "sources": null,
+                    "id": "viewRts",
+                    "sources": [],
                     "value": {
                       "kind": "Axis1D",
                       "raw": [
@@ -107,32 +105,30 @@
                   },
                   {
                     "command": "console",
-                    "icon": "edit.op",
-                    "label": "Console",
-                    "sources": null
+                    "id": "console",
+                    "sources": []
                   },
                   {
                     "command": "player.camera",
-                    "icon": "view.freeCam",
-                    "label": "Free Cam",
-                    "sources": null
+                    "id": "freeCam",
+                    "sources": []
                   },
                   {
                     "command": "player.where",
-                    "icon": "action.target",
-                    "label": "Where",
-                    "sources": null
+                    "id": "where",
+                    "sources": []
                   },
                   {
                     "command": "player.disengage",
-                    "icon": "edit.exit",
-                    "label": "Disengage",
-                    "sources": null
+                    "id": "disengage",
+                    "sources": []
                   }
                 ],
                 "id": "ring0"
               }
-            ]
+            ],
+            "labelRow": "state.wheelLabels",
+            "iconRow": "state.actionIcons"
           }
         ]
       },
@@ -197,9 +193,8 @@
                 "entries": [
                   {
                     "command": "view.override",
-                    "icon": "action.target",
-                    "label": "View Chase",
-                    "sources": null,
+                    "id": "viewChase",
+                    "sources": [],
                     "value": {
                       "kind": "Axis1D",
                       "raw": [
@@ -212,9 +207,8 @@
                   },
                   {
                     "command": "view.override",
-                    "icon": "edit.place",
-                    "label": "View RTS",
-                    "sources": null,
+                    "id": "viewRts",
+                    "sources": [],
                     "value": {
                       "kind": "Axis1D",
                       "raw": [
@@ -227,27 +221,23 @@
                   },
                   {
                     "command": "console",
-                    "icon": "edit.op",
-                    "label": "Console",
-                    "sources": null
+                    "id": "console",
+                    "sources": []
                   },
                   {
                     "command": "player.camera",
-                    "icon": "view.freeCam",
-                    "label": "Free Cam",
-                    "sources": null
+                    "id": "freeCam",
+                    "sources": []
                   },
                   {
                     "command": "player.where",
-                    "icon": "action.target",
-                    "label": "Where",
-                    "sources": null
+                    "id": "where",
+                    "sources": []
                   },
                   {
                     "command": "player.disengage",
-                    "icon": "edit.exit",
-                    "label": "Disengage",
-                    "sources": null
+                    "id": "disengage",
+                    "sources": []
                   }
                 ],
                 "id": "rtsWheelRing0",
@@ -259,7 +249,9 @@
               "placement": "ViewportCenter",
               "selectionGraceSeconds": 0.13,
               "switchFraction": 0.4
-            }
+            },
+            "labelRow": "state.wheelLabels",
+            "iconRow": "state.actionIcons"
           }
         ]
       },
@@ -1717,10 +1709,7 @@
         "transitionSeconds": 0.4,
         "transitionRenderScale": 0.5
       }
-    ],
-    "seatControl": {
-      "swapRate": 0
-    }
+    ]
   },
   "speakers": [
     {

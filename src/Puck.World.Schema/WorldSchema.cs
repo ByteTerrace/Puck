@@ -21,7 +21,8 @@ namespace Puck.World;
 /// <see cref="StrictEnumConverter{TEnum}"/> member. This generator adds only what the exporter cannot infer on its
 /// own: curated hover text pulled from the assembly's XML documentation (<c>Puck.World.Schema.xml</c> beside
 /// it), a <c>type</c>/<c>enum</c> constraint for a member whose <see cref="JsonConverter{T}"/> the exporter cannot
-/// introspect and that opts in via <see cref="IJsonSchemaStringConverter"/> (<see cref="ApplyStringVocabulary"/>),
+/// introspect and that opts in via <see cref="IJsonSchemaTypeConverter"/> or
+/// <see cref="IJsonSchemaStringConverter"/> (<see cref="ApplyConverterVocabulary"/>),
 /// the document root's one deliberate strictness exception — the <see cref="WorldDefinition.Extensions"/>
 /// round-trip bag, which admits any <c>$</c>/<c>_</c>-prefixed key (<see cref="DocumentExtensionsPolicy"/>) and so
 /// cannot be a flat <c>additionalProperties: false</c> — and the multi-file split: a small root plus one file per
@@ -231,17 +232,36 @@ public static class WorldSchema {
     // the loader's own WorldDestinationDurabilityJsonConverter would reject, but an unconstrained schema accepts).
     // Fixed here by asking the RESOLVED converter (via JsonSerializerOptions.GetConverter, the same resolution the
     // loader itself uses — closed generics, [JsonConverter] attributes, and the context's own Converters array all
-    // resolve through one call) whether it opts into IJsonSchemaStringConverter; a converter that does not is a
-    // converter this generator has no mechanical way to describe (an object shape, a number, an open grammar like
-    // GrantSubject's "body:<n>" — see WorldSchema's own sweep notes) and is left exactly as the exporter produced
-    // it. Never widens an ALREADY-typed node (a $type union arm, a native enum) — only ever adds to the fully
+    // resolve through one call) whether it opts into IJsonSchemaTypeConverter or IJsonSchemaStringConverter; a
+    // converter that does not is one this generator has no mechanical way to describe (an object shape or an open
+    // grammar like GrantSubject's "body:<n>" — see WorldSchema's own sweep notes) and is left exactly as the
+    // exporter produced it. Never widens an ALREADY-typed node (a $type union arm, a native enum) — only ever adds to the fully
     // permissive `{}` AsObjectNode just promoted.
-    private static void ApplyStringVocabulary(JsonObject obj, Type propertyType) {
+    private static void ApplyConverterVocabulary(JsonObject obj, Type propertyType) {
         if (
             obj.ContainsKey(propertyName: "type") ||
             obj.ContainsKey(propertyName: "enum") ||
             obj.ContainsKey(propertyName: "anyOf")
         ) {
+            return;
+        }
+
+        if (TryGetTypeVocabulary(
+            propertyType: propertyType,
+            types: out var types
+        )) {
+            var typeArray = new JsonArray();
+
+            foreach (var type in types) {
+                typeArray.Add(item: type);
+            }
+
+            if (Nullable.GetUnderlyingType(nullableType: propertyType) is not null) {
+                typeArray.Add(item: "null");
+            }
+
+            obj["type"] = typeArray;
+
             return;
         }
 
@@ -1487,7 +1507,7 @@ public static class WorldSchema {
 
         typesByNode[propertyObject] = property.PropertyType;
 
-        ApplyStringVocabulary(
+        ApplyConverterVocabulary(
             obj: propertyObject,
             propertyType: property.PropertyType
         );
@@ -1625,8 +1645,8 @@ public static class WorldSchema {
         );
     }
     // Runs once per exported node, bottom-up (children before parents). Attaches a description resolved from the
-    // assembly's XML documentation, teaches a custom-token-converted node its own "type"/"enum" (see
-    // ApplyStringVocabulary), and — at the document root only, when the root type has one — the Extensions bag's
+    // assembly's XML documentation, teaches a custom-converted node its own "type"/"enum" (see
+    // ApplyConverterVocabulary), and — at the document root only, when the root type has one — the Extensions bag's
     // reserved-prefix carve-out.
     private static JsonNode Transform(JsonSchemaExporterContext context, IReadOnlyDictionary<string, XElement>? index, JsonNode node, Dictionary<JsonNode, Type> typesByNode) {
         if (
@@ -1654,7 +1674,7 @@ public static class WorldSchema {
 
         typesByNode[obj] = context.TypeInfo.Type;
 
-        ApplyStringVocabulary(
+        ApplyConverterVocabulary(
             obj: obj,
             propertyType: context.TypeInfo.Type
         );
@@ -1754,6 +1774,30 @@ public static class WorldSchema {
         }
 
         tokens = vocabulary.SchemaTokens;
+
+        return true;
+    }
+    // Resolves a custom converter that accepts more than one JSON primitive representation (for example,
+    // BindableScalar's number-or-string wire form). This runs before the string-only vocabulary seam above.
+    private static bool TryGetTypeVocabulary(Type propertyType, out IReadOnlyList<string> types) {
+        var effectiveType = (Nullable.GetUnderlyingType(nullableType: propertyType) ?? propertyType);
+        JsonConverter? converter;
+
+        try {
+            converter = WorldJsonContext.Default.Options.GetConverter(typeToConvert: effectiveType);
+        } catch (NotSupportedException) {
+            types = [];
+
+            return false;
+        }
+
+        if ((converter is not IJsonSchemaTypeConverter vocabulary) || (vocabulary.SchemaTypes.Count == 0)) {
+            types = [];
+
+            return false;
+        }
+
+        types = vocabulary.SchemaTypes;
 
         return true;
     }

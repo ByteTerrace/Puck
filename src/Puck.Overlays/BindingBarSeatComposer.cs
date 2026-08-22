@@ -112,9 +112,9 @@ public static class BindingBarSeatComposer {
     /// (a blank plate, never a placeholder mark).</param>
     /// <param name="isCommandHeld">Answers whether a named command is currently carried held for this seat — the
     /// latched-toggle door, consulted for every bank's toggle rows; <see langword="null"/> lights no toggles.</param>
-    /// <param name="isPressed">Answers whether a physical control is currently held this frame — the SAME physical
-    /// fact across every bank (a control's live press state does not depend on which page is being shown for it);
-    /// <see langword="null"/> renders every chip unpressed (an input-stateless feed).</param>
+    /// <param name="isPressed">Answers whether a physical control is currently held this frame. The host supplies
+    /// it only for the live bank; <see langword="null"/> keeps a non-live wing (or an input-stateless feed) from
+    /// presenting a momentary press that belongs to another page.</param>
     /// <param name="bankAlpha">This bank's resolved opacity multiplier (its authored alpha or active-alpha). An
     /// unbound slot's extra dim is the writer's, from the live theme — not folded in here.</param>
     /// <param name="text">Whether the bar draws its atlas text; <see langword="false"/> drops every badge whose

@@ -23,7 +23,6 @@ namespace Puck.World;
 internal sealed class WorldOverlayFeed {
     private readonly WorldBindingBarControl m_bindingBar;
     private readonly WorldSeatBindings m_bindings;
-    private readonly WorldClient m_client;
     private readonly GamepadManager? m_gamepads;
     private readonly WorldIconTable m_icons;
     private readonly string[][] m_hintLines;
@@ -55,6 +54,7 @@ internal sealed class WorldOverlayFeed {
     // between frames.
     private readonly Func<string?, OverlayResolvedGlyph> m_resolveIcon;
     private string? m_currentIconRow;
+    private int m_currentSlot;
     private GamepadType m_currentFamily;
     private readonly PlayerRoster m_roster;
     private readonly OverlayBindingSeat[] m_seats;
@@ -65,17 +65,15 @@ internal sealed class WorldOverlayFeed {
     /// <param name="roster">The participant roster (which seats are joined).</param>
     /// <param name="bindings">The per-seat binding resolver (each seat's active page view).</param>
     /// <param name="bindingBar">The per-seat authored binding-bar policy and live visibility resolver.</param>
-    /// <param name="client">The client view.</param>
     /// <param name="router">The input router whose carried held state lights the pressed chips.</param>
     /// <param name="store">The binding-bar store the overlay reads.</param>
     /// <param name="gamepads">The gamepad manager for family-resolved badge glyphs, or <see langword="null"/>
     /// (a non-Windows host) — the bar then themes for the unknown family.</param>
     /// <param name="icons">The boot document's resolved icon table (badges and bound-action icons alike).</param>
     /// <exception cref="ArgumentNullException">A required argument is <see langword="null"/>.</exception>
-    public WorldOverlayFeed(PlayerRoster roster, WorldSeatBindings bindings, WorldBindingBarControl bindingBar, WorldClient client, InputRouter router, BindingBarStore store, GamepadManager? gamepads, WorldIconTable icons) {
+    public WorldOverlayFeed(PlayerRoster roster, WorldSeatBindings bindings, WorldBindingBarControl bindingBar, InputRouter router, BindingBarStore store, GamepadManager? gamepads, WorldIconTable icons) {
         ArgumentNullException.ThrowIfNull(argument: bindings);
         ArgumentNullException.ThrowIfNull(argument: bindingBar);
-        ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: icons);
         ArgumentNullException.ThrowIfNull(argument: roster);
         ArgumentNullException.ThrowIfNull(argument: router);
@@ -83,21 +81,28 @@ internal sealed class WorldOverlayFeed {
 
         m_bindings = bindings;
         m_bindingBar = bindingBar;
-        m_client = client;
         m_gamepads = gamepads;
         m_icons = icons;
-        m_resolveIcon = action => (((m_currentIconRow is { Length: > 0 } row) && (action is { Length: > 0 }) && WorldStateReader.TryRead(
-            definition: m_client.Definition,
-            key: action,
-            rawValue: out _,
-            row: out _,
-            rowName: row,
-            text: out var iconName,
-            tick: m_client.Tick
-        ))
-            ? icons.ResolveIcon(name: iconName)
-            : OverlayResolvedGlyph.None
-        );
+        m_resolveIcon = action => {
+            m_bindings.GetRoutedState(
+                slot: m_currentSlot,
+                definition: out var definition,
+                tick: out var tick
+            );
+
+            return (((m_currentIconRow is { Length: > 0 } row) && (action is { Length: > 0 }) && WorldStateReader.TryRead(
+                definition: definition,
+                key: action,
+                rawValue: out _,
+                row: out _,
+                rowName: row,
+                text: out var iconName,
+                tick: tick
+            ))
+                ? icons.ResolveIcon(name: iconName)
+                : OverlayResolvedGlyph.None
+            );
+        };
         m_resolveBadge = source => icons.ResolveBadge(
             family: m_currentFamily,
             source: source
@@ -250,6 +255,8 @@ internal sealed class WorldOverlayFeed {
                 continue;
             }
 
+            m_currentSlot = slot;
+
             var view = m_bindings.PageView(slot: slot);
             var barStatus = m_bindingBar.Status(slot: slot);
             var authoring = barStatus.Authoring;
@@ -266,7 +273,8 @@ internal sealed class WorldOverlayFeed {
             )
                 ? iconRowName
                 : null
-            );            // The bar's opacity: the split-screen quieting lever times the visibility condition's presence, so a
+            );
+            // The bar's opacity: the split-screen quieting lever times the visibility condition's presence, so a
             // fading "recently" condition eases the bar out instead of cutting it.
             var barAlpha = (((joined > 1)
                 ? authoring.MultiSeatAlpha

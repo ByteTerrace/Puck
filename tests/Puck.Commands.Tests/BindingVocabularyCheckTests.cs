@@ -99,6 +99,53 @@ public sealed class BindingVocabularyCheckTests {
 
         Assert.Contains(expectedSubstring: "unaddressable control \"keyboard.text\"", actualString: Assert.Single(collection: errors));
     }
+    [Fact]
+    public void ArgumentBindingRequiresAWireArgsCommandAndAPressCapableSource() {
+        var document = Document(entry: new BindingPageEntryDefinition(
+            Sources: ["gamepad.leftTrigger"],
+            Command: "action",
+            Text: "first second"
+        ));
+        var errors = new List<string>();
+
+        BindingVocabularyCheck.Validate(
+            document: document,
+            command: static name => new CommandMetadata(
+                Name: name,
+                ValueKind: CommandValueKind.Axis1D,
+                Routing: CommandRouting.Simulation,
+                Bindability: CommandBindability.Bindable
+            ),
+            sourceKind: static _ => CommandValueKind.Axis1D,
+            errors: errors
+        );
+
+        Assert.Contains(collection: errors, filter: static error => error.Contains(value: "accepts no wire arguments", comparisonType: StringComparison.Ordinal));
+        Assert.Contains(collection: errors, filter: static error => error.Contains(value: "has no press edge", comparisonType: StringComparison.Ordinal));
+
+        errors.Clear();
+
+        BindingVocabularyCheck.Validate(
+            document: document with {
+                Chords = [document.Chords[0] with {
+                    Page = document.Chords[0].Page! with {
+                        Entries = [document.Chords[0].Page!.Entries[0] with { Sources = ["key.a"], }],
+                    },
+                }],
+            },
+            command: static name => new CommandMetadata(
+                Name: name,
+                ValueKind: CommandValueKind.Digital,
+                Routing: CommandRouting.Simulation,
+                Bindability: CommandBindability.Bindable,
+                AcceptsWireArgs: true
+            ),
+            sourceKind: static _ => CommandValueKind.Digital,
+            errors: errors
+        );
+
+        Assert.Empty(collection: errors);
+    }
 
     private static BindingProfileDocument Document(BindingPageEntryDefinition entry) {
         return new BindingProfileDocument(

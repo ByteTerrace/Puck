@@ -10,6 +10,10 @@ public sealed class BindingBarAuthoringValidationLawTests {
         var layout = WorldBindingBarLayout.Default;
 
         yield return ["visible.windowSeconds", Policy(layout: layout) with { Visible = new OverlayPredicate.Recently(Fact: OverlayFact.SeatInput, WindowSeconds: -1f) }, Policy(layout: layout) with { Visible = new OverlayPredicate.Recently(Fact: OverlayFact.SeatInput, WindowSeconds: 3f) }];
+        yield return ["iconRow 'actionIcons' must be spelled state.<row>", Policy(layout: layout) with { IconRow = "actionIcons" }, Policy(layout: layout) with { IconRow = "state.actionIcons" }];
+        yield return ["iconRow 'state.noSuch' names no declared state row", Policy(layout: layout) with { IconRow = "state.noSuch" }, Policy(layout: layout) with { IconRow = "state.actionIcons" }];
+        yield return ["iconRow 'state.numericIcons' names a Int row", Policy(layout: layout) with { IconRow = "state.numericIcons" }, Policy(layout: layout) with { IconRow = "state.actionIcons" }];
+        yield return ["iconRow 'state.scalarIcons' names a scalar row", Policy(layout: layout) with { IconRow = "state.scalarIcons" }, Policy(layout: layout) with { IconRow = "state.actionIcons" }];
         yield return ["visible.predicates[0].windowSeconds", Policy(layout: layout) with { Visible = new OverlayPredicate.Any(Predicates: [new OverlayPredicate.Recently(Fact: OverlayFact.SeatInput, WindowSeconds: float.NaN)]) }, Policy(layout: layout) with { Visible = new OverlayPredicate.Any(Predicates: [new OverlayPredicate.Now(Fact: OverlayFact.WheelOpen)]) }];
         yield return ["layout.buttonSize", Policy(layout: layout with { ButtonSize = 0f }), Policy(layout: layout with { ButtonSize = 0.01f })];
         yield return ["layout.centerGap", Policy(layout: layout with { CenterGap = -0.01f }), Policy(layout: layout with { CenterGap = 0f })];
@@ -93,6 +97,11 @@ public sealed class BindingBarAuthoringValidationLawTests {
         SlotSet: [InputSources.Gamepad.DpadUp]
     );
     private static WorldDefinition WithPolicy(WorldBindingBarAuthoring policy) => Fixtures.BuildDocument() with {
+        StateRaw = new WorldStateSection(World: [
+            new WorldStateRow(Name: WorldCellName.Parse(candidate: "actionIcons"), Kind: CellKind.Text, Capacity: 8, Cells: [new WorldStateCell(Key: WorldCellName.Parse(candidate: "jump"), Text: "known.icon")]),
+            new WorldStateRow(Name: WorldCellName.Parse(candidate: "numericIcons"), Kind: CellKind.Int, Capacity: 8),
+            new WorldStateRow(Name: WorldCellName.Parse(candidate: "scalarIcons"), Kind: CellKind.Text, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Text: "known.icon")]),
+        ]),
         BindingOverlaysRaw = [
             new WorldBindingOverlay(
                 Id: "binding-bar-law",

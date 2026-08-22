@@ -34,7 +34,7 @@ census implies a body (`population.capacity > 0`), the same derived refusal
 `kits` carries, and a seatless document may author none. The standard chase
 framing below is AUTHORED, in `src/Puck.World/Assets/worlds/standard.world.json`
 — a world inherits it by naming that document as its `basis` (`null.world.json`
-does, authoring only its own `layouts` and `seatControl.swapRate` delta), or
+does, authoring only its own `layouts` and other prototype-specific sections), or
 states its own:
 
 ```json
@@ -48,7 +48,7 @@ states its own:
     "name": "seatChase",
     "version": "puck.camera.v1",
     "operations": [
-      { "$type": "orbit", "distance": 5.4626001, "yaw": 0, "pitch": 0.4145069, "pivotOffset": [0, 0, 0] },
+      { "$type": "orbit", "distance": 5.4626001, "yaw": "state.look.behind", "pitch": 0.4145069, "pivotOffset": [0, 0, 0] },
       { "$type": "lookAt", "subject": { "$type": "reference" }, "targetOffset": [0, 1, 0], "worldAxes": false },
       { "$type": "fov", "fieldOfViewRadians": 0.9599311 },
       { "$type": "smooth", "rate": 6 }
@@ -102,7 +102,8 @@ Motion input is a separate, generic toggled mode. The standard profile binds
 `player.motion.angular`. Each North press toggles the mode; it remains active
 after the buttons release. The command is intentionally not gyro-named so a
 later orientation/tilt-to-move adapter can share it. `LT → RB → LB` explicitly
-fires the same `player.look.swap` action as `LT → LB`; the shorter `LT + RB`
+submits the same `player.state.cell.toggle look behind 0 3.14159265` line as
+`LT → LB`, toggling the `state.look.behind` yaw bound above; the shorter `LT + RB`
 chord holds `player.look.free`: right-stick
 yaw/pitch continues to orbit the camera, but yaw does not write body heading
 and left-stick movement resolves against authoritative character heading until

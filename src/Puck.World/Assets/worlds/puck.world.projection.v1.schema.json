@@ -2121,11 +2121,25 @@
                           "const": "orbit"
                         },
                         "distance": {
+                          "description": "The finite positive orbit distance.",
                           "type": "number"
                         },
-                        "yaw": {},
-                        "pitch": {},
+                        "yaw": {
+                          "description": "The orbit heading in radians, as a literal or numeric state binding.",
+                          "type": [
+                            "number",
+                            "string"
+                          ]
+                        },
+                        "pitch": {
+                          "description": "The orbit tilt in radians, as a literal or numeric state binding.",
+                          "type": [
+                            "number",
+                            "string"
+                          ]
+                        },
                         "pivotOffset": {
+                          "description": "The world-axis offset from the current subject\u0027s origin to the pivot.",
                           "default": null
                         },
                         "opcode": {
@@ -2201,7 +2215,11 @@
                           "const": "fov"
                         },
                         "fieldOfViewRadians": {
-                          "description": "The field of view."
+                          "description": "The field of view.",
+                          "type": [
+                            "number",
+                            "string"
+                          ]
                         },
                         "opcode": {
                           "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
@@ -2231,7 +2249,11 @@
                           "type": "string"
                         },
                         "weight": {
-                          "description": "The blend weight in [0, 1] \u2014 a literal, or a state binding."
+                          "description": "The blend weight in [0, 1] \u2014 a literal, or a state binding.",
+                          "type": [
+                            "number",
+                            "string"
+                          ]
                         },
                         "opcode": {
                           "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
@@ -2290,7 +2312,11 @@
                     "type": "string"
                   },
                   "weight": {
-                    "description": "The blend weight in [0, 1] \u2014 a literal, or a state binding."
+                    "description": "The blend weight in [0, 1] \u2014 a literal, or a state binding.",
+                    "type": [
+                      "number",
+                      "string"
+                    ]
                   },
                   "opcode": {
                     "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
@@ -2344,7 +2370,11 @@
                 ],
                 "properties": {
                   "fieldOfViewRadians": {
-                    "description": "The field of view."
+                    "description": "The field of view.",
+                    "type": [
+                      "number",
+                      "string"
+                    ]
                   },
                   "opcode": {
                     "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
@@ -2437,11 +2467,25 @@
                 ],
                 "properties": {
                   "distance": {
+                    "description": "The finite positive orbit distance.",
                     "type": "number"
                   },
-                  "yaw": {},
-                  "pitch": {},
+                  "yaw": {
+                    "description": "The orbit heading in radians, as a literal or numeric state binding.",
+                    "type": [
+                      "number",
+                      "string"
+                    ]
+                  },
+                  "pitch": {
+                    "description": "The orbit tilt in radians, as a literal or numeric state binding.",
+                    "type": [
+                      "number",
+                      "string"
+                    ]
+                  },
                   "pivotOffset": {
+                    "description": "The world-axis offset from the current subject\u0027s origin to the pivot.",
                     "default": null
                   },
                   "opcode": {
@@ -4804,7 +4848,7 @@
                 "description": "The stacked banks \u2014 at least one, at most MaxBanks, unique ids, each naming a page the composed binding profile actually declares.",
                 "type": "array",
                 "items": {
-                  "description": "One stacked binding-bar bank: the page it renders and its position in the stack. Several banks of the SAME slot set render simultaneously, each showing what that bank\u0027s OWN page binds \u2014 the WoW-addon original\u0027s \u0022five banks of one compass\u0022 idea (resting, LT, RT, LT\u003ERT, RT\u003ELT are the natural five, though a bank may name any page). The engine ARRANGES the stack from Order alone, pitching it off the authored theme\u0027s spacing grid; the two offsets exist only for a world that wants to place one bank by hand.",
+                  "description": "One stacked binding-bar bank: the page it renders and its position in the stack. Several banks of the SAME slot set render simultaneously, each showing what that bank\u0027s OWN page binds \u2014 the WoW-addon original\u0027s \u0022five banks of one compass\u0022 idea (resting, LT, RT, LT\u003ERT, RT\u003ELT are the natural five, though a bank may name any page). The engine ARRANGES the stack from Order alone on a fixed button-pitch nested-cross table; the two offsets exist only for a world that wants to place one bank by hand.",
                   "type": [
                     "object",
                     "null"
@@ -4819,7 +4863,7 @@
                       "type": "string"
                     },
                     "order": {
-                      "description": "This bank\u0027s place in the derived stack (unique within the authoring row): 0 sits on the bar\u0027s shared anchor, and each higher order fans one step further out and up.",
+                      "description": "This bank\u0027s place in the derived stack (unique within the authoring row): 0 sits on the bar\u0027s shared anchor; 1 nests up and inward, 2 down and inward, and 3/4 sit straight above/below. Later orders alternate farther above and below.",
                       "type": "integer"
                     },
                     "alpha": {
@@ -7757,18 +7801,18 @@
           "description": "The declared interaction rows, in authoring/evaluation order.",
           "type": "array",
           "items": {
-            "description": "One row of the world\u0027s interactions section \u2014 an authorable property x property (or property x region) -\u003E effect table entry, the generalized A x B -\u003E F emergent-chemistry primitive. Not a second rule engine: WorldRuleCompiler.CompileAllInteractions desugars every row into a synthesized WorldRule \u2014 its co-occurrence spelled as an ordinary CompareState/All gate over the same reserved channels a hand-authored rule already reads \u2014 and compiles it through the identical WorldRuleCompiler.Compile path, so it rides the same per-tick evaluation, edge/level latch, journal, and undo a rule already has. This is a second authoring surface over one evaluation engine.",
+            "description": "One row of the world\u0027s interactions section \u2014 an authorable property x property (or property x region) -\u003E effect table entry, the A x B -\u003E F chemistry primitive. Evaluated over every carrier pair (or every occupant) each tick with the matched carriers bound as $left/$right, and compiled through the same effect compiler a WorldRule uses, so it rides the same edge/level latch (kept per pair), journal, and undo.",
             "type": [
               "object",
               "null"
             ],
             "properties": {
               "name": {
-                "description": "The interaction\u0027s stable name \u2014 unique within the section (a separate namespace from Name: an interaction desugars into its own synthesized rule rather than sharing the authored rule list, so the two may coincide without colliding). A WorldCellName, never $-prefixed \u2014 that prefix marks what the engine mints, and nothing mints an interaction.",
+                "description": "The interaction\u0027s stable name \u2014 unique within the section (a separate namespace from Name, so the two may coincide without colliding). A WorldCellName, never $-prefixed \u2014 that prefix marks what the engine mints, and nothing mints an interaction.",
                 "type": "string"
               },
               "left": {
-                "description": "A property name, validated against the declared properties registry \u2014 the carrier a candidate co-occurrence is searched from (the $argmax: resolution \u2014 \u0022the carrier most strongly tagged Left\u0022).",
+                "description": "A property name, validated against the declared properties registry \u2014 every body whose cell in that keyed row reads nonzero is a left carrier.",
                 "type": "string"
               },
               "right": {
@@ -8321,17 +8365,17 @@
                           "default": null
                         },
                         "yawDegrees": {
-                          "description": "The yaw about \u002BY, degrees; read only with Position.",
+                          "description": "The yaw about \u002BY, degrees; legal only with Position and required to remain zero when SpawnPoint supplies the pose.",
                           "type": "number",
                           "default": 0
                         },
                         "pitchDegrees": {
-                          "description": "The pitch about the body right, degrees; read only with Position.",
+                          "description": "The pitch about the body right, degrees; legal only with Position and required to remain zero with SpawnPoint.",
                           "type": "number",
                           "default": 0
                         },
                         "rollDegrees": {
-                          "description": "The roll about the body forward, degrees; read only with Position.",
+                          "description": "The roll about the body forward, degrees; legal only with Position and required to remain zero with SpawnPoint.",
                           "type": "number",
                           "default": 0
                         }

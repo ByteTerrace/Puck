@@ -880,6 +880,20 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         return false;
     }
 
+    /// <summary>Gets the live definition and completed tick seat <paramref name="slot"/> currently resolves through.
+    /// Both values move with <see cref="SyncSeat"/>, so presentation derived from binding state reads the destination
+    /// authority after a crossing rather than the boot client's document. An out-of-range slot reads slot 0.</summary>
+    /// <param name="slot">The 0-based local roster slot.</param>
+    /// <param name="definition">The seat's routed definition.</param>
+    /// <param name="tick">The completed tick at that authority.</param>
+    public void GetRoutedState(int slot, out WorldDefinition definition, out ulong tick) {
+        slot = ((((uint)slot) < SeatCount)
+            ? slot
+            : 0
+        );
+        definition = m_definitions[slot];
+        tick = m_stateTicks[slot];
+    }
     /// <summary>The channel vocabulary seat <paramref name="slot"/>'s bindings resolve against — that seat's own
     /// currently-routed document's live table (see <see cref="SyncSeat"/>), so a crossed seat is linted against the
     /// destination's channels, never always the boot world's. An out-of-range slot reads slot 0's table.</summary>

@@ -64,6 +64,9 @@ public sealed class CommandRegistryTests {
         Assert.Equal(expected: [CommandMaps.Global, "combat"], actual: registry.Maps);
         Assert.True(condition: registry.TryGetMetadata(metadata: out var beta, name: "beta"));
         Assert.Equal(expected: "combat", actual: beta.Map);
+        Assert.False(condition: beta.AcceptsWireArgs);
+        Assert.True(condition: registry.TryGetMetadata(metadata: out var sum, name: "sum"));
+        Assert.True(condition: sum.AcceptsWireArgs);
     }
     [Fact]
     public void ACommandNameClaimedTwiceIsRefusedAtConstruction() {
@@ -144,6 +147,36 @@ public sealed class CommandRegistryTests {
 
         _ = Assert.Throws<ArgumentException>(testCode: () => targetRegistry.ApplySnapshot(snapshot: in snapshot));
         Assert.False(condition: invoked);
+    }
+    [Fact]
+    public void BoundTextSeparatorsRemainArgumentsOfOneSeatStampedCommand() {
+        CommandPrincipal? seenPrincipal = null;
+        string? seenLine = null;
+        var secondCommandInvoked = false;
+        var registry = new CommandRegistry(modules: [new SeparatorProbeModule(
+            onBound: context => {
+                seenPrincipal = context.Principal;
+                seenLine = context.Text;
+            },
+            onSecond: () => secondCommandInvoked = true
+        )]);
+        var router = new InputRouter(
+            registry: registry,
+            bindings: new FixedBindings(
+                command: "bound",
+                text: "  first; second && privileged | fourth  "
+            ),
+            principalResolver: new SeatPrincipal()
+        );
+
+        router.Capture(signal: InputSignal.Press(source: "key.a"));
+        var snapshot = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+
+        registry.ApplySnapshot(snapshot: in snapshot);
+
+        Assert.Equal(expected: CommandPrincipal.Seat(slot: 0), actual: seenPrincipal);
+        Assert.Equal(expected: "bound   first; second && privileged | fourth  ", actual: seenLine);
+        Assert.False(condition: secondCommandInvoked);
     }
     [Fact]
     public void WireNativeFastPathUsesTheCommandsDeclaredValueKind() {
@@ -242,10 +275,38 @@ public sealed class CommandRegistryTests {
             );
         }
     }
-    private sealed class FixedBindings(string command) : IInputBindings {
-        private readonly CommandBinding[] m_bindings = [new CommandBinding(Command: command)];
+    private sealed class FixedBindings(string command, string? text = null) : IInputBindings {
+        private readonly CommandBinding[] m_bindings = [new CommandBinding(Command: command, Text: text)];
 
         public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) => m_bindings;
+    }
+    private sealed class SeatPrincipal : ICommandPrincipalResolver {
+        public CommandPrincipal PrincipalOf(int slot) => CommandPrincipal.Seat(slot: slot);
+    }
+    private sealed class SeparatorProbeModule(Action<CommandContext> onBound, Action onSecond) : ICommandModule {
+        public IEnumerable<CommandDefinition> GetCommands() {
+            yield return CommandDefinition.WithWireArgs(
+                name: "bound",
+                description: "Bound text separator probe.",
+                handler: (context, _) => {
+                    onBound(obj: context);
+
+                    return CommandResult.None;
+                },
+                bindability: CommandBindability.Bindable
+            );
+            yield return CommandDefinition.Verb(
+                name: "privileged",
+                description: "Second command injection probe.",
+                valueKind: CommandValueKind.Digital,
+                handler: _ => {
+                    onSecond();
+
+                    return CommandResult.None;
+                },
+                bindability: CommandBindability.Bindable
+            );
+        }
     }
     private sealed class SingleCommandModule(string name, Action? onInvoke = null) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {

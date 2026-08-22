@@ -74,8 +74,8 @@ public sealed record CommandDefinition {
     public bool Held { get; init; }
     /// <summary>Gets the command map that classifies source-driven activation.</summary>
     public string Map { get; init; }
-    /// <summary>Gets the publicly readable facts about this command — what <see cref="CommandRegistry.Definitions"/>
-    /// hands out.</summary>
+    /// <summary>Gets the publicly readable facts about this command — including whether it accepts wire arguments —
+    /// that <see cref="CommandRegistry.Definitions"/> hands out.</summary>
     public CommandMetadata Metadata => new(
         Name: Name,
         ValueKind: ValueKind,
@@ -83,7 +83,8 @@ public sealed record CommandDefinition {
         Bindability: Bindability,
         InputScope: InputScope,
         Map: Map,
-        Held: Held
+        Held: Held,
+        AcceptsWireArgs: (WireArgsHandler is not null)
     );
     /// <summary>Gets the unique name used to identify and dispatch the command.</summary>
     public string Name { get; init; }

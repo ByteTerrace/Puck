@@ -301,7 +301,30 @@ public sealed partial class WorldServer {
                 values: rule.Effects.Select(selector: static effect => effect.Describe)
             );
 
-            lines.Add(item: $"{rule.Name} mode={rule.Mode.ToString().ToLowerInvariant()} latch={(latch.GetValueOrDefault(key: rule.Name)
+            var held = latch.GetValueOrDefault(key: rule.Name);
+            var prefix = $"{rule.Name}#";
+
+            // A forEach rule or an interaction keeps one latch per bound key/pair: held when any is.
+            foreach (var pair in latch) {
+                if (pair.Value && pair.Key.StartsWith(
+                    comparisonType: StringComparison.Ordinal,
+                    value: prefix
+                )) {
+                    held = true;
+                    break;
+                }
+            }
+
+            var scope = ((rule.Interaction is { } interaction)
+                ? $" {interaction.CoOccurrence.ToString().ToLowerInvariant()} {interaction.Left} x {interaction.Right}{((interaction.CoOccurrence == WorldInteractionCoOccurrence.Distance)
+                    ? $" <= {(double)interaction.Range}"
+                    : string.Empty)}"
+                : ((rule.ForEach is { } forEach)
+                    ? $" forEach {forEach}"
+                    : string.Empty)
+            );
+
+            lines.Add(item: $"{rule.Name} mode={rule.Mode.ToString().ToLowerInvariant()}{scope} latch={(held
                 ? "held"
                 : "open")} when {gate} -> {effects}");
         }

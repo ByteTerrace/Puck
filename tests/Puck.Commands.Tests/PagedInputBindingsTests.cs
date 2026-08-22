@@ -72,6 +72,40 @@ public sealed class PagedInputBindingsTests {
         Assert.False(condition: router.IsCommandHeld(command: ActionCommand, slot: 0));
     }
     [Fact]
+    public void AuthoredTextReachesAnActivatorPressButNotItsCarriedStateOrRelease() {
+        var bindings = Bindings(entries: [new BindingPageEntryDefinition(
+            Sources: null,
+            Command: ActionCommand,
+            Text: "first second",
+            Activator: new BindingActivatorDefinition(Sequence: ["key.a", "key.b"])
+        )]);
+        var router = Router(
+            bindings: bindings,
+            definitions: [(ActionCommand, CommandValueKind.Digital)]
+        );
+
+        router.Capture(signal: InputSignal.Press(source: "key.a"));
+        _ = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+        router.Capture(signal: InputSignal.Press(source: "key.b"));
+        var opened = Assert.Single(collection: Assert.Single(collection: router.SnapshotForTick(tick: 2UL, windowEndTick: ulong.MaxValue).Lanes).Entries);
+
+        Assert.True(condition: opened.Dispatch);
+        Assert.Equal(expected: $"{ActionCommand} first second", actual: opened.Text);
+
+        var carried = Assert.Single(collection: Assert.Single(collection: router.SnapshotForTick(tick: 3UL, windowEndTick: ulong.MaxValue).Lanes).Entries);
+
+        Assert.False(condition: carried.Dispatch);
+        Assert.Null(@object: carried.Text);
+
+        router.Capture(signal: InputSignal.Release(source: "key.a"));
+        var closed = Assert.Single(
+            Assert.Single(collection: router.SnapshotForTick(tick: 4UL, windowEndTick: ulong.MaxValue).Lanes).Entries,
+            predicate: static entry => (entry.Phase == CommandPhase.Completed)
+        );
+
+        Assert.Null(@object: closed.Text);
+    }
+    [Fact]
     public void TappedActivatorFiresNowAndReleasesOnTheNextTick() {
         var bindings = Bindings(entries: [new BindingPageEntryDefinition(
             Sources: null,
@@ -510,8 +544,9 @@ public sealed class PagedInputBindingsTests {
             new(Id: "shift", Sources: ["key.shift"]),
         };
         var sequence = new List<string> { "key.a", "key.b", };
+        var sources = new List<string> { "key.action", };
         var entries = new List<BindingPageEntryDefinition> {
-            new(Sources: ["key.action"], Command: ActionCommand),
+            new(Sources: sources, Command: ActionCommand),
             new(
                 Sources: null,
                 Command: ActionCommand,
@@ -531,6 +566,7 @@ public sealed class PagedInputBindingsTests {
         modifiers.Clear();
         entries.Clear();
         sequence.Clear();
+        sources.Clear();
 
         var bindings = new PagedInputBindings(profile: profile);
         var resolved = bindings.Resolve(slot: 0, source: "key.action");
@@ -538,6 +574,7 @@ public sealed class PagedInputBindingsTests {
         Assert.Single(collection: profile.Modifiers);
         Assert.Single(collection: resolved!);
         Assert.Equal(expected: 2, actual: bindings.ViewFor(slot: 0).Buttons.Count);
+        Assert.Equal(expected: ["key.action"], actual: bindings.ViewFor(slot: 0).Buttons[0].Sources);
 
         Resolve(bindings: bindings, signal: InputSignal.Press(source: "key.a"));
         Resolve(bindings: bindings, signal: InputSignal.Press(source: "key.b"));

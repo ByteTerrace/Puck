@@ -12,8 +12,8 @@ public enum OverlayPanelStyle : uint {
 /// <summary>
 /// The unified overlay's record packer: writers call the <c>Write*</c> methods in pixel coordinates (the design
 /// tokens are px values) and the builder packs normalized screen-space records into the one storage-buffer scratch —
-/// panels, then a flat element list (rects, fixed-cell text runs, icon chips), then the pre-resolved glyph-code
-/// words the text runs index. Preallocated once; <see cref="BeginFrame"/> resets it with zero steady-state
+/// panels, then a flat element list (rects, fixed-cell text runs, icon chips, rings, wedges, sampled frames), then
+/// the pre-resolved glyph-code words the text runs index. Preallocated once; <see cref="BeginFrame"/> resets it with zero steady-state
 /// allocation. Word layouts are documented at each writer — KEEP IN SYNC with <c>overlay-unified.frag.hlsl</c>.
 /// </summary>
 /// <remarks>
@@ -40,8 +40,8 @@ public sealed class OverlayFrameBuilder {
     /// <summary>The clip-rect ceiling (index 0 is the unclipped sentinel; the table holds indices 1..MaxClips) — a
     /// cannot-overflow backstop, never a budget; see <see cref="MaxPanels"/> for what that means.</summary>
     public const int MaxClips = 32;
-    /// <summary>The element-record ceiling (rects + rings + text runs + icon chips together) — a cannot-overflow
-    /// backstop, never a budget; see <see cref="MaxPanels"/> for what that means.</summary>
+    /// <summary>The element-record ceiling (all rect, text, icon, ring, wedge, and sampled-frame records together) —
+    /// a cannot-overflow backstop, never a budget; see <see cref="MaxPanels"/> for what that means.</summary>
     public const int MaxElements = 2048;
     /// <summary>The panel-record ceiling — a cannot-overflow backstop, never a budget.</summary>
     /// <remarks>What a capacity here is: the point past which a record cannot be addressed at all — the four
@@ -473,10 +473,10 @@ public sealed class OverlayFrameBuilder {
     /// RESOLVED atlas index, 1-based, 0 = none; the caller (never this builder, never the shader) turns an icon
     /// name or a physical button into that index — see <c>Puck.World.WorldIconTable</c>). Word layout (12):
     /// 0..1 plate center (normalized) · 2 plate half-size (px) · 3 badge half-size (px) ·
-    /// 4 = 2 | (role &lt;&lt; 4, unused) · 5 iconGlyph0 (low 16 bits; high 16 reserved) ·
+    /// 4 = 2 | (accentRole &lt;&lt; 4; 0 selects the accent token) · 5 iconGlyph0 (low 16 bits; high 16 reserved) ·
     /// 6 state (alpha byte | pressed&lt;&lt;8 | badgeGlyph0&lt;&lt;9 (7 bits) | badgeGlyph1&lt;&lt;16 (7 bits) |
-    /// accent&lt;&lt;23 | bound&lt;&lt;24) · 7..8 badge center offset from the plate center (px floats) ·
-    /// 9 clip index · 10 iconGlyph1 · 11 reserved.</summary>
+    /// accent&lt;&lt;23 | bound&lt;&lt;24 | toggled&lt;&lt;25) · 7..8 badge center offset from the plate center (px floats) ·
+    /// 9 clip index · 10 iconGlyph1 · 11 toggle phase (float, 0..1).</summary>
     /// <param name="centerX">The plate center x, px.</param>
     /// <param name="centerY">The plate center y, px.</param>
     /// <param name="plateHalf">The plate half-extent, px.</param>
@@ -510,8 +510,8 @@ public sealed class OverlayFrameBuilder {
         m_scratch[(offset + 1)] = Pack(value: (centerY * m_inverseHeight));
         m_scratch[(offset + 2)] = Pack(value: plateHalf);
         m_scratch[(offset + 3)] = Pack(value: glyphHalf);
-        // The accent tier's hue override rides the role bits (0 = the accent token): a verdict chip blooms in the
-        // outcome's hue through the very tier a hovered chip blooms accent.
+        // The accent tier's hue override rides the role bits (0 = the accent token): an outcome chip blooms in its
+        // own hue through the very tier a hovered chip blooms accent.
         m_scratch[(offset + 4)] = 2u | (((uint)(accentRole ?? 0)) << 4);
         m_scratch[(offset + 5)] = iconGlyph0;
         m_scratch[(offset + 6)] = ((uint)(Math.Clamp(

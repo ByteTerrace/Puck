@@ -11,11 +11,12 @@ namespace Puck.Commands;
 /// concentric shells rather than selected by chord; each ring's entries are the wheel's SECTORS, and every sector is
 /// an ordinary command binding activated through the originating seat's input-router lane.
 /// </summary>
-/// <remarks>A sector row deliberately narrows the page-entry shape: it carries a <see cref="BindingPageEntryDefinition.Command"/>
-/// destination plus display metadata and NOTHING else — no <c>Sources</c>/<c>Activator</c> (the radial gesture is the
-/// trigger), no <c>Channel</c>/<c>Scale</c> (a radial choice is a one-shot command activation), and no
-/// <c>Mode</c> (it has no held state). Command <c>Value</c> and <c>ActivateOn</c> remain meaningful and compile into
-/// the same activation shape an ordinary binding uses. Ring page ids share the document-wide page-id namespace.</remarks>
+/// <remarks>A sector row deliberately narrows the page-entry shape: it carries a
+/// <see cref="BindingPageEntryDefinition.Command"/> destination and an optional stable id, and NOTHING else — no
+/// <c>Sources</c>/<c>Activator</c> (the radial gesture is the trigger), no <c>Channel</c>/<c>Scale</c> (a radial choice
+/// is a one-shot command activation), no <c>Mode</c> (it has no held state), and no <c>Text</c> (the activation is a
+/// value, not a submitted line). Command <c>Value</c> and <c>ActivateOn</c> remain meaningful and compile into the
+/// same activation shape an ordinary binding uses. Ring page ids share the document-wide page-id namespace.</remarks>
 /// <param name="Id">The profile-unique radial id. Composition and runtime continuity key on this identity.</param>
 /// <param name="Group">The page group this wheel belongs to — the seat's ACTIVE group decides which wheel presents,
 /// so a group without a wheel simply presents nothing. A containing world may bind the name to a Text state cell

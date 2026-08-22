@@ -20,7 +20,8 @@ public readonly record struct CommandEntry {
     /// <param name="phase">The edge this tick represents.</param>
     /// <param name="origin">How the command entered the command pipeline.</param>
     /// <param name="dispatch">Whether this entry's handler fires when the snapshot is applied.</param>
-    /// <param name="text">The original text line for a simulation-routed console command; <see langword="null"/> for physical input.</param>
+    /// <param name="text">The submitted line for a simulation-routed console command or an argument-bearing binding
+    /// press; otherwise <see langword="null"/>.</param>
     /// <param name="device">The local device that produced this command.</param>
     /// <param name="source">The deterministic binding owner: a provider-neutral physical source, or a stable
     /// synthesized destination id for a chord or toggle. <see langword="null"/> for non-binding injections.</param>
@@ -91,9 +92,9 @@ public readonly record struct CommandEntry {
     /// must distinguish independent contributions dispatching commands reads this, never <see cref="Device"/>.
     /// Use <see cref="Origin"/> for ingress.</summary>
     public string? Source { get; internal init; }
-    /// <summary>The original text line for a simulation-routed console command. <see langword="null"/> for physical
-    /// input. This is deterministic snapshot payload; it lets argument-bearing verbs execute at their assigned
-    /// tick.</summary>
+    /// <summary>The submitted line for a simulation-routed console command or an argument-bearing binding press;
+    /// otherwise <see langword="null"/>. This is deterministic snapshot payload; it lets argument-bearing verbs
+    /// execute at their assigned tick.</summary>
     public string? Text { get; internal init; }
     /// <summary>The command's value for this tick.</summary>
     public CommandValue Value { get; internal init; }

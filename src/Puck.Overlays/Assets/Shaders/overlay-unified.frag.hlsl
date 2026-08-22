@@ -5,7 +5,8 @@
 // The unified overlay pass (single-source HLSL; DXC -> SPIR-V for Vulkan AND DXIL for Direct3D 12). ONE decorator
 // draws every 2D surface from one packed storage buffer: N PANELS (token chrome — a scrim fill in a rounded rect, a
 // 1px hairline outline, an optional title band + divider, an optional Tier-1 status ring + bloom halo) plus a flat
-// list of ELEMENTS — rounded-rect cells, fixed-cell text runs into the ONE shared SDF glyph atlas, and ICON CHIPS
+// list of ELEMENTS — rounded-rect cells, fixed-cell text runs into the ONE shared SDF glyph atlas, ICON CHIPS,
+// hairline rings, filled radial-menu wedges, and sampled frame slots
 // (the binding-bar repertoire folded in as an element kind: rounded plate with the four chip-state tiers, a bound
 // action's plate icon, and a physical-button badge — every glyph an authored atlas entry, none of it drawn
 // procedurally; see Puck.World.WorldIconTable for how a name becomes an atlas index). SURFACES ARE WRITERS: the
@@ -236,9 +237,9 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
         }
     }
 
-    // ---- elements (rects, text runs, icon chips, rings, sampled frames, in submission order) -----------------------
+    // ---- elements (rects, text, icons, rings, wedges, sampled frames, in submission order) -------------------------
     // Element word layout (12 words) — KEEP IN SYNC with OverlayFrameBuilder.WriteRect/WriteText/WriteIcon/WriteRing/WriteFrame:
-    //   4         kind (uint low nibble: 0 = text, 1 = rect, 2 = icon, 3 = ring, 4 = frame) | (word4 bits 4.. vary by kind)
+    //   4         kind (uint low nibble: 0 = text, 1 = rect, 2 = icon, 3 = ring, 4 = frame, 5 = wedge) | (word4 bits 4.. vary by kind)
     //   text:     colorRole << 4 · 0..1 origin (normalized) · 2..3 one glyph cell's on-screen w/h (normalized) ·
     //             5 glyph start · 6 glyph count · 7 alpha
     //   rect:     colorRole << 4 · 0..3 rect (normalized) · 6 corner radius (px) · 7 alpha
@@ -254,7 +255,7 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
     //             half-width trimmed off each angular edge so neighbours read as separate pie pieces) · 10 glow role
     //             (uint: 0 = none, else a token color-role index — a lit ring AT the piece's edge plus an outward
     //             halo, the selection/outcome indicator) — a FILLED annular sector, the radial menu's piece. The
-    //             OVERLAY_ROLE_CUSTOM fill role draws NO fill: glow only (a closed wheel's verdict).
+    //             OVERLAY_ROLE_CUSTOM fill role draws NO fill: glow only (a closed wheel's local outcome).
     //   frame:    (frameSlot << 4) | (mirror << 12) | (fit << 13, 0 = cover, 1 = contain, 2 = stretch) · 0..3 rect
     //             (normalized) · 6 corner radius (px) · 7 alpha — a live OverlayFrameSlots slot sampled into a
     //             rounded rect (the HUD picture-in-picture, e.g. a face cam); see frameSlotDimensions/sampleFrameSlot.
@@ -361,9 +362,9 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
 
             if (glowRole != 0u) {
                 // The piece's glow: a 1px lit ring straddling its edge plus an SDF distance-falloff halo OUTSIDE it,
-                // in the outcome's own hue — the same Tier-1 bloom the chip and the toast use, so "this is selected /
-                // accepted / refused" reads in one vocabulary everywhere. The fill beneath is untouched: a glow
-                // indicates, it never hides what is under the piece.
+                // in the outcome's own hue — the same Tier-1 bloom the chip and the toast use, so "selected /
+                // dispatched / locally failed" reads in one vocabulary everywhere. The fill beneath is untouched:
+                // a glow indicates, it never hides what is under the piece.
                 float3 hue = OverlayTokenColor(overlayData, glowRole).rgb;
                 float ring = strokeMask(abs(dist), 0.5, edgeAa);
                 float halo = (saturate(1.0 - (max(dist, 0.0) / max(haloBlur, 1e-4))) * step(0.0, dist));
@@ -463,8 +464,8 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
             // Tier 1 HELD: surface.base, fully seated, + bloom.neutral. Tier 1 ACCENT: accent.quiet + bloom.accent.
             // Tier-1 chips skip the plain hairline — the bloom ring below IS their edge.
             // The accent tier's hue: the accent token, unless the record names another role in word 4's role bits
-            // (0 = none, since no chip ever blooms text.primary by override) — a verdict chip blooms positive or
-            // danger through the same tier the hover accent uses.
+            // (0 = none, since no chip ever blooms text.primary by override) — an outcome chip can bloom another
+            // semantic hue through the same tier the hover accent uses.
             float3 accentRgb = ((role != 0u) ? OverlayTokenColor(overlayData, role).rgb : OverlayTokenColor(overlayData, OVERLAY_ROLE_ACCENT).rgb);
             float3 fillColor = (isHeld
                 ? OverlayTokenColor(overlayData, OVERLAY_ROLE_SURFACE_BASE).rgb

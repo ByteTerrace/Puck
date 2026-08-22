@@ -23,7 +23,7 @@ public static partial class WorldDefinitionValidator {
     // Slot-set/bank structure: names, uniqueness, and ceilings — everything checkable WITHOUT the composed binding
     // profile. The bank PageId existence check runs separately, after ValidateBindingOverlays compiles the
     // composed profile (a bank's page reference is checkable only against the whole overlay stack's result).
-    private static void ValidateBindingBar(WorldBindingBarAuthoring? authoring, string path, List<string> errors) {
+    private static void ValidateBindingBar(WorldBindingBarAuthoring? authoring, string path, IReadOnlyDictionary<string, WorldStateRow> stateRows, List<string> errors) {
         if (authoring is null) {
             return;
         }
@@ -32,6 +32,12 @@ public static partial class WorldDefinitionValidator {
             errors: errors,
             path: $"{path}.visible",
             predicate: authoring.Visible
+        );
+        WorldStateBindingContext.ValidatePresentationRowReference(
+            errors: errors,
+            path: $"{path}.iconRow",
+            reference: authoring.IconRow,
+            stateRows: stateRows
         );
 
         if (
@@ -221,9 +227,8 @@ public static partial class WorldDefinitionValidator {
         );
 
     }
-    // Every icon-bearing door a composed binding profile carries — page and its entries, modifier, chord command, and
-    // wheel ring and its sector entries — so an authored icon naming an unknown row refuses by name at each, matching
-    // the iconography section's referential contract rather than only the page-entry door.
+    // Every icon-bearing door the composed binding profile carries directly — pages, modifiers, and chord commands.
+    // Entry and sector presentation is state-backed and validated separately by WorldStateBindingContext.
     private static void ValidateComposedIcons(BindingProfileDocument composed, IReadOnlySet<string> iconNames, List<string> errors) {
         foreach (var modifier in composed.Modifiers) {
             if (modifier is not null) {
@@ -401,6 +406,7 @@ public static partial class WorldDefinitionValidator {
             ValidateBindingBar(
                 authoring: overlay.BindingBar,
                 path: $"{path}.bindingBar",
+                stateRows: stateRows,
                 errors: errors
             );
         }

@@ -377,14 +377,35 @@ public sealed partial class WorldServer {
     // A '$cell:' key indirection: the cell's integer value spelled as a key; an absent cell reads 0 like any other.
     // The integer part of a Q48.16 value — the key or index a cell's value names.
     private static long IntegerOf(FixedQ4816 value) => (value.Value >> 16);
-    private string ResolveOperandKey(string? key, CompiledCellRef? keyFrom, ulong tick) => ((keyFrom is { } indirection)
-        ? IntegerOf(value: ReadStateCell(
-            row: indirection.Row,
-            key: indirection.Key,
-            tick: tick
-        )).ToString(provider: System.Globalization.CultureInfo.InvariantCulture)
-        : key!
-    );
+    // The bodies bound for the evaluation in progress — set by the rule/interaction evaluator before a gate or
+    // effect is read, -1 when a binding is not in play.
+    private int m_boundEach = -1;
+    private int m_boundLeft = -1;
+    private int m_boundRight = -1;
+
+    private int BoundBody(RuleBinding binding) => binding switch {
+        RuleBinding.Each => m_boundEach,
+        RuleBinding.Left => m_boundLeft,
+        RuleBinding.Right => m_boundRight,
+        _ => -1,
+    };
+    // A '$cell:' key indirection reads the cell's integer value as a key; a binding token reads the bound body.
+    private string ResolveOperandKey(string? key, CompiledCellRef? keyFrom, ulong tick) {
+        if (keyFrom is not { } indirection) {
+            return key!;
+        }
+
+        var index = ((indirection.Binding != RuleBinding.None)
+            ? BoundBody(binding: indirection.Binding)
+            : IntegerOf(value: ReadStateCell(
+                row: indirection.Row,
+                key: indirection.Key,
+                tick: tick
+            ))
+        );
+
+        return index.ToString(provider: System.Globalization.CultureInfo.InvariantCulture);
+    }
     // The nearest active body to 'from' (itself excluded) whose cell in the keyed tag row reads nonzero, or -1.
     private int ResolveNearestBody(CompiledBodyRef from, string row, ulong tick) {
         var origin = Body(index: ResolveBodyRef(
@@ -431,6 +452,7 @@ public sealed partial class WorldServer {
     }
     private int ResolveBodyRef(CompiledBodyRef bodyRef, ulong tick) => (bodyRef.Kind switch {
         CompiledBodyRefKind.Literal => bodyRef.Index,
+        CompiledBodyRefKind.Binding => BoundBody(binding: (RuleBinding)bodyRef.Index),
         CompiledBodyRefKind.Cell => ((IntegerOf(value: ReadStateCell(
         row: bodyRef.Row!,
         key: bodyRef.Key!,

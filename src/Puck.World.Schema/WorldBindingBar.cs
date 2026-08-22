@@ -186,13 +186,14 @@ public sealed record WorldBindingBarLayout(
 /// <summary>One stacked binding-bar bank: the page it renders and its position in the stack. Several banks of the
 /// SAME slot set render simultaneously, each showing what that bank's OWN page binds — the WoW-addon original's
 /// "five banks of one compass" idea (resting, LT, RT, LT&gt;RT, RT&gt;LT are the natural five, though a bank may name
-/// any page). The engine ARRANGES the stack from <paramref name="Order"/> alone, pitching it off the authored theme's
-/// spacing grid; the two offsets exist only for a world that wants to place one bank by hand.</summary>
+/// any page). The engine ARRANGES the stack from <paramref name="Order"/> alone on a fixed button-pitch nested-cross
+/// table; the two offsets exist only for a world that wants to place one bank by hand.</summary>
 /// <param name="Id">The bank's stable id — its mutation address (unique within the authoring row).</param>
 /// <param name="PageId">The <c>BindingPageDefinition.Id</c> this bank renders — validated to exist somewhere in the
 /// composed binding profile.</param>
 /// <param name="Order">This bank's place in the derived stack (unique within the authoring row): 0 sits on the bar's
-/// shared anchor, and each higher order fans one step further out and up.</param>
+/// shared anchor; 1 nests up and inward, 2 down and inward, and 3/4 sit straight above/below. Later orders alternate
+/// farther above and below.</param>
 /// <param name="Alpha">This bank's opacity when it is NOT the seat's currently active page.</param>
 /// <param name="ActiveAlpha">This bank's opacity when it IS the seat's currently active page; <see langword="null"/>
 /// draws fully opaque (1.0) while active.</param>
