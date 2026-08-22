@@ -308,11 +308,11 @@ public static partial class WorldDefinitionValidator {
     }
     // The hud section: schema caps (MaxWorldPanels; MaxElementsPerPanel, or the tighter MaxElementsPerSeatPanel for
     // an owned identity's seat panel — see isIdentityScope), id uniqueness (panels; elements within their panel),
-    // rect sanity, WorldHudLayer.Replace refused for a seat panel, and the closed HudBindingVocabulary — including
-    // whether a state.<name> binding resolves against the state rows validated just before this call. Throws an
-    // enum-reasoned HudValidationException at the first violation, caught here and folded into the whole-document
-    // errors list.
-    private static void ValidateHud(WorldHudSection hud, IReadOnlyDictionary<string, WorldStateRow> stateRows, bool isIdentityScope, List<string> errors) {
+    // rect sanity, WorldHudLayer.Replace refused for a seat panel, the closed HudBindingVocabulary — including
+    // whether a state.<name> binding resolves against the state rows validated just before this call — and (for a
+    // Frame element) the shared ValidateFrameSource gate against definition/cameras. Throws an enum-reasoned
+    // HudValidationException at the first violation, caught here and folded into the whole-document errors list.
+    private static void ValidateHud(WorldDefinition definition, HashSet<string> cameras, WorldHudSection hud, IReadOnlyDictionary<string, WorldStateRow> stateRows, bool isIdentityScope, List<string> errors) {
         if (hud is null) {
             errors.Add(item: "hud is required.");
 
@@ -321,6 +321,8 @@ public static partial class WorldDefinitionValidator {
 
         try {
             ValidateHudCore(
+                cameras: cameras,
+                definition: definition,
                 hud: hud,
                 isIdentityScope: isIdentityScope,
                 stateRows: stateRows
@@ -329,7 +331,7 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"hud.{exception.Reason}: {exception.Message}");
         }
     }
-    private static void ValidateHudCore(WorldHudSection hud, IReadOnlyDictionary<string, WorldStateRow> stateRows, bool isIdentityScope) {
+    private static void ValidateHudCore(WorldDefinition definition, HashSet<string> cameras, WorldHudSection hud, IReadOnlyDictionary<string, WorldStateRow> stateRows, bool isIdentityScope) {
         var panels = hud.Panels;
         var maxElements = (isIdentityScope
             ? WorldHudCapacity.MaxElementsPerSeatPanel
@@ -415,6 +417,8 @@ public static partial class WorldDefinitionValidator {
                 path: $"{panelPath}.rect"
             );
             HudRowValidation.ValidateElements(
+                cameras: cameras,
+                definition: definition,
                 elements: panel.Elements,
                 panelPath: $"{panelPath} ('{panel.Id}')",
                 maxElements: maxElements,

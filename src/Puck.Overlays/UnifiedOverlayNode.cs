@@ -58,12 +58,23 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
     // channel scopes (wheel, then cursor on top), drawn over everything and outside the replace-band suppression
     // (see ProduceFrame's tail).
     private const int FirstPartyChannelCount = 4;
+    // Combined image-sampler binding layout (identical numbering on both backends — see OverlayServices.StorageBufferBinding
+    // for the storage buffer's matching binding): 0 the inner world image (SamplerBinding); 1..OverlayFrameSlots.SlotCount
+    // the frame-slot table (FrameSlotFirstBinding..), one scalar Texture2D+SamplerState pair per binding (DXC's
+    // vk::combinedImageSampler never fuses an array — see overlay-unified.frag.hlsl's frameTextureN/frameSamplerN
+    // declarations); OverlayFrameSlots.SlotCount+1 the storage buffer, immediately after every sampler. All 1+SlotCount
+    // samplers share ONE sampler configuration (m_sampler) — a bound slot's descriptor gets its lease's image view, an
+    // unbound slot's gets the inner world image (see ProduceFrame's WriteFrameSlotDescriptors call), so every binding
+    // the shader can reach through its slot-selecting switch is always valid.
+    private const uint FrameSlotFirstBinding = (SamplerBinding + 1);
     // The glyph outline halo width, in encoded signed-distance units — the SDF contrast band that keeps overlay text
     // legible over any world content, kept clear of the atlas' saturation floor at the overlay's screenPxRange.
     private const float OutlineBand = 0.20f;
     // counts float4 + sdf float4 + misc float4 — KEEP IN SYNC with overlay-unified.frag.hlsl's OverlayPassData.
     private const int PushConstantByteLength = ((sizeof(float) * 4) * 3);
     private const uint SamplerBinding = 0;
+    // 1 (SamplerBinding) + the frame-slot table — see FrameSlotFirstBinding's remarks.
+    private const uint TextureSamplerCount = (1u + OverlayFrameSlots.SlotCount);
     // The one overlay pass's timestamp pair (a begin/end bracket around the fullscreen draw).
     private const uint TimingQueryCount = 2;
     private const uint VertexCount = 3;
@@ -86,6 +97,10 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
     private readonly IGpuDescriptorAllocator m_descriptorAllocator;
     private readonly IGpuDeviceContext m_deviceContext;
     private readonly ReadOnlyMemory<byte> m_fragmentBytecode;
+    // The node-owned per-frame frame-slot table (see FrameSlotFirstBinding's remarks) — always constructed, even
+    // when m_hudWriter is null, so BeginFrame/RetirePending/WriteFrameSlotDescriptors stay unconditional every
+    // ProduceFrame call; with no HudWriter to call Bind, it simply never binds anything.
+    private readonly OverlayFrameSlots m_frameSlots;
     private readonly MarkerWriter? m_markerWriter;
     private readonly uint m_height;
     // The authored world-scope HUD's banded writer, or null when the host wired no Hud/HudBindings source pair (see
@@ -216,6 +231,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         );
         m_descriptorAllocator = services.DescriptorAllocator;
         m_deviceContext = services.DeviceContext;
+        m_frameSlots = new OverlayFrameSlots(sources: services.FrameSources);
         m_markerWriter = ((sources.Markers is { } markers)
             ? new MarkerWriter(
                 maxChipsPerSeat: capacity.MarkerMaxChipsPerSeat,
@@ -226,6 +242,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         m_hudWriter = (((sources.Hud is { } hudSource) && (sources.HudBindings is { } hudBindings))
             ? new HudWriter(
                 bindings: hudBindings,
+                frameSlots: m_frameSlots,
                 source: hudSource,
                 theme: m_theme
             )
@@ -389,7 +406,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
                     StrideBytes: VertexStrideBytes,
                     Attributes: [new GpuVertexAttribute(Format: GpuVertexFormat.R32G32Float, Location: 0, OffsetBytes: 0)]
                 ),
-                TextureSamplerCount: 1,
+                TextureSamplerCount: TextureSamplerCount,
                 EnableStorageBuffer: true,
                 PushConstantBinding: new GpuPushConstantBinding(
                     data: new byte[PushConstantByteLength],
@@ -410,7 +427,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
             deviceHandle: deviceHandle,
             sizes: new GpuDescriptorPoolSizes(
                 AccelerationStructureCount: 0,
-                CombinedImageSamplerCount: 1,
+                CombinedImageSamplerCount: TextureSamplerCount,
                 MaxSets: 1,
                 StorageBufferCount: 1,
                 StorageImageCount: 0
@@ -846,6 +863,31 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
             width: width
         );
     }
+    // Rewrites every one of the OverlayFrameSlots.SlotCount frame-slot descriptors, unconditionally, every produced
+    // frame that draws: a bound slot's descriptor points at its lease's image view (bound content changes far more
+    // often than the world image's own identity, so — unlike SamplerBinding above — this is never cached against a
+    // last-written handle); an unbound slot's points at fallbackImageViewHandle (the inner world image), so every
+    // binding the shader's slot-selecting switch can reach is always a valid, sampleable image.
+    private void WriteFrameSlotDescriptors(nint fallbackImageViewHandle) {
+        var boundCount = m_frameSlots.BoundCount;
+        var deviceHandle = m_deviceContext.DeviceHandle;
+
+        for (var slot = 0; (slot < OverlayFrameSlots.SlotCount); slot++) {
+            var imageViewHandle = ((slot < boundCount)
+                ? m_frameSlots.LeaseAt(slot: slot).ImageViewHandle
+                : fallbackImageViewHandle
+            );
+
+            m_descriptorAllocator.WriteCombinedImageSampler(
+                arrayElement: 0,
+                binding: (FrameSlotFirstBinding + ((uint)slot)),
+                descriptorSetHandle: m_descriptorSet,
+                deviceHandle: deviceHandle,
+                imageViewHandle: imageViewHandle,
+                samplerHandle: m_sampler
+            );
+        }
+    }
 
     /// <inheritdoc/>
     public void Dispose() {
@@ -854,6 +896,10 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         }
 
         m_disposed = true;
+        // A final wait proves no in-flight pass can still be sampling a held lease, so every one of them — bound
+        // this frame or still pending retirement from the last — can retire safely.
+        m_frameFence?.Wait();
+        m_frameSlots.RetireAll();
         ReleaseGpuResources();
         m_inner.Dispose();
     }
@@ -887,6 +933,10 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         // here carries an ordering-sensitive side effect beyond its own emission.
         m_sources.FeedTick?.Invoke();
         m_builder.BeginFrame();
+        // Moves the leases the PREVIOUS produced frame bound aside for retirement (RetirePending, below, once this
+        // frame's fence wait proves that frame's sampling pass retired) and clears the slot table for this frame's
+        // Bind calls, which the HUD writer's Frame-element emission makes below.
+        m_frameSlots.BeginFrame();
         m_currentFrameRenderTicks = context.RenderTicks;
         m_hudWriter?.RefreshFrame();
 
@@ -963,8 +1013,10 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         }
 
         EnsureResources();
-        // The previous frame's pass must have retired before the descriptor/buffer/command-buffer rewrites below.
+        // The previous frame's pass must have retired before the descriptor/buffer/command-buffer rewrites below —
+        // which is also what proves the leases OverlayFrameSlots.BeginFrame moved aside above safe to retire.
         m_frameFence!.Wait();
+        m_frameSlots.RetirePending();
         // The retired previous submission's timestamps are readable now — resolve them before this frame overwrites
         // the pool (non-stalling by construction: the fence above just proved retirement).
         ReadPreviousTiming();
@@ -982,6 +1034,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
             m_lastImageViewHandle = inner.ImageViewHandle;
         }
 
+        WriteFrameSlotDescriptors(fallbackImageViewHandle: inner.ImageViewHandle);
         FillPushConstants();
         UploadFrameRegions();
 

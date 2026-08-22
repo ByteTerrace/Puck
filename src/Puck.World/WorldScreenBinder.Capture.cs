@@ -21,41 +21,70 @@ internal sealed partial class WorldScreenBinder {
     // the D3D12 GPU transport the open is ALWAYS deferred to that pending path (the render adapter LUID the platform
     // capture must open on is not resolvable at construction), so a valid declaration retains a pending feed here.
     private void BootDeclaredCapture(ScreenSlot slot, WorldScreenSource.Capture capture) {
+        var feed = TryCreateCaptureFeed(
+            capture: capture,
+            fault: out var fault
+        );
+
+        if (feed is not null) {
+            slot.Capture = feed;
+        } else {
+            slot.DeclaredFault = fault;
+        }
+    }
+    // The one open ladder behind a Capture source, shared by a declared screen row (BootDeclaredCapture, above) and
+    // the frame-source registry (DeclareFrameSource, WorldScreenBinder.FrameSources.cs — a HUD/overlay capture with
+    // no screen row at all): the D3D12 GPU transport always defers to the pending path (the render adapter LUID is
+    // not resolvable yet); otherwise an immediate CPU/GPU open is tried, then a pending feed on a platform that
+    // supports window capture at all, then nothing (fault only, no feed) on a platform with none. A caller that
+    // gets no feed back never retries on its own — a null return means the platform itself cannot ever open this
+    // source, not a transient miss.
+    private CaptureFeed? TryCreateCaptureFeed(WorldScreenSource.Capture capture, out string? fault) {
         if (capture.MonitorIndex is { } monitorIndex) {
             if (
                 m_hostsOnDirectX &&
                 m_windowCapture.IsSupported &&
                 (monitorIndex >= 0)
             ) {
-                slot.Capture = NewCaptureFeed(
+                fault = null;
+
+                return NewCaptureFeed(
                     title: "",
                     profile: capture.Profile,
                     source: null,
                     monitorIndex: monitorIndex
                 );
-            } else if (TryOpenMonitorCapture(
+            }
+
+            if (TryOpenMonitorCapture(
                 monitorIndex: monitorIndex,
                 profile: capture.Profile,
                 feed: out var monitorFeed,
                 fault: out var monitorFault
             )) {
-                slot.Capture = monitorFeed;
-            } else if (
+                fault = null;
+
+                return monitorFeed;
+            }
+
+            if (
                 m_windowCapture.IsSupported &&
                 (monitorIndex >= 0)
             ) {
-                slot.Capture = NewCaptureFeed(
+                fault = monitorFault;
+
+                return NewCaptureFeed(
                     title: "",
                     profile: capture.Profile,
                     source: null,
                     monitorIndex: monitorIndex,
                     fault: monitorFault
                 );
-            } else {
-                slot.DeclaredFault = monitorFault;
             }
 
-            return;
+            fault = monitorFault;
+
+            return null;
         }
 
         if (
@@ -63,31 +92,43 @@ internal sealed partial class WorldScreenBinder {
             m_windowCapture.IsSupported &&
             !string.IsNullOrWhiteSpace(value: capture.WindowTitle)
         ) {
-            slot.Capture = NewCaptureFeed(
+            fault = null;
+
+            return NewCaptureFeed(
                 title: capture.WindowTitle,
                 profile: capture.Profile,
                 source: null
             );
-        } else if (TryOpenCapture(
+        }
+
+        if (TryOpenCapture(
             title: capture.WindowTitle,
             profile: capture.Profile,
             feed: out var captureFeed,
             fault: out var captureFault
         )) {
-            slot.Capture = captureFeed;
-        } else if (
+            fault = null;
+
+            return captureFeed;
+        }
+
+        if (
             m_windowCapture.IsSupported &&
             !string.IsNullOrWhiteSpace(value: capture.WindowTitle)
         ) {
-            slot.Capture = NewCaptureFeed(
+            fault = captureFault;
+
+            return NewCaptureFeed(
                 title: capture.WindowTitle,
                 profile: capture.Profile,
                 source: null,
                 fault: captureFault
             );
-        } else {
-            slot.DeclaredFault = captureFault;
         }
+
+        fault = captureFault;
+
+        return null;
     }
     // Samples only already-completed compositor frames. A miss holds the last frame. An ended compositor session is
     // disposed before the binder resolves a replacement target (a returning window with the same title, or a reconnected

@@ -29,28 +29,7 @@
           "null"
         ],
         "additionalProperties": {
-          "description": "The WorldScreenSource arms that produce a sampled frame \u2014 Camera, View, Probe, and Capture \u2014 carrying its own JsonPolymorphicAttribute over the SAME four discriminators (camera/view/probe/capture) their parent union uses, so a member declared as this narrower type round-trips the identical JSON a full WorldScreenSource screen row does. A WorldProbe socket is the driving consumer: it plugs one of these into each named input rather than the wider union, which would legally admit a decal/machine/console/qr/text/none source no probe kernel can sample.",
-          "type": [
-            "object",
-            "null"
-          ],
-          "required": [
-            "$type"
-          ],
-          "anyOf": [
-            {
-              "$ref": "./common.schema.json#/$defs/WorldScreenSourceCamera"
-            },
-            {
-              "$ref": "./common.schema.json#/$defs/WorldScreenSourceView"
-            },
-            {
-              "$ref": "./common.schema.json#/$defs/WorldScreenSourceProbe"
-            },
-            {
-              "$ref": "./common.schema.json#/$defs/WorldScreenSourceCapture"
-            }
-          ]
+          "$ref": "./common.schema.json#/$defs/WorldFrameSource"
         },
         "default": null
       },

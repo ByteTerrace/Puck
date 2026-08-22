@@ -569,8 +569,11 @@ public static partial class WorldDefinitionValidator {
     // capture extent) — validated to the SAME shape as a screen row anyway rather than forking a second, looser
     // gate for one field nobody reads. Self-reference (a probe socket naming its own enclosing row) is the ONE rule
     // this method cannot see — the caller checks it, since only a probe socket call site knows which probe is
-    // enclosing.
-    private static void ValidateFrameSource(WorldDefinition definition, WorldFrameSource? source, string path, HashSet<string> cameras, List<string> errors) {
+    // enclosing. Internal (not private): HudRowValidation.ValidateElement (HudValidation.cs) is a separate class in
+    // this same assembly that reuses this exact gate for a hud.panels Frame element's own bound source — widening the
+    // member rather than granting InternalsVisibleTo to another project (there is none to grant it to; both types
+    // already share this assembly).
+    internal static void ValidateFrameSource(WorldDefinition definition, WorldFrameSource? source, string path, HashSet<string> cameras, List<string> errors) {
         switch (source) {
             case null:
                 errors.Add(item: $"{path} is required.");

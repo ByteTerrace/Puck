@@ -534,6 +534,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         DisposeCamera();
         DisposeProbeFeeds();
         DisposeViewExports();
+        DisposeFrameCaptures();
 
         // After the feeds: the camera's and every probe's shared targets live on this headless device, so it must
         // outlive them.
@@ -593,6 +594,8 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         foreach (var slot in m_slots.Values) {
             slot.Capture?.NotifyDeviceLost();
         }
+
+        NotifyFrameCapturesDeviceLost();
 
         m_viewStack?.NotifyDeviceLost();
     }

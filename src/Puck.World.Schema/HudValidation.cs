@@ -60,6 +60,26 @@ internal enum HudRefusal {
     /// role.</summary>
     [Refusal(door: "hud.validate", condition: "the defaults row's cursor policy carries a non-finite or out-of-band hover radius, ring size, or an undefined palette role", kind: RefusalKind.Verdict)]
     CursorInvalid,
+
+    /// <summary>A <see cref="WorldHudElementKind.Frame"/> element's <see cref="WorldHudElement.Source"/> is missing
+    /// or fails the shared frame-source gate (an undeclared view camera, an unrecognized camera sensor, an
+    /// undeclared probe, or a malformed capture selector/profile).</summary>
+    [Refusal(door: "hud.validate", condition: "a frame element's source is missing or fails the shared frame-source gate", kind: RefusalKind.Verdict)]
+    FrameSourceInvalid,
+
+    /// <summary>A non-<see cref="WorldHudElementKind.Frame"/> element carries a <see cref="WorldHudElement.Source"/>.</summary>
+    [Refusal(door: "hud.validate", condition: "a non-frame element carries a source", kind: RefusalKind.Verdict)]
+    FrameSourceNotAllowed,
+
+    /// <summary>A <see cref="WorldHudElementKind.Frame"/> element's <see cref="WorldHudElement.Radius"/> is
+    /// non-finite or negative.</summary>
+    [Refusal(door: "hud.validate", condition: "a frame element's radius is non-finite or negative", kind: RefusalKind.Verdict)]
+    InvalidFrameRadius,
+
+    /// <summary>A <see cref="WorldHudElementKind.Frame"/> element's <see cref="WorldHudElement.Opacity"/> is
+    /// non-finite or outside [0, 1].</summary>
+    [Refusal(door: "hud.validate", condition: "a frame element's opacity is non-finite or outside [0, 1]", kind: RefusalKind.Verdict)]
+    InvalidFrameOpacity,
 }
 /// <summary>
 /// Row-level HUD validation shared by <see cref="WorldDefinitionValidator"/> (world-scope panels, capped by
@@ -111,6 +131,62 @@ internal static class HudRowValidation {
         }
     }
 
+    // Bridges ValidateFrameSource's collect-many-errors style (a List<string>, shared with every other screen/probe
+    // frame-source site) into this door's throw-on-first-violation style: run the shared gate into a scratch list,
+    // then fold it into ONE HudValidationException naming every collected line, rather than forking a second,
+    // throwing-only copy of the gate.
+    private static void ValidateFrameElementSource(WorldHudElement element, string path, WorldDefinition? definition, HashSet<string>? cameras) {
+        var isFrame = (element.Kind == WorldHudElementKind.Frame);
+
+        if (!isFrame) {
+            if (element.Source is not null) {
+                throw new HudValidationException(
+                    message: $"{path}.source is only legal on a 'frame' kind element (got '{element.Kind}').",
+                    reason: HudRefusal.FrameSourceNotAllowed
+                );
+            }
+
+            return;
+        }
+
+        var frameErrors = new List<string>();
+
+        WorldDefinitionValidator.ValidateFrameSource(
+            cameras: (cameras ?? []),
+            definition: definition!,
+            errors: frameErrors,
+            path: $"{path}.source",
+            source: element.Source
+        );
+
+        if (frameErrors.Count > 0) {
+            throw new HudValidationException(
+                message: string.Join(separator: " ", values: frameErrors),
+                reason: HudRefusal.FrameSourceInvalid
+            );
+        }
+
+        if (
+            !float.IsFinite(f: element.Radius) ||
+            (element.Radius < 0f)
+        ) {
+            throw new HudValidationException(
+                reason: HudRefusal.InvalidFrameRadius,
+                message: $"{path}.radius must be finite and non-negative (got {element.Radius})."
+            );
+        }
+
+        if (
+            !float.IsFinite(f: element.Opacity) ||
+            (element.Opacity < 0f) ||
+            (element.Opacity > 1f)
+        ) {
+            throw new HudValidationException(
+                reason: HudRefusal.InvalidFrameOpacity,
+                message: $"{path}.opacity must be finite and within [0, 1] (got {element.Opacity})."
+            );
+        }
+    }
     /// <summary>Validates one element row: a required id unique within <paramref name="elementIds"/>, a valid rect,
     /// and (when present) a binding token in the closed <see cref="HudBindingVocabulary"/> — for a
     /// <c>state.&lt;row&gt;</c> token, additionally that the row resolves against <paramref name="stateRows"/>
@@ -118,14 +194,21 @@ internal static class HudRowValidation {
     /// refuses there — a player-profile document is authored independent of any particular world and can never know
     /// which state rows one will declare); for a <c>state.&lt;row&gt;.&lt;key&gt;</c> token, additionally that the
     /// key resolves against that row's own authored cells — a binding naming a row that exists but no such cell
-    /// refuses exactly like one naming no row at all, never a silently blank panel.</summary>
+    /// refuses exactly like one naming no row at all, never a silently blank panel. A <see cref="WorldHudElementKind.Frame"/>
+    /// element additionally requires a valid <see cref="WorldHudElement.Source"/> (the shared <c>ValidateFrameSource</c>
+    /// gate); every other kind refuses one. <paramref name="definition"/>/<paramref name="cameras"/> are required only
+    /// for that check — <see langword="null"/> is legal on a caller that never authors a Frame element.</summary>
     /// <param name="element">The element to validate.</param>
     /// <param name="path">The dotted path to name in a thrown message.</param>
     /// <param name="elementIds">The owning panel's id set so far (mutated: the element's id is added on success).</param>
     /// <param name="stateRows">The world's declared <c>state</c> rows by name, or <see langword="null"/> when no such
     /// context exists (seat scope).</param>
+    /// <param name="definition">The owning document, for a Frame element's declared-probe lookup, or
+    /// <see langword="null"/> when the caller carries no Frame element.</param>
+    /// <param name="cameras">The document's declared <c>cameras[]</c> names, for a Frame element's <c>view</c> arm, or
+    /// <see langword="null"/> when the caller carries no Frame element.</param>
     /// <exception cref="HudValidationException">The element is invalid.</exception>
-    public static void ValidateElement(WorldHudElement element, string path, HashSet<string> elementIds, IReadOnlyDictionary<string, WorldStateRow>? stateRows) {
+    public static void ValidateElement(WorldHudElement element, string path, HashSet<string> elementIds, IReadOnlyDictionary<string, WorldStateRow>? stateRows, WorldDefinition? definition = null, HashSet<string>? cameras = null) {
         if (string.IsNullOrWhiteSpace(value: element.Id)) {
             throw new HudValidationException(
                 message: $"{path}.id is required.",
@@ -143,6 +226,13 @@ internal static class HudRowValidation {
         ValidateRect(
             rect: element.Rect,
             path: $"{path}.rect"
+        );
+
+        ValidateFrameElementSource(
+            cameras: cameras,
+            definition: definition,
+            element: element,
+            path: path
         );
 
         var hasBinding = (element.Binding is { Length: > 0 });
@@ -198,8 +288,12 @@ internal static class HudRowValidation {
     /// <param name="maxElements">The element-count ceiling for this scope.</param>
     /// <param name="stateRows">The world's declared <c>state</c> rows by name, or <see langword="null"/> when no such
     /// context exists (seat scope) — see <see cref="ValidateElement"/>.</param>
+    /// <param name="definition">The owning document, threaded to <see cref="ValidateElement"/> for a Frame element's
+    /// source gate, or <see langword="null"/> for a caller that never authors one.</param>
+    /// <param name="cameras">The document's declared <c>cameras[]</c> names, threaded to <see cref="ValidateElement"/>
+    /// for a Frame element's <c>view</c> arm, or <see langword="null"/> for a caller that never authors one.</param>
     /// <exception cref="HudValidationException">The element list is invalid.</exception>
-    public static void ValidateElements(IReadOnlyList<WorldHudElement> elements, string panelPath, int maxElements, IReadOnlyDictionary<string, WorldStateRow>? stateRows = null) {
+    public static void ValidateElements(IReadOnlyList<WorldHudElement> elements, string panelPath, int maxElements, IReadOnlyDictionary<string, WorldStateRow>? stateRows = null, WorldDefinition? definition = null, HashSet<string>? cameras = null) {
         if (elements.Count > maxElements) {
             throw new HudValidationException(
                 reason: HudRefusal.TooManyElements,
@@ -211,6 +305,8 @@ internal static class HudRowValidation {
 
         for (var index = 0; (index < elements.Count); index++) {
             ValidateElement(
+                cameras: cameras,
+                definition: definition,
                 element: elements[index],
                 path: $"{panelPath}.elements[{index}]",
                 elementIds: elementIds,

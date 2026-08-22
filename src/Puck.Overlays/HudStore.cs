@@ -27,6 +27,22 @@ public enum OverlayHudElementKind : byte {
 
     /// <summary>A fill-bar readout of a bound binding's normalized 0..1 value.</summary>
     Gauge,
+
+    /// <summary>A sampled frame: the element rect shows the live content <see cref="OverlayHudElement.FrameSource"/>
+    /// names, drawn through <see cref="OverlayFrameSlots"/>.</summary>
+    Frame,
+}
+/// <summary>How a sampled <see cref="OverlayHudElementKind.Frame"/> element's content maps onto its element rect —
+/// the presentation-side twin of the document's <c>WorldHudFrameFit</c>.</summary>
+public enum OverlayHudFrameFit : byte {
+    /// <summary>Fills the rect, cropping the source's longer axis.</summary>
+    Cover,
+
+    /// <summary>Fits entirely inside the rect, letterboxing the source's shorter axis.</summary>
+    Contain,
+
+    /// <summary>Maps the source directly onto the rect, ignoring its aspect.</summary>
+    Stretch,
 }
 /// <summary>A normalized rect (origin top-left, Y down) in the same two coordinate spaces
 /// <c>Puck.World.WorldHudRect</c> uses: a panel's rect is screen space, an element's rect is its owning panel's local
@@ -59,13 +75,29 @@ public readonly record struct OverlayHudTemplateSegment(bool IsPlaceholder, stri
 /// for an untemplated element. Takes priority over <paramref name="Binding"/> when both are somehow present (the
 /// document validator refuses that combination before it ever reaches a live document, so this is a defensive
 /// ordering, never the primary rule).</param>
+/// <param name="FrameSource">Meaningful only for <see cref="OverlayHudElementKind.Frame"/>: the opaque key the host
+/// declared for this element's <c>WorldFrameSource</c> — the id <see cref="OverlayFrameSlots.Bind"/> is called with.
+/// -1 for a non-<c>Frame</c> element, or a <c>Frame</c> element the host never assigned a key.</param>
+/// <param name="Fit">Meaningful only for <see cref="OverlayHudElementKind.Frame"/>: how the sampled content maps
+/// onto the element rect.</param>
+/// <param name="Mirror">Meaningful only for <see cref="OverlayHudElementKind.Frame"/>: whether the sampled content
+/// flips horizontally (a face cam's conventional mirroring).</param>
+/// <param name="Radius">Meaningful only for <see cref="OverlayHudElementKind.Frame"/>: the element's corner
+/// rounding, px.</param>
+/// <param name="Opacity">Meaningful only for <see cref="OverlayHudElementKind.Frame"/>: the element's opacity,
+/// <c>[0,1]</c>.</param>
 public readonly record struct OverlayHudElement(
     OverlayHudElementKind Kind,
     OverlayHudRect Rect,
     OverlayColorRole Role,
     string? Text,
     string? Binding,
-    ReadOnlyMemory<OverlayHudTemplateSegment> Template = default
+    ReadOnlyMemory<OverlayHudTemplateSegment> Template = default,
+    int FrameSource = -1,
+    OverlayHudFrameFit Fit = OverlayHudFrameFit.Cover,
+    bool Mirror = false,
+    float Radius = 0f,
+    float Opacity = 1f
 );
 /// <summary>One HUD panel the writer resolves and draws — the presentation-side twin of
 /// <c>Puck.World.WorldHudPanel</c>.</summary>

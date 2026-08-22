@@ -7399,7 +7399,8 @@
                       "enum": [
                         "Rect",
                         "Text",
-                        "Gauge"
+                        "Gauge",
+                        "Frame"
                       ]
                     },
                     "rect": {
@@ -7459,6 +7460,128 @@
                         "null"
                       ],
                       "default": null
+                    },
+                    "source": {
+                      "description": "A Frame element\u0027s sampled frame \u2014 the same WorldFrameSource vocabulary a screen row or probe socket plugs into (camera/view/probe/capture). Required for Frame; refused on every other kind. Omitted from the wire when null.",
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "required": [
+                        "$type"
+                      ],
+                      "anyOf": [
+                        {
+                          "description": "The platform\u0027s default live camera feed. The platform may negotiate a nearby extent; every screen and probe socket naming the same sensor shares one feed, opened at the richest profile any screen row requests.",
+                          "properties": {
+                            "$type": {
+                              "const": "camera"
+                            },
+                            "profile": {
+                              "$ref": "#/properties/screens/items/properties/source/anyOf/3/properties/profile",
+                              "default": null
+                            },
+                            "controls": {
+                              "$ref": "#/properties/screens/items/properties/source/anyOf/3/properties/controls",
+                              "default": null
+                            },
+                            "sensor": {
+                              "description": "Which physical sensor this row\u0027s shared feed opens: Color (the default) or Infrared \u2014 the infrared frame source a Windows Hello capable device carries. Each sensor gets its own shared feed, so different rows may request different sensors at once; the engine honors a Windows Face Authentication Profile V2 when published and admits simultaneous capture only after both native streams prove live. A legacy provider available only to the Windows biometric broker is not a public dual-camera graph. An absent infrared source faults the bind loudly (the slot shows the no-signal card).",
+                              "enum": [
+                                "Color",
+                                "Infrared"
+                              ],
+                              "default": "Color"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        {
+                          "description": "A named view from the presentation view stack, such as a monitor showing another camera\u0027s output.",
+                          "properties": {
+                            "$type": {
+                              "const": "view"
+                            },
+                            "cameraName": {
+                              "description": "The registered view name this slot samples.",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "cameraName"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "description": "A declared probe\u0027s texture output \u2014 the frame a kind that declares an output writes each cycle (a relit camera frame, a mask), published like a camera feed. The probe must be a probes row of this document; whether its kind writes a texture is checked at boot against the kind\u0027s manifest.",
+                          "properties": {
+                            "$type": {
+                              "const": "probe"
+                            },
+                            "id": {
+                              "description": "The probes[].id whose output this slot shows.",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "description": "A live compositor capture feed \u2014 a desktop window keyed by title, or a whole monitor keyed by index. The selector is the altitude of the primitive: MonitorIndex null is window mode; non-null is whole-monitor mode (and WindowTitle is unused).",
+                          "properties": {
+                            "$type": {
+                              "const": "capture"
+                            },
+                            "windowTitle": {
+                              "description": "The captured window\u0027s title (window mode; ignored when MonitorIndex is set).",
+                              "type": "string"
+                            },
+                            "profile": {
+                              "$ref": "#/properties/screens/items/properties/source/anyOf/5/properties/profile"
+                            },
+                            "monitorIndex": {
+                              "description": "The 0-based monitor to capture whole (0 = primary), or null for window mode.",
+                              "type": [
+                                "integer",
+                                "null"
+                              ],
+                              "default": null
+                            }
+                          },
+                          "required": [
+                            "windowTitle",
+                            "profile"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ],
+                      "default": null
+                    },
+                    "fit": {
+                      "description": "A Frame element\u0027s aspect-fit policy. Ignored for every other kind. Omitted from the wire at its default (Cover).",
+                      "enum": [
+                        "Cover",
+                        "Contain",
+                        "Stretch"
+                      ],
+                      "default": "Cover"
+                    },
+                    "mirror": {
+                      "description": "Whether a Frame element flips its sampled frame horizontally \u2014 a face cam is conventionally mirrored. Ignored for every other kind. Omitted from the wire at its default (false).",
+                      "type": "boolean",
+                      "default": false
+                    },
+                    "radius": {
+                      "description": "A Frame element\u0027s corner-rounding radius, in pixels. Must be finite and non-negative. Ignored for every other kind. Omitted from the wire at its default (0).",
+                      "type": "number",
+                      "default": 0
+                    },
+                    "opacity": {
+                      "description": "A Frame element\u0027s sampled-frame alpha, in [0, 1]. Ignored for every other kind.",
+                      "type": "number",
+                      "default": 1
                     }
                   },
                   "required": [

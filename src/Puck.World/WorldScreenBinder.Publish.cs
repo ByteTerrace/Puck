@@ -146,6 +146,10 @@ internal sealed partial class WorldScreenBinder {
             gpu: gpu
         );
         ServiceProbeFeeds(deviceContext: deviceContext);
+        PublishFrameCaptures(
+            deviceContext: deviceContext,
+            gpu: gpu
+        );
         var cameraTicks = (timingEnabled
             ? (Stopwatch.GetTimestamp() - phaseStart)
             : 0L

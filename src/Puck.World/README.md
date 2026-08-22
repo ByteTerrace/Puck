@@ -510,6 +510,29 @@ output, re-rendered in place every refresh) with no second buffer to rotate
 into — latest-wins, unfenced: a consumer may sample a frame that is
 concurrently being re-rendered.
 
+## HUD frame elements
+
+A HUD `Frame` element (`WorldHudElementKind.Frame`) shows a live frame inside
+the banded overlay — the same four-arm `WorldFrameSource` vocabulary a screen
+samples (`camera`, `view`, `probe`, `capture`), never a pipeline of its own.
+`WorldScreenBinder.DeclareFrameSource`/`TryAcquireFrame` are the registry
+every non-screen consumer of a `WorldFrameSource` shares: the former opens the
+named source's feed the first time anything asks for it (idempotent — a
+camera sensor no `screens` row names still opens through `EnsureCameraFeed`, a
+view renders every `ViewStack` refresh with no wired screen narrowing its
+round-robin turn, a probe reads whatever its own kernel publishes, a capture
+opens through the same ladder a declared screen's capture source uses); the
+latter reads the current frame, render-thread-side, once per produced frame.
+`WorldOverlayFrameSources` (`Puck.Overlays.IOverlayFrameSources`) is the
+integer-keyed adapter the compositor addresses: `WorldHudFeed.BuildElements`
+resolves a `Frame` element's `Source` to a key on the structure rebuild (world
+panels and a joined seat's own panel alike), and the compositor calls
+`TryAcquire` each produced frame to bind the element's overlay slot. Two
+elements naming an identical source (record equality) share one key, one
+feed, and one slot. `standard.world.json`'s `hud.panels` ships one such
+panel — a mirrored, rounded picture-in-picture of the color camera —
+inherited by every world naming it as `basis`.
+
 ## Native capture
 
 The world records itself to WebM/Matroska through the recording graph in

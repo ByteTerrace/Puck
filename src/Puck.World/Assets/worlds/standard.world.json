@@ -581,7 +581,25 @@
       },
       "enabled": true
     },
-    "panels": []
+    "panels": [
+      {
+        "id": "face",
+        "rect": { "x": 0.79, "y": 0.03, "width": 0.18, "height": 0.24 },
+        "layer": "Over",
+        "style": "Chip",
+        "elements": [
+          {
+            "id": "cam",
+            "kind": "Frame",
+            "rect": { "x": 0, "y": 0, "width": 1, "height": 1 },
+            "style": "Primary",
+            "source": { "$type": "camera", "sensor": "Color" },
+            "mirror": true,
+            "radius": 10
+          }
+        ]
+      }
+    ]
   },
   "icons": {
     "icons": [

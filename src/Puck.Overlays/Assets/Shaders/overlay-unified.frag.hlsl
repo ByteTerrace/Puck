@@ -25,14 +25,72 @@
 // widths (radii, plate halves, badge offsets) are PIXELS. KEEP IN SYNC with
 // Puck.Overlays.OverlayFrameBuilder (record word layouts) and UnifiedOverlayNode (push constants).
 //
-// On Vulkan the texture+sampler fuse into one combined image sampler at set 0 binding 0 and the buffer is the
-// storage buffer at binding 1; on Direct3D 12 they are t0/s0 (static sampler) and the storage SRV packs in at t1.
+// Combined image-sampler bindings, identical numbering on both backends: binding 0 the inner world image; bindings
+// 1..FRAME_SLOT_COUNT the frame-slot table (a Frame element's sampled WorldFrameSource content, e.g. a face cam) —
+// FRAME_SLOT_COUNT separate SCALAR Texture2D+SamplerState pairs, never one array binding, since DXC's
+// vk::combinedImageSampler only ever fuses a scalar pair; the storage buffer follows immediately after at binding
+// FRAME_SLOT_COUNT+1. On Vulkan each pair fuses into its own combined image sampler at set 0, its binding number; on
+// Direct3D 12 the textures are t0..t{FRAME_SLOT_COUNT} (one static linear-clamp sampler PER register, s0..s{FRAME_SLOT_COUNT},
+// all sharing the SAME filter/address description) and the storage SRV packs in immediately after at
+// t{FRAME_SLOT_COUNT+1} — see UnifiedOverlayNode's FrameSlotFirstBinding remarks for the C# side of this layout.
 #include "overlay-common.hlsli"
+
+#define FRAME_SLOT_COUNT 8u
 
 [[vk::combinedImageSampler]][[vk::binding(0, 0)]] Texture2D sourceTexture : register(t0);
 [[vk::combinedImageSampler]][[vk::binding(0, 0)]] SamplerState sourceSampler : register(s0);
 
-[[vk::binding(1, 0)]] StructuredBuffer<uint4> overlayData : register(t1);
+[[vk::combinedImageSampler]] [[vk::binding(1, 0)]] Texture2D frameTexture0 : register(t1);
+[[vk::combinedImageSampler]] [[vk::binding(1, 0)]] SamplerState frameSampler0 : register(s1);
+[[vk::combinedImageSampler]] [[vk::binding(2, 0)]] Texture2D frameTexture1 : register(t2);
+[[vk::combinedImageSampler]] [[vk::binding(2, 0)]] SamplerState frameSampler1 : register(s2);
+[[vk::combinedImageSampler]] [[vk::binding(3, 0)]] Texture2D frameTexture2 : register(t3);
+[[vk::combinedImageSampler]] [[vk::binding(3, 0)]] SamplerState frameSampler2 : register(s3);
+[[vk::combinedImageSampler]] [[vk::binding(4, 0)]] Texture2D frameTexture3 : register(t4);
+[[vk::combinedImageSampler]] [[vk::binding(4, 0)]] SamplerState frameSampler3 : register(s4);
+[[vk::combinedImageSampler]] [[vk::binding(5, 0)]] Texture2D frameTexture4 : register(t5);
+[[vk::combinedImageSampler]] [[vk::binding(5, 0)]] SamplerState frameSampler4 : register(s5);
+[[vk::combinedImageSampler]] [[vk::binding(6, 0)]] Texture2D frameTexture5 : register(t6);
+[[vk::combinedImageSampler]] [[vk::binding(6, 0)]] SamplerState frameSampler5 : register(s6);
+[[vk::combinedImageSampler]] [[vk::binding(7, 0)]] Texture2D frameTexture6 : register(t7);
+[[vk::combinedImageSampler]] [[vk::binding(7, 0)]] SamplerState frameSampler6 : register(s7);
+[[vk::combinedImageSampler]] [[vk::binding(8, 0)]] Texture2D frameTexture7 : register(t8);
+[[vk::combinedImageSampler]] [[vk::binding(8, 0)]] SamplerState frameSampler7 : register(s8);
+
+[[vk::binding(9, 0)]] StructuredBuffer<uint4> overlayData : register(t9);
+
+// Dispatches to the slot's own scalar texture/sampler pair — the switch every multi-source shader in this codebase
+// uses in place of an unsupported combined-image-sampler array (see the binding comment above).
+float2 frameSlotDimensions(uint slot) {
+    uint w;
+    uint h;
+
+    switch (slot) {
+        case 0: frameTexture0.GetDimensions(w, h); break;
+        case 1: frameTexture1.GetDimensions(w, h); break;
+        case 2: frameTexture2.GetDimensions(w, h); break;
+        case 3: frameTexture3.GetDimensions(w, h); break;
+        case 4: frameTexture4.GetDimensions(w, h); break;
+        case 5: frameTexture5.GetDimensions(w, h); break;
+        case 6: frameTexture6.GetDimensions(w, h); break;
+        default: frameTexture7.GetDimensions(w, h); break;
+    }
+
+    return float2(w, h);
+}
+
+float4 sampleFrameSlot(uint slot, float2 uv) {
+    switch (slot) {
+        case 0: return frameTexture0.SampleLevel(frameSampler0, uv, 0);
+        case 1: return frameTexture1.SampleLevel(frameSampler1, uv, 0);
+        case 2: return frameTexture2.SampleLevel(frameSampler2, uv, 0);
+        case 3: return frameTexture3.SampleLevel(frameSampler3, uv, 0);
+        case 4: return frameTexture4.SampleLevel(frameSampler4, uv, 0);
+        case 5: return frameTexture5.SampleLevel(frameSampler5, uv, 0);
+        case 6: return frameTexture6.SampleLevel(frameSampler6, uv, 0);
+        default: return frameTexture7.SampleLevel(frameSampler7, uv, 0);
+    }
+}
 
 // counts: panelCount, elementCount, atlasCellW, atlasCellH (texels)
 // sdf:    distanceRange (texels), outlineBand (encoded units), panelBase (word index), elementBase (word index)
@@ -177,18 +235,21 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
         }
     }
 
-    // ---- elements (rects, text runs, icon chips, rings, in submission order) -------------------------------------
-    // Element word layout (12 words) — KEEP IN SYNC with OverlayFrameBuilder.WriteRect/WriteText/WriteIcon/WriteRing:
-    //   4         kind (uint low nibble: 0 = text, 1 = rect, 2 = icon, 3 = ring) | colorRole << 4
-    //   text:     0..1 origin (normalized) · 2..3 one glyph cell's on-screen w/h (normalized) · 5 glyph start ·
-    //             6 glyph count · 7 alpha
-    //   rect:     0..3 rect (normalized) · 6 corner radius (px) · 7 alpha
+    // ---- elements (rects, text runs, icon chips, rings, sampled frames, in submission order) -----------------------
+    // Element word layout (12 words) — KEEP IN SYNC with OverlayFrameBuilder.WriteRect/WriteText/WriteIcon/WriteRing/WriteFrame:
+    //   4         kind (uint low nibble: 0 = text, 1 = rect, 2 = icon, 3 = ring, 4 = frame) | (word4 bits 4.. vary by kind)
+    //   text:     colorRole << 4 · 0..1 origin (normalized) · 2..3 one glyph cell's on-screen w/h (normalized) ·
+    //             5 glyph start · 6 glyph count · 7 alpha
+    //   rect:     colorRole << 4 · 0..3 rect (normalized) · 6 corner radius (px) · 7 alpha
     //   icon:     0..1 plate center (normalized) · 2 plate half (px) · 3 badge half (px) · 5 iconGlyph0 ·
     //             6 state bits · 7..8 badge offset (px) · 10 iconGlyph1
-    //   ring:     0..1 center (normalized) · 2 radius (px) · 7 alpha — a stroked hairline circle (the marker
-    //             radius indicator), the ONE hairline weight like every grammar stroke. colorRole ==
+    //   ring:     colorRole << 4 · 0..1 center (normalized) · 2 radius (px) · 7 alpha — a stroked hairline circle
+    //             (the marker radius indicator), the ONE hairline weight like every grammar stroke. colorRole ==
     //             OVERLAY_ROLE_CUSTOM (255) reads a raw RGB triple from words 5/6/8 (Pack()'d floats) instead of
     //             indexing the token slab — a marker's authored, possibly state-bound ring color.
+    //   frame:    (frameSlot << 4) | (mirror << 12) | (fit << 13, 0 = cover, 1 = contain, 2 = stretch) · 0..3 rect
+    //             (normalized) · 6 corner radius (px) · 7 alpha — a live OverlayFrameSlots slot sampled into a
+    //             rounded rect (the HUD picture-in-picture, e.g. a face cam); see frameSlotDimensions/sampleFrameSlot.
     for (int e = 0; (e < elementCount); e++) {
         uint o = (elementBase + ((uint)e * ELEMENT_WORDS));
 
@@ -254,6 +315,51 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
                 : OverlayTokenColor(overlayData, role));
 
             color = lerp(color, strokeColor.rgb, (strokeMask(dist, 0.5, edgeAa) * strokeColor.a * alpha));
+        } else if (kind == 4u) {
+            // A SAMPLED FRAME: a live WorldFrameSource picture-in-picture (e.g. the HUD face-cam element) drawn from
+            // one of the FRAME_SLOT_COUNT frame-slot bindings — "role" (bits 4..11) is this record's slot index.
+            uint slot = role;
+            bool mirror = (((packed >> 12u) & 0x1u) != 0u);
+            uint fit = ((packed >> 13u) & 0x3u);
+            float2 size = (ab * dims);
+
+            if ((local.x < -edgeAa) || (local.y < -edgeAa) || (local.x >= (size.x + edgeAa)) || (local.y >= (size.y + edgeAa))) {
+                continue;
+            }
+
+            float radius = OverlayFloat(overlayData, (o + 6u));
+            float alpha = OverlayFloat(overlayData, (o + 7u));
+            float2 halfSize = (size * 0.5);
+            float dist = sdRoundedBox((local - halfSize), halfSize, radius);
+            float mask = (1.0 - smoothstep(0.0, edgeAa, dist));
+
+            if (mask <= 0.0) {
+                continue;
+            }
+
+            float2 uv = (local / max(size, 1e-5));
+
+            // COVER (fit 0) crops the source's longer axis to fill the rect; CONTAIN (1) shrinks to fit inside,
+            // letterboxing the shorter axis (an out-of-[0,1] uv below, left unsampled so the world shows through);
+            // STRETCH (2) skips aspect correction entirely — uv already maps the rect directly.
+            if (fit != 2u) {
+                float2 sourceDims = max(frameSlotDimensions(slot), 1.0);
+                float2 axisScale = (size / sourceDims);
+                float scaleFactor = ((fit == 0u) ? max(axisScale.x, axisScale.y) : min(axisScale.x, axisScale.y));
+                float2 ratio = (axisScale / max(scaleFactor, 1e-5));
+
+                uv = (((uv - 0.5) * ratio) + 0.5);
+            }
+
+            if (mirror) {
+                uv.x = (1.0 - uv.x);
+            }
+
+            if (all(uv >= 0.0) && all(uv <= 1.0)) {
+                float3 sample = sampleFrameSlot(slot, uv).rgb;
+
+                color = lerp(color, sample, (mask * alpha));
+            }
         } else {
             // An ICON CHIP: rounded plate with the four chip-state tiers (REST / HELD / ACCENT / DISABLED), a
             // bound action's plate icon, and a physical-button badge hugging its corner — both drawn from the SAME

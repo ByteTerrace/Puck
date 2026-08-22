@@ -27,6 +27,7 @@ public sealed class HudWriter {
     public const int TextRunChars = 64;
 
     private readonly IHudBindingResolver m_bindings;
+    private readonly OverlayFrameSlots m_frameSlots;
     private readonly IHudSource m_source;
     private readonly OverlayThemeStore m_theme;
 
@@ -37,15 +38,19 @@ public sealed class HudWriter {
     /// <param name="source">The HUD structure source.</param>
     /// <param name="bindings">The live binding resolver.</param>
     /// <param name="theme">The live resolved theme.</param>
+    /// <param name="frameSlots">The node-owned frame-slot table a <see cref="OverlayHudElementKind.Frame"/> element
+    /// binds against.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public HudWriter(IHudSource source, IHudBindingResolver bindings, OverlayThemeStore theme) {
+    public HudWriter(IHudSource source, IHudBindingResolver bindings, OverlayThemeStore theme, OverlayFrameSlots frameSlots) {
         ArgumentNullException.ThrowIfNull(argument: source);
         ArgumentNullException.ThrowIfNull(argument: bindings);
         ArgumentNullException.ThrowIfNull(argument: theme);
+        ArgumentNullException.ThrowIfNull(argument: frameSlots);
 
         m_source = source;
         m_bindings = bindings;
         m_theme = theme;
+        m_frameSlots = frameSlots;
     }
 
     // Substitution only — the brace/escape grammar is parsed once by the host's document layer and arrives here as
@@ -142,7 +147,44 @@ public sealed class HudWriter {
                 );
 
                 break;
+            case OverlayHudElementKind.Frame:
+                EmitFrame(
+                    builder: builder,
+                    element: in element,
+                    h: h,
+                    w: w,
+                    x: x,
+                    y: y
+                );
+
+                break;
         }
+    }
+    // A slot with no live lease this frame (an unassigned source, an unopened camera, every slot already taken)
+    // draws nothing — never a placeholder — so a face cam with no camera attached is simply an empty rect, not a
+    // stand-in graphic the writer would need to author.
+    private void EmitFrame(OverlayFrameBuilder builder, in OverlayHudElement element, float x, float y, float w, float h) {
+        if (element.FrameSource < 0) {
+            return;
+        }
+
+        var slot = m_frameSlots.Bind(key: element.FrameSource);
+
+        if (slot < 0) {
+            return;
+        }
+
+        builder.WriteFrame(
+            alpha: element.Opacity,
+            fit: element.Fit,
+            h: h,
+            mirror: element.Mirror,
+            radius: element.Radius,
+            slot: slot,
+            w: w,
+            x: x,
+            y: y
+        );
     }
     private void EmitGauge(OverlayFrameBuilder builder, in OverlayHudElement element, float x, float y, float w, float h) {
         var fraction = 0f;

@@ -2760,6 +2760,30 @@
         "Danger"
       ]
     },
+    "WorldFrameSource": {
+      "description": "The WorldScreenSource arms that produce a sampled frame \u2014 Camera, View, Probe, and Capture \u2014 carrying its own JsonPolymorphicAttribute over the SAME four discriminators (camera/view/probe/capture) their parent union uses, so a member declared as this narrower type round-trips the identical JSON a full WorldScreenSource screen row does. A WorldProbe socket is the driving consumer: it plugs one of these into each named input rather than the wider union, which would legally admit a decal/machine/console/qr/text/none source no probe kernel can sample.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/WorldScreenSourceCamera"
+        },
+        {
+          "$ref": "#/$defs/WorldScreenSourceView"
+        },
+        {
+          "$ref": "#/$defs/WorldScreenSourceProbe"
+        },
+        {
+          "$ref": "#/$defs/WorldScreenSourceCapture"
+        }
+      ]
+    },
     "WorldHudElement": {
       "description": "One HUD element row inside a WorldHudPanel \u2014 a stable id (unique within the owning panel), its kind, its local rect, its color role, an authored literal string (meaningful for Text), and an optional binding into the closed HudBindingVocabulary (meaningful for Text and Gauge \u2014 a bound text element\u0027s live value replaces the authored literal; a bound gauge element\u0027s live value drives its fill; an unbound gauge draws empty).",
       "type": [
@@ -2776,7 +2800,8 @@
           "enum": [
             "Rect",
             "Text",
-            "Gauge"
+            "Gauge",
+            "Frame"
           ]
         },
         "rect": {
@@ -2810,6 +2835,35 @@
             "null"
           ],
           "default": null
+        },
+        "source": {
+          "$ref": "#/$defs/WorldFrameSource",
+          "description": "A Frame element\u0027s sampled frame \u2014 the same WorldFrameSource vocabulary a screen row or probe socket plugs into (camera/view/probe/capture). Required for Frame; refused on every other kind. Omitted from the wire when null.",
+          "default": null
+        },
+        "fit": {
+          "description": "A Frame element\u0027s aspect-fit policy. Ignored for every other kind. Omitted from the wire at its default (Cover).",
+          "enum": [
+            "Cover",
+            "Contain",
+            "Stretch"
+          ],
+          "default": "Cover"
+        },
+        "mirror": {
+          "description": "Whether a Frame element flips its sampled frame horizontally \u2014 a face cam is conventionally mirrored. Ignored for every other kind. Omitted from the wire at its default (false).",
+          "type": "boolean",
+          "default": false
+        },
+        "radius": {
+          "description": "A Frame element\u0027s corner-rounding radius, in pixels. Must be finite and non-negative. Ignored for every other kind. Omitted from the wire at its default (0).",
+          "type": "number",
+          "default": 0
+        },
+        "opacity": {
+          "description": "A Frame element\u0027s sampled-frame alpha, in [0, 1]. Ignored for every other kind.",
+          "type": "number",
+          "default": 1
         }
       },
       "required": [

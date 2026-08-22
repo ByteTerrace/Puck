@@ -570,6 +570,45 @@ public sealed class OverlayFrameBuilder {
         m_scratch[(offset + 9)] = ((uint)m_activeClip);
         m_panelCount++;
     }
+    /// <summary>Packs one sampled-frame element (a HUD picture-in-picture: a live <see cref="OverlayFrameSlots"/>
+    /// slot's content drawn into the element rect, e.g. the face-cam panel). Word layout (12): 0..3 rect (normalized)
+    /// · 4 = 4 | (slot &lt;&lt; 4) | (mirror &lt;&lt; 12) | (fit &lt;&lt; 13) · 6 corner radius (px float) · 7 alpha ·
+    /// 9 clip index.</summary>
+    /// <param name="x">Left, px.</param>
+    /// <param name="y">Top, px.</param>
+    /// <param name="w">Width, px.</param>
+    /// <param name="h">Height, px.</param>
+    /// <param name="slot">The bound <see cref="OverlayFrameSlots"/> slot (<c>0..OverlayFrameSlots.SlotCount-1</c>)
+    /// the shader samples.</param>
+    /// <param name="fit">How the sampled content maps onto the element rect.</param>
+    /// <param name="mirror">Whether the sampled content flips horizontally.</param>
+    /// <param name="radius">The corner radius, px.</param>
+    /// <param name="alpha">The element opacity.</param>
+    /// <exception cref="InvalidOperationException">No channel scope is open.</exception>
+    public void WriteFrame(float x, float y, float w, float h, int slot, OverlayHudFrameFit fit, bool mirror, float radius, float alpha) {
+        if (!TryTakeElement()) {
+            return;
+        }
+
+        var offset = (ElementBaseWords + (m_elementCount * ElementWords));
+
+        m_scratch[offset] = Pack(value: (x * m_inverseWidth));
+        m_scratch[(offset + 1)] = Pack(value: (y * m_inverseHeight));
+        m_scratch[(offset + 2)] = Pack(value: (w * m_inverseWidth));
+        m_scratch[(offset + 3)] = Pack(value: (h * m_inverseHeight));
+        m_scratch[(offset + 4)] = (4u
+            | (((uint)slot) << 4)
+            | (mirror
+            ? (1u << 12)
+            : 0u
+            )
+            | (((uint)fit) << 13)
+        );
+        m_scratch[(offset + 6)] = Pack(value: radius);
+        m_scratch[(offset + 7)] = Pack(value: alpha);
+        m_scratch[(offset + 9)] = ((uint)m_activeClip);
+        m_elementCount++;
+    }
     /// <summary>Packs one rounded-rect element (chip fill, selection fill, accent tick, state rail). Word layout
     /// (12): 0..3 rect (normalized) · 4 = 1 | (role &lt;&lt; 4) · 6 corner radius (px float) · 7 alpha ·
     /// 9 clip index.</summary>

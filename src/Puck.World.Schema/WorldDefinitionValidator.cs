@@ -895,15 +895,6 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
 
-        // An owned world (Identity not null) authors seat-scope panels: WorldHudCapacity.MaxSeatPanels of them, each
-        // capped at MaxElementsPerSeatPanel, WorldHudLayer.Replace refused (a panel confined to one seat's viewport has
-        // no base slot to take over). A plain world document keeps the world-scope ceilings and admits Replace.
-        ValidateHud(
-            hud: definition.Hud,
-            stateRows: stateRows,
-            isIdentityScope: (definition.Identity is not null),
-            errors: errors
-        );
         ValidateIdentityMotionState(
             identity: definition.Identity,
             stateRows: stateRows,
@@ -1142,6 +1133,20 @@ public static partial class WorldDefinitionValidator {
                 }
             }
         }
+
+        // An owned world (Identity not null) authors seat-scope panels: WorldHudCapacity.MaxSeatPanels of them, each
+        // capped at MaxElementsPerSeatPanel, WorldHudLayer.Replace refused (a panel confined to one seat's viewport has
+        // no base slot to take over). A plain world document keeps the world-scope ceilings and admits Replace. Runs
+        // here (not beside State, above) because a hud.panels Frame element's source resolves against the SAME
+        // declared camera set a screen row's own 'view' arm does — the cameras set just built above.
+        ValidateHud(
+            cameras: cameras,
+            definition: definition,
+            hud: definition.Hud,
+            stateRows: stateRows,
+            isIdentityScope: (definition.Identity is not null),
+            errors: errors
+        );
 
         // A probe socket's 'view' arm resolves against the SAME declared camera set a screen row's own 'view' arm
         // does, so this runs only once that set is fully built above — never earlier, and never twice.

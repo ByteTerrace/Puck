@@ -18,9 +18,10 @@ namespace Puck.World;
 /// rects, their style, which binding token or parsed template runs each names, and which seat's viewport a
 /// player-scope panel is confined to).
 /// </summary>
-internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudStore store, WorldOverlayFacts facts) {
+internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudStore store, WorldOverlayFacts facts, WorldOverlayFrameSources frameSources) {
     private readonly WorldClient m_client = client;
     private readonly WorldOverlayFacts m_facts = facts;
+    private readonly WorldOverlayFrameSources m_frameSources = frameSources;
     private readonly PlayerRoster m_roster = roster;
     private readonly HudStore m_store = store;
     private readonly OverlayHudSeatPanel[] m_seatPanels = new OverlayHudSeatPanel[PlayerRoster.MaxSlots];
@@ -34,7 +35,9 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
     private OverlayHudPanel[] m_visiblePanels = [];
     private WorldHudPanel[] m_worldSources = [];
 
-    private static OverlayHudElement[] BuildElements(IReadOnlyList<WorldHudElement> elements) {
+    // A Frame element's Source (present only for that kind, enforced at validation) resolves through the process's
+    // one WorldOverlayFrameSources — the same key a non-Frame element carries -1 for, meaning "no source to bind".
+    private OverlayHudElement[] BuildElements(IReadOnlyList<WorldHudElement> elements) {
         var built = new OverlayHudElement[elements.Count];
 
         for (var index = 0; (index < elements.Count); index++) {
@@ -46,13 +49,21 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
                 Role: ToRole(token: element.Style),
                 Text: element.Text,
                 Binding: element.Binding,
-                Template: BuildTemplate(template: element.Template)
+                Template: BuildTemplate(template: element.Template),
+                FrameSource: ((element.Source is { } source)
+                    ? m_frameSources.KeyFor(source: source)
+                    : -1
+                ),
+                Fit: ToFit(fit: element.Fit),
+                Mirror: element.Mirror,
+                Radius: element.Radius,
+                Opacity: element.Opacity
             );
         }
 
         return built;
     }
-    private static OverlayHudPanel BuildPanel(WorldHudPanel panel) {
+    private OverlayHudPanel BuildPanel(WorldHudPanel panel) {
         return new OverlayHudPanel(
             Id: panel.Id,
             Rect: ToOverlayRect(rect: panel.Rect),
@@ -61,7 +72,7 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
             Elements: BuildElements(elements: panel.Elements)
         );
     }
-    private static OverlayHudPanel[] BuildPanels(IReadOnlyList<WorldHudPanel> panels) {
+    private OverlayHudPanel[] BuildPanels(IReadOnlyList<WorldHudPanel> panels) {
         var built = new OverlayHudPanel[panels.Count];
 
         for (var index = 0; (index < panels.Count); index++) {
@@ -166,7 +177,14 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
         WorldHudElementKind.Rect => OverlayHudElementKind.Rect,
         WorldHudElementKind.Text => OverlayHudElementKind.Text,
         WorldHudElementKind.Gauge => OverlayHudElementKind.Gauge,
+        WorldHudElementKind.Frame => OverlayHudElementKind.Frame,
         _ => OverlayHudElementKind.Rect,
+    };
+    private static OverlayHudFrameFit ToFit(WorldHudFrameFit fit) => fit switch {
+        WorldHudFrameFit.Cover => OverlayHudFrameFit.Cover,
+        WorldHudFrameFit.Contain => OverlayHudFrameFit.Contain,
+        WorldHudFrameFit.Stretch => OverlayHudFrameFit.Stretch,
+        _ => OverlayHudFrameFit.Cover,
     };
     private static OverlayHudRect ToOverlayRect(WorldHudRect rect) => new(
         X: rect.X,

@@ -33,6 +33,23 @@ public enum WorldHudElementKind : byte {
 
     /// <summary>A fill-bar readout of a bound binding's normalized 0..1 value (0 when unbound).</summary>
     Gauge,
+
+    /// <summary>A sampled frame: the element rect shows the frame a <see cref="WorldFrameSource"/> produces
+    /// (camera/view/probe/capture) — the picture-in-picture element kind (e.g. a face-cam overlay).</summary>
+    Frame,
+}
+/// <summary>How a <see cref="WorldHudElementKind.Frame"/> element maps its sampled frame's aspect ratio onto its own
+/// rect — the same uv-mapping choice a screen material or a UI image element makes.</summary>
+[JsonConverter(typeof(StrictEnumConverter<WorldHudFrameFit>))]
+public enum WorldHudFrameFit : byte {
+    /// <summary>Scales the frame to fill the rect, cropping whichever axis overflows.</summary>
+    Cover,
+
+    /// <summary>Scales the frame to fit entirely within the rect, letterboxing whichever axis falls short.</summary>
+    Contain,
+
+    /// <summary>Scales each axis independently to fill the rect exactly, distorting the frame's aspect ratio.</summary>
+    Stretch,
 }
 /// <summary>A <see cref="WorldHudPanel"/>'s chrome recipe — the authored twin of <c>Puck.Overlays.OverlayPanelStyle</c>
 /// (Puck.World.Schema must not reference Puck.Overlays; the renderer maps this token to the concrete style).</summary>
@@ -101,6 +118,19 @@ public readonly record struct WorldHudRect(float X, float Y, float Width, float 
 /// instead of one — never both on the same element. Ignored for <see cref="WorldHudElementKind.Rect"/> and
 /// <see cref="WorldHudElementKind.Gauge"/> (a gauge's fill is one fraction; it has no composed string to show).
 /// Omitted from the wire when null.</param>
+/// <param name="Source">A <see cref="WorldHudElementKind.Frame"/> element's sampled frame — the same
+/// <see cref="WorldFrameSource"/> vocabulary a screen row or probe socket plugs into (camera/view/probe/capture).
+/// Required for <see cref="WorldHudElementKind.Frame"/>; refused on every other kind. Omitted from the wire when
+/// null.</param>
+/// <param name="Fit">A <see cref="WorldHudElementKind.Frame"/> element's aspect-fit policy. Ignored for every other
+/// kind. Omitted from the wire at its default (<see cref="WorldHudFrameFit.Cover"/>).</param>
+/// <param name="Mirror">Whether a <see cref="WorldHudElementKind.Frame"/> element flips its sampled frame
+/// horizontally — a face cam is conventionally mirrored. Ignored for every other kind. Omitted from the wire at its
+/// default (<see langword="false"/>).</param>
+/// <param name="Radius">A <see cref="WorldHudElementKind.Frame"/> element's corner-rounding radius, in pixels. Must
+/// be finite and non-negative. Ignored for every other kind. Omitted from the wire at its default (0).</param>
+/// <param name="Opacity">A <see cref="WorldHudElementKind.Frame"/> element's sampled-frame alpha, in [0, 1]. Ignored
+/// for every other kind.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldHudElement(
     string Id,
@@ -109,7 +139,12 @@ public sealed record WorldHudElement(
     WorldHudStyleToken Style,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Text = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Binding = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Template = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Template = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldFrameSource? Source = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] WorldHudFrameFit Fit = WorldHudFrameFit.Cover,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Mirror = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float Radius = 0f,
+    float Opacity = 1f
 );
 /// <summary>One HUD panel row — a stable id (unique within the section), a normalized viewport rect in screen space,
 /// which band it draws in, its chrome style, and its child elements. <c>WorldMutation.UpsertHudPanel</c> carries

@@ -10,7 +10,9 @@ namespace Puck.DirectX;
 /// <summary>
 /// Implements <see cref="IGpuPipelineFactory"/> for Direct3D 12, creating a root signature and PSO tailored
 /// for the SDF renderer: POSITION-only (R32G32_FLOAT) vertex input, a descriptor table with N SRV slots and
-/// an optional UAV slot, root constants for push data, and a static linear-clamp sampler at <c>s0</c>.
+/// an optional UAV slot, root constants for push data, and one static linear-clamp sampler PER texture SRV
+/// (<c>s0..sN-1</c>, matching <c>t0..tN-1</c> one-for-one) — every one of those static samplers carries the SAME
+/// fixed filter/address description, so in effect the whole table shares one sampler configuration.
 /// </summary>
 /// <remarks>
 /// Root signature layout (always the same slot ordering):
@@ -192,28 +194,38 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
             parameters[paramIndex++] = constantsParam;
         }
 
-        var staticSampler = new D3D12_STATIC_SAMPLER_DESC {
-            AddressU = D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
-            AddressV = D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
-            AddressW = D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
-            BorderColor = D3D12_STATIC_BORDER_COLOR.D3D12_STATIC_BORDER_COLOR_OPAQUE_BLACK,
-            ComparisonFunc = D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_NEVER,
-            Filter = D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_LINEAR,
-            MaxAnisotropy = 0,
-            MaxLOD = float.MaxValue,
-            MinLOD = 0f,
-            MipLODBias = 0f,
-            RegisterSpace = 0,
-            ShaderRegister = 0,
-            ShaderVisibility = D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_PIXEL,
-        };
+        // One static sampler PER texture register (s0..s{textureSamplerCount-1}, matching t0..t{textureSamplerCount-1}
+        // one-for-one): a Texture2D.Sample call is free to name any register, so a shader with several textures needs
+        // a register bound at each one it uses (mirrors DirectXGpuComputePipelineFactory's per-SampledImage-binding
+        // static sampler). Every entry carries the SAME fixed linear-clamp description, so this is one sampler
+        // configuration replicated across registers, not several distinct ones.
+        var staticSamplerCount = ((textureSamplerCount > 0) ? textureSamplerCount : 1u);
+        var staticSamplers = stackalloc D3D12_STATIC_SAMPLER_DESC[((int)staticSamplerCount)];
+
+        for (var register = 0u; (register < textureSamplerCount); register++) {
+            staticSamplers[((int)register)] = new D3D12_STATIC_SAMPLER_DESC {
+                AddressU = D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
+                AddressV = D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
+                AddressW = D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
+                BorderColor = D3D12_STATIC_BORDER_COLOR.D3D12_STATIC_BORDER_COLOR_OPAQUE_BLACK,
+                ComparisonFunc = D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_NEVER,
+                Filter = D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_LINEAR,
+                MaxAnisotropy = 0,
+                MaxLOD = float.MaxValue,
+                MinLOD = 0f,
+                MipLODBias = 0f,
+                RegisterSpace = 0,
+                ShaderRegister = register,
+                ShaderVisibility = D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_PIXEL,
+            };
+        }
 
         var desc = new D3D12_ROOT_SIGNATURE_DESC {
             Flags = D3D12_ROOT_SIGNATURE_FLAGS.D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT,
             NumParameters = ((uint)paramCount),
-            NumStaticSamplers = 1,
+            NumStaticSamplers = textureSamplerCount,
             pParameters = ((0 < paramCount) ? parameters : null),
-            pStaticSamplers = &staticSampler,
+            pStaticSamplers = ((textureSamplerCount > 0) ? staticSamplers : null),
         };
 
         return DirectXRootSignatures.Create(description: in desc, device: device);

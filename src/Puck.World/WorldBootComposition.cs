@@ -726,11 +726,20 @@ internal static class WorldBootComposition {
         // surface are core (WorldBootComposition.AddWorldAuthoritativeCore) — only the on-screen render cache is
         // presentation-only.
         services.AddSingleton<HudStore>();
+        // The unified overlay's IOverlayFrameSources — adapts the binder's WorldFrameSource vocabulary (camera/
+        // view/probe/capture) to the opaque key a HUD Frame element's overlay slot addresses its source by.
+        // Registered as itself (WorldHudFeed calls KeyFor when building a Frame element) AND as the interface
+        // (OverlayServices.Build resolves it below), so both consumers share the one key table.
+        services.AddSingleton<WorldOverlayFrameSources>(implementationFactory: static sp => new WorldOverlayFrameSources(
+            binder: sp.GetRequiredService<WorldScreenBinder>()
+        ));
+        services.AddSingleton<IOverlayFrameSources>(implementationFactory: static sp => sp.GetRequiredService<WorldOverlayFrameSources>());
         services.AddSingleton(implementationFactory: static sp => new WorldHudFeed(
             client: sp.GetRequiredService<WorldClient>(),
             roster: sp.GetRequiredService<PlayerRoster>(),
             store: sp.GetRequiredService<HudStore>(),
-            facts: sp.GetRequiredService<WorldOverlayFacts>()
+            facts: sp.GetRequiredService<WorldOverlayFacts>(),
+            frameSources: sp.GetRequiredService<WorldOverlayFrameSources>()
         ));
 
         // The boot document's resolved icon table: the ONE place an icon name, a font id, or a codepoint is known
@@ -935,7 +944,9 @@ internal static class WorldBootComposition {
                             services: OverlayServices.Build(
                                 hostsOnDirectX: hostSettings.HostsOnDirectX,
                                 serviceProvider: sp
-                            ),
+                            ) with {
+                                FrameSources = sp.GetRequiredService<IOverlayFrameSources>(),
+                            },
                             sources: new UnifiedOverlaySources(
                                 BindingBar: sp.GetRequiredService<BindingBarStore>(),
                                 Console: sp.GetRequiredService<ConsoleTapeStore>(),
