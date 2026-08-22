@@ -131,7 +131,7 @@ internal sealed class WorldUiCommandModule(IServerLink link, WorldRenderProbe? r
             ? "on"
             : "off")} visible {((authoring.Visible is null)
             ? "always"
-            : "predicate")} override {overrideWord} hidden {status.Hidden.ToString().ToLowerInvariant()} reason {status.Reason} slots {authoring.SlotSet.Count} banks {authoring.Banks.Count} hideUnbound {status.EffectiveHideUnbound.ToString().ToLowerInvariant()} stacked {status.Stacked.ToString().ToLowerInvariant()} layout buttonSize {layout.ResolvedButtonSize:0.###} centerGap {layout.ResolvedCenterGap:0.###} anchorOffsetY {layout.ResolvedAnchorOffsetY:0.###} glyphOffsetRatio {layout.ResolvedGlyphOffsetRatio:0.###} glyphSizeRatio {layout.ResolvedGlyphSizeRatio:0.###} scale {status.EffectiveScale:0.###}]"));
+            : "predicate")} override {overrideWord} hidden {status.Hidden.ToString().ToLowerInvariant()} reason {status.Reason} presence {status.Presence:0.##} slots {authoring.SlotSet.Count} banks {authoring.Banks.Count} hideUnbound {status.EffectiveHideUnbound.ToString().ToLowerInvariant()} stacked {status.Stacked.ToString().ToLowerInvariant()} layout buttonSize {layout.ResolvedButtonSize:0.###} centerGap {layout.ResolvedCenterGap:0.###} anchorOffsetY {layout.ResolvedAnchorOffsetY:0.###} glyphOffsetRatio {layout.ResolvedGlyphOffsetRatio:0.###} glyphSizeRatio {layout.ResolvedGlyphSizeRatio:0.###} scale {status.EffectiveScale:0.###}]"));
     }
 
     /// <inheritdoc/>

@@ -36,15 +36,11 @@ public sealed record WorldViewLayout(string Name, int SeatCount, IReadOnlyList<W
 /// <param name="YawReference">What the camera yaw is relative to.</param>
 /// <param name="MinPitch">The minimum live pitch offset in radians.</param>
 /// <param name="MaxPitch">The maximum live pitch offset in radians.</param>
-/// <param name="SwapRate">The rate the camera boom closes over a <c>player.look.swap</c>, in the same unit as
-/// <c>seatRig.smoothRate</c>: <c>0</c> is instant (the boom re-seeds at the turned pose — a cut), a positive value
-/// eases the half-turn at that rate until it lands. Optional; absent leaves the swap to the rig's own
-/// <c>smoothRate</c>.</param>
 /// <param name="Follow">The follow camera: with no look input the camera yaw eases in behind the body's heading;
 /// any look input (a deflected look stick, a held orbit/steer) is free-look and the follow yields for as long as
 /// it lasts. Optional; absent is a still camera that goes only where look input sends it. Needs
 /// <see cref="WorldSeatYawReference.World"/> — a body-relative yaw already rides the body.</param>
-public sealed record WorldSeatViewControl(WorldSeatYawReference YawReference, float MinPitch, float MaxPitch, [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldSeatFollow? Follow = null, [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] float? SwapRate = null);
+public sealed record WorldSeatViewControl(WorldSeatYawReference YawReference, float MinPitch, float MaxPitch, [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldSeatFollow? Follow = null);
 /// <summary>The follow camera's shape.</summary>
 /// <param name="Rate">The exponential rate (per second) the camera yaw closes on the heading — about 63% of the
 /// remaining angle per <c>1/rate</c> seconds; larger is a stiffer follow.</param>
@@ -81,7 +77,7 @@ public sealed record WorldViewDefaults(WorldCameraProgram SeatRig, WorldSeatView
             Name: "absent",
             Version: WorldCameraProgram.CurrentVersion,
             Operations: [
-                new WorldCameraProgramOp.Orbit(Distance: 0.01f, Yaw: 0f, Pitch: 0f),
+                new WorldCameraProgramOp.Orbit(Distance: 0.01f, Yaw: new BindableScalar(literal: 0f), Pitch: new BindableScalar(literal: 0f)),
                 new WorldCameraProgramOp.Fov(new BindableScalar(literal: 0f)),
             ]
         ),

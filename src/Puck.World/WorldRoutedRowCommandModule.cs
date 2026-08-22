@@ -23,7 +23,8 @@ namespace Puck.World;
 /// world's own live document are refused by name (see <c>WorldRowCommandModule.TryComposeRoutedSet</c>), and the
 /// routed cell write always carries the raw token for the destination's compose arm to resolve against ITS row
 /// kinds — this process cannot read them.</remarks>
-internal sealed class WorldRoutedRowCommandModule(PlayerRoster roster, WorldSeatAuthorityRouter seatRouter, IServerLink link) : ICommandModule {
+internal sealed class WorldRoutedRowCommandModule(PlayerRoster roster, WorldSeatAuthorityRouter seatRouter, IServerLink link, WorldClient client) : ICommandModule {
+    private readonly WorldClient m_client = client;
     private readonly IServerLink m_link = link;
     private readonly PlayerRoster m_roster = roster;
     private readonly WorldSeatAuthorityRouter m_seatRouter = seatRouter;
@@ -147,6 +148,54 @@ internal sealed class WorldRoutedRowCommandModule(PlayerRoster roster, WorldSeat
                         RawToken: args[3].ToString()
                     ),
                     verb: "player.state.cell.set"
+                );
+            },
+            routing: CommandRouting.Simulation
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Bindable,
+            name: "player.state.cell.toggle",
+            description: "Flips ONE numeric state cell between two authored values for the ACTING seat: player.state.cell.toggle <row> <key> <a> <b> — the cell becomes <b> when it currently reads <a>, else <a>. BINDABLE with a text payload (a chord row or page entry's \"text\": \"look behind 0 3.14159\"), which is how an authored press flips a cell the camera program, a HUD, or an action reads — look behind is a seat rig whose orbit yaw binds state.look.behind and a chord that toggles it. Routes and stamps exactly as player.state.cell.set; the destination's row kind resolves the raw tokens.",
+            handler: (context, args) => {
+                if (args.Count != 4) {
+                    return CommandResult.Error(output: "[player.state.cell.toggle: expected <row> <key> <a> <b>]");
+                }
+
+                var row = args[0].ToString();
+                var key = args[1].ToString();
+                var a = args[2].ToString();
+                var b = args[3].ToString();
+                // The flip reads the live document: the cell currently AT <a> goes to <b>; anything else goes to <a>.
+                var atA = (WorldStateReader.TryRead(
+                    definition: m_client.Definition,
+                    key: key,
+                    rawValue: out var raw,
+                    row: out var stateRow,
+                    rowName: row,
+                    text: out _,
+                    tick: m_client.Tick
+                ) && (raw is { } current) && WorldStateCellWriter.TryParseNumericToken(
+                    kind: stateRow.Kind,
+                    reason: out _,
+                    token: a,
+                    value: out var rawA
+                ) && (current == rawA));
+
+                return Route(
+                    context: context,
+                    described: $"state cell '{row}'.'{key}' toggle",
+                    display: PlayerRoster.DisplayNumber(slot: context.Slot),
+                    mutation: new WorldMutation.UpsertStateCell(
+                        Principal: context.ActingPrincipal(),
+                        Row: row,
+                        Key: key,
+                        Value: 0L,
+                        Kind: WorldDocumentWriteKind.Set,
+                        RawToken: (atA
+                            ? b
+                            : a)
+                    ),
+                    verb: "player.state.cell.toggle"
                 );
             },
             routing: CommandRouting.Simulation

@@ -156,6 +156,7 @@ public sealed class GamepadCaptureSource {
             CaptureTick: tick,
             DeviceId: deviceId,
             Phase: CommandPhase.Active,
+            Posture: true,
             Source: InputSources.Gamepad.Accelerometer,
             Value: CommandValue.Axis(value: latest.Accelerometer)
         ));
@@ -163,6 +164,7 @@ public sealed class GamepadCaptureSource {
             CaptureTick: tick,
             DeviceId: deviceId,
             Phase: CommandPhase.Active,
+            Posture: true,
             Source: InputSources.Gamepad.Orientation,
             Value: CommandValue.Orientation(value: latest.Orientation)
         ));

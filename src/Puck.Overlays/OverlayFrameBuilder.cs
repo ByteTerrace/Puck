@@ -494,8 +494,12 @@ public sealed class OverlayFrameBuilder {
     /// <param name="pressed">The held tier-1 state.</param>
     /// <param name="accent">The accent tier-1 state (the context-primary action).</param>
     /// <param name="bound">Whether an action is bound (<see langword="false"/> = the disabled tier-0 look).</param>
+    /// <param name="accentRole">The accent tier's hue override — the role the plate fills and blooms in while
+    /// <paramref name="accent"/> is set — or <see langword="null"/> for the accent token.</param>
+    /// <param name="toggled">Whether the plate shows a latched toggle: a marching accent border circles it.</param>
+    /// <param name="togglePhase">The marching border's phase, 0..1 per cycle — the caller's presentation clock.</param>
     /// <exception cref="InvalidOperationException">No channel scope is open.</exception>
-    public void WriteIcon(float centerX, float centerY, float plateHalf, float glyphHalf, float glyphOffsetX, float glyphOffsetY, ushort badgeGlyph0, ushort badgeGlyph1, ushort iconGlyph0, ushort iconGlyph1, float alpha, bool pressed, bool accent, bool bound) {
+    public void WriteIcon(float centerX, float centerY, float plateHalf, float glyphHalf, float glyphOffsetX, float glyphOffsetY, ushort badgeGlyph0, ushort badgeGlyph1, ushort iconGlyph0, ushort iconGlyph1, float alpha, bool pressed, bool accent, bool bound, OverlayColorRole? accentRole = null, bool toggled = false, float togglePhase = 0f) {
         if (!TryTakeElement()) {
             return;
         }
@@ -506,7 +510,9 @@ public sealed class OverlayFrameBuilder {
         m_scratch[(offset + 1)] = Pack(value: (centerY * m_inverseHeight));
         m_scratch[(offset + 2)] = Pack(value: plateHalf);
         m_scratch[(offset + 3)] = Pack(value: glyphHalf);
-        m_scratch[(offset + 4)] = 2u;
+        // The accent tier's hue override rides the role bits (0 = the accent token): a verdict chip blooms in the
+        // outcome's hue through the very tier a hovered chip blooms accent.
+        m_scratch[(offset + 4)] = 2u | (((uint)(accentRole ?? 0)) << 4);
         m_scratch[(offset + 5)] = iconGlyph0;
         m_scratch[(offset + 6)] = ((uint)(Math.Clamp(
             max: 1f,
@@ -523,12 +529,16 @@ public sealed class OverlayFrameBuilder {
             : 0u)
             | (bound
             ? (1u << 24)
+            : 0u)
+            | (toggled
+            ? (1u << 25)
             : 0u
         );
         m_scratch[(offset + 7)] = Pack(value: glyphOffsetX);
         m_scratch[(offset + 8)] = Pack(value: glyphOffsetY);
         m_scratch[(offset + 9)] = ((uint)m_activeClip);
         m_scratch[(offset + 10)] = iconGlyph1;
+        m_scratch[(offset + 11)] = Pack(value: togglePhase);
         m_elementCount++;
     }
     /// <summary>Packs one panel-chrome record (scrim fill + hairline + optional title band + optional Tier-1
@@ -688,6 +698,45 @@ public sealed class OverlayFrameBuilder {
         m_scratch[(offset + 7)] = Pack(value: alpha);
         m_scratch[(offset + 8)] = Pack(value: color.B);
         m_scratch[(offset + 9)] = ((uint)m_activeClip);
+        m_elementCount++;
+    }
+    /// <summary>Packs one filled annular sector — a radial menu's pie piece. Word layout (12): 0..1 center
+    /// (normalized) · 2 inner radius (px) · 3 outer radius (px) · 4 = 5 | (role &lt;&lt; 4) · 5 start angle ·
+    /// 6 sweep · 7 alpha · 8 gap (px) · 9 clip index · 10 glow role (0 = none). Angles are radians clockwise from
+    /// twelve o'clock, the wheel's own selection convention, so a piece and the gesture that selects it share one
+    /// transform.</summary>
+    /// <param name="centerX">The pie center x, px.</param>
+    /// <param name="centerY">The pie center y, px.</param>
+    /// <param name="innerRadius">The hole radius, px (0 for a full disc).</param>
+    /// <param name="outerRadius">The outer radius, px.</param>
+    /// <param name="startAngle">The piece's leading edge, radians clockwise from twelve.</param>
+    /// <param name="sweep">The piece's angular extent, radians (a full turn draws an unbroken ring/disc).</param>
+    /// <param name="gap">The half-width, px, trimmed off each angular edge so neighbours separate.</param>
+    /// <param name="role">The fill's color role.</param>
+    /// <param name="alpha">The element opacity (composes with the role's own alpha).</param>
+    /// <param name="glow">The glow's color role — a lit edge ring plus outward halo in that hue — or
+    /// <see langword="null"/> for no glow.</param>
+    /// <exception cref="InvalidOperationException">No channel scope is open.</exception>
+    public void WriteWedge(float centerX, float centerY, float innerRadius, float outerRadius, float startAngle, float sweep, float gap, OverlayColorRole role, float alpha, OverlayColorRole? glow = null) {
+        if (!TryTakeElement()) {
+            return;
+        }
+
+        var offset = (ElementBaseWords + (m_elementCount * ElementWords));
+
+        m_scratch[offset] = Pack(value: (centerX * m_inverseWidth));
+        m_scratch[(offset + 1)] = Pack(value: (centerY * m_inverseHeight));
+        m_scratch[(offset + 2)] = Pack(value: innerRadius);
+        m_scratch[(offset + 3)] = Pack(value: outerRadius);
+        m_scratch[(offset + 4)] = 5u | (((uint)role) << 4);
+        m_scratch[(offset + 5)] = Pack(value: startAngle);
+        m_scratch[(offset + 6)] = Pack(value: sweep);
+        m_scratch[(offset + 7)] = Pack(value: alpha);
+        m_scratch[(offset + 8)] = Pack(value: gap);
+        m_scratch[(offset + 9)] = ((uint)m_activeClip);
+        m_scratch[(offset + 10)] = ((glow is { } glowRole)
+            ? ((uint)glowRole)
+            : 0u);
         m_elementCount++;
     }
     /// <summary>Packs one fixed-cell text run (codes stored pre-resolved as atlas glyph indices; anything outside

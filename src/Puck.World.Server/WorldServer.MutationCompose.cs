@@ -498,13 +498,7 @@ public sealed partial class WorldServer {
             return false;
         }
 
-        var stateRow = mutation switch {
-            WorldMutation.UpsertStateRow value => value.Row.Name.Value,
-            WorldMutation.RemoveStateRow value => value.Name,
-            WorldMutation.UpsertStateCell value => value.Row,
-            WorldMutation.RemoveStateCell value => value.Row,
-            _ => null,
-        };
+        var stateRow = StateRowOf(mutation: mutation);
 
         return (
             (stateRow is null) ||
@@ -516,6 +510,26 @@ public sealed partial class WorldServer {
             )
         );
     }
+    // The state row a state mutation writes, or null for every other kind — the row whose bound document values
+    // TryRefresh re-resolves.
+    private static string? StateRowOf(WorldMutation mutation) => mutation switch {
+        WorldMutation.UpsertStateRow value => value.Row.Name.Value,
+        WorldMutation.RemoveStateRow value => value.Name,
+        WorldMutation.UpsertStateCell value => value.Row,
+        WorldMutation.RemoveStateCell value => value.Row,
+        _ => null,
+    };
+    // A state write re-resolves every document value bound to its row; when one of those values is a
+    // look-assignment row name, the population's look indices are derived from it and must re-resolve too —
+    // KEEP IN SYNC with AffectsPopulation, which lists the mutation KINDS that rebuild.
+    private static bool RefreshesLookAssignment(WorldMutation mutation, WorldDefinition candidate) => (
+        (StateRowOf(mutation: mutation) is { } row) &&
+        WorldStateDocumentValues.ReferencesRow(
+            definition: candidate,
+            graph: candidate.LookAssignment,
+            rowName: row
+        )
+    );
     private static bool TryComposeCore(WorldDefinition current, WorldMutation mutation, ulong tick, string instanceIdentity, out WorldDefinition candidate, out string reason, out WorldCellName? evictedKey) {
         reason = string.Empty;
         evictedKey = null;

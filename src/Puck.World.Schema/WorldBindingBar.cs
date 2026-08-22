@@ -236,6 +236,13 @@ public sealed record WorldBindingBarBank(
 /// <param name="MultiSeatAlpha">The opacity every joined seat's bar renders at while two or more seats are joined —
 /// the split-screen quieting lever, multiplied into each bank's own alpha; 1 keeps multi-seat bars fully
 /// opaque.</param>
+/// <param name="IconRow">The state row a slot's icon resolves through, spelled <c>state.&lt;row&gt;</c> — the row's
+/// CELL KEY is the bound row's <c>id</c> when it authors one, else its action (<c>command</c> or <c>channel</c>;
+/// a dotted command name therefore needs an <c>id</c>, since a cell key holds no dot), and its value is
+/// an <c>icons</c> name. The engine holds no action-to-icon vocabulary of its own: the association is ordinary
+/// authored state, so it is written, read, and MUTATED like any other state (<c>world.state.cell.set</c>) — a spell
+/// minted at runtime gets its icon by writing a cell, never by reshaping the document. <see langword="null"/>
+/// resolves no slot icons at all; a key the row does not carry simply draws no icon.</param>
 /// <param name="Layout">The bar's tuning; <see langword="null"/> uses <see cref="WorldBindingBarLayout.Default"/>.</param>
 /// <param name="Visible">The bar's visibility condition over presentation facts, or <see langword="null"/> for always.</param>
 public sealed record WorldBindingBarAuthoring(
@@ -246,6 +253,7 @@ public sealed record WorldBindingBarAuthoring(
     bool Modifiers = true,
     bool HideUnbound = false,
     float MultiSeatAlpha = 1f,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? IconRow = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldBindingBarLayout? Layout = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] OverlayPredicate? Visible = null
 ) {

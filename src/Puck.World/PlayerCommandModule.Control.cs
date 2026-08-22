@@ -540,25 +540,8 @@ internal sealed partial class PlayerCommandModule {
         );
         yield return CommandDefinition.Verb(
             bindability: CommandBindability.Bindable,
-            name: SwapLookCommand,
-            description: "Turns the seat camera a half-turn about the body — look behind; again to look forward, at views.seatControl.swapRate (0 cuts, a positive rate eases the turn, absent leaves it to the seat rig's own smoothing). Presentation-only: nothing reaches the sim.",
-            valueKind: CommandValueKind.Digital,
-            handler: context => {
-                if (m_roster.Seat(slot: context.Slot) is { } seat) {
-                    // A discrete look request takes ownership from a still-held recenter chord. Chord commands are
-                    // edge-driven (their carried Active entry does not redispatch), so the physical RB may remain
-                    // down without immediately reasserting recenter over the swap.
-                    seat.SetRecenter(held: false);
-                    seat.View.SwapLook(rate: m_instances.ResolveRoutedDefinition(slot: context.Slot).Views.SeatControl.SwapRate);
-                }
-
-                return CommandResult.None;
-            }
-        );
-        yield return CommandDefinition.Verb(
-            bindability: CommandBindability.Bindable,
             name: RecenterLookCommand,
-            description: "Held: turns the seat camera round behind the body and KEEPS it there while down (the body turning under it drags the camera along), at views.seatControl.swapRate (0 cuts, a positive rate eases each turn, absent leaves it to the seat rig's own smoothing). Bind it once — the router delivers the release to a held verb. Presentation-only: nothing reaches the sim.",
+            description: "Held: turns the seat camera round behind the body and KEEPS it there while down (the body turning under it drags the camera along); the seat rig's own smoothing eases each turn. Bind it once — the router delivers the release to a held verb. Presentation-only: nothing reaches the sim. Look-behind is not a verb: author the seat rig's orbit yaw as a state binding (orbit.yaw: state.look.behind) and flip that cell — see player.state.cell.toggle.",
             valueKind: CommandValueKind.Digital,
             held: true,
             handler: context => HeldFlag(

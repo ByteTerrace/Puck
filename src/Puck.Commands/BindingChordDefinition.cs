@@ -64,6 +64,9 @@ public sealed record BindingChordDefinition(
 /// <param name="Value">A constant press value replacing the default active digital, or <see langword="null"/>.</param>
 /// <param name="Mode">Whether a channel destination follows the chord's live hold or toggles a persistent input
 /// latch on each completion. Toggle is refused for a command destination.</param>
+/// <param name="Text">A constant text payload delivered with the press as the submitted line <c>&lt;command&gt; &lt;text&gt;</c>
+/// under the pressing seat's principal — any wire-args verb bindable with authored arguments. See
+/// <see cref="BindingPageEntryDefinition.Text"/>.</param>
 [System.Text.Json.Serialization.JsonUnmappedMemberHandling(System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow)]
 public sealed record BindingCommandDefinition(
     string? Command = null,
@@ -73,5 +76,6 @@ public sealed record BindingCommandDefinition(
     string? Label = null,
     string? Icon = null,
     CommandValue? Value = null,
-    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)] BindingEntryMode Mode = BindingEntryMode.Hold
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)] BindingEntryMode Mode = BindingEntryMode.Hold,
+    string? Text = null
 );

@@ -281,6 +281,11 @@ public static partial class WorldDefinitionValidator {
                     valueSeconds: set.ValueSeconds,
                     verb: "setState"
                 );
+
+                if (set.Text is not null) {
+                    errors.Add(item: $"{path}.text is refused at body scope — 'setState' writes a numeric per-body action-state slot; a text write addresses a world state row, in the rules section.");
+                }
+
                 ValidateCounterState(
                     name: set.State,
                     value: set.Value
@@ -360,6 +365,9 @@ public static partial class WorldDefinitionValidator {
                 break;
             case ActionEffect.Save:
                 errors.Add(item: $"{path} has no body-scope meaning — a per-body action has no world file of its own to save, and is admissible only inside a world rule's own effects.");
+                break;
+            case ActionEffect.Pose:
+                errors.Add(item: $"{path} has no body-scope meaning — 'pose' teleports a body the world names, and is admissible only inside a world rule's own effects.");
                 break;
             default:
                 errors.Add(item: $"{path} is an unknown effect kind.");

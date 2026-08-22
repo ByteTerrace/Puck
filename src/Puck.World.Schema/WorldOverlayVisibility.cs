@@ -31,7 +31,12 @@ public abstract record OverlayPredicate {
     /// <summary>The fact holds this frame.</summary>
     public sealed record Now(OverlayFact Fact) : OverlayPredicate;
     /// <summary>The fact held within the last <paramref name="WindowSeconds"/>.</summary>
-    public sealed record Recently(OverlayFact Fact, float WindowSeconds) : OverlayPredicate;
+    /// <param name="Fact">The fact whose recency is tested.</param>
+    /// <param name="WindowSeconds">How long after the fact last held the predicate still holds in full.</param>
+    /// <param name="FadeSeconds">How long after the window the predicate's PRESENCE eases from 1 to 0 — a surface
+    /// reading presence rather than the boolean fades out instead of cutting, and the predicate still HOLDS
+    /// (presence above 0) throughout the fade. 0 cuts at the window's end.</param>
+    public sealed record Recently(OverlayFact Fact, float WindowSeconds, float FadeSeconds = 0f) : OverlayPredicate;
     /// <summary>Every predicate holds.</summary>
     public sealed record All(IReadOnlyList<OverlayPredicate> Predicates) : OverlayPredicate;
     /// <summary>At least one predicate holds.</summary>

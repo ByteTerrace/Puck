@@ -371,6 +371,13 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{path}.windowSeconds must be finite and non-negative.");
                 }
 
+                if (
+                    !float.IsFinite(f: recently.FadeSeconds) ||
+                    (recently.FadeSeconds < 0f)
+                ) {
+                    errors.Add(item: $"{path}.fadeSeconds must be finite and non-negative.");
+                }
+
                 return;
             case OverlayPredicate.All all:
                 for (var index = 0; (index < (all.Predicates?.Count ?? 0)); index++) {

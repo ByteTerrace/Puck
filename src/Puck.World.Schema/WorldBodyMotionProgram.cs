@@ -326,6 +326,8 @@ public static class BodyActionSpecFactory {
             // ActionEffect.Save's own remarks).
             ActionEffect.Save =>
                 throw new InvalidOperationException(message: $"Action '{actionName}' uses effect 'Save', which has no body-scope meaning — a per-body action has no world file of its own to save, and is admissible only inside a world rule's own effects."),
+            ActionEffect.Pose =>
+                throw new InvalidOperationException(message: $"Action '{actionName}' uses effect 'Pose', which has no body-scope meaning — it teleports a body the world names, and is admissible only inside a world rule's own effects."),
             _ => throw new InvalidOperationException(message: $"Action '{actionName}' contains an unknown effect kind."),
         };
 

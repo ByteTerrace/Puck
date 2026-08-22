@@ -109,6 +109,7 @@ struct OverlayPassData {
 // Icon-chip state bits — KEEP IN SYNC with OverlayFrameBuilder.WriteIcon.
 #define ICON_STATE_ACCENT_BIT 23u
 #define ICON_STATE_BOUND_BIT 24u
+#define ICON_STATE_TOGGLED_BIT 25u
 
 // ---- distance primitives -----------------------------------------------------------------------------------------
 
@@ -241,12 +242,19 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
     //   text:     colorRole << 4 · 0..1 origin (normalized) · 2..3 one glyph cell's on-screen w/h (normalized) ·
     //             5 glyph start · 6 glyph count · 7 alpha
     //   rect:     colorRole << 4 · 0..3 rect (normalized) · 6 corner radius (px) · 7 alpha
-    //   icon:     0..1 plate center (normalized) · 2 plate half (px) · 3 badge half (px) · 5 iconGlyph0 ·
-    //             6 state bits · 7..8 badge offset (px) · 10 iconGlyph1
+    //   icon:     (accentRole << 4, 0 = the accent token) · 0..1 plate center (normalized) · 2 plate half (px) ·
+    //             3 badge half (px) · 5 iconGlyph0 · 6 state bits · 7..8 badge offset (px) · 10 iconGlyph1 ·
+    //             11 toggle phase (0..1; the marching border's position while state bit 25, TOGGLED, is set)
     //   ring:     colorRole << 4 · 0..1 center (normalized) · 2 radius (px) · 7 alpha — a stroked hairline circle
     //             (the marker radius indicator), the ONE hairline weight like every grammar stroke. colorRole ==
     //             OVERLAY_ROLE_CUSTOM (255) reads a raw RGB triple from words 5/6/8 (Pack()'d floats) instead of
     //             indexing the token slab — a marker's authored, possibly state-bound ring color.
+    //   wedge:    colorRole << 4 · 0..1 center (normalized) · 2 inner radius (px) · 3 outer radius (px) ·
+    //             5 start angle (radians, clockwise from twelve) · 6 sweep (radians) · 7 alpha · 8 gap (px, the
+    //             half-width trimmed off each angular edge so neighbours read as separate pie pieces) · 10 glow role
+    //             (uint: 0 = none, else a token color-role index — a lit ring AT the piece's edge plus an outward
+    //             halo, the selection/outcome indicator) — a FILLED annular sector, the radial menu's piece. The
+    //             OVERLAY_ROLE_CUSTOM fill role draws NO fill: glow only (a closed wheel's verdict).
     //   frame:    (frameSlot << 4) | (mirror << 12) | (fit << 13, 0 = cover, 1 = contain, 2 = stretch) · 0..3 rect
     //             (normalized) · 6 corner radius (px) · 7 alpha — a live OverlayFrameSlots slot sampled into a
     //             rounded rect (the HUD picture-in-picture, e.g. a face cam); see frameSlotDimensions/sampleFrameSlot.
@@ -315,6 +323,54 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
                 : OverlayTokenColor(overlayData, role));
 
             color = lerp(color, strokeColor.rgb, (strokeMask(dist, 0.5, edgeAa) * strokeColor.a * alpha));
+        } else if (kind == 5u) {
+            // A WEDGE: a filled annular sector — origin the center, ab.x/ab.y the inner/outer radii in px, words 5/6
+            // the start angle and sweep (radians, clockwise from twelve o'clock, the wheel's own convention), word 8
+            // the angular gap in px. An SDF in two parts: radial (outside either radius) and angular (outside the
+            // sweep, measured as arc length at this radius so the gap is a constant pixel width, not a constant
+            // angle); the piece is the intersection, anti-aliased on both.
+            float innerR = ab.x;
+            float outerR = ab.y;
+            float r = length(local);
+
+            if ((r > (outerR + haloBlur + edgeAa)) || (r < (innerR - haloBlur - edgeAa))) {
+                continue;
+            }
+
+            float alpha = OverlayFloat(overlayData, (o + 7u));
+            float startAngle = OverlayFloat(overlayData, (o + 5u));
+            float sweep = OverlayFloat(overlayData, (o + 6u));
+            float gap = OverlayFloat(overlayData, (o + 8u));
+            // Clockwise-from-twelve: x = sin, y = -cos (y down).
+            float theta = atan2(local.x, -local.y);
+            float mid = (startAngle + (sweep * 0.5));
+            float delta = (theta - mid);
+            delta = (delta - (6.28318530718 * floor((delta + 3.14159265359) / 6.28318530718)));
+            float angularDist = ((abs(delta) - (sweep * 0.5)) * max(r, 1e-3)) + gap;
+            float radialDist = max((innerR - r), (r - outerR));
+            float dist = ((sweep >= 6.2831) ? radialDist : max(radialDist, angularDist));
+            float mask = (1.0 - smoothstep(0.0, edgeAa, dist));
+
+            if (role != OVERLAY_ROLE_CUSTOM) {
+                float4 fill = OverlayTokenColor(overlayData, role);
+
+                color = lerp(color, fill.rgb, (mask * fill.a * alpha));
+            }
+
+            uint glowRole = OverlayWord(overlayData, (o + 10u));
+
+            if (glowRole != 0u) {
+                // The piece's glow: a 1px lit ring straddling its edge plus an SDF distance-falloff halo OUTSIDE it,
+                // in the outcome's own hue — the same Tier-1 bloom the chip and the toast use, so "this is selected /
+                // accepted / refused" reads in one vocabulary everywhere. The fill beneath is untouched: a glow
+                // indicates, it never hides what is under the piece.
+                float3 hue = OverlayTokenColor(overlayData, glowRole).rgb;
+                float ring = strokeMask(abs(dist), 0.5, edgeAa);
+                float halo = (saturate(1.0 - (max(dist, 0.0) / max(haloBlur, 1e-4))) * step(0.0, dist));
+
+                color = lerp(color, hue, (halo * halo * bloomHaloA * alpha));
+                color = lerp(color, hue, (ring * bloomRingA * alpha));
+            }
         } else if (kind == 4u) {
             // A SAMPLED FRAME: a live WorldFrameSource picture-in-picture (e.g. the HUD face-cam element) drawn from
             // one of the FRAME_SLOT_COUNT frame-slot bindings — "role" (bits 4..11) is this record's slot index.
@@ -374,6 +430,7 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
             bool pressed = ((state & 0x100u) != 0u);
             bool accent = ((state & (1u << ICON_STATE_ACCENT_BIT)) != 0u);
             bool bound = ((state & (1u << ICON_STATE_BOUND_BIT)) != 0u);
+            bool toggled = ((state & (1u << ICON_STATE_TOGGLED_BIT)) != 0u);
             // The four chip states (the token spec's Tier recipes). HELD wins over ACCENT (pressing the
             // context-primary chip still needs press feedback); DISABLED only shows when nothing else lights it.
             bool isHeld = pressed;
@@ -400,16 +457,20 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
             float fill = (1.0 - smoothstep(0.0, aa, plateDistance));
             float outline = strokeMask(abs(plateDistance), outlineWidth, aa);
 
-            // Tier 0 REST: surface.raised + line.hair (the rest-opacity token tunes its translucency).
-            // Tier 0 DISABLED: transparent fill + line.soft (a free/unbound button, still shown so its socket reads).
+            // Tier 0 REST: surface.raised, fill only (the rest-opacity token tunes its translucency).
+            // Tier 0 DISABLED: the same fill at the quiet-dim alpha (a free/unbound button, still shown so its socket
+            // reads). No tier strokes its edge — a dense stacked layout reads as fills, never as overlapping lines.
             // Tier 1 HELD: surface.base, fully seated, + bloom.neutral. Tier 1 ACCENT: accent.quiet + bloom.accent.
             // Tier-1 chips skip the plain hairline — the bloom ring below IS their edge.
-            float3 accentRgb = OverlayTokenColor(overlayData, OVERLAY_ROLE_ACCENT).rgb;
+            // The accent tier's hue: the accent token, unless the record names another role in word 4's role bits
+            // (0 = none, since no chip ever blooms text.primary by override) — a verdict chip blooms positive or
+            // danger through the same tier the hover accent uses.
+            float3 accentRgb = ((role != 0u) ? OverlayTokenColor(overlayData, role).rgb : OverlayTokenColor(overlayData, OVERLAY_ROLE_ACCENT).rgb);
             float3 fillColor = (isHeld
                 ? OverlayTokenColor(overlayData, OVERLAY_ROLE_SURFACE_BASE).rgb
                 : (isAccentTier ? accentRgb : OverlayTokenColor(overlayData, OVERLAY_ROLE_SURFACE_RAISED).rgb));
             float plateOpacity = (isDisabled
-                ? 0.0
+                ? OverlayTokenScalar(overlayData, OVERLAY_SCALAR_CHIP_REST_OPACITY)
                 : (isHeld
                     ? 1.0
                     : (isAccentTier
@@ -428,10 +489,22 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
 
                 color = lerp(color, hue, (haloMask * haloA * alpha));
                 color = lerp(color, hue, (outline * ringA * alpha));
-            } else {
-                float4 outlineColor = (isDisabled ? lineSoft : lineHair);
+            }
 
-                color = lerp(color, outlineColor.rgb, (outline * alpha * outlineColor.a));
+            if (toggled) {
+                // The latched-toggle border: three bright arcs of the accent hue marching clockwise around the plate's
+                // edge — the "autocast" grammar: a state that stays on until pressed again, as distinct from a
+                // momentary hold's static bloom. The band sits just outside the plate so it never dims the fill or
+                // the icon; its phase is the caller's presentation clock (word 11), so every latched plate on screen
+                // marches in step.
+                float phase = OverlayFloat(overlayData, (o + 11u));
+                float bandWidth = max((plateHalf * 0.10), 1.5);
+                float band = strokeMask(abs(plateDistance - (bandWidth * 0.5)), (bandWidth * 0.5), aa);
+                float angle = atan2(slotLocal.x, -slotLocal.y);
+                float march = smoothstep(0.15, 1.0, (0.5 + (0.5 * cos((angle * 3.0) - (phase * 6.28318530718)))));
+                float3 marchHue = OverlayTokenColor(overlayData, OVERLAY_ROLE_ACCENT).rgb;
+
+                color = lerp(color, marchHue, (band * (0.25 + (0.75 * march)) * alpha));
             }
 
             // The bound action's icon, centered on the plate — up to two stacked atlas glyphs (a two-character

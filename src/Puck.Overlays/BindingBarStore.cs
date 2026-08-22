@@ -33,6 +33,11 @@ namespace Puck.Overlays;
 /// DISABLED tier-0 state (a free/unbound button, still shown so the socket reads) unless the resolved policy hides
 /// unbound slots, in which case it is not <see cref="Visible"/> instead.</param>
 /// <param name="Accent">Whether this slot is the CONTEXT-PRIMARY action — the chip's ACCENT tier-1 state.</param>
+/// <param name="Toggled">Whether <see cref="Pressed"/> is a toggle's latch at all, on any bank — drawn with the
+/// marching border that says "this stays on until you press it again", as distinct from a momentary hold.</param>
+/// <param name="Latched">Whether <see cref="Pressed"/> is a toggle's latch shown on a bank that is NOT live — drawn
+/// at the held tier but quieted with its bank (the theme's quiet-dim), so a latch stays legible on a wing without
+/// reading as the live press it is not.</param>
 public readonly record struct OverlayBindingSlot(
     ushort BadgeGlyph0,
     ushort BadgeGlyph1,
@@ -47,7 +52,9 @@ public readonly record struct OverlayBindingSlot(
     int BankOrder,
     Vector2? BankOffsetOverride,
     bool Bound = true,
-    bool Accent = false
+    bool Accent = false,
+    bool Latched = false,
+    bool Toggled = false
 );
 /// <summary>One declared modifier as the renderer consumes it (the trigger indicators between the clusters).</summary>
 /// <param name="BadgeGlyph0">The modifier's first (or only) badge atlas glyph index, 1-based, 0 = none.</param>

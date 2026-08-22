@@ -10,6 +10,8 @@ namespace Puck.Overlays;
 public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
     // A viewport eased/shrunk to nothing has nowhere to draw a bar.
     private const float MinRegionExtent = 0.05f;
+    /// <summary>One full march of the latched-toggle border, seconds.</summary>
+    public const float TogglePeriodSeconds = 1.6f;
 
     /// <summary>The chord-hint lines one seat's bar draws. A page with more command-chord rows than this shows the
     /// first <see cref="MaxHintLines"/> and the rest are refused at the bar's own channel boundary, attributed.</summary>
@@ -55,7 +57,9 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
 
         var layout = seat.Layout;
         var chrome = m_theme.Current.Chrome;
-        var space = m_theme.Current.Space;
+        // The latched-toggle border's phase: one march per TogglePeriodSeconds on the presentation clock — never
+        // simulation time; every latched plate in the frame shares it so they march together.
+        var togglePhase = (float)((System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: 0L).TotalSeconds % TogglePeriodSeconds) / TogglePeriodSeconds);
         var scaledButtonSize = (layout.ButtonSize * layout.Scale);
         var regionWidthPx = (region.Width * builder.Width);
         var regionHeightPx = (region.Height * builder.Height);
@@ -81,7 +85,10 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
             var derived = BindingBarLayout.BankOffset(
                 buttonSize: scaledButtonSize,
                 order: slot.BankOrder,
-                space: in space
+                side: BindingBarLayout.ClusterSide(
+                    category: slot.Category,
+                    categoryIndex: slot.CategoryIndex
+                )
             );
             var bankOffset = (slot.BankOffsetOverride ?? derived);
             var centerX = ((regionOriginX + (placement.Center.X * regionHeightPx)) + (bankOffset.X * regionHeightPx));
@@ -89,9 +96,14 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
 
             builder.WriteIcon(
                 accent: slot.Accent,
-                alpha: (slot.Bound
-                ? slot.Alpha
-                : (slot.Alpha * chrome.DimQuietAlpha)),
+                // A latch shown on a bank that is not live keeps the held LOOK but takes the bank's REST coverage: the
+                // held tier fills solid where a rest plate fills at the chip rest opacity, so scaling a wing's latch
+                // by that same opacity makes it fade with its neighbours instead of standing at full strength.
+                alpha: (slot.Latched
+                ? (slot.Alpha * m_theme.Current.Elevation.ChipRestOpacity)
+                : (slot.Bound
+                    ? slot.Alpha
+                    : (slot.Alpha * chrome.DimQuietAlpha))),
                 badgeGlyph0: slot.BadgeGlyph0,
                 badgeGlyph1: slot.BadgeGlyph1,
                 bound: slot.Bound,
@@ -103,7 +115,9 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
                 iconGlyph0: slot.IconGlyph0,
                 iconGlyph1: slot.IconGlyph1,
                 plateHalf: (placement.HalfSize * regionHeightPx),
-                pressed: slot.Pressed
+                pressed: slot.Pressed,
+                toggled: slot.Toggled,
+                togglePhase: togglePhase
             );
         }
 

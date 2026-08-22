@@ -187,8 +187,26 @@ each admitting an EXISTING `WorldMutation` kind into the rule effect set (riding
 the exact seam `generate` proved, never a new door), `upsertHudPanel`/
 `removeHudPanel` (a world-scoped HUD row) and `upsertPlacement`/`removePlacement`
 (a placement row); the rest read or write per-body state (velocity/impulse/
-designate/timer) and are refused BY NAME by `WorldRuleCompiler`. `save` admits on
-DIFFERENT terms again: it is the ONE effect with no `WorldMutation` ordinal at
+designate/timer) and are refused BY NAME by `WorldRuleCompiler`. `pose` is the
+rule-side `player.pose`: `{"$type":"pose","key":"<body>","spawnPoint":"<id>"}` or
+`position` + `yawDegrees`/`pitchDegrees`/`rollDegrees` (exactly one of the two),
+applied through `WorldBody.Pose` as the world's own act — no `WorldMutation`, no
+journal, and deliberately outside the `gatesDrive` check, which is what lets a
+`dead == 1 && respawnIn <= 0` rule move a body its own gate row has frozen.
+`setState` with `text` writes a `kind=text` cell (exactly one of `value`/
+`valueSeconds`/`fromState`/`text`); because `lookAssignment.rows` and creation
+palettes bind to text cells, and a state write re-resolves every bound value
+(re-running the look resolve when `lookAssignment` is touched), this is how a
+rule restyles a body — `elements.world.json`'s `look-*` rules drive one
+`lookOf.<body>` cell per body. A text row also takes a `fromState` copy from
+another text cell. Two indirections make "the body my `target` cell names"
+addressable: a key spelled `$cell:<row>:<key>` resolves to that cell's integer
+value at every read/firing (effect `key`/`fromKey`, `compareState`
+`key`/`comparandKey`), and a body-reference token `cell:<row>:<key>` does the
+same inside `$distance:`/`$los:`/`$nearest:`. `$nearest:<bodyRef>:<row>` is the
+nearest other active body whose cell in keyed `<row>` is nonzero (−1 for none,
+ties to the lowest index) — `elements.world.json`'s `auto-target` rule is
+`setState target.0 fromState $nearest:body:0:enemy`. `save` admits on DIFFERENT terms again: it is the ONE effect with no `WorldMutation` ordinal at
 all — it writes a session snapshot to the world's own loaded file
 (`WorldDefinitionSource.SourcePath`, the SAME target the console's no-argument
 `world.save` resolves; no authored path, and no homeless-world refusal exists
@@ -286,10 +304,10 @@ already exists, and that placement's region can never be removed while ANY
 rule (including the one being fired) still names it — retire the referencing
 rule first, in an earlier mutation of the same or a prior tick, then remove the
 placement. Sense a PERMANENT placement (boot-declared, never removed) rather
-than a token placement a rule itself spawns/removes, for exactly this reason —
-the four shipped worlds author no `rules` section today, so there is no
-worked example to cite; the pattern still governs the first world that adds
-one.
+than a token placement a rule itself spawns/removes, for exactly this reason.
+`src/Puck.World/Assets/worlds/elements.world.json` is the worked example: two
+boot-declared region placements, `Region` interactions that set countdown
+cells, and `Level` rules that drain/countdown them.
 
 `state` (`WorldStateSection`, `Puck.World.Schema/WorldState.cs`) is the
 document's abstract state inventory. It has three ownership lanes:

@@ -218,12 +218,25 @@ public static class WorldStateDocumentValues {
         );
     }
     /// <summary>Reports whether any retained document-value reference reads <paramref name="rowName"/>.</summary>
-    public static bool ReferencesRow(WorldDefinition definition, string rowName) {
+    public static bool ReferencesRow(WorldDefinition definition, string rowName) =>
+        ReferencesRow(
+            definition: definition,
+            graph: definition,
+            rowName: rowName
+        );
+    /// <summary>Reports whether <paramref name="graph"/> — one section or value holder of
+    /// <paramref name="definition"/> — carries a document-value reference naming <paramref name="rowName"/>.</summary>
+    /// <param name="definition">The document the references resolve against.</param>
+    /// <param name="graph">The sub-graph to walk.</param>
+    /// <param name="rowName">The state row sought.</param>
+    /// <returns><see langword="true"/> when a reference in <paramref name="graph"/> names the row.</returns>
+    public static bool ReferencesRow(WorldDefinition definition, object graph, string rowName) {
         ArgumentNullException.ThrowIfNull(argument: definition);
+        ArgumentNullException.ThrowIfNull(argument: graph);
         ArgumentException.ThrowIfNullOrEmpty(argument: rowName);
         return (
             TryVisit(
-            value: definition,
+            value: graph,
             path: "definition",
             definition: definition,
             walk: Walk.Find,

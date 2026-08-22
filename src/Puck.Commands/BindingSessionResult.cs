@@ -6,14 +6,12 @@ namespace Puck.Commands;
 /// <param name="MatchedSuggestion"><see langword="true"/> when the player confirmed the suggested default; <see langword="false"/> when they deviated to their own choice.</param>
 /// <param name="ActivateOn">The phase the resulting binding fires on (carried from the step).</param>
 /// <param name="Label">The step's display label; opaque to the engine.</param>
-/// <param name="Icon">The step's display icon id; opaque to the engine.</param>
 public sealed record BindingSessionCapture(
     string Command,
     string Source,
     bool MatchedSuggestion,
     CommandPhase? ActivateOn = null,
-    string? Label = null,
-    string? Icon = null
+    string? Label = null
 );
 /// <summary>
 /// The outcome of a binding session: the confirmed captures, in step order. <see cref="Apply"/> folds them back
@@ -108,7 +106,6 @@ public sealed record BindingSessionResult(
                     entries.Add(item: new BindingPageEntryDefinition(
                         ActivateOn: capture.ActivateOn,
                         Command: capture.Command,
-                        Icon: capture.Icon,
                         Label: capture.Label,
                         Sources: [capture.Source]
                     ));

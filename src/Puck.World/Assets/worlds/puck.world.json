@@ -116,6 +116,17 @@
         "shapes": [
           {
             "blend": "Union",
+            "domain": [
+              {
+                "$type": "wallpaper",
+                "cell": [
+                  1,
+                  4096
+                ],
+                "group": "P1",
+                "materialStride": 1
+              }
+            ],
             "id": 0,
             "material": 0,
             "name": "surface",
@@ -136,18 +147,7 @@
               1
             ],
             "smooth": 0,
-            "type": "Plane",
-            "domain": [
-              {
-                "$type": "wallpaper",
-                "cell": [
-                  1,
-                  4096
-                ],
-                "group": "P1",
-                "materialStride": 1
-              }
-            ]
+            "type": "Plane"
           },
           {
             "blend": "Subtraction",
@@ -349,6 +349,14 @@
         "shapes": [
           {
             "blend": "Union",
+            "domain": [
+              {
+                "$type": "polar",
+                "axis": "Y",
+                "count": 12,
+                "materialStride": 1
+              }
+            ],
             "id": 0,
             "material": 0,
             "name": "surface",
@@ -369,30 +377,21 @@
               1
             ],
             "smooth": 0,
-            "type": "Plane",
-            "domain": [
-              {
-                "$type": "polar",
-                "count": 12,
-                "axis": "Y",
-                "materialStride": 1
-              }
-            ]
+            "type": "Plane"
           }
         ]
       },
       "id": "groundNorthWest"
     },
     {
-      "id": "groundContact",
       "document": {
         "name": "groundContact",
-        "schema": "puck.creation.v1",
         "palette": [
           {
             "color": "state.colors.substrate"
           }
         ],
+        "schema": "puck.creation.v1",
         "shapes": [
           {
             "blend": "Union",
@@ -419,7 +418,8 @@
             "type": "Plane"
           }
         ]
-      }
+      },
+      "id": "groundContact"
     }
   ],
   "documentId": "puck",

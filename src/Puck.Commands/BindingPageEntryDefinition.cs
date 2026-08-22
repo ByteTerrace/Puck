@@ -31,8 +31,14 @@ namespace Puck.Commands;
 /// channel destination other than the default.</param>
 /// <param name="ActivateOn">The phase the binding fires on, or <see langword="null"/> for the default (press/continuous, not release).
 /// Meaningless (and refused) beside <paramref name="Activator"/> — the activator's own transition IS the entry's edge.</param>
+/// <param name="Id">An optional stable identity for this row, unique within its page. IDENTITY, not presentation:
+/// it is the key a presentation surface looks the row up by (a wheel sector's text), so two rows activating the same
+/// command with different constants stay distinguishable — which their command name alone cannot do.</param>
+/// <param name="Text">A constant text payload delivered with a <paramref name="Command"/> activation: the press
+/// submits the line <c>&lt;command&gt; &lt;text&gt;</c> under the pressing seat's principal, exactly as if typed, so
+/// any wire-args verb is bindable with authored arguments (<c>player.state.cell.toggle look behind 0 3.14159</c>).
+/// Press only; a release carries no line.</param>
 /// <param name="Label">An optional display label for the UI layer; opaque to the engine.</param>
-/// <param name="Icon">An optional display icon id for the UI layer; opaque to the engine.</param>
 /// <param name="Value">A constant activation value a <paramref name="Command"/> destination's digital source sends
 /// instead of its own (a function key driving a fixed one-dimensional axis), or <see langword="null"/> to pass the
 /// source's value through.</param>
@@ -54,8 +60,9 @@ public sealed record BindingPageEntryDefinition(
     float? Scale = null,
     CommandPhase? ActivateOn = null,
     string? Label = null,
-    string? Icon = null,
+    string? Id = null,
     CommandValue? Value = null,
+    string? Text = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] BindingActivatorDefinition? Activator = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)] BindingEntryMode Mode = BindingEntryMode.Hold
 ) {

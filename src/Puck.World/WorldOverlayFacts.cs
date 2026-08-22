@@ -92,7 +92,16 @@ internal sealed class WorldOverlayFacts {
 
         return true;
     }
-    private bool Recently(int slot, OverlayFact fact, float windowSeconds) {
+    private bool Recently(int slot, OverlayFact fact, float windowSeconds, float fadeSeconds) =>
+        (RecentPresence(
+            fact: fact,
+            fadeSeconds: fadeSeconds,
+            slot: slot,
+            windowSeconds: windowSeconds
+        ) > 0f);
+    // A recency fact's PRESENCE: 1 while it holds and for the window after; then, across the fade, 1 down to 0 on
+    // the completed-tick clock (presentation reads it, the simulation never does); 0 once the fade has elapsed.
+    private float RecentPresence(int slot, OverlayFact fact, float windowSeconds, float fadeSeconds) {
         var holds = Holds(
             fact: fact,
             lastHeldTick: out var lastHeldTick,
@@ -100,22 +109,96 @@ internal sealed class WorldOverlayFacts {
         );
 
         if (holds) {
-            return true;
+            return 1f;
         }
 
-        var window = WorldSimulationTickConversion.CompiledDuration(
-            ratePerSecond: ((uint)m_client.Definition.SimulationRateHz),
-            seconds: windowSeconds
-        );
+        var rate = m_client.Definition.SimulationRateHz;
 
         if (
-            window.IsNever ||
+            (rate <= 0) ||
             (lastHeldTick == 0UL)
         ) {
-            return false;
+            return 0f;
         }
 
-        return ((CompletedTick - lastHeldTick) < ((ulong)window.Ticks));
+        var elapsedSeconds = (((float)(CompletedTick - lastHeldTick)) / rate);
+
+        if (elapsedSeconds < windowSeconds) {
+            return 1f;
+        }
+
+        if (fadeSeconds <= 0f) {
+            return 0f;
+        }
+
+        return Math.Clamp(
+            max: 1f,
+            min: 0f,
+            value: (1f - ((elapsedSeconds - windowSeconds) / fadeSeconds))
+        );
+    }
+    /// <summary>Evaluates a predicate's PRESENCE for one seat: 1 while it fully holds, 0 when it does not, and the
+    /// eased value in between while a <see cref="OverlayPredicate.Recently"/> fades — <c>all</c> takes the minimum,
+    /// <c>any</c> the maximum, <c>not</c> the complement. <see cref="Evaluate"/> is this above zero.</summary>
+    /// <param name="slot">The 0-based local seat.</param>
+    /// <param name="predicate">The predicate, or <see langword="null"/> (always fully present).</param>
+    public float Presence(int slot, OverlayPredicate? predicate) {
+        switch (predicate) {
+            case null:
+                return 1f;
+            case OverlayPredicate.Now now:
+                return (Holds(
+                    fact: now.Fact,
+                    lastHeldTick: out _,
+                    slot: slot
+                )
+                    ? 1f
+                    : 0f);
+            case OverlayPredicate.Recently recently:
+                return RecentPresence(
+                    fact: recently.Fact,
+                    fadeSeconds: recently.FadeSeconds,
+                    slot: slot,
+                    windowSeconds: recently.WindowSeconds
+                );
+            case OverlayPredicate.All all: {
+                var presence = 1f;
+
+                foreach (var inner in (all.Predicates ?? [])) {
+                    presence = MathF.Min(
+                        x: presence,
+                        y: Presence(
+                            predicate: inner,
+                            slot: slot
+                        )
+                    );
+                }
+
+                return presence;
+            }
+            case OverlayPredicate.Any any: {
+                var presence = 0f;
+
+                foreach (var inner in (any.Predicates ?? [])) {
+                    presence = MathF.Max(
+                        x: presence,
+                        y: Presence(
+                            predicate: inner,
+                            slot: slot
+                        )
+                    );
+                }
+
+                return presence;
+            }
+            case OverlayPredicate.Not not:
+                return (1f - Presence(
+                    predicate: not.Predicate,
+                    slot: slot
+                ));
+            default:
+                return 1f;
+        }
     }
     // Samples a fact from its owner for one seat. SeatInput/PointerMotion are edge facts: they hold for the whole
     // evaluation tick on which their owner is first observed advanced (an overlay evaluates once per frame, several
@@ -177,6 +260,7 @@ internal sealed class WorldOverlayFacts {
             case OverlayPredicate.Recently recently:
                 return Recently(
                     fact: recently.Fact,
+                    fadeSeconds: recently.FadeSeconds,
                     slot: slot,
                     windowSeconds: recently.WindowSeconds
                 );

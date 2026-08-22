@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using Puck.Commands;
 using Puck.Maths;
@@ -10,6 +11,8 @@ namespace Puck.World;
 public static class WorldStateBindingContext {
     /// <summary>The prefix identifying a world-state-backed binding-context family.</summary>
     public const string FamilyPrefix = "state:";
+    /// <summary>The prefix a <c>state.&lt;row&gt;</c> row reference carries.</summary>
+    public const string RowReferencePrefix = "state.";
 
     private static bool Advances(WorldStateRow row) {
         if (row.Advance is not null) {
@@ -45,6 +48,34 @@ public static class WorldStateBindingContext {
             _ => raw.ToString(provider: CultureInfo.InvariantCulture),
         };
     }
+    /// <summary>Parses a <c>state.&lt;row&gt;</c> row reference — a document field naming a whole state row whose
+    /// CELL KEY comes from the runtime rather than the document (the binding bar's icon row). The dotted spelling is
+    /// the same one an authored value reference (<c>state.colors.paper</c>) and a HUD token (<c>state.&lt;row&gt;</c>)
+    /// use; it stops at the row because the key is not knowable until draw time.</summary>
+    /// <param name="reference">The reference text.</param>
+    /// <param name="rowName">The row name on success.</param>
+    /// <returns><see langword="true"/> when the reference is well-formed.</returns>
+    public static bool TryParseRowReference(string? reference, [NotNullWhen(true)] out string? rowName) {
+        rowName = null;
+
+        if (
+            (reference is not { Length: > 0 }) ||
+            !reference.StartsWith(value: RowReferencePrefix, comparisonType: StringComparison.Ordinal)
+        ) {
+            return false;
+        }
+
+        var name = reference[RowReferencePrefix.Length..];
+
+        if ((name.Length == 0) || name.Contains(value: '.', comparisonType: StringComparison.Ordinal)) {
+            return false;
+        }
+
+        rowName = name;
+
+        return true;
+    }
+
     /// <summary>Parses a <c>state:&lt;row&gt;</c> family name.</summary>
     /// <param name="family">The binding-context family name.</param>
     /// <param name="rowName">The validated state-row name on success.</param>

@@ -149,6 +149,13 @@
                         "Toggle"
                       ],
                       "default": "Hold"
+                    },
+                    "text": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "default": null
                     }
                   },
                   "additionalProperties": false,
@@ -345,9 +352,31 @@
                     "switchFraction": {
                       "type": "number",
                       "default": 0.4
+                    },
+                    "fadeOutSeconds": {
+                      "type": "number",
+                      "default": 0.25
+                    },
+                    "fadeOutEase": {
+                      "type": "number",
+                      "default": 2
                     }
                   },
                   "additionalProperties": false,
+                  "default": null
+                },
+                "labelRow": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "iconRow": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
                   "default": null
                 }
               },
@@ -515,6 +544,14 @@
             "description": "The opacity every joined seat\u0027s bar renders at while two or more seats are joined \u2014 the split-screen quieting lever, multiplied into each bank\u0027s own alpha; 1 keeps multi-seat bars fully opaque.",
             "type": "number",
             "default": 1
+          },
+          "iconRow": {
+            "description": "The state row a slot\u0027s icon resolves through, spelled state.\u003Crow\u003E \u2014 the row\u0027s CELL KEY is the bound row\u0027s id when it authors one, else its action (command or channel; a dotted command name therefore needs an id, since a cell key holds no dot), and its value is an icons name. The engine holds no action-to-icon vocabulary of its own: the association is ordinary authored state, so it is written, read, and MUTATED like any other state (world.state.cell.set) \u2014 a spell minted at runtime gets its icon by writing a cell, never by reshaping the document. null resolves no slot icons at all; a key the row does not carry simply draws no icon.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
           },
           "layout": {
             "description": "The bar\u0027s tuning; null uses Default.",

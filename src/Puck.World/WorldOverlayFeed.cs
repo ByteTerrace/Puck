@@ -48,7 +48,13 @@ internal sealed class WorldOverlayFeed {
     // family-aware badge resolver's only per-tick input (the connected family) rides the mutable m_currentFamily cell
     // instead of a fresh closure, the same "mutable cell + preallocated delegate" shape m_pressedBySource already takes.
     private readonly Func<string, OverlayResolvedGlyph> m_resolveBadge;
+    private static readonly Func<string, OverlayResolvedGlyph> NoBadge = static _ => OverlayResolvedGlyph.None;
+    // Same "mutable cell + preallocated delegate" shape as m_resolveBadge: the per-tick input is WHICH state row
+    // this seat's bar named (m_currentIconRow), so the delegate is allocated once rather than per seat per tick.
+    // Nothing is cached across ticks — the row's cells are live, so an ordinary state mutation retargets an icon
+    // between frames.
     private readonly Func<string?, OverlayResolvedGlyph> m_resolveIcon;
+    private string? m_currentIconRow;
     private GamepadType m_currentFamily;
     private readonly PlayerRoster m_roster;
     private readonly OverlayBindingSeat[] m_seats;
@@ -80,11 +86,22 @@ internal sealed class WorldOverlayFeed {
         m_client = client;
         m_gamepads = gamepads;
         m_icons = icons;
+        m_resolveIcon = action => (((m_currentIconRow is { Length: > 0 } row) && (action is { Length: > 0 }) && WorldStateReader.TryRead(
+            definition: m_client.Definition,
+            key: action,
+            rawValue: out _,
+            row: out _,
+            rowName: row,
+            text: out var iconName,
+            tick: m_client.Tick
+        ))
+            ? icons.ResolveIcon(name: iconName)
+            : OverlayResolvedGlyph.None
+        );
         m_resolveBadge = source => icons.ResolveBadge(
             family: m_currentFamily,
             source: source
         );
-        m_resolveIcon = icons.ResolveIcon;
         m_roster = roster;
         m_store = store;
         m_hintLines = new string[PlayerRoster.MaxSlots][];
@@ -240,10 +257,20 @@ internal sealed class WorldOverlayFeed {
             // stays dumb: a suppressed badge is OverlayResolvedGlyph.None, a suppressed label is the empty string,
             // and suppressed hints are an empty span, each already a case the writer draws nothing for.
             var barText = authoring.Text;
-            var barAlpha = ((joined > 1)
+
+            // "What does this action look like" is a lookup in authored state, not an engine table: the bar names
+            // the row, the bound action names the cell, the cell's value names the icon.
+            m_currentIconRow = (WorldStateBindingContext.TryParseRowReference(
+                reference: authoring.IconRow,
+                rowName: out var iconRowName
+            )
+                ? iconRowName
+                : null
+            );            // The bar's opacity: the split-screen quieting lever times the visibility condition's presence, so a
+            // fading "recently" condition eases the bar out instead of cutting it.
+            var barAlpha = (((joined > 1)
                 ? authoring.MultiSeatAlpha
-                : 1f
-            );
+                : 1f) * barStatus.Presence);
             var slotSet = ResolveSlotSet(
                 authoring: authoring,
                 slot: slot
@@ -311,8 +338,17 @@ internal sealed class WorldOverlayFeed {
                             length: slotCount
                         ),
                         hideUnbound: barStatus.EffectiveHideUnbound,
-                        isPressed: m_pressedBySource[slot],
-                        resolveBadge: m_resolveBadge,
+                        // Only the ACTIVE bank lights a held control: a wing shows what a chord WOULD make the
+                        // control do, and a press is happening on the page that is live, not on that hypothetical.
+                        isPressed: (isActiveBank
+                            ? m_pressedBySource[slot]
+                            : null),
+                        isCommandHeld: m_pressedBySlot[slot],
+                        // The physical-button badge belongs to the live page too: a wing shows what a chord WOULD
+                        // make each plate do, and which control a plate IS is already read off the active bank.
+                        resolveBadge: (isActiveBank
+                            ? m_resolveBadge
+                            : NoBadge),
                         resolveIcon: m_resolveIcon,
                         slotSet: slotSet[..slotCount],
                         text: barText,

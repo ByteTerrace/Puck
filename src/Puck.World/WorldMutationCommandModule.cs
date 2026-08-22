@@ -278,7 +278,12 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 return CommandResult.None;
             }
         );
-        yield return Simulation(
+        // BINDABLE, unlike the rest of this module: it is a gesture, not a verb naming a document target (no path, no
+        // row, no principal) — the artist's "re-read what is on disk" press. Binding it changes nothing about who may
+        // do it: the Mutate hold is checked at dispatch under the pressing seat's principal, exactly as from stdin.
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Bindable,
+            routing: CommandRouting.Simulation,
             name: "world.reload",
             description: "Re-reads the CURRENT document origin from disk and rebuilds from it — the artist external-edit loop: edit the JSON externally, world.reload, no restart: world.reload. The journal always clears on success (reload IS a fresh read of what is on disk right now, so there is nothing to discard-guard the way world.load does). A missing/invalid file, or a re-read that no longer validates, leaves the running world untouched and echoes a loud line naming why. Fully replay-compatible: captured on the tape, CAS-pinned by a sha256-64 hash of the exact bytes read off disk — a re-drive re-reads the same path and refuses BY NAME if the file has moved since the recording was made. The accept echo names the re-read origin.",
             handler: (context, _) => {

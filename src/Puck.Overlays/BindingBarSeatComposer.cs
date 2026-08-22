@@ -29,24 +29,28 @@ public static class BindingBarSeatComposer {
             ? glyph
             : OverlayResolvedGlyph.None
         );
+    // Matched against the row's SOURCE IDS, never its Source display label: a row binding several controls
+    // ("gamepad.buttonSouth,keyboard.space") joins them into one label, so comparing that label to a single
+    // control's id answers false for every multi-source row and leaves its slot drawing as unbound.
     private static BindingPageButtonView? FindButton(BindingPageView view, string source) {
         foreach (var button in view.Buttons) {
-            if (string.Equals(
-                a: button.Source,
-                b: source,
-                comparisonType: StringComparison.OrdinalIgnoreCase
-            )) {
-                return button;
+            for (var index = 0; (index < button.Sources.Count); index++) {
+                if (string.Equals(
+                    a: button.Sources[index],
+                    b: source,
+                    comparisonType: StringComparison.OrdinalIgnoreCase
+                )) {
+                    return button;
+                }
             }
         }
 
         return null;
     }
 
-    /// <summary>Answers whether a physical control is currently held, from the seat's ACTIVE page view — the ONE
-    /// physical-press fact every bank's rendering of that control's slot reuses: a control's momentary press state
-    /// does not depend on which bank/page is drawing it, and only the active page's routed command carries a live
-    /// held sample.</summary>
+    /// <summary>Answers whether a physical control is currently held, from the seat's ACTIVE page view — only the
+    /// active page's routed command carries a live held sample, and only the active bank draws it (a stacked wing
+    /// renders a page that is not live, so it shows no press).</summary>
     /// <param name="activeView">The seat's currently active page view.</param>
     /// <param name="source">The physical control's input source id.</param>
     /// <param name="isCommandHeld">Answers whether a named command is currently carried held for this seat.</param>
@@ -103,9 +107,11 @@ public static class BindingBarSeatComposer {
     /// an exotic slot's left-to-right position in its row follows this order.</param>
     /// <param name="resolveBadge">Resolves a physical control's input source id (already family-resolved by the
     /// caller) to its badge content — the caller's own icon table.</param>
-    /// <param name="resolveIcon">Resolves a bound action's opaque icon string (e.g. <c>action.jump</c>) to its
+    /// <param name="resolveIcon">Resolves a bound row's presentation KEY (its id, else its action name) to its
     /// plate-icon content; a <see langword="null"/>/unresolved string yields <see cref="OverlayResolvedGlyph.None"/>
     /// (a blank plate, never a placeholder mark).</param>
+    /// <param name="isCommandHeld">Answers whether a named command is currently carried held for this seat — the
+    /// latched-toggle door, consulted for every bank's toggle rows; <see langword="null"/> lights no toggles.</param>
     /// <param name="isPressed">Answers whether a physical control is currently held this frame — the SAME physical
     /// fact across every bank (a control's live press state does not depend on which page is being shown for it);
     /// <see langword="null"/> renders every chip unpressed (an input-stateless feed).</param>
@@ -122,7 +128,7 @@ public static class BindingBarSeatComposer {
     /// <param name="destination">The destination slots; exactly <paramref name="slotSet"/>.Length entries.</param>
     /// <exception cref="ArgumentException"><paramref name="destination"/> does not match <paramref name="slotSet"/>
     /// in length.</exception>
-    public static void ComposeBank(BindingPageView view, ReadOnlySpan<string> slotSet, Func<string, OverlayResolvedGlyph> resolveBadge, Func<string?, OverlayResolvedGlyph> resolveIcon, Func<string, bool>? isPressed, float bankAlpha, bool text, bool hideUnbound, int bankOrder, Vector2? bankOffsetOverride, Span<OverlayBindingSlot> destination) {
+    public static void ComposeBank(BindingPageView view, ReadOnlySpan<string> slotSet, Func<string, OverlayResolvedGlyph> resolveBadge, Func<string?, OverlayResolvedGlyph> resolveIcon, Func<string, bool>? isPressed, Func<string, bool>? isCommandHeld, float bankAlpha, bool text, bool hideUnbound, int bankOrder, Vector2? bankOffsetOverride, Span<OverlayBindingSlot> destination) {
         ArgumentNullException.ThrowIfNull(argument: view);
         ArgumentNullException.ThrowIfNull(argument: resolveBadge);
         ArgumentNullException.ThrowIfNull(argument: resolveIcon);
@@ -162,14 +168,19 @@ public static class BindingBarSeatComposer {
                 glyph: resolveBadge(source),
                 text: text
             );
-            var pressed = ((isPressed is not null) && isPressed(source));
             var binding = FindButton(
                 view: view,
                 source: source
             );
+            // A momentary press lights only on the live bank (isPressed is null for a wing). A LATCHED toggle is a
+            // fact about the seat, not the live page: it lights on every bank that binds it, judged against THIS
+            // bank's own row (the wing's L3 may latch a different channel than the base's), faded with the bank.
+            var livePress = ((isPressed is not null) && isPressed(source));
+            var latched = ((binding is { Toggle: true }) && (isCommandHeld is not null) && isCommandHeld(binding.Command));
+            var pressed = (livePress || latched);
             var icon = ((binding is null)
                 ? OverlayResolvedGlyph.None
-                : resolveIcon(binding.Icon)
+                : resolveIcon(binding.Key)
             );
 
             destination[index] = new OverlayBindingSlot(
@@ -180,6 +191,8 @@ public static class BindingBarSeatComposer {
                 BankOrder: bankOrder,
                 Bound: (binding is not null),
                 Category: category,
+                Latched: (latched && (isPressed is null)),
+                Toggled: latched,
                 CategoryCount: exoticCount,
                 CategoryIndex: categoryIndex,
                 IconGlyph0: icon.Glyph0,

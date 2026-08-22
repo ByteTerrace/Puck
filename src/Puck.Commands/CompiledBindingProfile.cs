@@ -56,7 +56,8 @@ public sealed class CompiledBindingProfile {
         CommandValue ReleaseValue,
         bool Reassertable,
         BindingEntryMode Mode,
-        string Source
+        string Source,
+        string? Text = null
     );
     // A compiled row activator: the shared command edge plus the sequence/mode/timeout a RowActivatorTracker
     // resolves, plus a GLOBAL index (0..ActivatorCount-1, unique across the whole compiled profile) a slot's

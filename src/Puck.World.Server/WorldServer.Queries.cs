@@ -332,9 +332,18 @@ public sealed partial class WorldServer {
         seat: operand.Seat,
         ordinal: operand.ChannelOrdinal
     )),
+        WorldRuleFactKind.Nearest => Finite(value: FixedQ4816.FromInteger(value: ResolveNearestBody(
+        from: operand.BodyA!.Value,
+        row: operand.Row!,
+        tick: tick
+    ))),
         _ => Finite(value: ReadStateCell(
         row: operand.Row!,
-        key: operand.Key!,
+        key: ResolveOperandKey(
+        key: operand.Key,
+        keyFrom: operand.KeyFrom,
+        tick: tick
+    ),
         tick: tick
     )),
     };
@@ -365,8 +374,70 @@ public sealed partial class WorldServer {
     // Resolves ONE body reference to a live 0-based index (or -1 for "no body") — a literal index passes through
     // unchanged (compile time already bounded it against the document's declared capacity), an argmax/argmin
     // resolves through the same ResolveArgBody walk the standalone $argmax:/$argmin: channel uses.
+    // A '$cell:' key indirection: the cell's integer value spelled as a key; an absent cell reads 0 like any other.
+    // The integer part of a Q48.16 value — the key or index a cell's value names.
+    private static long IntegerOf(FixedQ4816 value) => (value.Value >> 16);
+    private string ResolveOperandKey(string? key, CompiledCellRef? keyFrom, ulong tick) => ((keyFrom is { } indirection)
+        ? IntegerOf(value: ReadStateCell(
+            row: indirection.Row,
+            key: indirection.Key,
+            tick: tick
+        )).ToString(provider: System.Globalization.CultureInfo.InvariantCulture)
+        : key!
+    );
+    // The nearest active body to 'from' (itself excluded) whose cell in the keyed tag row reads nonzero, or -1.
+    private int ResolveNearestBody(CompiledBodyRef from, string row, ulong tick) {
+        var origin = Body(index: ResolveBodyRef(
+            bodyRef: from,
+            tick: tick
+        ));
+
+        if (origin is null) {
+            return -1;
+        }
+
+        var originIndex = ResolveBodyRef(
+            bodyRef: from,
+            tick: tick
+        );
+        var best = -1;
+        var bestDistance = FixedQ4816.Zero;
+
+        for (var index = 0; (index < m_population.Capacity); index++) {
+            if (
+                (index == originIndex) ||
+                (Body(index: index) is not { } candidate) ||
+                (ReadStateCell(
+                row: row,
+                key: index.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
+                tick: tick
+            ) == FixedQ4816.Zero)
+            ) {
+                continue;
+            }
+
+            var distance = (candidate.FixedPosition - origin.FixedPosition).Length;
+
+            if (
+                (best < 0) ||
+                (distance < bestDistance)
+            ) {
+                best = index;
+                bestDistance = distance;
+            }
+        }
+
+        return best;
+    }
     private int ResolveBodyRef(CompiledBodyRef bodyRef, ulong tick) => (bodyRef.Kind switch {
         CompiledBodyRefKind.Literal => bodyRef.Index,
+        CompiledBodyRefKind.Cell => ((IntegerOf(value: ReadStateCell(
+        row: bodyRef.Row!,
+        key: bodyRef.Key!,
+        tick: tick
+    )) is var cellIndex) && (cellIndex >= 0) && (cellIndex < m_population.Capacity)
+        ? ((int)cellIndex)
+        : -1),
         _ => ResolveArgBody(
         row: bodyRef.Row!,
         op: ((bodyRef.Kind == CompiledBodyRefKind.ArgMax)

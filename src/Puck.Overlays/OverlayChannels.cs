@@ -149,12 +149,12 @@ public sealed class OverlayChannelLeases {
     // character clamp.
     private const int ToastLabelChars = ToastWriter.LabelChars;
     private const int ToastTextWords = (ToastLabelChars + (ToastWriter.MaxMessageChars * ToastWriter.MaxMessageLines));
-    // Wheel, per OPEN seat — the hub dot, one outline per ring plus the active ring's second stroke, every ring's
-    // sector labels, the hovered sector's marker, and the active ring's hub label, all inside the seat's one clip
-    // scope. Every count and clamp reads the writer's own declared caps (the CursorWriter discipline), so a cap
-    // change moves the reservation with it. No panel.
-    private const int WheelElementsPerSeat = ((1 + (WheelWriter.MaxRings + 1)) + ((WheelWriter.MaxRings * WheelWriter.MaxSectorsPerRing) + (1 + 1)));
-    private const int WheelTextWordsPerSeat = (((WheelWriter.MaxRings * WheelWriter.MaxSectorsPerRing) * WheelWriter.MaxSectorLabelChars) + WheelWriter.MaxRingLabelChars);
+    // Wheel, per OPEN seat — the hub disc, every ring's sector pieces each with its icon chip OR text fallback (two
+    // elements per sector at most), and the hub's two text lines (hovered sector, active ring), all inside the
+    // seat's one clip scope. Every count and clamp reads the writer's own declared caps (the CursorWriter
+    // discipline), so a cap change moves the reservation with it. No panel.
+    private const int WheelElementsPerSeat = (1 + ((WheelWriter.MaxRings * WheelWriter.MaxSectorsPerRing) * 2) + 2);
+    private const int WheelTextWordsPerSeat = ((((WheelWriter.MaxRings * WheelWriter.MaxSectorsPerRing) + 1) * WheelWriter.MaxSectorLabelChars) + WheelWriter.MaxRingLabelChars);
 
     /// <summary>The number of declared channels.</summary>
     public const int Count = 7;

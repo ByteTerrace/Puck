@@ -2115,25 +2115,17 @@
                       "additionalProperties": false
                     },
                     {
-                      "description": "Places the eye by orbiting the current subject\u0027s pose. The seat-view pipeline adds a joined seat\u0027s live look input to Yaw/Pitch for an interactive program (see Puck.World.Client.WorldSeatCameraResolver); a non-interactive program (a named camera) renders the authored angles unchanged. At most one per program.",
+                      "description": "Orbits the eye about its pivot. Yaw and Pitch are live-bindable like Fov\u0027s field of view: a seat rig whose yaw reads a state cell turns the CAMERA when that cell changes \u2014 look behind is state.look.behind flipping between 0 and \u03C0 \u2014 while the seat\u0027s facing (what steering and movement resolve against) is untouched, because the facing never includes the rig\u0027s offsets.",
                       "properties": {
                         "$type": {
                           "const": "orbit"
                         },
                         "distance": {
-                          "description": "The orbit distance.",
                           "type": "number"
                         },
-                        "yaw": {
-                          "description": "The orbit heading in radians.",
-                          "type": "number"
-                        },
-                        "pitch": {
-                          "description": "The orbit tilt in radians.",
-                          "type": "number"
-                        },
+                        "yaw": {},
+                        "pitch": {},
                         "pivotOffset": {
-                          "description": "The world-axis offset from the current subject\u0027s origin to the pivot.",
                           "default": null
                         },
                         "opcode": {
@@ -2445,19 +2437,11 @@
                 ],
                 "properties": {
                   "distance": {
-                    "description": "The orbit distance.",
                     "type": "number"
                   },
-                  "yaw": {
-                    "description": "The orbit heading in radians.",
-                    "type": "number"
-                  },
-                  "pitch": {
-                    "description": "The orbit tilt in radians.",
-                    "type": "number"
-                  },
+                  "yaw": {},
+                  "pitch": {},
                   "pivotOffset": {
-                    "description": "The world-axis offset from the current subject\u0027s origin to the pivot.",
                     "default": null
                   },
                   "opcode": {
@@ -4322,7 +4306,7 @@
                                 ],
                                 "default": null
                               },
-                              "icon": {
+                              "id": {
                                 "type": [
                                   "string",
                                   "null"
@@ -4330,6 +4314,13 @@
                                 "default": null
                               },
                               "value": {
+                                "default": null
+                              },
+                              "text": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
                                 "default": null
                               },
                               "activator": {
@@ -4461,6 +4452,13 @@
                             "Toggle"
                           ],
                           "default": "Hold"
+                        },
+                        "text": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "default": null
                         }
                       },
                       "additionalProperties": false,
@@ -4694,9 +4692,31 @@
                         "switchFraction": {
                           "type": "number",
                           "default": 0.4
+                        },
+                        "fadeOutSeconds": {
+                          "type": "number",
+                          "default": 0.25
+                        },
+                        "fadeOutEase": {
+                          "type": "number",
+                          "default": 2
                         }
                       },
                       "additionalProperties": false,
+                      "default": null
+                    },
+                    "labelRow": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "iconRow": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
                       "default": null
                     }
                   },
@@ -4864,6 +4884,14 @@
                 "description": "The opacity every joined seat\u0027s bar renders at while two or more seats are joined \u2014 the split-screen quieting lever, multiplied into each bank\u0027s own alpha; 1 keeps multi-seat bars fully opaque.",
                 "type": "number",
                 "default": 1
+              },
+              "iconRow": {
+                "description": "The state row a slot\u0027s icon resolves through, spelled state.\u003Crow\u003E \u2014 the row\u0027s CELL KEY is the bound row\u0027s id when it authors one, else its action (command or channel; a dotted command name therefore needs an id, since a cell key holds no dot), and its value is an icons name. The engine holds no action-to-icon vocabulary of its own: the association is ordinary authored state, so it is written, read, and MUTATED like any other state (world.state.cell.set) \u2014 a spell minted at runtime gets its icon by writing a cell, never by reshaping the document. null resolves no slot icons at all; a key the row does not carry simply draws no icon.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
               },
               "layout": {
                 "description": "The bar\u0027s tuning; null uses Default.",
@@ -5079,6 +5107,7 @@
                         "const": "recently"
                       },
                       "fact": {
+                        "description": "The fact whose recency is tested.",
                         "enum": [
                           "SeatInput",
                           "PointerMotion",
@@ -5088,7 +5117,13 @@
                         ]
                       },
                       "windowSeconds": {
+                        "description": "How long after the fact last held the predicate still holds in full.",
                         "type": "number"
+                      },
+                      "fadeSeconds": {
+                        "description": "How long after the window the predicate\u0027s PRESENCE eases from 1 to 0 \u2014 a surface reading presence rather than the boolean fades out instead of cutting, and the predicate still HOLDS (presence above 0) throughout the fade. 0 cuts at the window\u0027s end.",
+                        "type": "number",
+                        "default": 0
                       }
                     },
                     "required": [
@@ -5143,6 +5178,7 @@
                                   "const": "recently"
                                 },
                                 "fact": {
+                                  "description": "The fact whose recency is tested.",
                                   "enum": [
                                     "SeatInput",
                                     "PointerMotion",
@@ -5152,7 +5188,13 @@
                                   ]
                                 },
                                 "windowSeconds": {
+                                  "description": "How long after the fact last held the predicate still holds in full.",
                                   "type": "number"
+                                },
+                                "fadeSeconds": {
+                                  "description": "How long after the window the predicate\u0027s PRESENCE eases from 1 to 0 \u2014 a surface reading presence rather than the boolean fades out instead of cutting, and the predicate still HOLDS (presence above 0) throughout the fade. 0 cuts at the window\u0027s end.",
+                                  "type": "number",
+                                  "default": 0
                                 }
                               },
                               "required": [
@@ -5234,6 +5276,7 @@
                                           "const": "recently"
                                         },
                                         "fact": {
+                                          "description": "The fact whose recency is tested.",
                                           "enum": [
                                             "SeatInput",
                                             "PointerMotion",
@@ -5243,7 +5286,13 @@
                                           ]
                                         },
                                         "windowSeconds": {
+                                          "description": "How long after the fact last held the predicate still holds in full.",
                                           "type": "number"
+                                        },
+                                        "fadeSeconds": {
+                                          "description": "How long after the window the predicate\u0027s PRESENCE eases from 1 to 0 \u2014 a surface reading presence rather than the boolean fades out instead of cutting, and the predicate still HOLDS (presence above 0) throughout the fade. 0 cuts at the window\u0027s end.",
+                                          "type": "number",
+                                          "default": 0
                                         }
                                       },
                                       "required": [
@@ -6738,14 +6787,6 @@
               ],
               "additionalProperties": false,
               "default": null
-            },
-            "swapRate": {
-              "description": "The rate the camera boom closes over a player.look.swap, in the same unit as seatRig.smoothRate: 0 is instant (the boom re-seeds at the turned pose \u2014 a cut), a positive value eases the half-turn at that rate until it lands. Optional; absent leaves the swap to the rig\u0027s own smoothRate.",
-              "type": [
-                "number",
-                "null"
-              ],
-              "default": null
             }
           },
           "required": [
@@ -7067,6 +7108,7 @@
                           "const": "recently"
                         },
                         "fact": {
+                          "description": "The fact whose recency is tested.",
                           "enum": [
                             "SeatInput",
                             "PointerMotion",
@@ -7076,7 +7118,13 @@
                           ]
                         },
                         "windowSeconds": {
+                          "description": "How long after the fact last held the predicate still holds in full.",
                           "type": "number"
+                        },
+                        "fadeSeconds": {
+                          "description": "How long after the window the predicate\u0027s PRESENCE eases from 1 to 0 \u2014 a surface reading presence rather than the boolean fades out instead of cutting, and the predicate still HOLDS (presence above 0) throughout the fade. 0 cuts at the window\u0027s end.",
+                          "type": "number",
+                          "default": 0
                         }
                       },
                       "required": [
@@ -7180,6 +7228,7 @@
                       "const": "recently"
                     },
                     "fact": {
+                      "description": "The fact whose recency is tested.",
                       "enum": [
                         "SeatInput",
                         "PointerMotion",
@@ -7189,7 +7238,13 @@
                       ]
                     },
                     "windowSeconds": {
+                      "description": "How long after the fact last held the predicate still holds in full.",
                       "type": "number"
+                    },
+                    "fadeSeconds": {
+                      "description": "How long after the window the predicate\u0027s PRESENCE eases from 1 to 0 \u2014 a surface reading presence rather than the boolean fades out instead of cutting, and the predicate still HOLDS (presence above 0) throughout the fade. 0 cuts at the window\u0027s end.",
+                      "type": "number",
+                      "default": 0
                     }
                   },
                   "required": [
@@ -7343,6 +7398,7 @@
                         "const": "recently"
                       },
                       "fact": {
+                        "description": "The fact whose recency is tested.",
                         "enum": [
                           "SeatInput",
                           "PointerMotion",
@@ -7352,7 +7408,13 @@
                         ]
                       },
                       "windowSeconds": {
+                        "description": "How long after the fact last held the predicate still holds in full.",
                         "type": "number"
+                      },
+                      "fadeSeconds": {
+                        "description": "How long after the window the predicate\u0027s PRESENCE eases from 1 to 0 \u2014 a surface reading presence rather than the boolean fades out instead of cutting, and the predicate still HOLDS (presence above 0) throughout the fade. 0 cuts at the window\u0027s end.",
+                        "type": "number",
+                        "default": 0
                       }
                     },
                     "required": [
@@ -7870,6 +7932,14 @@
                             "null"
                           ],
                           "default": null
+                        },
+                        "text": {
+                          "description": "world scope only: the literal a kind=text state row\u0027s cell takes \u2014 the fourth spelling beside Value/FromState/ValueSeconds, exactly one authored. Because every state-bound document value (a creation palette colour, a look-assignment row name) re-resolves on the write, this is how a rule restyles what a body wears.",
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "default": null
                         }
                       },
                       "required": [
@@ -8226,6 +8296,49 @@
                           "const": "save"
                         }
                       },
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Teleports one body to a pose \u2014 the rule-side spelling of the player.pose verb, world scope only (refused at body scope). Like Save it submits no WorldMutation: a pose is body state, not document state, so nothing composes, validates, or journals, and a replay reproduces it by re-firing the same rule. Applied as the world\u0027s own act through WorldBody.Pose, deliberately outside the drive-admission gate: a body whose gatesDrive row reads nonzero is a body a rule still needs to move (a dead body back to its spawn). The client sees the same teleport continuity a player.pose produces.",
+                      "properties": {
+                        "$type": {
+                          "const": "pose"
+                        },
+                        "key": {
+                          "description": "The target body\u0027s 0-based entity index, spelled as a plain integer \u2014 the same literal addressing every other world-scope effect uses for a per-body cell.",
+                          "type": "string"
+                        },
+                        "spawnPoint": {
+                          "description": "A declared spawnPoints id (position and yaw from the point; pitch/roll zero). Exactly one of this and Position is authored.",
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "position": {
+                          "description": "A literal world position. Exactly one of this and SpawnPoint is authored.",
+                          "default": null
+                        },
+                        "yawDegrees": {
+                          "description": "The yaw about \u002BY, degrees; read only with Position.",
+                          "type": "number",
+                          "default": 0
+                        },
+                        "pitchDegrees": {
+                          "description": "The pitch about the body right, degrees; read only with Position.",
+                          "type": "number",
+                          "default": 0
+                        },
+                        "rollDegrees": {
+                          "description": "The roll about the body forward, degrees; read only with Position.",
+                          "type": "number",
+                          "default": 0
+                        }
+                      },
+                      "required": [
+                        "key"
+                      ],
                       "additionalProperties": false
                     }
                   ]

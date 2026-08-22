@@ -27,6 +27,9 @@ namespace Puck.Commands;
 /// </param>
 /// <param name="Transient">Whether an active analog sample is an impulse rather than persistent device state.
 /// Transient channel destinations receive an automatic inactive edge on the following tick.</param>
+/// <param name="Posture">Whether the sample is a reading of the device's attitude (an accelerometer's gravity
+/// vector, a fused orientation) rather than an act upon it. A posture sample streams every report whether or not a
+/// hand is on the device, so it is never the player's activity — it drives motion controls, not idle accounting.</param>
 /// <param name="Slot">The lane the signal addresses directly, for a source whose seat is authored rather than
 /// discovered (a document-bound sense measurement), or <see cref="UnresolvedSlot"/> to resolve the lane from
 /// <paramref name="DeviceId"/> through the slot resolver. An authored-lane signal never seats a device and never
@@ -39,7 +42,8 @@ public readonly record struct InputSignal(
     string? Text = null,
     ulong CaptureTick = 0UL,
     bool Transient = false,
-    int Slot = InputSignal.UnresolvedSlot
+    int Slot = InputSignal.UnresolvedSlot,
+    bool Posture = false
 ) {
     /// <summary>The <see cref="Slot"/> value meaning "resolve the lane from the device".</summary>
     public const int UnresolvedSlot = -1;

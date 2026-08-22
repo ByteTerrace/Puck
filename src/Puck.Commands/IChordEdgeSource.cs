@@ -32,6 +32,7 @@ namespace Puck.Commands;
 /// <param name="Mode">Whether this synthesized channel edge follows its ordinary hold lifecycle or flips the
 /// router's input-side toggle latch. Toggle edges arrive only as completion presses; physical chord/activator
 /// release does not clear the latched destination.</param>
+/// <param name="Text">The authored text payload a press edge submits as <c>&lt;Command&gt; &lt;Text&gt;</c>, or <see langword="null"/>.</param>
 public readonly record struct BindingChordEdge(
     string Command,
     string Source,
@@ -40,7 +41,8 @@ public readonly record struct BindingChordEdge(
     bool Dispatch,
     bool Momentary = false,
     bool DispatchRelease = false,
-    BindingEntryMode Mode = BindingEntryMode.Hold
+    BindingEntryMode Mode = BindingEntryMode.Hold,
+    string? Text = null
 );
 /// <summary>
 /// The seam a chord-aware <see cref="IInputBindings"/> hands its synthesized chord-command edges to the

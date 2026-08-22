@@ -109,7 +109,6 @@ public sealed class BindingSession {
         m_captures.Add(item: new BindingSessionCapture(
             ActivateOn: step.ActivateOn,
             Command: step.Command,
-            Icon: step.Icon,
             Label: step.Label,
             MatchedSuggestion: string.Equals(
                 a: source,

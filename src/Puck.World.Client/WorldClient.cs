@@ -639,11 +639,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
                     index: route.EntityIndex,
                     heading: out var recenterHeading
                 )) {
-                    seat.View.RecenterLook(
-                        rate: definition.Views.SeatControl.SwapRate,
-                        targetYaw: recenterHeading,
-                        views: definition.Views
-                    );
+                    seat.View.RecenterLook(targetYaw: recenterHeading);
                 }
 
                 continue;

@@ -1169,7 +1169,10 @@ public sealed partial class WorldServer {
             // itself does.
             Install(
                 definition: candidate,
-                rebuildPopulation: (AffectsPopulation(mutation: mutation) || (solidAffecting && WorldContactSelection.RequiresField(collision: candidate.Collision)))
+                rebuildPopulation: (AffectsPopulation(mutation: mutation) || RefreshesLookAssignment(
+                mutation: mutation,
+                candidate: candidate
+            ) || (solidAffecting && WorldContactSelection.RequiresField(collision: candidate.Collision)))
             );
 
             if (addonPlan is not null) {

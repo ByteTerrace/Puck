@@ -24,6 +24,14 @@ namespace Puck.Commands;
 /// group. Their ordinary entries author selection, ring navigation, commit, and cancel sources.</param>
 /// <param name="Rings">The concentric ring pages, innermost first — <see cref="MinRings"/>..<see cref="MaxRings"/>
 /// of them, each carrying <see cref="MinSectorsPerRing"/>..<see cref="MaxSectorsPerRing"/> sector rows.</param>
+/// <param name="LabelRow">The state row a sector's DISPLAY TEXT resolves from, spelled <c>state.&lt;row&gt;</c> — the
+/// cell key is the sector row's <see cref="BindingPageEntryDefinition.Id"/> and the cell's value is the text drawn.
+/// Opaque here (this layer never reads world state; the containing world resolves it, the same way it resolves
+/// <paramref name="Group"/>'s state reference), so a sector row carries what it DOES and the world carries how it
+/// reads. <see langword="null"/> falls back to each sector's command name.</param>
+/// <param name="IconRow">The state row a sector's ICON resolves from, spelled <c>state.&lt;row&gt;</c> — the cell key
+/// is the sector row's <see cref="BindingPageEntryDefinition.Id"/> and the cell's value is an <c>icons</c> name.
+/// Opaque here exactly as <paramref name="LabelRow"/> is. <see langword="null"/> draws no sector icons.</param>
 /// <param name="Style">Author-controlled presentation and pointer-selection policy, or the documented defaults.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record BindingWheelDefinition(
@@ -31,7 +39,9 @@ public sealed record BindingWheelDefinition(
     DocumentIdentifier Group,
     IReadOnlyList<string> HoldPages,
     IReadOnlyList<BindingPageDefinition> Rings,
-    BindingWheelStyleDefinition? Style = null
+    BindingWheelStyleDefinition? Style = null,
+    string? LabelRow = null,
+    string? IconRow = null
 ) {
     /// <summary>The fewest rings a wheel may declare.</summary>
     public const int MinRings = 1;
@@ -112,6 +122,12 @@ public sealed record BindingWheelExcursionDefinition(
 /// <param name="SwitchFraction">The normalized selector magnitude a different sector needs to replace a sector held by
 /// <paramref name="SelectionGraceSeconds"/>, so a return swing that clips the far side of the dead zone cannot steal the
 /// selection.</param>
+/// <param name="FadeOutSeconds">How long the wheel stays on screen after a commit or cancel, fading out with the
+/// verdict glow on it — the accepted piece lit positive, the refused piece or the hub lit danger — so the result is
+/// SEEN before the wheel goes. 0 closes instantly with no verdict shown.</param>
+/// <param name="FadeOutEase">The fade's shape: opacity over the fade is <c>1 - t^ease</c>. 1 is linear; above 1
+/// starts slow and ends fast (the wheel holds nearly solid while the verdict registers, then snaps away — a twitch
+/// player sees nothing linger, a new player sees what happened); below 1 drops early and trails off.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record BindingWheelStyleDefinition(
     BindingWheelSpatialSelectionMode PointerSelection = BindingWheelSpatialSelectionMode.Angle,
@@ -126,5 +142,7 @@ public sealed record BindingWheelStyleDefinition(
     BindingWheelExcursionDefinition? Excursion = null,
     float AxisDeadZone = 0.08f,
     float SelectionGraceSeconds = 0.50f,
-    float SwitchFraction = 0.40f
+    float SwitchFraction = 0.40f,
+    float FadeOutSeconds = 0.25f,
+    float FadeOutEase = 2f
 );

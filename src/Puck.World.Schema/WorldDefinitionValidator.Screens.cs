@@ -348,12 +348,21 @@ public static partial class WorldDefinitionValidator {
                         errors.Add(item: $"{opPath}.distance must be positive and finite.");
                     }
 
-                    if (
-                        !float.IsFinite(f: orbit.Yaw) ||
-                        !float.IsFinite(f: orbit.Pitch) ||
-                        ((orbit.PivotOffset is { } pivotOffset) && !IsFinite(value: pivotOffset))
-                    ) {
-                        errors.Add(item: $"{opPath} needs a finite yaw, pitch, and pivotOffset.");
+                    RequireBindableScalar(
+                        definition: definition,
+                        errors: errors,
+                        path: $"{opPath}.yaw",
+                        scalar: orbit.Yaw
+                    );
+                    RequireBindableScalar(
+                        definition: definition,
+                        errors: errors,
+                        path: $"{opPath}.pitch",
+                        scalar: orbit.Pitch
+                    );
+
+                    if ((orbit.PivotOffset is { } pivotOffset) && !IsFinite(value: pivotOffset)) {
+                        errors.Add(item: $"{opPath} needs a finite pivotOffset.");
                     }
 
                     break;
@@ -781,12 +790,6 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path}.minPitch and {path}.maxPitch must be finite and within [-pi/2, pi/2].");
         } else if (control.MinPitch >= control.MaxPitch) {
             errors.Add(item: $"{path}.minPitch must be less than {path}.maxPitch.");
-        }
-        if (
-            (control.SwapRate is { } swapRate) &&
-            (!float.IsFinite(f: swapRate) || (swapRate < 0f))
-        ) {
-            errors.Add(item: $"{path}.swapRate must be finite and non-negative — 0 is an instant swap.");
         }
         if (control.Follow is { } follow) {
             if (

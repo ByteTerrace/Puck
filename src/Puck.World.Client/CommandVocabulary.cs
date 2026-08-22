@@ -23,7 +23,6 @@ public static class PlayerCommandNames {
     public const string SteerCommand = "player.steer";
     /// <summary>The look-swap command: turns the seat camera a half-turn about the body — look behind; again to
     /// look forward.</summary>
-    public const string SwapLookCommand = "player.look.swap";
     /// <summary>The look-recenter command: turns the seat camera round behind the body.</summary>
     public const string RecenterLookCommand = "player.look.recenter";
     /// <summary>The no-token Free Cam toggle: <c>player.camera [seat]</c>, the bindable door onto the same

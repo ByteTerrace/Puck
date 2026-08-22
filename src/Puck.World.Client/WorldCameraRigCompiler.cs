@@ -38,10 +38,11 @@ public static class WorldCameraRigCompiler {
         ArgumentNullException.ThrowIfNull(argument: program);
 
         if (program.OrbitOp is { } orbit) {
+            // A bound angle has no authored position to narrate; its literal (or the rest angle) stands in.
             return ((orbit.PivotOffset?.Value ?? Vector3.Zero) + OrbitRig.Offset(
                 distance: orbit.Distance,
-                pitch: orbit.Pitch,
-                yaw: orbit.Yaw
+                pitch: (orbit.Pitch.Literal ?? 0f),
+                yaw: (orbit.Yaw.Literal ?? 0f)
             ));
         }
 
@@ -197,9 +198,15 @@ public static class WorldCameraRigCompiler {
                         operations.Add(item: new SdfCameraOp.Orbit(
                             AppliesLook: interactive,
                             Distance: SdfCameraScalar.FromLiteral(value: orbit.Distance),
-                            Pitch: SdfCameraScalar.FromLiteral(value: orbit.Pitch),
+                            Pitch: Scalar(
+                                fallback: 0f,
+                                scalar: orbit.Pitch
+                            ),
                             PivotOffset: (orbit.PivotOffset?.Value ?? Vector3.Zero),
-                            Yaw: SdfCameraScalar.FromLiteral(value: orbit.Yaw)
+                            Yaw: Scalar(
+                                fallback: 0f,
+                                scalar: orbit.Yaw
+                            )
                         ));
 
                         break;

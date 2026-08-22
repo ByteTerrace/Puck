@@ -49,14 +49,6 @@
           ],
           "additionalProperties": false,
           "default": null
-        },
-        "swapRate": {
-          "description": "The rate the camera boom closes over a player.look.swap, in the same unit as seatRig.smoothRate: 0 is instant (the boom re-seeds at the turned pose \u2014 a cut), a positive value eases the half-turn at that rate until it lands. Optional; absent leaves the swap to the rig\u0027s own smoothRate.",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
         }
       },
       "required": [

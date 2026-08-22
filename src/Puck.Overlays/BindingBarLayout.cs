@@ -145,36 +145,52 @@ public static class BindingBarLayout {
             x: (aspect * 0.5f),
             y: (1f - anchorOffsetY)
         );
-    /// <summary>The displacement one stacked bank's whole cluster takes from the bar's shared anchor, derived from
-    /// the bank's declared order — a fan that alternates left/right and climbs one row per pair, with both steps
-    /// taken from the authored theme's spacing grid (the <c>space3</c>/<c>space2</c> steps as multiples of the
-    /// <c>space1</c> grid unit) scaled by the button size, so a retheme re-pitches the stack without re-authoring a
-    /// single bank. A theme with no spacing grid stacks every bank on the anchor.</summary>
+    /// <summary>The derived displacement of one stacked bank's plate, in whole button pitches, as a nesting of
+    /// crosses: a compass cluster is a plus (its four corner cells are empty), and two pluses tile tightly when one
+    /// sits two pitches up and two pitches across from the other, its arm tips filling the other's empty corners.
+    /// The base bar is the outer middle of the weave and the wings nest INWARD of it — order 1 diagonally up and
+    /// toward the bar's centre, order 2 diagonally down and toward the centre, orders 3 and 4 straight above and
+    /// below the base — so every wing plate lands on the base bar's grid with no cluster-sized gaps. Each cluster
+    /// steps relative to the bar's centre on its own side (a centre/exotic slot has no side and only climbs or
+    /// drops). Orders past the table alternate further up and down.</summary>
     /// <param name="order">The bank's declared stack order; 0 sits on the anchor.</param>
+    /// <param name="side">The plate's cluster side: -1 for the left cluster, +1 for the right, 0 for a slot with no
+    /// side (centre row, exotic row).</param>
     /// <param name="buttonSize">The scaled slot-plate size, region-height units.</param>
-    /// <param name="space">The resolved theme's spacing grid.</param>
-    /// <returns>The bank's displacement, region-height units, y DOWN.</returns>
-    public static Vector2 BankOffset(int order, float buttonSize, in OverlayThemeValues.SpaceSet space) {
-        var unit = space.Space1;
-
-        if (
-            (order <= 0) ||
-            (unit <= 0f)
-        ) {
+    /// <returns>The plate's displacement, region-height units, y DOWN.</returns>
+    public static Vector2 BankOffset(int order, int side, float buttonSize) {
+        if (order <= 0) {
             return Vector2.Zero;
         }
 
-        var row = ((order + 1) / 2);
-        var side = (((order % 2) == 1)
-            ? -1f
-            : 1f
-        );
+        var (outward, up) = (order <= NestedWingPitches.Length)
+            ? NestedWingPitches[(order - 1)]
+            : (0, ((((order % 2) == 1) ? 1 : -1) * (4 + (2 * ((order - NestedWingPitches.Length + 1) / 2)))));
 
         return new Vector2(
-            x: ((side * ((space.Space3 / unit) * buttonSize)) / row),
-            y: (-((space.Space2 / unit) * buttonSize) * row)
+            x: (side * outward * buttonSize),
+            y: (-up * buttonSize)
         );
     }
+    // The plus-nesting table, (outward, up) in button pitches per stack order — negative outward is toward the
+    // bar's centre, negative up is below the base. See BankOffset.
+    private static readonly (int Outward, int Up)[] NestedWingPitches = [
+        (-2, 1),
+        (-2, -2),
+        (0, 4),
+        (0, -4),
+    ];
+    /// <summary>The cluster side a placed slot belongs to — -1 for the left compass cluster, +1 for the right, 0 for
+    /// a centre or exotic slot — the sign <see cref="BankOffset"/> fans a stacked bank by.</summary>
+    /// <param name="category">The slot's placement category.</param>
+    /// <param name="categoryIndex">The slot's index within that category.</param>
+    /// <returns>-1, 0, or +1.</returns>
+    public static int ClusterSide(BindingSlotCategory category, int categoryIndex) => ((category == BindingSlotCategory.Classic)
+        ? ((categoryIndex < PadPictogramLayout.SlotsPerCluster)
+            ? -1
+            : 1)
+        : 0
+    );
     private static BindingSlotPlacement FromOffset(Vector2 anchor, float x, float yUp, float buttonSize, in BindingBarLayoutOptions options) {
         var center = new Vector2(
             x: (anchor.X + x),

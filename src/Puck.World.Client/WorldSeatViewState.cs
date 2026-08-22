@@ -9,8 +9,6 @@ namespace Puck.World.Client;
 /// local rendering, away rendering, and read-back all observe it.
 /// </summary>
 public sealed class WorldSeatViewState {
-    // The boom-to-target distance at which a swap in flight is considered landed, in world units.
-    private const float SwapLandedDistance = 0.01f;
 
     private readonly Lock m_gate = new();
     private readonly SdfCameraBoomSmoother m_smoothing = new();
@@ -30,9 +28,6 @@ public sealed class WorldSeatViewState {
     private IWorldCameraProgramRig? m_compiledRig;
     private float m_pitch;
     private float m_yaw;
-    // The rate the swap in flight closes its boom at, overriding the rig's own until the boom lands; null when no
-    // swap is in flight (or the world left the swap to the rig).
-    private float? m_swapRate;
 
     public float Pitch { get { lock (m_gate) { return m_pitch; } } }
     public float Yaw { get { lock (m_gate) { return m_yaw; } } }
@@ -44,7 +39,9 @@ public sealed class WorldSeatViewState {
         min: (control.MinPitch - authoredPitch),
         max: (control.MaxPitch - authoredPitch)
     );
-    private static float AuthoredPitch(WorldViewDefaults views) => (views.SeatRig.OrbitOp?.Pitch ?? 0f);
+    // The rig's authored pitch, for the live-pitch clamp: a BOUND pitch has no single authored value, so the clamp
+    // is taken about the rest angle.
+    private static float AuthoredPitch(WorldViewDefaults views) => (views.SeatRig.OrbitOp?.Pitch.Literal ?? 0f);
     private static float Wrap(float radians) => (radians - (MathF.Tau * MathF.Round(x: (radians / MathF.Tau))));
 
     /// <summary>The rotation carrying world up to the seat's own up, CARRIED across updates rather than rebuilt.
@@ -113,14 +110,17 @@ public sealed class WorldSeatViewState {
         }
     }
     public float LogicalYaw(WorldViewDefaults views, Quaternion bodyOrientation) {
-        var authoredYaw = (views.SeatRig.OrbitOp?.Yaw ?? 0f);
+        // The seat's FACING — what steering writes and movement frames against: the live look yaw over the yaw
+        // reference, and nothing of the camera program. The rig's orbit yaw (authored or state-bound — look behind)
+        // is where the EYE sits relative to the facing; folding it in here is what once made "look behind" turn the
+        // body round with the camera.
         var bodyYaw = ((views.SeatControl.YawReference == WorldSeatYawReference.Body)
             ? WorldSeatCameraResolver.BodyYaw(orientation: bodyOrientation)
             : 0f
         );
 
         lock (m_gate) {
-            return Wrap(radians: ((authoredYaw + m_yaw) + bodyYaw));
+            return Wrap(radians: (m_yaw + bodyYaw));
         }
     }
     public void Nudge(Vector2 input, float yawScale, float pitchScale, WorldSeatLook preference, WorldViewDefaults views) {
@@ -156,55 +156,22 @@ public sealed class WorldSeatViewState {
     public void Follow(float targetYaw, float rate, float deltaSeconds, WorldViewDefaults views) {
         ArgumentNullException.ThrowIfNull(argument: views);
 
-        var authoredYaw = (views.SeatRig.OrbitOp?.Yaw ?? 0f);
         var fraction = (1f - MathF.Exp(x: (-rate * deltaSeconds)));
 
         lock (m_gate) {
-            var current = Wrap(radians: (authoredYaw + m_yaw));
+            var current = Wrap(radians: m_yaw);
             var delta = Wrap(radians: (targetYaw - current));
 
             m_yaw = Wrap(radians: (m_yaw + (delta * fraction)));
         }
     }
-    /// <summary>Turns the live yaw a half-turn — look behind the body; again to look forward. Presentation-only.</summary>
-    /// <param name="rate">The rate the boom closes over this turn (<c>views.seatControl.swapRate</c>): zero re-seeds
-    /// the boom at the turned pose, so the turn is a cut; a positive value eases it at that rate until it lands;
-    /// <see langword="null"/> leaves the turn to the seat rig's own smoothing.</param>
-    public void SwapLook(float? rate) {
-        lock (m_gate) {
-            m_yaw = Wrap(radians: (m_yaw + MathF.PI));
-            ApplyTurnRate(rate: rate);
-        }
-    }
-    /// <summary>Turns the camera round BEHIND the body: the live yaw is set so the total logical yaw is
-    /// <paramref name="targetYaw"/>. Presentation-only.</summary>
+    /// <summary>Turns the camera round BEHIND the body: the live yaw is set so the facing is
+    /// <paramref name="targetYaw"/>. Presentation-only; the rig's own smoothing eases the turn.</summary>
     /// <param name="targetYaw">The heading to sit behind, in radians.</param>
-    /// <param name="rate">The rate the boom closes over the turn — <see cref="SwapLook"/>'s rate, same meaning.</param>
-    /// <param name="views">The seat views (for the authored orbit yaw the live delta rides).</param>
-    public void RecenterLook(float targetYaw, float? rate, WorldViewDefaults views) {
-        ArgumentNullException.ThrowIfNull(argument: views);
-
-        var authoredYaw = (views.SeatRig.OrbitOp?.Yaw ?? 0f);
-
+    public void RecenterLook(float targetYaw) {
         lock (m_gate) {
-            m_yaw = Wrap(radians: (targetYaw - authoredYaw));
-            ApplyTurnRate(rate: rate);
+            m_yaw = Wrap(radians: targetYaw);
         }
-    }
-
-    // Held under m_gate: a zero rate lands the turn instantly (the boom re-seeds at the turned pose), a positive one
-    // eases it at that rate until it lands, and null leaves the turn to the rig's own smoothing.
-    private void ApplyTurnRate(float? rate) {
-        if (rate is not { } turnRate) {
-            return;
-        }
-        if (turnRate <= 0f) {
-            m_smoothing.Reseed();
-
-            return;
-        }
-
-        m_swapRate = turnRate;
     }
 
     public void Recenter() {
@@ -279,26 +246,15 @@ public sealed class WorldSeatViewState {
     }
     public void Smooth(float rate, bool enabled, float deltaSeconds, ref Vector3 eye, ref Vector3 target) {
         lock (m_gate) {
-            // A swap in flight closes at ITS rate; the rig's resumes the moment the boom has landed on the turned
-            // pose (within SwapLandedDistance, the same scale as an unnoticeable camera offset).
-            var boomTarget = (eye - target);
-
             if (enabled) {
                 m_smoothing.Apply(
                     deltaSeconds: deltaSeconds,
                     eye: ref eye,
-                    rate: (m_swapRate ?? rate),
+                    rate: rate,
                     target: ref target
                 );
             } else {
                 m_smoothing.Reseed();
-            }
-
-            if (
-                (m_swapRate is not null) &&
-                ((boomTarget - m_smoothing.Boom).LengthSquared() <= (SwapLandedDistance * SwapLandedDistance))
-            ) {
-                m_swapRate = null;
             }
         }
     }

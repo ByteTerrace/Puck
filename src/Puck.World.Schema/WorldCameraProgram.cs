@@ -93,15 +93,11 @@ public abstract record WorldCameraProgramOp {
     /// <param name="FocusDistance">The finite target distance along the current subject's forward axis, used only
     /// when <paramref name="Subject"/> is <see langword="null"/>.</param>
     public sealed record LookAt(WorldCameraSubject? Subject, DocumentVector3? TargetOffset = null, bool WorldAxes = false, float FocusDistance = 6f) : WorldCameraProgramOp;
-    /// <summary>Places the eye by orbiting the current subject's pose. The seat-view pipeline adds a joined seat's
-    /// live look input to <paramref name="Yaw"/>/<paramref name="Pitch"/> for an interactive program (see
-    /// <c>Puck.World.Client.WorldSeatCameraResolver</c>); a non-interactive program (a named camera) renders the
-    /// authored angles unchanged. At most one per program.</summary>
-    /// <param name="Distance">The orbit distance.</param>
-    /// <param name="Yaw">The orbit heading in radians.</param>
-    /// <param name="Pitch">The orbit tilt in radians.</param>
-    /// <param name="PivotOffset">The world-axis offset from the current subject's origin to the pivot.</param>
-    public sealed record Orbit(float Distance, float Yaw, float Pitch, DocumentVector3? PivotOffset = null) : WorldCameraProgramOp;
+    /// <summary>Orbits the eye about its pivot. <paramref name="Yaw"/> and <paramref name="Pitch"/> are live-bindable
+    /// like <see cref="Fov"/>'s field of view: a seat rig whose yaw reads a state cell turns the CAMERA when that cell
+    /// changes — look behind is <c>state.look.behind</c> flipping between 0 and π — while the seat's facing (what
+    /// steering and movement resolve against) is untouched, because the facing never includes the rig's offsets.</summary>
+    public sealed record Orbit(float Distance, BindableScalar Yaw, BindableScalar Pitch, DocumentVector3? PivotOffset = null) : WorldCameraProgramOp;
     /// <summary>Sets the presentation-only exponential response rate (per second) the resolved eye/target boom eases
     /// at; zero disables smoothing. Read by the caller after resolving a frame — never affects the resolved pose
     /// itself. At most one per program.</summary>

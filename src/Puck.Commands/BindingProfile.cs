@@ -289,7 +289,8 @@ public static class BindingProfile {
                     Command: effectiveCommand,
                     Value: effectiveValue,
                     Component: component,
-                    Mode: entry.Mode
+                    Mode: entry.Mode,
+                    Text: entry.Text
                 ));
             }
         }
@@ -319,11 +320,16 @@ public static class BindingProfile {
                 Command: ((entry.Channel is { } channel)
                 ? channelCommandName(arg: channel)
                 : entry.Command!),
-                Icon: entry.Icon,
+                Action: ((entry.Channel is ChannelRef.Name named)
+                ? named.Value
+                : entry.Command),
+                Id: entry.Id,
                 Label: entry.Label,
+                Toggle: (entry.Mode == BindingEntryMode.Toggle),
                 // An activator entry has no Sources — its synthetic "activator[...]" label stands in, so a
                 // binding-bar consumer never renders a null/blank chip for it.
-                Source: entry.TriggerLabel
+                Source: entry.TriggerLabel,
+                Sources: (entry.Sources ?? [])
             );
         }
 
@@ -1094,10 +1100,14 @@ public static class BindingProfile {
                 (style.SelectionGraceSeconds < 0f) ||
                 !float.IsFinite(f: style.SwitchFraction) ||
                 (style.SwitchFraction < 0f) ||
-                (style.SwitchFraction > 1f)
+                (style.SwitchFraction > 1f) ||
+                !float.IsFinite(f: style.FadeOutSeconds) ||
+                (style.FadeOutSeconds < 0f) ||
+                !float.IsFinite(f: style.FadeOutEase) ||
+                (style.FadeOutEase <= 0f)
             ) {
                 throw new ArgumentException(
-                    message: $"Wheel \"{wheel.Id}\" carries invalid selector thresholds or timing.",
+                    message: $"Wheel \"{wheel.Id}\" carries invalid selector thresholds, timing, or fade.",
                     paramName: nameof(document)
                 );
             }
@@ -1325,8 +1335,7 @@ public static class BindingProfile {
                             value: value,
                             phase: phase
                         ),
-                        Label: sector.Label,
-                        Icon: sector.Icon
+                        Id: sector.Id
                     );
                 }
 
@@ -1340,6 +1349,8 @@ public static class BindingProfile {
             var view = new BindingWheelView(
                 Id: wheel.Id,
                 Group: wheel.Group,
+                LabelRow: wheel.LabelRow,
+                IconRow: wheel.IconRow,
                 HoldPageIds: holdPages.ToImmutableArray(),
                 Rings: ringViews.ToImmutableArray(),
                 Style: style,
@@ -1447,7 +1458,8 @@ public static class BindingProfile {
                         ReleaseValue: CommandValue.Inactive(kind: pressValue.Kind),
                         Reassertable: (isChannel && (command.Mode == BindingEntryMode.Hold)),
                         Mode: command.Mode,
-                        Source: BindingSourceIdentity.ForCommand(command: effectiveCommand)
+                        Source: BindingSourceIdentity.ForCommand(command: effectiveCommand),
+                        Text: command.Text
                     ),
                     GroupIndex: groupIndex,
                     Table: null,

@@ -210,8 +210,8 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"bindingOverlays {door} icon '{icon}' names no row in icons.icons.");
         }
     }
-    // A page's own display icon plus every one of its entries' icons — the shape a chord-row page and a wheel ring
-    // page share.
+    // A page's own display icon — the shape a chord-row page and a wheel ring page share. An ENTRY carries no icon:
+    // a row says what it does, and what that looks like is resolved from authored state by the surface drawing it.
     private static void CheckComposedPageIcons(BindingPageDefinition page, string door, IReadOnlySet<string> iconNames, List<string> errors) {
         CheckComposedIcon(
             door: door,
@@ -220,14 +220,6 @@ public static partial class WorldDefinitionValidator {
             iconNames: iconNames
         );
 
-        for (var index = 0; (index < page.Entries.Count); index++) {
-            CheckComposedIcon(
-                door: $"{door} entry[{index}]",
-                errors: errors,
-                icon: page.Entries[index]?.Icon,
-                iconNames: iconNames
-            );
-        }
     }
     // Every icon-bearing door a composed binding profile carries — page and its entries, modifier, chord command, and
     // wheel ring and its sector entries — so an authored icon naming an unknown row refuses by name at each, matching

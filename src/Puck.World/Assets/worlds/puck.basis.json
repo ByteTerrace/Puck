@@ -14,18 +14,33 @@
       "bindingBar": {
         "banks": [
           {
-            "alpha": 1,
             "id": "resting",
             "order": 0,
-            "pageId": "base"
+            "pageId": "base",
+            "alpha": 1
+          },
+          {
+            "id": "lt",
+            "order": 1,
+            "pageId": "pageLt",
+            "alpha": 0.6,
+            "activeAlpha": 1
+          },
+          {
+            "id": "rt",
+            "order": 2,
+            "pageId": "pageRt",
+            "alpha": 0.6,
+            "activeAlpha": 1
           }
         ],
         "hideUnbound": false,
+        "iconRow": "state.actionIcons",
         "layout": {
-          "anchorOffsetY": 0.36666667,
+          "anchorOffsetY": 0.3125,
           "badgeCorner": 1,
           "buttonSize": 0.075,
-          "centerGap": 0.1,
+          "centerGap": 0.15,
           "centerRowLift": 1.9,
           "centerSlotSpacing": 1.15,
           "exoticRowLift": 3.6,
@@ -54,7 +69,8 @@
         "visible": {
           "$type": "recently",
           "fact": "SeatInput",
-          "windowSeconds": 3
+          "windowSeconds": 3,
+          "fadeSeconds": 2
         }
       },
       "document": {
@@ -207,8 +223,9 @@
               "actionWheel"
             ],
             "command": {
-              "command": "player.look.swap",
-              "label": "Look behind"
+              "command": "player.state.cell.toggle",
+              "label": "Look behind",
+              "text": "look behind 0 3.14159265"
             },
             "group": "state.bindingGroups.defaultActionGroup"
           },
@@ -249,43 +266,14 @@
           },
           {
             "chord": [
-              "gamepad.leftStickPress"
-            ],
-            "command": {
-              "channel": "forward",
-              "label": "Autorun",
-              "mode": "Toggle",
-              "scale": 1
-            },
-            "group": "state.bindingGroups.defaultActionGroup",
-            "held": [
-              "look"
-            ]
-          },
-          {
-            "chord": [
-              "gamepad.rightStickPress"
-            ],
-            "command": {
-              "channel": "up",
-              "label": "Auto-jetpack",
-              "mode": "Toggle",
-              "scale": 1
-            },
-            "group": "state.bindingGroups.defaultActionGroup",
-            "held": [
-              "look"
-            ]
-          },
-          {
-            "chord": [
               "look",
               "gamepad.rightShoulder",
               "actionWheel"
             ],
             "command": {
-              "command": "player.look.swap",
-              "label": "Look behind"
+              "command": "player.state.cell.toggle",
+              "label": "Look behind",
+              "text": "look behind 0 3.14159265"
             },
             "group": "state.bindingGroups.defaultActionGroup"
           },
@@ -296,6 +284,18 @@
             "group": "state.bindingGroups.defaultActionGroup",
             "page": {
               "entries": [
+                {
+                  "command": "player.move.strafe",
+                  "sources": [
+                    "gamepad.leftStick"
+                  ]
+                },
+                {
+                  "command": "player.motion.angular",
+                  "sources": [
+                    "gamepad.gyro"
+                  ]
+                },
                 {
                   "command": "player.wheel.select",
                   "sources": [
@@ -327,6 +327,144 @@
               "mouse.button1",
               "mouse.button2"
             ]
+          },
+          {
+            "chord": [
+              "look"
+            ],
+            "group": "state.bindingGroups.defaultActionGroup",
+            "page": {
+              "id": "pageLt",
+              "entries": [
+                {
+                  "command": "player.move.strafe",
+                  "sources": [
+                    "gamepad.leftStick"
+                  ]
+                },
+                {
+                  "command": "player.look.steer",
+                  "sources": [
+                    "gamepad.rightStick"
+                  ]
+                },
+                {
+                  "command": "player.motion.angular",
+                  "sources": [
+                    "gamepad.gyro"
+                  ]
+                },
+                {
+                  "command": "console",
+                  "id": "console",
+                  "sources": [
+                    "gamepad.buttonNorth"
+                  ]
+                },
+                {
+                  "command": "view.override",
+                  "id": "cameraOverhead",
+                  "value": {
+                    "kind": "Axis1D",
+                    "raw": [
+                      2.0,
+                      0,
+                      0,
+                      0
+                    ]
+                  },
+                  "sources": [
+                    "gamepad.buttonWest"
+                  ]
+                },
+                {
+                  "command": "view.override",
+                  "id": "cameraAction",
+                  "value": {
+                    "kind": "Axis1D",
+                    "raw": [
+                      1.0,
+                      0,
+                      0,
+                      0
+                    ]
+                  },
+                  "sources": [
+                    "gamepad.buttonEast"
+                  ]
+                },
+                {
+                  "channel": "forward",
+                  "id": "autorun",
+                  "label": "Autorun",
+                  "mode": "Toggle",
+                  "scale": 1,
+                  "sources": [
+                    "gamepad.leftStickPress"
+                  ]
+                },
+                {
+                  "channel": "up",
+                  "id": "autoJetpack",
+                  "label": "Auto-jetpack",
+                  "mode": "Toggle",
+                  "scale": 1,
+                  "sources": [
+                    "gamepad.rightStickPress"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "chord": [
+              "rt"
+            ],
+            "group": "state.bindingGroups.defaultActionGroup",
+            "page": {
+              "id": "pageRt",
+              "entries": [
+                {
+                  "command": "player.move.strafe",
+                  "sources": [
+                    "gamepad.leftStick"
+                  ]
+                },
+                {
+                  "command": "player.look.steer",
+                  "sources": [
+                    "gamepad.rightStick"
+                  ]
+                },
+                {
+                  "command": "player.motion.angular",
+                  "sources": [
+                    "gamepad.gyro"
+                  ]
+                },
+                {
+                  "command": "player.camera",
+                  "id": "freeCam",
+                  "sources": [
+                    "gamepad.buttonNorth"
+                  ]
+                },
+                {
+                  "command": "player.where",
+                  "id": "where",
+                  "sources": [
+                    "gamepad.buttonWest"
+                  ]
+                },
+                {
+                  "command": "quit",
+                  "id": "quit",
+                  "sources": [
+                    "gamepad.buttonEast"
+                  ]
+                }
+              ]
+            }
           }
         ],
         "contexts": [],
@@ -346,6 +484,14 @@
               "gamepad.leftTrigger",
               "keyboard.shiftLeft"
             ]
+          },
+          {
+            "id": "rt",
+            "label": "Shift",
+            "sources": [
+              "gamepad.rightTrigger",
+              "keyboard.altLeft"
+            ]
           }
         ],
         "version": "puck.bindings.v1",
@@ -361,8 +507,6 @@
                 "entries": [
                   {
                     "command": "view.override",
-                    "icon": "action.target",
-                    "label": "Overhead camera",
                     "sources": null,
                     "value": {
                       "kind": "Axis1D",
@@ -372,12 +516,11 @@
                         0,
                         0
                       ]
-                    }
+                    },
+                    "id": "cameraOverhead"
                   },
                   {
                     "command": "view.override",
-                    "icon": "view.freeCam",
-                    "label": "Action camera",
                     "sources": null,
                     "value": {
                       "kind": "Axis1D",
@@ -387,32 +530,40 @@
                         0,
                         0
                       ]
-                    }
+                    },
+                    "id": "cameraAction"
                   },
                   {
                     "command": "quit",
-                    "icon": "edit.exit",
-                    "label": "Quit",
-                    "sources": null
+                    "sources": null,
+                    "id": "quit"
                   },
                   {
                     "command": "console",
-                    "icon": "edit.op",
-                    "label": "Console",
+                    "sources": null,
+                    "id": "console"
+                  },
+                  {
+                    "command": "world.reload",
+                    "id": "reload",
                     "sources": null
                   }
                 ],
                 "icon": null,
                 "id": "ring0",
-                "label": "Ring0"
+                "label": "Actions"
               }
             ],
             "style": {
               "axisDeadZone": 0.08,
               "placement": "ViewportCenter",
               "selectionGraceSeconds": 0.13,
-              "switchFraction": 0.4
-            }
+              "switchFraction": 0.4,
+              "deadZoneFraction": 0.11,
+              "ringWidthFraction": 0.13
+            },
+            "labelRow": "state.wheelLabels",
+            "iconRow": "state.actionIcons"
           }
         ]
       },
@@ -1165,6 +1316,41 @@
           "glyph": "U+25A1"
         },
         "name": "view.freeCam"
+      },
+      {
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+2191"
+        },
+        "name": "move.jump"
+      },
+      {
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+25B6"
+        },
+        "name": "move.run"
+      },
+      {
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+21D1"
+        },
+        "name": "move.ascend"
+      },
+      {
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+21C9"
+        },
+        "name": "move.dash"
+      },
+      {
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+2197"
+        },
+        "name": "move.leap"
       }
     ]
   },
@@ -1480,6 +1666,112 @@
         ],
         "kind": "text",
         "name": "colors"
+      },
+      {
+        "cells": [
+          {
+            "key": "jump",
+            "value": "move.jump"
+          },
+          {
+            "key": "run",
+            "value": "move.run"
+          },
+          {
+            "key": "up",
+            "value": "move.ascend"
+          },
+          {
+            "key": "dash",
+            "value": "move.dash"
+          },
+          {
+            "key": "leap",
+            "value": "move.leap"
+          },
+          {
+            "key": "airLeap",
+            "value": "move.leap"
+          },
+          {
+            "key": "console",
+            "value": "edit.op"
+          },
+          {
+            "key": "quit",
+            "value": "edit.exit"
+          },
+          {
+            "key": "cameraOverhead",
+            "value": "action.target"
+          },
+          {
+            "key": "cameraAction",
+            "value": "action.target"
+          },
+          {
+            "key": "freeCam",
+            "value": "view.freeCam"
+          },
+          {
+            "key": "where",
+            "value": "action.target"
+          },
+          {
+            "key": "reload",
+            "value": "edit.undo"
+          },
+          {
+            "key": "autorun",
+            "value": "move.run"
+          },
+          {
+            "key": "autoJetpack",
+            "value": "move.ascend"
+          }
+        ],
+        "kind": "text",
+        "name": "actionIcons"
+      },
+      {
+        "cells": [
+          {
+            "key": "cameraOverhead",
+            "value": "Overhead cam"
+          },
+          {
+            "key": "cameraAction",
+            "value": "Action cam"
+          },
+          {
+            "key": "quit",
+            "value": "Quit"
+          },
+          {
+            "key": "console",
+            "value": "Console"
+          },
+          {
+            "key": "reload",
+            "value": "Reload world"
+          },
+          {
+            "key": "cancel",
+            "value": "Cancel"
+          }
+        ],
+        "kind": "text",
+        "name": "wheelLabels"
+      },
+      {
+        "cells": [
+          {
+            "key": "behind",
+            "value": "0"
+          }
+        ],
+        "kind": "fixed",
+        "name": "look"
       }
     ]
   },
@@ -1504,7 +1796,7 @@
       "cursorDotMaxHalf": 4,
       "cursorDotRatio": 0.22,
       "cursorLabelGap": 5,
-      "dimQuietAlpha": 0.35,
+      "dimQuietAlpha": 0.7,
       "wheelActiveRingAlpha": 0.95,
       "wheelActiveRingOffset": 1.5,
       "wheelHubDotHalf": 3,
@@ -1524,7 +1816,7 @@
       "danger": "#F2565B",
       "lineHair": "#FFFFFF17",
       "lineInset": "#0000008C",
-      "lineSoft": "#FFFFFF0F",
+      "lineSoft": "#FFFFFFB3",
       "lineStrong": "#FFFFFF29",
       "phosphor": "#5CFAA0",
       "phosphorCyan": "#5EEBE0",
@@ -1759,7 +2051,7 @@
             0,
             0
           ],
-          "yaw": 0
+          "yaw": "state.look.behind"
         },
         {
           "$type": "lookAt",
@@ -1784,5 +2076,12 @@
       ],
       "version": "puck.camera.v1"
     }
-  }
+  },
+  "grants": [
+    {
+      "principal": "seat1",
+      "capability": "Mutate",
+      "subject": "all"
+    }
+  ]
 }

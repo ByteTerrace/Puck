@@ -16,6 +16,9 @@ namespace Puck.World;
 /// <see langword="true"/> (stacked, the authored look) when unset.</param>
 /// <param name="EffectiveScale"><see cref="Authoring"/>'s resolved layout scale, overridden by the seat's own
 /// stored <see cref="BindingBarPreferences.Scale"/> when set to a finite positive value.</param>
+/// <param name="Presence">The authored <see cref="WorldBindingBarAuthoring.Visible"/> condition's presence, 0..1 —
+/// the bar's opacity multiplier, so a fading <c>recently</c> predicate fades the bar rather than cutting it. 1
+/// under a live override or with no condition.</param>
 internal readonly record struct WorldBindingBarStatus(
     WorldBindingBarAuthoring Authoring,
     string Source,
@@ -24,7 +27,8 @@ internal readonly record struct WorldBindingBarStatus(
     string Reason,
     bool EffectiveHideUnbound,
     bool Stacked,
-    float EffectiveScale
+    float EffectiveScale,
+    float Presence
 );
 /// <summary>Resolves the world binding-bar floor with each seat identity's preference, its authored
 /// <see cref="WorldBindingBarAuthoring.Visible"/> condition, the seat's own stored LOOK preferences
@@ -100,6 +104,15 @@ internal sealed class WorldBindingBarControl {
 
         var preferences = m_bindings.ProfileBindings(slot: slot)?.BindingBar;
         var effectiveScale = authoring.ResolvedLayout.Scale;
+        var presence = ((hidden || (liveOverride is true))
+            ? (hidden
+                ? 0f
+                : 1f)
+            : m_facts.Presence(
+                predicate: authoring.Visible,
+                slot: slot
+            )
+        );
 
         if (
             (preferences?.Scale is { } scale) &&
@@ -117,7 +130,8 @@ internal sealed class WorldBindingBarControl {
             Override: liveOverride,
             Reason: reason,
             Source: source,
-            Stacked: (preferences?.Stacked ?? true)
+            Stacked: (preferences?.Stacked ?? true),
+            Presence: presence
         );
     }
 }

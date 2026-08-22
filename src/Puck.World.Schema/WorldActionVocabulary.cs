@@ -78,6 +78,7 @@ public abstract record ActionPredicate {
 [JsonDerivedType(typeof(ActionEffect.UpsertPlacement), typeDiscriminator: "upsertPlacement")]
 [JsonDerivedType(typeof(ActionEffect.RemovePlacement), typeDiscriminator: "removePlacement")]
 [JsonDerivedType(typeof(ActionEffect.Save), typeDiscriminator: "save")]
+[JsonDerivedType(typeof(ActionEffect.Pose), typeDiscriminator: "pose")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record ActionEffect {
     /// <summary>Writes the body's vertical-velocity channel (the jump launch / the surge). Under the grounded model
@@ -121,6 +122,10 @@ public abstract record ActionEffect {
     /// <see cref="decimal"/> exactly (base-10, no binary-float intermediate), and most terminating decimals — the
     /// only ones an author can spell — have no exact binary float or fixed-point spelling either. See
     /// <see cref="WorldRuleCompiler"/>.</param>
+    /// <param name="Text">world scope only: the literal a <c>kind=text</c> state row's cell takes — the fourth
+    /// spelling beside <paramref name="Value"/>/<paramref name="FromState"/>/<paramref name="ValueSeconds"/>, exactly
+    /// one authored. Because every state-bound document value (a creation palette colour, a look-assignment row
+    /// name) re-resolves on the write, this is how a rule restyles what a body wears.</param>
     public sealed record SetState(
         string State,
         float? Value = null,
@@ -128,7 +133,8 @@ public abstract record ActionEffect {
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Key = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromState = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromKey = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? ValueSeconds = null
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? ValueSeconds = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Text = null
     ) : ActionEffect;
     /// <summary>Adds to a named state cell — a kit counter slot at body scope, a <c>state</c>-section row's cell at
     /// world scope (see <see cref="WorldRule"/>).</summary>
@@ -248,6 +254,30 @@ public abstract record ActionEffect {
     /// </para>
     /// </remarks>
     public sealed record Save : ActionEffect;
+    /// <summary>Teleports one body to a pose — the rule-side spelling of the <c>player.pose</c> verb, world scope
+    /// only (refused at body scope). Like <see cref="Save"/> it submits no <c>WorldMutation</c>: a pose is body state,
+    /// not document state, so nothing composes, validates, or journals, and a replay reproduces it by re-firing the
+    /// same rule. Applied as the world's own act through <c>WorldBody.Pose</c>, deliberately outside the
+    /// drive-admission gate: a body whose <c>gatesDrive</c> row reads nonzero is a body a rule still needs to move
+    /// (a dead body back to its spawn). The client sees the same teleport continuity a <c>player.pose</c> produces.
+    /// </summary>
+    /// <param name="Key">The target body's 0-based entity index, spelled as a plain integer — the same literal
+    /// addressing every other world-scope effect uses for a per-body cell.</param>
+    /// <param name="SpawnPoint">A declared <c>spawnPoints</c> id (position and yaw from the point; pitch/roll zero).
+    /// Exactly one of this and <paramref name="Position"/> is authored.</param>
+    /// <param name="Position">A literal world position. Exactly one of this and <paramref name="SpawnPoint"/> is
+    /// authored.</param>
+    /// <param name="YawDegrees">The yaw about +Y, degrees; read only with <paramref name="Position"/>.</param>
+    /// <param name="PitchDegrees">The pitch about the body right, degrees; read only with <paramref name="Position"/>.</param>
+    /// <param name="RollDegrees">The roll about the body forward, degrees; read only with <paramref name="Position"/>.</param>
+    public sealed record Pose(
+        string Key,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SpawnPoint = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DocumentVector3? Position = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float YawDegrees = 0f,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float PitchDegrees = 0f,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float RollDegrees = 0f
+    ) : ActionEffect;
 }
 /// <summary>One trigger channel of a lane binding: a gate, a press latch (the buffer — a press stays pending until the
 /// gate opens or the latch expires; the release channel latches nothing), and the effects a fire applies in order.</summary>

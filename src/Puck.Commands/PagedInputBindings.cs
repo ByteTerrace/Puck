@@ -130,7 +130,8 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
                             DispatchRelease: activatorEntry.Edge.DispatchRelease,
                             Mode: activatorEntry.Edge.Mode,
                             Phase: CommandPhase.Started,
-                            Value: activatorEntry.Edge.PressValue
+                            Value: activatorEntry.Edge.PressValue,
+                            Text: activatorEntry.Edge.Text
                         )
                     );
                     break;
@@ -161,7 +162,8 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
                                 DispatchRelease: activatorEntry.Edge.DispatchRelease,
                                 Mode: BindingEntryMode.Toggle,
                                 Phase: CommandPhase.Started,
-                                Value: activatorEntry.Edge.PressValue
+                                Value: activatorEntry.Edge.PressValue,
+                                Text: activatorEntry.Edge.Text
                             )
                         );
                         break;
@@ -174,6 +176,7 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
                         Dispatch: true,
                         Phase: CommandPhase.Started,
                         Value: activatorEntry.Edge.PressValue,
+                        Text: activatorEntry.Edge.Text,
                         // MOMENTARY: its own release is already scheduled one tick below — marking THIS edge held
                         // too would make the tick the scheduled release lands on ALSO carry a stale, non-dispatching
                         // re-assertion of the press (harmless to a dispatch-gated reader, but not the clean single-
@@ -349,7 +352,8 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
                         Phase: (isDigitalReassertion
                     ? CommandPhase.Active
                     : CommandPhase.Started),
-                        Value: command.PressValue
+                        Value: command.PressValue,
+                        Text: command.Text
                     )
                 );
             }

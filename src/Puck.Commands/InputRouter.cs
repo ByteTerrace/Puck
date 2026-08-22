@@ -318,6 +318,12 @@ public sealed class InputRouter {
             origin: CommandOrigin.Binding,
             phase: phase,
             source: edge.Source,
+            text: TextLine(
+                command: edge.Command,
+                dispatch: dispatch,
+                phase: phase,
+                text: edge.Text
+            ),
             value: value
         );
 
@@ -423,7 +429,14 @@ public sealed class InputRouter {
             return;
         }
 
-        if (!authoredLane) {
+        // Activity is a PRESS, a RELEASE, or an analog sample deflected past the rest band — never a device merely
+        // reporting, and never a posture reading (an accelerometer carries gravity in every report). Counting
+        // those as the player's activity would mean a paired pad never goes idle (the binding bar's "recently
+        // SeatInput" would hold forever).
+        if (
+            !authoredLane &&
+            IsActivity(signal: in signal)
+        ) {
             m_lastInputTickBySlot[slot] = tick;
         }
         var activeCommands = ModalityFor(slot: slot).ActiveCommands;
@@ -704,6 +717,12 @@ public sealed class InputRouter {
                 origin: CommandOrigin.Binding,
                 phase: phase,
                 source: dispatchSource,
+                text: TextLine(
+                    command: binding.Command,
+                    dispatch: dispatch,
+                    phase: phase,
+                    text: binding.Text
+                ),
                 value: value,
                 assignedSlot: assignedSlot
             );
@@ -2026,6 +2045,33 @@ public sealed class InputRouter {
         device: device,
         preservePressedControls: true
     );
+    /// <summary>The analog magnitude below which a sample is a device at rest, not a hand on it — stick centring
+    /// slop and gyro noise sit well under this; the lightest deliberate deflection sits well over it.</summary>
+    public const float ActivityRestBand = 0.15f;
+    // A bound row's authored text payload rides the PRESS as a submitted line — "<command> <text>", dispatched by
+    // the registry exactly as a typed line under the pressing seat's principal — so a wire-args verb is bindable
+    // with authored arguments. A release, or a row with no payload, carries no line.
+    private static string? TextLine(string command, string? text, CommandPhase phase, bool dispatch) =>
+        (((text is { Length: > 0 }) && dispatch && (phase == CommandPhase.Started))
+            ? $"{command} {text}"
+            : null);
+    private static bool IsActivity(in InputSignal signal) {
+        if (signal.Posture) {
+            return false;
+        }
+
+        if (signal.Phase is CommandPhase.Started or CommandPhase.Completed or CommandPhase.Canceled) {
+            return true;
+        }
+
+        return (signal.Value.Kind switch {
+            CommandValueKind.Digital => signal.Value.AsDigital,
+            CommandValueKind.Axis1D => (MathF.Abs(x: signal.Value.AsAxis1D) >= ActivityRestBand),
+            CommandValueKind.Axis2D => (signal.Value.AsAxis2D.LengthSquared() >= (ActivityRestBand * ActivityRestBand)),
+            CommandValueKind.Axis3D => (signal.Value.AsAxis3D.LengthSquared() >= (ActivityRestBand * ActivityRestBand)),
+            _ => false,
+        });
+    }
     /// <summary>Gets the simulation tick at which a seat most recently produced a physical or synthesized raw input
     /// signal.</summary>
     /// <param name="slot">The logical player slot.</param>

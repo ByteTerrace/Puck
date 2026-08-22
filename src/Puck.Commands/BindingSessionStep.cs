@@ -9,11 +9,9 @@ namespace Puck.Commands;
 /// <param name="SuggestedSource">The provider-neutral input source id suggested as the default (an <c>InputSources</c> control, e.g. <c>gamepad.buttonSouth</c>).</param>
 /// <param name="ActivateOn">The phase the resulting binding fires on, or <see langword="null"/> for the default (press/continuous, not release).</param>
 /// <param name="Label">An optional display label for the UI layer; opaque to the engine.</param>
-/// <param name="Icon">An optional display icon id for the UI layer; opaque to the engine.</param>
 public sealed record BindingSessionStep(
     string Command,
     string SuggestedSource,
     CommandPhase? ActivateOn = null,
-    string? Label = null,
-    string? Icon = null
+    string? Label = null
 );

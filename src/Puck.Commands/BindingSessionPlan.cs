@@ -71,7 +71,6 @@ public sealed record BindingSessionPlan(
                     Command: ((entry.Channel is { } channel)
             ? BindingProfile.ChannelCommandName(channel: channel)
             : entry.Command!),
-                    Icon: entry.Icon,
                     Label: entry.Label,
                     SuggestedSource: entry.Sources![0]
                 ))]

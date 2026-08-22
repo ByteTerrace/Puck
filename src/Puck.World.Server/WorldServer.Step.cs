@@ -133,9 +133,11 @@ public sealed partial class WorldServer {
     // m_rules/m_interactions — and iterating a field an inner call reassigns is how a rule would silently stop seeing
     // its siblings mid-tick. Every row declared at the top of the tick evaluates during this tick; a row ADDED by
     // this tick's effects starts on the next one, the same next-tick boundary every other mutation already lands on.
-    private void EvaluateCompiledRules(CompiledWorldRule[] rules, Dictionary<string, bool> latch, ulong tick, ulong stepTicks) {
+    private bool EvaluateCompiledRules(CompiledWorldRule[] rules, Dictionary<string, bool> latch, ulong tick, ulong stepTicks) {
+        var applied = false;
+
         if (rules.Length == 0) {
-            return;
+            return applied;
         }
 
         foreach (var rule in rules) {
@@ -161,13 +163,15 @@ public sealed partial class WorldServer {
             }
 
             foreach (var effect in rule.Effects) {
-                FireWorldRuleEffect(
+                applied |= FireWorldRuleEffect(
                     effect: effect,
                     stepTicks: stepTicks,
                     tick: tick
                 );
             }
         }
+
+        return applied;
     }
     // Evaluates every compiled rule's gate and fires its effects, in DOCUMENT ORDER — then every compiled
     // INTERACTION's, same terms, AFTER every rule. That ordering (rules, then interactions, each internally in
@@ -181,19 +185,28 @@ public sealed partial class WorldServer {
     // tick are a sequence, not a simultaneous snapshot, and a chain (rule A sets a flag, rule B gates on it, rule C
     // copies it) fires end to end within one tick. That is deterministic because document order is: the same
     // document and the same input produce the same sequence on every run, machine, and backend.
+    //
+    // Effects install through TryApplyMutation directly, bypassing the pending-op queue and its per-step
+    // DeliverDefinition, so the delivery happens here: once per tick with at least one applied effect, the same
+    // once-per-step shape DrainPendingOps keeps. KEEP IN SYNC with DrainPendingOps' delivery.
     private void EvaluateWorldRules(ulong tick, ulong stepTicks) {
-        EvaluateCompiledRules(
+        var applied = EvaluateCompiledRules(
             latch: m_ruleGateHeld,
             rules: m_rules,
             stepTicks: stepTicks,
             tick: tick
         );
-        EvaluateCompiledRules(
+
+        applied |= EvaluateCompiledRules(
             latch: m_interactionGateHeld,
             rules: m_interactions,
             stepTicks: stepTicks,
             tick: tick
         );
+
+        if (applied) {
+            m_output.DeliverDefinition(definition: m_definition);
+        }
     }
     // Submits the effect's own ORDINARY mutation through the ordinary pipeline (admission → compose → whole-document
     // validate → install → journal → echo), stamped WorldPrincipal.World — the SAME door UpsertHudPanel/RemoveHudPanel
@@ -206,15 +219,28 @@ public sealed partial class WorldServer {
     // (the one exception being a removePlacement on a possessed carrier, which the CarrierPossessed guard below skips
     // outright rather than submitting). SAVE is the one exception to all of this: it submits no WorldMutation at all (see
     // ActionEffect.Save's remarks) and is handled before the mutation switch below ever runs.
-    private void FireWorldRuleEffect(CompiledWorldEffect effect, ulong tick, ulong stepTicks) {
+    private bool FireWorldRuleEffect(CompiledWorldEffect effect, ulong tick, ulong stepTicks) {
         if (effect.Kind == WorldRuleEffectKind.Save) {
             // No compose, no validate, no install, no journal — SaveEffectTap performs the identical settle-at-save
             // capture 'world.save' itself runs, straight to the world's own loaded file. A null tap (no composition
             // root wired) is a silent no-op, the same convention EchoTap follows.
             SaveEffectTap?.Invoke(tick);
 
-            return;
+            return false;
         }
+
+        if (effect.Kind == WorldRuleEffectKind.Pose) {
+            FirePoseEffect(effect: effect);
+
+            return false;
+        }
+
+        // A '$cell:' destination resolves its key fresh every firing, exactly as a gate operand's does.
+        var destinationKey = ResolveOperandKey(
+            key: effect.Key,
+            keyFrom: effect.KeyFrom,
+            tick: tick
+        );
 
         if (effect.Kind is WorldRuleEffectKind.Write or WorldRuleEffectKind.Countdown) {
             // The destination's CURRENT value through the same shared resolver the gate read: an absent cell reads as
@@ -226,13 +252,64 @@ public sealed partial class WorldServer {
             if (!WorldStateReader.TryRead(
                 definition: m_definition,
                 rowName: effect.Row,
-                key: effect.Key,
+                key: destinationKey,
                 tick: tick,
                 row: out var row,
                 rawValue: out var destination,
-                text: out _
+                text: out var currentText
             )) {
-                return;
+                return false;
+            }
+
+            if (row.Kind == CellKind.Text) {
+                var nextText = effect.Text;
+
+                if (
+                    (nextText is null) &&
+                    (effect.From is { Kind: WorldRuleFactKind.StateCell } source)
+                ) {
+                    if (!WorldStateReader.TryRead(
+                        definition: m_definition,
+                        rowName: source.Row!,
+                        key: ResolveOperandKey(
+                            key: source.Key,
+                            keyFrom: source.KeyFrom,
+                            tick: tick
+                        ),
+                        tick: tick,
+                        row: out _,
+                        rawValue: out _,
+                        text: out nextText
+                    )) {
+                        return false;
+                    }
+                }
+
+                if (
+                    (nextText is null) ||
+                    string.Equals(
+                    a: currentText,
+                    b: nextText,
+                    comparisonType: StringComparison.Ordinal
+                )
+                ) {
+                    return false;
+                }
+
+                return TryApplyMutation(
+                    mutation: new WorldMutation.UpsertStateCell(
+                        Principal: WorldPrincipal.World,
+                        Row: effect.Row,
+                        Key: destinationKey,
+                        Value: 0L,
+                        Kind: WorldDocumentWriteKind.Set,
+                        Text: nextText
+                    ),
+                    tick: tick,
+                    connectionId: SubmissionEnvelope.LocalConnectionId,
+                    correlationId: 0,
+                    preMetered: false
+                );
             }
 
             var current = (destination ?? 0L);
@@ -250,7 +327,7 @@ public sealed partial class WorldServer {
                 tick: tick
             ).IsForever
             ) {
-                return;
+                return false;
             }
 
             var raw = ((effect.Kind == WorldRuleEffectKind.Countdown)
@@ -284,14 +361,14 @@ public sealed partial class WorldServer {
             // is still submitted and still refused BY NAME. That is the settled envelope duality — a computed value
             // clamps, an explicit write refuses — with the inert case removed from the write side, not softened.
             if (row.ClampToEnvelope(value: next) == current) {
-                return;
+                return false;
             }
 
-            _ = TryApplyMutation(
+            return TryApplyMutation(
                 mutation: new WorldMutation.UpsertStateCell(
                     Principal: WorldPrincipal.World,
                     Row: effect.Row,
-                    Key: effect.Key,
+                    Key: destinationKey,
                     Value: raw,
                     Kind: effect.Write
                 ),
@@ -300,8 +377,6 @@ public sealed partial class WorldServer {
                 correlationId: 0,
                 preMetered: false
             );
-
-            return;
         }
 
         // DESPAWN-OF-OWNED-CARRIER GUARD (WorldRuleEffectRefusal.CarrierPossessed): a removePlacement targeting a
@@ -323,7 +398,7 @@ public sealed partial class WorldServer {
         ) {
             Console.Error.WriteLine(value: $"[world.rule: despawn refused ({WorldRuleEffectRefusal.CarrierPossessed}) — placement '{effect.Row}' carries inhabitant body:{possessedBody}, possessed by {possessor.Describe()}; revoke the drive grant before despawning, or clear the possession in the rule's own effects first]");
 
-            return;
+            return false;
         }
 
         WorldMutation mutation = effect.Kind switch {
@@ -350,13 +425,58 @@ public sealed partial class WorldServer {
             _ => throw new InvalidOperationException(message: $"world rule effect kind '{effect.Kind}' has no fire mapping."),
         };
 
-        _ = TryApplyMutation(
+        return TryApplyMutation(
             connectionId: SubmissionEnvelope.LocalConnectionId,
             correlationId: 0,
             mutation: mutation,
             preMetered: false,
             tick: tick
         );
+    }
+    // Body state, not document state: the same WorldBody.Pose door ApplyCommand's SnapPose arm (player.pose) uses,
+    // but as the world's own act — no drive-gate or grant check, since a gated body is one a rule still needs to
+    // move.
+    private void FirePoseEffect(CompiledWorldEffect effect) {
+        var bodyIndex = int.Parse(
+            s: effect.Key,
+            provider: System.Globalization.CultureInfo.InvariantCulture
+        );
+
+        if (Body(index: bodyIndex) is not { } body) {
+            Console.Error.WriteLine(value: $"[world.rule: pose skipped — body:{bodyIndex} is inactive]");
+
+            return;
+        }
+
+        CompiledWorldPose pose;
+
+        if (effect.Pose is { } literal) {
+            pose = literal;
+        } else if (WorldDefinitionRows.FindSpawnPoint(
+            spawnPoints: m_definition.SpawnPoints,
+            id: effect.Row
+        ) is { } point) {
+            var spawn = FixedSpawnPoint.Compile(point: in point);
+
+            pose = new CompiledWorldPose(
+                Position: spawn.Position,
+                YawRadians: spawn.YawRadians,
+                PitchRadians: FixedQ4816.Zero,
+                RollRadians: FixedQ4816.Zero
+            );
+        } else {
+            Console.Error.WriteLine(value: $"[world.rule: pose skipped — spawnPoint '{effect.Row}' is no longer declared]");
+
+            return;
+        }
+
+        body.Pose(
+            position: pose.Position,
+            yawRadians: pose.YawRadians,
+            pitchRadians: pose.PitchRadians,
+            rollRadians: pose.RollRadians
+        );
+        Console.Error.WriteLine(value: $"[world.rule: pose body:{bodyIndex} -> ({pose.Position.X}, {pose.Position.Y}, {pose.Position.Z})]");
     }
     // A rule/interaction that no longer exists loses its latch; every surviving name KEEPS its bit, which is the
     // whole reason the latch does not live inside the recompiled array. Shared by m_ruleGateHeld/m_interactions'
