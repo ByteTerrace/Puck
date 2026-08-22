@@ -24,10 +24,19 @@ The Windows concrete backends behind `Puck.Platform`'s contracts.
 
 ## Camera capture
 
-`Win32MediaFoundationCameraService` opens one `ICameraGraph` per request. A
-single sensor opens through a Media Foundation source reader
-(`Win32SourceReaderCameraGraph`); the color + infrared pair opens through the
-camera frame server's public Windows Face Authentication Profile V2 graph
+`Win32MediaFoundationCameraService.EnumerateDevices` reports every attached
+physical camera as a `CameraDeviceInfo`; `Win32CameraDeviceGroups` is the one
+`MediaFrameSourceGroup` scan every camera path resolves a device through — a
+group is one physical camera, and its color/infrared source infos carry both
+the display name and the `DeviceInformation.Id` symbolic links a specific
+device is selected by. `TryOpenPixels`/`TryOpenShared` open one named
+device's `ICameraGraph`. A single sensor opens through a Media Foundation
+source reader (`Win32SourceReaderCameraGraph`), which resolves the requested
+device id to its color/infrared symbolic link and passes it to
+`MfInterop.ActivateDefaultVideoSource` so the right physical camera is
+activated among several attached ones; the color + infrared pair opens
+through the camera frame server's public Windows Face Authentication Profile
+V2 graph for that same device
 (`Win32FaceAuthenticationCapture` discovers and starts it,
 `Win32FaceAuthenticationCameraGraph` polls it). Each shape has a CPU-pixel leaf
 and a shared-texture leaf; the leaves differ only in reader configuration and

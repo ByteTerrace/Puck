@@ -38,6 +38,23 @@ public sealed class WorldFrameSourceSerializationTests {
 
         Assert.Equal(expected: WorldCameraSensor.Infrared, actual: camera.Sensor);
         Assert.Equal(expected: WorldFeedProfile.Default, actual: camera.Profile);
+        Assert.Null(@object: camera.Seat);
+    }
+    [Fact]
+    public void ACameraFrameSourceWithASeatRoundTripsThroughTheFrameSourceAccessor() {
+        var source = new WorldScreenSource.Camera(
+            Sensor: WorldCameraSensor.Color,
+            Seat: 2
+        );
+
+        var roundTripped = RoundTrip(
+            typeInfo: WorldJsonContext.Default.WorldFrameSource,
+            value: (WorldFrameSource)source
+        );
+
+        var camera = Assert.IsType<WorldScreenSource.Camera>(roundTripped);
+
+        Assert.Equal(expected: 2, actual: camera.Seat);
     }
     [Fact]
     public void AViewFrameSourceRoundTripsThroughTheFrameSourceAccessor() {

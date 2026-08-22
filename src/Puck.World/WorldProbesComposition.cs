@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Puck.Commands;
 using Puck.Hosting;
+using Puck.World.Client;
 
 namespace Puck.World;
 
@@ -21,6 +22,7 @@ public static class WorldProbesComposition {
             definitionSource: sp.GetRequiredService<WorldDefinitionSource>(),
             focus: sp.GetRequiredService<IInputFocus>(),
             passes: sp.GetRequiredService<WorldPostRenderExtensionPasses>(),
+            roster: sp.GetRequiredService<PlayerRoster>(),
             router: sp.GetRequiredService<InputRouter>(),
             screens: sp.GetRequiredService<WorldScreenBinder>()
         ));

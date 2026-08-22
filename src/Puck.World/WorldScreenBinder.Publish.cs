@@ -178,7 +178,7 @@ internal sealed partial class WorldScreenBinder {
 
             // The shared webcam and every probe output are published once (in CaptureCamera and ServiceProbeFeeds
             // above), so their screens only ride those feeds.
-            if ((slot.Camera is not null) || (slot.Probe is not null)) {
+            if ((slot.CameraSeat is not null) || (slot.Probe is not null)) {
                 continue;
             }
 

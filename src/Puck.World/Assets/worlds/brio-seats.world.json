@@ -1,0 +1,20 @@
+{
+  "$schema": "./puck.world.def.v1.schema.json",
+  "basis": "brio-probe.world.json",
+  "documentId": "brio-seats",
+  "metadata": {
+    "description": "The brio-probe vertical with two local seats: the 'head' row's lone camera socket carries no seat, so it is seat-relative — one instance per occupied seat, labeled head@1/head@2 by probe.status. This machine carries one BRIO, so only seat 1 (the default-seated camera) ever gets a live instance; a second seat that joins with no camera of its own shows a seat-relative instance idle with a no-camera-assigned fault, never a crash or a silently-shared reading.",
+    "tags": [
+      "camera",
+      "brio",
+      "infrared",
+      "probes",
+      "seats"
+    ],
+    "title": "BRIO Seats"
+  },
+  "population": {
+    "capacity": 2,
+    "localSeats": 2
+  }
+}

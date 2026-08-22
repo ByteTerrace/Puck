@@ -500,8 +500,7 @@
           "hysteresis": 0,
           "smoothing": 0,
           "quantizeBits": 1,
-          "maxAgeSeconds": 0.5,
-          "seat": 1
+          "maxAgeSeconds": 0.5
         }
       ]
     }

@@ -23,7 +23,7 @@ internal abstract class Win32SourceReaderCameraGraph<TStream> : Win32CameraGraph
     private string m_name = "camera";
     private TStream[] m_streams = [];
 
-    protected Win32SourceReaderCameraGraph(CameraStreamRequest request) {
+    protected Win32SourceReaderCameraGraph(string deviceId, CameraStreamRequest request) : base(deviceId: deviceId) {
         Request = request;
     }
 
@@ -89,7 +89,8 @@ internal abstract class Win32SourceReaderCameraGraph<TStream> : Win32CameraGraph
         // The infrared sensor is probed on the color device first — the BRIO exposes it as a second stream of the color
         // camera — and only a device without such a stream falls back to the separate sensor-camera category.
         var infrared = (CameraSensor.Infrared == Request.Sensor);
-        var (mediaSource, deviceName) = ActivateDefaultVideoSource(extended: infrared, infrared: false);
+        var (colorLink, infraredLink) = ResolveDeviceLinks();
+        var (mediaSource, deviceName) = ActivateDefaultVideoSource(symbolicLink: colorLink, extended: infrared, infrared: false);
         IMFMediaType? infraredType = null;
         IMFPresentationDescriptor? infraredPresentation = null;
 
@@ -99,7 +100,7 @@ internal abstract class Win32SourceReaderCameraGraph<TStream> : Win32CameraGraph
         if (infrared && !TryPrepareInfraredStream(mediaSource: mediaSource, mediaType: out infraredType, presentationDescriptor: out infraredPresentation, streamIndex: out streamIndex)) {
             _ = Marshal.ReleaseComObject(o: mediaSource);
             m_mediaSource = null;
-            (mediaSource, deviceName) = ActivateDefaultVideoSource(extended: true, infrared: true);
+            (mediaSource, deviceName) = ActivateDefaultVideoSource(symbolicLink: infraredLink, extended: true, infrared: true);
             m_mediaSource = mediaSource;
 
             if (!TryPrepareInfraredStream(mediaSource: mediaSource, mediaType: out infraredType, presentationDescriptor: out infraredPresentation, streamIndex: out streamIndex)) {
@@ -163,6 +164,20 @@ internal abstract class Win32SourceReaderCameraGraph<TStream> : Win32CameraGraph
                 _ = Marshal.ReleaseComObject(o: infraredPresentation);
             }
         }
+    }
+    // Resolves this graph's device id to the color/infrared symbolic links Win32MediaFoundationInterop selects an
+    // IMFActivate by. A host below the MediaFrameSourceGroup floor falls back to the first enumerated device of each
+    // category, exactly as the graph behaved before per-device selection existed.
+    private (string? Color, string? Infrared) ResolveDeviceLinks() {
+        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 14393)) {
+            return (null, null);
+        }
+
+        if (!Win32CameraDeviceGroups.TryFind(deviceId: DeviceId, color: out var color, group: out _, infrared: out var infrared)) {
+            throw new InvalidOperationException(message: $"camera device '{DeviceId}' is no longer attached");
+        }
+
+        return (color?.DeviceInformation.Id, infrared?.DeviceInformation.Id);
     }
     private void ReadSamples(IMFSourceReader reader, uint streamIndex) {
         while (!Stopping) {
@@ -270,7 +285,7 @@ internal sealed class Win32SourceReaderPixelGraph : Win32SourceReaderCameraGraph
     private Win32PixelStream? m_stream;
     private int m_width;
 
-    public Win32SourceReaderPixelGraph(CameraStreamRequest request) : base(request: request) {
+    public Win32SourceReaderPixelGraph(string deviceId, CameraStreamRequest request) : base(deviceId: deviceId, request: request) {
         Start(threadName: "camera-grabber");
     }
 
@@ -441,7 +456,7 @@ internal sealed class Win32SourceReaderSharedGraph : Win32SourceReaderCameraGrap
     private Win32SharedStream? m_stream;
     private nint[] m_targets = [];
 
-    public Win32SourceReaderSharedGraph(long adapterLuid, CameraStreamRequest request) : base(request: request) {
+    public Win32SourceReaderSharedGraph(long adapterLuid, string deviceId, CameraStreamRequest request) : base(deviceId: deviceId, request: request) {
         // A standalone infrared stream's L8 luminance has no DXVA-to-ARGB32 path; the coordinated Face Authentication
         // graph keeps native L8 and expands it with the camera-device compute path instead.
         if (CameraSensor.Infrared == request.Sensor) {

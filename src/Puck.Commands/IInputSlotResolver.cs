@@ -15,4 +15,11 @@ public interface IInputSlotResolver {
     /// <returns><see langword="true"/> when this call created the device-to-slot assignment; otherwise
     /// <see langword="false"/>.</returns>
     bool CommitSlot(InputDeviceId device, int slot);
+    /// <summary>Records the physical kind of <paramref name="device"/> the first time any of its signals reach the
+    /// router — before <see cref="ResolveSlot"/> or <see cref="CommitSlot"/> ever run for it, so a kind-aware
+    /// seating policy already knows what it is resolving. The default implementation is a no-op, for a resolver
+    /// that does not distinguish device kinds (e.g. a single-slot test double).</summary>
+    /// <param name="device">The device the signal came from.</param>
+    /// <param name="kind">The device's classified kind.</param>
+    void ObserveDeviceKind(InputDeviceId device, InputDeviceKind kind) { }
 }

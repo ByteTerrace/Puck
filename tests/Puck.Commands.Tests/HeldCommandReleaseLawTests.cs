@@ -19,7 +19,7 @@ public sealed class HeldCommandReleaseLawTests {
                 bindings: new FixedBindings(binding: new CommandBinding(Command: command)),
                 principalResolver: new ConsolePrincipal()
             );
-            var device = InputDeviceId.FromConnectionKey(key: "kbd-1");
+            var device = InputDeviceId.FromConnectionKey(key: "keyboard-1");
 
             router.Capture(signal: InputSignal.Press(source: "keyboard.q", deviceId: device));
             var pressed = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
@@ -47,7 +47,7 @@ public sealed class HeldCommandReleaseLawTests {
             bindings: new FixedBindings(binding: new CommandBinding(Command: HeldVerb, ActivateOn: CommandPhase.Started)),
             principalResolver: new ConsolePrincipal()
         );
-        var device = InputDeviceId.FromConnectionKey(key: "kbd-1");
+        var device = InputDeviceId.FromConnectionKey(key: "keyboard-1");
 
         router.Capture(signal: InputSignal.Press(source: "keyboard.q", deviceId: device));
         _ = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);

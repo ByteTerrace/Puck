@@ -1,5 +1,4 @@
 using System.Numerics;
-using System.Text;
 using Puck.Commands;
 using Puck.Maths;
 using Puck.World.Protocol;
@@ -100,8 +99,8 @@ public enum SetProfileOutcome {
 
 /// <summary>The roster's recorded preferred-profile decision for a first-seen device.</summary>
 internal enum DevicePreselectionKind {
-    /// <summary>The keyboard has no durable controller preference.</summary>
-    Keyboard,
+    /// <summary>The device's kind carries no durable controller-preference concept (a keyboard or a mouse).</summary>
+    NoControllerConcept,
 
     /// <summary>The transport cannot identify the same physical controller after reconnect.</summary>
     ConnectionOnly,
@@ -145,12 +144,14 @@ public enum JoinResult {
 /// </summary>
 /// <remarks>
 /// <para>
-/// A player owns a device set (the keyboard is a device like any pad — its id is <see cref="InputDeviceId"/>
-/// <see langword="default"/>, mapped to slot 0 from boot). Reassignment moves a device between slots: onto an occupied
-/// slot it joins that team; onto an empty slot it creates a pending player (a profile must be chosen). A device joins
-/// on its first routed signal (stick activity or a South/confirm press): the first pad seats with player 1 alongside
-/// the keyboard (attaching to an already-seated player is not a join, so no profile choice is owed), and each later pad
-/// takes the next free slot as a pending player.
+/// A player owns a device set — a keyboard, a mouse, and a gamepad are all ordinary roster devices, each with its
+/// own <see cref="InputDeviceId"/>, none pre-seeded at boot. Reassignment moves a device between slots: onto an
+/// occupied slot it joins that team; onto an empty slot it creates a pending player (a profile must be chosen). A
+/// device joins on its first routed signal (a key/click, stick activity, or a South/confirm press): the FIRST
+/// keyboard and the FIRST mouse each seat with player 1 the moment they are first seen, exactly as the first
+/// gamepad already does (attaching to an already-seated player is not a join, so no profile choice is owed); a
+/// SECOND keyboard or mouse (or any later gamepad) instead takes the next free slot as a pending player, like any
+/// other device passed around the couch.
 /// </para>
 /// <para>
 /// Slot 0 (player 1) is always joined from boot and never leaves; it starts on the first authored profile. A stable
@@ -162,7 +163,7 @@ public enum JoinResult {
 /// whenever a slot's occupancy, state, or color changes; the frame source watches it to rebuild the program.
 /// </para>
 /// </remarks>
-public sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolver {
+public sealed partial class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolver {
     /// <summary>The maximum number of local participants — a quad viewport's worth (the server table's seat count).</summary>
     public const int MaxSlots = WorldPopulationLimits.LocalSeatCount;
     /// <summary>The <see cref="DriveTarget"/> sentinel for "drives nothing": a claimed slot whose principal has never
@@ -220,10 +221,6 @@ public sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolver
             return count;
         }
     }
-    /// <summary>The keyboard's device id — the one device the roster names by identity. A device id is a content-addressed
-    /// <see cref="InputDeviceId"/>; the keyboard alone rides the <see langword="default"/> (all-zero) id, mapped to slot 0
-    /// from boot. Comparisons that mean "the keyboard" spell this rather than a bare <c>default</c>.</summary>
-    public static InputDeviceId KeyboardDevice => default;
     /// <summary>A monotonically increasing counter bumped whenever a slot's occupancy, state, or color changes. The
     /// frame source rebuilds the program (avatar colors + <c>Active</c> flags) and re-lays-out the viewports on change.</summary>
     public int Revision => m_revision;
@@ -406,54 +403,13 @@ public sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolver
 
         return accepted;
     }
-    // How many mapped devices a slot owns. With excludeKeyboard false every device counts; with it true only gamepads
-    // count (the keyboard's default id is skipped), so the first-pad-seats-with-player-1 test reads "no pad yet".
-    private int CountDevices(int slot, bool excludeKeyboard) {
-        var count = 0;
-
-        foreach (var pair in m_deviceToSlot) {
-            if (
-                (pair.Value == slot) &&
-                (!excludeKeyboard || (pair.Key != KeyboardDevice))
-            ) {
-                count++;
-            }
-        }
-
-        return count;
-    }
-    // The tokens of every device currently mapped to the slot, joined with "+" (first-seen order), or empty.
-    private string DeviceTokensFor(int slot) {
-        var builder = new StringBuilder();
-
-        foreach (var device in m_deviceOrder) {
-            if (
-                m_deviceToSlot.TryGetValue(
-                key: device,
-                value: out var mapped
-            ) &&
-                (mapped == slot)
-            ) {
-                if (builder.Length > 0) {
-                    _ = builder.Append(value: '+');
-                }
-
-                _ = builder.Append(value: DeviceToken(device: device));
-            }
-        }
-
-        return builder.ToString();
-    }
     // Dissolve a slot whose last device just left, but only when it exists to be dissolved by a device leaving: a
     // device-origin slot with no devices left. Permanent (slot 0) and scripted slots stay. An internal cascade with
     // no ingress context of its own — the vacating seat leaving ITSELF self-provisions, explicitly.
     private void DissolveIfOrphanedDevice(int slot, WorldPrincipal actingPrincipal) {
         if (
             (m_slots[slot] is { Origin: ParticipantOrigin.Device }) &&
-            (CountDevices(
-            excludeKeyboard: false,
-            slot: slot
-        ) == 0)
+            (CountDevices(slot: slot) == 0)
         ) {
             // actingPrincipal is the SAME identity AssignDevice already authorized the relocation under — NEVER a
             // fabricated SelfProvisioned(slot): the cascade dissolving this ORPHANED source is downstream of one
@@ -468,9 +424,9 @@ public sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolver
         }
     }
     private DevicePreselection EvaluatePreselection(InputDeviceId device) {
-        if (device == KeyboardDevice) {
+        if (DeviceKindOf(device: device) != InputDeviceKind.Gamepad) {
             return new DevicePreselection(
-                Kind: DevicePreselectionKind.Keyboard,
+                Kind: DevicePreselectionKind.NoControllerConcept,
                 Profile: null,
                 Seat: -1
             );
@@ -577,10 +533,7 @@ public sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolver
             if (
                 (m_slots[slot] is null) &&
                 (m_slotPrincipal[slot] is null) &&
-                (CountDevices(
-                excludeKeyboard: false,
-                slot: slot
-            ) == 0)
+                (CountDevices(slot: slot) == 0)
             ) {
                 return slot;
             }
@@ -732,8 +685,8 @@ public sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolver
 
         return null;
     }
-    // Resolve the participant a device drives, joining it per the roster rules if unmapped: the first pad seats with
-    // player 1 alongside the keyboard (attaching to an already-active player is not a join, so no profile choice is
+    // Resolve the participant a device drives, joining it per the roster rules if unmapped: the first device of ITS
+    // OWN kind seats with player 1 (attaching to an already-active player is not a join, so no profile choice is
     // owed; a deviceless slot 0 is claimed the same way); otherwise the next free slot as a pending player. A full
     // roster returns null. Tracks first-seen order for the token vocabulary.
     private Participant? ResolveDeviceSlot(InputDeviceId device) {
@@ -762,52 +715,60 @@ public sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolver
                 return null;
             }
 
-            m_deviceToSlot[device] = preferredSlot;
+            MapDevice(
+                device: device,
+                slot: preferredSlot
+            );
 
             return m_slots[preferredSlot];
         }
 
-        // Slot 0 gets the SAME TryClaimSlot exclusion the loop below applies to 1..3 — see ResolveSlot's matching guard.
+        // Slot 0 gets the SAME TryClaimSlot exclusion the loop below applies to 1..3 — see ResolveSlot's matching
+        // guard. excludeKind generalizes "alongside the keyboard" to every kind alike: a keyboard, a mouse, and a
+        // gamepad each seat here on their OWN first touch, as long as slot 0 has none of their own kind yet.
         if (
-            (device != KeyboardDevice) &&
             (m_slotPrincipal[0] is null) &&
             (m_slots[0] is { State: ParticipantState.Active }) &&
             (CountDevices(
-            excludeKeyboard: true,
+            matchKind: DeviceKindOf(device: device),
             slot: 0
         ) == 0)
         ) {
-            // Device mapping is not render state, so seating the first pad with player 1 does not bump the revision.
-            m_deviceToSlot[device] = 0;
+            // Device mapping is not render state, so seating the first device of a kind with player 1 does not
+            // bump the revision.
+            MapDevice(
+                device: device,
+                slot: 0
+            );
 
             return m_slots[0];
         }
 
         if (
             (m_slotPrincipal[0] is null) &&
-            (CountDevices(
-            excludeKeyboard: false,
-            slot: 0
-        ) == 0)
+            (CountDevices(slot: 0) == 0)
         ) {
-            m_deviceToSlot[device] = 0;
+            MapDevice(
+                device: device,
+                slot: 0
+            );
 
             return m_slots[0];
         }
 
         // Claim an already-active, deviceless local-human seat before creating a pending participant. This is the
-        // mutating twin of ResolveSlot's proposal and preserves the deterministic p1..p4 pad-arrival order. A slot
+        // mutating twin of ResolveSlot's proposal and preserves the deterministic p1..p4 arrival order. A slot
         // TryClaimSlot has claimed is excluded — see ResolveSlot's matching guard.
         for (var existing = 1; (existing < MaxSlots); existing++) {
             if (
                 (m_slotPrincipal[existing] is null) &&
                 (m_slots[existing] is not null) &&
-                (CountDevices(
-                excludeKeyboard: false,
-                slot: existing
-            ) == 0)
+                (CountDevices(slot: existing) == 0)
             ) {
-                m_deviceToSlot[device] = existing;
+                MapDevice(
+                    device: device,
+                    slot: existing
+                );
 
                 return m_slots[existing];
             }
@@ -824,7 +785,10 @@ public sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolver
             return null;
         }
 
-        m_deviceToSlot[device] = slot;
+        MapDevice(
+            device: device,
+            slot: slot
+        );
 
         return m_slots[slot];
     }
@@ -878,13 +842,6 @@ public sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolver
     /// never laundered into the target's own identity.</summary>
     /// <param name="slot">The slot index (0-based) the device/boot op targets.</param>
     private static WorldPrincipal SelfProvisioned(int slot) => WorldPrincipal.Seat(slot: slot);
-    // Record a device the first time it is seen, so the kbd/pad<N> token order is stable.
-    private void TrackDeviceOrder(InputDeviceId device) {
-        if (!m_deviceOrder.Contains(item: device)) {
-            m_deviceOrder.Add(item: device);
-            m_devicePreselections[device] = EvaluatePreselection(device: device);
-        }
-    }
     // Predicts — WITHOUT mutating — whether relocating the device currently on `slot` away from it would leave that
     // slot's device-origin participant orphaned (the same condition DissolveIfOrphanedDevice checks AFTER the move,
     // computed here before it, so AssignDevice can authorize the dissolution before causing it). True exactly when
@@ -892,10 +849,7 @@ public sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolver
     private bool WouldOrphanOnMove(int slot) {
         return (
             (m_slots[slot] is { Origin: ParticipantOrigin.Device }) &&
-            (CountDevices(
-            excludeKeyboard: false,
-            slot: slot
-        ) == 1)
+            (CountDevices(slot: slot) == 1)
         );
     }
 
@@ -975,6 +929,14 @@ public sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolver
             hadCurrent &&
             (current == targetSlot)
         ) {
+            // Still a NoOp for occupancy/team purposes, but an explicit re-assign is a deliberate re-assertion —
+            // refresh the assignment stamp so TryGetSeatDevice's most-recently-assigned tie-break (several devices
+            // of one kind sharing a slot) reflects it.
+            MapDevice(
+                device: device,
+                slot: targetSlot
+            );
+
             return AssignOutcome.NoOp;
         }
 
@@ -1044,13 +1006,13 @@ public sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolver
             DeviceSlotChanging?.Invoke(obj: device);
         }
 
-        // When the keyboard leaves a slot, free the movement axes it was holding on the source seat: a still-down
+        // When a keyboard leaves a slot, free the movement axes it was holding on the source seat: a still-down
         // key's release edge routes to the keyboard's new slot, so without this the source would walk forever (an
-        // authored tape on the source is left intact). Pads are immune — ClearAnalog wipes their transient analog each
-        // frame.
+        // authored tape on the source is left intact). Gamepads are immune — ClearAnalog wipes their transient
+        // analog each frame.
         if (
             hadCurrent &&
-            (device == KeyboardDevice)
+            (DeviceKindOf(device: device) == InputDeviceKind.Keyboard)
         ) {
             m_slots[current]?.Seat.ReleaseAllHeld();
         }
@@ -1059,7 +1021,10 @@ public sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolver
             _ = m_deviceToSlot.Remove(key: device);
         }
 
-        m_deviceToSlot[device] = targetSlot;
+        MapDevice(
+            device: device,
+            slot: targetSlot
+        );
 
         if (hadCurrent) {
             // The cascade's Leave carries the SAME actingPrincipal the source check above already cleared — never
@@ -1131,7 +1096,10 @@ public sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolver
         }
 
         TrackDeviceOrder(device: device);
-        m_deviceToSlot[device] = slot;
+        MapDevice(
+            device: device,
+            slot: slot
+        );
 
         return true;
     }
@@ -1299,7 +1267,7 @@ public sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolver
     }
     /// <summary>Formats the roster for the <c>world.players</c> verb — one segment per slot, each joined slot carrying
     /// its profile name, state, owned devices (or origin), and pose.</summary>
-    /// <returns>A line of the form <c>[world.players: p1 amber active(kbd) pos=(...) yaw=...° | p2 empty | ...]</c>.</returns>
+    /// <returns>A line of the form <c>[world.players: p1 amber active(keyboard1) pos=(...) yaw=...° | p2 empty | ...]</c>.</returns>
     public string Describe() {
         var segments = new string[MaxSlots];
 
@@ -1344,87 +1312,6 @@ public sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolver
             separator: " | ",
             values: segments
         )}]";
-    }
-    /// <summary>Formats the preferred-profile decision recorded when each connected device was first seen.</summary>
-    /// <returns>A line naming every device's selected profile, or why no preference applied.</returns>
-    public string DescribeDeviceProfiles() {
-        var segments = new List<string>(capacity: m_deviceOrder.Count);
-
-        foreach (var device in m_deviceOrder) {
-            var token = DeviceToken(device: device);
-            var decision = m_devicePreselections[device];
-            var description = decision.Kind switch {
-                DevicePreselectionKind.Keyboard => "none (keyboard has no controller preference)",
-                DevicePreselectionKind.ConnectionOnly => "none (connection-only identity; XInput ids name slots, not physical pads)",
-                DevicePreselectionKind.NoLocalPreference => "none (no preference on this machine)",
-                DevicePreselectionKind.Preferred => $"{decision.Profile!.Name} (preferred controller match)",
-                DevicePreselectionKind.AlreadySeated => $"none ({decision.Profile!.Name} already active on p{DisplayNumber(slot: decision.Seat)}; ordinary seating applied)",
-                _ => $"none ({decision.Profile!.Name} matched, but no free seat could present it; ordinary seating applied)",
-            };
-
-            segments.Add(item: $"{token}={description}");
-        }
-
-        return $"[world.device-profiles: {string.Join(
-            separator: " | ",
-            values: segments
-        )}]";
-    }
-    /// <summary>Formats the device table for the <c>world.devices</c> verb — every seen device token in first-seen
-    /// order and the player it currently drives.</summary>
-    /// <returns>A line of the form <c>[world.devices: kbd=p1 | pad1=p2]</c>.</returns>
-    public string DescribeDevices() {
-        var segments = new List<string>(capacity: m_deviceOrder.Count);
-
-        foreach (var device in m_deviceOrder) {
-            var owner = (m_deviceToSlot.TryGetValue(
-                key: device,
-                value: out var slot
-            )
-                ? $"p{DisplayNumber(slot: slot)}"
-                : "unassigned"
-            );
-
-            segments.Add(item: $"{DeviceToken(device: device)}={owner}");
-        }
-
-        return $"[world.devices: {string.Join(
-            separator: " | ",
-            values: segments
-        )}]";
-    }
-    /// <summary>The slot (0-based) a device currently owns, or <see langword="null"/> if it is unmapped.</summary>
-    /// <param name="device">The device id.</param>
-    public int? DeviceSlot(InputDeviceId device) => (m_deviceToSlot.TryGetValue(
-        key: device,
-        value: out var slot
-    )
-        ? slot
-        : null
-    );
-    /// <summary>The stable token for a device: the keyboard is <c>kbd</c>; each pad is <c>pad&lt;N&gt;</c> by first-seen
-    /// order. Public so a verb echo can name the device a gesture acted on (e.g. "pad1 seated with player 1").</summary>
-    /// <param name="device">The device id.</param>
-    public string DeviceToken(InputDeviceId device) {
-        if (device == KeyboardDevice) {
-            return "kbd";
-        }
-
-        var ordinal = 0;
-
-        foreach (var candidate in m_deviceOrder) {
-            if (candidate == KeyboardDevice) {
-                continue;
-            }
-
-            ordinal++;
-
-            if (candidate == device) {
-                return $"pad{ordinal}";
-            }
-        }
-
-        return "pad?";
     }
     /// <summary>The entity index a slot's per-tick intent submission should target: the slot's own body for an
     /// ordinary (unclaimed) seat, or — for a slot a <see cref="TryClaimSlot"/> call claimed — whatever body the
@@ -1765,6 +1652,14 @@ public sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolver
         : null
     );
     /// <inheritdoc/>
+    /// <remarks>First-seen-wins: a device's physical kind never changes across its lifetime, so a later call for an
+    /// already-classified device is a no-op even if the router's own family test ever disagreed with itself.</remarks>
+    public void ObserveDeviceKind(InputDeviceId device, InputDeviceKind kind) {
+        if (!m_deviceKind.ContainsKey(key: device)) {
+            m_deviceKind[device] = kind;
+        }
+    }
+    /// <inheritdoc/>
     public int ResolveSlot(InputDeviceId device) {
         if (m_deviceToSlot.TryGetValue(
             key: device,
@@ -1784,16 +1679,16 @@ public sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolver
             return preferredSlot;
         }
 
-        // Probe the seating policy without mutating routing or simulation state. InputRouter commits this proposal only
-        // after it finds a binding on an active command map. Slot 0 gets the SAME TryClaimSlot exclusion as 1..3
-        // below: a claimed slot 0 (e.g. a replay device claiming the keyboard's seat) must never be silently offered to
-        // an ordinary arriving pad.
+        // Probe the seating policy without mutating routing or simulation state. InputRouter commits this proposal
+        // only after it finds a binding on an active command map. Slot 0 gets the SAME TryClaimSlot exclusion as
+        // 1..3 below: a claimed slot 0 (e.g. a replay device claiming a seat) must never be silently offered to an
+        // ordinary arriving device. excludeKind generalizes the couch-sharing rule to every kind alike — a
+        // keyboard, a mouse, and a gamepad each probe here on their OWN first touch.
         if (
-            (device != KeyboardDevice) &&
             (m_slotPrincipal[0] is null) &&
             (m_slots[0] is { State: ParticipantState.Active }) &&
             (CountDevices(
-            excludeKeyboard: true,
+            matchKind: DeviceKindOf(device: device),
             slot: 0
         ) == 0)
         ) {
@@ -1802,27 +1697,21 @@ public sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolver
 
         if (
             (m_slotPrincipal[0] is null) &&
-            (CountDevices(
-            excludeKeyboard: false,
-            slot: 0
-        ) == 0)
+            (CountDevices(slot: 0) == 0)
         ) {
             return 0;
         }
 
         // The built-in census may have already created players 2..4 as active, deviceless local-human seats. Prefer
-        // claiming those existing seats in slot order before proposing a new participant, so four arriving pads map to
-        // p1..p4 without requiring a roster verb or replacing the avatars already visible in split screen. A slot
-        // TryClaimSlot has claimed is excluded from this ordinary device-arrival policy regardless: "exclusively" means
-        // a ordinary pad plugging in later must never be silently offered the same slot.
+        // claiming those existing seats in slot order before proposing a new participant, so four arriving devices
+        // map to p1..p4 without requiring a roster verb or replacing the avatars already visible in split screen. A
+        // slot TryClaimSlot has claimed is excluded from this ordinary device-arrival policy regardless: an ordinary
+        // device plugging in later must never be silently offered the same slot.
         for (var slot = 1; (slot < MaxSlots); slot++) {
             if (
                 (m_slotPrincipal[slot] is null) &&
                 (m_slots[slot] is not null) &&
-                (CountDevices(
-                excludeKeyboard: false,
-                slot: slot
-            ) == 0)
+                (CountDevices(slot: slot) == 0)
             ) {
                 return slot;
             }
@@ -1835,10 +1724,7 @@ public sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolver
             if (
                 (m_slotPrincipal[slot] is null) &&
                 (m_slots[slot] is null) &&
-                (CountDevices(
-                excludeKeyboard: false,
-                slot: slot
-            ) == 0)
+                (CountDevices(slot: slot) == 0)
             ) {
                 return slot;
             }
@@ -1989,8 +1875,8 @@ public sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolver
     /// success, overrides the slot's acting identity for <see cref="PrincipalOf"/> to report. Honors
     /// <paramref name="preferredSlot"/> when given (it must already carry a local seat, hold no live device, and not
     /// already be claimed); otherwise takes the first unclaimed slot with a local seat and no device attached — slot 0
-    /// never qualifies for the automatic pick because the keyboard sentinel occupies it from boot, which is the correct
-    /// exclusion (a claim should never silently share the keyboard's body).</summary>
+    /// never qualifies for the automatic pick (a claim should never silently share player 1's body); an explicit
+    /// <paramref name="preferredSlot"/> of 0 is still honored when it is genuinely deviceless and unclaimed.</summary>
     /// <param name="device">The claiming caller's content-addressed device id.</param>
     /// <param name="principal">The acting identity the claimed slot submits under from now on (see
     /// <see cref="PrincipalOf"/>) — e.g. a replay device's or a network peer stand-in's.</param>
@@ -2022,10 +1908,7 @@ public sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolver
                 return false;
             }
 
-            if (CountDevices(
-                excludeKeyboard: false,
-                slot: requested
-            ) != 0) {
+            if (CountDevices(slot: requested) != 0) {
                 slot = -1;
                 fault = $"slot {DisplayNumber(slot: requested)} is already driven by a human device";
 
@@ -2036,14 +1919,13 @@ public sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolver
         } else {
             var found = -1;
 
-            for (var candidate = 0; (candidate < MaxSlots); candidate++) {
+            // Starts at 1: player 1's seat never qualifies for the automatic pick (see this method's own remarks) —
+            // an explicit preferredSlot of 0 above is the only door to claiming it.
+            for (var candidate = 1; (candidate < MaxSlots); candidate++) {
                 if (
                     (m_slotPrincipal[candidate] is null) &&
                     (m_slots[candidate] is not null) &&
-                    (CountDevices(
-                    excludeKeyboard: false,
-                    slot: candidate
-                ) == 0)
+                    (CountDevices(slot: candidate) == 0)
                 ) {
                     found = candidate;
 
@@ -2070,7 +1952,10 @@ public sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolver
         m_slotDriveAlarm[slot] = null;
         _ = m_programmaticDevices.Add(item: device);
         TrackDeviceOrder(device: device);
-        m_deviceToSlot[device] = slot;
+        MapDevice(
+            device: device,
+            slot: slot
+        );
         fault = null;
 
         return true;
@@ -2097,55 +1982,6 @@ public sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolver
         }
 
         return true;
-    }
-    /// <summary>Resolves a device token (<c>kbd</c> or <c>pad&lt;N&gt;</c>) to its device id.</summary>
-    /// <param name="token">The token (case-insensitive).</param>
-    /// <param name="device">The resolved device id.</param>
-    /// <returns><see langword="true"/> if the token names a known device.</returns>
-    public bool TryResolveDeviceToken(string token, out InputDeviceId device) {
-        device = default;
-
-        if (string.IsNullOrWhiteSpace(value: token)) {
-            return false;
-        }
-
-        if (string.Equals(
-            a: token,
-            b: "kbd",
-            comparisonType: StringComparison.OrdinalIgnoreCase
-        )) {
-            device = KeyboardDevice;
-
-            return m_deviceOrder.Contains(item: KeyboardDevice);
-        }
-
-        if (
-            token.StartsWith(
-            comparisonType: StringComparison.OrdinalIgnoreCase,
-            value: "pad"
-        ) &&
-            int.TryParse(
-            s: token.AsSpan(start: 3),
-            result: out var ordinal
-        ) &&
-            (ordinal >= 1)
-        ) {
-            var seen = 0;
-
-            foreach (var candidate in m_deviceOrder) {
-                if (candidate == KeyboardDevice) {
-                    continue;
-                }
-
-                if (++seen == ordinal) {
-                    device = candidate;
-
-                    return true;
-                }
-            }
-        }
-
-        return false;
     }
     /// <summary>The client-visible seat-vacated fact: the slot stops holding a participant, its claim and every
     /// per-claim cache die with it, the devices that were driving it are unmapped, and its authored mode-family
@@ -2205,12 +2041,22 @@ public sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolver
     // Device → slot map. Reconnect stability is explicit on InputDeviceId; connection-only transports still route for
     // the session but never participate in durable profile preferences.
     private readonly Dictionary<InputDeviceId, int> m_deviceToSlot = new();
-    // First-seen device order — the stable basis for the kbd/pad<N> tokens the reassignment verbs speak. Append-only
-    // so a token never shifts under a player.
+    // The MapDevice ordinal a device was last (re)assigned at — TryGetSeatDevice's tie-break among several devices
+    // of one kind sharing a slot (the higher stamp is the seat's current one for that kind).
+    private readonly Dictionary<InputDeviceId, int> m_deviceAssignStamp = new();
+    private int m_nextAssignStamp;
+    // First-seen device order — the stable basis for the keyboard<N>/mouse<N>/gamepad<N>/camera<N> tokens the
+    // reassignment verbs speak. Append-only so a token never shifts under a player.
     private readonly List<InputDeviceId> m_deviceOrder = [];
     // First-seen preferred-profile decisions, retained so the read-back reports the decision that actually governed
-    // arrival even after an explicit confirmation updates durable ownership.
+    // arrival even after an explicit confirmation updates durable ownership. A camera never has an entry (see
+    // ObserveDevice) — it carries no controller-profile preference concept.
     private readonly Dictionary<InputDeviceId, DevicePreselection> m_devicePreselections = new();
+    // Every device's recorded kind, keyed the same as m_deviceOrder membership — see DeviceKindOf.
+    private readonly Dictionary<InputDeviceId, InputDeviceKind> m_deviceKind = new();
+    // A device's recorded display name, populated only by ObserveDevice (a camera's MediaFoundation group name
+    // today); a pad or the keyboard carries none.
+    private readonly Dictionary<InputDeviceId, string> m_deviceName = new();
     // Devices that claimed their slot PROGRAMMATICALLY (via TryClaimSlot) rather than through a join/confirm/cycle
     // GESTURE — the editor session, a replay-playback device, a network peer stand-in, and a test-harness driver all
     // want the identical treatment: never eligible for a device-driven roster-IDENTITY gesture (confirm/cycle), because those
@@ -2251,9 +2097,10 @@ public sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolver
     private readonly GrantSubject?[] m_slotDriveAlarm = new GrantSubject?[MaxSlots];
 
     /// <summary>Initializes a new instance of the <see cref="PlayerRoster"/> class with the world definition's
-    /// eager seats already active (each boot seat mirrored to the server as a session join). Player 1 owns the
-    /// keyboard, uses the first authored profile, and is unconditionally eager regardless of the document — a
-    /// session always needs a first player. Every other seat activates at boot only when
+    /// eager seats already active (each boot seat mirrored to the server as a session join). Player 1 uses the
+    /// first authored profile and is unconditionally eager regardless of the document — a session always needs a
+    /// first player; no device is pre-mapped to it, so the first keyboard, mouse, or gamepad to touch input seats
+    /// there per the couch-sharing rule (see this type's remarks). Every other seat activates at boot only when
     /// <c>population.seatActivation</c> declares it <see cref="SeatActivationPolicy.Eager"/>; an
     /// <see cref="SeatActivationPolicy.OnDemand"/> seat stays empty until a later <c>player.join</c> or a
     /// controller's own hot-plug first touch (<see cref="ResolveDeviceSlot"/>) claims it through the identical
@@ -2310,14 +2157,6 @@ public sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolver
         );
         m_populationChannels = (channels ?? throw new InvalidOperationException(message: "the server answered no population channel table"));
 
-        // The keyboard is a device like any pad — its sentinel id, owned by slot 0 from boot and listed first.
-        m_deviceOrder.Add(item: KeyboardDevice);
-        m_deviceToSlot[KeyboardDevice] = 0;
-        m_devicePreselections[KeyboardDevice] = new DevicePreselection(
-            Kind: DevicePreselectionKind.Keyboard,
-            Profile: null,
-            Seat: -1
-        );
         // The boot census self-provisions: EXPLICIT at each call site (SelfProvisioned(slot)), never an omitted
         // default — see SelfProvisioned's own remarks for why this is a deliberate choice, not a laundered actor.
         // A world declaring no local seats (population.localSeats 0) and/or no profile catalog leaves every slot

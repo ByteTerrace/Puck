@@ -15,14 +15,30 @@ public sealed class Win32MediaFoundationCameraService : ICameraCaptureService {
     public bool IsSupported => OperatingSystem.IsWindows();
 
     /// <inheritdoc/>
-    public bool TryOpenPixels(ReadOnlySpan<CameraStreamRequest> streams, [NotNullWhen(true)] out ICameraGraph<ICameraPixelStream>? graph) {
+    public IReadOnlyList<CameraDeviceInfo> EnumerateDevices() {
+        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 14393)) {
+            return [];
+        }
+
+        try {
+            return Win32CameraDeviceGroups.Enumerate();
+        } catch (Exception exception) {
+            Console.Error.WriteLine(value: $"[camera] device enumeration failed: {exception.Message}");
+
+            return [];
+        }
+    }
+    /// <inheritdoc/>
+    public bool TryOpenPixels(string deviceId, ReadOnlySpan<CameraStreamRequest> streams, [NotNullWhen(true)] out ICameraGraph<ICameraPixelStream>? graph) {
+        ArgumentNullException.ThrowIfNull(deviceId);
+
         graph = null;
 
         try {
             if (streams is [var single]) {
-                graph = new Win32SourceReaderPixelGraph(request: single);
+                graph = new Win32SourceReaderPixelGraph(deviceId: deviceId, request: single);
             } else if (IsFaceAuthenticationPair(streams: streams) && OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041)) {
-                graph = new Win32FaceAuthenticationPixelGraph(requests: streams);
+                graph = new Win32FaceAuthenticationPixelGraph(deviceId: deviceId, requests: streams);
             } else {
                 throw new NotSupportedException(message: Unsupported(streams: streams));
             }
@@ -35,7 +51,9 @@ public sealed class Win32MediaFoundationCameraService : ICameraCaptureService {
         }
     }
     /// <inheritdoc/>
-    public bool TryOpenShared(long adapterLuid, ReadOnlySpan<CameraStreamRequest> streams, [NotNullWhen(true)] out ICameraGraph<ICameraSharedStream>? graph) {
+    public bool TryOpenShared(long adapterLuid, string deviceId, ReadOnlySpan<CameraStreamRequest> streams, [NotNullWhen(true)] out ICameraGraph<ICameraSharedStream>? graph) {
+        ArgumentNullException.ThrowIfNull(deviceId);
+
         graph = null;
 
         try {
@@ -44,9 +62,9 @@ public sealed class Win32MediaFoundationCameraService : ICameraCaptureService {
             }
 
             if (streams is [var single]) {
-                graph = new Win32SourceReaderSharedGraph(adapterLuid: adapterLuid, request: single);
+                graph = new Win32SourceReaderSharedGraph(adapterLuid: adapterLuid, deviceId: deviceId, request: single);
             } else if (IsFaceAuthenticationPair(streams: streams) && OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041)) {
-                graph = new Win32FaceAuthenticationSharedGraph(adapterLuid: adapterLuid, requests: streams);
+                graph = new Win32FaceAuthenticationSharedGraph(adapterLuid: adapterLuid, deviceId: deviceId, requests: streams);
             } else {
                 throw new NotSupportedException(message: Unsupported(streams: streams));
             }

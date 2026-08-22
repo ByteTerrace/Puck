@@ -12,33 +12,38 @@ namespace Puck.World;
 /// </summary>
 internal sealed class WorldOverlayFrameSources(WorldScreenBinder binder) : IOverlayFrameSources {
     private readonly WorldScreenBinder m_binder = binder;
-    // The stable key table: a WorldFrameSource never changes key once assigned, and record equality means two HUD
-    // elements naming the identical source (same $type and fields) share one key, one binder-owned feed, and one
-    // overlay slot.
-    private readonly Dictionary<WorldFrameSource, int> m_keys = new();
-    private readonly List<WorldFrameSource> m_sources = [];
+    // The stable key table, keyed by (source, seat) rather than the source alone: a bare Camera source with no
+    // authored Seat (record-equal across every seat's identity panel) still needs a DISTINCT key per seat — the
+    // enclosing seat scope KeyFor's caller passes is part of the source's identity here, not a resolve-time detail.
+    private readonly Dictionary<(WorldFrameSource Source, int Seat), int> m_keys = new();
+    private readonly List<(WorldFrameSource Source, int Seat)> m_sources = [];
 
-    /// <summary>Resolves the stable key for a <see cref="WorldFrameSource"/>, declaring it with the binder on first
-    /// sight so its feed opens even when no <c>screens</c> row names it.</summary>
+    /// <summary>Resolves the stable key for a <see cref="WorldFrameSource"/> in a seat scope, declaring it with the
+    /// binder on first sight so its feed opens even when no <c>screens</c> row names it.</summary>
     /// <param name="source">The frame source a HUD element names.</param>
+    /// <param name="seat">The 1-based enclosing seat scope — the owning identity panel's slot+1 for a player-scope
+    /// element, or 1 for a world-scope element. A camera source's own authored <c>Seat</c>, when present, still
+    /// wins; this is only the fallback and the disambiguator between two seats' otherwise-identical bare sources.</param>
     /// <returns>The key <see cref="TryAcquire"/> resolves.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="source"/> is <see langword="null"/>.</exception>
-    public int KeyFor(WorldFrameSource source) {
+    public int KeyFor(WorldFrameSource source, int seat) {
         ArgumentNullException.ThrowIfNull(argument: source);
 
+        var entry = (source, seat);
+
         if (m_keys.TryGetValue(
-            key: source,
+            key: entry,
             value: out var existing
         )) {
             return existing;
         }
 
-        m_binder.DeclareFrameSource(source: source);
+        m_binder.DeclareFrameSource(source: source, seat: seat);
 
         var key = m_sources.Count;
 
-        m_sources.Add(item: source);
-        m_keys[source] = key;
+        m_sources.Add(item: entry);
+        m_keys[entry] = key;
 
         return key;
     }
@@ -48,7 +53,8 @@ internal sealed class WorldOverlayFrameSources(WorldScreenBinder binder) : IOver
             (key < 0) ||
             (key >= m_sources.Count) ||
             !m_binder.TryAcquireFrame(
-                source: m_sources[key],
+                source: m_sources[key].Source,
+                seat: m_sources[key].Seat,
                 frame: out var frame
             )
         ) {

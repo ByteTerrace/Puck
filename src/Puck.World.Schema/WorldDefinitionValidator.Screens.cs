@@ -562,7 +562,8 @@ public static partial class WorldDefinitionValidator {
     }
     // The one frame-source gate, shared by a screen row/magazine entry's own Camera/View/Probe/Capture arms
     // (ValidateScreenSource) and a probe socket (WorldDefinitionValidator.Probes.cs' ValidateProbeStream): a
-    // camera's sensor is defined (and, when authored, its profile/vendor controls); a view names a declared
+    // camera's sensor is defined (and, when authored, its profile/vendor controls/seat, the last within
+    // 1..population.localSeats — shared by every consumer naming a seat: screens, probe sockets, HUD frames); a view names a declared
     // cameras[] row; a probe names another declared probes[] row; a capture's selector/profile are shaped like the
     // screen validator's own capture gate. A probe socket binding a Camera source has no meaningful use for
     // Profile (a probe kernel reads the hosting camera graph's existing feed rather than negotiating its own
@@ -590,6 +591,13 @@ public static partial class WorldDefinitionValidator {
 
                 if (!Enum.IsDefined(value: camera.Sensor)) {
                     errors.Add(item: $"{path}.camera.sensor '{camera.Sensor}' is not recognized.");
+                }
+
+                if (
+                    (camera.Seat is { } seat) &&
+                    ((seat < 1) || (seat > definition.Population.LocalSeats))
+                ) {
+                    errors.Add(item: $"{path}.camera.seat {seat} is outside 1..{definition.Population.LocalSeats} (population.localSeats).");
                 }
 
                 if (camera.Controls?.Vendor is { } vendorControls) {

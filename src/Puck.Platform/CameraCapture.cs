@@ -17,6 +17,14 @@ public readonly record struct CameraStreamRequest(CameraSensor Sensor, int Width
 /// graph.</param>
 public readonly record struct CameraCaptureFormat(string Subtype, double RateHz, string? Mode = null);
 
+/// <summary>One physical camera as the platform enumerates it, independent of whether — or how — anything has it
+/// open. <see cref="Id"/> is the platform's stable device identity: reconnecting the same physical camera reports the
+/// same <see cref="Id"/>, so it survives a hot-unplug/replug and is safe to key a roster entry by.</summary>
+/// <param name="Id">The platform's stable device identity (on Windows, the Media Foundation frame-source group id).</param>
+/// <param name="Name">The driver-reported display name.</param>
+/// <param name="Sensors">The physical sensors this device exposes.</param>
+public readonly record struct CameraDeviceInfo(string Id, string Name, IReadOnlyList<CameraSensor> Sensors);
+
 /// <summary>
 /// Opens a physical camera as a backend-neutral graph of sensor streams. One open is one device graph: every
 /// requested sensor streams, or the open refuses as a whole and the caller decides which sensor to drop. Two tiers,
@@ -29,22 +37,27 @@ public interface ICameraCaptureService {
     /// <summary>Gets a value indicating whether this platform can open camera devices at all.</summary>
     bool IsSupported { get; }
 
-    /// <summary>Tries to open the requested sensors as one CPU-pixel graph, negotiating each single-sensor stream near
-    /// its envelope: the smallest native frame size covering the requested extent (else the largest available), at the
-    /// lowest native rate covering the requested rate (else the highest available).</summary>
+    /// <summary>Enumerates every physical camera currently attached, in a stable order by <see cref="CameraDeviceInfo.Id"/>.</summary>
+    /// <returns>The attached cameras; empty when none are attached or the platform is unsupported.</returns>
+    IReadOnlyList<CameraDeviceInfo> EnumerateDevices();
+    /// <summary>Tries to open the requested sensors of one physical camera as one CPU-pixel graph, negotiating each
+    /// single-sensor stream near its envelope: the smallest native frame size covering the requested extent (else the
+    /// largest available), at the lowest native rate covering the requested rate (else the highest available).</summary>
+    /// <param name="deviceId">The physical camera to open, from <see cref="EnumerateDevices"/>.</param>
     /// <param name="streams">The sensors to open, in the order their streams are returned.</param>
     /// <param name="graph">When this returns <see langword="true"/>, the open graph; otherwise <see langword="null"/>.</param>
     /// <returns><see langword="true"/> if every requested sensor opened.</returns>
-    bool TryOpenPixels(ReadOnlySpan<CameraStreamRequest> streams, [NotNullWhen(true)] out ICameraGraph<ICameraPixelStream>? graph);
-    /// <summary>Tries to open the requested sensors as one shared-texture graph on the consumer's render adapter. The
-    /// returned streams are negotiated but idle until each receives its targets through
+    bool TryOpenPixels(string deviceId, ReadOnlySpan<CameraStreamRequest> streams, [NotNullWhen(true)] out ICameraGraph<ICameraPixelStream>? graph);
+    /// <summary>Tries to open the requested sensors of one physical camera as one shared-texture graph on the
+    /// consumer's render adapter. The returned streams are negotiated but idle until each receives its targets through
     /// <see cref="ICameraSharedStream.Start"/>; a coordinated graph publishes only after every stream has started.</summary>
     /// <param name="adapterLuid">The consumer render device's adapter LUID; the platform's device must share the adapter
     /// for the shared textures to be openable.</param>
+    /// <param name="deviceId">The physical camera to open, from <see cref="EnumerateDevices"/>.</param>
     /// <param name="streams">The sensors to open, in the order their streams are returned.</param>
     /// <param name="graph">When this returns <see langword="true"/>, the negotiated graph; otherwise <see langword="null"/>.</param>
     /// <returns><see langword="true"/> if every requested sensor opened on the shared tier.</returns>
-    bool TryOpenShared(long adapterLuid, ReadOnlySpan<CameraStreamRequest> streams, [NotNullWhen(true)] out ICameraGraph<ICameraSharedStream>? graph);
+    bool TryOpenShared(long adapterLuid, string deviceId, ReadOnlySpan<CameraStreamRequest> streams, [NotNullWhen(true)] out ICameraGraph<ICameraSharedStream>? graph);
 }
 
 /// <summary>One open camera device: its sensor streams and its one physical control surface. Disposing the graph
@@ -54,6 +67,9 @@ public interface ICameraGraph<out TStream> : IDisposable where TStream : ICamera
     /// <summary>Gets the device's live control surface. Controls live on the physical source, independent of which
     /// tier reads frames, and apply mid-stream.</summary>
     ICameraControlSurface Controls { get; }
+    /// <summary>Gets the platform device identity this graph opened — the same <see cref="CameraDeviceInfo.Id"/> that
+    /// was passed to <see cref="ICameraCaptureService.TryOpenPixels"/>/<see cref="ICameraCaptureService.TryOpenShared"/>.</summary>
+    string DeviceId { get; }
     /// <summary>Gets a value indicating whether the graph has permanently stopped (device unplugged, end of stream, or
     /// a mid-stream error) — the consumer's signal to dispose it and reopen.</summary>
     bool IsEnded { get; }

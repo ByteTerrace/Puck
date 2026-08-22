@@ -406,6 +406,17 @@ public sealed class InputRouter {
         // An authored lane (InputSignal.Slot) is never a device: it bypasses the resolver, seats nothing, and does not
         // count as the player's own activity.
         var authoredLane = (signal.Slot >= 0);
+
+        // Classify the signal's device kind BEFORE any slot resolution runs for it — a kind-aware seating policy
+        // (PlayerRoster's couch-sharing rule) reads this while deciding the very slot being resolved below, not
+        // after. An authored lane carries no real device to classify.
+        if (!authoredLane) {
+            m_inputSlotResolver?.ObserveDeviceKind(
+                device: signal.DeviceId,
+                kind: ClassifyDeviceKind(source: signal.Source)
+            );
+        }
+
         var slot = (authoredLane ? signal.Slot : m_slotResolver(arg: signal.DeviceId));
 
         if (slot < 0) {
@@ -926,6 +937,22 @@ public sealed class InputRouter {
         }
 
         m_snapshotLaneCount = activeLaneCount;
+    }
+    // The device-kind family test for ObserveDeviceKind: every InputSources id is prefixed by its physical-control
+    // group ("keyboard.", "mouse.", "gamepad.") — see Puck.Input.InputSources — mirrored here as literal prefixes
+    // rather than a reference to that vocabulary, since Puck.Commands sits below Puck.Input in the dependency
+    // layering. Anything else (a probe source, an authored/injected source) classifies as Gamepad, the roster's own
+    // defensive floor for a device it cannot otherwise place.
+    private static InputDeviceKind ClassifyDeviceKind(string source) {
+        if (source.StartsWith(value: "keyboard.", comparisonType: StringComparison.Ordinal)) {
+            return InputDeviceKind.Keyboard;
+        }
+
+        if (source.StartsWith(value: "mouse.", comparisonType: StringComparison.Ordinal)) {
+            return InputDeviceKind.Mouse;
+        }
+
+        return InputDeviceKind.Gamepad;
     }
     private static int CompareCaptureOrder(ulong leftTick, ulong leftSequence, ulong rightTick, ulong rightSequence) {
         var byTime = leftTick.CompareTo(value: rightTick);

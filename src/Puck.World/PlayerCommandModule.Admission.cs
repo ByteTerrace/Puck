@@ -7,7 +7,7 @@ namespace Puck.World;
 internal sealed partial class PlayerCommandModule {
     private CommandResult AssignHandler(CommandContext context, WireArgs args) {
         if (args.Count != 2) {
-            return CommandResult.Error(output: "[player.assign: expected a device token and a slot — player.assign <kbd|padN> <slot 1..4>]");
+            return CommandResult.Error(output: "[player.assign: expected a device token and a slot — player.assign <keyboardN|mouseN|gamepadN|cameraN> <slot 1..4>]");
         }
 
         var deviceToken = args[0].ToString();

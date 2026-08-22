@@ -218,7 +218,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "player.assign",
-            description: "Moves a device between players: player.assign <kbd|padN> <slot> (slot 1..4). Onto an occupied slot the device joins that team; onto an empty slot it creates a pending player (a profile must be chosen); onto its own slot a no-op. See world.devices for the tokens.",
+            description: "Moves a device between players: player.assign <keyboardN|mouseN|gamepadN|cameraN> <slot> (slot 1..4). Onto an occupied slot the device joins that team; onto an empty slot it creates a pending player (a profile must be chosen); onto its own slot a no-op. See world.devices for the tokens.",
             handler: AssignHandler
         );
     }

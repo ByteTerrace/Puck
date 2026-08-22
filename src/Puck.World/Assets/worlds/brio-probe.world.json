@@ -49,7 +49,6 @@
           "hysteresis": 0.01,
           "maxAgeSeconds": 0.25,
           "quantizeBits": 8,
-          "seat": 1,
           "smoothing": 0.25,
           "source": "head-x"
         },

@@ -12,7 +12,11 @@ plus the pieces that need no OS-specific code at all.
   detection), `ConfiguredNativeWindow` (the headless stand-in),
   `NativeWindowOptionsValidator`.
 - **Capture contracts** — `ICameraCaptureService`, `INativeImageCaptureService`,
-  `IAudioRenderDeviceFactory`/`IAudioRenderDevice`.
+  `IAudioRenderDeviceFactory`/`IAudioRenderDevice`. `ICameraCaptureService.EnumerateDevices`
+  reports every attached physical camera as a `CameraDeviceInfo` (a platform-stable
+  `Id`, a `Name`, and its `Sensors`); `TryOpenPixels`/`TryOpenShared` open one
+  named device's sensors, and the returned `ICameraGraph.DeviceId` echoes back
+  which one opened.
 - **`Puck.Memory`** — the unmanaged allocator (mimalloc-backed, with a
   tracking wrapper and a plain native fallback), registered via
   `AddPuckAllocator`.

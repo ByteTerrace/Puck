@@ -379,6 +379,63 @@ public sealed class ProbesAuthoringValidationLawTests {
             ));
     }
     [Fact]
+    public void AxisSeatAuthoredOnASeatRelativeProbeRefusesWhileUnauthoredPasses() {
+        // BuildProbe's default camera source ("lit", sensor Infrared) carries no Seat, so the row is seat-relative;
+        // an axis binding may not author its own seat there — it always takes its instance's.
+        Laws.RefusalWithControl(
+            lawId: "probes.axis-seat-on-seat-relative",
+            deniedOutcome: () => WorldDefinitionValidator.TryValidateLocally(
+                definition: WithProbes(
+                probes: [BuildProbe()],
+                bindings: [
+                    new WorldProbeBinding.Axis(Channel: ChannelName, Source: "head-x", Seat: 1),
+                ]
+            ),
+                reason: out _
+            ),
+            controlOutcome: () => WorldDefinitionValidator.TryValidateLocally(
+                definition: WithProbes(
+                probes: [BuildProbe()],
+                bindings: [
+                    new WorldProbeBinding.Axis(Channel: ChannelName, Source: "head-x"),
+                ]
+            ),
+                reason: out _
+            ));
+    }
+    [Fact]
+    public void AxisSeatOutsideLocalSeatsOnASingleInstanceProbeRefusesWhileAnInRangeSeatPasses() {
+        // Every camera socket names its own seat, so the row is NOT seat-relative — the ordinary range law applies,
+        // exactly as it did before seat-relative instancing existed.
+        static WorldFrameSource SeatedCameraSource() => new WorldScreenSource.Camera(
+            Profile: WorldFeedProfile.Default,
+            Sensor: WorldCameraSensor.Infrared,
+            Seat: 1
+        );
+        var seatedInputs = new Dictionary<string, WorldFrameSource>(comparer: StringComparer.Ordinal) { ["lit"] = SeatedCameraSource() };
+
+        Laws.RefusalWithControl(
+            lawId: "probes.axis-seat-range",
+            deniedOutcome: () => WorldDefinitionValidator.TryValidateLocally(
+                definition: WithProbes(
+                probes: [BuildProbe(inputs: seatedInputs)],
+                bindings: [
+                    new WorldProbeBinding.Axis(Channel: ChannelName, Source: "head-x", Seat: 99),
+                ]
+            ),
+                reason: out _
+            ),
+            controlOutcome: () => WorldDefinitionValidator.TryValidateLocally(
+                definition: WithProbes(
+                probes: [BuildProbe(inputs: seatedInputs)],
+                bindings: [
+                    new WorldProbeBinding.Axis(Channel: ChannelName, Source: "head-x", Seat: 1),
+                ]
+            ),
+                reason: out _
+            ));
+    }
+    [Fact]
     public void AProbeSocketNamingItsOwnProbeRefusesWhileAnotherProbePasses() {
         static WorldDefinition WithProbeSocket(string targetId) => Fixtures.BuildDocument() with {
             ProbesRaw = [

@@ -12,7 +12,7 @@ public sealed class InputRouterTests {
     [Fact]
     public void TwoControlsOnOneCommandPressOnFirstDownAndReleaseOnLastUp() {
         var router = Router(registry: out _);
-        var device = InputDeviceId.FromConnectionKey(key: "kbd-1");
+        var device = InputDeviceId.FromConnectionKey(key: "keyboard-1");
 
         // First control down: the logical press edge fires (Dispatch true) and the command is now carried.
         router.Capture(signal: InputSignal.Press(source: "key.w", deviceId: device));
@@ -73,7 +73,7 @@ public sealed class InputRouterTests {
             principalResolver: new ConsolePrincipal(),
             slotResolver: new FakeSlotResolver(raiseDisconnect: out var raiseDisconnect)
         );
-        var device = InputDeviceId.FromConnectionKey(key: "kbd-1");
+        var device = InputDeviceId.FromConnectionKey(key: "keyboard-1");
 
         router.Capture(signal: InputSignal.Press(source: "key.w", deviceId: device));
         _ = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
@@ -135,7 +135,7 @@ public sealed class InputRouterTests {
     [Fact]
     public void RecycledHeldStateDoesNotRetainItsPreviousControl() {
         var router = Router(registry: out _);
-        var device = InputDeviceId.FromConnectionKey(key: "kbd-1");
+        var device = InputDeviceId.FromConnectionKey(key: "keyboard-1");
 
         router.Capture(signal: InputSignal.Press(source: "key.w", deviceId: device));
         _ = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
@@ -159,7 +159,7 @@ public sealed class InputRouterTests {
             principalResolver: new ConsolePrincipal(),
             slotResolver: new FakeSlotResolver(raiseDisconnect: out var raiseDisconnect)
         );
-        var deviceA = InputDeviceId.FromConnectionKey(key: "kbd-1");
+        var deviceA = InputDeviceId.FromConnectionKey(key: "keyboard-1");
         var deviceB = InputDeviceId.FromConnectionKey(key: "pad-1");
 
         router.Capture(signal: InputSignal.Press(source: "key.w", deviceId: deviceA));
@@ -287,7 +287,7 @@ public sealed class InputRouterTests {
             )),
             principalResolver: new ConsolePrincipal()
         );
-        var device = InputDeviceId.FromConnectionKey(key: "kbd-1");
+        var device = InputDeviceId.FromConnectionKey(key: "keyboard-1");
 
         router.Capture(signal: InputSignal.Press(source: "key.w", deviceId: device));
         _ = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
@@ -338,7 +338,7 @@ public sealed class InputRouterTests {
     [Fact]
     public void KeyRepeatRefreshesLastInputWithoutDispatchingASecondPress() {
         var router = Router(registry: out _);
-        var device = InputDeviceId.FromConnectionKey(key: "kbd-1");
+        var device = InputDeviceId.FromConnectionKey(key: "keyboard-1");
 
         router.Capture(signal: InputSignal.Press(source: "key.w", deviceId: device));
         _ = router.SnapshotForTick(tick: 10UL, windowEndTick: ulong.MaxValue);

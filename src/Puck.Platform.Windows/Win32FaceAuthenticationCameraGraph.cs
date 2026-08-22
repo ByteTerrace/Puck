@@ -27,8 +27,8 @@ internal abstract class Win32FaceAuthenticationCameraGraph<TStream> : Win32Camer
     private TimeSpan m_lastColorTime = TimeSpan.MinValue;
     private TimeSpan m_lastInfraredTime = TimeSpan.MinValue;
 
-    protected Win32FaceAuthenticationCameraGraph(ReadOnlySpan<CameraStreamRequest> requests, MediaCaptureMemoryPreference memoryPreference) {
-        m_capture = Win32FaceAuthenticationCapture.Open(memoryPreference: memoryPreference);
+    protected Win32FaceAuthenticationCameraGraph(string deviceId, ReadOnlySpan<CameraStreamRequest> requests, MediaCaptureMemoryPreference memoryPreference) : base(deviceId: deviceId) {
+        m_capture = Win32FaceAuthenticationCapture.Open(deviceId: deviceId, memoryPreference: memoryPreference);
 
         try {
             m_streams = new TStream[requests.Length];
@@ -132,7 +132,7 @@ internal sealed class Win32FaceAuthenticationPixelGraph : Win32FaceAuthenticatio
     private byte[] m_colorScratch = [];
     private byte[] m_infraredScratch = [];
 
-    public Win32FaceAuthenticationPixelGraph(ReadOnlySpan<CameraStreamRequest> requests) : base(memoryPreference: MediaCaptureMemoryPreference.Cpu, requests: requests) {
+    public Win32FaceAuthenticationPixelGraph(string deviceId, ReadOnlySpan<CameraStreamRequest> requests) : base(deviceId: deviceId, memoryPreference: MediaCaptureMemoryPreference.Cpu, requests: requests) {
         try {
             Start(threadName: "camera-dual-poll");
         } catch {
@@ -270,7 +270,7 @@ internal sealed class Win32FaceAuthenticationSharedGraph : Win32FaceAuthenticati
     private Win32D3D11CameraFrameConverter? m_colorConverter;
     private Win32D3D11CameraFrameConverter? m_infraredConverter;
 
-    public Win32FaceAuthenticationSharedGraph(long adapterLuid, ReadOnlySpan<CameraStreamRequest> requests) : base(memoryPreference: MediaCaptureMemoryPreference.Auto, requests: requests) {
+    public Win32FaceAuthenticationSharedGraph(long adapterLuid, string deviceId, ReadOnlySpan<CameraStreamRequest> requests) : base(deviceId: deviceId, memoryPreference: MediaCaptureMemoryPreference.Auto, requests: requests) {
         m_adapterLuid = adapterLuid;
         Start(threadName: "camera-dual-gpu-poll");
         Console.Out.WriteLine(value: $"[camera] dual GPU negotiation: color {Color.Description} + infrared {Infrared.Description}, native Direct3D surfaces on adapter 0x{adapterLuid:X16}.");

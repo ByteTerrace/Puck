@@ -73,10 +73,16 @@ public abstract record WorldScreenSource {
     /// after both native streams prove live. A legacy provider available only to the Windows biometric broker is not a
     /// public dual-camera graph. An absent infrared source faults the bind loudly (the slot shows the no-signal card).
     /// </param>
+    /// <param name="Seat">The 1-based local seat this row names — a camera is an input device seated like a pad, never
+    /// hardware named directly. <see langword="null"/> means the enclosing seat scope (an identity's HUD panel, a
+    /// seat-scoped probe socket) or seat 1 at world scope — the same explicit-index convention
+    /// <c>$channel:&lt;seat&gt;</c> and axis bindings already use. Validated within <c>1..population.localSeats</c>
+    /// when present. Omitted from the wire when null.</param>
     public sealed record Camera(
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldFeedProfile? Profile = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCameraControls? Controls = null,
-        WorldCameraSensor Sensor = WorldCameraSensor.Color) : WorldFrameSource;
+        WorldCameraSensor Sensor = WorldCameraSensor.Color,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Seat = null) : WorldFrameSource;
     /// <summary>A named view from the presentation view stack, such as a monitor showing another camera's output.</summary>
     /// <param name="CameraName">The registered view name this slot samples.</param>
     public sealed record View(string CameraName) : WorldFrameSource;

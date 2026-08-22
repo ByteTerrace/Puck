@@ -15,15 +15,18 @@ internal sealed partial class WorldScreenBinder {
 
     /// <summary>Declares that a <see cref="WorldFrameSource"/> is consumed outside any declared <c>screens</c> row (a
     /// HUD/overlay <c>Frame</c> element) and opens its feed through the same shared machinery a screen row would —
-    /// idempotent, safe to call at boot or on every definition/identity revision. A camera sensor no screen names is
-    /// still one shared feed with any screen that later does (<see cref="EnsureCameraFeed"/> is itself idempotent per
-    /// sensor); a view camera renders every <see cref="ViewStack"/> refresh with no wired screen narrowing its
-    /// round-robin turn (<see cref="RegisterCameraView"/>'s default <c>isLive</c> is always-true); a probe reads
-    /// whatever its own kernel publishes; a capture opens through <see cref="TryCreateCaptureFeed"/>, the same ladder
-    /// a declared screen's capture source uses.</summary>
+    /// idempotent, safe to call at boot or on every definition/identity revision. A camera source names a seat, never
+    /// hardware: <paramref name="seat"/> is the enclosing seat scope's fallback, used only when the source's own
+    /// <c>Seat</c> is absent (<see cref="DeclareCameraDemand"/> is itself idempotent per (seat, sensor)); a view
+    /// camera renders every <see cref="ViewStack"/> refresh with no wired screen narrowing its round-robin turn
+    /// (<see cref="RegisterCameraView"/>'s default <c>isLive</c> is always-true); a probe reads whatever its own
+    /// kernel publishes; a capture opens through <see cref="TryCreateCaptureFeed"/>, the same ladder a declared
+    /// screen's capture source uses.</summary>
     /// <param name="source">The frame source a HUD element (or any other non-screen consumer) names.</param>
+    /// <param name="seat">The 1-based enclosing seat scope a camera source with no authored <c>Seat</c> resolves
+    /// against.</param>
     /// <exception cref="ArgumentNullException"><paramref name="source"/> is <see langword="null"/>.</exception>
-    public void DeclareFrameSource(WorldFrameSource source) {
+    public void DeclareFrameSource(WorldFrameSource source, int seat) {
         ArgumentNullException.ThrowIfNull(argument: source);
 
         if (m_disposed) {
@@ -32,10 +35,13 @@ internal sealed partial class WorldScreenBinder {
 
         switch (source) {
             case WorldScreenSource.Camera camera:
-                _ = EnsureCameraFeed(
-                    profile: (camera.Profile ?? WorldFeedProfile.Default),
-                    sensor: camera.Sensor
-                );
+                if (m_cameraCapture.IsSupported) {
+                    DeclareCameraDemand(
+                        seat: (camera.Seat ?? seat),
+                        sensor: camera.Sensor,
+                        profile: camera.Profile
+                    );
+                }
 
                 break;
             case WorldScreenSource.View view:
@@ -61,19 +67,21 @@ internal sealed partial class WorldScreenBinder {
     }
     /// <summary>Acquires the current frame for a previously-declared <see cref="WorldFrameSource"/> — the render-thread,
     /// per-frame counterpart of <see cref="DeclareFrameSource"/>. Reads the same shared feed a screen slot naming the
-    /// identical source would (a camera sensor, a named view, a probe id, or a standalone capture), so a HUD frame and
-    /// a diegetic screen filming the same source see the same image.</summary>
+    /// identical source would (a camera seat/sensor, a named view, a probe id, or a standalone capture), so a HUD
+    /// frame and a diegetic screen filming the same source see the same image.</summary>
     /// <param name="source">The frame source to sample.</param>
+    /// <param name="seat">The 1-based enclosing seat scope a camera source with no authored <c>Seat</c> resolves
+    /// against.</param>
     /// <param name="frame">The acquired frame, set only when this returns <see langword="true"/>.</param>
     /// <returns><see langword="true"/> when the source is live this frame.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="source"/> is <see langword="null"/>.</exception>
-    public bool TryAcquireFrame(WorldFrameSource source, out SdfScreenSourceFrame frame) {
+    public bool TryAcquireFrame(WorldFrameSource source, int seat, out SdfScreenSourceFrame frame) {
         ArgumentNullException.ThrowIfNull(argument: source);
 
         switch (source) {
             case WorldScreenSource.Camera camera:
-                if (m_cameraFeeds.TryGetValue(key: camera.Sensor, value: out var cameraFeed)) {
-                    frame = cameraFeed.AcquireFrame();
+                if (TryResolveCamera(seat: (camera.Seat ?? seat), sensor: camera.Sensor, device: out _, feed: out var cameraFeed, fault: out _)) {
+                    frame = cameraFeed!.AcquireFrame();
 
                     return (0 != frame.ImageViewHandle);
                 }

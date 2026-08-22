@@ -406,6 +406,25 @@ diegetic console, an authored QR code, a remote-session projection, or
 decal-rendered reading text), and a **route** (whether a player may engage it,
 and within what radius).
 
+**A physical camera is an input device, seated like a gamepad, never named by
+hardware.** Each enumerated device gets a reconnect-stable `InputDeviceId`
+(`InputDeviceId.FromKey` over the platform's device id) and a roster token
+(`camera<N>` by first-seen order, beside `keyboard1`/`gamepad<N>`) —
+`world.devices` lists every device and the seat it drives; `player.assign
+camera<N> <slot>` moves one between seats exactly like a gamepad. A newly seen
+camera attaches to the lowest occupied, camera-less slot by default (seat 1
+first); it never creates a seat. A `camera` frame source (a `screens` row, a
+probe socket, a HUD `Frame` element) names a **seat**, never a device: `{
+"$type": "camera", "sensor": "Color", "seat": 2 }`; `seat` absent means the
+enclosing seat scope (an identity's own HUD panel, a seat-scoped probe socket)
+or seat 1 at world scope. `WorldScreenBinder` resolves `(seat, sensor)` to a
+live feed every frame (`roster.TryGetSeatDevice` → the device → its sensor's
+feed), enumerating attached devices (and retiring vanished ones) roughly every
+two seconds; a seat with no camera, or whose camera lacks the requested
+sensor, reports that fault through `screen.state`/`screen.camera` rather than
+refusing the bind — reassigning a camera moves every consumer to the new
+device with no reopen, on the next produced frame.
+
 **A booted MACHINE is authoritative server state, not presentation-fed**
 (owner ruling, 2026-08-03). `Puck.World.Server.WorldMachineHost` owns
 boot/step/cable-link/reconfigure/memory-peek for every declared screen's
@@ -454,19 +473,21 @@ half the frames arrive ambient and only the illuminated half ever publishes
 (a Surface declares 60 fps IR, so 30 lit frames reach the feed); a device
 that cannot stream the public pair keeps the first-bound sensor and faults the
 other by name, and an absent IR source faults that feed loudly)
-and may author `controls` (one physical camera has one state across its color
-and IR streams, so the first controls-bearing camera row wins regardless of
-sensor; the standard
+and may author `controls` (one physical camera device has one state across its
+color and IR streams, so the first controls-bearing camera row authored for a
+given SEAT wins regardless of sensor — two seats' cameras carry independent
+states; the standard
 UVC pan/tilt/zoom/exposure/focus/color surface plus the vendor-extension
 `fieldOfView` in degrees and raw `vendor` selector/value rows,
 `WorldCameraControls`): the values land on the physical device once its
 stream is live (vendor-extension writes are firmware-ignored on an idle
 filter), an `UpsertScreen` mutation (`world.row.set screens …`) moves the
-device live through the ordered domain, and `screen.camera` reads each
-sensor's section — negotiated extent, native transport subtype/rate,
-coordinated capture mode, device range, mode, current value, the shared
-authored value, and raw vendor read-backs — over the pipe (the device stays
-authoritative: values clamp to its reported envelope, members never authored
+device live through the ordered domain, and `screen.camera` lists every known
+device (token, name, sensors, tier, and the seat it drives) with each live
+sensor's own section — negotiated extent, native transport subtype/rate,
+coordinated capture mode, device range, mode, current value, the resolved
+seat's authored value, and raw vendor read-backs — over the pipe (the device
+stays authoritative: values clamp to its reported envelope, members never authored
 leave driver defaults untouched, and removing an applied member restores its
 default). A QR is the one source with no
 per-frame cost at all: `QrEncoder` (in `Puck.World.Schema`) resolves the module
@@ -515,23 +536,29 @@ concurrently being re-rendered.
 A HUD `Frame` element (`WorldHudElementKind.Frame`) shows a live frame inside
 the banded overlay — the same four-arm `WorldFrameSource` vocabulary a screen
 samples (`camera`, `view`, `probe`, `capture`), never a pipeline of its own.
-`WorldScreenBinder.DeclareFrameSource`/`TryAcquireFrame` are the registry
-every non-screen consumer of a `WorldFrameSource` shares: the former opens the
-named source's feed the first time anything asks for it (idempotent — a
-camera sensor no `screens` row names still opens through `EnsureCameraFeed`, a
-view renders every `ViewStack` refresh with no wired screen narrowing its
-round-robin turn, a probe reads whatever its own kernel publishes, a capture
-opens through the same ladder a declared screen's capture source uses); the
-latter reads the current frame, render-thread-side, once per produced frame.
-`WorldOverlayFrameSources` (`Puck.Overlays.IOverlayFrameSources`) is the
-integer-keyed adapter the compositor addresses: `WorldHudFeed.BuildElements`
+`WorldScreenBinder.DeclareFrameSource`/`TryAcquireFrame` take an explicit
+enclosing SEAT (the owning identity panel's slot for a player-scope panel,
+or seat 1 for a world-scope one) alongside the source, since a bare `camera`
+source (no authored `seat`) means "this panel's own seat" — the seat argument
+is what resolves that, not a value baked into the source record. They are the
+registry every non-screen consumer of a `WorldFrameSource` shares: the former
+records the (seat, sensor) demand the first time anything asks for it
+(idempotent — a camera seat/sensor no `screens` row names still opens through
+`DeclareCameraDemand`, a view renders every `ViewStack` refresh with no wired
+screen narrowing its round-robin turn, a probe reads whatever its own kernel
+publishes, a capture opens through the same ladder a declared screen's capture
+source uses); the latter reads the current frame, render-thread-side, once per
+produced frame. `WorldOverlayFrameSources` (`Puck.Overlays.IOverlayFrameSources`)
+is the integer-keyed adapter the compositor addresses: `WorldHudFeed.BuildElements`
 resolves a `Frame` element's `Source` to a key on the structure rebuild (world
-panels and a joined seat's own panel alike), and the compositor calls
-`TryAcquire` each produced frame to bind the element's overlay slot. Two
-elements naming an identical source (record equality) share one key, one
-feed, and one slot. `standard.world.json`'s `hud.panels` ships one such
-panel — a mirrored, rounded picture-in-picture of the color camera —
-inherited by every world naming it as `basis`.
+panels at seat 1, a joined seat's own panel at its own seat), and the
+compositor calls `TryAcquire` each produced frame to bind the element's
+overlay slot. Two elements naming an identical (source, seat) pair share one
+key, one feed, and one slot — keying on the pair, not the source alone, is
+what keeps two seats' otherwise-identical bare camera panels (both authoring
+no `seat`) from collapsing onto the same feed. `standard.world.json`'s
+`hud.panels` ships one such panel — a mirrored, rounded picture-in-picture of
+the color camera — inherited by every world naming it as `basis`.
 
 ## Native capture
 
@@ -569,8 +596,11 @@ camera control surface. A socket's class is `frame` (any one frame source) or
 before it — bound only to a `camera` source with sensor Infrared); an
 `optional` socket may be left unbound (a null input to the kernel). A socket
 source is the same four-arm `WorldFrameSource` vocabulary a screen samples:
-`camera` (a declared sensor), `view` (a named `cameras[]` row's offscreen
-render, exported as a kernel-readable ring), `probe` (another declared probe's
+`camera` (a declared sensor and seat — `seat` absent means the enclosing
+instance's own seat, the same convention a `screens` row and a HUD `Frame`
+element follow), `view` (a
+named `cameras[]` row's offscreen render, exported as a kernel-readable ring),
+`probe` (another declared probe's
 own texture output, read back as a ring), or `capture` (not yet hosted as a
 kernel input — a bound socket idles with that fault). The kind's `trigger`
 socket must bind a `camera` source: kernels run on that sensor's own camera
@@ -588,33 +618,61 @@ socket against the binder's live state and (re)attaching the kernel to the
 trigger sensor's open graph whenever any socket's generation — or the output
 ring's — changes; a socket whose source is not ready yet (an unpublished ring,
 an unopened camera) idles the whole probe with that fault and retries every
-frame until it resolves. Every camera sensor a kind reads must be declared by
-some camera screen, since that is what opens the feed. A probe is not a device and
-never occupies a seat: an axis binding addresses its authored seat's lane
-directly (`InputSignal.Slot`), its `probe:<seat>` device id is only the
+frame until it resolves. A camera socket resolves its own (seat, sensor) demand
+lazily, the same way a HUD `Frame` element does — no `screens` row need ever
+name the sensor for a probe to read it. A probe is not a device and
+never occupies a seat: an axis binding addresses its own instance's seat's
+lane directly (`InputSignal.Slot`), its `probe:<seat>` device id is only the
 router's held-state key, it never counts as player activity, and it loses its
-carried sample whenever the terminal takes focus, exactly as a pad does. Shipped kinds are
+carried sample whenever the terminal takes focus, exactly as a gamepad does.
+
+A row is seat-relative when at least one of its camera sockets carries no
+`seat` of its own — it is then instanced once per occupied local seat, each
+instance carrying its own reading ring, kernel run, packed constants, and
+bindings, and resolving its seat-less sockets against its own seat, exactly
+the way the identity HUD panel is already instanced per seat. A row whose
+camera sockets every one name a seat (or that has no camera sockets, or plays
+back a recorded track) stays a single instance for the whole boot, exactly as
+before seat-relative instancing existed. Instances follow the roster's
+occupancy: a seat joining creates its row's instances on the next serviced
+frame, a seat leaving retires them (ending the run, releasing the output ring,
+and releasing every binding's held router state) with no reboot. An axis
+binding declared on a seat-relative row may not author its own `seat` (refused
+at document load — it always takes its instance's); one declared on a
+single-instance row still authors `seat` as before (absent defaults to seat
+1). A `probe`-target parameter binding or a `probe` socket naming a
+seat-relative probe resolves to the enclosing instance's own seat's target
+instance, or the single instance when the target is not seat-relative.
+Shipped kinds are
 the lit-frame blob centroid `ir-blob` (bright-mass centroid/coverage/mean
 luminance of the above-threshold pixels over the FaceAuth infrared stream)
 and `faerie` (relights the color frame from a light orbiting an authored
 anchor, with the infrared strobe pair's lit-minus-unlit response as the
 height field; see `src/Puck.Shaders/README.md`) — GPU-tier only today.
 
-`probe.status` echoes every probe's run state (or fault), tier, rate,
-cycles/drops, latest capture age, channel values and confidence, and every
-binding's conditioned value and write count — a query, always echoing even
-under `wire.ack quiet`. `probe.record <probe> <path> <seconds>` arms a live
-recording of one probe's fresh readings to a `puck.probe-track.v1`
-document, sampled once per host frame (an probe faster than the host frame
-rate records its latest reading per frame); each sample carries its own
-capture time, and playback follows those times, so completion narrates on
-stderr with the sample count and the recorded cadence replays as recorded. The
-recorded document plugs into a track-input probe in place of a live device
-— the hardware-free proof leg every probe admits. `probe.set <probe> <field>
-<value>` patches one float config field of a declared probe's kind live —
-the same constants write a `probe`-target parameter binding performs, bound
-only by the field's own declared range; a parameter binding targeting the
-same field overwrites a `probe.set` write on its own next changed reading.
+`probe.status` echoes every live instance's run state (or fault), tier, rate,
+cycles/drops, latest capture age, channel values and confidence, every
+binding's conditioned value and write count, and (for a camera socket) the
+resolved device token (`camera<N>`, or `seat<N>-unassigned` when the socket's
+seat carries no camera) — a query, always echoing even under `wire.ack quiet`.
+A seat-relative row's instance is listed as `<id>@<seat>`; a single-instance
+row's is listed by its bare `<id>`. `probe.record <probe>[@<seat>] <path>
+<seconds>` arms a live recording of one instance's fresh readings to a
+`puck.probe-track.v1` document, sampled once per host frame (an instance
+faster than the host frame rate records its latest reading per frame); each
+sample carries its own capture time, and playback follows those times, so
+completion narrates on stderr with the sample count and the recorded cadence
+replays as recorded. The `@<seat>` suffix is required to name one instance of
+a seat-relative row (omitting it is refused as ambiguous, naming the live
+instances) and optional on a single-instance row. The recorded document plugs
+into a track-input probe in place of a live device — the hardware-free proof
+leg every probe admits. `probe.set <probe>[@<seat>] <field> <value>` patches
+one float config field of a declared probe's kind live — the same constants
+write a `probe`-target parameter binding performs, bound only by the field's
+own declared range; a parameter binding targeting the same field overwrites a
+`probe.set` write on its own next changed reading. With no `@<seat>` suffix a
+single-instance row's one instance is written and a seat-relative row's every
+live instance is written; with a suffix, only that one instance.
 
 `Assets/worlds/brio-probe.world.json` (basis `brio-dual.world.json`) is the
 end-to-end vertical: the `ir-blob` probe over the BRIO's infrared stream,
@@ -666,6 +724,18 @@ hardware-free leg, runnable headless on a machine with no camera:
 
 ```
 dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/brio-probe-track.world.json --headless --exit-after-seconds 6
+```
+
+`Assets/worlds/brio-seats.world.json` (basis `brio-probe.world.json`) declares
+two local seats to exercise seat-relative instancing directly: run it
+windowed, join a second, console-only seat (`player.join 2`), and
+`probe.status` shows two instances, `head@1` (the machine's own BRIO,
+default-seated at boot) running and `head@2` idle with a no-camera-assigned
+fault — a second local seat with no camera of its own, never a crash or a
+silently-shared reading:
+
+```
+dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/brio-seats.world.json --exit-after-seconds 16
 ```
 
 ## Graphics options

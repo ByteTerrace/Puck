@@ -38,7 +38,30 @@ public sealed class CameraAuthoringValidationLawTests {
         Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "camera.sensor");
     }
 
-    private static WorldDefinition WithCamera(WorldCameraSensor sensor, IReadOnlyList<WorldCameraVendorControl>? vendor) {
+    // The fixture document declares 4 local seats (Fixtures.BuildDocument's four seat spawns), so seat 5 is the first
+    // out-of-range ordinal and seat 4 is the last in-range one.
+    [Fact]
+    public void AnOutOfRangeSeatRefusesWhileTheCeilingSeatPasses() {
+        Laws.RefusalWithControl(
+            lawId: "camera.seat-out-of-range",
+            deniedOutcome: () => WorldDefinitionValidator.TryValidateLocally(
+                definition: WithCamera(sensor: WorldCameraSensor.Color, vendor: null, seat: 5),
+                reason: out _
+            ),
+            controlOutcome: () => WorldDefinitionValidator.TryValidateLocally(
+                definition: WithCamera(sensor: WorldCameraSensor.Color, vendor: null, seat: 4),
+                reason: out _
+            ));
+    }
+    [Fact]
+    public void AZeroSeatRefuses() {
+        var definition = WithCamera(sensor: WorldCameraSensor.Color, vendor: null, seat: 0);
+
+        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: definition, reason: out var reason));
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "camera.seat");
+    }
+
+    private static WorldDefinition WithCamera(WorldCameraSensor sensor, IReadOnlyList<WorldCameraVendorControl>? vendor, int? seat = null) {
         var definition = Fixtures.BuildDocument();
         var screen = definition.Screens[0];
 
@@ -47,7 +70,8 @@ public sealed class CameraAuthoringValidationLawTests {
                 Source = new WorldScreenSource.Camera(
                     Profile: WorldFeedProfile.Default,
                     Controls: new WorldCameraControls(Vendor: vendor),
-                    Sensor: sensor
+                    Sensor: sensor,
+                    Seat: seat
                 ),
             }],
         };

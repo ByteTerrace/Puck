@@ -91,18 +91,37 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
+            var isSeatRelative = IsSeatRelativeProbe(probe: probe);
+
             for (var bindingIndex = 0; (bindingIndex < bindings.Count); bindingIndex++) {
                 ValidateProbeBinding(
                     axisSources: axisSources,
                     binding: bindings[bindingIndex],
                     definition: definition,
                     errors: errors,
+                    isSeatRelative: isSeatRelative,
                     localSeats: localSeats,
                     path: $"{path}.bindings[{bindingIndex}]",
                     probeId: probe.Id
                 );
             }
         }
+    }
+    // A probe row is seat-relative — instanced once per occupied local seat rather than once for the whole world —
+    // exactly when at least one of its declared camera sockets carries no `seat` of its own (the socket then
+    // resolves against its own instance's seat). A track-input row (no camera sockets at all) is never seat-relative.
+    private static bool IsSeatRelativeProbe(WorldProbe probe) {
+        if (probe.Inputs is not { } inputs) {
+            return false;
+        }
+
+        foreach (var (_, source) in inputs) {
+            if ((source is WorldScreenSource.Camera camera) && (camera.Seat is null)) {
+                return true;
+            }
+        }
+
+        return false;
     }
     // Exactly one of inputs/track: the live-hardware leg (named sockets, each a shared WorldFrameSource — the same
     // vocabulary and gate a screen row's frame arms use, ValidateFrameSource) or the recorded-track leg (one
@@ -173,7 +192,7 @@ public static partial class WorldDefinitionValidator {
 
         return false;
     }
-    private static void ValidateProbeBinding(WorldDefinition definition, WorldProbeBinding? binding, HashSet<string> axisSources, int localSeats, List<string> errors, string path, string? probeId) {
+    private static void ValidateProbeBinding(WorldDefinition definition, WorldProbeBinding? binding, HashSet<string> axisSources, bool isSeatRelative, int localSeats, List<string> errors, string path, string? probeId) {
         if (binding is null) {
             errors.Add(item: $"{path} is required.");
 
@@ -197,6 +216,7 @@ public static partial class WorldDefinitionValidator {
                     axis: axis,
                     axisSources: axisSources,
                     errors: errors,
+                    isSeatRelative: isSeatRelative,
                     localSeats: localSeats,
                     path: path
                 );
@@ -226,7 +246,7 @@ public static partial class WorldDefinitionValidator {
                 break;
         }
     }
-    private static void ValidateProbeAxisBinding(WorldProbeBinding.Axis axis, HashSet<string> axisSources, int localSeats, List<string> errors, string path) {
+    private static void ValidateProbeAxisBinding(WorldProbeBinding.Axis axis, HashSet<string> axisSources, bool isSeatRelative, int localSeats, List<string> errors, string path) {
         if (
             !IsKebabCase(value: axis.Source) ||
             (axis.Source.Length > 64)
@@ -290,11 +310,15 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path}.maxAgeSeconds {axis.MaxAgeSeconds} must be finite and positive.");
         }
 
-        if (
-            (axis.Seat < 1) ||
-            (axis.Seat > localSeats)
+        if (isSeatRelative) {
+            if (axis.Seat is not null) {
+                errors.Add(item: $"{path}.seat is authored on a seat-relative probe's axis binding; a seat-relative probe's axis bindings take the instance's seat.");
+            }
+        } else if (
+            (axis.Seat is { } seat) &&
+            ((seat < 1) || (seat > localSeats))
         ) {
-            errors.Add(item: $"{path}.seat {axis.Seat} is outside 1..{localSeats} for the authored local seat count.");
+            errors.Add(item: $"{path}.seat {seat} is outside 1..{localSeats} for the authored local seat count.");
         }
     }
     private static void ValidateProbeParameterBinding(WorldDefinition definition, WorldProbeBinding.Parameter parameter, List<string> errors, string path, string? probeId) {

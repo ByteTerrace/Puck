@@ -1,6 +1,7 @@
 using System.Numerics;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Machines;
+using Puck.Commands;
 using Puck.DirectX;
 using Puck.DirectX.Interop;
 using Puck.Platform;
@@ -96,16 +97,27 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     private DirectXGpuSurfaceExportFactory? m_cameraExport;
     private DirectXDeviceContext? m_cameraTargetDevice;
 
-    // The one physical camera and its per-sensor feeds: every screen naming a sensor shares that sensor's feed, and
-    // every feed shares the device's one graph (CameraDevice). A sensor the platform cannot open at all records its
-    // fault in m_cameraFaults and gets no feed.
-    private readonly CameraDevice m_camera = new();
-    private readonly Dictionary<WorldCameraSensor, CameraFeed> m_cameraFeeds = new();
-    private readonly Dictionary<WorldCameraSensor, string> m_cameraFaults = new();
-    // The authored control state for the physical device (the first camera row authoring controls wins, per
-    // ResolveSharedCameraControls) — resolved at boot and re-resolved by ReconcileScreens, so an UpsertScreen mutation
-    // moves the device live through the per-frame service path.
-    private WorldCameraControls? m_cameraControls;
+    // The player roster — resolves a seat to its bound camera device (TryGetSeatDevice) and mints the camera<N>
+    // tokens screen.camera/probe.status echo. A camera is an input device seated like a gamepad; this binder never
+    // opens hardware by device identity, only by (seat, sensor).
+    private readonly PlayerRoster m_roster;
+    // Every physical camera device seen since boot, by its reconnect-stable InputDeviceId, plus a stable first-seen
+    // order for DescribeCamera. A device vanishing (unplugged) drops out of both; a later reconnect (the SAME
+    // content-addressed id) re-enumerates fresh.
+    private readonly Dictionary<InputDeviceId, CameraDevice> m_cameraDevices = new();
+    private readonly List<CameraDevice> m_cameraDeviceOrder = new();
+    // One feed per (device, sensor) a consumer has resolved — shared by every screen/probe/HUD source landing on the
+    // same device and sensor.
+    private readonly Dictionary<(InputDeviceId Device, WorldCameraSensor Sensor), CameraFeed> m_cameraFeeds = new();
+    // The recorded (seat, sensor) demand from DeclareCameraDemand — the richest profile any declarer asked for —
+    // fulfilled against the roster's current seating every publish (FulfillCameraDemand) and, best-effort, at the
+    // moment it is declared.
+    private readonly Dictionary<(int Seat, WorldCameraSensor Sensor), WorldFeedProfile> m_cameraDemand = new();
+    // The authored control state per seat (the first camera row authoring controls for a given seat wins, per
+    // ResolveSeatCameraControls) — resolved at boot and re-resolved by ReconcileScreens, so an UpsertScreen mutation
+    // moves the seat's device live through the per-frame service path.
+    private Dictionary<int, WorldCameraControls?> m_seatCameraControls = new();
+    private long m_nextCameraDeviceScanTimestamp;
     // The world's placeable-camera rows — booted from the definition and REPLACED by ReconcileCameras when a camera
     // mutation delivers, so a runtime screen.source <index> view (and every later resolve) reads the LIVE rows.
     private IReadOnlyList<WorldCamera> m_cameras;
@@ -174,8 +186,9 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     /// both hosts; this flag only picks how its shared targets are allocated and sampled.</param>
     /// <param name="instanceHost">The process's running world instances — a session-sourced face's resolved
     /// destination instance is found or started here.</param>
+    /// <param name="roster">The player roster — resolves a seat to its bound camera device.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldScreenBinder(IReadOnlyList<WorldScreen> screens, WorldMachineHost machines, ICameraCaptureService cameraCapture, INativeImageCaptureService windowCapture, IGpuSurfaceTransferFactory? surfaceTransfers, IReadOnlyList<WorldCamera> cameras, ISdfAnchorSource anchors, WorldStampPool stamps, bool hostsOnDirectX, WorldInstanceHost instanceHost) {
+    public WorldScreenBinder(IReadOnlyList<WorldScreen> screens, WorldMachineHost machines, ICameraCaptureService cameraCapture, INativeImageCaptureService windowCapture, IGpuSurfaceTransferFactory? surfaceTransfers, IReadOnlyList<WorldCamera> cameras, ISdfAnchorSource anchors, WorldStampPool stamps, bool hostsOnDirectX, WorldInstanceHost instanceHost, PlayerRoster roster) {
         ArgumentNullException.ThrowIfNull(argument: screens);
         ArgumentNullException.ThrowIfNull(argument: machines);
         ArgumentNullException.ThrowIfNull(argument: cameraCapture);
@@ -184,6 +197,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         ArgumentNullException.ThrowIfNull(argument: anchors);
         ArgumentNullException.ThrowIfNull(argument: stamps);
         ArgumentNullException.ThrowIfNull(argument: instanceHost);
+        ArgumentNullException.ThrowIfNull(argument: roster);
 
         m_machines = machines;
         m_cameraCapture = cameraCapture;
@@ -194,6 +208,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         m_stamps = stamps;
         m_hostsOnDirectX = hostsOnDirectX;
         m_instanceHost = instanceHost;
+        m_roster = roster;
         // Windows-10240 guarded because DirectXGpuSurfaceExportFactory is platform-attributed; hostsOnDirectX already
         // implies that floor (Program.cs rejects the D3D12 backend below it), so the check only satisfies the analyzer.
         m_surfaceExport = ((hostsOnDirectX && OperatingSystem.IsWindowsVersionAtLeast(
@@ -204,12 +219,12 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
             ? new DirectXGpuSurfaceExportFactory()
             : null
         );
-        m_cameraControls = ResolveSharedCameraControls(screens: screens);
+        m_seatCameraControls = ResolveSeatCameraControls(screens: screens);
 
         foreach (var screen in screens) {
             _ = m_bootScreenIndices.Add(item: screen.Index);
 
-            var slot = new ScreenSlot { DeclaredSource = screen.Source, Index = screen.Index, Machines = m_machines };
+            var slot = new ScreenSlot { Binder = this, DeclaredSource = screen.Source, Index = screen.Index, Machines = m_machines };
 
             switch (screen.Source) {
                 case WorldScreenSource.TestPattern pattern:
@@ -227,19 +242,22 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
                     // do here; Handle()/Light() below read the host directly for a machine-owning index.
                     break;
                 case WorldScreenSource.Camera cameraSource:
-                    // The declared webcam: bind the row's SENSOR's shared feed. Color and infrared may be two sensors
-                    // on one physical camera, so the platform opens them as one coordinated graph when both are
-                    // declared. On the GPU transport it stays pending until the render adapter resolves at first
-                    // publish. An absent device leaves the slot unbound with a visible sensor-specific fault.
-                    if (EnsureCameraFeed(
-                        profile: ResolveSharedCameraProfile(screens: screens, sensor: cameraSource.Sensor),
-                        sensor: cameraSource.Sensor
-                    ) is { } cameraFeed) {
-                        slot.Camera = cameraFeed;
+                    // The declared webcam: bind the seat's sensor demand. Color and infrared may be two sensors on
+                    // one physical camera, so the platform opens them as one coordinated graph when both are
+                    // declared for the same seat. Resolution is per-frame (the seat's device may not be enumerated
+                    // yet at boot) — an unassigned seat or an incompatible sensor reports through the slot's live
+                    // fault (CurrentFault) rather than a fault recorded here.
+                    if (!m_cameraCapture.IsSupported) {
+                        slot.DeclaredFault = "no camera device present";
                     } else {
-                        slot.DeclaredFault = m_cameraFaults.GetValueOrDefault(
-                            key: cameraSource.Sensor,
-                            defaultValue: "no camera device present"
+                        var cameraSeat = (cameraSource.Seat ?? 1);
+
+                        slot.CameraSeat = cameraSeat;
+                        slot.CameraSensorKind = cameraSource.Sensor;
+                        DeclareCameraDemand(
+                            seat: cameraSeat,
+                            sensor: cameraSource.Sensor,
+                            profile: ResolveCameraProfile(screens: screens, seat: cameraSeat, sensor: cameraSource.Sensor)
                         );
                     }
 
@@ -360,7 +378,8 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
             : (Ok: true, Message: $"screen {index} machine (host-owned)")),
             WorldScreenSource.Camera cameraSource => TryCamera(
             index: index,
-            sensor: cameraSource.Sensor
+            sensor: cameraSource.Sensor,
+            seat: (cameraSource.Seat ?? 1)
         ),
             WorldScreenSource.Capture { MonitorIndex: { } monitorIndex } => TryDesktop(
             index: index,
@@ -696,7 +715,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
                 // Equals check below never short-circuits a fresh slot. Never write a new delegate into
                 // m_sources/m_lights here (see m_sourceCells' own remarks) — re-point the boot-time cell's Slot
                 // field instead, which the renderer's already-copied delegate reads through immediately.
-                slot = new ScreenSlot { DeclaredSource = null, Index = screen.Index, Machines = m_machines };
+                slot = new ScreenSlot { Binder = this, DeclaredSource = null, Index = screen.Index, Machines = m_machines };
                 m_slots[screen.Index] = slot;
 
                 if (m_sourceCells.TryGetValue(
@@ -734,7 +753,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
 
         // One physical camera has one authored control state. Re-resolve it from the mutated list; the per-frame service
         // path lands it on the device at the next live frame (vendor writes are firmware-ignored on an idle stream).
-        m_cameraControls = ResolveSharedCameraControls(screens: screens);
+        m_seatCameraControls = ResolveSeatCameraControls(screens: screens);
     }
     /// <summary>Clears a screen's live local producer — the runtime <c>screen.eject</c> path — for either kind this
     /// binder itself owns (the webcam, a window capture). Ejecting a machine is <c>ScreenCommandModule</c>'s
@@ -784,7 +803,11 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     // (Server.WorldMachineHost owns it); Handle()/Light() check Machines first. A mutable class so the producer
     // references flip in place with no engine rebuild.
     private sealed class ScreenSlot {
-        public CameraFeed? Camera { get; set; }
+        // The bound (seat, sensor) demand — the slot's camera resolves through Binder every frame rather than
+        // caching a CameraFeed directly, since the seat's device (and even the seat itself) can change live with no
+        // notification to this slot (see WorldScreenBinder.TryResolveCamera).
+        public int? CameraSeat { get; set; }
+        public WorldCameraSensor? CameraSensorKind { get; set; }
         public CaptureFeed? Capture { get; set; }
         public ProbeFeed? Probe { get; set; }
         // The ctor-time fault (an absent camera, an unopenable window capture, an unknown view camera); a live feed's
@@ -795,8 +818,11 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         public WorldScreenSource? DeclaredSource { get; set; }
         // Whether a live (ejectable) local producer is bound — the webcam, a probe output, or a window capture (a
         // machine is never local state on this slot).
-        public bool HasLive => ((Camera is not null) || (Capture is not null) || (Probe is not null));
+        public bool HasLive => ((CameraSeat is not null) || (Capture is not null) || (Probe is not null));
         public required int Index { get; init; }
+        // The owning binder — resolves this slot's (CameraSeat, CameraSensorKind) demand to a live frame every call,
+        // since a camera consumer's binding names a SEAT, never a device.
+        public required WorldScreenBinder Binder { get; init; }
         // The authoritative screen-machine host — consulted FIRST by Handle()/Light()/CurrentFault() for this slot's
         // index, before any locally-owned producer.
         public required WorldMachineHost Machines { get; init; }
@@ -815,7 +841,8 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         // shared webcam feed is NOT disposed here (other camera screens may still sample it — the binder owns its
         // lifetime); a window capture is per-slot and disposed.
         public void ClearLive() {
-            Camera = null;
+            CameraSeat = null;
+            CameraSensorKind = null;
             Probe = null;
             Capture?.Dispose();
             Capture = null;
@@ -826,8 +853,8 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         // type's own State(int) composer).
         public string? CurrentFault() {
             if (
-                (Camera is { Live: false } camera) &&
-                (camera.Fault is { } cameraFault)
+                (CameraSeat is { } cameraSeat) &&
+                (Binder.CameraFaultFor(seat: cameraSeat, sensor: CameraSensorKind!.Value) is { } cameraFault)
             ) {
                 return cameraFault;
             }
@@ -858,7 +885,8 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
             ReleaseQr();
             Capture?.Dispose();
             Capture = null;
-            Camera = null;
+            CameraSeat = null;
+            CameraSensorKind = null;
             Probe = null;
             View = null;
         }
@@ -867,8 +895,8 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         // Only the shared-camera branch carries a retirement callback; every engine-owned/stable source is handle-only.
         public SdfScreenSourceFrame AcquireFrame() => (Machines.HasMachine(index: Index)
             ? Machines.Handle(index: Index)
-            : ((Camera is { } camera)
-                ? camera.AcquireFrame()
+            : ((CameraSeat is { } cameraSeat)
+                ? Binder.AcquireCameraFrame(seat: cameraSeat, sensor: CameraSensorKind!.Value)
                 : ((Probe is { } probe)
                     ? probe.AcquireFrame()
                     : ((Capture is { } capture)
@@ -885,8 +913,8 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         // an asynchronously-written camera slot.
         public nint Handle() => (Machines.HasMachine(index: Index)
             ? Machines.Handle(index: Index)
-            : ((Camera is { } camera)
-                ? camera.Handle()
+            : ((CameraSeat is { } cameraSeat)
+                ? Binder.CameraHandleFor(seat: cameraSeat, sensor: CameraSensorKind!.Value)
                 : ((Probe is { } probe)
                     ? probe.Handle()
                     : ((Capture is { } capture)
@@ -902,8 +930,8 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         // The current emitted light, in the same precedence as Handle.
         public Vector3 Light() => (Machines.HasMachine(index: Index)
             ? Machines.Light(index: Index)
-            : ((Camera is { } camera)
-                ? camera.Light
+            : ((CameraSeat is { } cameraSeat)
+                ? Binder.CameraLightFor(seat: cameraSeat, sensor: CameraSensorKind!.Value)
                 : ((Probe is { } probe)
                     ? probe.Light
                     : ((Capture is { } capture)

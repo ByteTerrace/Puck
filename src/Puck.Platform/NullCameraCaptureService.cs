@@ -9,13 +9,15 @@ public sealed class NullCameraCaptureService : ICameraCaptureService {
     public bool IsSupported => false;
 
     /// <inheritdoc/>
-    public bool TryOpenPixels(ReadOnlySpan<CameraStreamRequest> streams, [NotNullWhen(true)] out ICameraGraph<ICameraPixelStream>? graph) {
+    public IReadOnlyList<CameraDeviceInfo> EnumerateDevices() => [];
+    /// <inheritdoc/>
+    public bool TryOpenPixels(string deviceId, ReadOnlySpan<CameraStreamRequest> streams, [NotNullWhen(true)] out ICameraGraph<ICameraPixelStream>? graph) {
         graph = null;
 
         return false;
     }
     /// <inheritdoc/>
-    public bool TryOpenShared(long adapterLuid, ReadOnlySpan<CameraStreamRequest> streams, [NotNullWhen(true)] out ICameraGraph<ICameraSharedStream>? graph) {
+    public bool TryOpenShared(long adapterLuid, string deviceId, ReadOnlySpan<CameraStreamRequest> streams, [NotNullWhen(true)] out ICameraGraph<ICameraSharedStream>? graph) {
         graph = null;
 
         return false;

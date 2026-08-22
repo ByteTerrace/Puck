@@ -89,7 +89,11 @@ public abstract record WorldProbeBinding {
     /// <param name="QuantizeBits">The output quantization width, 1..16 bits.</param>
     /// <param name="MaxAgeSeconds">How long a reading stays live before the axis returns to neutral and
     /// confidence to zero. Must be finite and positive.</param>
-    /// <param name="Seat">The 1-based local seat this axis is captured for.</param>
+    /// <param name="Seat">The 1-based local seat this axis is captured for. Forbidden (refused at load) on a
+    /// seat-relative probe — a row instanced once per occupied seat because at least one of its camera sockets
+    /// carries no <c>seat</c> of its own — whose axis bindings always take their own instance's seat; required
+    /// (defaulting to seat 1) on a single-instance probe, exactly as before. <see langword="null"/> is the wire
+    /// default. Omitted from the wire when null.</param>
     public sealed record Axis(
         string Channel,
         string Source,
@@ -98,7 +102,7 @@ public abstract record WorldProbeBinding {
         float Smoothing = 0f,
         int QuantizeBits = 8,
         float MaxAgeSeconds = 0.25f,
-        int Seat = 1
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Seat = null
     ) : WorldProbeBinding;
     /// <summary>Writes a channel into a presentation-float shader-extension config field, lerped over
     /// <paramref name="Range"/>. Presentation-only — the destination never feeds simulation state.</summary>

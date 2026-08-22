@@ -261,7 +261,7 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
         yield return CommandDefinition.Verb(
             bindability: CommandBindability.Unbindable,
             name: "world.devices",
-            description: "Lists every input device seen this session by its stable token (kbd, pad1, pad2, …) in first-seen order and the player it currently drives (p<N> or unassigned). The reassignment verbs — player.assign / player.cycle / player.claim — move a device between players.",
+            description: "Lists every input device seen this session by its stable token (keyboard1, keyboard2, …, mouse1, mouse2, …, gamepad1, gamepad2, …, camera1, camera2, …) in first-seen order, its name when known, and the player it currently drives (p<N> or unassigned; a slot-sharing device's marker * names the seat's resolved device of its own kind). The reassignment verbs — player.assign / player.cycle / player.claim — move a device between players.",
             valueKind: CommandValueKind.Digital,
             handler: _ => new CommandResult(Output: roster.DescribeDevices())
         );

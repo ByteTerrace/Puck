@@ -37,7 +37,9 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
 
     // A Frame element's Source (present only for that kind, enforced at validation) resolves through the process's
     // one WorldOverlayFrameSources — the same key a non-Frame element carries -1 for, meaning "no source to bind".
-    private OverlayHudElement[] BuildElements(IReadOnlyList<WorldHudElement> elements) {
+    // seat is the enclosing seat scope a bare (Seat-less) camera source falls back to: the owning identity panel's
+    // slot+1 for a player-scope panel, or 1 for a world-scope panel.
+    private OverlayHudElement[] BuildElements(IReadOnlyList<WorldHudElement> elements, int seat) {
         var built = new OverlayHudElement[elements.Count];
 
         for (var index = 0; (index < elements.Count); index++) {
@@ -51,7 +53,7 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
                 Binding: element.Binding,
                 Template: BuildTemplate(template: element.Template),
                 FrameSource: ((element.Source is { } source)
-                    ? m_frameSources.KeyFor(source: source)
+                    ? m_frameSources.KeyFor(source: source, seat: seat)
                     : -1
                 ),
                 Fit: ToFit(fit: element.Fit),
@@ -63,20 +65,20 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
 
         return built;
     }
-    private OverlayHudPanel BuildPanel(WorldHudPanel panel) {
+    private OverlayHudPanel BuildPanel(WorldHudPanel panel, int seat) {
         return new OverlayHudPanel(
             Id: panel.Id,
             Rect: ToOverlayRect(rect: panel.Rect),
             Band: ToBand(layer: panel.Layer),
             Style: ToStyle(style: panel.Style),
-            Elements: BuildElements(elements: panel.Elements)
+            Elements: BuildElements(elements: panel.Elements, seat: seat)
         );
     }
     private OverlayHudPanel[] BuildPanels(IReadOnlyList<WorldHudPanel> panels) {
         var built = new OverlayHudPanel[panels.Count];
 
         for (var index = 0; (index < panels.Count); index++) {
-            built[index] = BuildPanel(panel: panels[index]);
+            built[index] = BuildPanel(panel: panels[index], seat: 1);
         }
 
         return built;
@@ -118,7 +120,7 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
                 objB: panel
             )) {
                 m_seatSources[slot] = panel;
-                m_seatBuilds[slot] = BuildPanel(panel: panel);
+                m_seatBuilds[slot] = BuildPanel(panel: panel, seat: (slot + 1));
             }
 
             m_seatPanels[count++] = new OverlayHudSeatPanel(

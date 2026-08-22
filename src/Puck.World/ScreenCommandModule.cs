@@ -68,7 +68,7 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "screen.source",
-            description: "Binds a declared screen's live PRESENTATION source, absorbing the five former per-kind verbs into one: screen.source <index> <kind> [args…] — <kind> is camera | capture | desktop | probe | qr | view, each carrying its own former arg grammar unchanged: camera [color|infrared] (one shared feed per sensor; concurrent color and infrared are used only when the device proves both streams live; default color); probe <probeId> (a declared probe whose kind writes a texture output); capture <windowTitle...> (a case-insensitive substring match, may contain spaces); desktop [monitorIndex] (0-based, default 0 = primary); qr [payload] [ecLevel] [quietZoneModules] (payload a single token; ecLevel one of L|M|Q|H, default M; quietZoneModules default 4 — NO payload echoes the current authoring instead of changing it); view <cameraName> (the jumbotron recursion — one offscreen camera render, budgeted round-robin). Genuinely presentation for every kind (never a machine, never tape-covered) — a booted machine on the slot is ejected FIRST, through the ordered domain, exactly as each former verb did. Errors on an undeclared screen, an unresolved kind, or the kind's own refusal (a missing capture target, an unavailable capture service, an absent or incompatible sensor stream, an unknown camera name, an unrecognized EC-level letter, a negative quiet zone, a payload too large for the encoder).",
+            description: "Binds a declared screen's live PRESENTATION source, absorbing the five former per-kind verbs into one: screen.source <index> <kind> [args…] — <kind> is camera | capture | desktop | probe | qr | view, each carrying its own former arg grammar unchanged: camera [color|infrared] [seat N] (a camera is an input device seated like a pad — <seat> (1-based, default 1) names which seat's camera device to show, never hardware directly; one shared feed per (seat, sensor); concurrent color and infrared are used only when the seat's device proves both streams live; default color); probe <probeId> (a declared probe whose kind writes a texture output); capture <windowTitle...> (a case-insensitive substring match, may contain spaces); desktop [monitorIndex] (0-based, default 0 = primary); qr [payload] [ecLevel] [quietZoneModules] (payload a single token; ecLevel one of L|M|Q|H, default M; quietZoneModules default 4 — NO payload echoes the current authoring instead of changing it); view <cameraName> (the jumbotron recursion — one offscreen camera render, budgeted round-robin). Genuinely presentation for every kind (never a machine, never tape-covered) — a booted machine on the slot is ejected FIRST, through the ordered domain, exactly as each former verb did. Errors on an undeclared screen, an unresolved kind, or the kind's own refusal (a missing capture target, an unavailable capture service, an unrecognized EC-level letter, a negative quiet zone, a payload too large for the encoder); an unassigned seat or an incompatible sensor is NOT a refusal — the bind succeeds and the fault surfaces through screen.state/screen.camera instead (a seat's camera can attach after the bind).",
             handler: SourceHandler,
             ackOnly: true
         );
@@ -111,7 +111,7 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "screen.camera",
-            description: "Echoes every shared camera feed's live control surface, one section per sensor (color | infrared): screen.camera — the device name, live tier (gpu | cpu | opening | unopened), negotiated extent, native transport subtype/rate and coordinated capture mode, each device-supported control's current value/mode, device range (with auto capability), and the one physical device's authored value, plus the authored vendor-extension rows read back raw and a faulted sensor's fault. The pipe-assertable read-back for a camera source row's `controls`/`sensor` members (the first controls-bearing camera row wins across both sensors; an UpsertScreen mutation moves the device live). A query (always echoes, even under wire.ack quiet). Errors when no camera feed was ever attempted.",
+            description: "Echoes every known camera device: screen.camera — one section per device, its roster token (camera<N>, world.devices' own vocabulary), name, sensors, live tier (gpu | cpu | opening | unopened), and the seat it is currently assigned to (or 'unassigned'); a device with a live sensor feed additionally reports that sensor's negotiated extent, native transport subtype/rate, each device-supported control's current value/mode and range (with auto capability), the currently-resolved seat's authored value, and the authored vendor-extension rows read back raw. Controls are per DEVICE: whichever seat resolves to a device supplies its desired control state (the first controls-bearing camera row for that seat wins; an UpsertScreen mutation moves it live). A query (always echoes, even under wire.ack quiet). Errors when no camera device has ever been enumerated.",
             handler: CameraHandler
         );
         yield return CommandDefinition.WithWireArgs(
@@ -496,22 +496,50 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
         };
     }
     private CommandResult SourceCamera(int index, WorldPrincipal principal, in WireArgs args) {
-        if (args.Count > 3) {
-            return CommandResult.Error(output: "[screen.source: camera expects at most one [color|infrared] sensor token]");
+        if (args.Count > 5) {
+            return CommandResult.Error(output: "[screen.source: camera expects [color|infrared] [seat N]]");
         }
 
         // The optional sensor token: color (the default) or infrared — the sensor-camera stream a Windows Hello
         // capable device exposes as its own capture device, streaming BESIDE the color feed rather than replacing it.
         var sensor = WorldCameraSensor.Color;
+        var seat = 1;
+        var token = 2;
 
-        if (args.Count == 3) {
-            var token = args[2].ToString();
+        if (
+            (token < args.Count) &&
+            !args.Is(index: token, value: "seat")
+        ) {
+            var sensorToken = args[token].ToString();
 
-            if (string.Equals(a: token, b: "infrared", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            if (string.Equals(a: sensorToken, b: "infrared", comparisonType: StringComparison.OrdinalIgnoreCase)) {
                 sensor = WorldCameraSensor.Infrared;
-            } else if (!string.Equals(a: token, b: "color", comparisonType: StringComparison.OrdinalIgnoreCase)) {
-                return CommandResult.Error(output: $"[screen.source: unknown camera sensor '{token}' — expected color or infrared]");
+            } else if (!string.Equals(a: sensorToken, b: "color", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+                return CommandResult.Error(output: $"[screen.source: unknown camera sensor '{sensorToken}' — expected color or infrared]");
             }
+
+            token++;
+        }
+
+        if (token < args.Count) {
+            if (!args.Is(index: token, value: "seat")) {
+                return CommandResult.Error(output: $"[screen.source: unexpected token '{args[token].ToString()}' — expected 'seat <N>']");
+            }
+
+            token++;
+
+            if (
+                (token >= args.Count) ||
+                !args.TryInt(index: token, value: out seat)
+            ) {
+                return CommandResult.Error(output: "[screen.source: seat expects an integer]");
+            }
+
+            token++;
+        }
+
+        if (token != args.Count) {
+            return CommandResult.Error(output: "[screen.source: camera expects [color|infrared] [seat N]]");
         }
 
         EjectMachineFirst(
@@ -521,7 +549,8 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
 
         var (ok, message) = m_binder.TryCamera(
             index: index,
-            sensor: sensor
+            sensor: sensor,
+            seat: seat
         );
 
         return (ok

@@ -23,6 +23,18 @@ root-crossing dependency was the audio director, narrowed to
 - `PlayerRoster.cs` — seat metadata: which devices sit at which of the four
   local slots, each seat's selected or pending profile, and the join/confirm
   flow (a pending seat's inputs drive the profile picker, not locomotion).
+  `PlayerRoster.Devices.cs` (a sibling partial) carries the per-kind device
+  vocabulary: a keyboard, mouse, or gamepad is learned through the router's own
+  first-touch discovery (`InputRouter.ObserveDeviceKind` classifies the kind
+  from the signal's source family before the roster ever resolves a slot for
+  it), while a camera is recorded explicitly via `ObserveDevice` and seated by
+  its own default policy (the lowest occupied, camera-less slot, player 1
+  first — never minting a player). Tokens are minted per kind (`keyboard<N>`,
+  `mouse<N>`, `gamepad<N>`, `camera<N>`) and `TryGetSeatDevice`/`AssignDevice`
+  move a camera between seats exactly like a gamepad; a camera never counts
+  toward a seat's device-presence bookkeeping. When several devices of one
+  kind share a seat, `TryGetSeatDevice` resolves whichever was assigned to it
+  most recently (`world.devices` marks that one `*`).
 - `SeatController.cs` — the per-seat device-intent producer: typed movement
   and look samples, toggled motion input, and held channel lanes folded into
   the seat's per-tick `PlayerIntent` submission.

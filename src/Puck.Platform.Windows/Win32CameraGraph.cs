@@ -19,7 +19,12 @@ internal abstract class Win32CameraGraph<TStream> : ICameraGraph<TStream> where 
     private volatile bool m_stop;
     private Thread? m_thread;
 
+    protected Win32CameraGraph(string deviceId) {
+        DeviceId = deviceId;
+    }
+
     public abstract ICameraControlSurface Controls { get; }
+    public string DeviceId { get; }
     public bool IsEnded => m_ended;
     public abstract string Name { get; }
     public abstract IReadOnlyList<TStream> Streams { get; }

@@ -3,6 +3,7 @@ using System.Text.Json;
 using Puck.Platform;
 using Puck.Platform.Probes;
 using Puck.Shaders;
+using Puck.World.Client;
 
 namespace Puck.World;
 
@@ -12,13 +13,13 @@ internal sealed partial class WorldProbes {
     // gate ServiceProbes applies to every other socket.
     private static readonly object s_unboundSocketGeneration = new();
 
-    // Loads and deep-validates one declared probe row: its kind manifest (must exist, must be kernel-class — a
-    // model-class kind has no registered host yet), its bound config, and — for a track-input row — the recorded
-    // document itself; for a socket-input row, every socket binding the document's own shallow validator could not
-    // see behind the kind vocabulary (WorldDefinitionValidator.ValidateProbeStream's own remarks). Every reading
-    // ring is created here, once, so a binding against this probe always has somewhere to read from regardless of
-    // whether a live run ever starts.
-    private static ProbeState BuildProbe(string documentDirectory, int index, IReadOnlyDictionary<string, WorldProbe> probesById, WorldProbe row) {
+    // Loads and deep-validates one declared probe row's static shape: its kind manifest (must exist, must be
+    // kernel-class — a model-class kind has no registered host yet), its bound config, whether it is seat-relative,
+    // and — for a track-input row — the recorded document itself; for a socket-input row, every socket binding the
+    // document's own shallow validator could not see behind the kind vocabulary
+    // (WorldDefinitionValidator.ValidateProbeStream's own remarks). No live instance is created here — the row's
+    // instance(s) are built afterward by ReconcileInstances, once every row's id is registered.
+    private static ProbeRowInfo BuildRow(string documentDirectory, int index, IReadOnlyDictionary<string, WorldProbe> probesById, WorldProbe row) {
         var path = $"probes[{index}] ('{row.Id}')";
         ProbeKindManifest manifest;
 
@@ -39,36 +40,36 @@ internal sealed partial class WorldProbes {
             throw new InvalidOperationException(message: $"{path} config is invalid: {reason}");
         }
 
-        var ring = new ProbeReadingRing();
         var constants = manifest.ConstantsBlock(values: config).ToArray();
 
         if (row.Inputs is { } inputs) {
-            var triggerSensor = ValidateProbeSockets(
+            var (triggerSensor, singleInstanceSeat, isSeatRelative) = ValidateProbeSockets(
                 inputs: inputs,
                 manifest: manifest,
                 path: path,
                 probesById: probesById
             );
 
-            return new ProbeState {
-                Constants = constants,
+            return new ProbeRowInfo {
+                ConstantsTemplate = constants,
+                InstancesBySeat = (isSeatRelative ? [] : null),
+                IsSeatRelative = isSeatRelative,
                 Manifest = manifest,
-                Ring = ring,
                 Row = row,
+                SingleInstanceSeat = singleInstanceSeat,
                 TriggerSensor = triggerSensor,
             };
         }
         if (row.Track is { } trackPath) {
-            return new ProbeState {
-                Constants = constants,
+            return new ProbeRowInfo {
+                ConstantsTemplate = constants,
+                IsSeatRelative = false,
                 Manifest = manifest,
-                Ring = ring,
                 Row = row,
-                Track = BuildTrackPlayer(
+                TrackDocument = LoadTrackDocument(
                     channelCount: manifest.Channels.Count,
                     documentDirectory: documentDirectory,
                     path: path,
-                    ring: ring,
                     trackPath: trackPath
                 ),
             };
@@ -80,8 +81,11 @@ internal sealed partial class WorldProbes {
     // is bound, a bound name is a declared socket, a strobePair socket binds only a camera Infrared source, the
     // trigger socket binds a camera source (kernels are hosted by a camera graph — this is what decides which
     // graph a kernel attaches to), the output.of socket is bound regardless of its own optionality, and a `probe`
-    // socket names a probe whose kind declares an output. Returns the trigger socket's bound sensor.
-    private static WorldCameraSensor ValidateProbeSockets(IReadOnlyDictionary<string, WorldFrameSource> inputs, ProbeKindManifest manifest, string path, IReadOnlyDictionary<string, WorldProbe> probesById) {
+    // socket names a probe whose kind declares an output. Returns the trigger socket's bound sensor, the seat a
+    // NON-seat-relative row's single instance resolves against (every camera socket named its own seat, so the
+    // trigger's is representative), and whether the row is seat-relative (WorldDefinitionValidator.IsSeatRelativeProbe's
+    // runtime counterpart — at least one camera socket carries no seat).
+    private static (WorldCameraSensor Sensor, int SingleInstanceSeat, bool IsSeatRelative) ValidateProbeSockets(IReadOnlyDictionary<string, WorldFrameSource> inputs, ProbeKindManifest manifest, string path, IReadOnlyDictionary<string, WorldProbe> probesById) {
         var sockets = manifest.Inputs;
 
         for (var socketIndex = 0; (socketIndex < sockets.Count); socketIndex++) {
@@ -91,6 +95,8 @@ internal sealed partial class WorldProbes {
                 throw new InvalidOperationException(message: $"{path}.inputs is missing required socket '{socket.Name}'.");
             }
         }
+
+        var isSeatRelative = false;
 
         foreach (var (socketName, source) in inputs) {
             if (!TryFindSocket(
@@ -105,6 +111,9 @@ internal sealed partial class WorldProbes {
                 ((source is not WorldScreenSource.Camera camera) || (camera.Sensor != WorldCameraSensor.Infrared))
             ) {
                 throw new InvalidOperationException(message: $"{path}.inputs['{socketName}'] is a strobePair socket; it must bind a camera source with sensor Infrared.");
+            }
+            if ((source is WorldScreenSource.Camera cameraSource) && (cameraSource.Seat is null)) {
+                isSeatRelative = true;
             }
             if (source is WorldScreenSource.Probe probeSource) {
                 if (!probesById.TryGetValue(key: probeSource.Id, value: out var targetRow)) {
@@ -140,7 +149,7 @@ internal sealed partial class WorldProbes {
             throw new InvalidOperationException(message: $"{path}.inputs['{triggerSocket.Name}'] is the trigger socket; it must bind a camera source (kernels are hosted by a camera graph).");
         }
 
-        return triggerCamera.Sensor;
+        return (triggerCamera.Sensor, (triggerCamera.Seat ?? 1), isSeatRelative);
     }
     private static bool TryFindSocket(string name, IReadOnlyList<ProbeKindInput> sockets, out ProbeKindInput socket) {
         for (var index = 0; (index < sockets.Count); index++) {
@@ -157,10 +166,10 @@ internal sealed partial class WorldProbes {
     }
     // Loads a track document and checks its channel count against the kind it stands in for: a binding's channel
     // ordinal resolves against the kind's manifest, so a track carrying fewer channels would fault at the first
-    // conditioned step rather than at boot.
-    private static ProbeTrackPlayer BuildTrackPlayer(int channelCount, string documentDirectory, string path, ProbeReadingRing ring, string trackPath) {
+    // conditioned step rather than at boot. A track-input row is never seat-relative, so this document is played
+    // back by exactly one instance's ProbeTrackPlayer, built once ReconcileInstances creates it.
+    private static ProbeTrackDocument LoadTrackDocument(int channelCount, string documentDirectory, string path, string trackPath) {
         var resolvedPath = Path.GetFullPath(path: Path.Combine(path1: documentDirectory, path2: trackPath));
-
         ProbeTrackDocument document;
 
         try {
@@ -174,10 +183,56 @@ internal sealed partial class WorldProbes {
             throw new InvalidOperationException(message: $"{path} track '{trackPath}' carries {document.Channels} channel(s); the kind declares {channelCount}.");
         }
 
+        // A trial construction against a throwaway ring proves the document's own sample-shape laws (ascending
+        // time, matching channel counts) now, at boot, rather than at the first seat that ever instances this row.
         try {
-            return new ProbeTrackPlayer(document: document, ring: ring);
+            _ = new ProbeTrackPlayer(document: document, ring: new ProbeReadingRing());
         } catch (InvalidDataException exception) {
             throw new InvalidOperationException(message: $"{path} track '{trackPath}' is invalid: {exception.Message}", innerException: exception);
+        }
+
+        return document;
+    }
+    // Deep-validates and resolves every one of a row's declared bindings into a reusable template — the second half
+    // of the original two-pass build (every row exists, by id, before any binding resolves a cross-probe reference).
+    // Never builds live binding state; that happens once per instance, in BuildInstanceBindings.
+    private void BuildRowBindingTemplates(int index, WorldProbe row) {
+        if (row.Bindings is not { } bindings) {
+            return;
+        }
+
+        var rowInfo = m_rows[index];
+
+        for (var bindingIndex = 0; (bindingIndex < bindings.Count); bindingIndex++) {
+            var path = $"probes[{index}].bindings[{bindingIndex}]";
+
+            switch (bindings[bindingIndex]) {
+                case WorldProbeBinding.Axis axis:
+                    rowInfo.AxisTemplates.Add(item: BuildAxisTemplate(axis: axis, path: path, rowInfo: rowInfo));
+
+                    break;
+                case WorldProbeBinding.Parameter parameter:
+                    rowInfo.ParameterTemplates.Add(item: BuildParameterTemplate(parameter: parameter, path: path, rowInfo: rowInfo));
+
+                    break;
+                case WorldProbeBinding.Control control:
+                    rowInfo.ControlTemplates.Add(item: BuildControlTemplate(control: control, path: path, rowInfo: rowInfo));
+
+                    break;
+            }
+        }
+    }
+    // Builds every one of an instance's binding rows from its row's already-validated templates — cheap, never
+    // re-validating, since the templates already proved every channel/target/control name resolves.
+    private void BuildInstanceBindings(ProbeInstance instance) {
+        foreach (var template in instance.RowInfo.AxisTemplates) {
+            instance.AxisBindings.Add(item: BuildAxis(instance: instance, template: template));
+        }
+        foreach (var template in instance.RowInfo.ParameterTemplates) {
+            instance.ParameterBindings.Add(item: BuildParameter(instance: instance, template: template));
+        }
+        foreach (var template in instance.RowInfo.ControlTemplates) {
+            instance.ControlBindings.Add(item: BuildControl(instance: instance, template: template));
         }
     }
     private static CameraSensor ToCameraSensor(WorldCameraSensor sensor) => (sensor switch {
@@ -185,22 +240,95 @@ internal sealed partial class WorldProbes {
         WorldCameraSensor.Infrared => CameraSensor.Infrared,
         _ => throw new ArgumentOutOfRangeException(paramName: nameof(sensor), actualValue: sensor, message: "The camera sensor is not defined."),
     });
-    // Advances every track-input probe's player and services every socket-input probe's kernel run: resolves every
-    // declared socket against the binder's live state, restarts the kernel when any socket's generation (or the
+    // Follows the roster's occupancy: a non-seat-relative row's single instance exists once and forever (created
+    // the first time this runs — from the constructor — and never retired here); a seat-relative row gains an
+    // instance for every occupied local seat and loses one the moment its seat is no longer joined. Runs before
+    // ServiceProbes every CaptureFrame, and once more from the constructor so a seat joined before boot has its
+    // instances ready for the very first probe.status.
+    private void ReconcileInstances() {
+        foreach (var rowInfo in m_rows) {
+            if (!rowInfo.IsSeatRelative) {
+                if (rowInfo.SingleInstance is null) {
+                    rowInfo.SingleInstance = CreateInstance(rowInfo: rowInfo, seat: rowInfo.SingleInstanceSeat);
+                }
+
+                continue;
+            }
+
+            var bySeat = rowInfo.InstancesBySeat!;
+
+            for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
+                var seat = (slot + 1);
+                var occupied = m_roster.IsJoined(slot: slot);
+                var hasInstance = bySeat.TryGetValue(key: seat, value: out var existing);
+
+                if (occupied && !hasInstance) {
+                    bySeat[seat] = CreateInstance(rowInfo: rowInfo, seat: seat);
+                } else if (!occupied && hasInstance) {
+                    RetireInstance(instance: existing!);
+                    bySeat.Remove(key: seat);
+                }
+            }
+        }
+    }
+    // Builds one row's instance at one seat: a fresh reading ring, its own copy of the row's constants template, its
+    // output ring key (seat 1 of a seat-relative row shares the row's bare id, so an authored screen/HUD `probe`
+    // source — which carries no seat of its own — keeps resolving the same ring it always has; every other seat gets
+    // its own "id@seat" ring), its track player when the row plays one back, and every one of its bindings' live
+    // state (built from the row's already-validated templates — never re-validated per instance).
+    private ProbeInstance CreateInstance(ProbeRowInfo rowInfo, int seat) {
+        var ring = new ProbeReadingRing();
+        var isSeatRelative = rowInfo.IsSeatRelative;
+        var instance = new ProbeInstance {
+            Constants = [.. rowInfo.ConstantsTemplate],
+            Label = (isSeatRelative ? $"{rowInfo.Row.Id}@{seat}" : rowInfo.Row.Id),
+            OutputRingKey = ((isSeatRelative && (seat != 1)) ? $"{rowInfo.Row.Id}@{seat}" : rowInfo.Row.Id),
+            Ring = ring,
+            RowInfo = rowInfo,
+            Seat = seat,
+            Track = ((rowInfo.TrackDocument is { } document) ? new ProbeTrackPlayer(document: document, ring: ring) : null),
+        };
+
+        if (rowInfo.Manifest.Output is not null) {
+            m_screens.DeclareProbeOutput(id: instance.OutputRingKey);
+        }
+
+        BuildInstanceBindings(instance: instance);
+        m_liveInstances.Add(item: instance);
+
+        return instance;
+    }
+    // Ends the run, releases the output ring (if any), and drops every held router capture — the retirement path a
+    // seat leaving and process Dispose share, so a mid-game leave can never leave a lane latched.
+    private void RetireInstance(ProbeInstance instance) {
+        instance.Run?.Dispose();
+        instance.Run = null;
+
+        foreach (var axis in instance.AxisBindings) {
+            ReleaseAxisHeldState(axis: axis);
+        }
+        if (instance.RowInfo.Manifest.Output is not null) {
+            m_screens.ReleaseProbeOutput(id: instance.OutputRingKey);
+        }
+
+        _ = m_liveInstances.Remove(item: instance);
+    }
+    // Advances every track-input instance's player and services every socket-input instance's kernel run: resolves
+    // every declared socket against the binder's live state, restarts the kernel when any socket's generation (or the
     // output ring's) changed since the last successful attach, and ends it when its own run has stopped (a
     // device-loss/end-of-stream condition the graph surfaces as IsEnded) so the next frame's readiness check starts
     // a fresh one against whatever the binder now reports.
     private void ServiceProbes() {
         var nowTimestamp = Stopwatch.GetTimestamp();
 
-        foreach (var probe in m_probes) {
-            if (probe.Track is { } track) {
+        foreach (var instance in m_liveInstances) {
+            if (instance.Track is { } track) {
                 _ = track.Advance(nowTimestamp: nowTimestamp);
 
                 continue;
             }
 
-            var manifest = probe.Manifest;
+            var manifest = instance.RowInfo.Manifest;
             var sockets = manifest.Inputs;
             var inputs = new ProbeKernelInput[sockets.Count];
             var generations = new object?[sockets.Count];
@@ -209,24 +337,24 @@ internal sealed partial class WorldProbes {
             for (var socketIndex = 0; (socketIndex < sockets.Count); socketIndex++) {
                 var socket = sockets[socketIndex];
 
-                probe.Row.Inputs!.TryGetValue(key: socket.Name, value: out var source);
+                instance.RowInfo.Row.Inputs!.TryGetValue(key: socket.Name, value: out var source);
 
-                var (input, generation, extent, socketFault) = ResolveSocket(socket: socket, source: source);
+                var (input, generation, extent, socketFault) = ResolveSocket(socket: socket, source: source, contextSeat: instance.Seat);
 
                 inputs[socketIndex] = input;
                 generations[socketIndex] = generation;
                 fault ??= socketFault;
 
                 if ((manifest.Output is { } declaredOutput) && string.Equals(a: declaredOutput.Of, b: socket.Name, comparisonType: StringComparison.Ordinal)) {
-                    probe.OutputExtent = extent;
+                    instance.OutputExtent = extent;
                 }
             }
 
             object? outputSet = null;
 
             if (manifest.Output is not null) {
-                if (probe.OutputExtent is { Width: > 0, Height: > 0 } extent) {
-                    _ = m_screens.TryGetProbeOutput(id: probe.Row.Id, width: extent.Width, height: extent.Height, output: out _, generation: out outputSet, fault: out var outputFault);
+                if (instance.OutputExtent is { Width: > 0, Height: > 0 } extent) {
+                    _ = m_screens.TryGetProbeOutput(id: instance.OutputRingKey, width: extent.Width, height: extent.Height, output: out _, generation: out outputSet, fault: out var outputFault);
                     fault ??= ((outputSet is null) ? outputFault : null);
                 } else {
                     fault ??= "probe output awaiting provisioning";
@@ -234,44 +362,52 @@ internal sealed partial class WorldProbes {
             }
 
             if (fault is not null) {
-                EndRun(probe: probe, fault: fault);
-                probe.SocketGenerations = null;
-                probe.OutputSet = null;
+                EndRun(instance: instance, fault: fault);
+                instance.SocketGenerations = null;
+                instance.OutputSet = null;
 
                 continue;
             }
 
-            var changed = ((probe.SocketGenerations is not { } previous) || !SocketGenerationsEqual(current: generations, previous: previous) || !ReferenceEquals(objA: probe.OutputSet, objB: outputSet));
+            var changed = ((instance.SocketGenerations is not { } previous) || !SocketGenerationsEqual(current: generations, previous: previous) || !ReferenceEquals(objA: instance.OutputSet, objB: outputSet));
 
             if (changed) {
-                RestartRun(generations: generations, inputs: inputs, outputSet: outputSet, probe: probe);
+                RestartRun(generations: generations, inputs: inputs, outputSet: outputSet, instance: instance);
 
                 continue;
             }
 
-            if (probe.Run is { IsEnded: true } endedRun) {
-                probe.Fault = (endedRun.Fault ?? "the probe kernel run ended");
+            if (instance.Run is { IsEnded: true } endedRun) {
+                instance.Fault = (endedRun.Fault ?? "the probe kernel run ended");
                 endedRun.Dispose();
-                probe.Run = null;
+                instance.Run = null;
                 // Force the next frame's readiness check to retry from scratch rather than waiting for a socket's
                 // generation to change again — a transient GPU fault, not necessarily a reopen.
-                probe.SocketGenerations = null;
+                instance.SocketGenerations = null;
             }
         }
     }
     // Resolves one socket against the binder's current live state: the ProbeKernelInput arm to bind, its
     // generation (null while not ready — the caller never attaches on a null generation), the extent its bound
     // source renders at (meaningful only for the socket the kind's output.of names), and a fault naming why it is
-    // not ready (null once it is).
-    private (ProbeKernelInput Input, object? Generation, (int Width, int Height)? Extent, string? Fault) ResolveSocket(ProbeKindInput socket, WorldFrameSource? source) {
+    // not ready (null once it is). contextSeat is the enclosing instance's own seat — what a seat-less camera socket
+    // (or a `probe` socket naming a seat-relative target) resolves against.
+    private (ProbeKernelInput Input, object? Generation, (int Width, int Height)? Extent, string? Fault) ResolveSocket(ProbeKindInput socket, WorldFrameSource? source, int contextSeat) {
         if (source is null) {
             return (new ProbeKernelInput.Unbound(), s_unboundSocketGeneration, null, null);
         }
 
         switch (source) {
             case WorldScreenSource.Camera camera:
-                if (!m_screens.TryGetCameraAttachment(sensor: camera.Sensor, attachment: out var attachment)) {
-                    return (new ProbeKernelInput.Unbound(), null, null, "no camera feed for this sensor");
+                var socketSeat = (camera.Seat ?? contextSeat);
+
+                if (!m_screens.TryGetCameraAttachment(seat: socketSeat, sensor: camera.Sensor, attachment: out var attachment)) {
+                    var cameraFault = ((m_screens.ResolvedCameraToken(seat: socketSeat) is null)
+                        ? $"no camera assigned to seat {socketSeat}"
+                        : $"no camera feed for seat {socketSeat}"
+                    );
+
+                    return (new ProbeKernelInput.Unbound(), null, null, cameraFault);
                 }
                 if ((attachment.Shared is not { } shared) || (attachment.TargetSet is not { } targetSet)) {
                     return (new ProbeKernelInput.Unbound(), null, null, "probe needs the camera GPU tier");
@@ -284,13 +420,20 @@ internal sealed partial class WorldProbes {
 
                 return (sensorInput, targetSet, (shared.Width, shared.Height), null);
             case WorldScreenSource.Probe probeSource:
-                if (!m_probeIndexById.TryGetValue(key: probeSource.Id, value: out var targetIndex)) {
+                if (!m_rowIndexById.TryGetValue(key: probeSource.Id, value: out var targetRowIndex)) {
                     return (new ProbeKernelInput.Unbound(), null, null, $"probe '{probeSource.Id}' names no declared probe");
                 }
-                if (m_probes[targetIndex].OutputExtent is not { Width: > 0, Height: > 0 } wanted) {
+
+                var targetRow = m_rows[targetRowIndex];
+                var targetInstance = ResolveInstance(target: targetRow, contextSeat: contextSeat);
+
+                if (targetInstance is null) {
+                    return (new ProbeKernelInput.Unbound(), null, null, $"probe '{probeSource.Id}' has no live instance for seat {contextSeat}");
+                }
+                if (targetInstance.OutputExtent is not { Width: > 0, Height: > 0 } wanted) {
                     return (new ProbeKernelInput.Unbound(), null, null, $"probe '{probeSource.Id}' output is not provisioned yet");
                 }
-                if (!m_screens.TryGetProbeOutput(id: probeSource.Id, width: wanted.Width, height: wanted.Height, output: out var ringOutput, generation: out var ringGeneration, fault: out var ringFault)) {
+                if (!m_screens.TryGetProbeOutput(id: targetInstance.OutputRingKey, width: wanted.Width, height: wanted.Height, output: out var ringOutput, generation: out var ringGeneration, fault: out var ringFault)) {
                     return (new ProbeKernelInput.Unbound(), null, null, ringFault);
                 }
 
@@ -316,69 +459,69 @@ internal sealed partial class WorldProbes {
 
         return true;
     }
-    // Ends and clears whatever run a probe currently holds, recording a fault when one is given. Used both when a
+    // Ends and clears whatever run an instance currently holds, recording a fault when one is given. Used both when a
     // socket falls out of readiness and right before a restart attempt (so a failed restart never leaves a stale
     // run reference behind).
-    private static void EndRun(ProbeState probe, string? fault) {
-        probe.Run?.Dispose();
-        probe.Run = null;
+    private static void EndRun(ProbeInstance instance, string? fault) {
+        instance.Run?.Dispose();
+        instance.Run = null;
 
         if (fault is not null) {
-            probe.Fault = fault;
+            instance.Fault = fault;
         }
     }
-    // The whole restart decision for one socket-input probe against a freshly resolved, fully ready socket set:
+    // The whole restart decision for one socket-input instance against a freshly resolved, fully ready socket set:
     // end whatever ran before, adopt the new generations unconditionally (so a failed attach never retries every
     // single frame against the same dead generation set — only a further generation change tries again), provision
     // the declared output ring at its resolved extent when the kind writes one, resolve the trigger sensor's
-    // kernel host, and attach.
-    private void RestartRun(ProbeState probe, ProbeKernelInput[] inputs, object?[] generations, object? outputSet) {
-        EndRun(probe: probe, fault: null);
-        probe.SocketGenerations = generations;
-        probe.OutputSet = outputSet;
+    // kernel host at this instance's own seat, and attach.
+    private void RestartRun(ProbeInstance instance, ProbeKernelInput[] inputs, object?[] generations, object? outputSet) {
+        EndRun(instance: instance, fault: null);
+        instance.SocketGenerations = generations;
+        instance.OutputSet = outputSet;
 
         ProbeKernelOutput? output = null;
 
-        if (probe.Manifest.Output is not null) {
-            var extent = probe.OutputExtent!.Value;
+        if (instance.RowInfo.Manifest.Output is not null) {
+            var extent = instance.OutputExtent!.Value;
 
-            if (!m_screens.TryGetProbeOutput(id: probe.Row.Id, width: extent.Width, height: extent.Height, output: out var provisioned, generation: out _, fault: out var outputFault)) {
-                probe.Fault = outputFault;
+            if (!m_screens.TryGetProbeOutput(id: instance.OutputRingKey, width: extent.Width, height: extent.Height, output: out var provisioned, generation: out _, fault: out var outputFault)) {
+                instance.Fault = outputFault;
 
                 return;
             }
 
             output = provisioned;
         }
-        if (!m_screens.TryGetCameraAttachment(sensor: probe.TriggerSensor!.Value, attachment: out var triggerAttachment) || (triggerAttachment.Kernels is not { } kernels)) {
-            probe.Fault = "the open camera graph hosts no kernels";
+        if (!m_screens.TryGetCameraAttachment(seat: instance.Seat, sensor: instance.RowInfo.TriggerSensor!.Value, attachment: out var triggerAttachment) || (triggerAttachment.Kernels is not { } kernels)) {
+            instance.Fault = "the open camera graph hosts no kernels";
 
             return;
         }
 
-        var kernel = (probe.Manifest.Kernel ?? throw new InvalidOperationException(message: $"probe kind '{probe.Manifest.Name}' is kernel-class but declares no kernel block."));
+        var kernel = (instance.RowInfo.Manifest.Kernel ?? throw new InvalidOperationException(message: $"probe kind '{instance.RowInfo.Manifest.Name}' is kernel-class but declares no kernel block."));
         var request = new ProbeKernelRequest(
-            KernelSource: File.ReadAllText(path: Path.Combine(path1: probe.Manifest.Directory, path2: kernel.Source)),
+            KernelSource: File.ReadAllText(path: Path.Combine(path1: instance.RowInfo.Manifest.Directory, path2: kernel.Source)),
             AccumulateEntry: kernel.Accumulate,
             FinalizeEntry: kernel.Finalize,
-            Constants: probe.Constants,
-            ChannelCount: probe.Manifest.Channels.Count,
-            RateHz: probe.Row.RateHz,
+            Constants: instance.Constants,
+            ChannelCount: instance.RowInfo.Manifest.Channels.Count,
+            RateHz: instance.RowInfo.Row.RateHz,
             Inputs: inputs,
-            Trigger: ToCameraSensor(sensor: probe.TriggerSensor.Value),
+            Trigger: ToCameraSensor(sensor: instance.RowInfo.TriggerSensor.Value),
             Output: output
         );
 
         if (kernels.TryAttachKernel(
             request: in request,
-            ring: probe.Ring,
+            ring: instance.Ring,
             run: out var run,
             fault: out var fault
         )) {
-            probe.Fault = null;
-            probe.Run = run;
+            instance.Fault = null;
+            instance.Run = run;
         } else {
-            probe.Fault = fault;
+            instance.Fault = fault;
         }
     }
 }

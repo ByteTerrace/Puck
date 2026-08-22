@@ -44,14 +44,16 @@ internal sealed class Win32FaceAuthenticationCapture : IDisposable {
     public Win32FaceAuthenticationStream Infrared { get; }
     public string Name { get; }
 
-    /// <summary>Opens and starts the first public color/infrared Face Authentication Profile V2 pair.</summary>
-    public static Win32FaceAuthenticationCapture Open(MediaCaptureMemoryPreference memoryPreference) {
+    /// <summary>Opens and starts the given physical camera's public color/infrared Face Authentication Profile V2 pair.</summary>
+    /// <param name="memoryPreference">Whether the frame server should place frames in system or GPU memory.</param>
+    /// <param name="deviceId">The physical camera to open, from <see cref="Win32CameraDeviceGroups.Enumerate"/>.</param>
+    public static Win32FaceAuthenticationCapture Open(MediaCaptureMemoryPreference memoryPreference, string deviceId) {
         MediaCapture? capture = null;
         MediaFrameReader? colorReader = null;
         MediaFrameReader? infraredReader = null;
 
         try {
-            var selection = FindPair();
+            var selection = FindPair(deviceId: deviceId);
 
             capture = new MediaCapture();
             capture.InitializeAsync(mediaCaptureInitializationSettings: new MediaCaptureInitializationSettings {
@@ -148,49 +150,31 @@ internal sealed class Win32FaceAuthenticationCapture : IDisposable {
             : (((double)format.FrameRate.Numerator) / denominator)
         );
     }
-    private static Win32FaceAuthenticationSelection FindPair() {
-        var groups = MediaFrameSourceGroup.FindAllAsync().AsTask().GetAwaiter().GetResult();
-
-        foreach (var group in groups) {
-            MediaFrameSourceInfo? color = null;
-            MediaFrameSourceInfo? infrared = null;
-
-            foreach (var info in group.SourceInfos) {
-                if (
-                    (MediaStreamType.VideoRecord != info.MediaStreamType) &&
-                    (MediaStreamType.VideoPreview != info.MediaStreamType)
-                ) {
-                    continue;
-                }
-
-                if (MediaFrameSourceKind.Color == info.SourceKind) {
-                    color ??= info;
-                } else if (MediaFrameSourceKind.Infrared == info.SourceKind) {
-                    infrared ??= info;
-                }
-            }
-
-            if ((color is null) || (infrared is null)) {
-                continue;
-            }
-
-            var profile = (
-                FindProfile(videoDeviceId: color.DeviceInformation.Id) ??
-                (FindProfile(videoDeviceId: infrared.DeviceInformation.Id) ??
-                FindProfile(videoDeviceId: group.Id))
-            );
-
-            if (profile is { } match) {
-                return new Win32FaceAuthenticationSelection(
-                    Color: match.Color,
-                    Group: group,
-                    Infrared: match.Infrared,
-                    Profile: match.Profile
-                );
-            }
+    private static Win32FaceAuthenticationSelection FindPair(string deviceId) {
+        if (!Win32CameraDeviceGroups.TryFind(deviceId: deviceId, color: out var color, group: out var group, infrared: out var infrared)) {
+            throw new NotSupportedException(message: $"camera device '{deviceId}' is no longer attached");
         }
 
-        throw new NotSupportedException(message: "no capture device publishes a public Face Authentication Profile V2 color/infrared pair");
+        if ((color is null) || (infrared is null)) {
+            throw new NotSupportedException(message: $"camera device '{deviceId}' carries no color/infrared pair");
+        }
+
+        var profile = (
+            FindProfile(videoDeviceId: color.DeviceInformation.Id) ??
+            (FindProfile(videoDeviceId: infrared.DeviceInformation.Id) ??
+            FindProfile(videoDeviceId: group.Id))
+        );
+
+        if (profile is { } match) {
+            return new Win32FaceAuthenticationSelection(
+                Color: match.Color,
+                Group: group,
+                Infrared: match.Infrared,
+                Profile: match.Profile
+            );
+        }
+
+        throw new NotSupportedException(message: $"camera device '{deviceId}' publishes no Face Authentication Profile V2 color/infrared pair");
     }
     private static Win32FaceAuthenticationProfile? FindProfile(string videoDeviceId) {
         try {
@@ -327,3 +311,79 @@ internal readonly record struct Win32FaceAuthenticationStream(
     MediaFrameReader Reader,
     int Width
 );
+/// <summary>
+/// The <see cref="MediaFrameSourceGroup"/> scan every camera path resolves a physical device through — one group is
+/// one physical camera, and its color/infrared <see cref="MediaFrameSourceInfo"/> entries carry the
+/// <c>DeviceInformation.Id</c> symbolic links the single-sensor source-reader path selects a device by
+/// (<see cref="MfInterop.MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_SYMBOLIC_LINK"/>).
+/// </summary>
+[SupportedOSPlatform("windows10.0.14393")]
+internal static class Win32CameraDeviceGroups {
+    /// <summary>Enumerates every attached physical camera.</summary>
+    public static IReadOnlyList<CameraDeviceInfo> Enumerate() {
+        var devices = new List<CameraDeviceInfo>();
+
+        foreach (var group in MediaFrameSourceGroup.FindAllAsync().AsTask().GetAwaiter().GetResult()) {
+            var (color, infrared) = Sources(group: group);
+
+            if ((color is null) && (infrared is null)) {
+                continue;
+            }
+
+            var sensors = new List<CameraSensor>(capacity: 2);
+
+            if (color is not null) {
+                sensors.Add(item: CameraSensor.Color);
+            }
+
+            if (infrared is not null) {
+                sensors.Add(item: CameraSensor.Infrared);
+            }
+
+            devices.Add(item: new CameraDeviceInfo(Id: group.Id, Name: group.DisplayName, Sensors: sensors));
+        }
+
+        return devices;
+    }
+    /// <summary>Finds the attached group matching <paramref name="deviceId"/> and its color/infrared source infos.</summary>
+    public static bool TryFind(string deviceId, out MediaFrameSourceGroup group, out MediaFrameSourceInfo? color, out MediaFrameSourceInfo? infrared) {
+        foreach (var candidate in MediaFrameSourceGroup.FindAllAsync().AsTask().GetAwaiter().GetResult()) {
+            if (!string.Equals(a: candidate.Id, b: deviceId, comparisonType: StringComparison.Ordinal)) {
+                continue;
+            }
+
+            (color, infrared) = Sources(group: candidate);
+            group = candidate;
+
+            return true;
+        }
+
+        group = null!;
+        color = null;
+        infrared = null;
+
+        return false;
+    }
+
+    private static (MediaFrameSourceInfo? Color, MediaFrameSourceInfo? Infrared) Sources(MediaFrameSourceGroup group) {
+        MediaFrameSourceInfo? color = null;
+        MediaFrameSourceInfo? infrared = null;
+
+        foreach (var info in group.SourceInfos) {
+            if (
+                (MediaStreamType.VideoRecord != info.MediaStreamType) &&
+                (MediaStreamType.VideoPreview != info.MediaStreamType)
+            ) {
+                continue;
+            }
+
+            if (MediaFrameSourceKind.Color == info.SourceKind) {
+                color ??= info;
+            } else if (MediaFrameSourceKind.Infrared == info.SourceKind) {
+                infrared ??= info;
+            }
+        }
+
+        return (color, infrared);
+    }
+}

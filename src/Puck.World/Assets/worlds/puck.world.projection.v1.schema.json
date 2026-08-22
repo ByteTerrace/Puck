@@ -1112,6 +1112,14 @@
                       "Infrared"
                     ],
                     "default": "Color"
+                  },
+                  "seat": {
+                    "description": "The 1-based local seat this row names \u2014 a camera is an input device seated like a pad, never hardware named directly. null means the enclosing seat scope (an identity\u0027s HUD panel, a seat-scoped probe socket) or seat 1 at world scope \u2014 the same explicit-index convention $channel:\u003Cseat\u003E and axis bindings already use. Validated within 1..population.localSeats when present. Omitted from the wire when null.",
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "default": null
                   }
                 },
                 "additionalProperties": false
@@ -1517,6 +1525,14 @@
                             "Infrared"
                           ],
                           "default": "Color"
+                        },
+                        "seat": {
+                          "description": "The 1-based local seat this row names \u2014 a camera is an input device seated like a pad, never hardware named directly. null means the enclosing seat scope (an identity\u0027s HUD panel, a seat-scoped probe socket) or seat 1 at world scope \u2014 the same explicit-index convention $channel:\u003Cseat\u003E and axis bindings already use. Validated within 1..population.localSeats when present. Omitted from the wire when null.",
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "default": null
                         }
                       },
                       "additionalProperties": false
@@ -5663,6 +5679,14 @@
                             "Infrared"
                           ],
                           "default": "Color"
+                        },
+                        "seat": {
+                          "description": "The 1-based local seat this row names \u2014 a camera is an input device seated like a pad, never hardware named directly. null means the enclosing seat scope (an identity\u0027s HUD panel, a seat-scoped probe socket) or seat 1 at world scope \u2014 the same explicit-index convention $channel:\u003Cseat\u003E and axis bindings already use. Validated within 1..population.localSeats when present. Omitted from the wire when null.",
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "default": null
                         }
                       },
                       "additionalProperties": false
@@ -7492,6 +7516,14 @@
                                 "Infrared"
                               ],
                               "default": "Color"
+                            },
+                            "seat": {
+                              "description": "The 1-based local seat this row names \u2014 a camera is an input device seated like a pad, never hardware named directly. null means the enclosing seat scope (an identity\u0027s HUD panel, a seat-scoped probe socket) or seat 1 at world scope \u2014 the same explicit-index convention $channel:\u003Cseat\u003E and axis bindings already use. Validated within 1..population.localSeats when present. Omitted from the wire when null.",
+                              "type": [
+                                "integer",
+                                "null"
+                              ],
+                              "default": null
                             }
                           },
                           "additionalProperties": false

@@ -293,7 +293,10 @@ internal static class WorldBootComposition {
                 // A session-sourced face's destination/reference lookup and resolver-owned instance — CORE, not
                 // presentation-only, so an observation lease attaches (and a destination instance starts) in every
                 // boot shape, exactly like WorldMachineHost's own boot-time machine start.
-                instanceHost: sp.GetRequiredService<WorldInstanceHost>()
+                instanceHost: sp.GetRequiredService<WorldInstanceHost>(),
+                // A camera is an input device seated like a pad — the binder resolves a seat to its bound device
+                // through the SAME roster every other device-aware seam reads.
+                roster: sp.GetRequiredService<PlayerRoster>()
             );
         });
 

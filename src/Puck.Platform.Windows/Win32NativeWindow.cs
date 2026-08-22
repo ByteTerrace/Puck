@@ -18,7 +18,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private const int GwlStyle = -16;
     private const int GwlpUserData = -21;
     // MapVirtualKey map type: scan code -> the LEFT/RIGHT-distinguishing extended virtual key. The only way to
-    // tell VK_LSHIFT from VK_RSHIFT — Shift's lParam extended-key bit is never set for either side.
+    // tell VK_LSHIFT from VK_RSHIFT — Shift's lParam/raw-input extended-key bit is never set for either side.
     private const uint MapvkVscToVkEx = 0x03;
     private const int MonitorDefaultToNearest = 2;
     private const int PmRemove = 0x0001;
@@ -32,6 +32,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private const int Vk9 = 0x39;
     private const int VkBack = 0x08;
     private const int VkC = 0x43;
+    private const int VkCapital = 0x14;
     private const int VkControl = 0x11;
     private const int VkDown = 0x28;
     private const int VkEscape = 0x1B;
@@ -50,6 +51,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private const int VkLWin = 0x5B;
     private const int VkLeft = 0x25;
     private const int VkMenu = 0x12;
+    private const int VkNumLock = 0x90;
     private const int VkNumpad0 = 0x60;
     private const int VkNumpad9 = 0x69;
     private const int VkAdd = 0x6B;
@@ -61,6 +63,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private const int VkRWin = 0x5C;
     private const int VkReturn = 0x0D;
     private const int VkRight = 0x27;
+    private const int VkScroll = 0x91;
     private const int VkShift = 0x10;
     private const int VkSpace = 0x20;
     private const int VkTab = 0x09;
@@ -85,9 +88,10 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private const uint WmMouseHWheel = 0x020E;
     private const uint WmXButtonDown = 0x020B;
     private const uint WmXButtonUp = 0x020C;
-    // WHEEL_DELTA: the notch quantum WM_MOUSEWHEEL's high word counts in. A free-spin or precision wheel reports
-    // FRACTIONS of it, so the neutral event carries the quotient as a float rather than an integer notch count —
-    // rounding here would silently drop every sub-notch report a high-resolution wheel makes.
+    // WHEEL_DELTA: the notch quantum WM_MOUSEWHEEL's high word (and RAWMOUSE's ButtonData for a wheel report) counts
+    // in. A free-spin or precision wheel reports FRACTIONS of it, so the neutral event carries the quotient as a
+    // float rather than an integer notch count — rounding here would silently drop every sub-notch report a
+    // high-resolution wheel makes.
     private const float WheelDelta = 120f;
     private const uint WmNcCreate = 0x0081;
     private const uint WmNcDestroy = 0x0082;
@@ -100,12 +104,40 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private const uint WmSysKeyDown = 0x0104;
     private const uint WmSysKeyUp = 0x0105;
     private const uint WmWindowPosChanged = 0x0047;
-    // Raw Input (WM_INPUT): un-accelerated, full-rate relative mouse motion, summed pump-level per frame.
+    // Raw Input (WM_INPUT): every mouse and keyboard report this window registers for arrives here, keyed to its
+    // physical device by RAWINPUTHEADER.hDevice (see ResolveRawDeviceId).
     private const uint RidInput = 0x10000003;
+    private const uint RidiDeviceName = 0x20000007;
     private const ushort HidUsageGenericMouse = 0x02;
+    private const ushort HidUsageGenericKeyboard = 0x06;
     private const ushort HidUsagePageGeneric = 0x01;
     private const ushort RiMouseMoveAbsolute = 0x01;
+    private const ushort RiMouseButton1Down = 0x0001;
+    private const ushort RiMouseButton1Up = 0x0002;
+    private const ushort RiMouseButton2Down = 0x0004;
+    private const ushort RiMouseButton2Up = 0x0008;
+    private const ushort RiMouseButton3Down = 0x0010;
+    private const ushort RiMouseButton3Up = 0x0020;
+    private const ushort RiMouseButton4Down = 0x0040;
+    private const ushort RiMouseButton4Up = 0x0080;
+    private const ushort RiMouseButton5Down = 0x0100;
+    private const ushort RiMouseButton5Up = 0x0200;
+    private const ushort RiMouseWheel = 0x0400;
+    private const ushort RiMouseHWheel = 0x0800;
+    // RAWKEYBOARD.Flags: RI_KEY_BREAK (a release, vs. a make/press) and RI_KEY_E0 (the same left/right-disambiguating
+    // extended-key bit WM_KEYDOWN's lParam bit 24 carries).
+    private const ushort RiKeyBreak = 0x0001;
+    private const ushort RiKeyE0 = 0x0002;
+    // RAWKEYBOARD reports "no VK mapping" (an E1 Pause/Break packet, among others) as 0xFF.
+    private const ushort RawKeyboardNoVKey = 0xFF;
     private const uint RimTypeMouse = 0;
+    private const uint RimTypeKeyboard = 1;
+    // GetSystemMetrics indices for the virtual desktop bounds an absolute-mode raw mouse report (a tablet, RDP) is
+    // normalized against.
+    private const int SmXVirtualScreen = 76;
+    private const int SmYVirtualScreen = 77;
+    private const int SmCxVirtualScreen = 78;
+    private const int SmCyVirtualScreen = 79;
     private const uint WsOverlappedWindow = 0x00CF0000;
     private const uint WsPopup = 0x80000000;
     private const uint WsVisible = 0x10000000;
@@ -122,6 +154,19 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private readonly NativeWindowOptions m_options;
     private readonly Queue<WindowInputEvent> m_pendingInput = [];
     private readonly GCHandle m_selfHandle;
+    // Reused across every ToUnicodeEx call — text derivation runs on the window-pump thread only, so one small
+    // scratch buffer is safe to share (sized for a combining dead-key result or a surrogate pair).
+    private readonly char[] m_textBuffer = new char[8];
+    // Every raw device handle this session has seen, resolved once to its stable InputDeviceId (see
+    // ResolveRawDeviceId) and cached for the life of the connection — hDevice is stable only while the device stays
+    // connected; a replug mints a new handle, resolved again, that happens to hash back to the SAME InputDeviceId
+    // (see InputDeviceId.FromKey's own reconnect-stability contract).
+    private readonly Dictionary<nint, InputDeviceId> m_rawDeviceIds = new();
+    // One RAWKEYBOARD-fed BYTE[256] per physical keyboard handle, threaded into ToUnicodeEx so a dead key or a
+    // held Shift on one keyboard never leaks into another's text derivation.
+    private readonly Dictionary<nint, byte[]> m_rawKeyStates = new();
+    // One accumulated pointer per physical mouse handle — position, pending delta, and absolute-report tracking.
+    private readonly Dictionary<nint, RawMouseState> m_rawMouseStates = new();
 
     private bool m_disposed;
     private bool m_isFullscreen;
@@ -130,15 +175,24 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private bool m_isVisible;
     private Vector2 m_frameMouseDelta;
     private bool m_pointerPositionDirty;
+    private bool m_rawKeyboardRegistered;
     private bool m_rawMouseRegistered;
     private int? m_lastMouseX;
     private int? m_lastMouseY;
-    private int? m_lastRawAbsoluteX;
-    private int? m_lastRawAbsoluteY;
     private ulong m_resizeCount;
     private Rectangle m_windowedBounds;
     private nint m_windowedStyle;
     private nint m_windowHandle;
+
+    // One physical mouse's accumulated pointer state — see m_rawMouseStates.
+    private sealed class RawMouseState {
+        public required InputDeviceId DeviceId;
+        public Vector2 Position;
+        public Vector2 PendingDelta;
+        public bool PositionDirty;
+        public int? LastAbsoluteX;
+        public int? LastAbsoluteY;
+    }
 
     public Win32NativeWindow(IClipboardService clipboardService, IOptions<NativeWindowOptions> options) {
         ArgumentNullException.ThrowIfNull(clipboardService);
@@ -219,24 +273,48 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     }
 
     private void FlushPointerFrame() {
-        // Emit at most one PointerDelta (the frame's summed relative motion) and one PointerAbsolute per
-        // frame, so a high-rate mouse that produced many WM_INPUT packets collapses to a single delta each
-        // observer sees once (a per-frame consumer sums or last-wins; one event makes either exact).
-        if (m_frameMouseDelta != Vector2.Zero) {
-            m_pendingInput.Enqueue(item: WindowInputEvent.PointerDelta(delta: m_frameMouseDelta));
-            m_frameMouseDelta = Vector2.Zero;
+        if (!m_rawMouseRegistered) {
+            // Fallback path: raw mouse registration failed, so WM_MOUSEMOVE/WM_*BUTTON* fed these two legacy
+            // accumulators instead (see HandleMouseMove) — one aggregate, device-less pointer, exactly as before
+            // every mouse carried its own identity.
+            if (m_frameMouseDelta != Vector2.Zero) {
+                m_pendingInput.Enqueue(item: WindowInputEvent.PointerDelta(delta: m_frameMouseDelta));
+                m_frameMouseDelta = Vector2.Zero;
+            }
+
+            if (
+                m_pointerPositionDirty &&
+                (m_lastMouseX is { } absoluteX) &&
+                (m_lastMouseY is { } absoluteY)
+            ) {
+                m_pendingInput.Enqueue(item: WindowInputEvent.PointerAbsolute(position: new Vector2(
+                    x: absoluteX,
+                    y: absoluteY
+                )));
+                m_pointerPositionDirty = false;
+            }
+
+            return;
         }
 
-        if (
-            m_pointerPositionDirty &&
-            (m_lastMouseX is { } absoluteX) &&
-            (m_lastMouseY is { } absoluteY)
-        ) {
-            m_pendingInput.Enqueue(item: WindowInputEvent.PointerAbsolute(position: new Vector2(
-                x: absoluteX,
-                y: absoluteY
-            )));
-            m_pointerPositionDirty = false;
+        // At most one PointerDelta and one PointerPosition PER DEVICE per frame, so a high-rate mouse that produced
+        // many WM_INPUT packets collapses to a single report each observer sees once.
+        foreach (var state in m_rawMouseStates.Values) {
+            if (state.PendingDelta != Vector2.Zero) {
+                m_pendingInput.Enqueue(item: WindowInputEvent.PointerDelta(
+                    delta: state.PendingDelta,
+                    deviceId: state.DeviceId
+                ));
+                state.PendingDelta = Vector2.Zero;
+            }
+
+            if (state.PositionDirty) {
+                m_pendingInput.Enqueue(item: WindowInputEvent.PointerAbsolute(
+                    position: state.Position,
+                    deviceId: state.DeviceId
+                ));
+                state.PositionDirty = false;
+            }
         }
     }
 
@@ -417,24 +495,37 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
             throw new InvalidOperationException(message: $"CreateWindowExW failed with Win32 error {Marshal.GetLastWin32Error()}.");
         }
 
-        RegisterRawMouse(windowHandle: windowHandle);
+        RegisterRawInput(windowHandle: windowHandle);
 
         return windowHandle;
     }
-    private void RegisterRawMouse(nint windowHandle) {
-        // Register the generic mouse for raw input (flags 0 = follow focus, foreground only). The launcher
-        // focus-gates anyway. On failure, m_rawMouseRegistered stays false and HandleMouseMove derives the
-        // delta from WM_MOUSEMOVE instead — feeding the same pump-level accumulator, never both.
-        var device = new RawInputDevice {
-            Flags = 0,
-            TargetWindowHandle = windowHandle,
-            Usage = HidUsageGenericMouse,
-            UsagePage = HidUsagePageGeneric,
-        };
+    // Registers the generic mouse AND the generic keyboard for raw input (flags 0 = follow focus, foreground only;
+    // the launcher focus-gates anyway), independently — one class's registration failing never withholds the
+    // other. On failure, the corresponding m_raw*Registered flag stays false and the legacy WM_MOUSEMOVE/WM_KEYDOWN/
+    // WM_CHAR path takes over for that class instead (see HandleMouseMove, HandleKeyDown/Up, HandleCharacterInput).
+    private void RegisterRawInput(nint windowHandle) {
+        m_rawMouseRegistered = RegisterRawInputDevice(
+            usage: HidUsageGenericMouse,
+            windowHandle: windowHandle
+        );
+        m_rawKeyboardRegistered = RegisterRawInputDevice(
+            usage: HidUsageGenericKeyboard,
+            windowHandle: windowHandle
+        );
+    }
+    private static bool RegisterRawInputDevice(ushort usage, nint windowHandle) {
+        RawInputDevice[] devices = [
+            new RawInputDevice {
+                Flags = 0,
+                TargetWindowHandle = windowHandle,
+                Usage = usage,
+                UsagePage = HidUsagePageGeneric,
+            },
+        ];
 
-        m_rawMouseRegistered = User32.RegisterRawInputDevices(
+        return User32.RegisterRawInputDevices(
             deviceCount: 1,
-            rawInputDevices: in device,
+            rawInputDevices: devices,
             size: ((uint)Marshal.SizeOf<RawInputDevice>())
         );
     }
@@ -616,6 +707,12 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
         );
     }
     private nint HandleCharacterInput(nint windowHandle, nint wParam, nint lParam) {
+        if (m_rawKeyboardRegistered) {
+            // Typed text comes entirely from the raw stream's per-device ToUnicodeEx derivation when it is
+            // available — see HandleRawKeyboard/EmitRawTypedText.
+            return 0;
+        }
+
         var character = checked((char)wParam.ToInt64());
 
         if (!char.IsControl(c: character)) {
@@ -624,59 +721,42 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
 
         return 0;
     }
+    // The legacy key door: when the raw keyboard stream is available it owns every key/letter/text signal (see
+    // HandleRawKeyboard), and this handler's only remaining job is deciding whether to swallow the message
+    // (returning 0 suppresses the native behaviors of the keys Puck owns — F10/bare Alt menu navigation and Tab
+    // dialog traversal included) or let it reach DefWindowProc. When raw registration failed, this handler falls
+    // all the way back to emitting the signal itself (device-less, exactly as before Raw Input covered the
+    // keyboard).
     private nint HandleKeyDown(nint windowHandle, uint message, nint wParam, nint lParam) {
-        if (IsAltEnterGesture(
-            altKeyState: User32.GetKeyState(virtualKey: VkMenu),
-            message: message,
-            wParam: wParam
-        )) {
-            ToggleFullscreen(windowHandle: windowHandle);
-            return 0;
-        }
-
-        // Ctrl+V pastes: the clipboard text flows through the text pipeline. The chord is consumed WHETHER OR NOT the
-        // clipboard has text — otherwise an empty clipboard would let Ctrl+V fall through to the letter case below
-        // and emit a LetterDown('v', Control) that a full clipboard suppresses: a clipboard-state-dependent binding
-        // behavior no consumer could reason about. Exactly Control (no Shift/Alt/Super) so Ctrl+Shift+V still falls
-        // through to its letter signal rather than also pasting.
-        if (
-            IsKeyDown(virtualKey: VkControl) &&
-            !IsKeyDown(virtualKey: VkShift) &&
-            !IsKeyDown(virtualKey: VkMenu) &&
-            !IsKeyDown(virtualKey: VkLWin) &&
-            !IsKeyDown(virtualKey: VkRWin) &&
-            (wParam.ToInt64() == VkV)
-        ) {
-            if (
-                m_clipboardService.TryGetText(text: out var clipboardText) &&
-                (clipboardText.Length > 0)
-            ) {
-                m_pendingInput.Enqueue(item: WindowInputEvent.TypedText(text: clipboardText));
-            }
-
-            return 0;
-        }
-
         var virtualKey = wParam.ToInt64();
+        var isSystemKey = (message == WmSysKeyDown);
+        var isExtended = IsExtendedKey(lParam: lParam);
+        var scanCode = GetScanCode(lParam: lParam);
 
-        if (virtualKey is >= VkA and <= VkZ) {
-            // EVERY letter key is a first-class key signal, chorded or plain — a game binds WASD movement the same
-            // way it binds Ctrl+C. The letter's WM_CHAR still arrives independently, and its modifier chord rides
-            // along so the console can distinguish Ctrl+A/C/X from plain text.
-            m_pendingInput.Enqueue(item: WindowInputEvent.LetterDown(
-                character: LetterForVirtualKey(virtualKey: virtualKey)
-            ) with {
-                Modifiers = CurrentModifiers(),
-            });
-
-            return 0;
+        if (!m_rawKeyboardRegistered) {
+            EmitKeyTransition(
+                deviceId: default,
+                isDown: true,
+                isExtended: isExtended,
+                isSystemKey: isSystemKey,
+                scanCode: scanCode,
+                virtualKey: virtualKey
+            );
         }
 
-        // Key-down and key-up resolve through the SAME VK table. Returning 0 also suppresses the native behaviors
-        // of the keys Puck owns (F10/bare Alt menu navigation and Tab dialog traversal included).
-        if (TryMapNamedKey(key: out var key, lParam: lParam, virtualKey: virtualKey)) {
-            m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: key));
-
+        if (
+            IsConsumedKeyGesture(
+            isSystemKey: isSystemKey,
+            virtualKey: virtualKey
+        ) ||
+            (virtualKey is >= VkA and <= VkZ) ||
+            TryMapNamedKey(
+            isExtended: isExtended,
+            key: out _,
+            scanCode: scanCode,
+            virtualKey: virtualKey
+        )
+        ) {
             return 0;
         }
 
@@ -688,18 +768,30 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
         );
     }
     private nint HandleKeyUp(nint windowHandle, uint message, nint wParam, nint lParam) {
-        // Release edges for the named navigation/function/special keys AND the letter keys — a held-key
-        // consumer (e.g. a movement binding's release edge) needs the up transition or the hold sticks.
-        // Releases are inert by default (CommandBinding.ActivateOn ignores Completed).
         var virtualKey = wParam.ToInt64();
+        var isExtended = IsExtendedKey(lParam: lParam);
+        var scanCode = GetScanCode(lParam: lParam);
 
-        if (virtualKey is >= VkA and <= VkZ) {
-            m_pendingInput.Enqueue(item: WindowInputEvent.LetterUp(character: LetterForVirtualKey(virtualKey: virtualKey)));
-            return 0;
+        if (!m_rawKeyboardRegistered) {
+            EmitKeyTransition(
+                deviceId: default,
+                isDown: false,
+                isExtended: isExtended,
+                isSystemKey: (message == WmSysKeyUp),
+                scanCode: scanCode,
+                virtualKey: virtualKey
+            );
         }
 
-        if (TryMapNamedKey(key: out var key, lParam: lParam, virtualKey: virtualKey)) {
-            m_pendingInput.Enqueue(item: WindowInputEvent.KeyUp(key: key));
+        if (
+            (virtualKey is >= VkA and <= VkZ) ||
+            TryMapNamedKey(
+            isExtended: isExtended,
+            key: out _,
+            scanCode: scanCode,
+            virtualKey: virtualKey
+        )
+        ) {
             return 0;
         }
 
@@ -710,14 +802,104 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
             windowHandle: windowHandle
         );
     }
+    // Whether virtualKey/isSystemKey is a system gesture consumed WHOLE (Alt+Enter fullscreen toggle, Ctrl+V
+    // paste) rather than becoming an ordinary key/letter signal. Read-only: the legacy WM_KEYDOWN suppression
+    // decision above calls this without running the effect; EmitKeyTransition is the one place that both checks it
+    // and runs the effect.
+    private bool IsConsumedKeyGesture(long virtualKey, bool isSystemKey) {
+        if (
+            isSystemKey &&
+            (virtualKey == VkReturn) &&
+            IsKeyDown(virtualKey: VkMenu)
+        ) {
+            return true;
+        }
+
+        // Exactly Control (no Shift/Alt/Super) so Ctrl+Shift+V still falls through to its letter signal rather
+        // than also pasting.
+        return (
+            (virtualKey == VkV) &&
+            IsKeyDown(virtualKey: VkControl) &&
+            !IsKeyDown(virtualKey: VkShift) &&
+            !IsKeyDown(virtualKey: VkMenu) &&
+            !IsKeyDown(virtualKey: VkLWin) &&
+            !IsKeyDown(virtualKey: VkRWin)
+        );
+    }
+    // The one place a key transition becomes a WindowInputEvent, for a keyboard identified by deviceId — the raw
+    // stream's per-device door (see HandleRawKeyboard) and the legacy WM_KEYDOWN/WM_KEYUP fallback (device-less,
+    // when raw registration failed) both funnel through here so the gesture/letter/named-key logic is written once.
+    private void EmitKeyTransition(long virtualKey, bool isExtended, byte scanCode, bool isDown, bool isSystemKey, InputDeviceId deviceId) {
+        if (
+            isDown &&
+            IsConsumedKeyGesture(
+            isSystemKey: isSystemKey,
+            virtualKey: virtualKey
+        )
+        ) {
+            if (virtualKey == VkReturn) {
+                ToggleFullscreen(windowHandle: m_windowHandle);
+            } else if (
+                m_clipboardService.TryGetText(text: out var clipboardText) &&
+                (clipboardText.Length > 0)
+            ) {
+                m_pendingInput.Enqueue(item: WindowInputEvent.TypedText(
+                    deviceId: deviceId,
+                    text: clipboardText
+                ));
+            }
+
+            return;
+        }
+
+        // EVERY letter key is a first-class key signal, chorded or plain — a game binds WASD movement the same
+        // way it binds Ctrl+C.
+        if (virtualKey is >= VkA and <= VkZ) {
+            var character = LetterForVirtualKey(virtualKey: virtualKey);
+
+            m_pendingInput.Enqueue(item: (isDown
+                ? (WindowInputEvent.LetterDown(
+                    character: character,
+                    deviceId: deviceId
+                ) with {
+                    Modifiers = CurrentModifiers(),
+                })
+                : WindowInputEvent.LetterUp(
+                    character: character,
+                    deviceId: deviceId
+                )
+            ));
+
+            return;
+        }
+
+        if (TryMapNamedKey(
+            isExtended: isExtended,
+            key: out var key,
+            scanCode: scanCode,
+            virtualKey: virtualKey
+        )) {
+            m_pendingInput.Enqueue(item: (isDown
+                ? WindowInputEvent.KeyDown(
+                    deviceId: deviceId,
+                    key: key
+                )
+                : WindowInputEvent.KeyUp(
+                    deviceId: deviceId,
+                    key: key
+                )
+            ));
+        }
+    }
     // The single owner of the VK→letter identity BOTH key edges share — a copy-paste slip desyncing the down and up
     // arithmetic (each previously computed it inline) would silently break every held-letter consumer.
     private static char LetterForVirtualKey(long virtualKey) {
         return ((char)('a' + (virtualKey - VkA)));
     }
-    // The one VK→named-key table both physical edges share. Side-sensitive modifiers derive from the event's
-    // lParam: Control/Alt use the extended bit, while Shift resolves its scan code through MapVirtualKey.
-    private static bool TryMapNamedKey(long virtualKey, nint lParam, out KeyCode key) {
+    // The one VK→named-key table both physical edges (and both the raw and legacy-fallback doors) share.
+    // Side-sensitive modifiers derive from the caller's own extended-bit/scan-code reading — the raw stream's
+    // RAWKEYBOARD.Flags/MakeCode, or the legacy lParam via IsExtendedKey/GetScanCode.
+    private static bool TryMapNamedKey(long virtualKey, bool isExtended, byte scanCode, out KeyCode key) {
         if (virtualKey is >= Vk0 and <= Vk9) {
             key = ((KeyCode)(((int)KeyCode.Digit0) + (virtualKey - Vk0)));
             return true;
@@ -755,9 +937,9 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
             VkF10 => KeyCode.F10,
             VkF11 => KeyCode.F11,
             VkF12 => KeyCode.F12,
-            VkControl => ((IsExtendedKey(lParam: lParam)) ? KeyCode.ControlRight : KeyCode.ControlLeft),
-            VkMenu => ((IsExtendedKey(lParam: lParam)) ? KeyCode.AltRight : KeyCode.AltLeft),
-            VkShift => ResolveShiftSide(lParam: lParam),
+            VkControl => ((isExtended) ? KeyCode.ControlRight : KeyCode.ControlLeft),
+            VkMenu => ((isExtended) ? KeyCode.AltRight : KeyCode.AltLeft),
+            VkShift => ResolveShiftSide(scanCode: scanCode),
             VkLWin => KeyCode.SuperLeft,
             VkRWin => KeyCode.SuperRight,
             _ => KeyCode.None,
@@ -766,15 +948,20 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
         return (key != KeyCode.None);
     }
     // WM_KEYDOWN/WM_KEYUP lParam bit 24 (ExtendedKeyBit) — set for the right-hand Control/Alt, clear for the
-    // left-hand ones. Verified against the documented WM_KEYDOWN/WM_KEYUP lParam layout, not against hardware.
+    // left-hand ones. Verified against the documented WM_KEYDOWN/WM_KEYUP lParam layout, not against hardware. The
+    // raw stream carries the identical bit as RAWKEYBOARD.Flags' RI_KEY_E0 instead (see HandleRawKeyboard).
     private static bool IsExtendedKey(nint lParam) {
         return ((lParam.ToInt64() & ExtendedKeyBit) != 0);
     }
-    // Shift's lParam carries no extended-key bit on either side, so the scan code (lParam bits 16..23) plus
-    // MapVirtualKey(MAPVK_VSC_TO_VK_EX) is the documented way to recover which physical Shift key fired.
-    // Ambiguous or unresolved input (0, or neither VK) defaults to the left key.
-    private static KeyCode ResolveShiftSide(nint lParam) {
-        var scanCode = ((uint)((lParam.ToInt64() >> 16) & 0xFF));
+    // lParam bits 16..23 carry the scan code on the legacy path; RAWKEYBOARD.MakeCode carries the identical value
+    // directly on the raw path (see HandleRawKeyboard) — both feed TryMapNamedKey's ResolveShiftSide the same way.
+    private static byte GetScanCode(nint lParam) {
+        return unchecked((byte)((lParam.ToInt64() >> 16) & 0xFF));
+    }
+    // Shift's scan code carries no extended-key bit on either side, so MapVirtualKey(MAPVK_VSC_TO_VK_EX) against
+    // the physical scan code is the documented way to recover which physical Shift key fired. Ambiguous or
+    // unresolved input (0, or neither VK) defaults to the left key.
+    private static KeyCode ResolveShiftSide(byte scanCode) {
         var resolvedVirtualKey = User32.MapVirtualKey(code: scanCode, mapType: MapvkVscToVkEx);
 
         return ((resolvedVirtualKey == VkRShift) ? KeyCode.ShiftRight : KeyCode.ShiftLeft);
@@ -793,7 +980,16 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
         }
 
         if (raw.Header.Type == RimTypeMouse) {
-            AccumulateRawMouse(mouse: in raw.Mouse);
+            HandleRawMouse(
+                deviceHandle: raw.Header.DeviceHandle,
+                mouse: in raw.Data.Mouse,
+                windowHandle: windowHandle
+            );
+        } else if (raw.Header.Type == RimTypeKeyboard) {
+            HandleRawKeyboard(
+                deviceHandle: raw.Header.DeviceHandle,
+                keyboard: in raw.Data.Keyboard
+            );
         }
 
         // WM_INPUT must always reach DefWindowProc for system cleanup (per the Raw Input contract).
@@ -807,41 +1003,359 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
             windowHandle: windowHandle
         );
     }
-    private void AccumulateRawMouse(in RawMouse mouse) {
-        // Absolute mode (RDP / VMs / tablets / touch-as-mouse): lLastX/lLastY are absolute normalized coords,
-        // not deltas — derive the delta from the previous absolute sample instead of summing garbage.
+    // Resolves (creating on first sight) a physical mouse's accumulated pointer state, seeded at the client centre
+    // so its first PointerPosition report is a sane on-screen value rather than the client origin.
+    private RawMouseState GetOrCreateRawMouseState(nint deviceHandle) {
+        if (!m_rawMouseStates.TryGetValue(
+            key: deviceHandle,
+            value: out var state
+        )) {
+            state = new RawMouseState {
+                DeviceId = ResolveRawDeviceId(deviceHandle: deviceHandle),
+                Position = new Vector2(
+                    x: (Width / 2f),
+                    y: (Height / 2f)
+                ),
+            };
+            m_rawMouseStates[deviceHandle] = state;
+        }
+
+        return state;
+    }
+    private void HandleRawMouse(nint deviceHandle, nint windowHandle, in RawMouse mouse) {
+        var state = GetOrCreateRawMouseState(deviceHandle: deviceHandle);
+
+        // Absolute mode (RDP / VMs / tablets / touch-as-mouse): LastX/LastY are absolute normalized coordinates
+        // across the virtual desktop, not deltas. The relative-delta report stays in raw device units (matching
+        // the relative-mode branch below); the accumulated on-screen POSITION is translated onto the client rect
+        // and clamped to it independently.
         if ((mouse.Flags & RiMouseMoveAbsolute) != 0) {
             if (
-                (m_lastRawAbsoluteX is { } previousX) &&
-                (m_lastRawAbsoluteY is { } previousY)
+                (state.LastAbsoluteX is { } previousX) &&
+                (state.LastAbsoluteY is { } previousY)
             ) {
-                m_frameMouseDelta += new Vector2(
+                state.PendingDelta += new Vector2(
                     x: (mouse.LastX - previousX),
                     y: (mouse.LastY - previousY)
                 );
             }
 
-            m_lastRawAbsoluteX = mouse.LastX;
-            m_lastRawAbsoluteY = mouse.LastY;
+            state.LastAbsoluteX = mouse.LastX;
+            state.LastAbsoluteY = mouse.LastY;
+            state.Position = ClampToClient(position: TranslateAbsoluteRawMouse(
+                rawX: mouse.LastX,
+                rawY: mouse.LastY,
+                windowHandle: windowHandle
+            ));
+        } else {
+            state.LastAbsoluteX = null;
+            state.LastAbsoluteY = null;
+
+            var delta = new Vector2(
+                x: mouse.LastX,
+                y: mouse.LastY
+            );
+
+            state.PendingDelta += delta;
+            state.Position = ClampToClient(position: (state.Position + delta));
+        }
+
+        state.PositionDirty = true;
+
+        if (mouse.ButtonFlags != 0) {
+            HandleRawMouseButtons(
+                buttonData: mouse.ButtonData,
+                buttonFlags: mouse.ButtonFlags,
+                state: state,
+                windowHandle: windowHandle
+            );
+        }
+    }
+    private Vector2 ClampToClient(Vector2 position) {
+        return new Vector2(
+            x: Math.Clamp(value: position.X, min: 0f, max: Width),
+            y: Math.Clamp(value: position.Y, min: 0f, max: Height)
+        );
+    }
+    // Maps a RAWMOUSE absolute report (normalized 0..65535 across the virtual desktop, or the current monitor when
+    // the device sets MOUSE_VIRTUAL_DESKTOP — not modeled here, matching every raw mouse this window has been
+    // verified against) onto client-relative pixels.
+    private static Vector2 TranslateAbsoluteRawMouse(nint windowHandle, int rawX, int rawY) {
+        var virtualLeft = User32.GetSystemMetrics(index: SmXVirtualScreen);
+        var virtualTop = User32.GetSystemMetrics(index: SmYVirtualScreen);
+        var virtualWidth = User32.GetSystemMetrics(index: SmCxVirtualScreen);
+        var virtualHeight = User32.GetSystemMetrics(index: SmCyVirtualScreen);
+
+        var screenX = (virtualLeft + ((rawX / 65535f) * virtualWidth));
+        var screenY = (virtualTop + ((rawY / 65535f) * virtualHeight));
+
+        var clientOrigin = new Point();
+
+        _ = User32.ClientToScreen(
+            point: ref clientOrigin,
+            windowHandle: windowHandle
+        );
+
+        return new Vector2(
+            x: (screenX - clientOrigin.X),
+            y: (screenY - clientOrigin.Y)
+        );
+    }
+    private void HandleRawMouseButtons(RawMouseState state, nint windowHandle, ushort buttonFlags, ushort buttonData) {
+        ApplyRawMouseButton(
+            button: 0,
+            buttonFlags: buttonFlags,
+            downFlag: RiMouseButton1Down,
+            state: state,
+            upFlag: RiMouseButton1Up,
+            windowHandle: windowHandle
+        );
+        ApplyRawMouseButton(
+            button: 1,
+            buttonFlags: buttonFlags,
+            downFlag: RiMouseButton2Down,
+            state: state,
+            upFlag: RiMouseButton2Up,
+            windowHandle: windowHandle
+        );
+        ApplyRawMouseButton(
+            button: 2,
+            buttonFlags: buttonFlags,
+            downFlag: RiMouseButton3Down,
+            state: state,
+            upFlag: RiMouseButton3Up,
+            windowHandle: windowHandle
+        );
+        ApplyRawMouseButton(
+            button: 3,
+            buttonFlags: buttonFlags,
+            downFlag: RiMouseButton4Down,
+            state: state,
+            upFlag: RiMouseButton4Up,
+            windowHandle: windowHandle
+        );
+        ApplyRawMouseButton(
+            button: 4,
+            buttonFlags: buttonFlags,
+            downFlag: RiMouseButton5Down,
+            state: state,
+            upFlag: RiMouseButton5Up,
+            windowHandle: windowHandle
+        );
+
+        // The wheel is NOT summed per frame the way relative motion is: a wheel report is already a discrete act at
+        // human cadence, so each one is enqueued as it arrives. The delta rides ButtonData as a SIGNED quantum
+        // (positive = away from the user) — the same WHEEL_DELTA convention WM_MOUSEWHEEL's high word used.
+        if ((buttonFlags & RiMouseWheel) != 0) {
+            var notches = (unchecked((short)buttonData) / WheelDelta);
+
+            if (notches != 0f) {
+                m_pendingInput.Enqueue(item: WindowInputEvent.PointerWheel(
+                    deviceId: state.DeviceId,
+                    notches: notches
+                ));
+            }
+        }
+
+        if ((buttonFlags & RiMouseHWheel) != 0) {
+            var notches = (unchecked((short)buttonData) / WheelDelta);
+
+            if (notches != 0f) {
+                m_pendingInput.Enqueue(item: WindowInputEvent.PointerWheel(
+                    deviceId: state.DeviceId,
+                    notches: new Vector2(
+                    x: notches,
+                    y: 0f
+                )
+                ));
+            }
+        }
+    }
+    // A left-button press captures the mouse: the OS then keeps routing raw reports to this window even after the
+    // pointer leaves the client area (or the whole window), so a drag that starts inside and ends outside still
+    // streams moves and the matching release edge, instead of going silent the moment the cursor crosses the
+    // border. Only the left button captures — see HandlePointerButtonDown's own remarks (the legacy-fallback twin
+    // of this same rule).
+    private void ApplyRawMouseButton(RawMouseState state, nint windowHandle, ushort downFlag, ushort upFlag, int button, ushort buttonFlags) {
+        if ((buttonFlags & downFlag) != 0) {
+            if (button == 0) {
+                _ = User32.SetCapture(windowHandle: windowHandle);
+            }
+
+            m_pendingInput.Enqueue(item: WindowInputEvent.PointerButton(
+                button: button,
+                deviceId: state.DeviceId,
+                phase: CommandPhase.Started
+            ));
+        } else if ((buttonFlags & upFlag) != 0) {
+            if (button == 0) {
+                _ = User32.ReleaseCapture();
+            }
+
+            m_pendingInput.Enqueue(item: WindowInputEvent.PointerButton(
+                button: button,
+                deviceId: state.DeviceId,
+                phase: CommandPhase.Completed
+            ));
+        }
+    }
+    private void HandleRawKeyboard(nint deviceHandle, in RawKeyboard keyboard) {
+        if (keyboard.VKey == RawKeyboardNoVKey) {
+            // No VK mapping (an E1 Pause/Break packet, among others) — nothing to resolve.
             return;
         }
 
-        m_lastRawAbsoluteX = null;
-        m_lastRawAbsoluteY = null;
-        m_frameMouseDelta += new Vector2(
-            x: mouse.LastX,
-            y: mouse.LastY
+        var deviceId = ResolveRawDeviceId(deviceHandle: deviceHandle);
+        var isDown = ((keyboard.Flags & RiKeyBreak) == 0);
+        var isExtended = ((keyboard.Flags & RiKeyE0) != 0);
+        var isSystemKey = (keyboard.Message is WmSysKeyDown or WmSysKeyUp);
+
+        EmitKeyTransition(
+            deviceId: deviceId,
+            isDown: isDown,
+            isExtended: isExtended,
+            isSystemKey: isSystemKey,
+            scanCode: unchecked((byte)keyboard.MakeCode),
+            virtualKey: keyboard.VKey
         );
+
+        if (isDown) {
+            EmitRawTypedText(
+                deviceHandle: deviceHandle,
+                deviceId: deviceId,
+                isExtended: isExtended,
+                keyboard: in keyboard
+            );
+        }
+    }
+    // Derives typed text for ONE physical keyboard from its own make/break stream via ToUnicodeEx, so a dead key or
+    // a held Shift on keyboard A never combines with a keystroke on keyboard B — each keyboard's BYTE[256] state
+    // (m_rawKeyStates) is threaded independently. ToUnicodeEx's dead-key COMPOSITION state itself is maintained by
+    // Windows per calling thread, not per device: a dead key on one keyboard immediately followed by a letter on
+    // another, on the same thread, can still combine across devices — a real limitation of the Win32 API this
+    // window has no way around, not attempted here. IME composition (WM_IME_*) is not read by this path at all;
+    // an IME's composed text needs its own window-message-driven pipeline, out of scope here.
+    private void EmitRawTypedText(nint deviceHandle, InputDeviceId deviceId, bool isExtended, in RawKeyboard keyboard) {
+        if (!m_rawKeyStates.TryGetValue(
+            key: deviceHandle,
+            value: out var keyState
+        )) {
+            keyState = new byte[256];
+            m_rawKeyStates[deviceHandle] = keyState;
+        }
+
+        if (keyboard.VKey < keyState.Length) {
+            keyState[keyboard.VKey] = (((keyboard.Flags & RiKeyBreak) == 0) ? (byte)0x80 : (byte)0);
+        }
+
+        // Toggle state (bit 0) is a single system-wide fact, not per keyboard — mirrored in from GetKeyState so a
+        // Shift+letter or a dead-key sequence resolves against the real CapsLock/NumLock/ScrollLock state.
+        keyState[VkCapital] = (byte)((User32.GetKeyState(virtualKey: VkCapital) & 1) != 0 ? 1 : 0);
+        keyState[VkNumLock] = (byte)((User32.GetKeyState(virtualKey: VkNumLock) & 1) != 0 ? 1 : 0);
+        keyState[VkScroll] = (byte)((User32.GetKeyState(virtualKey: VkScroll) & 1) != 0 ? 1 : 0);
+
+        var scanCode = ((uint)(keyboard.MakeCode | (isExtended ? 0x0100u : 0u)));
+        var written = User32.ToUnicodeEx(
+            bufferCount: m_textBuffer.Length,
+            buffer: m_textBuffer,
+            flags: 0,
+            keyboardLayout: User32.GetKeyboardLayout(threadId: 0),
+            keyState: keyState,
+            scanCode: scanCode,
+            virtualKey: keyboard.VKey
+        );
+
+        // written < 0 is a dead key awaiting its combining character (state held internally by Windows, per
+        // thread); written == 0 is a non-printing key (an arrow, a function key). Only a positive result is real
+        // text.
+        if (
+            (written > 0) &&
+            !char.IsControl(c: m_textBuffer[0])
+        ) {
+            m_pendingInput.Enqueue(item: WindowInputEvent.TypedText(
+                deviceId: deviceId,
+                text: new string(
+                    value: m_textBuffer,
+                    startIndex: 0,
+                    length: written
+                )
+            ));
+        }
+    }
+    // Resolves (and caches, per connection) a raw device handle to a reconnect-stable InputDeviceId, addressed off
+    // its OS device interface path — the same physical mouse or keyboard replugged later mints a NEW hDevice but
+    // resolves to the SAME name, and so the SAME id (see InputDeviceId.FromKey). A device whose name could not be
+    // read falls back to a connection-only id keyed by the handle itself — stable for this connection, explicitly
+    // ineligible for durable preferences.
+    private InputDeviceId ResolveRawDeviceId(nint deviceHandle) {
+        if (m_rawDeviceIds.TryGetValue(
+            key: deviceHandle,
+            value: out var cached
+        )) {
+            return cached;
+        }
+
+        var resolved = (TryGetRawInputDeviceName(deviceHandle: deviceHandle, name: out var name)
+            ? InputDeviceId.FromKey(key: name)
+            : InputDeviceId.FromConnectionKey(key: $"raw-device-{deviceHandle}")
+        );
+
+        m_rawDeviceIds[deviceHandle] = resolved;
+
+        return resolved;
+    }
+    // GetRawInputDeviceInfo's RIDI_DEVICENAME reports the count in CHARACTERS (not bytes); the documented two-call
+    // pattern discovers the required size with a null buffer, then fetches into one sized exactly for it.
+    private static bool TryGetRawInputDeviceName(nint deviceHandle, out string name) {
+        name = string.Empty;
+
+        var size = 0u;
+
+        _ = User32.GetRawInputDeviceInfo(
+            command: RidiDeviceName,
+            data: 0,
+            deviceHandle: deviceHandle,
+            size: ref size
+        );
+
+        if (size == 0) {
+            return false;
+        }
+
+        var buffer = Marshal.AllocHGlobal(cb: (checked((int)size) * sizeof(char)));
+
+        try {
+            var written = User32.GetRawInputDeviceInfo(
+                command: RidiDeviceName,
+                data: buffer,
+                deviceHandle: deviceHandle,
+                size: ref size
+            );
+
+            if (unchecked((int)written) < 0) {
+                return false;
+            }
+
+            name = (Marshal.PtrToStringUni(
+                len: checked((int)written),
+                ptr: buffer
+            ) ?? string.Empty).TrimEnd(trimChar: '\0');
+
+            return (name.Length > 0);
+        } finally {
+            Marshal.FreeHGlobal(hglobal: buffer);
+        }
     }
     private nint HandleMouseMove(nint lParam) {
+        if (m_rawMouseRegistered) {
+            // Position and delta come entirely from the raw stream when it is available — see HandleRawMouse.
+            return 0;
+        }
+
         var mouseX = GetSignedLowWord(value: lParam);
         var mouseY = GetSignedHighWord(value: lParam);
 
-        // WM_MOUSEMOVE owns the absolute position (PointerAbsolute). It only owns the relative delta as a
-        // fallback when raw input could not be registered — otherwise WM_INPUT is the single delta emitter,
-        // so the two never both feed the pump-level accumulator for the same motion.
         if (
-            !m_rawMouseRegistered &&
             (m_lastMouseX is { } lastMouseX) &&
             (m_lastMouseY is { } lastMouseY)
         ) {
@@ -856,11 +1370,11 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
         m_pointerPositionDirty = true;
         return 0;
     }
-    // The wheel is NOT summed per frame the way relative motion is: a wheel report is already a discrete act at
-    // human cadence, so each one is enqueued as it arrives and consumers accumulate what they care about. The
-    // delta rides the SIGNED high word of wParam (positive = away from the user) — an unsigned read would turn
-    // every scroll toward the user into a large positive number.
     private nint HandleMouseWheel(nint wParam) {
+        if (m_rawMouseRegistered) {
+            return 0;
+        }
+
         var notches = (GetSignedHighWord(value: wParam) / WheelDelta);
 
         if (notches != 0f) {
@@ -870,6 +1384,10 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
         return 0;
     }
     private nint HandleMouseHWheel(nint wParam) {
+        if (m_rawMouseRegistered) {
+            return 0;
+        }
+
         var notches = (GetSignedHighWord(value: wParam) / WheelDelta);
 
         if (notches != 0f) {
@@ -883,12 +1401,13 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private static int XButtonIndex(nint wParam) {
         return (2 + unchecked((ushort)(wParam.ToInt64() >> 16)));
     }
-    // A left-button press captures the mouse: the OS then keeps routing WM_MOUSEMOVE/WM_LBUTTONUP to this window
-    // even after the pointer leaves the client area (or the whole window), so a drag that starts inside and ends
-    // outside still streams moves and the matching release edge, instead of going silent the moment the cursor
-    // crosses the border. Only the left button captures — a middle/right press dragging a panel is not a contract
-    // this window makes, and stacking captures across buttons would need a ref-count this simple pump doesn't have.
+    // Legacy button fallback — only live when raw mouse registration failed (see HandleRawMouseButtons for the
+    // normal, per-device door). A left-button press captures the mouse the same way; see that method's own remarks.
     private nint HandlePointerButtonDown(int button, nint windowHandle) {
+        if (m_rawMouseRegistered) {
+            return 0;
+        }
+
         if (button == 0) {
             _ = User32.SetCapture(windowHandle: windowHandle);
         }
@@ -897,6 +1416,10 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
         return 0;
     }
     private nint HandlePointerButtonUp(int button) {
+        if (m_rawMouseRegistered) {
+            return 0;
+        }
+
         if (button == 0) {
             _ = User32.ReleaseCapture();
         }
@@ -905,13 +1428,6 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
         return 0;
     }
 
-    internal static bool IsAltEnterGesture(uint message, nint wParam, short altKeyState) {
-        return (
-            (message == WmSysKeyDown) &&
-            (wParam.ToInt64() == VkReturn) &&
-            ((altKeyState & 0x8000) != 0)
-        );
-    }
     internal static nint CreateFullscreenWindowStyle(nint currentStyle) {
         var currentStyleValue = unchecked((uint)currentStyle.ToInt64());
         var fullscreenStyle = (currentStyleValue & WsVisible) | WsPopup;
@@ -1019,6 +1535,9 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     }
     // The currently-held modifier chord, provider-neutral (Puck.Input.WindowInputModifiers), for stamping onto a
     // key event — either physical Super key folds into the one Super flag, mirroring left/right Control/Alt above.
+    // Read off the global key state (GetKeyState), not any one device's own tracked state: a modifier held on a
+    // DIFFERENT physical keyboard than the one producing this letter still chords it, matching how a single OS
+    // keyboard state has always worked.
     private static WindowInputModifiers CurrentModifiers() {
         var modifiers = WindowInputModifiers.None;
 

@@ -101,9 +101,12 @@
                   "default": 0.25
                 },
                 "seat": {
-                  "description": "The 1-based local seat this axis is captured for.",
-                  "type": "integer",
-                  "default": 1
+                  "description": "The 1-based local seat this axis is captured for. Forbidden (refused at load) on a seat-relative probe \u2014 a row instanced once per occupied seat because at least one of its camera sockets carries no seat of its own \u2014 whose axis bindings always take their own instance\u0027s seat; required (defaulting to seat 1) on a single-instance probe, exactly as before. null is the wire default. Omitted from the wire when null.",
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "default": null
                 }
               },
               "required": [

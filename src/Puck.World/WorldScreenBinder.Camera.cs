@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Numerics;
 using System.Runtime.InteropServices;
@@ -5,6 +6,7 @@ using System.Runtime.Versioning;
 using System.Text;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
+using Puck.Commands;
 using Puck.DirectX;
 using Puck.DirectX.Apis;
 using Puck.DirectX.Interop;
@@ -23,9 +25,13 @@ internal sealed partial class WorldScreenBinder {
     // Shared-target ring depth per stream: enough room for the renderer's two in-flight frames plus one write target;
     // explicit slot acquisitions enforce the guarantee when producer and renderer cadence diverge.
     private const int CameraTargetCount = 3;
+    // How often the device table is refreshed against ICameraCaptureService.EnumerateDevices() (hot plug/unplug) —
+    // cheap enough to run every publish, expensive enough (a platform enumeration call) to throttle to a human-scale
+    // cadence rather than every produced frame.
+    private static readonly long CameraDeviceScanInterval = (2L * Stopwatch.Frequency);
 
-    // The document-member-to-platform-control pairing, stated once so ApplyCameraControls and DescribeCamera can never
-    // disagree about which authored member drives which device control.
+    // The document-member-to-platform-control pairing, stated once so ApplyCameraControlsFor and DescribeCameraFeed
+    // can never disagree about which authored member drives which device control.
     private static readonly (CameraControl Control, string Name, Func<WorldCameraControls, int?> Select)[] CameraControlMap = [
         (CameraControl.Pan, "pan", static controls => controls.Pan),
         (CameraControl.Tilt, "tilt", static controls => controls.Tilt),
@@ -42,47 +48,49 @@ internal sealed partial class WorldScreenBinder {
         (CameraControl.FieldOfView, "fieldOfView", static controls => controls.FieldOfView),
     ];
 
-    /// <summary>Describes the camera device's live state — the <c>screen.camera</c> read-back: per sensor, the device
-    /// name, tier, negotiated extent, native transport subtype/rate and coordinated mode, each device-supported
-    /// control's current value/mode, device envelope, and the authored document value, plus the authored vendor rows
-    /// read back raw. A sensor without a stream reports its fault. Null when no camera feed was ever attempted.</summary>
-    /// <returns>The description, or <see langword="null"/> when no camera feed or fault exists.</returns>
+    /// <summary>Describes every known camera device — the <c>screen.camera</c> read-back: each device's roster token,
+    /// name, sensors, tier, and the seat it is currently assigned to (or <c>unassigned</c>); for a sensor with a live
+    /// feed, the same per-sensor detail (negotiated extent, native transport, control surface) the single-camera
+    /// read-back always reported. Null when no camera device has ever been enumerated.</summary>
+    /// <returns>The description, or <see langword="null"/> when no camera device is known.</returns>
     public string? DescribeCamera() {
-        if ((0 == m_cameraFeeds.Count) && (0 == m_cameraFaults.Count)) {
+        if (0 == m_cameraDeviceOrder.Count) {
             return null;
         }
 
         var builder = new StringBuilder();
 
-        foreach (var sensor in (WorldCameraSensor[])[WorldCameraSensor.Color, WorldCameraSensor.Infrared]) {
-            string? fault = null;
-
-            if (!m_cameraFeeds.TryGetValue(key: sensor, value: out var feed) && !m_cameraFaults.TryGetValue(key: sensor, value: out fault)) {
-                continue;
-            }
-
+        foreach (var device in m_cameraDeviceOrder) {
             if (builder.Length > 0) {
                 _ = builder.Append(value: " | ");
             }
 
-            if (feed is not null) {
-                DescribeCameraFeed(builder: builder, feed: feed);
-            } else {
-                _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $"{SensorName(sensor: sensor)} '{fault}'");
+            var token = m_roster.DeviceToken(device: device.DeviceId);
+            var seatText = ((m_roster.DeviceSlot(device: device.DeviceId) is { } slot)
+                ? $"p{(slot + 1)}"
+                : "unassigned"
+            );
+
+            _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $"{token} '{device.Name}' [{string.Join(separator: "+", values: device.Sensors)}] {device.Tier} seat={seatText}");
+
+            foreach (var feed in device.Feeds) {
+                _ = builder.Append(value: " — ");
+                DescribeCameraFeed(builder: builder, device: device, feed: feed);
             }
         }
 
         return builder.ToString();
     }
-    /// <summary>Binds a declared screen to a sensor's shared live webcam feed — the runtime
-    /// <c>screen.source &lt;index&gt; camera [color|infrared]</c> path. Any existing producer on the slot is cleared
-    /// first. The device opens (or reopens with the new sensor set) on the next publish; an absent or incompatible
-    /// sensor then reports through the slot's fault and <c>screen.camera</c>. Fails loudly for an undeclared screen or a
-    /// platform without camera support.</summary>
+    /// <summary>Binds a declared screen to a seat's camera device's sensor — the runtime
+    /// <c>screen.source &lt;index&gt; camera [color|infrared] [seat N]</c> path. Any existing producer on the slot is
+    /// cleared first. The seat's camera device resolves (and its sensor feed opens, or reopens with the new sensor
+    /// set) on the next publish; an unassigned seat or an incompatible sensor then reports through the slot's fault
+    /// and <c>screen.camera</c>. Fails loudly for an undeclared screen or a platform without camera support.</summary>
     /// <param name="index">The engine screen-surface index (must be a declared screen).</param>
-    /// <param name="sensor">Which sensor stream's shared feed to bind.</param>
+    /// <param name="sensor">Which sensor stream to bind.</param>
+    /// <param name="seat">The 1-based local seat whose camera device this screen shows.</param>
     /// <returns>Whether the bind succeeded, and a message describing the outcome.</returns>
-    public (bool Ok, string Message) TryCamera(int index, WorldCameraSensor sensor) {
+    public (bool Ok, string Message) TryCamera(int index, WorldCameraSensor sensor, int seat) {
         if (m_disposed) {
             return (Ok: false, Message: "binder disposed");
         }
@@ -95,28 +103,31 @@ internal sealed partial class WorldScreenBinder {
             return (Ok: false, Message: $"no screen {index} declared");
         }
 
-        if (EnsureCameraFeed(profile: WorldFeedProfile.Default, sensor: sensor) is not { } feed) {
-            return (Ok: false, Message: m_cameraFaults.GetValueOrDefault(key: sensor, defaultValue: "no camera device present"));
+        if (!m_cameraCapture.IsSupported) {
+            return (Ok: false, Message: "no camera device present");
         }
 
         slot.ClearLive();
-        slot.Camera = feed;
+        slot.CameraSeat = seat;
+        slot.CameraSensorKind = sensor;
         slot.DeclaredFault = null;
+        DeclareCameraDemand(seat: seat, sensor: sensor, profile: null);
 
-        return (Ok: true, Message: $"screen {index} showing the {SensorName(sensor: sensor)} webcam");
+        return (Ok: true, Message: $"screen {index} showing seat {seat}'s {SensorName(sensor: sensor)} webcam");
     }
 
-    /// <summary>Reads one sensor's live camera attachment for the probes host: the shared-tier stream, the graph's
-    /// kernel host, and the open device's control surface. A sensor with no feed or no started shared-tier stream
-    /// answers <see langword="false"/> with a default attachment — the probes host reads that as "no camera GPU tier
-    /// available yet" and records its own fault rather than throwing.</summary>
+    /// <summary>Reads a seat's camera attachment for the probes host: the shared-tier stream, the graph's kernel
+    /// host, and the open device's control surface. A seat with no camera assigned, an incompatible sensor, or no
+    /// started shared-tier stream answers <see langword="false"/> with a default attachment — the probes host reads
+    /// that as "no camera GPU tier available yet" and records its own fault rather than throwing.</summary>
+    /// <param name="seat">The 1-based local seat whose camera device to read.</param>
     /// <param name="sensor">Which physical sensor to read.</param>
     /// <param name="attachment">The live attachment, set only when this returns <see langword="true"/>.</param>
-    /// <returns><see langword="true"/> when a shared-tier stream is open for the sensor.</returns>
-    public bool TryGetCameraAttachment(WorldCameraSensor sensor, out WorldCameraAttachment attachment) {
+    /// <returns><see langword="true"/> when a shared-tier stream is open for the seat's sensor.</returns>
+    public bool TryGetCameraAttachment(int seat, WorldCameraSensor sensor, out WorldCameraAttachment attachment) {
         if (
-            !m_cameraFeeds.TryGetValue(key: sensor, value: out var feed) ||
-            (feed.SharedStream is not { } shared)
+            !TryResolveCamera(seat: seat, sensor: sensor, device: out var device, feed: out var feed, fault: out _) ||
+            (feed!.SharedStream is not { } shared)
         ) {
             attachment = default;
 
@@ -124,37 +135,202 @@ internal sealed partial class WorldScreenBinder {
         }
 
         attachment = new WorldCameraAttachment(
-            Controls: m_camera.Graph?.Controls,
-            Kernels: (m_camera.Shared as ICameraKernelHost),
+            Controls: device!.Graph?.Controls,
+            Kernels: (device.Shared as ICameraKernelHost),
             Shared: shared,
             TargetSet: feed.GpuTargets
         );
 
         return true;
     }
-    // Services the device's lifecycle, then every sensor feed. Opens run on the thread pool (a Media Foundation open
-    // can block for seconds proving a graph live); the render thread only adopts a finished open.
+    /// <summary>The roster token (<c>camera&lt;N&gt;</c>) of the camera device currently mapped to a seat, or
+    /// <see langword="null"/> when the seat has no camera assigned — the resolved-device echo <c>probe.status</c>
+    /// prints per camera socket.</summary>
+    /// <param name="seat">The 1-based local seat.</param>
+    public string? ResolvedCameraToken(int seat) => (m_roster.TryGetSeatDevice(
+        slot: (seat - 1),
+        kind: InputDeviceKind.Camera,
+        device: out var device
+    )
+        ? m_roster.DeviceToken(device: device)
+        : null
+    );
+    // Services the device table, then every known device's lifecycle and every one of its declared feeds. Opens run
+    // on the thread pool (a Media Foundation open can block for seconds proving a graph live); the render thread only
+    // adopts a finished open.
     private void CaptureCamera(IGpuDeviceContext deviceContext, IGpuComputeServices gpu) {
-        if (0 == m_camera.Feeds.Count) {
+        ServiceCameraDevices();
+        FulfillCameraDemand();
+
+        foreach (var device in m_cameraDeviceOrder) {
+            if (0 == device.Feeds.Count) {
+                // A device's graph opens lazily — only once some consumer's resolution lands on it (EnsureCameraFeed
+                // declares at least one feed).
+                continue;
+            }
+
+            ServiceCameraDeviceGraph(deviceContext: deviceContext, device: device);
+
+            foreach (var feed in device.Feeds) {
+                ServiceCameraFeed(deviceContext: deviceContext, device: device, feed: feed, gpu: gpu);
+            }
+        }
+    }
+    // Re-enumerates every physical camera at boot and roughly every CameraDeviceScanInterval thereafter (hot plug):
+    // a newly seen device is content-addressed (InputDeviceId.FromKey — reconnect-stable) and observed onto the
+    // roster (its default-seating policy attaches it, or leaves it unassigned); a device that vanished has its graph
+    // closed and every feed detached with a "camera disconnected" fault, then drops out of the table so a later
+    // reconnect (the SAME content-addressed id) starts fresh.
+    private void ServiceCameraDevices() {
+        var now = Stopwatch.GetTimestamp();
+
+        if (
+            (m_nextCameraDeviceScanTimestamp != 0L) &&
+            (now < m_nextCameraDeviceScanTimestamp)
+        ) {
             return;
         }
 
-        ServiceCameraDevice(deviceContext: deviceContext);
+        m_nextCameraDeviceScanTimestamp = (now + CameraDeviceScanInterval);
 
-        foreach (var feed in m_camera.Feeds) {
-            ServiceCameraFeed(deviceContext: deviceContext, feed: feed, gpu: gpu);
+        if (!m_cameraCapture.IsSupported) {
+            return;
+        }
+
+        var seen = new HashSet<InputDeviceId>();
+
+        foreach (var info in m_cameraCapture.EnumerateDevices()) {
+            var deviceId = InputDeviceId.FromKey(key: info.Id);
+
+            _ = seen.Add(item: deviceId);
+
+            if (m_cameraDevices.TryGetValue(key: deviceId, value: out var device)) {
+                device.Name = info.Name;
+                device.Sensors = info.Sensors;
+            } else {
+                device = new CameraDevice(deviceId: deviceId, platformId: info.Id, name: info.Name, sensors: info.Sensors);
+                m_cameraDevices[deviceId] = device;
+                m_cameraDeviceOrder.Add(item: device);
+            }
+
+            m_roster.ObserveDevice(device: deviceId, kind: InputDeviceKind.Camera, name: info.Name);
+        }
+
+        for (var index = (m_cameraDeviceOrder.Count - 1); (index >= 0); index--) {
+            var device = m_cameraDeviceOrder[index];
+
+            if (seen.Contains(item: device.DeviceId)) {
+                continue;
+            }
+
+            CloseCameraGraphFor(device: device, fault: "camera disconnected");
+            device.Opening = null;
+            _ = m_cameraDevices.Remove(key: device.DeviceId);
+            m_cameraDeviceOrder.RemoveAt(index: index);
+
+            foreach (var feed in device.Feeds) {
+                _ = m_cameraFeeds.Remove(key: (device.DeviceId, feed.Sensor));
+            }
         }
     }
-    private void ServiceCameraDevice(IGpuDeviceContext deviceContext) {
-        var device = m_camera;
+    // Applies every recorded (seat, sensor) demand against the roster's current seating: a seat that now resolves to
+    // an enumerated device gets its feed ensured (declared, opening) at the richest profile any DeclareCameraDemand
+    // call recorded for it. Cheap — the demand table holds at most a handful of entries.
+    private void FulfillCameraDemand() {
+        foreach (var (seat, sensor) in m_cameraDemand.Keys) {
+            _ = TryFulfillCameraDemand(seat: seat, sensor: sensor);
+        }
+    }
+    private bool TryFulfillCameraDemand(int seat, WorldCameraSensor sensor) {
+        if (
+            !m_roster.TryGetSeatDevice(slot: (seat - 1), kind: InputDeviceKind.Camera, device: out var deviceId) ||
+            !m_cameraDevices.TryGetValue(key: deviceId, value: out var device) ||
+            !DeviceHasSensor(device: device, sensor: sensor)
+        ) {
+            return false;
+        }
 
+        var profile = (m_cameraDemand.TryGetValue(key: (seat, sensor), value: out var requested) ? requested : WorldFeedProfile.Default);
+
+        _ = EnsureCameraFeed(device: device, sensor: sensor, profile: profile);
+
+        return true;
+    }
+    // Records that a (seat, sensor) pair is wanted at (at least) the given profile — the richest envelope any
+    // DeclareCameraDemand call for the same pair has ever recorded — then attempts an immediate resolve so a
+    // demand declared after the device already resolved does not wait a whole publish for its feed to appear.
+    private void DeclareCameraDemand(int seat, WorldCameraSensor sensor, WorldFeedProfile? profile) {
+        var requested = (profile ?? WorldFeedProfile.Default);
+        var key = (seat, sensor);
+
+        if (m_cameraDemand.TryGetValue(key: key, value: out var existing)) {
+            requested = new WorldFeedProfile(
+                Width: Math.Max(val1: existing.Width, val2: requested.Width),
+                Height: Math.Max(val1: existing.Height, val2: requested.Height),
+                RefreshRateHz: Math.Max(val1: existing.RefreshRateHz, val2: requested.RefreshRateHz)
+            );
+        }
+
+        m_cameraDemand[key] = requested;
+        _ = TryFulfillCameraDemand(seat: seat, sensor: sensor);
+    }
+    // Resolves (seat, sensor) to the device currently seated there and its feed — the one lookup every camera
+    // consumer (a screen slot, a probe socket, a HUD frame) makes each frame. A device already known but with no
+    // feed for this sensor yet is ensured here (default profile) so a bind that skipped DeclareCameraDemand (a
+    // direct screen.source camera call) still resolves the same frame it is issued.
+    private bool TryResolveCamera(int seat, WorldCameraSensor sensor, out CameraDevice? device, out CameraFeed? feed, out string fault) {
+        device = null;
+        feed = null;
+
+        if (!m_roster.TryGetSeatDevice(slot: (seat - 1), kind: InputDeviceKind.Camera, device: out var deviceId)) {
+            fault = $"seat {seat} has no camera assigned";
+
+            return false;
+        }
+
+        if (!m_cameraDevices.TryGetValue(key: deviceId, value: out device)) {
+            fault = $"seat {seat}'s camera is not yet enumerated";
+
+            return false;
+        }
+
+        if (!DeviceHasSensor(device: device, sensor: sensor)) {
+            fault = $"seat {seat}'s camera '{device.Name}' has no {SensorName(sensor: sensor)} sensor";
+
+            return false;
+        }
+
+        if (!m_cameraFeeds.TryGetValue(key: (deviceId, sensor), value: out feed)) {
+            feed = EnsureCameraFeed(device: device, sensor: sensor, profile: WorldFeedProfile.Default);
+        }
+
+        fault = "";
+
+        return true;
+    }
+    // The four per-frame reads a ScreenSlot bound to (CameraSeat, CameraSensorKind) makes — thin wrappers over
+    // TryResolveCamera so the slot itself carries no camera machinery of its own.
+    private SdfScreenSourceFrame AcquireCameraFrame(int seat, WorldCameraSensor sensor) =>
+        (TryResolveCamera(seat: seat, sensor: sensor, device: out _, feed: out var feed, fault: out _) ? feed!.AcquireFrame() : default);
+    private nint CameraHandleFor(int seat, WorldCameraSensor sensor) =>
+        (TryResolveCamera(seat: seat, sensor: sensor, device: out _, feed: out var feed, fault: out _) ? feed!.Handle() : 0);
+    private Vector3 CameraLightFor(int seat, WorldCameraSensor sensor) =>
+        (TryResolveCamera(seat: seat, sensor: sensor, device: out _, feed: out var feed, fault: out _) ? feed!.Light : Vector3.Zero);
+    private string? CameraFaultFor(int seat, WorldCameraSensor sensor) {
+        if (!TryResolveCamera(seat: seat, sensor: sensor, device: out _, feed: out var feed, fault: out var fault)) {
+            return fault;
+        }
+
+        return (feed!.Live ? null : feed.Fault);
+    }
+    private void ServiceCameraDeviceGraph(CameraDevice device, IGpuDeviceContext deviceContext) {
         if (device.Opening is { } opening) {
             if (!opening.IsCompleted) {
                 return;
             }
 
             device.Opening = null;
-            AdoptCameraGraph(deviceContext: deviceContext, result: opening.Result);
+            AdoptCameraGraph(deviceContext: deviceContext, device: device, result: opening.Result);
 
             return;
         }
@@ -174,13 +350,13 @@ internal sealed partial class WorldScreenBinder {
             // graph before every requested stream publishes, refuse the shared tier for exactly the next open so the
             // ladder actually reaches CPU pixels instead of recreating the same failed GPU graph forever.
             if (sharedStartFailed) {
-                Console.Error.WriteLine(value: "[camera] GPU tier ended before every stream produced a frame; opening the CPU tier.");
+                Console.Error.WriteLine(value: $"[camera] {device.Name}: GPU tier ended before every stream produced a frame; opening the CPU tier.");
                 device.SharedRefused = true;
             }
 
             // A sensor set change and a shared-tier startup refusal reopen at once; a real disconnect after live
             // streaming waits for the driver to settle.
-            CloseCameraGraph(fault: (graph.IsEnded ? (sharedStartFailed ? "camera GPU tier refused" : "camera disconnected") : null));
+            CloseCameraGraphFor(device: device, fault: (graph.IsEnded ? (sharedStartFailed ? "camera GPU tier refused" : "camera disconnected") : null));
             device.Countdown = ((graph.IsEnded && !sharedStartFailed) ? CameraReopenFrames : 0);
         }
 
@@ -190,13 +366,12 @@ internal sealed partial class WorldScreenBinder {
             return;
         }
 
-        BeginCameraOpen();
+        BeginCameraOpen(device: device);
     }
     // The open ladder, off the render thread: shared textures when the render adapter and transport allow, else CPU
     // pixels; when the platform refuses the whole sensor set, the most recently bound sensor is dropped and the
     // remainder retried, down to one.
-    private void BeginCameraOpen() {
-        var device = m_camera;
+    private void BeginCameraOpen(CameraDevice device) {
         var feeds = device.Feeds;
         var requests = new CameraStreamRequest[feeds.Count];
         var sensors = new WorldCameraSensor[feeds.Count];
@@ -221,22 +396,23 @@ internal sealed partial class WorldScreenBinder {
         );
         var adapterLuid = (sharedEligible ? m_renderAdapterLuid : null);
         var capture = m_cameraCapture;
+        var platformId = device.PlatformId;
 
         device.SensorsChanged = false;
         device.SharedRefused = false;
-        device.Opening = Task.Run(function: () => OpenCamera(adapterLuid: adapterLuid, capture: capture, requests: requests, sensors: sensors));
+        device.Opening = Task.Run(function: () => OpenCamera(adapterLuid: adapterLuid, capture: capture, deviceId: platformId, requests: requests, sensors: sensors));
     }
-    private static CameraOpenResult OpenCamera(ICameraCaptureService capture, long? adapterLuid, CameraStreamRequest[] requests, WorldCameraSensor[] sensors) {
+    private static CameraOpenResult OpenCamera(ICameraCaptureService capture, string deviceId, long? adapterLuid, CameraStreamRequest[] requests, WorldCameraSensor[] sensors) {
         var dropped = new List<WorldCameraSensor>();
 
         for (var count = requests.Length; (count > 0); count--) {
             var slice = requests.AsSpan(start: 0, length: count);
 
-            if ((adapterLuid is { } luid) && capture.TryOpenShared(adapterLuid: luid, graph: out var shared, streams: slice)) {
+            if ((adapterLuid is { } luid) && capture.TryOpenShared(adapterLuid: luid, deviceId: deviceId, graph: out var shared, streams: slice)) {
                 return new CameraOpenResult(Dropped: [.. dropped], Pixels: null, Shared: shared);
             }
 
-            if (capture.TryOpenPixels(graph: out var pixels, streams: slice)) {
+            if (capture.TryOpenPixels(deviceId: deviceId, graph: out var pixels, streams: slice)) {
                 return new CameraOpenResult(Dropped: [.. dropped], Pixels: pixels, Shared: null);
             }
 
@@ -245,11 +421,9 @@ internal sealed partial class WorldScreenBinder {
 
         return new CameraOpenResult(Dropped: [.. dropped], Pixels: null, Shared: null);
     }
-    private void AdoptCameraGraph(CameraOpenResult result, IGpuDeviceContext deviceContext) {
-        var device = m_camera;
-
+    private void AdoptCameraGraph(CameraDevice device, CameraOpenResult result, IGpuDeviceContext deviceContext) {
         if (result.Shared is { } shared) {
-            if (TryProvisionSharedTargets(deviceContext: deviceContext, fault: out var fault, graph: shared)) {
+            if (TryProvisionSharedTargets(deviceContext: deviceContext, device: device, fault: out var fault, graph: shared)) {
                 device.Shared = shared;
                 Console.Out.WriteLine(value: $"[camera] GPU tier: '{shared.Name}' {DescribeStreams(graph: shared)}, {CameraTargetCount} shared targets per sensor{(m_hostsOnDirectX ? "" : ", imported for Vulkan sampling")}.");
             } else {
@@ -275,12 +449,16 @@ internal sealed partial class WorldScreenBinder {
         }
 
         foreach (var sensor in result.Dropped) {
-            m_cameraFeeds[sensor].Detach(fault: "the device cannot stream color and infrared concurrently");
+            if (m_cameraFeeds.TryGetValue(key: (device.DeviceId, sensor), value: out var droppedFeed)) {
+                droppedFeed.Detach(fault: "the device cannot stream color and infrared concurrently");
+            }
         }
 
         if (device.Graph is { } graph) {
             foreach (var stream in graph.Streams) {
-                m_cameraFeeds[WorldSensor(sensor: stream.Sensor)].Attach(stream: stream);
+                if (m_cameraFeeds.TryGetValue(key: (device.DeviceId, WorldSensor(sensor: stream.Sensor)), value: out var attaching)) {
+                    attaching.Attach(stream: stream);
+                }
             }
         }
 
@@ -288,7 +466,7 @@ internal sealed partial class WorldScreenBinder {
     }
     // Allocates each shared stream's ring on the render adapter and starts the stream; a failure releases every ring
     // already provisioned so the graph can be disposed whole.
-    private bool TryProvisionSharedTargets(ICameraGraph<ICameraSharedStream> graph, IGpuDeviceContext deviceContext, out string fault) {
+    private bool TryProvisionSharedTargets(CameraDevice device, ICameraGraph<ICameraSharedStream> graph, IGpuDeviceContext deviceContext, out string fault) {
         if (m_renderAdapterLuid is not { } adapterLuid) {
             fault = "the render adapter reports no LUID";
 
@@ -304,7 +482,9 @@ internal sealed partial class WorldScreenBinder {
         var provisioned = new List<CameraFeed>(capacity: graph.Streams.Count);
 
         foreach (var stream in graph.Streams) {
-            var feed = m_cameraFeeds[WorldSensor(sensor: stream.Sensor)];
+            if (!m_cameraFeeds.TryGetValue(key: (device.DeviceId, WorldSensor(sensor: stream.Sensor)), value: out var feed)) {
+                continue;
+            }
 
             if (!TryProvisionSharedRing(adapterLuid: adapterLuid, deviceContext: deviceContext, fault: out fault, format: stream.TargetFormat, height: stream.Height, images: out var images, importedViews: out var views, imports: out var imports, width: stream.Width)) {
                 foreach (var started in provisioned) {
@@ -427,7 +607,7 @@ internal sealed partial class WorldScreenBinder {
             return false;
         }
     }
-    private void ServiceCameraFeed(CameraFeed feed, IGpuDeviceContext deviceContext, IGpuComputeServices gpu) {
+    private void ServiceCameraFeed(CameraDevice device, CameraFeed feed, IGpuDeviceContext deviceContext, IGpuComputeServices gpu) {
         if (feed.SharedStream is { } shared) {
             // The platform publishes completed slots on its own thread and the screen samples the latest one directly;
             // no CPU pixels ever exist on this tier, so Light stays dark.
@@ -435,7 +615,7 @@ internal sealed partial class WorldScreenBinder {
             feed.Fault = (feed.Live ? null : "camera awaiting a first frame");
 
             if (feed.Live) {
-                ApplyCameraControls();
+                ApplyCameraControlsFor(device: device);
             }
 
             return;
@@ -448,7 +628,7 @@ internal sealed partial class WorldScreenBinder {
         var version = stream.FrameVersion;
 
         if (version == feed.LastFrameVersion) {
-            NoteCameraStarvation(feed: feed);
+            NoteCameraStarvation(device: device, feed: feed);
 
             return;
         }
@@ -457,7 +637,7 @@ internal sealed partial class WorldScreenBinder {
             // The producer advertised a new version but the grab raced it; retry on the next produced frame rather
             // than spending the declaration's whole cadence on the miss.
             feed.Rearm();
-            NoteCameraStarvation(feed: feed);
+            NoteCameraStarvation(device: device, feed: feed);
 
             return;
         }
@@ -470,19 +650,19 @@ internal sealed partial class WorldScreenBinder {
         feed.Live = true;
         feed.Fault = null;
         feed.Light = AverageColor(pixels: panelSurface.Pixels.Span);
-        ApplyCameraControls();
+        ApplyCameraControlsFor(device: device);
     }
     // Reader construction can succeed while a multiplexing driver delivers only one selected sensor. Count cadence
     // opportunities with no new frame, including a formerly live stream that freezes; after roughly three seconds at
     // the default cadence the no-signal state and its likeliest cause become observable.
-    private void NoteCameraStarvation(CameraFeed feed) {
+    private void NoteCameraStarvation(CameraDevice device, CameraFeed feed) {
         if (++feed.StarvedPulls <= 90) {
             return;
         }
 
         var siblingLive = false;
 
-        foreach (var other in m_camera.Feeds) {
+        foreach (var other in device.Feeds) {
             siblingLive |= ((other != feed) && other.Live);
         }
 
@@ -497,12 +677,20 @@ internal sealed partial class WorldScreenBinder {
     // absent now) restores its driver default — a member never authored never disturbs driver state. Best-effort per
     // control (the device is authoritative; screen.camera reads the result back), and a no-op while the authored state
     // matches what was last applied. Called only once a stream is live: vendor-extension controls (fieldOfView, the
-    // vendor rows) are register-accepted but stream-ignored by firmware when written before frames flow.
-    private void ApplyCameraControls() {
-        var device = m_camera;
-        var desired = m_cameraControls;
+    // vendor rows) are register-accepted but stream-ignored by firmware when written before frames flow. Controls are
+    // per DEVICE: whichever seat currently resolves to this device supplies the desired state (the first camera row
+    // authoring controls for that seat wins — see ResolveSeatCameraControls).
+    private void ApplyCameraControlsFor(CameraDevice device) {
+        if (device.Graph is not { } graph) {
+            return;
+        }
 
-        if ((device.Graph is not { } graph) || Equals(objA: desired, objB: device.AppliedControls)) {
+        var desired = (((m_roster.DeviceSlot(device: device.DeviceId) is { } slot) && m_seatCameraControls.TryGetValue(key: (slot + 1), value: out var found))
+            ? found
+            : null
+        );
+
+        if (Equals(objA: desired, objB: device.AppliedControls)) {
             return;
         }
 
@@ -529,8 +717,7 @@ internal sealed partial class WorldScreenBinder {
 
         device.AppliedControls = desired;
     }
-    private void DescribeCameraFeed(StringBuilder builder, CameraFeed feed) {
-        var device = m_camera;
+    private void DescribeCameraFeed(StringBuilder builder, CameraDevice device, CameraFeed feed) {
         var sensorName = SensorName(sensor: feed.Sensor);
 
         if ((feed.Stream is not { } stream) || (device.Graph is not { } graph)) {
@@ -544,10 +731,10 @@ internal sealed partial class WorldScreenBinder {
 
         _ = builder.Append(
             provider: CultureInfo.InvariantCulture,
-            handler: $"{sensorName} '{graph.Name}' {device.Tier} {stream.Width}x{stream.Height}{transport}{(feed.Live ? "" : ((feed.Fault is { } liveFault) ? $" '{liveFault}'" : " (no frames)"))}"
+            handler: $"{sensorName} {stream.Width}x{stream.Height}{transport}{(feed.Live ? "" : ((feed.Fault is { } liveFault) ? $" '{liveFault}'" : " (no frames)"))}"
         );
 
-        var controls = m_cameraControls;
+        var controls = (((m_roster.DeviceSlot(device: device.DeviceId) is { } slot) && m_seatCameraControls.TryGetValue(key: (slot + 1), value: out var found)) ? found : null);
         var surface = graph.Controls;
 
         foreach (var (control, label, select) in CameraControlMap) {
@@ -577,36 +764,28 @@ internal sealed partial class WorldScreenBinder {
             }
         }
     }
-    // Returns the sensor's shared feed, creating it on first demand. A new sensor changes the device's sensor set, so
-    // the next publish reopens the graph with it; a platform without camera support records the fault and returns
-    // null.
-    private CameraFeed? EnsureCameraFeed(WorldFeedProfile profile, WorldCameraSensor sensor) {
-        if (m_cameraFeeds.TryGetValue(key: sensor, value: out var existing)) {
+    // Returns a device's sensor feed, creating it on first demand. A new sensor changes the device's sensor set, so
+    // the next publish reopens the graph with it.
+    private CameraFeed EnsureCameraFeed(CameraDevice device, WorldCameraSensor sensor, WorldFeedProfile profile) {
+        var key = (device.DeviceId, sensor);
+
+        if (m_cameraFeeds.TryGetValue(key: key, value: out var existing)) {
             return existing;
-        }
-
-        if (!m_cameraCapture.IsSupported) {
-            m_cameraFaults[sensor] = CameraAbsenceFault(sensor: sensor);
-
-            return null;
         }
 
         var feed = new CameraFeed(profile: profile, sensor: sensor, surface: new CpuSurfaceSource()) {
             Fault = "camera opening",
         };
 
-        m_cameraFeeds[sensor] = feed;
-        m_camera.Feeds.Add(item: feed);
-        m_camera.SensorsChanged = true;
-        _ = m_cameraFaults.Remove(key: sensor);
+        m_cameraFeeds[key] = feed;
+        device.Feeds.Add(item: feed);
+        device.SensorsChanged = true;
 
         return feed;
     }
-    // Tears the open graph down and detaches every feed; a fault, when given, is what the feeds report until the
-    // next open lands.
-    private void CloseCameraGraph(string? fault) {
-        var device = m_camera;
-
+    // Tears one device's open graph down and detaches every one of its feeds; a fault, when given, is what the feeds
+    // report until the next open lands.
+    private static void CloseCameraGraphFor(CameraDevice device, string? fault) {
         device.Shared?.Dispose();
         device.Shared = null;
         device.Pixels?.Dispose();
@@ -617,42 +796,46 @@ internal sealed partial class WorldScreenBinder {
             feed.Detach(fault: fault);
         }
     }
-    // The shared tier's rings are render-device-owned: drop the graph with them so the next publish reopens on the
-    // live device (a CPU-pixel graph survives device loss untouched). An open in flight adopts against the new device.
+    // The shared tier's rings are render-device-owned: drop every device's graph with them so the next publish
+    // reopens on the live device (a CPU-pixel graph survives device loss untouched). An open in flight adopts against
+    // the new device.
     private void CameraDeviceLost() {
-        var device = m_camera;
+        foreach (var device in m_cameraDeviceOrder) {
+            if (device.Shared is not null) {
+                CloseCameraGraphFor(device: device, fault: null);
+                device.Countdown = 0;
+            }
 
-        if (device.Shared is not null) {
-            CloseCameraGraph(fault: null);
-            device.Countdown = 0;
-        }
+            device.SharedRefused = false;
 
-        device.SharedRefused = false;
-
-        foreach (var feed in device.Feeds) {
-            feed.Surface.NotifyDeviceLost();
-            feed.LastFrameVersion = -1L;
-            feed.Rearm();
+            foreach (var feed in device.Feeds) {
+                feed.Surface.NotifyDeviceLost();
+                feed.LastFrameVersion = -1L;
+                feed.Rearm();
+            }
         }
     }
     private void DisposeCamera() {
-        var device = m_camera;
+        foreach (var device in m_cameraDeviceOrder) {
+            CloseCameraGraphFor(device: device, fault: null);
 
-        CloseCameraGraph(fault: null);
+            if (device.Opening is { } opening) {
+                device.Opening = null;
+                _ = opening.ContinueWith(continuationAction: static finished => {
+                    finished.Result.Shared?.Dispose();
+                    finished.Result.Pixels?.Dispose();
+                }, continuationOptions: TaskContinuationOptions.OnlyOnRanToCompletion);
+            }
 
-        if (device.Opening is { } opening) {
-            device.Opening = null;
-            _ = opening.ContinueWith(continuationAction: static finished => {
-                finished.Result.Shared?.Dispose();
-                finished.Result.Pixels?.Dispose();
-            }, continuationOptions: TaskContinuationOptions.OnlyOnRanToCompletion);
+            foreach (var feed in device.Feeds) {
+                feed.Dispose();
+            }
+
+            device.Feeds.Clear();
         }
 
-        foreach (var feed in device.Feeds) {
-            feed.Dispose();
-        }
-
-        device.Feeds.Clear();
+        m_cameraDevices.Clear();
+        m_cameraDeviceOrder.Clear();
         m_cameraFeeds.Clear();
     }
 
@@ -734,27 +917,47 @@ internal sealed partial class WorldScreenBinder {
         ? CameraSensor.Infrared
         : CameraSensor.Color
     );
-    // One physical device carries one control state, so — unlike the profile's richest-envelope merge below — the
-    // first declared camera screen authoring controls wins (two zoom values have no meaningful merge). Document order
-    // is the author's priority statement.
-    private static WorldCameraControls? ResolveSharedCameraControls(IReadOnlyList<WorldScreen> screens) {
-        foreach (var screen in screens) {
-            if (screen.Source is WorldScreenSource.Camera { Controls: { } controls }) {
-                return controls;
+    // A device's sensor set is a handful of entries at most — a manual scan avoids pulling System.Linq into a file
+    // that otherwise carries no allocation on its per-frame resolution path.
+    private static bool DeviceHasSensor(CameraDevice device, WorldCameraSensor sensor) {
+        var platformSensor = PlatformSensor(sensor: sensor);
+
+        foreach (var candidate in device.Sensors) {
+            if (candidate == platformSensor) {
+                return true;
             }
         }
 
-        return null;
+        return false;
     }
-    // One stream per sensor is shared by every screen naming it. When several camera sources declare different
-    // preferences for the same sensor, request the richest combined envelope rather than letting declaration order
-    // choose.
-    private static WorldFeedProfile ResolveSharedCameraProfile(IReadOnlyList<WorldScreen> screens, WorldCameraSensor sensor) {
+    // A device carries one control state, so — unlike the profile's richest-envelope merge below — the first
+    // declared camera screen authoring controls for a given seat wins (two zoom values have no meaningful merge).
+    // Document order is the author's priority statement. Per-seat rather than per-document: two seats' cameras (two
+    // physical devices) each carry their own control state.
+    private static Dictionary<int, WorldCameraControls?> ResolveSeatCameraControls(IReadOnlyList<WorldScreen> screens) {
+        var map = new Dictionary<int, WorldCameraControls?>();
+
+        foreach (var screen in screens) {
+            if (screen.Source is WorldScreenSource.Camera camera) {
+                var seat = (camera.Seat ?? 1);
+
+                if (!map.ContainsKey(key: seat)) {
+                    map[seat] = camera.Controls;
+                }
+            }
+        }
+
+        return map;
+    }
+    // One seat's sensor feed is shared by every screen naming it. When several camera sources declare different
+    // preferences for the same (seat, sensor) pair, request the richest combined envelope rather than letting
+    // declaration order choose.
+    private static WorldFeedProfile ResolveCameraProfile(IReadOnlyList<WorldScreen> screens, int seat, WorldCameraSensor sensor) {
         var profile = WorldFeedProfile.Default;
         var found = false;
 
         foreach (var screen in screens) {
-            if (screen.Source is not WorldScreenSource.Camera camera || (sensor != camera.Sensor)) {
+            if ((screen.Source is not WorldScreenSource.Camera camera) || ((camera.Seat ?? 1) != seat) || (sensor != camera.Sensor)) {
                 continue;
             }
 
@@ -779,16 +982,20 @@ internal sealed partial class WorldScreenBinder {
         : WorldCameraSensor.Color
     );
 
-    // The one physical camera: its open graph (on exactly one tier), the open in flight, and the feeds in bind order
-    // — the order the open ladder drops sensors in when the platform refuses the set.
-    private sealed class CameraDevice {
+    // One physical camera device: its open graph (on exactly one tier), the open in flight, and its feeds in bind
+    // order — the order the open ladder drops sensors in when the platform refuses the set.
+    private sealed class CameraDevice(InputDeviceId deviceId, string platformId, string name, IReadOnlyList<CameraSensor> sensors) {
         public WorldCameraControls? AppliedControls { get; set; }
         public int Countdown { get; set; }
+        public InputDeviceId DeviceId { get; } = deviceId;
         public List<CameraFeed> Feeds { get; } = [];
         public ICameraGraph<ICameraStream>? Graph => ((ICameraGraph<ICameraStream>?)Shared ?? Pixels);
+        public string Name { get; set; } = name;
         public Task<CameraOpenResult>? Opening { get; set; }
         public ICameraGraph<ICameraPixelStream>? Pixels { get; set; }
+        public string PlatformId { get; } = platformId;
         public bool SensorsChanged { get; set; }
+        public IReadOnlyList<CameraSensor> Sensors { get; set; } = sensors;
         public ICameraGraph<ICameraSharedStream>? Shared { get; set; }
         public bool SharedRefused { get; set; }
         public string Tier => ((Shared is not null)

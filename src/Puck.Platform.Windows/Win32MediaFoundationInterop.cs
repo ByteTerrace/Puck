@@ -30,6 +30,9 @@ internal static class MfInterop {
     // probes streams first and falls back to the sensor category only when no stream carries the flag.
     public static Guid MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_CATEGORY = new(g: "77f0ae69-c3bd-4509-941d-467e4d24899e");
     public static Guid KSCATEGORY_SENSOR_CAMERA = new(g: "24e552d7-6523-47f7-a647-d3465bf1f5ca");
+    // The per-device symbolic link, matched against a Windows.Media.Capture.Frames source's DeviceInformation.Id to
+    // select a specific physical camera out of an enumeration rather than the first one.
+    public static Guid MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_SYMBOLIC_LINK = new(g: "58f0aad8-22bf-4f8a-bb3d-d2c4978c6e2f");
     // Per-stream frame-source classification (readable through IMFSourceReader.GetPresentationAttribute with a stream
     // index): a VT_UI4 flag set — Color = 0x1, Infrared = 0x2, Depth = 0x4.
     public static Guid MF_DEVICESTREAM_ATTRIBUTE_FRAMESOURCE_TYPES = new(g: "17145fd1-1b2b-423c-8001-2b6833ed3588");
@@ -78,9 +81,13 @@ internal static class MfInterop {
             );
         }
     }
-    /// <summary>Enumerates video capture devices, activates the first one as a media source, and reports its friendly
-    /// name. Shared by both the CPU and GPU-tier camera sessions — the enumeration/activation shape is identical; only
-    /// what each does with the resulting source (reader configuration) differs.</summary>
+    /// <summary>Enumerates video capture devices and activates the one whose <c>MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_SYMBOLIC_LINK</c>
+    /// matches <paramref name="symbolicLink"/> (or the first enumerated device when <paramref name="symbolicLink"/> is
+    /// <see langword="null"/>), reporting its friendly name. Shared by both the CPU and GPU-tier camera sessions — the
+    /// enumeration/activation shape is identical; only what each does with the resulting source (reader configuration)
+    /// differs.</summary>
+    /// <param name="symbolicLink">The physical device to select, matched against each candidate's symbolic-link
+    /// attribute; <see langword="null"/> selects the first enumerated device.</param>
     /// <param name="infrared">Whether to enumerate the sensor-camera category (the infrared stream a Windows Hello
     /// capable device exposes as its own capture device) instead of the default color-camera category.</param>
     /// <param name="extended">Whether to activate the device through <c>IMFMediaSourceEx</c>, preserving non-color
@@ -88,7 +95,7 @@ internal static class MfInterop {
     /// <returns>The activated media source (as <see cref="object"/>, the way <c>ActivateObject</c> yields it) and the
     /// device's friendly name (or <see langword="null"/> if the driver did not report one).</returns>
     /// <exception cref="InvalidOperationException">No matching video capture device was found.</exception>
-    public static (object MediaSource, string? Name) ActivateDefaultVideoSource(bool infrared = false, bool extended = false) {
+    public static (object MediaSource, string? Name) ActivateDefaultVideoSource(string? symbolicLink = null, bool infrared = false, bool extended = false) {
         Check(hr: MFCreateAttributes(cInitialSize: 2, ppMFAttributes: out var enumConfig));
 
         var sourceTypeKey = MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE;
@@ -112,27 +119,49 @@ internal static class MfInterop {
             ));
         }
 
-        var activate = ((IMFActivate)Marshal.GetObjectForIUnknown(pUnk: Marshal.ReadIntPtr(ptr: devices)));
+        try {
+            var selectedIndex = ((symbolicLink is null) ? 0 : SelectDeviceIndex(count: count, devices: devices, symbolicLink: symbolicLink));
+            var activate = ((IMFActivate)Marshal.GetObjectForIUnknown(pUnk: Marshal.ReadIntPtr(ptr: devices, ofs: (selectedIndex * IntPtr.Size))));
 
-        // Release every raw device pointer the array owns (the RCW above holds its own ref) and free the array.
+            var nameKey = MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME;
+            var name = ((activate.GetAllocatedString(guidKey: ref nameKey, pcchLength: out _, ppwszValue: out var deviceName) >= 0)
+                ? deviceName
+                : null);
+
+            // IMFMediaSourceEx is the capture-source activation contract that exposes non-color device streams. Asking
+            // only for IMFMediaSource can yield the ordinary video projection even when the same device has an L8 pin.
+            var sourceIid = (extended ? IID_IMFMediaSourceEx : IID_IMFMediaSource);
+
+            Check(hr: activate.ActivateObject(ppv: out var mediaSource, riid: ref sourceIid));
+
+            return (mediaSource, name);
+        } finally {
+            // Release every raw device pointer the array owns (each candidate's RCW above holds its own ref) and free
+            // the array.
+            for (var index = 0; (index < count); index++) {
+                _ = Marshal.Release(pUnk: Marshal.ReadIntPtr(ptr: devices, ofs: (index * IntPtr.Size)));
+            }
+
+            Marshal.FreeCoTaskMem(ptr: devices);
+        }
+    }
+    // Linear scan: MFEnumDeviceSources yields a handful of capture devices per machine, never enough for the scan to
+    // matter.
+    private static int SelectDeviceIndex(nint devices, uint count, string symbolicLink) {
+        var linkKey = MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_SYMBOLIC_LINK;
+
         for (var index = 0; (index < count); index++) {
-            _ = Marshal.Release(pUnk: Marshal.ReadIntPtr(ptr: devices, ofs: (index * IntPtr.Size)));
+            var candidate = ((IMFActivate)Marshal.GetObjectForIUnknown(pUnk: Marshal.ReadIntPtr(ptr: devices, ofs: (index * IntPtr.Size))));
+
+            if (
+                (candidate.GetAllocatedString(guidKey: ref linkKey, pcchLength: out _, ppwszValue: out var candidateLink) >= 0) &&
+                string.Equals(a: candidateLink, b: symbolicLink, comparisonType: StringComparison.OrdinalIgnoreCase)
+            ) {
+                return index;
+            }
         }
 
-        Marshal.FreeCoTaskMem(ptr: devices);
-
-        var nameKey = MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME;
-        var name = ((activate.GetAllocatedString(guidKey: ref nameKey, pcchLength: out _, ppwszValue: out var deviceName) >= 0)
-            ? deviceName
-            : null);
-
-        // IMFMediaSourceEx is the capture-source activation contract that exposes non-color device streams. Asking
-        // only for IMFMediaSource can yield the ordinary video projection even when the same device has an L8 pin.
-        var sourceIid = (extended ? IID_IMFMediaSourceEx : IID_IMFMediaSource);
-
-        Check(hr: activate.ActivateObject(ppv: out var mediaSource, riid: ref sourceIid));
-
-        return (mediaSource, name);
+        throw new InvalidOperationException(message: $"camera device '{symbolicLink}' is not among the enumerated capture devices");
     }
     /// <summary>Selects the media source's native L8 infrared stream before a Source Reader is constructed.</summary>
     /// <remarks>Some composite UVC cameras, including BRIO firmware, require the presentation descriptor and its
