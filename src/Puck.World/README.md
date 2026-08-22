@@ -411,9 +411,10 @@ hardware.** Each enumerated device gets a reconnect-stable `InputDeviceId`
 (`InputDeviceId.FromKey` over the platform's device id) and a roster token
 (`camera<N>` by first-seen order, beside `keyboard1`/`gamepad<N>`) —
 `world.devices` lists every device and the seat it drives; `player.assign
-camera<N> <slot>` moves one between seats exactly like a gamepad. A newly seen
-camera attaches to the lowest occupied, camera-less slot by default (seat 1
-first); it never creates a seat. A `camera` frame source (a `screens` row, a
+camera<N> <slot>` moves one between occupied seats, but refuses an empty target
+because a passive sensor cannot create player presence. A newly seen camera
+attaches to the lowest occupied, camera-less slot by default (seat 1 first); it
+never creates a seat. A `camera` frame source (a `screens` row, a
 probe socket, a HUD `Frame` element) names a **seat**, never a device: `{
 "$type": "camera", "sensor": "Color", "seat": 2 }`; `seat` absent means the
 enclosing seat scope (an identity's own HUD panel, a seat-scoped probe socket)
@@ -528,8 +529,9 @@ host's opaque Vulkan-to-Vulkan export handle, so the Vulkan host refuses
 export outright rather than producing a handle nothing downstream can read.
 Day one exports exactly ONE physical image (the engine's own persistent
 output, re-rendered in place every refresh) with no second buffer to rotate
-into — latest-wins, unfenced: a consumer may sample a frame that is
-concurrently being re-rendered.
+into. A shared lease admits concurrent readers of the completed image and
+defers the next writer until all of them retire; export submission drains the
+producer queue before publishing that image as readable.
 
 ## HUD frame elements
 
@@ -598,11 +600,15 @@ before it — bound only to a `camera` source with sensor Infrared); an
 source is the same four-arm `WorldFrameSource` vocabulary a screen samples:
 `camera` (a declared sensor and seat — `seat` absent means the enclosing
 instance's own seat, the same convention a `screens` row and a HUD `Frame`
-element follow), `view` (a
-named `cameras[]` row's offscreen render, exported as a kernel-readable ring),
+element follow; every camera socket in one probe must resolve to the same seat,
+because one kernel run has one host graph; `profile` is honored while source
+`controls` are refused in favor of probe control bindings or camera-screen
+authoring), `view` (a named `cameras[]` row's offscreen render, exported as a
+kernel-readable lease that holds the last complete image while a kernel reads),
 `probe` (another declared probe's
-own texture output, read back as a ring), or `capture` (not yet hosted as a
-kernel input — a bound socket idles with that fault). The kind's `trigger`
+own texture output, read back as a ring). `capture` remains part of the shared
+frame-source vocabulary but is refused on a probe socket until a kernel input
+host exists for it. The kind's `trigger`
 socket must bind a `camera` source: kernels run on that sensor's own camera
 graph, so it decides which `ICameraKernelHost` a run attaches to. A kind that
 declares an `output` writes a texture each cycle, at the extent its own
@@ -618,9 +624,10 @@ socket against the binder's live state and (re)attaching the kernel to the
 trigger sensor's open graph whenever any socket's generation — or the output
 ring's — changes; a socket whose source is not ready yet (an unpublished ring,
 an unopened camera) idles the whole probe with that fault and retries every
-frame until it resolves. A camera socket resolves its own (seat, sensor) demand
-lazily, the same way a HUD `Frame` element does — no `screens` row need ever
-name the sensor for a probe to read it. A probe is not a device and
+frame until it resolves. A camera socket retains its own (seat, sensor,
+profile) demand while its instance lives, then releases it on retirement, the
+same ownership shape a visible HUD `Frame` element uses — no `screens` row
+need ever name the sensor for a probe to read it. A probe is not a device and
 never occupies a seat: an axis binding addresses its own instance's seat's
 lane directly (`InputSignal.Slot`), its `probe:<seat>` device id is only the
 router's held-state key, it never counts as player activity, and it loses its
@@ -636,7 +643,8 @@ back a recorded track) stays a single instance for the whole boot, exactly as
 before seat-relative instancing existed. Instances follow the roster's
 occupancy: a seat joining creates its row's instances on the next serviced
 frame, a seat leaving retires them (ending the run, releasing the output ring,
-and releasing every binding's held router state) with no reboot. An axis
+releasing retained view exports, and releasing every binding's held router
+state) with no reboot. An axis
 binding declared on a seat-relative row may not author its own `seat` (refused
 at document load — it always takes its instance's); one declared on a
 single-instance row still authors `seat` as before (absent defaults to seat

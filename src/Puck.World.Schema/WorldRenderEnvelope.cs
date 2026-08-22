@@ -5,7 +5,7 @@ namespace Puck.World;
 /// "capacity honesty" contract: each active renderer registers the render envelope (program words, instances) it
 /// probed at construction, so an applied mutation that would exceed ANY active consumer is REJECTED at apply time
 /// with a loud line naming the ceiling (never a crash, never a silent clamp). A shared DI singleton:
-/// <c>Puck.World.Client.WorldFrameSource</c> and session-screen views each register their own
+/// <c>Puck.World.Client.WorldFramePresenter</c> and session-screen views each register their own
 /// floors and candidate measurer; <c>Puck.World.Server.WorldServer</c> reads their conjunction while draining its
 /// mutation queue.
 /// </summary>

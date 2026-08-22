@@ -225,6 +225,36 @@ internal sealed unsafe class Win32ProbeKernelBench {
         m_attached.Clear();
     }
 
+    private static void ReleaseRingResources(nint[]?[] textures, nint[]?[] views) => ReleaseRingResources(
+        release: static resource => Win32D3D11VideoDevice.ReleaseTexture(texture: resource),
+        textures: textures,
+        views: views
+    );
+
+    // Release views first because each view retains its texture. The injected release action is the smallest pure
+    // seam that lets a law prove partially populated acquisition arrays drain completely and in dependency order.
+    private static void ReleaseRingResources(nint[]?[] textures, nint[]?[] views, Action<nint> release) {
+        foreach (var slots in views) {
+            if (slots is not null) {
+                foreach (var view in slots) {
+                    if (view != 0) {
+                        release(obj: view);
+                    }
+                }
+            }
+        }
+
+        foreach (var slots in textures) {
+            if (slots is not null) {
+                foreach (var texture in slots) {
+                    if (texture != 0) {
+                        release(obj: texture);
+                    }
+                }
+            }
+        }
+    }
+
     private sealed class Attachment(in ProbeKernelRequest request, ProbeReadingRing ring) : IProbeKernelRun {
         private volatile bool m_detached;
         private volatile bool m_ended;
@@ -269,15 +299,22 @@ internal sealed unsafe class Win32ProbeKernelBench {
                     var openedTextures = new nint[handles.Count];
                     var openedViews = new nint[handles.Count];
 
+                    // Publish the partial-acquisition arrays before the first native call so the outer catch owns
+                    // every COM pointer this ring opens, even when validation or view creation fails partway through.
+                    textures[index] = openedTextures;
+                    views[index] = openedViews;
+
                     for (var slot = 0; (slot < handles.Count); slot++) {
                         using var handle = new SafeFileHandle(ownsHandle: false, preexistingHandle: handles[slot]);
 
-                        void* opened;
+                        void* opened = null;
 
                         try {
                             device.Device1->OpenSharedResource1(hResource: handle, ppResource: out opened, returnedInterface: ID3D11Texture2D.IID_Guid);
                         } catch (Exception exception) {
                             throw new InvalidOperationException(message: $"opening ring socket {index} slot {slot} on the graph's device failed: {exception.Message}", innerException: exception);
+                        } finally {
+                            openedTextures[slot] = ((nint)opened);
                         }
 
                         var texture = ((ID3D11Texture2D*)opened);
@@ -295,14 +332,10 @@ internal sealed unsafe class Win32ProbeKernelBench {
                             device.Device->CreateShaderResourceView(pResource: ((ID3D11Resource*)texture), pDesc: null, ppSRView: &view);
                         } catch (Exception exception) {
                             throw new InvalidOperationException(message: $"viewing ring socket {index} slot {slot} ({description.Format}, bind {description.BindFlags}, misc {description.MiscFlags}) failed: {exception.Message}", innerException: exception);
+                        } finally {
+                            openedViews[slot] = ((nint)view);
                         }
-
-                        openedTextures[slot] = ((nint)texture);
-                        openedViews[slot] = ((nint)view);
                     }
-
-                    textures[index] = openedTextures;
-                    views[index] = openedViews;
                 }
             } catch {
                 ReleaseRingResources(textures: textures, views: views);
@@ -337,23 +370,6 @@ internal sealed unsafe class Win32ProbeKernelBench {
             }
         }
 
-        private static void ReleaseRingResources(nint[]?[] textures, nint[]?[] views) {
-            foreach (var slots in views) {
-                if (slots is not null) {
-                    foreach (var view in slots) {
-                        Win32D3D11VideoDevice.ReleaseTexture(texture: view);
-                    }
-                }
-            }
-
-            foreach (var slots in textures) {
-                if (slots is not null) {
-                    foreach (var texture in slots) {
-                        Win32D3D11VideoDevice.ReleaseTexture(texture: texture);
-                    }
-                }
-            }
-        }
         private static DXGI_FORMAT ToDxgiFormat(SurfaceFormat format) => (format switch {
             SurfaceFormat.R8G8B8A8Unorm => DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM,
             SurfaceFormat.B8G8R8A8Unorm => DXGI_FORMAT.DXGI_FORMAT_B8G8R8A8_UNORM,

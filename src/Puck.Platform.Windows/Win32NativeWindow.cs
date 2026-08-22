@@ -112,6 +112,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private const ushort HidUsageGenericKeyboard = 0x06;
     private const ushort HidUsagePageGeneric = 0x01;
     private const ushort RiMouseMoveAbsolute = 0x01;
+    private const ushort RiMouseVirtualDesktop = 0x02;
     private const ushort RiMouseButton1Down = 0x0001;
     private const ushort RiMouseButton1Up = 0x0002;
     private const ushort RiMouseButton2Down = 0x0004;
@@ -132,8 +133,10 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private const ushort RawKeyboardNoVKey = 0xFF;
     private const uint RimTypeMouse = 0;
     private const uint RimTypeKeyboard = 1;
-    // GetSystemMetrics indices for the virtual desktop bounds an absolute-mode raw mouse report (a tablet, RDP) is
-    // normalized against.
+    // GetSystemMetrics indices for the primary and virtual desktop bounds an absolute-mode raw mouse report (a
+    // tablet, RDP) is normalized against. RAWMOUSE.Flags selects which space applies.
+    private const int SmCxScreen = 0;
+    private const int SmCyScreen = 1;
     private const int SmXVirtualScreen = 76;
     private const int SmYVirtualScreen = 77;
     private const int SmCxVirtualScreen = 78;
@@ -1043,6 +1046,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
             state.LastAbsoluteX = mouse.LastX;
             state.LastAbsoluteY = mouse.LastY;
             state.Position = ClampToClient(position: TranslateAbsoluteRawMouse(
+                flags: mouse.Flags,
                 rawX: mouse.LastX,
                 rawY: mouse.LastY,
                 windowHandle: windowHandle
@@ -1077,18 +1081,9 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
             y: Math.Clamp(value: position.Y, min: 0f, max: Height)
         );
     }
-    // Maps a RAWMOUSE absolute report (normalized 0..65535 across the virtual desktop, or the current monitor when
-    // the device sets MOUSE_VIRTUAL_DESKTOP — not modeled here, matching every raw mouse this window has been
-    // verified against) onto client-relative pixels.
-    private static Vector2 TranslateAbsoluteRawMouse(nint windowHandle, int rawX, int rawY) {
-        var virtualLeft = User32.GetSystemMetrics(index: SmXVirtualScreen);
-        var virtualTop = User32.GetSystemMetrics(index: SmYVirtualScreen);
-        var virtualWidth = User32.GetSystemMetrics(index: SmCxVirtualScreen);
-        var virtualHeight = User32.GetSystemMetrics(index: SmCyVirtualScreen);
-
-        var screenX = (virtualLeft + ((rawX / 65535f) * virtualWidth));
-        var screenY = (virtualTop + ((rawY / 65535f) * virtualHeight));
-
+    // Maps a RAWMOUSE absolute report (normalized 0..65535) against the primary desktop by default, or the full
+    // virtual desktop only when the packet sets MOUSE_VIRTUAL_DESKTOP, then converts to client-relative pixels.
+    private static Vector2 TranslateAbsoluteRawMouse(nint windowHandle, int rawX, int rawY, ushort flags) {
         var clientOrigin = new Point();
 
         _ = User32.ClientToScreen(
@@ -1096,9 +1091,23 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
             windowHandle: windowHandle
         );
 
-        return new Vector2(
-            x: (screenX - clientOrigin.X),
-            y: (screenY - clientOrigin.Y)
+        return Win32RawInput.TranslateAbsolutePointer(
+            clientOrigin: new Vector2(x: clientOrigin.X, y: clientOrigin.Y),
+            primaryDesktop: new Win32DesktopBounds(
+                Left: 0,
+                Top: 0,
+                Width: User32.GetSystemMetrics(index: SmCxScreen),
+                Height: User32.GetSystemMetrics(index: SmCyScreen)
+            ),
+            rawX: rawX,
+            rawY: rawY,
+            usesVirtualDesktop: ((flags & RiMouseVirtualDesktop) != 0),
+            virtualDesktop: new Win32DesktopBounds(
+                Left: User32.GetSystemMetrics(index: SmXVirtualScreen),
+                Top: User32.GetSystemMetrics(index: SmYVirtualScreen),
+                Width: User32.GetSystemMetrics(index: SmCxVirtualScreen),
+                Height: User32.GetSystemMetrics(index: SmCyVirtualScreen)
+            )
         );
     }
     private void HandleRawMouseButtons(RawMouseState state, nint windowHandle, ushort buttonFlags, ushort buttonData) {
@@ -1209,6 +1218,13 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
         var isDown = ((keyboard.Flags & RiKeyBreak) == 0);
         var isExtended = ((keyboard.Flags & RiKeyE0) != 0);
         var isSystemKey = (keyboard.Message is WmSysKeyDown or WmSysKeyUp);
+        var keyState = GetOrCreateRawKeyState(deviceHandle: deviceHandle);
+
+        Win32RawInput.ApplyKeyTransition(
+            isDown: isDown,
+            keyState: keyState,
+            virtualKey: keyboard.VKey
+        );
 
         EmitKeyTransition(
             deviceId: deviceId,
@@ -1221,21 +1237,14 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
 
         if (isDown) {
             EmitRawTypedText(
-                deviceHandle: deviceHandle,
                 deviceId: deviceId,
                 isExtended: isExtended,
+                keyState: keyState,
                 keyboard: in keyboard
             );
         }
     }
-    // Derives typed text for ONE physical keyboard from its own make/break stream via ToUnicodeEx, so a dead key or
-    // a held Shift on keyboard A never combines with a keystroke on keyboard B — each keyboard's BYTE[256] state
-    // (m_rawKeyStates) is threaded independently. ToUnicodeEx's dead-key COMPOSITION state itself is maintained by
-    // Windows per calling thread, not per device: a dead key on one keyboard immediately followed by a letter on
-    // another, on the same thread, can still combine across devices — a real limitation of the Win32 API this
-    // window has no way around, not attempted here. IME composition (WM_IME_*) is not read by this path at all;
-    // an IME's composed text needs its own window-message-driven pipeline, out of scope here.
-    private void EmitRawTypedText(nint deviceHandle, InputDeviceId deviceId, bool isExtended, in RawKeyboard keyboard) {
+    private byte[] GetOrCreateRawKeyState(nint deviceHandle) {
         if (!m_rawKeyStates.TryGetValue(
             key: deviceHandle,
             value: out var keyState
@@ -1244,10 +1253,16 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
             m_rawKeyStates[deviceHandle] = keyState;
         }
 
-        if (keyboard.VKey < keyState.Length) {
-            keyState[keyboard.VKey] = (((keyboard.Flags & RiKeyBreak) == 0) ? (byte)0x80 : (byte)0);
-        }
-
+        return keyState;
+    }
+    // Derives typed text for ONE physical keyboard from its own make/break stream via ToUnicodeEx, so a dead key or
+    // a held Shift on keyboard A never combines with a keystroke on keyboard B — each keyboard's BYTE[256] state
+    // (m_rawKeyStates) is threaded independently. ToUnicodeEx's dead-key COMPOSITION state itself is maintained by
+    // Windows per calling thread, not per device: a dead key on one keyboard immediately followed by a letter on
+    // another, on the same thread, can still combine across devices — a real limitation of the Win32 API this
+    // window has no way around, not attempted here. IME composition (WM_IME_*) is not read by this path at all;
+    // an IME's composed text needs its own window-message-driven pipeline, out of scope here.
+    private void EmitRawTypedText(InputDeviceId deviceId, bool isExtended, byte[] keyState, in RawKeyboard keyboard) {
         // Toggle state (bit 0) is a single system-wide fact, not per keyboard — mirrored in from GetKeyState so a
         // Shift+letter or a dead-key sequence resolves against the real CapsLock/NumLock/ScrollLock state.
         keyState[VkCapital] = (byte)((User32.GetKeyState(virtualKey: VkCapital) & 1) != 0 ? 1 : 0);

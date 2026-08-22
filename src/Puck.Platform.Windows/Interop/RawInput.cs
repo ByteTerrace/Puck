@@ -23,7 +23,8 @@ internal struct RawInputHeader {
     public nint DeviceHandle;
     public nint WParam;
 }
-/// <summary>A <c>RAWMOUSE</c>: a raw mouse packet. The button union is modeled with explicit offsets.
+/// <summary>A <c>RAWMOUSE</c>: a raw mouse packet. <see cref="Flags"/> distinguishes relative motion, primary-desktop
+/// absolute motion, and <c>MOUSE_VIRTUAL_DESKTOP</c> absolute motion. The button union is modeled with explicit offsets.
 /// <see cref="ButtonData"/> carries a signed wheel-rotation quantum (in <c>WHEEL_DELTA</c> units) when
 /// <see cref="ButtonFlags"/> has the wheel/h-wheel bit set.</summary>
 [StructLayout(LayoutKind.Explicit)]

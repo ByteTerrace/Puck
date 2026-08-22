@@ -158,10 +158,10 @@ public interface IHudBindingResolver {
     bool TryResolve(string binding, out float fraction, out string text);
 }
 /// <summary>
-/// The HUD structure store. A thin named wrapper over the shared <see cref="PublishBuffer{T}"/>, published only when
-/// the delivered world definition's HUD section actually changes (structure — panels/elements/rects/bindings), not
-/// every frame; live binding values are resolved separately by <see cref="HudWriter"/> every produced frame. Same
-/// threading contract as every other overlay store.
+/// The HUD structure store. A thin named wrapper over the shared <see cref="PublishBuffer{T}"/>. The world feed
+/// publishes every produced frame because visibility, seat membership, and per-seat panels are live even while the
+/// delivered document structure is unchanged; <see cref="HudWriter"/> resolves binding values from that snapshot in
+/// the same frame. Same threading contract as every other overlay store.
 /// </summary>
 public sealed class HudStore : IHudSource {
     private readonly PublishBuffer<OverlayHudFrame> m_buffer = new();

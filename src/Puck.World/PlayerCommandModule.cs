@@ -37,6 +37,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
     // The reserved trailing token an instance-addressed drive-a-player verb carries — see TryStripInstanceToken.
     private const string InstanceTokenPrefix = "instance:";
 
+    public const string AssignCommand = Puck.World.Client.PlayerCommandNames.AssignCommand;
     /// <summary>The keyboard-claim command (Keyboard F1..F4, press edge). The target slot rides the binding's Axis1D
     /// value as a 1-based player number, the clean scalar constant a binding carries.</summary>
     public const string ClaimCommand = Puck.World.Client.PlayerCommandNames.ClaimCommand;
@@ -215,12 +216,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
             description: "Sets a specific owned-world identity on a player and confirms it: player.identity <name> [n].",
             handler: ProfileHandler
         );
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Bindable,
-            name: "player.assign",
-            description: "Moves a device between players: player.assign <keyboardN|mouseN|gamepadN|cameraN> <slot> (slot 1..4). Onto an occupied slot the device joins that team; onto an empty slot it creates a pending player (a profile must be chosen); onto its own slot a no-op. See world.devices for the tokens.",
-            handler: AssignHandler
-        );
+        yield return PlayerAssignmentCommand.Create(roster: m_roster);
     }
     // The success-echo tail every side-effecting wire verb shares: echo the formatted line when acks are on, else drop
     // it (CommandResult.None). On a quiet pipe (args.Echo false) the EchoHandler skips every format append and no ack

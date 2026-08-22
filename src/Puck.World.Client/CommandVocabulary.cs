@@ -6,6 +6,7 @@ namespace Puck.World.Client;
 /// becomes a forwarding const, the same shape <c>WorldPopulation.LocalSeatCount</c> already uses for
 /// <c>WorldPopulationLimits.LocalSeatCount</c>.</summary>
 public static class PlayerCommandNames {
+    public const string AssignCommand = "player.assign";
     public const string ClaimCommand = "player.claim";
     public const string ConfirmCommand = "player.confirm";
     public const string CycleCommand = "player.cycle";

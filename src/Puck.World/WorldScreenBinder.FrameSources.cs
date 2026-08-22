@@ -12,6 +12,14 @@ internal sealed partial class WorldScreenBinder {
     // all) records no entry and is retried the next time DeclareFrameSource sees it (cheap: HUD structure rebuilds run
     // at most once per definition revision plus once per edited identity).
     private readonly Dictionary<WorldFrameSource, CaptureFeed> m_frameCaptures = new();
+    // HUD frame sources are generation-owned. Exact (source, enclosing-seat) references preserve the seat fallback
+    // identity, while resource-specific release below folds aliases that resolve the same capture, camera, or view.
+    // Counts make the binder safe for more than one overlay owner without coupling either owner to the other's
+    // generation cadence.
+    private readonly Dictionary<(WorldFrameSource Source, int Seat), int> m_frameSourceReferences = new();
+    // Probe camera inputs have their own persistent lane. A HUD generation can therefore narrow or remove only its
+    // contribution without weakening a kernel graph that still consumes the same sensor.
+    private readonly Dictionary<(int Seat, WorldCameraSensor Sensor), List<WorldFeedProfile>> m_probeCameraDemand = new();
 
     /// <summary>Declares that a <see cref="WorldFrameSource"/> is consumed outside any declared <c>screens</c> row (a
     /// HUD/overlay <c>Frame</c> element) and opens its feed through the same shared machinery a screen row would —
@@ -63,6 +71,249 @@ internal sealed partial class WorldScreenBinder {
                 }
 
                 break;
+        }
+    }
+    /// <summary>Retains one non-screen consumer's use of a frame source. The first reference starts or registers its
+    /// producer; later references share it.</summary>
+    /// <param name="source">The source to retain.</param>
+    /// <param name="seat">The enclosing 1-based seat fallback.</param>
+    public void RetainFrameSource(WorldFrameSource source, int seat) {
+        ArgumentNullException.ThrowIfNull(argument: source);
+
+        if (m_disposed) {
+            return;
+        }
+
+        var key = (source, seat);
+
+        if (m_frameSourceReferences.TryGetValue(key: key, value: out var references)) {
+            m_frameSourceReferences[key] = checked(references + 1);
+
+            return;
+        }
+
+        m_frameSourceReferences[key] = 1;
+
+        switch (source) {
+            case WorldScreenSource.Camera:
+                ReconcileFrameSourceCameraDemand();
+
+                break;
+            default:
+                DeclareFrameSource(source: source, seat: seat);
+
+                break;
+        }
+    }
+    /// <summary>Releases one retained non-screen source. Its producer is torn down when this was the final reference
+    /// and no screen or probe consumer still owns the same underlying resource.</summary>
+    /// <param name="source">The source to release.</param>
+    /// <param name="seat">The enclosing 1-based seat fallback used when retained.</param>
+    public void ReleaseFrameSource(WorldFrameSource source, int seat) {
+        ArgumentNullException.ThrowIfNull(argument: source);
+
+        var key = (source, seat);
+
+        if (!m_frameSourceReferences.TryGetValue(key: key, value: out var references)) {
+            return;
+        }
+
+        if (references > 1) {
+            m_frameSourceReferences[key] = (references - 1);
+
+            return;
+        }
+
+        _ = m_frameSourceReferences.Remove(key: key);
+
+        switch (source) {
+            case WorldScreenSource.Camera:
+                ReconcileFrameSourceCameraDemand();
+
+                break;
+            case WorldScreenSource.View view:
+                ReleaseOrphanedCameraView(name: view.CameraName);
+
+                break;
+            case WorldScreenSource.Capture:
+                if (!HasRetainedCapture(source: source) && m_frameCaptures.Remove(key: source, value: out var capture)) {
+                    capture.Dispose();
+                }
+
+                break;
+        }
+    }
+    private static WorldFeedProfile RichestProfile(WorldFeedProfile left, WorldFeedProfile right) => new(
+        Width: Math.Max(val1: left.Width, val2: right.Width),
+        Height: Math.Max(val1: left.Height, val2: right.Height),
+        RefreshRateHz: Math.Max(val1: left.RefreshRateHz, val2: right.RefreshRateHz)
+    );
+    private void RetainProbeCameraDemandCore(WorldScreenSource.Camera camera, int contextSeat) {
+        var key = (camera.Seat ?? contextSeat, camera.Sensor);
+        var requested = (camera.Profile ?? WorldFeedProfile.Default);
+
+        if (!m_probeCameraDemand.TryGetValue(key: key, value: out var demands)) {
+            demands = [];
+            m_probeCameraDemand.Add(key: key, value: demands);
+        }
+
+        demands.Add(item: requested);
+        ReconcileFrameSourceCameraDemand();
+    }
+    private void ReleaseProbeCameraDemandCore(WorldScreenSource.Camera camera, int contextSeat) {
+        var key = (camera.Seat ?? contextSeat, camera.Sensor);
+
+        if (!m_probeCameraDemand.TryGetValue(key: key, value: out var demands)) {
+            return;
+        }
+
+        var requested = (camera.Profile ?? WorldFeedProfile.Default);
+        var index = demands.FindIndex(match: profile => Equals(objA: profile, objB: requested));
+
+        if (index < 0) {
+            return;
+        }
+
+        demands.RemoveAt(index: index);
+
+        if (demands.Count == 0) {
+            _ = m_probeCameraDemand.Remove(key: key);
+        }
+
+        ReconcileFrameSourceCameraDemand();
+    }
+    private bool HasRetainedCapture(WorldFrameSource source) {
+        foreach (var entry in m_frameSourceReferences.Keys) {
+            if (Equals(objA: entry.Source, objB: source)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    private bool HasRetainedView(string cameraName) {
+        foreach (var entry in m_frameSourceReferences.Keys) {
+            if (
+                (entry.Source is WorldScreenSource.View view) &&
+                string.Equals(a: view.CameraName, b: cameraName, comparisonType: StringComparison.Ordinal)
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    private static void MergeCameraDemand(
+        Dictionary<(int Seat, WorldCameraSensor Sensor), WorldFeedProfile> demands,
+        WorldScreenSource.Camera camera,
+        int fallbackSeat
+    ) {
+        var key = (camera.Seat ?? fallbackSeat, camera.Sensor);
+        var requested = (camera.Profile ?? WorldFeedProfile.Default);
+
+        demands[key] = (demands.TryGetValue(key: key, value: out var existing)
+            ? RichestProfile(left: existing, right: requested)
+            : requested
+        );
+    }
+    // Rebuilds webcam demand from the live screen slots plus persistent probe declarations and active HUD references.
+    // This runs only when one of the latter two membership sets changes, never on a steady produced frame.
+    private void ReconcileFrameSourceCameraDemand() {
+        var next = new Dictionary<(int Seat, WorldCameraSensor Sensor), WorldFeedProfile>();
+
+        foreach (var slot in m_slots.Values) {
+            if ((slot.CameraSeat is not { } seat) || (slot.CameraSensorKind is not { } sensor)) {
+                continue;
+            }
+
+            var requested = (
+                (slot.DeclaredSource is WorldScreenSource.Camera declared) &&
+                ((declared.Seat ?? seat) == seat) &&
+                (declared.Sensor == sensor)
+            )
+                ? (declared.Profile ?? WorldFeedProfile.Default)
+                : WorldFeedProfile.Default;
+            var key = (seat, sensor);
+
+            next[key] = (next.TryGetValue(key: key, value: out var existing)
+                ? RichestProfile(left: existing, right: requested)
+                : requested
+            );
+        }
+
+        foreach (var entry in m_probeCameraDemand) {
+            foreach (var requested in entry.Value) {
+                next[entry.Key] = (next.TryGetValue(key: entry.Key, value: out var existing)
+                    ? RichestProfile(left: existing, right: requested)
+                    : requested
+                );
+            }
+        }
+
+        foreach (var entry in m_frameSourceReferences.Keys) {
+            if (entry.Source is WorldScreenSource.Camera camera) {
+                MergeCameraDemand(demands: next, camera: camera, fallbackSeat: entry.Seat);
+            }
+        }
+
+        var changed = (next.Count != m_cameraDemand.Count);
+
+        if (!changed) {
+            foreach (var entry in next) {
+                if (!m_cameraDemand.TryGetValue(key: entry.Key, value: out var existing) || !Equals(objA: existing, objB: entry.Value)) {
+                    changed = true;
+
+                    break;
+                }
+            }
+        }
+
+        if (!changed) {
+            return;
+        }
+
+        m_cameraDemand.Clear();
+
+        foreach (var entry in next) {
+            m_cameraDemand.Add(key: entry.Key, value: entry.Value);
+        }
+
+        ReconcileCameraFeedsToDemand();
+    }
+    private void ReconcileCameraFeedsToDemand() {
+        foreach (var device in m_cameraDeviceOrder) {
+            var seat = (m_roster.DeviceSlot(device: device.DeviceId) is { } slot ? (slot + 1) : 0);
+
+            for (var index = (device.Feeds.Count - 1); (index >= 0); index--) {
+                var feed = device.Feeds[index];
+                var key = (device.DeviceId, feed.Sensor);
+
+                if ((seat == 0) || !m_cameraDemand.TryGetValue(key: (seat, feed.Sensor), value: out var requested)) {
+                    _ = m_cameraFeeds.Remove(key: key);
+                    device.Feeds.RemoveAt(index: index);
+                    feed.Dispose();
+                    device.SensorsChanged = true;
+
+                    continue;
+                }
+
+                if (Equals(objA: requested, objB: feed.Profile)) {
+                    continue;
+                }
+
+                var replacement = new CameraFeed(profile: requested, sensor: feed.Sensor, surface: new CpuSurfaceSource()) {
+                    Fault = "camera opening",
+                };
+
+                feed.Dispose();
+                device.Feeds[index] = replacement;
+                m_cameraFeeds[key] = replacement;
+                device.SensorsChanged = true;
+            }
+        }
+
+        foreach (var (seat, sensor) in m_cameraDemand.Keys) {
+            _ = TryFulfillCameraDemand(seat: seat, sensor: sensor);
         }
     }
     /// <summary>Acquires the current frame for a previously-declared <see cref="WorldFrameSource"/> — the render-thread,

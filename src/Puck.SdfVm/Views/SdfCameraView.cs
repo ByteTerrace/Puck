@@ -39,6 +39,10 @@ public sealed class SdfCameraView : IViewContent, IDisposable {
     private Func<IGpuDeviceContext, IGpuStorageImage>? m_exportFactory;
     private SdfWorldKernels? m_kernels;
     private int m_lastUploadedRevision = -1;
+    // Export-mode changes rebuild the engine, but ViewStack keeps serving the last resolved image handle until a
+    // replacement frame completes. Keep the engine backing that handle alive across the rebuild; disposing it in
+    // ExportFactory's setter would leave a wired screen sampling a released image during a budgeted refresh gap.
+    private SdfWorldEngine? m_retiredEngine;
 
     /// <summary>Initializes a camera view against the host's worst-case capacity envelope, so this view's own program
     /// upload never throws when the shared program grows within that ceiling (same contract as
@@ -81,8 +85,9 @@ public sealed class SdfCameraView : IViewContent, IDisposable {
     /// <see langword="null"/> (the default) builds a plain same-device image; a factory returning an
     /// <see cref="IGpuExportableStorageImage"/> puts the engine in export mode (see <see cref="ExportSharedHandle"/>).
     /// Only consulted while building a new engine (<see cref="EnsureEngine"/> is a no-op once one exists), so setting
-    /// this after the engine already exists disposes it — the next <see cref="Resolve"/> rebuilds against the new
-    /// factory (a fresh engine also means a fresh <see cref="SdfWorldEngine.ExportSharedHandle"/>).</summary>
+    /// this after the engine already exists retires it — the next <see cref="Resolve"/> rebuilds against the new
+    /// factory, while the old engine stays alive until that replacement frame completes (a fresh engine also means
+    /// a fresh <see cref="SdfWorldEngine.ExportSharedHandle"/>).</summary>
     public Func<IGpuDeviceContext, IGpuStorageImage>? ExportFactory {
         get => m_exportFactory;
         set {
@@ -93,12 +98,26 @@ public sealed class SdfCameraView : IViewContent, IDisposable {
             m_exportFactory = value;
 
             if (m_engine is not null) {
-                m_engine.Dispose();
+                if (m_retiredEngine is null) {
+                    m_retiredEngine = m_engine;
+                } else {
+                    // A second factory change before the pending replacement completes cannot make this unserved
+                    // engine the ViewStack's cached image; the first retired engine still owns that handle.
+                    m_engine.Dispose();
+                }
+
                 m_engine = null;
                 m_lastUploadedRevision = -1;
             }
         }
     }
+    /// <summary>Optional cross-device write reservation used by an exported-image consumer. When present,
+    /// <see cref="Resolve"/> keeps the last completed image instead of overwriting it while a consumer holds a read
+    /// lease.</summary>
+    public Func<bool>? TryBeginExportWrite { get; set; }
+    /// <summary>Ends a successful <see cref="TryBeginExportWrite"/> reservation after submission, reporting whether
+    /// the export queue reached a complete frame.</summary>
+    public Action<bool>? EndExportWrite { get; set; }
     /// <summary>Gets the live engine's exported shared handle (see <see cref="SdfWorldEngine.ExportSharedHandle"/>),
     /// or 0 while <see cref="ExportFactory"/> is unset or no engine has been built yet.</summary>
     public nint ExportSharedHandle => (m_engine?.ExportSharedHandle ?? 0);
@@ -194,11 +213,15 @@ public sealed class SdfCameraView : IViewContent, IDisposable {
     public void Dispose() {
         m_engine?.Dispose();
         m_engine = null;
+        m_retiredEngine?.Dispose();
+        m_retiredEngine = null;
     }
     /// <inheritdoc/>
     public void NotifyDeviceLost() {
         m_engine?.Dispose();
         m_engine = null;
+        m_retiredEngine?.Dispose();
+        m_retiredEngine = null;
         m_lastUploadedRevision = -1;
     }
     /// <inheritdoc/>
@@ -291,11 +314,38 @@ public sealed class SdfCameraView : IViewContent, IDisposable {
             DisableSoftShadows = (context.HostFrame.DisableSoftShadows || DisableSoftShadows),
         };
 
-        m_engine!.SubmitFrame(frame: frame);
+        var tryBeginExportWrite = TryBeginExportWrite;
+        var endExportWrite = EndExportWrite;
+        var reservedExportWrite = (tryBeginExportWrite?.Invoke() ?? true);
+
+        if (!reservedExportWrite) {
+            // A factory change may already have built the replacement engine while a foreign reader still leases
+            // the old export. The replacement has not rendered yet, so keep returning the image ViewStack already
+            // caches instead of publishing an uninitialized output handle.
+            return (m_retiredEngine?.OutputImageViewHandle ?? m_engine!.OutputImageViewHandle);
+        }
+
+        var exportWriteCompleted = false;
+
+        try {
+            m_engine!.SubmitFrame(frame: frame);
+            exportWriteCompleted = true;
+        } finally {
+            if (tryBeginExportWrite is not null) {
+                endExportWrite?.Invoke(exportWriteCompleted);
+            }
+        }
+
+        var outputImageViewHandle = m_engine.OutputImageViewHandle;
+
+        // The replacement is now the result this Resolve publishes. Disposing drains the device, covering earlier
+        // in-flight frames that may still sample the previously cached image.
+        m_retiredEngine?.Dispose();
+        m_retiredEngine = null;
 
         // OutputImageViewHandle stays a valid same-device view even in export mode (IGpuExportableStorageImage IS an
         // IGpuStorageImage) — a jumbotron sampling this view and a probe kernel importing ExportSharedHandle read the
         // same drained frame through two different handles.
-        return m_engine.OutputImageViewHandle;
+        return outputImageViewHandle;
     }
 }

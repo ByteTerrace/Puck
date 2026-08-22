@@ -32,11 +32,12 @@ public enum DirectXExportableImageAccess {
 /// (from <c>CreateSharedHandle</c>), and a fence to drain the producer's queue. Another backend on the same adapter
 /// (a Vulkan host) imports <see cref="SharedHandle"/> and samples the texture without a CPU round-trip.
 /// <para>
-/// The texture is created in the <c>UNORDERED_ACCESS</c> state — matching the plain
-/// <see cref="DirectXGpuStorageImage"/> and the compute recorder's seeded prior state — so the recorder's
-/// per-resource state tracking stays the single source of truth: the producer transitions the texture to
-/// <c>COMMON</c> (the cross-API handoff state, via <see cref="GpuImageLayout.External"/>) as its final recorded
-/// barrier, and <see cref="FinalizeForExport"/> only blocks on a fence until that submitted work completes.
+/// A private <see cref="DirectXExportableImageAccess.ComputeWrite"/> texture starts in
+/// <c>UNORDERED_ACCESS</c>, matching <see cref="DirectXGpuStorageImage"/>. Both simultaneous-access shapes start and
+/// rest in <c>COMMON</c>, the immutable enhanced-barrier layout and cross-device handoff state their foreign device
+/// expects; a legacy first UAV use promotes from <c>COMMON</c>. The producer's final recorded barrier returns a
+/// compute-written texture to <c>COMMON</c> via <see cref="GpuImageLayout.External"/>, and
+/// <see cref="FinalizeForExport"/> only blocks on a fence until that submitted work completes.
 /// Single-thread affine.
 /// </para>
 /// </summary>
@@ -103,11 +104,12 @@ public sealed unsafe class DirectXGpuExportableStorageImage : IGpuExportableStor
         void* resource;
         var resourceIid = ID3D12Resource.IID_Guid;
 
-        // A foreign-written texture rests in (and decays to) COMMON — the cross-API handoff state its writer expects;
-        // a compute-written one starts in UNORDERED_ACCESS (the compute recorder's seeded state).
+        // Both simultaneous-access shapes rest in COMMON — the only enhanced-barrier layout they use and the
+        // cross-API handoff state their foreign device expects. A private compute-write texture starts in
+        // UNORDERED_ACCESS (the compute recorder's seeded state).
         device->CreateCommittedResource(
             HeapFlags: D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_SHARED,
-            InitialResourceState: ((access == DirectXExportableImageAccess.ForeignWrite) ? D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON : D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS),
+            InitialResourceState: (UsesCommonInitialState(access: access) ? D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON : D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS),
             pDesc: in textureDesc,
             pHeapProperties: in heapProperties,
             pOptimizedClearValue: ((D3D12_CLEAR_VALUE?)null),
@@ -169,6 +171,10 @@ public sealed unsafe class DirectXGpuExportableStorageImage : IGpuExportableStor
     public nint SharedHandle => m_sharedHandle;
     /// <inheritdoc/>
     public uint Width { get; }
+
+    // Keep the three access shapes' initial-state policy at one allocation-independent door; the constructor uses
+    // this result for the native resource state and the documentation above names the same split.
+    private static bool UsesCommonInitialState(DirectXExportableImageAccess access) => (access != DirectXExportableImageAccess.ComputeWrite);
 
     private void WaitForGpu() {
         DirectXFence.SignalAndWait(

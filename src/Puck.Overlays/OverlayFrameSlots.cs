@@ -1,5 +1,7 @@
 namespace Puck.Overlays;
 
+using Puck.Abstractions.Gpu;
+
 /// <summary>
 /// The unified overlay's per-frame frame-slot table: maps each key a <c>Frame</c> HUD element names to one of
 /// <see cref="SlotCount"/> combined image-sampler bindings (the compositor's fixed frame-slot descriptor range,
@@ -22,6 +24,7 @@ public sealed class OverlayFrameSlots {
 
     private int m_boundCount;
     private int m_pendingRetireCount;
+    private bool m_capacityExceeded;
 
     /// <summary>Initializes a new instance of the <see cref="OverlayFrameSlots"/> class.</summary>
     /// <param name="sources">The host seam leases are acquired through.</param>
@@ -34,6 +37,11 @@ public sealed class OverlayFrameSlots {
 
     /// <summary>Gets the number of slots bound so far this frame.</summary>
     public int BoundCount => m_boundCount;
+
+    /// <summary>Gets whether a distinct source binding was refused this frame because all <see cref="SlotCount"/>
+    /// slots were already occupied. The table does not acquire an over-capacity source merely to probe its
+    /// availability.</summary>
+    public bool CapacityExceeded => m_capacityExceeded;
 
     /// <summary>Gets the lease bound at <paramref name="slot"/> this frame.</summary>
     /// <param name="slot">The slot index, <c>0..</c><see cref="BoundCount"/><c>-1</c>.</param>
@@ -52,8 +60,13 @@ public sealed class OverlayFrameSlots {
             }
         }
 
+        if (m_boundCount >= SlotCount) {
+            m_capacityExceeded = true;
+
+            return -1;
+        }
+
         if (
-            (m_boundCount >= SlotCount) ||
             !m_sources.TryAcquire(
                 key: key,
                 lease: out var lease
@@ -83,9 +96,11 @@ public sealed class OverlayFrameSlots {
         );
         m_pendingRetireCount = m_boundCount;
         m_boundCount = 0;
+        m_capacityExceeded = false;
     }
     /// <summary>Retires every lease this table currently holds, bound or still pending retirement — the caller's
-    /// responsibility to call only after a final fence wait proves no pass can still be sampling them.</summary>
+    /// responsibility to call only after a final fence wait proves no pass can still be sampling them, or after
+    /// device loss invalidates every such pass.</summary>
     public void RetireAll() {
         RetirePending();
 
@@ -95,6 +110,15 @@ public sealed class OverlayFrameSlots {
         }
 
         m_boundCount = 0;
+    }
+    /// <summary>Waits for the last overlay submission and then retires every bound or pending host-owned lease.
+    /// This is the pass-through/disposal path: unlike <see cref="RetirePending"/>, no current-frame submission will
+    /// adopt the bound leases.</summary>
+    /// <param name="fence">The overlay submission fence, or <see langword="null"/> before the overlay has ever
+    /// submitted GPU work.</param>
+    public void RetireAllAfter(IGpuSubmissionFence? fence) {
+        fence?.Wait();
+        RetireAll();
     }
     /// <summary>Retires the leases <see cref="BeginFrame"/> moved aside from the previous produced frame. Call once
     /// the node's frame fence wait proves that frame's sampling pass has retired.</summary>

@@ -16,9 +16,10 @@ internal sealed partial class WorldScreenBinder {
     // provisioned here, on the render thread, at the next publish (the exportable targets need the render device).
     private readonly Dictionary<string, ProbeFeed> m_probeFeeds = new(comparer: StringComparer.Ordinal);
     // One export state per named camera whose view a probe socket reads, shared by every probe socket naming the
-    // same camera (mirrors ProbeFeed's own id-keyed sharing — a socket rebind or probe removal that releases the
-    // export tears it down for every other socket still naming that camera too).
+    // same camera (mirrors ProbeFeed's own id-keyed sharing). Reference counting keeps the export alive until the
+    // final live probe instance releases that camera.
     private readonly Dictionary<string, ViewExportFeed> m_viewExports = new(comparer: StringComparer.Ordinal);
+    private readonly Dictionary<string, int> m_viewExportReferences = new(comparer: StringComparer.Ordinal);
 
     /// <summary>Declares that a probe writes a texture, so a screen may show it. Idempotent.</summary>
     /// <param name="id">The <c>probes[].id</c>.</param>
@@ -127,27 +128,36 @@ internal sealed partial class WorldScreenBinder {
         var handle = feed.View.ExportSharedHandle;
 
         generation = feed.View.ExportGeneration;
-        // A fresh engine (device loss, dimension change, a factory that just changed) briefly holds a zero handle
-        // again — mirror that into the ring so a consumer's TryAcquireLatest refuses until this camera's next
-        // rendered frame lands, instead of replaying whatever slot a PRIOR engine last published.
-        feed.Slots.LatestSlot = ((0 != handle) ? 0 : -1);
 
-        if (0 == handle) {
+        if (
+            (0 == handle) ||
+            !feed.Slots.HasCompletedFrame ||
+            !ReferenceEquals(objA: feed.CompletedGeneration, objB: generation)
+        ) {
             fault = "view export awaiting a first rendered frame";
 
             return false;
         }
 
-        ring = new ProbeKernelInput.Ring(
-            Format: SurfaceFormat.R8G8B8A8Unorm,
-            Height: ((int)camera.RenderHeight),
-            SharedTargetHandles: [handle],
-            Slots: feed.Slots,
-            Width: ((int)camera.RenderWidth)
-        );
+        if (!ReferenceEquals(objA: feed.InputGeneration, objB: generation)) {
+            feed.Input = new ProbeKernelInput.Ring(
+                Format: SurfaceFormat.R8G8B8A8Unorm,
+                Height: ((int)camera.RenderHeight),
+                SharedTargetHandles: [handle],
+                Slots: feed.Slots,
+                Width: ((int)camera.RenderWidth)
+            );
+            feed.InputGeneration = generation;
+        }
+
+        ring = feed.Input!;
         fault = "";
 
         return true;
+    }
+    /// <summary>Retains one live probe instance's use of a named view export.</summary>
+    public void RetainViewExport(string cameraName) {
+        m_viewExportReferences[cameraName] = (m_viewExportReferences.TryGetValue(key: cameraName, value: out var count) ? (count + 1) : 1);
     }
     /// <summary>Drops a view export requested through <see cref="TryGetViewExport"/> and rebuilds the view's engine
     /// without export on its next resolve. A camera still filmed by a jumbotron screen keeps rendering (the release
@@ -155,14 +165,29 @@ internal sealed partial class WorldScreenBinder {
     /// <see cref="ReleaseOrphanedCameraView"/>'s own orphan contract.</summary>
     /// <param name="cameraName">The <c>cameras[]</c> row name.</param>
     public void ReleaseViewExport(string cameraName) {
+        if (m_viewExportReferences.TryGetValue(key: cameraName, value: out var references) && (references > 1)) {
+            m_viewExportReferences[cameraName] = (references - 1);
+
+            return;
+        }
+
+        _ = m_viewExportReferences.Remove(key: cameraName);
+
         if (!m_viewExports.Remove(key: cameraName, value: out var feed)) {
             return;
         }
 
+        feed.Detach();
         feed.View.ExportFactory = null;
 
         if (0 == WiredScreensFor(name: cameraName).Count) {
             ReleaseOrphanedCameraView(name: cameraName);
+        }
+    }
+    private bool HasViewExportReferences(string cameraName) => m_viewExportReferences.ContainsKey(key: cameraName);
+    private void RetireViewExportForRecreation(string cameraName) {
+        if (m_viewExports.Remove(key: cameraName, value: out var feed)) {
+            feed.Detach();
         }
     }
 
@@ -173,13 +198,19 @@ internal sealed partial class WorldScreenBinder {
     // Every caller already guards TryGetViewExport's own OS-version check before reaching here.
     [SupportedOSPlatform("windows10.0.10240")]
     private ViewExportFeed GetOrAddViewExport(WorldCamera camera) {
-        if (m_viewExports.TryGetValue(key: camera.Name, value: out var existing)) {
-            return existing;
-        }
-
         RegisterCameraView(camera: camera);
 
         var view = m_cameraViews[camera.Name].View;
+
+        if (m_viewExports.TryGetValue(key: camera.Name, value: out var existing)) {
+            if (ReferenceEquals(objA: existing.View, objB: view)) {
+                return existing;
+            }
+
+            existing.Detach();
+            _ = m_viewExports.Remove(key: camera.Name);
+        }
+
         var width = camera.RenderWidth;
         var height = camera.RenderHeight;
 
@@ -266,7 +297,14 @@ internal sealed partial class WorldScreenBinder {
     }
     // No GPU teardown of its own — every export's engine/image is owned by its SdfCameraView, disposed with the
     // rest of the pool by m_viewStack.Dispose(). Clearing the map only drops this binder's own bookkeeping.
-    private void DisposeViewExports() => m_viewExports.Clear();
+    private void DisposeViewExports() {
+        foreach (var feed in m_viewExports.Values) {
+            feed.Detach();
+        }
+
+        m_viewExports.Clear();
+        m_viewExportReferences.Clear();
+    }
 
     // One probe output's feed: the ring its kernel publishes into and the render resources behind it, plus the
     // pending extent request and live/fault state. A probe emits no room light.
@@ -305,27 +343,124 @@ internal sealed partial class WorldScreenBinder {
     }
     // One camera's export state, keyed by camera name. Carries no GPU handle of its own — SdfCameraView.
     // ExportSharedHandle/ExportGeneration are read fresh from the view each call, so this class is pure bookkeeping.
-    private sealed class ViewExportFeed(SdfCameraView view) {
-        public SdfCameraView View { get; } = view;
+    private sealed class ViewExportFeed {
+        public ViewExportFeed(SdfCameraView view) {
+            View = view;
+            view.TryBeginExportWrite = TryBeginWrite;
+            view.EndExportWrite = EndWrite;
+        }
+
+        public object? CompletedGeneration { get; private set; }
+        public SdfCameraView View { get; }
         public ViewExportRing Slots { get; } = new();
+        public ProbeKernelInput.Ring? Input { get; set; }
+        public object? InputGeneration { get; set; }
+        private object? PendingGeneration { get; set; }
+
+        public void Detach() {
+            Slots.RetireAndWait();
+            View.TryBeginExportWrite = null;
+            View.EndExportWrite = null;
+        }
+        private void EndWrite(bool completed) {
+            if (completed) {
+                // Publish the generation identity before the ring's volatile ready state. A failed first submission
+                // after device loss may preserve an older readable image, but it must never bless the replacement
+                // engine's new handle as completed.
+                CompletedGeneration = PendingGeneration;
+            }
+
+            PendingGeneration = null;
+            Slots.EndWrite(completed: completed);
+        }
+        private bool TryBeginWrite() {
+            if (!Slots.TryBeginWrite()) {
+                return false;
+            }
+
+            PendingGeneration = View.ExportGeneration;
+
+            return true;
+        }
     }
     // The single-image counterpart of the multi-buffer camera/probe rings above: a view export has exactly one
-    // physical texture (the offscreen engine's own persistent output image, re-rendered in place every refresh), so
-    // there is no write target distinct from the read slot to rotate between — LatestSlotPublication's ring model
-    // (which requires at least two backing targets) does not fit. Readiness instead mirrors the export handle
-    // itself: SdfWorldEngine.SubmitFrame always finishes draining the image (FinalizeForExport) before
-    // SdfCameraView.ExportSharedHandle is read from outside a render pass, so a nonzero handle already means a
-    // complete frame landed. TryAcquireLatest/Release exist to satisfy ISharedSlotRing's contract for the probe
-    // kernel host that opens this ring; they carry no producer-side gating, so a consumer may sample the texture
-    // while the next render is mid-flight (latest-wins, unfenced read — see the README).
+    // physical texture, so producer and consumers coordinate through one atomic state instead of rotating slots.
+    // Positive states count concurrent D3D11 readers; SdfCameraView reserves the writer state before submitting
+    // the next D3D12 render and keeps the previous complete image when that reservation is unavailable. Export-mode
+    // SubmitFrame drains the producer queue before EndWrite publishes state 1, so the cross-device reader never
+    // overlaps a writer over the same texels.
     private sealed class ViewExportRing : ISharedSlotRing {
-        public int LatestSlot { get; set; } = -1;
+        // 0 = no completed frame, 1 = readable with no readers, 2+ = readable with (state - 1) readers,
+        // -1 = retired, -2 = producer writing.
+        private bool m_hadCompletedBeforeWrite;
+        private int m_state;
+
+        public bool HasCompletedFrame => (Volatile.Read(location: ref m_state) >= 1);
+        public int LatestSlot => (HasCompletedFrame ? 0 : -1);
+
+        public void EndWrite(bool completed) => Volatile.Write(location: ref m_state, value: ((completed || m_hadCompletedBeforeWrite) ? 1 : 0));
+        public bool TryBeginWrite() {
+            while (true) {
+                var state = Volatile.Read(location: ref m_state);
+
+                if ((state > 1) || (state < 0)) {
+                    return false;
+                }
+                if (Interlocked.CompareExchange(location1: ref m_state, value: -2, comparand: state) == state) {
+                    m_hadCompletedBeforeWrite = (state == 1);
+
+                    return true;
+                }
+            }
+        }
 
         public bool TryAcquireLatest(out int slot) {
-            slot = ((LatestSlot >= 0) ? 0 : -1);
+            while (true) {
+                var state = Volatile.Read(location: ref m_state);
 
-            return (slot >= 0);
+                if ((state < 1) || (state == int.MaxValue)) {
+                    slot = -1;
+
+                    return false;
+                }
+                if (Interlocked.CompareExchange(location1: ref m_state, value: (state + 1), comparand: state) == state) {
+                    slot = 0;
+
+                    return true;
+                }
+            }
         }
-        public void Release(int slot) => _ = slot;
+        public void Release(int slot) {
+            if (slot != 0) {
+                return;
+            }
+
+            while (true) {
+                var state = Volatile.Read(location: ref m_state);
+
+                if (state <= 1) {
+                    return;
+                }
+                if (Interlocked.CompareExchange(location1: ref m_state, value: (state - 1), comparand: state) == state) {
+                    return;
+                }
+            }
+        }
+        public void RetireAndWait() {
+            var spinner = new SpinWait();
+
+            while (true) {
+                var state = Volatile.Read(location: ref m_state);
+
+                if (state == -1) {
+                    return;
+                }
+                if ((state is 0 or 1) && (Interlocked.CompareExchange(location1: ref m_state, value: -1, comparand: state) == state)) {
+                    return;
+                }
+
+                spinner.SpinOnce();
+            }
+        }
     }
 }

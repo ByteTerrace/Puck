@@ -22,7 +22,7 @@ Primary code:
 - `Puck.World.Client/WorldSeatViewState.cs` — the one live state per occupied
   seat, including yaw/pitch, the cached compiled rig, and smoothing.
 - `Puck.World/WorldSeatViewInput.cs` — stateless pointer adapter.
-- `Puck.World.Client/WorldFrameSource.cs`, `WorldAdjacencySceneEmitter.cs`, and
+- `Puck.World.Client/WorldFramePresenter.cs`, `WorldAdjacencySceneEmitter.cs`, and
   `WorldContinuum.cs` — local and neighbouring-authority render callers of the
   same seat state and generation-addressed continuum.
 - `Puck.World/WorldViewCommandModule.cs` — read-back and composition verbs.
@@ -194,7 +194,7 @@ duration and render scale remain authored on each layout. A layout whose
 `view.override layout <name>` — the authoring shape for an override-only view.
 Under a camera-only layout, a joined seat the layout binds no seat slot to
 falls back to the first camera-bearing slot's region and camera
-(`WorldFrameSource`), so the cursor, the radial wheel, and pointer
+(`WorldFramePresenter`), so the cursor, the radial wheel, and pointer
 unprojection ride the view the player is looking at. The composer's active
 selection also publishes the `layout` context family every tick, so a world
 can flip a seat's binding group with the view (see documents.md, context

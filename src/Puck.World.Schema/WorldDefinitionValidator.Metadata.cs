@@ -307,11 +307,12 @@ public static partial class WorldDefinitionValidator {
         }
     }
     // The hud section: schema caps (MaxWorldPanels; MaxElementsPerPanel, or the tighter MaxElementsPerSeatPanel for
-    // an owned identity's seat panel — see isIdentityScope), id uniqueness (panels; elements within their panel),
-    // rect sanity, WorldHudLayer.Replace refused for a seat panel, the closed HudBindingVocabulary — including
-    // whether a state.<name> binding resolves against the state rows validated just before this call — and (for a
-    // Frame element) the shared ValidateFrameSource gate against definition/cameras. Throws an enum-reasoned
-    // HudValidationException at the first violation, caught here and folded into the whole-document errors list.
+    // an owned identity's seat panel — see isIdentityScope; MaxFrameSources at either scope), id uniqueness (panels;
+    // elements within their panel), rect sanity, WorldHudLayer.Replace refused for a seat panel, the closed
+    // HudBindingVocabulary — including whether a state.<name> binding resolves against the state rows validated just
+    // before this call — and (for a Frame element) the shared ValidateFrameSource gate against definition/cameras.
+    // Throws an enum-reasoned HudValidationException at the first violation, caught here and folded into the
+    // whole-document errors list.
     private static void ValidateHud(WorldDefinition definition, HashSet<string> cameras, WorldHudSection hud, IReadOnlyDictionary<string, WorldStateRow> stateRows, bool isIdentityScope, List<string> errors) {
         if (hud is null) {
             errors.Add(item: "hud is required.");
@@ -382,6 +383,10 @@ public static partial class WorldDefinitionValidator {
             );
         }
 
+        // Record equality is not structural for IReadOnlyList members such as Camera.Controls.Vendor. The generated
+        // wire form is the source declaration's canonical structural identity, so independently deserialized copies
+        // consume one capacity slot just as a reused object does.
+        var frameSources = new HashSet<string>(comparer: StringComparer.Ordinal);
         var panelIds = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         for (var panelIndex = 0; (panelIndex < panels.Count); panelIndex++) {
@@ -424,6 +429,26 @@ public static partial class WorldDefinitionValidator {
                 maxElements: maxElements,
                 stateRows: stateRows
             );
+
+            foreach (var element in panel.Elements) {
+                if (
+                    (element.Kind != WorldHudElementKind.Frame) ||
+                    (element.Source is not { } source) ||
+                    !frameSources.Add(item: JsonSerializer.Serialize(
+                        value: source,
+                        jsonTypeInfo: WorldJsonContext.Default.WorldFrameSource
+                    ))
+                ) {
+                    continue;
+                }
+
+                if (frameSources.Count > WorldHudCapacity.MaxFrameSources) {
+                    throw new HudValidationException(
+                        reason: HudRefusal.TooManyFrameSources,
+                        message: $"{panelPath} ('{panel.Id}') element '{element.Id}' introduces distinct frame source {frameSources.Count}, exceeding WorldHudCapacity.MaxFrameSources ({WorldHudCapacity.MaxFrameSources}). Repeated elements may share the same source."
+                    );
+                }
+            }
         }
     }
     // A kit's vehicle drive tuning: every convergence rate positive, the steering authority curve well-formed, and

@@ -3,10 +3,12 @@ using Xunit;
 
 namespace Puck.Platform.Windows.Tests;
 
-/// <summary>Exercises real attached hardware: enumeration and the pixel-tier open ladder against whatever cameras are
-/// physically connected. Skips rather than fails when a machine carries no color camera.</summary>
+/// <summary>Exercises real attached hardware: enumeration runs whenever a camera is present; the pixel-tier frame
+/// delivery test additionally requires the explicit <c>PUCK_WINDOWS_CAMERA_FRAME_TESTS=1</c> opt-in.</summary>
 [SupportedOSPlatform("windows10.0.14393")]
 public sealed class Win32MediaFoundationCameraServiceTests {
+    private const string FrameTestOptIn = "PUCK_WINDOWS_CAMERA_FRAME_TESTS";
+
     [Fact]
     public void Enumerate_devices_reports_a_color_camera() {
         var devices = new Win32MediaFoundationCameraService().EnumerateDevices();
@@ -23,6 +25,12 @@ public sealed class Win32MediaFoundationCameraServiceTests {
     }
     [Fact]
     public void Opening_a_color_device_by_id_on_the_pixel_tier_delivers_a_frame() {
+        if (!string.Equals(a: "1", b: Environment.GetEnvironmentVariable(variable: FrameTestOptIn), comparisonType: StringComparison.Ordinal)) {
+            Assert.Skip(reason: $"set {FrameTestOptIn}=1 to run the attached-camera frame-delivery test.");
+
+            return;
+        }
+
         var service = new Win32MediaFoundationCameraService();
         var devices = service.EnumerateDevices();
 

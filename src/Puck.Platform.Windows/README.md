@@ -48,6 +48,12 @@ completed slot until its GPU submission retires; the camera drops an incoming
 frame when every other slot remains acquired instead of overwriting a texture
 still being sampled.
 
+The attached-camera pixel delivery test is intentionally opt-in: set
+`PUCK_WINDOWS_CAMERA_FRAME_TESTS=1` before running
+`Win32MediaFoundationCameraServiceTests`. Its frame assertion remains a real
+hardware gate; the default test lane skips it rather than depending on an
+attached device and driver.
+
 Every graph's native objects belong to one MTA worker thread
 (`Win32CameraGraph`): construction blocks until the worker reports ready or
 fails, disposal requests a stop and joins for a bounded interval, and a worker

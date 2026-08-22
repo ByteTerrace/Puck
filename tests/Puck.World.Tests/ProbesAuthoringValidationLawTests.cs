@@ -52,6 +52,63 @@ public sealed class ProbesAuthoringValidationLawTests {
     );
 
     [Fact]
+    public void CaptureSocketRefusesWhileACameraSocketPasses() {
+        var capture = new WorldScreenSource.Capture(
+            WindowTitle: "OBS",
+            Profile: WorldFeedProfile.Default
+        );
+
+        Laws.RefusalWithControl(
+            lawId: "probes.capture-input-not-hosted",
+            deniedOutcome: () => WorldDefinitionValidator.TryValidateLocally(
+                definition: WithProbes(probes: [BuildProbe(inputs: new Dictionary<string, WorldFrameSource>(comparer: StringComparer.Ordinal) { ["lit"] = capture })], bindings: []),
+                reason: out _
+            ),
+            controlOutcome: () => WorldDefinitionValidator.TryValidateLocally(
+                definition: WithProbes(probes: [BuildProbe()], bindings: []),
+                reason: out _
+            ));
+    }
+    [Fact]
+    public void CameraControlsOnAProbeSocketRefuseWhileAnUncontrolledCameraPasses() {
+        var controlled = new WorldScreenSource.Camera(
+            Controls: new WorldCameraControls(Brightness: 1),
+            Profile: WorldFeedProfile.Default,
+            Sensor: WorldCameraSensor.Infrared
+        );
+
+        Laws.RefusalWithControl(
+            lawId: "probes.camera-controls-not-hosted",
+            deniedOutcome: () => WorldDefinitionValidator.TryValidateLocally(
+                definition: WithProbes(probes: [BuildProbe(inputs: new Dictionary<string, WorldFrameSource>(comparer: StringComparer.Ordinal) { ["lit"] = controlled })], bindings: []),
+                reason: out _
+            ),
+            controlOutcome: () => WorldDefinitionValidator.TryValidateLocally(
+                definition: WithProbes(probes: [BuildProbe()], bindings: []),
+                reason: out _
+            ));
+    }
+    [Fact]
+    public void MixedCameraSocketSeatsRefuseWhileMatchingSeatsPass() {
+        static WorldFrameSource At(int seat) => new WorldScreenSource.Camera(
+            Profile: WorldFeedProfile.Default,
+            Seat: seat,
+            Sensor: WorldCameraSensor.Infrared
+        );
+
+        Laws.RefusalWithControl(
+            lawId: "probes.camera-sockets-one-graph",
+            deniedOutcome: () => WorldDefinitionValidator.TryValidateLocally(
+                definition: WithProbes(probes: [BuildProbe(inputs: new Dictionary<string, WorldFrameSource>(comparer: StringComparer.Ordinal) { ["lit"] = At(seat: 1), ["other"] = At(seat: 2) })], bindings: []),
+                reason: out _
+            ),
+            controlOutcome: () => WorldDefinitionValidator.TryValidateLocally(
+                definition: WithProbes(probes: [BuildProbe(inputs: new Dictionary<string, WorldFrameSource>(comparer: StringComparer.Ordinal) { ["lit"] = At(seat: 1), ["other"] = At(seat: 1) })], bindings: []),
+                reason: out _
+            ));
+    }
+
+    [Fact]
     public void BlankKindRefusesWhileANonBlankKindPasses() {
         Laws.RefusalWithControl(
             lawId: "probes.blank-kind",

@@ -31,8 +31,9 @@ root-crossing dependency was the audio director, narrowed to
   its own default policy (the lowest occupied, camera-less slot, player 1
   first — never minting a player). Tokens are minted per kind (`keyboard<N>`,
   `mouse<N>`, `gamepad<N>`, `camera<N>`) and `TryGetSeatDevice`/`AssignDevice`
-  move a camera between seats exactly like a gamepad; a camera never counts
-  toward a seat's device-presence bookkeeping. When several devices of one
+  move a camera between occupied seats; assigning one to an empty slot is
+  refused because a camera never creates or counts toward player presence.
+  When several devices of one
   kind share a seat, `TryGetSeatDevice` resolves whichever was assigned to it
   most recently (`world.devices` marks that one `*`).
 - `SeatController.cs` — the per-seat device-intent producer: typed movement
@@ -154,6 +155,9 @@ root-crossing dependency was the audio director, narrowed to
   `AddonSourceVocabulary.TryResolve`) nine root `*CommandModule` classes in
   `Puck.World` forward their own declarations to, single-sourced here since
   the binding-authoring files above cannot reference those root types.
+- `PlayerAssignmentCommand.cs` — the shared `player.assign` definition and
+  outcome narration over `PlayerRoster`; the root module registers this exact
+  definition and command-level laws drive it through `CommandRegistry`.
 
 ## Audio and documents
 

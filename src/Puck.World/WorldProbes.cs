@@ -664,18 +664,22 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
         public required byte[] Constants { get; init; }
         public string? Fault { get; set; }
         public required string Label { get; init; }
+        public required ProbeKernelInput[] Inputs { get; init; }
         public required string OutputRingKey { get; init; }
         public (int Width, int Height)? OutputExtent { get; set; }
         public object? OutputSet { get; set; }
         public required ProbeReadingRing Ring { get; init; }
+        public required object?[] ResolvedGenerations { get; init; }
         public required ProbeRowInfo RowInfo { get; init; }
         public IProbeKernelRun? Run { get; set; }
         public required int Seat { get; init; }
         public object?[]? SocketGenerations { get; set; }
         public ProbeTrackPlayer? Track { get; init; }
         public List<AxisState> AxisBindings { get; } = [];
+        public List<WorldScreenSource.Camera> CameraDemands { get; } = [];
         public List<ControlState> ControlBindings { get; } = [];
         public List<ParameterState> ParameterBindings { get; } = [];
+        public List<string> ViewExports { get; } = [];
     }
     // One declared axis binding row's resolved, reusable shape — built once per row, instantiated (as an AxisState)
     // once per instance the row ever gets.
@@ -730,6 +734,7 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
         public int LastValue;
         public required long MaxAgeTicks { get; init; }
         public required WorldProbeBinding.Control Row { get; init; }
+        public ICameraControlSurface? Surface;
         public long Writes;
     }
     // One declared parameter binding's live, per-instance state — the last written value (NaN until the first
@@ -739,6 +744,7 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
         public required long MaxAgeTicks { get; init; }
         public required ProbeInstance Instance { get; init; }
         public float LastValue = float.NaN;
+        public ProbeInstance? LastTarget;
         public required WorldProbeBinding.Parameter Row { get; init; }
         public ProbeRowInfo? TargetRowInfo { get; init; }
         public string? ExtensionField { get; init; }

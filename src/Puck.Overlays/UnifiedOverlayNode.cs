@@ -165,6 +165,9 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
     // truncation narration (see OverlayFrameBuilder.Refused): a channel can open/close this episode with no
     // reservation overflow ever happening, so it cannot share state with m_overflowEpisodeOpen.
     private readonly bool[] m_refusalEpisodeOpen = new bool[OverlayChannelLeases.Count];
+    // The fixed frame-slot table's independent overflow episode. This can span world- and seat-scope HUD documents,
+    // so each document's authoring ceiling cannot by itself prove the composed frame fits.
+    private bool m_frameSlotOverflowEpisodeOpen;
 
     /// <summary>Initializes a new instance of the <see cref="UnifiedOverlayNode"/> class.</summary>
     /// <param name="inner">The producer whose render the overlay is drawn over (its surface must be sampleable here).</param>
@@ -525,6 +528,8 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
     // once per episode, independently, per channel — a channel can open one episode, both, or neither in a given
     // frame.
     private void NarrateOverflow() {
+        NarrateFrameSlotOverflow();
+
         if (!m_builder.HasOverflow) {
             Array.Clear(array: m_overflowEpisodeOpen);
             Array.Clear(array: m_refusalEpisodeOpen);
@@ -552,6 +557,23 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
                 written: in written
             );
         }
+    }
+    // A schema-valid world HUD and one or more independently valid seat HUDs can compose to more live sources than
+    // the shader-backed frame-slot table holds. Keep that runtime-only aggregate failure loud and episode-latched.
+    private void NarrateFrameSlotOverflow() {
+        if (!m_frameSlots.CapacityExceeded) {
+            m_frameSlotOverflowEpisodeOpen = false;
+
+            return;
+        }
+
+        if (m_frameSlotOverflowEpisodeOpen) {
+            return;
+        }
+
+        m_frameSlotOverflowEpisodeOpen = true;
+
+        Console.Error.WriteLine(value: $"[unified-overlay] more than {OverlayFrameSlots.SlotCount} distinct HUD frame source bindings were requested this frame; the additional element was omitted because every shader-backed frame slot was occupied. Each HUD document is capped at {OverlayFrameSlots.SlotCount}; reduce the combined world-plus-seat source set.");
     }
     // CAUSE 2: the writer itself refused content before ever offering it to the builder (NoteRefused), or a
     // WriteText run was truncated by its own caller's maxChars — a deliberate, pinned limit the writer authored,
@@ -898,13 +920,16 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         m_disposed = true;
         // A final wait proves no in-flight pass can still be sampling a held lease, so every one of them — bound
         // this frame or still pending retirement from the last — can retire safely.
-        m_frameFence?.Wait();
-        m_frameSlots.RetireAll();
+        m_frameSlots.RetireAllAfter(fence: m_frameFence);
         ReleaseGpuResources();
         m_inner.Dispose();
     }
     /// <inheritdoc/>
     public void OnDeviceLost() {
+        // Device loss invalidates the submissions that could sample these host-owned images. Retire before dropping
+        // the fence so capture/view producers do not retain acquisitions forever; waiting on a lost-device fence is
+        // neither necessary nor safe.
+        m_frameSlots.RetireAll();
         ReleaseGpuResources();
         m_inner.OnDeviceLost();
     }
@@ -923,6 +948,9 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
             (0 == inner.ImageViewHandle)
         ) {
             ForwardPendingCapture();
+            // No new overlay submit will provide the usual proving wait/retirement point. Drain the last submitted
+            // pass before releasing its host-owned image handles.
+            m_frameSlots.RetireAllAfter(fence: m_frameFence);
 
             return inner;
         }
@@ -1008,6 +1036,9 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
 
         if (!m_builder.HasContent) {
             ForwardPendingCapture();
+            // BeginFrame moved the previous pass's leases aside, and a writer may also have acquired a lease before
+            // declining to emit. With no overlay submit, retire both sets after the prior pass's fence.
+            m_frameSlots.RetireAllAfter(fence: m_frameFence);
 
             return inner;
         }

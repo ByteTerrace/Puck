@@ -83,6 +83,29 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
 
         return built;
     }
+    private void MarkFrameSources(OverlayHudPanel panel) {
+        foreach (var element in panel.Elements.Span) {
+            if (element.FrameSource >= 0) {
+                m_frameSources.MarkActive(key: element.FrameSource);
+            }
+        }
+    }
+    private void ReleaseFrameSources(OverlayHudPanel panel) {
+        foreach (var element in panel.Elements.Span) {
+            if (element.FrameSource >= 0) {
+                m_frameSources.ReleaseStructureKey(key: element.FrameSource);
+            }
+        }
+    }
+    private void ReleaseSeatBuild(int slot) {
+        if (m_seatSources[slot] is null) {
+            return;
+        }
+
+        ReleaseFrameSources(panel: m_seatBuilds[slot]);
+        m_seatSources[slot] = null;
+        m_seatBuilds[slot] = default;
+    }
     // Walks the joined roster in view order (the SAME order WorldOverlayFeed lays seats out in — LayoutRegion is a
     // pure function of (count, view index), so calling it here with identical arguments reproduces the exact rect a
     // seat's binding bar/editor HUD already renders in, with no cross-feed dependency), publishing one entry per
@@ -95,18 +118,17 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
 
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
             if (!m_roster.IsJoined(slot: slot)) {
+                ReleaseSeatBuild(slot: slot);
+
                 continue;
             }
 
             var localViewIndex = viewIndex++;
+            var panel = m_roster.ProfileAt(slot: slot)?.Hud;
 
-            if (
-                (m_roster.ProfileAt(slot: slot) is not { Hud: { } panel }) ||
-                !m_facts.Evaluate(
-                predicate: panel.Visible,
-                slot: slot
-            )
-            ) {
+            if (panel is null) {
+                ReleaseSeatBuild(slot: slot);
+
                 continue;
             }
 
@@ -119,8 +141,12 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
                 objA: m_seatSources[slot],
                 objB: panel
             )) {
+                ReleaseSeatBuild(slot: slot);
                 m_seatSources[slot] = panel;
                 m_seatBuilds[slot] = BuildPanel(panel: panel, seat: (slot + 1));
+            }
+            if (!m_facts.Evaluate(predicate: panel.Visible, slot: slot)) {
+                continue;
             }
 
             m_seatPanels[count++] = new OverlayHudSeatPanel(
@@ -132,6 +158,7 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
                 ),
                 Panel: m_seatBuilds[slot]
             );
+            MarkFrameSources(panel: m_seatBuilds[slot]);
         }
 
         return count;
@@ -214,42 +241,58 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
     /// recomposes the player-scope seat panels unconditionally, and publishes both together. Cheap to call every
     /// produced frame (the render thread's <c>FeedTick</c>).</summary>
     public void Tick() {
-        var revision = m_client.DefinitionRevision;
+        m_frameSources.BeginGeneration();
 
-        var hud = m_client.Definition.Hud;
+        try {
+            var revision = m_client.DefinitionRevision;
 
-        if (revision != m_seenRevision) {
-            m_seenRevision = revision;
-            m_worldSources = (hud.Defaults.Enabled
-                ? [.. hud.Panels]
-                : []
-            );
-            m_worldPanels = BuildPanels(panels: m_worldSources);
-            m_visiblePanels = new OverlayHudPanel[m_worldPanels.Length];
-        }
+            var hud = m_client.Definition.Hud;
 
-        // The world-scope gate (hud.defaults.visible) then each panel's own; both evaluated across every joined seat.
-        var visibleCount = 0;
+            if (revision != m_seenRevision) {
+                m_seenRevision = revision;
 
-        if (m_facts.EvaluateAnySeat(predicate: hud.Defaults.Visible)) {
-            for (var index = 0; (index < m_worldPanels.Length); index++) {
-                if (m_facts.EvaluateAnySeat(predicate: m_worldSources[index].Visible)) {
-                    m_visiblePanels[visibleCount++] = m_worldPanels[index];
+                foreach (var panel in m_worldPanels) {
+                    ReleaseFrameSources(panel: panel);
+                }
+
+                m_worldSources = (hud.Defaults.Enabled
+                    ? [.. hud.Panels]
+                    : []
+                );
+                m_worldPanels = BuildPanels(panels: m_worldSources);
+                m_visiblePanels = new OverlayHudPanel[m_worldPanels.Length];
+            }
+
+            // The world-scope gate (hud.defaults.visible) then each panel's own; both evaluated across every joined seat.
+            // Only panels that survive both gates mark their Frame sources into this generation: structural caches keep
+            // stable keys, while the binder's producer ownership follows what can actually draw this frame.
+            var visibleCount = 0;
+
+            if (m_facts.EvaluateAnySeat(predicate: hud.Defaults.Visible)) {
+                for (var index = 0; (index < m_worldPanels.Length); index++) {
+                    if (m_facts.EvaluateAnySeat(predicate: m_worldSources[index].Visible)) {
+                        var panel = m_worldPanels[index];
+
+                        m_visiblePanels[visibleCount++] = panel;
+                        MarkFrameSources(panel: panel);
+                    }
                 }
             }
+
+            var seatCount = BuildSeatPanels();
+
+            m_store.Publish(frame: new OverlayHudFrame(
+                Panels: m_visiblePanels.AsMemory(
+                    length: visibleCount,
+                    start: 0
+                ),
+                SeatPanels: m_seatPanels.AsMemory(
+                    length: seatCount,
+                    start: 0
+                )
+            ));
+        } finally {
+            m_frameSources.EndGeneration();
         }
-
-        var seatCount = BuildSeatPanels();
-
-        m_store.Publish(frame: new OverlayHudFrame(
-            Panels: m_visiblePanels.AsMemory(
-                length: visibleCount,
-                start: 0
-            ),
-            SeatPanels: m_seatPanels.AsMemory(
-                length: seatCount,
-                start: 0
-            )
-        ));
     }
 }

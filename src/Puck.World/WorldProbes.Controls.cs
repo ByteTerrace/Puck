@@ -101,7 +101,7 @@ internal sealed partial class WorldProbes {
                 var unitInterval = ((normalized + 1.0) / 2.0);
                 var value = (int)Math.Round(control.Row.Minimum + (unitInterval * (control.Row.Maximum - control.Row.Minimum)));
 
-                if (control.HasWritten && (value == control.LastValue)) {
+                if (control.HasWritten && ReferenceEquals(objA: control.Surface, objB: surface) && (value == control.LastValue)) {
                     continue;
                 }
                 if (!surface.TrySet(control: control.ControlEnum, value: value)) {
@@ -110,6 +110,7 @@ internal sealed partial class WorldProbes {
 
                 control.HasWritten = true;
                 control.LastValue = value;
+                control.Surface = surface;
                 control.Writes++;
             }
         }

@@ -237,6 +237,10 @@ public sealed record WorldHudSection(WorldHudDefaults Defaults, IReadOnlyList<Wo
 /// constructor data, never restated); the render cost each authored element expands into is the overlay writer's own
 /// constant.</summary>
 public static class WorldHudCapacity {
+    /// <summary>The number of structurally unique frame sources one HUD section may name. Repeated elements naming
+    /// the same source share one presentation slot. A cross-layer law pins this schema constant to the overlay's
+    /// independently declared fixed shader-slot count.</summary>
+    public const int MaxFrameSources = 8;
     /// <summary>The per-panel element-row ceiling (world scope).</summary>
     public const int MaxElementsPerPanel = 24;
     /// <summary>The per-seat player-scope panel's element-row ceiling — capped smaller than the world scope's

@@ -5,44 +5,6 @@ using Puck.World.Protocol;
 namespace Puck.World;
 
 internal sealed partial class PlayerCommandModule {
-    private CommandResult AssignHandler(CommandContext context, WireArgs args) {
-        if (args.Count != 2) {
-            return CommandResult.Error(output: "[player.assign: expected a device token and a slot — player.assign <keyboardN|mouseN|gamepadN|cameraN> <slot 1..4>]");
-        }
-
-        var deviceToken = args[0].ToString();
-
-        if (!m_roster.TryResolveDeviceToken(
-            device: out var device,
-            token: deviceToken
-        )) {
-            return CommandResult.Error(output: $"[player.assign: no device '{deviceToken}' — see world.devices]");
-        }
-
-        if (!WorldArgs.TryParseIndex(
-            args: in args,
-            at: 1,
-            fallback: null,
-            max: PlayerRoster.MaxSlots,
-            min: 1,
-            value: out var slot
-        )) {
-            return CommandResult.Error(output: $"[player.assign: <slot> must be an integer 1..{PlayerRoster.MaxSlots}]");
-        }
-
-        // An operator command naming BOTH the device and the destination explicitly — context.ActingPrincipal() (the
-        // text door's Console) is the real actor, threaded all the way into AssignDevice's Drive check, never a
-        // fabricated target identity.
-        return DescribeAssign(
-            verb: "player.assign",
-            outcome: m_roster.AssignDevice(
-                device: device,
-                targetSlot: PlayerRoster.SlotFromDisplay(number: slot),
-                actingPrincipal: context.ActingPrincipal()
-            ),
-            slot: PlayerRoster.SlotFromDisplay(number: slot)
-        );
-    }
     private CommandResult ClaimHandler(CommandContext context) {
         // The target slot rides the binding's Axis1D value as a 1-based player number (the clean scalar constant a
         // CommandBinding carries — CommandValue.Axis(float)); a typed invocation with no value is a no-op. This
@@ -166,20 +128,12 @@ internal sealed partial class PlayerCommandModule {
     // Format a device-reassignment outcome, echoing the roster on a change. Each Ignored-shaped outcome gets its OWN
     // accurate reason (see AssignOutcome's own remarks) rather than one hardcoded "roster is full" text that used to
     // print even when the real cause was an exclusively-claimed device or target slot.
-    private CommandResult DescribeAssign(string verb, AssignOutcome outcome, int slot) {
-        return (outcome switch {
-            AssignOutcome.CreatedPending => new CommandResult(Output: $"[{verb}: player {PlayerRoster.DisplayNumber(slot: slot)} joined pending] {m_roster.Describe()}"),
-            AssignOutcome.JoinedTeam => new CommandResult(Output: $"[{verb}: device moved to player {PlayerRoster.DisplayNumber(slot: slot)}] {m_roster.Describe()}"),
-            AssignOutcome.NoOp => new CommandResult(Output: $"[{verb}: device already on player {PlayerRoster.DisplayNumber(slot: slot)}]"),
-            AssignOutcome.DeviceClaimed => CommandResult.Error(output: $"[{verb}: this device is exclusively claimed and cannot be reassigned]"),
-            AssignOutcome.TargetClaimed => CommandResult.Error(output: $"[{verb}: player {PlayerRoster.DisplayNumber(slot: slot)} is exclusively claimed — a device cannot move onto it]"),
-            // Denied is distinct from Ignored ("roster is full"/out of range) — the QUIBBLE's own shape, closed here
-            // too so a plain authority refusal never misreports as "no room". world.why over drive/body:<slot>
-            // explains the refusal with the actor already named in the loud stderr line AssignDevice printed.
-            AssignOutcome.Denied => CommandResult.Error(output: $"[{verb}: player {PlayerRoster.DisplayNumber(slot: slot)} — actor denied, see wire.errors/world.why]"),
-            _ => CommandResult.Error(output: $"[{verb}: the roster is full ({PlayerRoster.MaxSlots} players)]"),
-        });
-    }
+    private CommandResult DescribeAssign(string verb, AssignOutcome outcome, int slot) => PlayerAssignmentCommand.Describe(
+        outcome: outcome,
+        roster: m_roster,
+        slot: slot,
+        verb: verb
+    );
     private CommandResult DescribeConfirm(ConfirmOutcome outcome, int slot, InputDeviceId? device, WorldPrincipal actingPrincipal) {
 
         return (outcome switch {

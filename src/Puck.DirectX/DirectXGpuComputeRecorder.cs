@@ -21,18 +21,20 @@ namespace Puck.DirectX;
 /// barrier on the storage-image resource: <see cref="GpuImageLayout.General"/> → <c>UNORDERED_ACCESS</c>,
 /// <see cref="GpuImageLayout.ShaderReadOnly"/> → <c>PIXEL_SHADER_RESOURCE</c> (the layout the readback and the
 /// compositor sample read require). Because the neutral <c>oldLayout</c> is <see cref="GpuImageLayout.Undefined"/>
-/// on the first frame, the actual <c>StateBefore</c> is taken from a per-resource tracked state seeded at the
-/// storage image's initial <c>UNORDERED_ACCESS</c>, not from the neutral old layout. <c>MemoryBarrier</c> emits a
-/// UAV barrier (a global one with a null resource) — the access/stage scopes are advisory only on D3D12.
+/// on the first frame, the legacy fallback's actual <c>StateBefore</c> is taken from per-resource tracking:
+/// private compute-write images begin in <c>UNORDERED_ACCESS</c>, while simultaneous-access images begin in
+/// <c>COMMON</c> and may implicitly promote on their first UAV use. Enhanced barriers instead keep simultaneous
+/// resources in <c>COMMON</c> and express ordering through sync/access scopes. <c>MemoryBarrier</c> emits a UAV
+/// barrier on the legacy fallback (a global one with a null resource).
 /// </para>
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDisposable {
     // The current D3D12 resource state of each storage image, keyed by its ID3D12Resource* — used ONLY by the classic
-    // (legacy) barrier fallback. Seeded lazily at the texture's initial UNORDERED_ACCESS state (DirectXGpuStorageImage
-    // creates it there) so the first classic transition's StateBefore is correct even though the neutral oldLayout is
-    // Undefined. The enhanced-barrier path needs no such tracking — it honors the neutral oldLayout directly (mapping
-    // Undefined to D3D12_BARRIER_LAYOUT_UNDEFINED + a discard), exactly like a Vulkan image-layout transition.
+    // (legacy) barrier fallback. Seeded lazily at UNORDERED_ACCESS: private compute-write images are created there,
+    // while a simultaneous-access image rests in COMMON, for which UNORDERED_ACCESS is a legal promotable
+    // BeforeState. The enhanced-barrier path needs no such tracking — it honors the neutral oldLayout directly
+    // (mapping Undefined to D3D12_BARRIER_LAYOUT_UNDEFINED + a discard), exactly like a Vulkan image-layout transition.
     private readonly ConcurrentDictionary<nint, D3D12_RESOURCE_STATES> m_imageStates = new();
     // Whether each device supports Enhanced Barriers (D3D12_FEATURE_D3D12_OPTIONS12), cached per ID3D12Device*. When
     // supported, transitions/memory barriers carry real sync + access scopes and first-class layouts (the Vulkan-barrier
@@ -191,8 +193,9 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
         }
 
         var commandList = ((ID3D12GraphicsCommandList*)state.CommandList);
-        // Legacy fallback: the neutral oldLayout is Undefined on the first frame, so the true prior state comes from
-        // tracking — the texture was created in UNORDERED_ACCESS, which is the seed for an untracked resource.
+        // Legacy fallback: the neutral oldLayout is Undefined on the first frame, so the prior state comes from
+        // tracking. UNORDERED_ACCESS is both the private texture's creation state and a legal promotable BeforeState
+        // while a simultaneous-access texture rests in COMMON.
         var before = m_imageStates.GetOrAdd(key: imageHandle, value: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
         var after = ToResourceState(layout: newLayout);
 

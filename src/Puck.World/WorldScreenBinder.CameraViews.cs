@@ -157,6 +157,7 @@ internal sealed partial class WorldScreenBinder {
             }
         }
 
+        RetireViewExportForRecreation(cameraName: name);
         m_viewStack?.Release(name: name);
         _ = m_cameraViews.Remove(key: name);
         Console.Error.WriteLine(value: $"[world.camera: view '{name}' released — camera removed]");
@@ -173,7 +174,7 @@ internal sealed partial class WorldScreenBinder {
 
         var wired = WiredScreensFor(name: name);
 
-        if (wired.Count == 0) {
+        if ((wired.Count == 0) && !HasViewExportReferences(cameraName: name) && !HasRetainedView(cameraName: name)) {
             stack.Release(name: name);
             _ = m_cameraViews.Remove(key: name);
             Console.Error.WriteLine(value: $"[world.screen: camera view '{name}' released — no remaining screen references it]");
@@ -305,6 +306,7 @@ internal sealed partial class WorldScreenBinder {
                 // The offscreen render target is sized (and the rig shaped) at construction: release the registration
                 // (ViewStack.Release disposes the SdfCameraView and its engine) and rebuild fresh from the new row,
                 // re-narrowing the survivors' self-reference set.
+                RetireViewExportForRecreation(cameraName: name);
                 m_viewStack?.Release(name: name);
                 _ = m_cameraViews.Remove(key: name);
                 RegisterCameraView(camera: next);

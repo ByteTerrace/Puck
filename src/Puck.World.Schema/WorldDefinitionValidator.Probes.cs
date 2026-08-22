@@ -146,6 +146,9 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.inputs must declare at least one socket — omit the member entirely for the track leg instead.");
             }
 
+            var hasCameraSeat = false;
+            int? cameraSeat = null;
+
             foreach (var (socket, source) in inputs) {
                 var socketPath = $"{path}.inputs['{socket}']";
 
@@ -160,6 +163,21 @@ public static partial class WorldDefinitionValidator {
                     path: socketPath,
                     source: source
                 );
+
+                if (source is WorldScreenSource.Capture) {
+                    errors.Add(item: $"{socketPath} binds a capture source, but probe kernels do not host capture inputs.");
+                }
+                if (source is WorldScreenSource.Camera camera) {
+                    if (hasCameraSeat && (camera.Seat != cameraSeat)) {
+                        errors.Add(item: $"{socketPath}.camera.seat must match every other camera socket in the probe; one kernel run can bind only one camera graph.");
+                    } else if (!hasCameraSeat) {
+                        hasCameraSeat = true;
+                        cameraSeat = camera.Seat;
+                    }
+                    if (camera.Controls is not null) {
+                        errors.Add(item: $"{socketPath}.camera.controls is not supported on probe inputs; author device controls on a camera screen.");
+                    }
+                }
 
                 if (
                     (source is WorldScreenSource.Probe target) &&

@@ -1135,10 +1135,11 @@ public static partial class WorldDefinitionValidator {
         }
 
         // An owned world (Identity not null) authors seat-scope panels: WorldHudCapacity.MaxSeatPanels of them, each
-        // capped at MaxElementsPerSeatPanel, WorldHudLayer.Replace refused (a panel confined to one seat's viewport has
-        // no base slot to take over). A plain world document keeps the world-scope ceilings and admits Replace. Runs
-        // here (not beside State, above) because a hud.panels Frame element's source resolves against the SAME
-        // declared camera set a screen row's own 'view' arm does — the cameras set just built above.
+        // capped at MaxElementsPerSeatPanel, WorldHudLayer.Replace refused (a panel confined to one seat's viewport
+        // has no base slot to take over). Either scope is capped at MaxFrameSources structurally unique frame sources.
+        // A plain world document keeps the world-scope panel/element ceilings and admits Replace. Runs here (not
+        // beside State, above) because a hud.panels Frame element's source resolves against the SAME declared camera
+        // set a screen row's own 'view' arm does — the cameras set just built above.
         ValidateHud(
             cameras: cameras,
             definition: definition,

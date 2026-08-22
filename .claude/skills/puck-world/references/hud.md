@@ -42,7 +42,11 @@ an unbound gauge draws empty).
 
 `WorldHudCapacity` (the DOCUMENT contract): `MaxWorldPanels = 4`,
 `MaxElementsPerPanel = 24`, `MaxSeatPanels = 1`, `MaxElementsPerSeatPanel =
-12`. The render cost an authored element expands into is the WRITER's own
+12`, and `MaxFrameSources = 8` structurally unique `Frame` sources per HUD
+document (repeated elements naming the same source share one slot). World and
+identity HUD documents validate independently; if their live composition exceeds
+eight unique sources, the unified overlay omits the additional source and narrates
+that aggregate runtime episode instead of failing silently. The render cost an authored element expands into is the WRITER's own
 constant in `Puck.Overlays` (`HudWriter.GaugeElementCost = 3` records,
 `HudWriter.TextRunChars = 64` glyph words — the latter enforced as a
 `WriteText` `maxChars` clamp, the way `GaugeLabelChars` always was for a gauge
@@ -52,7 +56,7 @@ DROPPING element records). Schema declares no render cost.
 Enforced by
 `WorldDefinitionValidator.ValidateHudCore` throwing `HudValidationException`
 with an enum `HudRefusal` (`TooManyPanels`, `DuplicatePanelId`,
-`TooManyElements`, `DuplicateElementId`, `InvalidRect`, `UnknownBinding`,
+`TooManyElements`, `TooManyFrameSources`, `DuplicateElementId`, `InvalidRect`, `UnknownBinding`,
 `SeatPanelReplaceRefused`, `MalformedTemplate`, `UnknownTemplatePlaceholder`,
 `TemplateBindingConflict`, under door `hud.validate` in `world.refusals`; a blank
 id folds into the duplicate reason). `ValidateHudCore` takes an `isIdentityScope`
@@ -341,7 +345,8 @@ restart the process against the SAME `--state-dir` and re-read
 `world.hud seat:<n>` for the persistence round-trip. There is no grant to
 narrow (the door is ungated, like `identity.motion`) — the refusal control
 instead is a malformed or over-cap panel: an element count over
-`WorldHudCapacity.MaxElementsPerSeatPanel` or a `WorldHudLayer.Replace` panel
-both refuse by name (`hud.TooManyElements` / `hud.SeatPanelReplaceRefused`)
-with the document left unchanged, confirmed against an at-cap panel that
-still succeeds.
+`WorldHudCapacity.MaxElementsPerSeatPanel`, more than
+`WorldHudCapacity.MaxFrameSources` unique frame sources, or a
+`WorldHudLayer.Replace` panel refuse by name (`hud.TooManyElements` /
+`hud.TooManyFrameSources` / `hud.SeatPanelReplaceRefused`) with the document
+left unchanged, confirmed against an at-cap panel that still succeeds.

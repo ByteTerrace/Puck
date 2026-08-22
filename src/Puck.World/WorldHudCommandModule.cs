@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Text.Json;
 using Puck.Commands;
 using Puck.Overlays;
 using Puck.World.Client;
@@ -27,7 +28,23 @@ internal sealed class WorldHudCommandModule(WorldServer server, IHudBindingResol
 
     private string DescribeElement(string panelId, WorldHudElement element) {
         var bindingToken = (element.Binding ?? "(none)");
+        var frameText = string.Empty;
         var valueText = string.Empty;
+
+        if (
+            (WorldHudElementKind.Frame == element.Kind) &&
+            (element.Source is { } source)
+        ) {
+            var sourceJson = JsonSerializer.Serialize(
+                value: source,
+                jsonTypeInfo: WorldJsonContext.Default.WorldFrameSource
+            );
+
+            frameText = string.Create(
+                provider: System.Globalization.CultureInfo.InvariantCulture,
+                handler: $" source={sourceJson} fit={element.Fit.ToString().ToLowerInvariant()} mirror={(element.Mirror ? "true" : "false")} radius={element.Radius:0.###} opacity={element.Opacity:0.###}"
+            );
+        }
 
         if (element.Template is { Length: > 0 } template) {
             // A validated document element's placeholders are already proven against the closed vocabulary and the
@@ -51,7 +68,7 @@ internal sealed class WorldHudCommandModule(WorldServer server, IHudBindingResol
             valueText = $" text='{literal}'";
         }
 
-        return $"[world.hud.element '{panelId}'.'{element.Id}' kind={element.Kind.ToString().ToLowerInvariant()} style={element.Style.ToString().ToLowerInvariant()} binding={bindingToken}{valueText}]";
+        return $"[world.hud.element '{panelId}'.'{element.Id}' kind={element.Kind.ToString().ToLowerInvariant()} style={element.Style.ToString().ToLowerInvariant()} binding={bindingToken}{frameText}{valueText}]";
     }
     private string DescribeHud() {
         var section = server.Definition.Hud;
@@ -257,7 +274,7 @@ internal sealed class WorldHudCommandModule(WorldServer server, IHudBindingResol
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.hud",
-            description: "Reads back the live hud state (Immediate): with no argument, the world-scope defaults row, every panel's id/layer/style/rect/element count against WorldHudCapacity's schema caps, and every element's kind/style/binding. With seat:<n> (1..4), that LOCAL seat's PRIVATE player-scope panel instead — authored through identity.hud <panel-json> [player] — or a refusal naming why there is none: world.hud [seat:<n>]. Either form resolves a bound element's LIVE value through the SAME IHudBindingResolver the renderer uses, and a templated element's placeholders through the SAME resolver too, so this read-back and what is on screen can never disagree.",
+            description: "Reads back the live hud state (Immediate): with no argument, the world-scope defaults row, every panel's id/layer/style/rect/element count against WorldHudCapacity's schema caps, and every element's kind/style/binding. A frame element additionally echoes its complete source JSON plus fit/mirror/radius/opacity. With seat:<n> (1..4), that LOCAL seat's PRIVATE player-scope panel instead — authored through identity.hud <panel-json> [player] — or a refusal naming why there is none: world.hud [seat:<n>]. Either form resolves a bound element's LIVE value through the SAME IHudBindingResolver the renderer uses, and a templated element's placeholders through the SAME resolver too, so this read-back and what is on screen can never disagree.",
             handler: (_, args) => DescribeHudHandler(args: args),
             routing: CommandRouting.Immediate
         );

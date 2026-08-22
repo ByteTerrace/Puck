@@ -129,17 +129,19 @@ internal sealed partial class WorldProbes {
                 var range = parameter.Row.Range;
                 var value = (float)(range.X + (unitInterval * (range.Y - range.X)));
 
-                if (value == parameter.LastValue) {
-                    continue;
-                }
-
                 if (parameter.TargetRowInfo is { } targetRow) {
                     if (ResolveInstance(target: targetRow, contextSeat: instance.Seat) is not { } targetInstance) {
                         continue;
                     }
 
+                    if (ReferenceEquals(objA: parameter.LastTarget, objB: targetInstance) && (value == parameter.LastValue)) {
+                        continue;
+                    }
+
                     WriteConstant(offset: parameter.ConstantOffset, target: targetInstance, value: value);
+                    parameter.LastTarget = targetInstance;
                 } else if (
+                    (value == parameter.LastValue) ||
                     !m_passes.TryGet(id: parameter.ExtensionId!, pass: out var pass) ||
                     !pass.TrySetConfig(field: parameter.ExtensionField!, value: value)
                 ) {

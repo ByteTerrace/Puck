@@ -57,6 +57,10 @@ public enum AssignOutcome {
     /// from <see cref="Ignored"/> (which means "no room") so a caller never reports "roster full" for a plain
     /// authority refusal.</summary>
     Denied,
+
+    /// <summary>A passive camera was addressed to an empty slot. Cameras can join an existing player's device team,
+    /// but never create participant presence. Nothing changed.</summary>
+    PassiveDeviceTargetEmpty,
 }
 /// <summary>The outcome of a <c>player.confirm</c>, for the verb to echo.</summary>
 public enum ConfirmOutcome {
@@ -938,6 +942,15 @@ public sealed partial class PlayerRoster : IInputSlotResolver, ICommandPrincipal
             );
 
             return AssignOutcome.NoOp;
+        }
+
+        // A camera is a passive sensor: explicit assignment can move it between existing players, but must preserve
+        // ObserveDevice's default-seating invariant that camera discovery never creates participant presence.
+        if (
+            (m_slots[targetSlot] is null) &&
+            (DeviceKindOf(device: device) == InputDeviceKind.Camera)
+        ) {
+            return AssignOutcome.PassiveDeviceTargetEmpty;
         }
 
         // An unbound device (the bootstrap case) has no source seat — see this method's own <paramref> remarks for

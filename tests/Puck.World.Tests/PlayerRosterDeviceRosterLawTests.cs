@@ -115,6 +115,45 @@ public sealed class PlayerRosterDeviceRosterLawTests {
         Assert.Equal(expected: 1, actual: roster.DeviceSlot(device: camera));
     }
     [Fact]
+    public void AssignDevice_RejectsAnUnassignedCameraOnAnEmptySlot_WithoutCreatingPresence() {
+        using var fixture = Fixtures.FreshServer(definition: SingleActiveSeatDocument());
+        var roster = BuildRoster(fixture: fixture);
+        var camera1 = InputDeviceId.FromKey(key: "camera:brio");
+        var camera2 = InputDeviceId.FromKey(key: "camera:c920");
+
+        roster.ObserveDevice(device: camera1, kind: InputDeviceKind.Camera, name: "Logitech BRIO");
+        roster.ObserveDevice(device: camera2, kind: InputDeviceKind.Camera, name: "HD Pro Webcam C920");
+
+        Assert.Null(@object: roster.DeviceSlot(device: camera2));
+        Assert.Equal(expected: AssignOutcome.PassiveDeviceTargetEmpty, actual: roster.AssignDevice(
+            device: camera2,
+            targetSlot: 1,
+            actingPrincipal: WorldPrincipal.Console
+        ));
+        Assert.Null(@object: roster.DeviceSlot(device: camera2));
+        Assert.Contains(expectedSubstring: "p2 empty", actualString: roster.Describe());
+    }
+    [Fact]
+    public void PlayerAssignCommand_RefusesAPassiveCameraOnAnEmptySlot_AndHelpExplainsTheException() {
+        using var fixture = Fixtures.FreshServer(definition: SingleActiveSeatDocument());
+        var roster = BuildRoster(fixture: fixture);
+        var camera1 = InputDeviceId.FromKey(key: "camera:brio");
+        var camera2 = InputDeviceId.FromKey(key: "camera:c920");
+        var definition = PlayerAssignmentCommand.Create(roster: roster);
+        var registry = new CommandRegistry(modules: [new SingleCommandModule(definition: definition)]);
+
+        roster.ObserveDevice(device: camera1, kind: InputDeviceKind.Camera, name: "Logitech BRIO");
+        roster.ObserveDevice(device: camera2, kind: InputDeviceKind.Camera, name: "HD Pro Webcam C920");
+
+        var result = registry.Submit(line: "player.assign camera2 2");
+
+        Assert.True(condition: result.IsError);
+        Assert.Equal(expected: "[player.assign: a camera can join an existing player but cannot create player 2]", actual: result.Output);
+        Assert.Null(@object: roster.DeviceSlot(device: camera2));
+        Assert.Contains(expectedSubstring: "p2 empty", actualString: roster.Describe());
+        Assert.Contains(expectedSubstring: "passive camera is refused because it cannot create a player", actualString: definition.Description);
+    }
+    [Fact]
     public void AssignDevice_ReassigningACamera_RaisesDeviceSlotChanging_AndVacatesTheOldSeat() {
         using var fixture = Fixtures.FreshServer(definition: TwoActiveSeatsDocument());
         var roster = BuildRoster(fixture: fixture);
@@ -139,6 +178,10 @@ public sealed class PlayerRosterDeviceRosterLawTests {
         Assert.False(condition: roster.TryGetSeatDevice(slot: 0, kind: InputDeviceKind.Camera, device: out _));
         Assert.True(condition: roster.TryGetSeatDevice(slot: 1, kind: InputDeviceKind.Camera, device: out var moved));
         Assert.Equal(expected: camera, actual: moved);
+    }
+
+    private sealed class SingleCommandModule(CommandDefinition definition) : ICommandModule {
+        public IEnumerable<CommandDefinition> GetCommands() => [definition];
     }
     [Fact]
     public void ACameraNeverCountsAsDevicePresence_SoAGamepadCanStillClaimASlotItAloneOccupies() {

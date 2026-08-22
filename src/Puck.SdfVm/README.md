@@ -91,9 +91,14 @@ mode (`SdfWorldEngineOptions.CreateOutputImage` returning an
 `IGpuExportableStorageImage`): the same rendered image both keeps serving
 `Resolve`'s same-device view handle (a jumbotron still samples it unchanged)
 and exposes `ExportSharedHandle` for a same-adapter, cross-API consumer to
-open. Setting the factory after the engine already exists disposes it, so the
-change takes effect on the next resolve; `ExportGeneration` changes identity
-every rebuild (a late export request, a dimension change, device loss).
+open. Setting the factory after the engine already exists retires it and keeps
+its last resolved image alive until the replacement engine completes a frame;
+`ExportGeneration` changes identity every rebuild (a late export request, a
+dimension change, device loss).
+An owner that exposes the single exported image to an asynchronous foreign
+reader wires `TryBeginExportWrite`/`EndExportWrite`: `Resolve` then holds the
+last completed image while the reader owns its lease and publishes the next
+image only after export-mode submission drains the producer queue.
 
 ## 🐛 Debug and bench tooling
 

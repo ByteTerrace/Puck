@@ -20,6 +20,11 @@ internal enum HudRefusal {
     [Refusal(door: "hud.validate", condition: "a panel's element count exceeds WorldHudCapacity.MaxElementsPerPanel", kind: RefusalKind.Verdict)]
     TooManyElements,
 
+    /// <summary>A HUD section names more than <see cref="WorldHudCapacity.MaxFrameSources"/> structurally unique
+    /// frame sources.</summary>
+    [Refusal(door: "hud.validate", condition: "a HUD section names more than WorldHudCapacity.MaxFrameSources structurally unique frame sources", kind: RefusalKind.Verdict)]
+    TooManyFrameSources,
+
     /// <summary>Two element rows within the same panel share the same id.</summary>
     [Refusal(door: "hud.validate", condition: "two element rows within the same panel share the same id", kind: RefusalKind.Verdict)]
     DuplicateElementId,

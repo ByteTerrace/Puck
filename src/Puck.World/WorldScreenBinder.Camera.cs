@@ -163,9 +163,14 @@ internal sealed partial class WorldScreenBinder {
         FulfillCameraDemand();
 
         foreach (var device in m_cameraDeviceOrder) {
-            if (0 == device.Feeds.Count) {
+            if (
+                (device.Feeds.Count == 0) &&
+                (device.Opening is null) &&
+                (device.Graph is null)
+            ) {
                 // A device's graph opens lazily — only once some consumer's resolution lands on it (EnsureCameraFeed
-                // declares at least one feed).
+                // declares at least one feed). An empty device with an in-flight open or an adopted graph still needs
+                // the lifecycle service below so final-demand removal can dispose it.
                 continue;
             }
 
@@ -223,14 +228,13 @@ internal sealed partial class WorldScreenBinder {
                 continue;
             }
 
-            CloseCameraGraphFor(device: device, fault: "camera disconnected");
-            device.Opening = null;
-            _ = m_cameraDevices.Remove(key: device.DeviceId);
-            m_cameraDeviceOrder.RemoveAt(index: index);
-
             foreach (var feed in device.Feeds) {
                 _ = m_cameraFeeds.Remove(key: (device.DeviceId, feed.Sensor));
             }
+
+            DisposeCameraDevice(device: device, fault: "camera disconnected");
+            _ = m_cameraDevices.Remove(key: device.DeviceId);
+            m_cameraDeviceOrder.RemoveAt(index: index);
         }
     }
     // Applies every recorded (seat, sensor) demand against the roster's current seating: a seat that now resolves to
@@ -274,6 +278,12 @@ internal sealed partial class WorldScreenBinder {
         m_cameraDemand[key] = requested;
         _ = TryFulfillCameraDemand(seat: seat, sensor: sensor);
     }
+    /// <summary>Retains one live probe instance's camera feed demand at the socket's authored profile.</summary>
+    public void RetainProbeCameraDemand(WorldScreenSource.Camera camera, int contextSeat) =>
+        RetainProbeCameraDemandCore(camera: camera, contextSeat: contextSeat);
+    /// <summary>Releases one live probe instance's camera feed demand.</summary>
+    public void ReleaseProbeCameraDemand(WorldScreenSource.Camera camera, int contextSeat) =>
+        ReleaseProbeCameraDemandCore(camera: camera, contextSeat: contextSeat);
     // Resolves (seat, sensor) to the device currently seated there and its feed — the one lookup every camera
     // consumer (a screen slot, a probe socket, a HUD frame) makes each frame. A device already known but with no
     // feed for this sensor yet is ensured here (default profile) so a bind that skipped DeclareCameraDemand (a
@@ -324,12 +334,46 @@ internal sealed partial class WorldScreenBinder {
         return (feed!.Live ? null : feed.Fault);
     }
     private void ServiceCameraDeviceGraph(CameraDevice device, IGpuDeviceContext deviceContext) {
+        // A retired last HUD camera source can leave a physical device with no sensor feeds. Do not reopen an empty
+        // graph; if an old profile open was already in flight, dispose its result when it lands instead of adopting it.
+        if (device.Feeds.Count == 0) {
+            if (device.Opening is { } emptyOpening) {
+                if (!emptyOpening.IsCompleted) {
+                    return;
+                }
+
+                device.Opening = null;
+
+                if (TaskStatus.RanToCompletion == emptyOpening.Status) {
+                    DisposeCameraOpenResult(result: emptyOpening.Result);
+                } else {
+                    _ = emptyOpening.Exception;
+                }
+            }
+
+            if (device.Graph is not null) {
+                CloseCameraGraphFor(device: device, fault: null);
+            }
+
+            return;
+        }
+
         if (device.Opening is { } opening) {
             if (!opening.IsCompleted) {
                 return;
             }
 
             device.Opening = null;
+
+            if (device.SensorsChanged) {
+                // Demand changed while the platform was opening the previous immutable request set. Never attach
+                // that stale profile even for one frame; dispose it and immediately open the current feeds.
+                DisposeCameraOpenResult(result: opening.Result);
+                BeginCameraOpen(device: device);
+
+                return;
+            }
+
             AdoptCameraGraph(deviceContext: deviceContext, device: device, result: opening.Result);
 
             return;
@@ -796,6 +840,39 @@ internal sealed partial class WorldScreenBinder {
             feed.Detach(fault: fault);
         }
     }
+    // The final ownership door for a physical device, shared by hot-unplug and binder shutdown. An open already in
+    // flight cannot be cancelled through the platform seam, so its successful result is disposed whenever it lands.
+    private static void DisposeCameraDevice(CameraDevice device, string? fault) {
+        CloseCameraGraphFor(device: device, fault: fault);
+
+        if (device.Opening is { } opening) {
+            device.Opening = null;
+            _ = opening.ContinueWith(
+                continuationAction: static finished => {
+                    if (TaskStatus.RanToCompletion == finished.Status) {
+                        DisposeCameraOpenResult(result: finished.Result);
+                    } else {
+                        // OpenCamera normally returns a refusal result; observe an unexpected platform exception so
+                        // abandoning a disconnected device cannot surface it later as an unobserved task exception.
+                        _ = finished.Exception;
+                    }
+                },
+                cancellationToken: CancellationToken.None,
+                continuationOptions: TaskContinuationOptions.ExecuteSynchronously,
+                scheduler: TaskScheduler.Default
+            );
+        }
+
+        foreach (var feed in device.Feeds) {
+            feed.Dispose();
+        }
+
+        device.Feeds.Clear();
+    }
+    private static void DisposeCameraOpenResult(CameraOpenResult result) {
+        result.Shared?.Dispose();
+        result.Pixels?.Dispose();
+    }
     // The shared tier's rings are render-device-owned: drop every device's graph with them so the next publish
     // reopens on the live device (a CPU-pixel graph survives device loss untouched). An open in flight adopts against
     // the new device.
@@ -817,21 +894,7 @@ internal sealed partial class WorldScreenBinder {
     }
     private void DisposeCamera() {
         foreach (var device in m_cameraDeviceOrder) {
-            CloseCameraGraphFor(device: device, fault: null);
-
-            if (device.Opening is { } opening) {
-                device.Opening = null;
-                _ = opening.ContinueWith(continuationAction: static finished => {
-                    finished.Result.Shared?.Dispose();
-                    finished.Result.Pixels?.Dispose();
-                }, continuationOptions: TaskContinuationOptions.OnlyOnRanToCompletion);
-            }
-
-            foreach (var feed in device.Feeds) {
-                feed.Dispose();
-            }
-
-            device.Feeds.Clear();
+            DisposeCameraDevice(device: device, fault: null);
         }
 
         m_cameraDevices.Clear();
@@ -1012,6 +1075,10 @@ internal sealed partial class WorldScreenBinder {
     // is 0 (unbound) until the first frame lands and whenever the feed is not live.
     private sealed class CameraFeed(WorldFeedProfile profile, WorldCameraSensor sensor, CpuSurfaceSource surface) : IDisposable {
         private readonly PullCadence m_cadence = new(rateHz: profile.RefreshRateHz);
+        private Action<int>? m_releaseCpuFrame;
+        private int m_outstandingCpuFrames;
+        private bool m_retired;
+        private bool m_surfaceDisposed;
 
         public string? Fault { get; set; }
         public CameraGpuTargetSet? GpuTargets { get; set; }
@@ -1049,11 +1116,19 @@ internal sealed partial class WorldScreenBinder {
             m_cadence.Rearm();
         }
         public void Dispose() {
+            if (m_retired) {
+                return;
+            }
+
+            m_retired = true;
             ReleaseGpuTargets();
-            Surface.Dispose();
+
+            if (0 == m_outstandingCpuFrames) {
+                DisposeSurface();
+            }
         }
         public SdfScreenSourceFrame AcquireFrame() {
-            if (!Live) {
+            if (!Live || m_retired) {
                 return 0;
             }
 
@@ -1063,7 +1138,19 @@ internal sealed partial class WorldScreenBinder {
                 return (targets.TryAcquire(frame: out var frame) ? frame : 0);
             }
 
-            return Surface.CurrentHandle;
+            var handle = Surface.CurrentHandle;
+
+            if (0 == handle) {
+                return 0;
+            }
+
+            m_releaseCpuFrame ??= ReleaseCpuFrame;
+            ++m_outstandingCpuFrames;
+
+            return new SdfScreenSourceFrame(
+                ImageViewHandle: handle,
+                Release: m_releaseCpuFrame
+            );
         }
         public nint Handle() {
             if (!Live) {
@@ -1086,6 +1173,22 @@ internal sealed partial class WorldScreenBinder {
             targets?.Retire();
         }
         public bool ShouldPull() => m_cadence.ShouldPull();
+        private void DisposeSurface() {
+            if (m_surfaceDisposed) {
+                return;
+            }
+
+            m_surfaceDisposed = true;
+            Surface.Dispose();
+        }
+        private void ReleaseCpuFrame(int token) {
+            _ = token;
+            --m_outstandingCpuFrames;
+
+            if (m_retired && (0 == m_outstandingCpuFrames)) {
+                DisposeSurface();
+            }
+        }
     }
     // One platform producer's render-device-owned target ring — a camera stream's or a probe kernel output's. A
     // screen-source frame acquires both the ring slot (so the producer cannot overwrite it) and this set's lifetime
