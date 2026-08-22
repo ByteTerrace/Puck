@@ -221,6 +221,10 @@ public sealed record WorldBindingBarBank(
 /// indicators, and the chord-hint lines above them. <see langword="false"/> drops every label-content badge outright
 /// and leaves a purely pictographic bar: every plate, the glyph-content badges (the d-pad arrows and the face-position
 /// marks), the bound actions' icons, and the modifier indicators all still draw.</param>
+/// <param name="Modifiers">Whether the bar draws the modifier indicator row on its anchor line — one plate per
+/// modifier the composed profile carries (declared rows plus every chord/held token the compiler synthesizes), lit
+/// while held. <see langword="false"/> drops the row and leaves the slot clusters alone; the chord hints and page
+/// label are <paramref name="Text"/>'s, not this one's.</param>
 /// <param name="SlotSet">The physical controls this bar shows, by INPUT SOURCE ID (<c>gamepad.buttonSouth</c>,
 /// <c>mouse.button1</c>, …) in authored order (an exotic slot's left-to-right position in its row follows this
 /// order) — the same vocabulary a binding entry's <c>sources</c> speak, every id validated against the engine's
@@ -239,6 +243,7 @@ public sealed record WorldBindingBarAuthoring(
     IReadOnlyList<WorldBindingBarBank> Banks,
     bool Enabled = true,
     bool Text = true,
+    bool Modifiers = true,
     bool HideUnbound = false,
     float MultiSeatAlpha = 1f,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldBindingBarLayout? Layout = null,

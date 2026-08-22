@@ -1,0 +1,487 @@
+{
+  "basis": "puck.basis.json",
+  "creations": [
+    {
+      "document": {
+        "name": "groundNorthEast",
+        "palette": [
+          {
+            "color": "state.colors.unitPale"
+          },
+          {
+            "color": "state.colors.unitDark"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "wallpaper",
+                "cell": [
+                  1,
+                  1
+                ],
+                "group": "P1",
+                "materialStride": 1
+              }
+            ],
+            "id": 0,
+            "material": 0,
+            "name": "surface",
+            "position": [
+              0,
+              0.001,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1,
+              1,
+              1
+            ],
+            "smooth": 0,
+            "type": "Plane"
+          },
+          {
+            "blend": "Subtraction",
+            "id": 1,
+            "material": 0,
+            "name": "cut-x>0",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0.70710678,
+              0.70710678
+            ],
+            "scale": [
+              1,
+              1,
+              1
+            ],
+            "smooth": 0,
+            "type": "Plane"
+          },
+          {
+            "blend": "Subtraction",
+            "id": 2,
+            "material": 0,
+            "name": "cut-z<0",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0.70710678,
+              0,
+              0,
+              0.70710678
+            ],
+            "scale": [
+              1,
+              1,
+              1
+            ],
+            "smooth": 0,
+            "type": "Plane"
+          }
+        ]
+      },
+      "id": "groundNorthEast"
+    },
+    {
+      "document": {
+        "name": "groundSouthEast",
+        "palette": [
+          {
+            "color": "state.colors.lanePale"
+          },
+          {
+            "color": "state.colors.laneDark"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "surface",
+            "position": [
+              0,
+              0.001,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1,
+              1,
+              1
+            ],
+            "smooth": 0,
+            "type": "Plane",
+            "domain": [
+              {
+                "$type": "wallpaper",
+                "cell": [
+                  1,
+                  4096
+                ],
+                "group": "P1",
+                "materialStride": 1
+              }
+            ]
+          },
+          {
+            "blend": "Subtraction",
+            "id": 1,
+            "material": 0,
+            "name": "cut-x>0",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0.70710678,
+              0.70710678
+            ],
+            "scale": [
+              1,
+              1,
+              1
+            ],
+            "smooth": 0,
+            "type": "Plane"
+          },
+          {
+            "blend": "Subtraction",
+            "id": 2,
+            "material": 0,
+            "name": "cut-z>0",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              -0.70710678,
+              0,
+              0,
+              0.70710678
+            ],
+            "scale": [
+              1,
+              1,
+              1
+            ],
+            "smooth": 0,
+            "type": "Plane"
+          }
+        ]
+      },
+      "id": "groundSouthEast"
+    },
+    {
+      "document": {
+        "name": "groundSouthWest",
+        "palette": [
+          {
+            "color": "state.colors.hexNear"
+          },
+          {
+            "color": "state.colors.hexMid"
+          },
+          {
+            "color": "state.colors.hexFar"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "wallpaper",
+                "cell": [
+                  2,
+                  2
+                ],
+                "group": "P6M",
+                "materialStride": 1
+              }
+            ],
+            "id": 0,
+            "material": 0,
+            "name": "surface",
+            "position": [
+              0,
+              0.001,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1,
+              1,
+              1
+            ],
+            "smooth": 0,
+            "type": "Plane"
+          },
+          {
+            "blend": "Subtraction",
+            "id": 1,
+            "material": 0,
+            "name": "cut-x<0",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              -0.70710678,
+              0.70710678
+            ],
+            "scale": [
+              1,
+              1,
+              1
+            ],
+            "smooth": 0,
+            "type": "Plane"
+          },
+          {
+            "blend": "Subtraction",
+            "id": 2,
+            "material": 0,
+            "name": "cut-z>0",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              -0.70710678,
+              0,
+              0,
+              0.70710678
+            ],
+            "scale": [
+              1,
+              1,
+              1
+            ],
+            "smooth": 0,
+            "type": "Plane"
+          }
+        ]
+      },
+      "id": "groundSouthWest"
+    },
+    {
+      "document": {
+        "name": "groundNorthWest",
+        "palette": [
+          {
+            "color": "state.colors.bearingPale"
+          },
+          {
+            "color": "state.colors.bearingDark"
+          },
+          {
+            "color": "state.colors.bearingPale"
+          },
+          {
+            "color": "state.colors.bearingDark"
+          },
+          {
+            "color": "state.colors.bearingPale"
+          },
+          {
+            "color": "state.colors.bearingDark"
+          },
+          {
+            "color": "state.colors.bearingPale"
+          },
+          {
+            "color": "state.colors.bearingDark"
+          },
+          {
+            "color": "state.colors.bearingPale"
+          },
+          {
+            "color": "state.colors.bearingDark"
+          },
+          {
+            "color": "state.colors.bearingPale"
+          },
+          {
+            "color": "state.colors.bearingDark"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "surface",
+            "position": [
+              0,
+              0.001,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1,
+              1,
+              1
+            ],
+            "smooth": 0,
+            "type": "Plane",
+            "domain": [
+              {
+                "$type": "polar",
+                "count": 12,
+                "axis": "Y",
+                "materialStride": 1
+              }
+            ]
+          }
+        ]
+      },
+      "id": "groundNorthWest"
+    },
+    {
+      "id": "groundContact",
+      "document": {
+        "name": "groundContact",
+        "schema": "puck.creation.v1",
+        "palette": [
+          {
+            "color": "state.colors.substrate"
+          }
+        ],
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "surface",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1,
+              1,
+              1
+            ],
+            "smooth": 0,
+            "type": "Plane"
+          }
+        ]
+      }
+    }
+  ],
+  "documentId": "puck",
+  "placements": [
+    {
+      "creationId": "groundNorthEast",
+      "id": "groundNorthEast",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1,
+      "yawDegrees": 0
+    },
+    {
+      "creationId": "groundSouthEast",
+      "id": "groundSouthEast",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1,
+      "yawDegrees": 0
+    },
+    {
+      "creationId": "groundSouthWest",
+      "id": "groundSouthWest",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1,
+      "yawDegrees": 0
+    },
+    {
+      "creationId": "groundNorthWest",
+      "id": "groundNorthWest",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1,
+      "yawDegrees": 0
+    },
+    {
+      "creationId": "groundContact",
+      "id": "groundContact",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1,
+      "solid": {
+        "margin": 0
+      },
+      "yawDegrees": 0
+    }
+  ],
+  "schema": "puck.world.def.v1"
+}

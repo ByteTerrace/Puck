@@ -479,6 +479,12 @@ public sealed partial class PlayerRoster : IInputSlotResolver, ICommandPrincipal
     // a slot reaching Fill, still empty, can never carry a claim — PrincipalOf(slot) would return the identical
     // value).
     private bool Fill(int slot, WorldIdentity profile, ParticipantState state, ParticipantOrigin origin, WorldPrincipal actingPrincipal) {
+        if (((uint)slot) >= ((uint)m_localSeats)) {
+            Console.Error.WriteLine(value: $"[player.join refused: slot {DisplayNumber(slot: slot)} — the world declares {m_localSeats} local seat(s) (population.localSeats)]");
+
+            return false;
+        }
+
         var accepted = false;
 
         // The completion fires inline (loopback drains its ordered domain synchronously before SubmitSession
@@ -524,7 +530,7 @@ public sealed partial class PlayerRoster : IInputSlotResolver, ICommandPrincipal
     }
     // The lowest empty slot index (0-based), or -1 if the roster is full.
     private int FirstFreeSlot() {
-        for (var slot = 0; (slot < MaxSlots); slot++) {
+        for (var slot = 0; (slot < m_localSeats); slot++) {
             if (m_slots[slot] is null) {
                 return slot;
             }
@@ -533,7 +539,7 @@ public sealed partial class PlayerRoster : IInputSlotResolver, ICommandPrincipal
         return -1;
     }
     private int FirstFreeUnclaimedSlot() {
-        for (var slot = 1; (slot < MaxSlots); slot++) {
+        for (var slot = 1; (slot < m_localSeats); slot++) {
             if (
                 (m_slots[slot] is null) &&
                 (m_slotPrincipal[slot] is null) &&
@@ -703,7 +709,18 @@ public sealed partial class PlayerRoster : IInputSlotResolver, ICommandPrincipal
             return m_slots[mapped];
         }
 
+        if (m_refusedDevices.Contains(item: device)) {
+            return null;
+        }
+
         TrackDeviceOrder(device: device);
+
+        if (m_localSeats == 0) {
+            m_refusedDevices.Add(item: device);
+            Console.Error.WriteLine(value: $"[player.join refused: device {device} — the world declares 0 local seats (population.localSeats); nothing to seat]");
+
+            return null;
+        }
 
         if (
             (m_devicePreselections[device] is { Kind: DevicePreselectionKind.Preferred, Profile: { } preferred }) &&
@@ -763,7 +780,7 @@ public sealed partial class PlayerRoster : IInputSlotResolver, ICommandPrincipal
         // Claim an already-active, deviceless local-human seat before creating a pending participant. This is the
         // mutating twin of ResolveSlot's proposal and preserves the deterministic p1..p4 arrival order. A slot
         // TryClaimSlot has claimed is excluded — see ResolveSlot's matching guard.
-        for (var existing = 1; (existing < MaxSlots); existing++) {
+        for (var existing = 1; (existing < m_localSeats); existing++) {
             if (
                 (m_slotPrincipal[existing] is null) &&
                 (m_slots[existing] is not null) &&
@@ -786,6 +803,10 @@ public sealed partial class PlayerRoster : IInputSlotResolver, ICommandPrincipal
         );
 
         if (result != JoinResult.Ok) {
+            // A refusal is a fact about THIS world's seat count, not about this report: remember it so the next
+            // report does not re-ask the server and re-print the same refusal.
+            m_refusedDevices.Add(item: device);
+
             return null;
         }
 
@@ -1720,7 +1741,7 @@ public sealed partial class PlayerRoster : IInputSlotResolver, ICommandPrincipal
         // map to p1..p4 without requiring a roster verb or replacing the avatars already visible in split screen. A
         // slot TryClaimSlot has claimed is excluded from this ordinary device-arrival policy regardless: an ordinary
         // device plugging in later must never be silently offered the same slot.
-        for (var slot = 1; (slot < MaxSlots); slot++) {
+        for (var slot = 1; (slot < m_localSeats); slot++) {
             if (
                 (m_slotPrincipal[slot] is null) &&
                 (m_slots[slot] is not null) &&
@@ -1730,7 +1751,7 @@ public sealed partial class PlayerRoster : IInputSlotResolver, ICommandPrincipal
             }
         }
 
-        for (var slot = 1; (slot < MaxSlots); slot++) {
+        for (var slot = 1; (slot < m_localSeats); slot++) {
             // A prior source signal in this same collection pass may have reserved an otherwise-empty lane through
             // CommitSlot before its simulation-routed join reaches the roster. Treat that device-map reservation as
             // occupancy so two first-seen devices cannot probe and commit the same slot in one tick.
@@ -1900,9 +1921,9 @@ public sealed partial class PlayerRoster : IInputSlotResolver, ICommandPrincipal
     /// <returns><see langword="true"/> when a slot was claimed.</returns>
     public bool TryClaimSlot(InputDeviceId device, WorldPrincipal principal, int? preferredSlot, out int slot, out string? fault) {
         if (preferredSlot is { } requested) {
-            if (((uint)requested) >= MaxSlots) {
+            if (((uint)requested) >= ((uint)m_localSeats)) {
                 slot = -1;
-                fault = $"slot {DisplayNumber(slot: requested)} is out of range (1..{MaxSlots})";
+                fault = $"slot {DisplayNumber(slot: requested)} is out of range (1..{m_localSeats}, the world's population.localSeats)";
 
                 return false;
             }
@@ -1934,7 +1955,7 @@ public sealed partial class PlayerRoster : IInputSlotResolver, ICommandPrincipal
 
             // Starts at 1: player 1's seat never qualifies for the automatic pick (see this method's own remarks) —
             // an explicit preferredSlot of 0 above is the only door to claiming it.
-            for (var candidate = 1; (candidate < MaxSlots); candidate++) {
+            for (var candidate = 1; (candidate < m_localSeats); candidate++) {
                 if (
                     (m_slotPrincipal[candidate] is null) &&
                     (m_slots[candidate] is not null) &&
@@ -1948,7 +1969,7 @@ public sealed partial class PlayerRoster : IInputSlotResolver, ICommandPrincipal
 
             if (found < 0) {
                 slot = -1;
-                fault = $"no free slot — all {MaxSlots} are human-driven or already claimed";
+                fault = $"no free slot — all {m_localSeats} declared local seat(s) are human-driven or already claimed";
 
                 return false;
             }
@@ -2051,6 +2072,15 @@ public sealed partial class PlayerRoster : IInputSlotResolver, ICommandPrincipal
     }
 
     private readonly Participant?[] m_slots = new Participant?[MaxSlots];
+    // The document's declared local-seat count (population.localSeats) — the server refuses any join at a slot
+    // >= this, so the roster never proposes one: every slot search below is bounded by it, not by MaxSlots (the
+    // hard array ceiling). A device arriving for a world declaring fewer seats than it needs is refused ONCE, by
+    // name, and remembered in m_refusedDevices rather than re-asking the server on every report.
+    private readonly int m_localSeats;
+    /// <summary>Gets the world's declared local-seat count (<c>population.localSeats</c>) — the ceiling every join
+    /// and claim here honors; <see cref="MaxSlots"/> is only the array ceiling.</summary>
+    public int LocalSeats => m_localSeats;
+    private readonly HashSet<InputDeviceId> m_refusedDevices = new();
     // Device → slot map. Reconnect stability is explicit on InputDeviceId; connection-only transports still route for
     // the session but never participate in durable profile preferences.
     private readonly Dictionary<InputDeviceId, int> m_deviceToSlot = new();
@@ -2132,6 +2162,7 @@ public sealed partial class PlayerRoster : IInputSlotResolver, ICommandPrincipal
         m_link = link;
         m_seatBindings = seatBindings;
         m_playerDefaults = definition.PlayerDefaults;
+        m_localSeats = definition.Population.LocalSeats;
         m_pickerThreshold = FixedQ4816.FromDouble(value: definition.PlayerDefaults.PickerThreshold);
         m_pickerNeutralColor = WorldIdentity.ParseColor(
             hex: definition.PlayerDefaults.PickerNeutralColor,

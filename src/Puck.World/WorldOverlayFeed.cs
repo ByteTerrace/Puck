@@ -323,11 +323,14 @@ internal sealed class WorldOverlayFeed {
                 }
             }
 
-            var modifierCount = BindingBarSeatComposer.ComposeModifiers(
-                destination: m_modifiers[viewIndex],
-                resolveBadge: m_resolveBadge,
-                text: barText,
-                view: view
+            var modifierCount = (authoring.Modifiers
+                ? BindingBarSeatComposer.ComposeModifiers(
+                    destination: m_modifiers[viewIndex],
+                    resolveBadge: m_resolveBadge,
+                    text: barText,
+                    view: view
+                )
+                : 0
             );
             var viewport = WorldFramePresenter.LayoutRegion(
                 count: joined,

@@ -4850,6 +4850,11 @@
                 "type": "boolean",
                 "default": true
               },
+              "modifiers": {
+                "description": "Whether the bar draws the modifier indicator row on its anchor line \u2014 one plate per modifier the composed profile carries (declared rows plus every chord/held token the compiler synthesizes), lit while held. false drops the row and leaves the slot clusters alone; the chord hints and page label are Text\u0027s, not this one\u0027s.",
+                "type": "boolean",
+                "default": true
+              },
               "hideUnbound": {
                 "description": "Whether a slot with no bound act on its bank\u0027s page should not render at all, rather than drawing the DISABLED tier-0 plate. A player\u0027s own BindingBarPreferences.HideUnbound overrides this.",
                 "type": "boolean",

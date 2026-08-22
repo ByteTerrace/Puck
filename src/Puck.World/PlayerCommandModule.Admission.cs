@@ -143,7 +143,7 @@ internal sealed partial class PlayerCommandModule {
             ConfirmOutcome.Seated => new CommandResult(Output: $"[player.confirm: player {PlayerRoster.DisplayNumber(slot: slot)} seated]"),
             ConfirmOutcome.AlreadyActive => new CommandResult(Output: $"[player.confirm: player {PlayerRoster.DisplayNumber(slot: slot)} is already active]"),
             ConfirmOutcome.Denied => CommandResult.Error(output: $"[player.confirm: {actingPrincipal.Describe()} cannot confirm player {PlayerRoster.DisplayNumber(slot: slot)} — see world.why]"),
-            _ => CommandResult.Error(output: $"[player.confirm: the roster is full ({PlayerRoster.MaxSlots} players)]"),
+            _ => CommandResult.Error(output: $"[player.confirm: the roster is full ({m_roster.LocalSeats} declared local seat(s), population.localSeats)]"),
         });
     }
     // The device-driven roster gestures — confirm/cycle/claim — routed by the pressing device's id. Confirm (South /
@@ -428,7 +428,7 @@ internal sealed partial class PlayerCommandModule {
             ? "joined active"
             : "joined pending")}] {m_roster.Describe()}"),
             JoinResult.Occupied => CommandResult.Error(output: $"[player.join: player {PlayerRoster.DisplayNumber(slot: slot)} is already joined]"),
-            JoinResult.Full => CommandResult.Error(output: $"[player.join: the roster is full ({PlayerRoster.MaxSlots} players)]"),
+            JoinResult.Full => CommandResult.Error(output: $"[player.join: the roster is full ({m_roster.LocalSeats} declared local seat(s), population.localSeats)]"),
             _ => CommandResult.Error(output: $"[player.join: {actingPrincipal.Describe()} cannot join slot {PlayerRoster.DisplayNumber(slot: slot)} — see world.why]"),
         });
     }

@@ -1,0 +1,1788 @@
+{
+  "authoring": {
+    "authoringHeadroomPlacements": 8,
+    "authoringHeadroomScreens": 4,
+    "candidateCap": 16,
+    "candidateRadius": 32,
+    "derivedFaceScreens": 4,
+    "maxPlacementScale": 5.0,
+    "minPlacementScale": 0.2,
+    "previewDeadlineFrames": 12
+  },
+  "bindingOverlays": [
+    {
+      "bindingBar": {
+        "banks": [
+          {
+            "alpha": 1,
+            "id": "resting",
+            "order": 0,
+            "pageId": "base"
+          }
+        ],
+        "hideUnbound": false,
+        "layout": {
+          "anchorOffsetY": 0.36666667,
+          "badgeCorner": 1,
+          "buttonSize": 0.075,
+          "centerGap": 0.1,
+          "centerRowLift": 1.9,
+          "centerSlotSpacing": 1.15,
+          "exoticRowLift": 3.6,
+          "exoticSlotSpacing": 1.15,
+          "glyphOffsetRatio": 0.4375,
+          "glyphSizeRatio": 0.53333336,
+          "scale": 1
+        },
+        "modifiers": false,
+        "multiSeatAlpha": 0.5,
+        "slotSet": [
+          "gamepad.dpadUp",
+          "gamepad.dpadRight",
+          "gamepad.dpadDown",
+          "gamepad.dpadLeft",
+          "gamepad.leftShoulder",
+          "gamepad.leftStickPress",
+          "gamepad.buttonNorth",
+          "gamepad.buttonWest",
+          "gamepad.buttonSouth",
+          "gamepad.buttonEast",
+          "gamepad.rightShoulder",
+          "gamepad.rightStickPress"
+        ],
+        "text": false,
+        "visible": {
+          "$type": "recently",
+          "fact": "SeatInput",
+          "windowSeconds": 3
+        }
+      },
+      "document": {
+        "chords": [
+          {
+            "chord": [],
+            "group": "state.bindingGroups.defaultActionGroup",
+            "page": {
+              "entries": [
+                {
+                  "channel": "forward",
+                  "scale": 1,
+                  "sources": [
+                    "keyboard.w",
+                    "keyboard.arrowUp"
+                  ]
+                },
+                {
+                  "channel": "forward",
+                  "scale": -1,
+                  "sources": [
+                    "keyboard.s",
+                    "keyboard.arrowDown"
+                  ]
+                },
+                {
+                  "channel": "strafe",
+                  "scale": -1,
+                  "sources": [
+                    "keyboard.a"
+                  ]
+                },
+                {
+                  "channel": "strafe",
+                  "scale": 1,
+                  "sources": [
+                    "keyboard.d"
+                  ]
+                },
+                {
+                  "command": "player.move.strafe",
+                  "sources": [
+                    "gamepad.leftStick"
+                  ]
+                },
+                {
+                  "command": "player.look.steer",
+                  "sources": [
+                    "gamepad.rightStick"
+                  ]
+                },
+                {
+                  "command": "player.motion.angular",
+                  "label": "Motion look",
+                  "sources": [
+                    "gamepad.gyro"
+                  ]
+                },
+                {
+                  "channel": "jump",
+                  "sources": [
+                    "gamepad.buttonSouth",
+                    "keyboard.space"
+                  ]
+                },
+                {
+                  "channel": "run",
+                  "label": "Sprint",
+                  "sources": [
+                    "gamepad.buttonWest",
+                    "keyboard.shiftLeft"
+                  ]
+                },
+                {
+                  "channel": "run",
+                  "label": "Run",
+                  "mode": "Toggle",
+                  "sources": [
+                    "gamepad.leftStickPress"
+                  ]
+                },
+                {
+                  "channel": "up",
+                  "label": "Jetpack",
+                  "scale": 1,
+                  "sources": [
+                    "gamepad.rightStickPress",
+                    "keyboard.controlLeft"
+                  ]
+                },
+                {
+                  "channel": "dash",
+                  "label": "Dash",
+                  "sources": [
+                    "gamepad.buttonEast",
+                    "keyboard.e"
+                  ]
+                },
+                {
+                  "channel": "leap",
+                  "label": "Leap",
+                  "sources": [
+                    "gamepad.buttonNorth",
+                    "keyboard.q"
+                  ]
+                },
+                {
+                  "channel": "airLeap",
+                  "label": "Leap",
+                  "sources": [
+                    "gamepad.buttonNorth",
+                    "keyboard.q"
+                  ]
+                },
+                {
+                  "command": "player.orbit",
+                  "label": "Orbit",
+                  "sources": [
+                    "mouse.button1"
+                  ]
+                },
+                {
+                  "command": "player.steer",
+                  "label": "Steer",
+                  "sources": [
+                    "mouse.button2"
+                  ]
+                },
+                {
+                  "channel": "turn",
+                  "scale": 1,
+                  "sources": [
+                    "keyboard.arrowLeft"
+                  ]
+                },
+                {
+                  "channel": "turn",
+                  "scale": -1,
+                  "sources": [
+                    "keyboard.arrowRight"
+                  ]
+                }
+              ],
+              "id": "base"
+            }
+          },
+          {
+            "chord": [
+              "look",
+              "actionWheel"
+            ],
+            "command": {
+              "command": "player.look.swap",
+              "label": "Look behind"
+            },
+            "group": "state.bindingGroups.defaultActionGroup"
+          },
+          {
+            "chord": [
+              "look",
+              "gamepad.rightShoulder"
+            ],
+            "command": {
+              "command": "player.look.free",
+              "holdRelease": true,
+              "label": "Free look"
+            },
+            "group": "state.bindingGroups.defaultActionGroup"
+          },
+          {
+            "chord": [
+              "look",
+              "keyboard.controlLeft"
+            ],
+            "command": {
+              "command": "player.look.recenter",
+              "holdRelease": true,
+              "label": "Recenter"
+            },
+            "group": "state.bindingGroups.defaultActionGroup"
+          },
+          {
+            "chord": [
+              "look",
+              "gamepad.buttonNorth"
+            ],
+            "command": {
+              "command": "player.motion.controls",
+              "label": "Toggle motion controls"
+            },
+            "group": "state.bindingGroups.defaultActionGroup"
+          },
+          {
+            "chord": [
+              "gamepad.leftStickPress"
+            ],
+            "command": {
+              "channel": "forward",
+              "label": "Autorun",
+              "mode": "Toggle",
+              "scale": 1
+            },
+            "group": "state.bindingGroups.defaultActionGroup",
+            "held": [
+              "look"
+            ]
+          },
+          {
+            "chord": [
+              "gamepad.rightStickPress"
+            ],
+            "command": {
+              "channel": "up",
+              "label": "Auto-jetpack",
+              "mode": "Toggle",
+              "scale": 1
+            },
+            "group": "state.bindingGroups.defaultActionGroup",
+            "held": [
+              "look"
+            ]
+          },
+          {
+            "chord": [
+              "look",
+              "gamepad.rightShoulder",
+              "actionWheel"
+            ],
+            "command": {
+              "command": "player.look.swap",
+              "label": "Look behind"
+            },
+            "group": "state.bindingGroups.defaultActionGroup"
+          },
+          {
+            "chord": [
+              "actionWheel"
+            ],
+            "group": "state.bindingGroups.defaultActionGroup",
+            "page": {
+              "entries": [
+                {
+                  "command": "player.wheel.select",
+                  "sources": [
+                    "gamepad.rightStick",
+                    "mouse.motion"
+                  ]
+                },
+                {
+                  "activateOn": "Completed",
+                  "command": "player.wheel.commit",
+                  "sources": [
+                    "gamepad.leftShoulder",
+                    "keyboard.tab"
+                  ]
+                }
+              ],
+              "id": "actionWheel",
+              "inherits": "base"
+            }
+          },
+          {
+            "command": {
+              "channel": "forward",
+              "holdRelease": true,
+              "label": "Run"
+            },
+            "group": "state.bindingGroups.defaultActionGroup",
+            "held": [
+              "mouse.button1",
+              "mouse.button2"
+            ]
+          }
+        ],
+        "contexts": [],
+        "modifiers": [
+          {
+            "id": "actionWheel",
+            "label": "Wheel",
+            "sources": [
+              "gamepad.leftShoulder",
+              "keyboard.tab"
+            ]
+          },
+          {
+            "id": "look",
+            "label": "Look",
+            "sources": [
+              "gamepad.leftTrigger",
+              "keyboard.shiftLeft"
+            ]
+          }
+        ],
+        "version": "puck.bindings.v1",
+        "wheels": [
+          {
+            "group": "state.bindingGroups.defaultActionGroup",
+            "holdPages": [
+              "actionWheel"
+            ],
+            "id": "defaultActionWheel",
+            "rings": [
+              {
+                "entries": [
+                  {
+                    "command": "view.override",
+                    "icon": "action.target",
+                    "label": "Overhead camera",
+                    "sources": null,
+                    "value": {
+                      "kind": "Axis1D",
+                      "raw": [
+                        2.0,
+                        0,
+                        0,
+                        0
+                      ]
+                    }
+                  },
+                  {
+                    "command": "view.override",
+                    "icon": "view.freeCam",
+                    "label": "Action camera",
+                    "sources": null,
+                    "value": {
+                      "kind": "Axis1D",
+                      "raw": [
+                        1.0,
+                        0,
+                        0,
+                        0
+                      ]
+                    }
+                  },
+                  {
+                    "command": "quit",
+                    "icon": "edit.exit",
+                    "label": "Quit",
+                    "sources": null
+                  },
+                  {
+                    "command": "console",
+                    "icon": "edit.op",
+                    "label": "Console",
+                    "sources": null
+                  }
+                ],
+                "icon": null,
+                "id": "ring0",
+                "label": "Ring0"
+              }
+            ],
+            "style": {
+              "axisDeadZone": 0.08,
+              "placement": "ViewportCenter",
+              "selectionGraceSeconds": 0.13,
+              "switchFraction": 0.4
+            }
+          }
+        ]
+      },
+      "id": "null-play"
+    }
+  ],
+  "bodyMotionPrograms": [
+    {
+      "kind": "Motion",
+      "name": "defaultMotionProgram",
+      "operations": [
+        "ResolveYawAttitudeAndPlanarFrame",
+        "ComputePlanarTargetVelocity",
+        "ShapePlanarVelocity",
+        "SnapYawToPlanarIntent",
+        "RunActionTriggers",
+        "ApplyVerticalGravity",
+        "ApplyVerticalDrive",
+        "IntegratePlanarAndVerticalVelocity",
+        "CommitPose"
+      ],
+      "version": "puck.body-motion.v1"
+    }
+  ],
+  "cameras": [
+    {
+      "anchor": null,
+      "name": "overhead",
+      "renderHeight": 720,
+      "renderWidth": 1280,
+      "rig": {
+        "name": "overhead",
+        "operations": [
+          {
+            "$type": "offset",
+            "value": [
+              0,
+              45,
+              18
+            ],
+            "worldAxes": true
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                0,
+                0
+              ]
+            }
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 0.6
+          }
+        ],
+        "version": "puck.camera.v1"
+      }
+    }
+  ],
+  "channels": [
+    {
+      "frame": "Heading",
+      "name": "forward",
+      "role": "MoveAdvance",
+      "shape": "Bipolar"
+    },
+    {
+      "frame": "Heading",
+      "name": "strafe",
+      "role": "MoveStrafe",
+      "shape": "Bipolar"
+    },
+    {
+      "name": "turn",
+      "role": "Turn",
+      "shape": "Bipolar"
+    },
+    {
+      "name": "up",
+      "role": "MoveUp",
+      "shape": "Bipolar"
+    },
+    {
+      "name": "faceX",
+      "role": "FaceX",
+      "shape": "Bipolar"
+    },
+    {
+      "name": "faceY",
+      "role": "FaceY",
+      "shape": "Bipolar"
+    },
+    {
+      "name": "faceZ",
+      "role": "FaceZ",
+      "shape": "Bipolar"
+    },
+    {
+      "name": "moveX",
+      "role": "MoveX",
+      "shape": "Bipolar"
+    },
+    {
+      "name": "moveY",
+      "role": "MoveY",
+      "shape": "Bipolar"
+    },
+    {
+      "name": "moveZ",
+      "role": "MoveZ",
+      "shape": "Bipolar"
+    },
+    {
+      "composition": true,
+      "name": "jump",
+      "shape": "Binary"
+    },
+    {
+      "composition": true,
+      "name": "run",
+      "shape": "Binary"
+    },
+    {
+      "composition": true,
+      "name": "dash",
+      "shape": "Binary"
+    },
+    {
+      "composition": true,
+      "name": "leap",
+      "shape": "Binary"
+    },
+    {
+      "composition": true,
+      "name": "airLeap",
+      "shape": "Binary"
+    }
+  ],
+  "collision": {
+    "contactSkin": 0.02,
+    "gradientProbe": 0.0,
+    "maxIterations": 4,
+    "maxSlopeDegrees": 60.0,
+    "requirements": [
+      "SmoothUnionContact",
+      "GradientDerivedUp"
+    ]
+  },
+  "creations": [
+    {
+      "document": {
+        "name": "pip",
+        "palette": [
+          {
+            "color": "state.colors.avatarBody"
+          },
+          {
+            "color": "state.colors.avatarMark"
+          },
+          {
+            "color": "state.colors.avatarEye"
+          },
+          {
+            "color": "state.colors.avatarPupil"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 0,
+            "material": 0,
+            "name": "pip",
+            "position": [
+              0,
+              0.5,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.35,
+              1.75,
+              0.35
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "symmetry",
+                "normal": [
+                  1,
+                  0,
+                  0
+                ]
+              }
+            ],
+            "group": 0,
+            "id": 1,
+            "material": 2,
+            "name": "eye",
+            "position": [
+              0.2,
+              1.1,
+              0.42
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.14,
+              0.14,
+              0.14
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "symmetry",
+                "normal": [
+                  1,
+                  0,
+                  0
+                ]
+              }
+            ],
+            "group": 0,
+            "id": 2,
+            "material": 3,
+            "name": "pupil",
+            "position": [
+              0.2,
+              1.1,
+              0.54
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.055,
+              0.055,
+              0.055
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          }
+        ],
+        "textRuns": [
+          {
+            "align": "center",
+            "depth": 0.05,
+            "emHeight": 0.35,
+            "material": 1,
+            "mode": "emboss",
+            "position": [
+              0,
+              0.25,
+              -1
+            ],
+            "rotation": [
+              0,
+              1,
+              0,
+              0
+            ],
+            "shapeId": 0,
+            "text": "K"
+          }
+        ]
+      },
+      "id": "pip"
+    }
+  ],
+  "gravity": {
+    "attractors": [],
+    "gravitationalConstant": 45.0,
+    "softeningLength": 0.5,
+    "solver": "Pairwise",
+    "uniform": [
+      0,
+      -46,
+      0
+    ]
+  },
+  "host": {
+    "backend": "auto",
+    "exitAfterSeconds": 0,
+    "fullscreen": false,
+    "genlock": null,
+    "height": 800,
+    "listen": null,
+    "presentation": "Windowed",
+    "presentMode": "Immediate",
+    "rayQuery": true,
+    "surfaceFormat": "r8g8b8a8",
+    "targetHertz": 60,
+    "timing": false,
+    "width": 1280
+  },
+  "hud": {
+    "defaults": {
+      "cursor": {
+        "hoverRadius": 64,
+        "role": "TextPrimary",
+        "sizePx": 7
+      },
+      "enabled": true
+    },
+    "panels": []
+  },
+  "icons": {
+    "badges": [
+      {
+        "icon": "dpad.up",
+        "source": "gamepad.dpadUp"
+      },
+      {
+        "icon": "dpad.right",
+        "source": "gamepad.dpadRight"
+      },
+      {
+        "icon": "dpad.down",
+        "source": "gamepad.dpadDown"
+      },
+      {
+        "icon": "dpad.left",
+        "source": "gamepad.dpadLeft"
+      },
+      {
+        "icon": "face.north",
+        "source": "gamepad.buttonNorth"
+      },
+      {
+        "icon": "face.east",
+        "source": "gamepad.buttonEast"
+      },
+      {
+        "icon": "face.south",
+        "source": "gamepad.buttonSouth"
+      },
+      {
+        "icon": "face.west",
+        "source": "gamepad.buttonWest"
+      },
+      {
+        "icon": "bumper.left",
+        "source": "gamepad.leftShoulder"
+      },
+      {
+        "icon": "bumper.right",
+        "source": "gamepad.rightShoulder"
+      },
+      {
+        "icon": "trigger.left",
+        "source": "gamepad.leftTrigger"
+      },
+      {
+        "icon": "trigger.right",
+        "source": "gamepad.rightTrigger"
+      },
+      {
+        "icon": "stick.left",
+        "source": "gamepad.leftStickPress"
+      },
+      {
+        "icon": "stick.right",
+        "source": "gamepad.rightStickPress"
+      },
+      {
+        "icon": "menu.back",
+        "source": "gamepad.back"
+      },
+      {
+        "icon": "menu.start",
+        "source": "gamepad.start"
+      },
+      {
+        "icon": "menu.guide",
+        "source": "gamepad.guide"
+      },
+      {
+        "icon": "menu.touchpad",
+        "source": "gamepad.touchpad"
+      },
+      {
+        "icon": "menu.mute",
+        "source": "gamepad.mute"
+      },
+      {
+        "icon": "grip.left",
+        "source": "gamepad.leftGrip"
+      },
+      {
+        "icon": "grip.right",
+        "source": "gamepad.rightGrip"
+      },
+      {
+        "icon": "grip.leftUpper",
+        "source": "gamepad.leftUpperGrip"
+      },
+      {
+        "icon": "grip.rightUpper",
+        "source": "gamepad.rightUpperGrip"
+      },
+      {
+        "icon": "menu.quickAccess",
+        "source": "gamepad.quickAccess"
+      },
+      {
+        "icon": "touchpad.left",
+        "source": "gamepad.touchpadLeft"
+      }
+    ],
+    "icons": [
+      {
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+2191"
+        },
+        "name": "dpad.up"
+      },
+      {
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+2192"
+        },
+        "name": "dpad.right"
+      },
+      {
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+2193"
+        },
+        "name": "dpad.down"
+      },
+      {
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+2190"
+        },
+        "name": "dpad.left"
+      },
+      {
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+25B2"
+        },
+        "name": "face.north"
+      },
+      {
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+25B6"
+        },
+        "name": "face.east"
+      },
+      {
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+25BC"
+        },
+        "name": "face.south"
+      },
+      {
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+25C0"
+        },
+        "name": "face.west"
+      },
+      {
+        "label": "LB",
+        "name": "bumper.left"
+      },
+      {
+        "label": "RB",
+        "name": "bumper.right"
+      },
+      {
+        "label": "LT",
+        "name": "trigger.left"
+      },
+      {
+        "label": "RT",
+        "name": "trigger.right"
+      },
+      {
+        "label": "LS",
+        "name": "stick.left"
+      },
+      {
+        "label": "RS",
+        "name": "stick.right"
+      },
+      {
+        "label": "BK",
+        "name": "menu.back"
+      },
+      {
+        "label": "ST",
+        "name": "menu.start"
+      },
+      {
+        "label": "GD",
+        "name": "menu.guide"
+      },
+      {
+        "label": "TP",
+        "name": "menu.touchpad"
+      },
+      {
+        "label": "MU",
+        "name": "menu.mute"
+      },
+      {
+        "label": "LG",
+        "name": "grip.left"
+      },
+      {
+        "label": "RG",
+        "name": "grip.right"
+      },
+      {
+        "label": "L5",
+        "name": "grip.leftUpper"
+      },
+      {
+        "label": "R5",
+        "name": "grip.rightUpper"
+      },
+      {
+        "label": "QA",
+        "name": "menu.quickAccess"
+      },
+      {
+        "label": "TL",
+        "name": "touchpad.left"
+      },
+      {
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+2191"
+        },
+        "name": "action.jump"
+      },
+      {
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+25C7"
+        },
+        "name": "action.interact"
+      },
+      {
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+25CE"
+        },
+        "name": "action.target"
+      },
+      {
+        "label": "1",
+        "name": "action.1"
+      },
+      {
+        "label": "2",
+        "name": "action.2"
+      },
+      {
+        "label": "3",
+        "name": "action.3"
+      },
+      {
+        "label": "4",
+        "name": "action.4"
+      },
+      {
+        "label": "5",
+        "name": "action.5"
+      },
+      {
+        "label": "6",
+        "name": "action.6"
+      },
+      {
+        "label": "7",
+        "name": "action.7"
+      },
+      {
+        "label": "8",
+        "name": "action.8"
+      },
+      {
+        "label": "9",
+        "name": "action.9"
+      },
+      {
+        "label": "10",
+        "name": "action.10"
+      },
+      {
+        "label": "11",
+        "name": "action.11"
+      },
+      {
+        "label": "12",
+        "name": "action.12"
+      },
+      {
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+2039"
+        },
+        "name": "edit.prev"
+      },
+      {
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+203A"
+        },
+        "name": "edit.next"
+      },
+      {
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+2193"
+        },
+        "name": "edit.place"
+      },
+      {
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+00D7"
+        },
+        "name": "edit.delete"
+      },
+      {
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+2190"
+        },
+        "name": "edit.exit"
+      },
+      {
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+25AA"
+        },
+        "name": "edit.duplicate"
+      },
+      {
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+2295"
+        },
+        "name": "edit.link"
+      },
+      {
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+25C9"
+        },
+        "name": "edit.material"
+      },
+      {
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+2229"
+        },
+        "name": "edit.op"
+      },
+      {
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+25CB"
+        },
+        "name": "edit.style"
+      },
+      {
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+2298"
+        },
+        "name": "edit.deselect"
+      },
+      {
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+25CF"
+        },
+        "name": "edit.record"
+      },
+      {
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+25B6"
+        },
+        "name": "edit.play"
+      },
+      {
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+21A9"
+        },
+        "name": "edit.undo"
+      },
+      {
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+21AA"
+        },
+        "name": "edit.redo"
+      },
+      {
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+25A0"
+        },
+        "name": "edit.speaker"
+      },
+      {
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+25EF"
+        },
+        "name": "edit.bed"
+      },
+      {
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+25A1"
+        },
+        "name": "view.freeCam"
+      }
+    ]
+  },
+  "kits": [
+    {
+      "actions": {
+        "airLeap": {
+          "onPress": {
+            "effects": [
+              {
+                "$type": "planarImpulse",
+                "bodyDirection": [
+                  0,
+                  0,
+                  -1
+                ],
+                "durationSeconds": 1.0,
+                "speed": 9
+              },
+              {
+                "$type": "startTimer",
+                "seconds": 1.0,
+                "state": "globalCooldown"
+              }
+            ],
+            "gate": {
+              "$type": "all",
+              "predicates": [
+                {
+                  "$type": "timerElapsed",
+                  "state": "globalCooldown"
+                },
+                {
+                  "$type": "now",
+                  "fact": "Airborne"
+                }
+              ]
+            }
+          }
+        },
+        "dash": {
+          "onPress": {
+            "effects": [
+              {
+                "$type": "planarImpulse",
+                "bodyDirection": [
+                  0,
+                  0,
+                  -1
+                ],
+                "durationSeconds": 0.25,
+                "speed": 14
+              },
+              {
+                "$type": "startTimer",
+                "seconds": 1.0,
+                "state": "globalCooldown"
+              }
+            ],
+            "gate": {
+              "$type": "timerElapsed",
+              "state": "globalCooldown"
+            },
+            "latchSeconds": 0.1
+          }
+        },
+        "jump": {
+          "onPress": {
+            "effects": [
+              {
+                "$type": "setVerticalVelocity",
+                "velocity": 11
+              },
+              {
+                "$type": "addState",
+                "state": "jumpCounter",
+                "value": 1
+              }
+            ],
+            "gate": {
+              "$type": "compareState",
+              "comparison": "Less",
+              "state": "jumpCounter",
+              "value": 2
+            },
+            "latchSeconds": 0.1
+          },
+          "onRelease": {
+            "effects": [
+              {
+                "$type": "scaleVerticalVelocity",
+                "factor": 0.45
+              }
+            ],
+            "gate": {
+              "$type": "now",
+              "fact": "Rising"
+            },
+            "latchSeconds": 0
+          }
+        },
+        "leap": {
+          "onPress": {
+            "effects": [
+              {
+                "$type": "setVerticalVelocity",
+                "velocity": 16
+              },
+              {
+                "$type": "planarImpulse",
+                "bodyDirection": [
+                  0,
+                  0,
+                  -1
+                ],
+                "durationSeconds": 1.0,
+                "speed": 9
+              },
+              {
+                "$type": "startTimer",
+                "seconds": 1.0,
+                "state": "globalCooldown"
+              }
+            ],
+            "gate": {
+              "$type": "all",
+              "predicates": [
+                {
+                  "$type": "timerElapsed",
+                  "state": "globalCooldown"
+                },
+                {
+                  "$type": "recently",
+                  "fact": "Grounded",
+                  "windowSeconds": 0.09
+                }
+              ]
+            },
+            "latchSeconds": 0.1
+          }
+        }
+      },
+      "bodyContact": "Solid",
+      "bodyMotionProgram": "defaultMotionProgram",
+      "collider": {
+        "$type": "capsule",
+        "endpoint": [
+          0,
+          1,
+          0
+        ],
+        "radius": 0.35
+      },
+      "motion": {
+        "$type": "grounded",
+        "facingSnap": false,
+        "fallGravity": 46,
+        "maxFallSpeed": 40,
+        "moveSpeed": 4,
+        "response": [],
+        "riseGravity": 28,
+        "sprintChannel": "run",
+        "sprintMultiplier": 1.6,
+        "turnSpeed": 2.5
+      },
+      "name": "defaultKit"
+    }
+  ],
+  "lookAssignment": {
+    "rows": [
+      "pip"
+    ],
+    "sequence": {
+      "name": "r1",
+      "offset": 0,
+      "step": 0
+    }
+  },
+  "looks": [
+    {
+      "motion": {
+        "gaitAmplitude": 0,
+        "replayFrames": false,
+        "secondsPerFrame": 0
+      },
+      "name": "pip",
+      "scale": 1,
+      "source": {
+        "$type": "creation",
+        "creationId": "pip"
+      }
+    }
+  ],
+  "playerDefaults": {
+    "seatLook": {
+      "gyro": {
+        "deadZone": [
+          0.02,
+          0.02,
+          0.02
+        ],
+        "invertX": false,
+        "invertY": false,
+        "invertZ": false,
+        "pitch": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "scale": 1.0,
+        "yaw": [
+          0.0,
+          -1.0,
+          -1.0
+        ]
+      },
+      "invertPitch": false,
+      "invertYaw": false,
+      "pitchSensitivity": 0.001,
+      "stickLookRate": 2.6,
+      "yawSensitivity": 0.001
+    }
+  },
+  "population": {
+    "localSeats": 1
+  },
+  "simulation": {
+    "rateHz": 30
+  },
+  "state": {
+    "body": [
+      {
+        "initial": 0,
+        "kind": "Timer",
+        "name": "globalCooldown"
+      },
+      {
+        "initial": 0,
+        "kind": "Counter",
+        "name": "jumpCounter",
+        "resetFact": "Grounded"
+      }
+    ],
+    "world": [
+      {
+        "cells": [
+          {
+            "key": "defaultActionGroup",
+            "value": "defaultActionGroup"
+          }
+        ],
+        "kind": "text",
+        "name": "bindingGroups"
+      },
+      {
+        "cells": [
+          {
+            "key": "avatarBody",
+            "value": "#FF73BF"
+          },
+          {
+            "key": "avatarMark",
+            "value": "#1ABFB2"
+          },
+          {
+            "key": "avatarEye",
+            "value": "#FFFFFF"
+          },
+          {
+            "key": "avatarPupil",
+            "value": "#0D0D0D"
+          },
+          {
+            "key": "unitPale",
+            "value": "#E4E7EB"
+          },
+          {
+            "key": "unitDark",
+            "value": "#AEB6BF"
+          },
+          {
+            "key": "hexNear",
+            "value": "#48566F"
+          },
+          {
+            "key": "hexMid",
+            "value": "#5C6C88"
+          },
+          {
+            "key": "hexFar",
+            "value": "#7285A3"
+          },
+          {
+            "key": "substrate",
+            "value": "#9AA3AC"
+          },
+          {
+            "key": "bearingPale",
+            "value": "#D8C9A8"
+          },
+          {
+            "key": "bearingDark",
+            "value": "#B3A180"
+          },
+          {
+            "key": "lanePale",
+            "value": "#90A992"
+          },
+          {
+            "key": "laneDark",
+            "value": "#6E8A72"
+          }
+        ],
+        "kind": "text",
+        "name": "colors"
+      }
+    ]
+  },
+  "text": {
+    "defaultFont": "inter",
+    "fonts": [
+      {
+        "codePointRanges": [
+          "U+0020-U+007E"
+        ],
+        "hash": "sha256-64/47e488e1fc92d640",
+        "name": "inter",
+        "source": "fonts/inter-regular.ttf"
+      }
+    ]
+  },
+  "theme": {
+    "chrome": {
+      "barHintAlpha": 0.6,
+      "barLabelAlpha": 0.9,
+      "cursorAlpha": 0.9,
+      "cursorDotMaxHalf": 4,
+      "cursorDotRatio": 0.22,
+      "cursorLabelGap": 5,
+      "dimQuietAlpha": 0.35,
+      "wheelActiveRingAlpha": 0.95,
+      "wheelActiveRingOffset": 1.5,
+      "wheelHubDotHalf": 3,
+      "wheelHubLabelGap": 2,
+      "wheelLabelAlpha": 1,
+      "wheelMarkerGapRatio": 1.6,
+      "wheelMarkerHalf": 3.5,
+      "wheelRingAlpha": 0.55
+    },
+    "color": {
+      "accent": "#FF6A2B",
+      "accentInk": "#160A04",
+      "accentLine": "#FF6A2B73",
+      "accentQuiet": "#FF6A2B24",
+      "badgeDark": "#0D0D12",
+      "badgeLight": "#F5F5FA",
+      "danger": "#F2565B",
+      "lineHair": "#FFFFFF17",
+      "lineInset": "#0000008C",
+      "lineSoft": "#FFFFFF0F",
+      "lineStrong": "#FFFFFF29",
+      "phosphor": "#5CFAA0",
+      "phosphorCyan": "#5EEBE0",
+      "phosphorDim": "#5CFAA06B",
+      "positive": "#5BC98C",
+      "scrimChip": {
+        "alpha": 0.94,
+        "color": "#171B1F"
+      },
+      "scrimPanel": {
+        "alpha": 0.9,
+        "color": "#121519"
+      },
+      "scrimStrip": {
+        "alpha": 0.86,
+        "color": "#121519"
+      },
+      "surfaceBase": "#0E1013",
+      "surfaceInset": "#0B0D0F",
+      "surfacePanel": "#15181C",
+      "surfaceRaised": "#1D2126",
+      "textDim": "#9BA3AB",
+      "textMute": "#5C646C",
+      "textPrimary": "#EDEFF2",
+      "warning": "#E8B341"
+    },
+    "diegetic": {
+      "bezelEdge": "#05070A",
+      "bezelInner": "#14181A",
+      "bezelOuter": "#23282B",
+      "embossFill": "#DFE6E1",
+      "embossShadowDropAlpha": 0.8,
+      "embossShadowDropBlur": 2,
+      "embossShadowDropOffsetY": 2,
+      "embossShadowLitAlpha": 0.3,
+      "embossShadowLitOffsetY": -1,
+      "engraveFill": "#14171A",
+      "engraveShadowLipAlpha": 0.16,
+      "engraveShadowLipOffsetY": 1,
+      "engraveShadowRecessAlpha": 0.85,
+      "engraveShadowRecessBlur": 1,
+      "engraveShadowRecessOffsetY": -1,
+      "phosphorGlowBlur": 6,
+      "plateBottom": "#1C1F22",
+      "plateMid": "#24272B",
+      "plateStripeColor": "#FFFFFF05",
+      "plateTop": "#2C2F33",
+      "screenWellInner": "#05100C",
+      "screenWellOuter": "#0C221A"
+    },
+    "elevation": {
+      "bloomAccent": {
+        "halo": "#FF6A2B6B",
+        "ring": "#FF6A2B8C"
+      },
+      "bloomDanger": {
+        "halo": "#F2565B6B",
+        "ring": "#F2565B8C"
+      },
+      "bloomHaloAlpha": 0.42,
+      "bloomHaloBlur": 18,
+      "bloomHaloSpread": -3,
+      "bloomHeldInsetAlpha": 0.5,
+      "bloomHeldInsetBlur": 12,
+      "bloomHeldInsetSpread": -3,
+      "bloomNeutral": {
+        "halo": "#EDEFF238",
+        "ring": "#EDEFF24C"
+      },
+      "bloomNeutralHaloAlpha": 0.22,
+      "bloomNeutralRingAlpha": 0.3,
+      "bloomPositive": {
+        "halo": "#5BC98C6B",
+        "ring": "#5BC98C8C"
+      },
+      "bloomRingAlpha": 0.55,
+      "bloomRingWidth": 1,
+      "bloomWarning": {
+        "halo": "#E8B3416B",
+        "ring": "#E8B3418C"
+      },
+      "catchlightColor": "#FFFFFF0D",
+      "catchlightOffsetY": 1,
+      "chipRestOpacity": 0.62,
+      "edgeHairlineWidth": 1,
+      "pressHeldGlowBlur": 12,
+      "pressHeldGlowColor": "#EDEFF23D",
+      "pressHeldGlowSpread": -3,
+      "pressHeldShadowBlur": 6,
+      "pressHeldShadowColor": "#00000099",
+      "pressHeldShadowOffsetY": 2,
+      "pressHeldTranslateY": 1,
+      "ringStatusAlpha": 0.6,
+      "ringStatusWidth": 2,
+      "shadowSeatBlur": 44,
+      "shadowSeatColor": "#000000B8",
+      "shadowSeatOffsetY": 18,
+      "shadowSeatSpread": -18,
+      "shadowSeatStripColor": "#000000BF",
+      "shadowSeatStripSpread": -20
+    },
+    "icon": {
+      "strokeHalfWidth": 0.08
+    },
+    "motion": {
+      "caretBlink": 1080,
+      "durFast": 120,
+      "durMed": 180,
+      "durPanel": 280,
+      "easeOut": {
+        "x1": 0.4,
+        "x2": 1,
+        "y1": 0,
+        "y2": 1
+      },
+      "easeStd": {
+        "x1": 0.2,
+        "x2": 0,
+        "y1": 0,
+        "y2": 1
+      }
+    },
+    "radius": {
+      "radius1": 3,
+      "radius2": 6,
+      "radius3": 9
+    },
+    "space": {
+      "heightBadge": 24,
+      "heightBindBar": 64,
+      "heightChip": 40,
+      "heightConsoleHead": 38,
+      "heightModeRow": 30,
+      "heightPromptRow": 34,
+      "heightTrackerBar": 52,
+      "heightTrackerCell": 26,
+      "space0": 0,
+      "space1": 4,
+      "space2": 8,
+      "space3": 12,
+      "space4": 16,
+      "space5": 20,
+      "space6": 24,
+      "space8": 32
+    },
+    "type": {
+      "bodyLine": 18,
+      "bodySize": 13,
+      "bodyWeight": 400,
+      "labelLine": 24,
+      "labelSize": 12,
+      "labelTracking": 0.01,
+      "labelWeight": 500,
+      "microLine": 13,
+      "microSize": 11,
+      "microTracking": 0.08,
+      "microWeight": 500,
+      "monoBadgeSize": 11,
+      "monoLine": 18,
+      "monoReadoutSize": 15,
+      "monoSize": 12,
+      "monoTracking": 0.04,
+      "monoWeight": 400,
+      "titleLine": 18,
+      "titleSize": 16,
+      "titleTracking": 0.01,
+      "titleWeight": 600
+    }
+  },
+  "views": {
+    "cameraRig": {
+      "name": "seatFreeCam",
+      "operations": [
+        {
+          "$type": "lookAt",
+          "focusDistance": 1,
+          "subject": null
+        },
+        {
+          "$type": "fov",
+          "fieldOfViewRadians": 0.9599311
+        }
+      ],
+      "version": "puck.camera.v1"
+    },
+    "layouts": [
+      {
+        "name": "action",
+        "seatCount": 0,
+        "slots": [
+          {
+            "camera": null,
+            "height": 1,
+            "width": 1,
+            "x": 0,
+            "y": 0
+          }
+        ],
+        "transitionRenderScale": 0.5,
+        "transitionSeconds": 0.4
+      },
+      {
+        "name": "overhead",
+        "seatCount": 5,
+        "slots": [
+          {
+            "camera": "overhead",
+            "height": 1,
+            "width": 1,
+            "x": 0,
+            "y": 0
+          }
+        ],
+        "transitionRenderScale": 0.5,
+        "transitionSeconds": 0.4
+      }
+    ],
+    "seatControl": {
+      "maxPitch": 1.2,
+      "minPitch": -0.35,
+      "yawReference": "World"
+    },
+    "seatRig": {
+      "name": "seatChase",
+      "operations": [
+        {
+          "$type": "orbit",
+          "distance": 5.4626001,
+          "pitch": 0.4145069,
+          "pivotOffset": [
+            0,
+            0,
+            0
+          ],
+          "yaw": 0
+        },
+        {
+          "$type": "lookAt",
+          "subject": {
+            "$type": "reference"
+          },
+          "targetOffset": [
+            0,
+            1,
+            0
+          ],
+          "worldAxes": false
+        },
+        {
+          "$type": "fov",
+          "fieldOfViewRadians": 0.9599311
+        },
+        {
+          "$type": "smooth",
+          "rate": 6
+        }
+      ],
+      "version": "puck.camera.v1"
+    }
+  }
+}

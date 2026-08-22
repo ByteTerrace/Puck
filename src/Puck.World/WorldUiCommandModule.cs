@@ -127,6 +127,8 @@ internal sealed class WorldUiCommandModule(IServerLink link, WorldRenderProbe? r
             ? "on"
             : "off")} text {(authoring.Text
             ? "on"
+            : "off")} modifiers {(authoring.Modifiers
+            ? "on"
             : "off")} visible {((authoring.Visible is null)
             ? "always"
             : "predicate")} override {overrideWord} hidden {status.Hidden.ToString().ToLowerInvariant()} reason {status.Reason} slots {authoring.SlotSet.Count} banks {authoring.Banks.Count} hideUnbound {status.EffectiveHideUnbound.ToString().ToLowerInvariant()} stacked {status.Stacked.ToString().ToLowerInvariant()} layout buttonSize {layout.ResolvedButtonSize:0.###} centerGap {layout.ResolvedCenterGap:0.###} anchorOffsetY {layout.ResolvedAnchorOffsetY:0.###} glyphOffsetRatio {layout.ResolvedGlyphOffsetRatio:0.###} glyphSizeRatio {layout.ResolvedGlyphSizeRatio:0.###} scale {status.EffectiveScale:0.###}]"));
