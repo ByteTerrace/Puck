@@ -274,7 +274,7 @@ Facts a script needs:
 - [`Puck.World.Client`](../Puck.World.Client/README.md) — the per-machine
   client half: seats and device intents, the snapshot-fed entity view and
   render interpolation, the fly camera application, the
-  binding-authoring layer, frame composition (`WorldFrameSource.cs`), scene
+  binding-authoring layer, frame composition (`WorldFramePresenter.cs`), scene
   emission (`WorldSceneEmitter.cs`), and offscreen view composition
   (`WorldViewComposer.cs`) — the three read the root's `WorldAudioDirector`
   only through `IWorldAudioFrameFeed`/`IWorldAudioCueSink`, never the concrete
@@ -493,6 +493,23 @@ currency, translated once into a neutral pad image through the named kit's
 `WorldMachineHost.Advance` inside `WorldServer.Step`; the authority to compose
 rides the grant table's `Control` capability. See [`Puck.World.Server`](../Puck.World.Server/README.md) for the full contract.
 
+A placeable camera's offscreen view can also be EXPORTED — read as a GPU
+texture by a consumer outside the render engine (a probe kernel, see
+`## Probes` below) rather than only sampled by a jumbotron screen.
+`WorldScreenBinder.TryGetViewExport`/`ReleaseViewExport` register/withdraw a
+named camera's `SdfCameraView` for export, sharing the SAME persistent view a
+`screen.source <index> view` binding uses (so a camera already filmed by a
+jumbotron gains export at no extra render cost) and keeping an export-only
+camera rendering every `ViewStack` refresh even with no screen wired to it.
+Export needs the Direct3D 12 host: the exported image is opened by a Direct3D
+11 `OpenSharedResource1` elsewhere in the process, which cannot open a Vulkan
+host's opaque Vulkan-to-Vulkan export handle, so the Vulkan host refuses
+export outright rather than producing a handle nothing downstream can read.
+Day one exports exactly ONE physical image (the engine's own persistent
+output, re-rendered in place every refresh) with no second buffer to rotate
+into — latest-wins, unfenced: a consumer may sample a frame that is
+concurrently being re-rendered.
+
 ## Native capture
 
 The world records itself to WebM/Matroska through the recording graph in
@@ -517,23 +534,38 @@ arm-to-first-packet latency.
 ## Probes
 
 A document's optional `probes` rows (`WorldProbe`, boot-authored only) each
-declare a registered `puck.probe.v1` kind reading a camera sensor or a
-recorded `puck.probe-track.v1` track, and carry the bindings that route one of
-its channels to a command axis (a `probe.<name>` source, an
-ordinary bindable stick-like input any binding overlay may map), a
+declare a registered `puck.probe.v1` kind and plug one `WorldFrameSource` into
+each of the kind's typed sockets (`inputs`, by socket name) — or, in place of
+every socket at once, a recorded `puck.probe-track.v1` track — and carry the
+bindings that route one of its channels to a command axis (a `probe.<name>`
+source, an ordinary bindable stick-like input any binding overlay may map), a
 presentation float (a `render.extensions` config field, or another probe's
 kind config field — patched live into its running kernel), or the existing
-camera control surface. A kind that declares an `output` writes a texture each
-cycle, and a screen shows it as a `probe` source (`screen.source <index> probe
-<id>`); the binder provisions its shared ring at the declared sensor's extent
-on the render device, the same way it provisions a camera's. `WorldProbes` services every declared row from the
-host loop's per-frame capture in both boot shapes (headless, a camera-input
-probe faults by name for want of a camera feed and a parameter binding
-finds no composed pass; a track-input probe and every axis binding run in
-full), polling `WorldScreenBinder.TryGetCameraAttachment` for a camera-input
-probe's live shared stream and (re)attaching its kernel to the open graph
-(`ICameraKernelHost`) when the attachment's target-ring generation — or its
-output ring's — changes. Every camera sensor a kind reads must be declared by
+camera control surface. A socket's class is `frame` (any one frame source) or
+`strobePair` (a strobing infrared sensor's lit frame and the unlit frame kept
+before it — bound only to a `camera` source with sensor Infrared); an
+`optional` socket may be left unbound (a null input to the kernel). A socket
+source is the same four-arm `WorldFrameSource` vocabulary a screen samples:
+`camera` (a declared sensor), `view` (a named `cameras[]` row's offscreen
+render, exported as a kernel-readable ring), `probe` (another declared probe's
+own texture output, read back as a ring), or `capture` (not yet hosted as a
+kernel input — a bound socket idles with that fault). The kind's `trigger`
+socket must bind a `camera` source: kernels run on that sensor's own camera
+graph, so it decides which `ICameraKernelHost` a run attaches to. A kind that
+declares an `output` writes a texture each cycle, at the extent its own
+`output.of` socket's source renders at; a screen shows it as a `probe` source
+(`screen.source <index> probe <id>`), and another probe's `probe` socket may
+read it back as an input in turn.
+
+`WorldProbes` services every declared row from the host loop's per-frame
+capture in both boot shapes (headless, every camera/view/probe socket faults
+by name for want of a live feed and a parameter binding finds no composed
+pass; a track-input probe and every axis binding run in full), resolving each
+socket against the binder's live state and (re)attaching the kernel to the
+trigger sensor's open graph whenever any socket's generation — or the output
+ring's — changes; a socket whose source is not ready yet (an unpublished ring,
+an unopened camera) idles the whole probe with that fault and retries every
+frame until it resolves. Every camera sensor a kind reads must be declared by
 some camera screen, since that is what opens the feed. A probe is not a device and
 never occupies a seat: an axis binding addresses its authored seat's lane
 directly (`InputSignal.Slot`), its `probe:<seat>` device id is only the
@@ -555,7 +587,11 @@ rate records its latest reading per frame); each sample carries its own
 capture time, and playback follows those times, so completion narrates on
 stderr with the sample count and the recorded cadence replays as recorded. The
 recorded document plugs into a track-input probe in place of a live device
-— the hardware-free proof leg every probe admits.
+— the hardware-free proof leg every probe admits. `probe.set <probe> <field>
+<value>` patches one float config field of a declared probe's kind live —
+the same constants write a `probe`-target parameter binding performs, bound
+only by the field's own declared range; a parameter binding targeting the
+same field overwrites a `probe.set` write on its own next changed reading.
 
 `Assets/worlds/brio-probe.world.json` (basis `brio-dual.world.json`) is the
 end-to-end vertical: the `ir-blob` probe over the BRIO's infrared stream,
@@ -568,12 +604,36 @@ dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/
 ```
 
 `Assets/worlds/brio-faerie.world.json` (basis `brio-dual.world.json`) is the
-texture-writing vertical: the `head` probe's centroid steers the `faerie`
-probe's anchor through two `probe`-target parameter bindings, and screen 0
-shows the faerie's relit color frame beside the raw infrared and color feeds:
+full vertical, all three shipped kinds over one BRIO stream: the `ir-marker`
+probe frames a strip of retroreflective tape on the wall as a painting quad
+(eight `probe`-target parameter bindings into the `faerie` probe's
+`paintingX0..paintingY3` config), the `ir-blob` probe steers the `faerie`
+probe's anchor from the tracked head (two more `probe`-target bindings), and
+the `faerie` probe relights the color frame and, through its optional
+`painting` socket — a `view` export of the world's own `gallery` camera —
+shows that camera's own feed as the framed canvas. An `axis` binding publishes
+the `faerie` probe's own `portal` channel as `probe.faerie-portal`; a binding
+overlay routes it onto the world's `portal` command channel, and a
+`compareState($channel:1:portal, GreaterOrEqual, 1)` world rule upserts a
+`faerie-glow` placement (kit `faerieKit`, an `attend` producer) once
+`probe.set faerie journey 1` carries the light into the painting far enough to
+cross the kind's own `portalThreshold`. Screen 0 shows the faerie probe's
+output beside the raw infrared and color feeds:
 
 ```
 dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/brio-faerie.world.json --exit-after-seconds 16
+```
+
+`Assets/worlds/brio-faerie-authored.world.json` (basis
+`brio-faerie.world.json`) is the no-tape leg, for an author with nothing
+retroreflective on the wall: it drops the `ir-marker` row (and with it, the
+eight painting-corner bindings that lived on it) and pins the `faerie`
+probe's `paintingX0..paintingY3` config to a hand-authored rectangle instead —
+the same corners `ir-marker` would otherwise track live. The head-anchored
+faerie and the `journey`/`portal` spawn are unchanged:
+
+```
+dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/brio-faerie-authored.world.json --exit-after-seconds 16
 ```
 
 `Assets/worlds/brio-probe-track.world.json` (basis `brio-probe.world.json`)

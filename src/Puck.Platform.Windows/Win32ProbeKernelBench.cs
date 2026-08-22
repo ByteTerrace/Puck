@@ -1,7 +1,9 @@
 using System.Collections.Concurrent;
 using System.Runtime.Versioning;
+using Microsoft.Win32.SafeHandles;
 using Puck.Platform.Probes;
 using Windows.Win32.Graphics.Direct3D11;
+using Windows.Win32.Graphics.Dxgi.Common;
 
 namespace Puck.Platform.Windows;
 
@@ -15,16 +17,20 @@ internal unsafe interface IProbeKernelDevice {
     void Enter();
     void Leave();
 }
-/// <summary>Resolves a kernel input to the shader-resource view over the graph's converted frame for it, or zero
-/// while that frame has not been produced yet.</summary>
+/// <summary>Resolves a sensor's converted frame to the shader-resource view a kernel binds, or zero while that
+/// frame has not been produced yet.</summary>
 internal interface IProbeInputResolver {
-    nint Resolve(ProbeKernelInput input);
+    /// <summary>Gets the shader-resource view over a sensor's current (or, strobing, previous/unlit) converted
+    /// frame, or zero while unresolved.</summary>
+    nint Resolve(CameraSensor sensor, bool previous);
     /// <summary>Gets the converted extent of a sensor's stream.</summary>
     (int Width, int Height) Extent(CameraSensor sensor);
 }
 /// <summary>The kernels attached to one camera graph. Attachment is thread-safe; everything else runs on the graph's
-/// worker after a frame converts: pending kernels compile once every input they read exists, kernels triggered by
-/// that frame's sensor run, and detached kernels release their native objects on this thread.</summary>
+/// worker after a frame converts: a pending kernel opens its <see cref="ProbeKernelInput.Ring"/> sockets and compiles
+/// once every <see cref="ProbeKernelInput.Sensor"/>/<see cref="ProbeKernelInput.StrobePair"/> socket resolves,
+/// kernels triggered by that frame's sensor run — a ring socket with no published slot yet runs unbound that cycle —
+/// and detached kernels release their native objects on this thread.</summary>
 [SupportedOSPlatform("windows10.0.10240")]
 internal sealed unsafe class Win32ProbeKernelBench {
     private readonly List<Attachment> m_attached = [];
@@ -48,7 +54,8 @@ internal sealed unsafe class Win32ProbeKernelBench {
             m_attached.Add(item: pending);
         }
 
-        var views = stackalloc nint[ProbeReadingLimits.MaxChannels];
+        var views = stackalloc nint[ProbeKernelInputLimits.MaxRegisters];
+        var ringSlots = stackalloc int[ProbeKernelInputLimits.MaxInputs];
 
         for (var index = m_attached.Count - 1; (index >= 0); index--) {
             var attachment = m_attached[index];
@@ -56,6 +63,7 @@ internal sealed unsafe class Win32ProbeKernelBench {
             if (attachment.Detached) {
                 attachment.Kernel?.Dispose();
                 attachment.Kernel = null;
+                attachment.CloseRingResources();
                 m_attached.RemoveAt(index: index);
 
                 continue;
@@ -66,52 +74,138 @@ internal sealed unsafe class Win32ProbeKernelBench {
 
             var inputs = attachment.Request.Inputs;
 
-            if (inputs.Count > ProbeReadingLimits.MaxChannels) {
-                attachment.End(fault: $"a probe kernel binds at most {ProbeReadingLimits.MaxChannels} inputs");
+            if (inputs.Count > ProbeKernelInputLimits.MaxInputs) {
+                attachment.End(fault: $"a probe kernel binds at most {ProbeKernelInputLimits.MaxInputs} sockets");
 
                 continue;
             }
 
-            var ready = true;
+            if (!attachment.RingResourcesOpened) {
+                try {
+                    attachment.OpenRingResources(device: device);
+                } catch (Exception exception) {
+                    attachment.End(fault: DescribeFault(exception: exception));
+
+                    continue;
+                }
+            }
 
             for (var input = 0; (input < inputs.Count); input++) {
-                views[input] = resolver.Resolve(input: inputs[input]);
-                ready &= (views[input] != 0);
-            }
-
-            if (!ready) {
-                continue;
+                ringSlots[input] = -1;
             }
 
             try {
-                if (attachment.Kernel is null) {
-                    var (width, height) = resolver.Extent(sensor: attachment.Request.Trigger);
+                var ready = true;
+                var boundMask = 0u;
+                var cursor = 0;
 
-                    attachment.Kernel = new Win32D3D11ProbeKernel(
-                        context: ((nint)device.Context),
-                        device: ((nint)device.Device),
-                        device1: ((nint)device.Device1),
-                        request: in attachment.Request,
-                        ring: attachment.Ring,
-                        triggerHeight: height,
-                        triggerWidth: width
-                    );
-                    attachment.ApplyPendingConstants();
+                for (var input = 0; (input < inputs.Count); input++) {
+                    switch (inputs[input]) {
+                        case ProbeKernelInput.Sensor sensorInput: {
+                            var view = resolver.Resolve(sensor: sensorInput.Kind, previous: false);
+
+                            views[cursor] = view;
+                            cursor += 1;
+
+                            if (view != 0) {
+                                boundMask |= (1u << input);
+                            } else {
+                                ready = false;
+                            }
+
+                            break;
+                        }
+                        case ProbeKernelInput.StrobePair strobeInput: {
+                            var lit = resolver.Resolve(sensor: strobeInput.Kind, previous: false);
+                            var unlit = resolver.Resolve(sensor: strobeInput.Kind, previous: true);
+
+                            views[cursor] = lit;
+                            views[cursor + 1] = unlit;
+                            cursor += 2;
+
+                            if ((lit != 0) && (unlit != 0)) {
+                                boundMask |= (1u << input);
+                            } else {
+                                ready = false;
+                            }
+
+                            break;
+                        }
+                        case ProbeKernelInput.Ring ringInput: {
+                            var ringViews = attachment.RingViews(index: input);
+
+                            if ((ringViews is not null) && ringInput.Slots.TryAcquireLatest(out var slot)) {
+                                ringSlots[input] = slot;
+                                views[cursor] = ringViews[slot];
+                                boundMask |= (1u << input);
+                            } else {
+                                views[cursor] = 0;
+                            }
+
+                            cursor += 1;
+
+                            break;
+                        }
+                        case ProbeKernelInput.Unbound: {
+                            views[cursor] = 0;
+                            cursor += 1;
+
+                            break;
+                        }
+                    }
                 }
 
-                device.Enter();
+                if (!ready) {
+                    continue;
+                }
 
                 try {
-                    _ = attachment.Kernel.TryRun(inputViews: new ReadOnlySpan<nint>(views, inputs.Count), captureTimestamp: captureTimestamp);
-                } finally {
-                    device.Leave();
+                    if (attachment.Kernel is null) {
+                        var (width, height) = resolver.Extent(sensor: attachment.Request.Trigger);
+
+                        attachment.Kernel = new Win32D3D11ProbeKernel(
+                            context: ((nint)device.Context),
+                            device: ((nint)device.Device),
+                            device1: ((nint)device.Device1),
+                            request: in attachment.Request,
+                            ring: attachment.Ring,
+                            triggerHeight: height,
+                            triggerWidth: width
+                        );
+                        attachment.ApplyPendingConstants();
+                    }
+
+                    device.Enter();
+
+                    try {
+                        _ = attachment.Kernel.TryRun(views: new ReadOnlySpan<nint>(views, cursor), boundMask: boundMask, captureTimestamp: captureTimestamp);
+                    } finally {
+                        device.Leave();
+                    }
+                } catch (Exception exception) {
+                    attachment.Kernel?.Dispose();
+                    attachment.Kernel = null;
+                    attachment.End(fault: DescribeFault(exception: exception));
                 }
-            } catch (Exception exception) {
-                attachment.Kernel?.Dispose();
-                attachment.Kernel = null;
-                attachment.End(fault: exception.Message);
+            } finally {
+                for (var input = 0; (input < inputs.Count); input++) {
+                    if ((ringSlots[input] >= 0) && (inputs[input] is ProbeKernelInput.Ring ringInput)) {
+                        ringInput.Slots.Release(slot: ringSlots[input]);
+                    }
+                }
             }
         }
+    }
+    // The fault a probe reports: the message plus the first frame inside this assembly, so a refused native call names
+    // the kernel step it came from rather than only the HRESULT text.
+    private static string DescribeFault(Exception exception) {
+        foreach (var frame in new System.Diagnostics.StackTrace(e: exception).GetFrames()) {
+            if ((frame.GetMethod() is { DeclaringType: { } type } method) && (type.Assembly == typeof(Win32ProbeKernelBench).Assembly) && (type.Namespace?.StartsWith(value: "Windows.Win32", comparisonType: StringComparison.Ordinal) != true)) {
+                return $"{exception.Message} ({type.Name}.{method.Name})";
+            }
+        }
+
+        return exception.Message;
     }
     /// <summary>Ends every attachment and releases its kernel; called on the worker as the graph closes.</summary>
     public void Close() {
@@ -124,6 +218,7 @@ internal sealed unsafe class Win32ProbeKernelBench {
         foreach (var attachment in m_attached) {
             attachment.Kernel?.Dispose();
             attachment.Kernel = null;
+            attachment.CloseRingResources();
             attachment.End(fault: "the camera graph ended");
         }
 
@@ -135,6 +230,9 @@ internal sealed unsafe class Win32ProbeKernelBench {
         private volatile bool m_ended;
         private string? m_fault;
         private byte[]? m_pendingConstants;
+        private bool m_ringResourcesOpened;
+        private nint[]?[] m_ringTextures = [];
+        private nint[]?[] m_ringViews = [];
 
         public readonly ProbeKernelRequest Request = request;
         public readonly ProbeReadingRing Ring = ring;
@@ -142,6 +240,7 @@ internal sealed unsafe class Win32ProbeKernelBench {
 
         public bool Detached => m_detached;
         public bool Ended => m_ended;
+        public bool RingResourcesOpened => m_ringResourcesOpened;
         public long Cycles => (Kernel?.Cycles ?? 0L);
         public long Drops => (Kernel?.Drops ?? 0L);
         public string? Fault => Volatile.Read(location: ref m_fault);
@@ -151,6 +250,79 @@ internal sealed unsafe class Win32ProbeKernelBench {
             if ((Interlocked.Exchange(location1: ref m_pendingConstants, value: null) is { } pending) && (Kernel is { } kernel)) {
                 kernel.SetConstants(constants: pending);
             }
+        }
+        /// <summary>Opens every declared <see cref="ProbeKernelInput.Ring"/> socket's shared targets and their
+        /// shader-resource views on the graph's device — once per attachment, regardless of readiness.</summary>
+        public void OpenRingResources(IProbeKernelDevice device) {
+            var inputs = Request.Inputs;
+            var textures = new nint[]?[inputs.Count];
+            var views = new nint[]?[inputs.Count];
+
+            try {
+                for (var index = 0; (index < inputs.Count); index++) {
+                    if (inputs[index] is not ProbeKernelInput.Ring ringInput) {
+                        continue;
+                    }
+
+                    var handles = ringInput.SharedTargetHandles;
+                    var format = ToDxgiFormat(format: ringInput.Format);
+                    var openedTextures = new nint[handles.Count];
+                    var openedViews = new nint[handles.Count];
+
+                    for (var slot = 0; (slot < handles.Count); slot++) {
+                        using var handle = new SafeFileHandle(ownsHandle: false, preexistingHandle: handles[slot]);
+
+                        void* opened;
+
+                        try {
+                            device.Device1->OpenSharedResource1(hResource: handle, ppResource: out opened, returnedInterface: ID3D11Texture2D.IID_Guid);
+                        } catch (Exception exception) {
+                            throw new InvalidOperationException(message: $"opening ring socket {index} slot {slot} on the graph's device failed: {exception.Message}", innerException: exception);
+                        }
+
+                        var texture = ((ID3D11Texture2D*)opened);
+                        var description = default(D3D11_TEXTURE2D_DESC);
+
+                        texture->GetDesc(pDesc: &description);
+
+                        if ((description.Width != ringInput.Width) || (description.Height != ringInput.Height) || (description.Format != format)) {
+                            throw new NotSupportedException(message: $"a probe ring socket target is {description.Width}x{description.Height} {description.Format}; expected {ringInput.Width}x{ringInput.Height} {format}");
+                        }
+
+                        ID3D11ShaderResourceView* view = null;
+
+                        try {
+                            device.Device->CreateShaderResourceView(pResource: ((ID3D11Resource*)texture), pDesc: null, ppSRView: &view);
+                        } catch (Exception exception) {
+                            throw new InvalidOperationException(message: $"viewing ring socket {index} slot {slot} ({description.Format}, bind {description.BindFlags}, misc {description.MiscFlags}) failed: {exception.Message}", innerException: exception);
+                        }
+
+                        openedTextures[slot] = ((nint)texture);
+                        openedViews[slot] = ((nint)view);
+                    }
+
+                    textures[index] = openedTextures;
+                    views[index] = openedViews;
+                }
+            } catch {
+                ReleaseRingResources(textures: textures, views: views);
+
+                throw;
+            }
+
+            m_ringTextures = textures;
+            m_ringViews = views;
+            m_ringResourcesOpened = true;
+        }
+        /// <summary>Gets the opened shared-resource views for the ring socket at <paramref name="index"/>, or
+        /// <see langword="null"/> when that socket is not a ring or resources are not yet open.</summary>
+        public nint[]? RingViews(int index) => m_ringViews[index];
+        /// <summary>Releases every opened ring socket's shared resources.</summary>
+        public void CloseRingResources() {
+            ReleaseRingResources(textures: m_ringTextures, views: m_ringViews);
+            m_ringTextures = [];
+            m_ringViews = [];
+            m_ringResourcesOpened = false;
         }
         public void Dispose() => m_detached = true;
         public void End(string fault) {
@@ -164,5 +336,28 @@ internal sealed unsafe class Win32ProbeKernelBench {
                 _ = Interlocked.Exchange(location1: ref m_pendingConstants, value: constants.ToArray());
             }
         }
+
+        private static void ReleaseRingResources(nint[]?[] textures, nint[]?[] views) {
+            foreach (var slots in views) {
+                if (slots is not null) {
+                    foreach (var view in slots) {
+                        Win32D3D11VideoDevice.ReleaseTexture(texture: view);
+                    }
+                }
+            }
+
+            foreach (var slots in textures) {
+                if (slots is not null) {
+                    foreach (var texture in slots) {
+                        Win32D3D11VideoDevice.ReleaseTexture(texture: texture);
+                    }
+                }
+            }
+        }
+        private static DXGI_FORMAT ToDxgiFormat(SurfaceFormat format) => (format switch {
+            SurfaceFormat.R8G8B8A8Unorm => DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM,
+            SurfaceFormat.B8G8R8A8Unorm => DXGI_FORMAT.DXGI_FORMAT_B8G8R8A8_UNORM,
+            _ => throw new NotSupportedException(message: $"probe ring format {format} is unsupported"),
+        });
     }
 }

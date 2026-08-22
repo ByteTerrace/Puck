@@ -95,7 +95,7 @@ public readonly record struct OverlayHudSeatPanel(
     OverlayHudPanel Panel
 );
 /// <summary>The per-revision HUD structure snapshot <see cref="HudWriter"/> renders — <see cref="Panels"/> reconciled
-/// from the delivered world definition only when its revision moves (the <c>WorldFrameSource</c> revision-reconcile
+/// from the delivered world definition only when its revision moves (the <c>WorldFramePresenter</c> revision-reconcile
 /// pattern); <see cref="SeatPanels"/> recomposed every produced frame (it depends on the roster and per-profile
 /// state, which the definition revision does not cover) but from a preallocated per-seat array, so the rebuild is
 /// zero-allocation and cheap even though it is unconditional. Live binding values are resolved separately, per

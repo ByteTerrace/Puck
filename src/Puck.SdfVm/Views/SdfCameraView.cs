@@ -36,6 +36,7 @@ public sealed class SdfCameraView : IViewContent, IDisposable {
 
     private SdfProgram? m_currentProgram;
     private SdfWorldEngine? m_engine;
+    private Func<IGpuDeviceContext, IGpuStorageImage>? m_exportFactory;
     private SdfWorldKernels? m_kernels;
     private int m_lastUploadedRevision = -1;
 
@@ -76,6 +77,35 @@ public sealed class SdfCameraView : IViewContent, IDisposable {
     /// <summary>Whether this offscreen camera skips soft shadows. Defaults to false; low-resolution diegetic displays
     /// may opt in independently of the host world's lighting quality.</summary>
     public bool DisableSoftShadows { get; set; }
+    /// <summary>The output-image factory forwarded to <see cref="SdfWorldEngineOptions.CreateOutputImage"/> —
+    /// <see langword="null"/> (the default) builds a plain same-device image; a factory returning an
+    /// <see cref="IGpuExportableStorageImage"/> puts the engine in export mode (see <see cref="ExportSharedHandle"/>).
+    /// Only consulted while building a new engine (<see cref="EnsureEngine"/> is a no-op once one exists), so setting
+    /// this after the engine already exists disposes it — the next <see cref="Resolve"/> rebuilds against the new
+    /// factory (a fresh engine also means a fresh <see cref="SdfWorldEngine.ExportSharedHandle"/>).</summary>
+    public Func<IGpuDeviceContext, IGpuStorageImage>? ExportFactory {
+        get => m_exportFactory;
+        set {
+            if (ReferenceEquals(objA: m_exportFactory, objB: value)) {
+                return;
+            }
+
+            m_exportFactory = value;
+
+            if (m_engine is not null) {
+                m_engine.Dispose();
+                m_engine = null;
+                m_lastUploadedRevision = -1;
+            }
+        }
+    }
+    /// <summary>Gets the live engine's exported shared handle (see <see cref="SdfWorldEngine.ExportSharedHandle"/>),
+    /// or 0 while <see cref="ExportFactory"/> is unset or no engine has been built yet.</summary>
+    public nint ExportSharedHandle => (m_engine?.ExportSharedHandle ?? 0);
+    /// <summary>Gets an identity that changes every time the underlying engine (and so its exported image) is
+    /// rebuilt — a fresh <see cref="SdfWorldEngine"/> instance on every <see cref="ExportFactory"/> change, device
+    /// loss, or dimension recreation. <see langword="null"/> while no engine exists.</summary>
+    public object? ExportGeneration => m_engine;
     /// <inheritdoc/>
     /// <remarks>Always <see langword="true"/> — a camera resolve is a real offscreen render pass.</remarks>
     public bool IsBudgeted => true;
@@ -123,6 +153,7 @@ public sealed class SdfCameraView : IViewContent, IDisposable {
                 // 64-view cap. Capacity 0 gives a 1-float filler; a filmed SampledRegion renders via the shader's
                 // conservative uncarved-hull fallback (never a box-shaped hole).
                 BrickPoolVoxelCapacity: 0,
+                CreateOutputImage: m_exportFactory,
                 DynamicTransformCapacity: m_dynamicTransformCapacity,
                 InstanceCapacity: m_instanceCapacity,
                 Program: m_currentProgram,
@@ -262,6 +293,9 @@ public sealed class SdfCameraView : IViewContent, IDisposable {
 
         m_engine!.SubmitFrame(frame: frame);
 
+        // OutputImageViewHandle stays a valid same-device view even in export mode (IGpuExportableStorageImage IS an
+        // IGpuStorageImage) — a jumbotron sampling this view and a probe kernel importing ExportSharedHandle read the
+        // same drained frame through two different handles.
         return m_engine.OutputImageViewHandle;
     }
 }

@@ -14,7 +14,7 @@ namespace Puck.World;
 /// family — chips lit from the router's carried PHYSICAL button state, the same fact reused across every bank
 /// showing that button's slot (<see cref="BindingBarSeatComposer.IsPhysicallyPressed"/>) — scopes it into that
 /// seat's split-screen viewport rect
-/// (<see cref="WorldFrameSource.LayoutRegion(int, int)"/>), and publishes one
+/// (<see cref="WorldFramePresenter.LayoutRegion(int, int)"/>), and publishes one
 /// <see cref="OverlayBindingBarFrame"/>. Zero steady-state allocation: the per-seat arrays and
 /// pressed probes are preallocated and reused, and the hint lines are re-formatted only when their source facts move
 /// (a page/group flip) — safe because the feed and the overlay reader run on the
@@ -329,7 +329,7 @@ internal sealed class WorldOverlayFeed {
                 text: barText,
                 view: view
             );
-            var viewport = WorldFrameSource.LayoutRegion(
+            var viewport = WorldFramePresenter.LayoutRegion(
                 count: joined,
                 index: viewIndex
             );

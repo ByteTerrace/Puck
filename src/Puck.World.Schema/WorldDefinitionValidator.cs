@@ -592,11 +592,6 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
 
-        ValidateProbes(
-            definition: definition,
-            errors: errors
-        );
-
         ValidateRenderLighting(
             definition: definition,
             lighting: definition.Render.Lighting,
@@ -1147,6 +1142,14 @@ public static partial class WorldDefinitionValidator {
                 }
             }
         }
+
+        // A probe socket's 'view' arm resolves against the SAME declared camera set a screen row's own 'view' arm
+        // does, so this runs only once that set is fully built above — never earlier, and never twice.
+        ValidateProbes(
+            cameras: cameras,
+            definition: definition,
+            errors: errors
+        );
 
         // The window composition. The engine holds no rig of its own, so views is REQUIRED exactly when the census
         // implies a body to look at (a derived refusal, not a flat floor, mirroring kits): a seatless document

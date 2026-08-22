@@ -11,11 +11,18 @@ public sealed class ProbesAuthoringValidationLawTests {
     private const string ProbeKind = "ir-blob";
     private const string ChannelName = "x";
 
-    private static WorldProbe BuildProbe(string id = ProbeId, string kind = ProbeKind) => new(
+    private static WorldFrameSource CameraSource(WorldCameraSensor sensor = WorldCameraSensor.Infrared) => new WorldScreenSource.Camera(
+        Profile: WorldFeedProfile.Default,
+        Sensor: sensor
+    );
+    private static WorldProbe BuildProbe(string id = ProbeId, string kind = ProbeKind, IReadOnlyDictionary<string, WorldFrameSource>? inputs = null, string? track = null) => new(
         Id: id,
+        Inputs: (inputs ?? (((track is null))
+            ? new Dictionary<string, WorldFrameSource>(comparer: StringComparer.Ordinal) { ["lit"] = CameraSource() }
+            : null)),
         Kind: kind,
-        Input: new WorldProbeInput.Camera(Sensor: WorldCameraSensor.Infrared),
-        RateHz: 30U
+        RateHz: 30U,
+        Track: track
     );
 
     private static WorldDefinition WithProbes(WorldProbe[] probes, WorldProbeBinding[] bindings, WorldRenderExtensionEntry[]? extensions = null) {
@@ -31,6 +38,18 @@ public sealed class ProbesAuthoringValidationLawTests {
             : (document with { RenderRaw = WorldRenderDefaults.Absent with { Extensions = extensions } })
         );
     }
+    // A minimal valid declared camera row — the "view" socket law's control needs one to name.
+    private static WorldCamera BuildCamera(string name) => new(
+        Name: name,
+        Anchor: null,
+        Rig: new WorldCameraProgram(
+            Name: $"{name}-rig",
+            Version: WorldCameraProgram.CurrentVersion,
+            Operations: [new WorldCameraProgramOp.Fov(FieldOfViewRadians: new BindableScalar(literal: 0.9f))]
+        ),
+        RenderWidth: 320U,
+        RenderHeight: 240U
+    );
 
     [Fact]
     public void BlankKindRefusesWhileANonBlankKindPasses() {
@@ -290,6 +309,92 @@ public sealed class ProbesAuthoringValidationLawTests {
                     new WorldProbeBinding.Control(Channel: "x", ControlName: "brightness", Minimum: 0, Maximum: 255),
                 ]
             ),
+                reason: out _
+            ));
+    }
+    [Fact]
+    public void BothInputsAndTrackRefuseWhileInputsAloneOnPasses() {
+        Laws.RefusalWithControl(
+            lawId: "probes.both-inputs-and-track",
+            deniedOutcome: () => WorldDefinitionValidator.TryValidateLocally(
+                definition: WithProbes(probes: [BuildProbe() with { Track = "tracks/brio-head.probe-track.json" }], bindings: []),
+                reason: out _
+            ),
+            controlOutcome: () => WorldDefinitionValidator.TryValidateLocally(
+                definition: WithProbes(probes: [BuildProbe()], bindings: []),
+                reason: out _
+            ));
+    }
+    [Fact]
+    public void NeitherInputsNorTrackRefusesWhileInputsAlonePasses() {
+        Laws.RefusalWithControl(
+            lawId: "probes.neither-inputs-nor-track",
+            deniedOutcome: () => WorldDefinitionValidator.TryValidateLocally(
+                definition: WithProbes(probes: [BuildProbe() with { Inputs = null }], bindings: []),
+                reason: out _
+            ),
+            controlOutcome: () => WorldDefinitionValidator.TryValidateLocally(
+                definition: WithProbes(probes: [BuildProbe()], bindings: []),
+                reason: out _
+            ));
+    }
+    [Fact]
+    public void ABadSocketNameRefusesWhileAnIdentifierPasses() {
+        Laws.RefusalWithControl(
+            lawId: "probes.bad-socket-name",
+            deniedOutcome: () => WorldDefinitionValidator.TryValidateLocally(
+                definition: WithProbes(
+                probes: [BuildProbe(inputs: new Dictionary<string, WorldFrameSource>(comparer: StringComparer.Ordinal) { ["1bad"] = CameraSource() })],
+                bindings: []
+            ),
+                reason: out _
+            ),
+            controlOutcome: () => WorldDefinitionValidator.TryValidateLocally(
+                definition: WithProbes(probes: [BuildProbe()], bindings: []),
+                reason: out _
+            ));
+    }
+    [Fact]
+    public void AViewSocketNamingNoCameraRefusesWhileADeclaredCameraPasses() {
+        static WorldDefinition WithViewSocket(bool declareCamera) {
+            var document = Fixtures.BuildDocument() with {
+                ProbesRaw = [BuildProbe(inputs: new Dictionary<string, WorldFrameSource>(comparer: StringComparer.Ordinal) { ["lit"] = new WorldScreenSource.View(CameraName: "gallery") })],
+            };
+
+            return (declareCamera
+                ? (document with { CamerasRaw = [BuildCamera(name: "gallery")] })
+                : document
+            );
+        }
+
+        Laws.RefusalWithControl(
+            lawId: "probes.socket-view-camera",
+            deniedOutcome: () => WorldDefinitionValidator.TryValidateLocally(
+                definition: WithViewSocket(declareCamera: false),
+                reason: out _
+            ),
+            controlOutcome: () => WorldDefinitionValidator.TryValidateLocally(
+                definition: WithViewSocket(declareCamera: true),
+                reason: out _
+            ));
+    }
+    [Fact]
+    public void AProbeSocketNamingItsOwnProbeRefusesWhileAnotherProbePasses() {
+        static WorldDefinition WithProbeSocket(string targetId) => Fixtures.BuildDocument() with {
+            ProbesRaw = [
+                BuildProbe(inputs: new Dictionary<string, WorldFrameSource>(comparer: StringComparer.Ordinal) { ["lit"] = new WorldScreenSource.Probe(Id: targetId) }),
+                BuildProbe(id: "faerie"),
+            ],
+        };
+
+        Laws.RefusalWithControl(
+            lawId: "probes.socket-self-probe",
+            deniedOutcome: () => WorldDefinitionValidator.TryValidateLocally(
+                definition: WithProbeSocket(targetId: ProbeId),
+                reason: out _
+            ),
+            controlOutcome: () => WorldDefinitionValidator.TryValidateLocally(
+                definition: WithProbeSocket(targetId: "faerie"),
                 reason: out _
             ));
     }

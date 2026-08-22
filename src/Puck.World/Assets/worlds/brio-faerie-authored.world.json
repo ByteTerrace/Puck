@@ -1,0 +1,37 @@
+{
+  "$schema": "./puck.world.def.v1.schema.json",
+  "basis": "brio-faerie.world.json",
+  "documentId": "brio-faerie-authored",
+  "metadata": {
+    "description": "The brio-faerie leg for an author with no retroreflective tape on the wall: the ir-marker probe (and its eight painting-corner bindings) is dropped, and the faerie probe's painting quad is pinned instead to a hand-authored rectangle on the upper-left wall. The head-anchored faerie and the journey/portal spawn still work exactly as in the basis.",
+    "tags": [
+      "camera",
+      "brio",
+      "infrared",
+      "probes",
+      "faerie",
+      "portal",
+      "authored"
+    ],
+    "title": "BRIO Faerie (authored painting)"
+  },
+  "probes": [
+    {
+      "id": "marker",
+      "$drop": true
+    },
+    {
+      "id": "faerie",
+      "config": {
+        "paintingX0": -0.9,
+        "paintingY0": 0.85,
+        "paintingX1": -0.3,
+        "paintingY1": 0.85,
+        "paintingX2": -0.3,
+        "paintingY2": 0.25,
+        "paintingX3": -0.9,
+        "paintingY3": 0.25
+      }
+    }
+  ]
+}

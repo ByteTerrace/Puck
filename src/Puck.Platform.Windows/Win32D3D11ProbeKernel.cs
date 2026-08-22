@@ -18,11 +18,13 @@ namespace Puck.Platform.Windows;
 /// <see cref="TryRun"/> after converting a trigger frame, holding the device's critical section; the kernel binds the
 /// converted frames it was asked for, dispatches accumulate and finalize, writes its output slot, reads the channels
 /// back, and publishes the reading before returning.
-/// <para>Kernel ABI (<c>puck.probe.v1</c>): inputs at <c>t0, t1, …</c> in request order; <c>cbuffer ProbeConfig :
-/// register(b0)</c> is the kind's packed config; <c>cbuffer ProbeFrame : register(b1)</c> is
-/// <c>{ float time; float deltaTime; uint frame; uint pad; }</c>; <c>RWStructuredBuffer&lt;uint&gt; Accumulate :
-/// register(u0)</c> is cleared per cycle; <c>RWStructuredBuffer&lt;float&gt; Channels : register(u1)</c> carries
-/// the channels then confidence; a declared output is <c>RWTexture2D&lt;float4&gt; Output : register(u2)</c>.</para>
+/// <para>Kernel ABI (<c>puck.probe.v1</c>): sockets bind <c>t</c> registers in declaration order — a
+/// <see cref="ProbeKernelInput.StrobePair"/> socket spans two consecutive registers (lit, then unlit); every other
+/// socket spans one; <c>cbuffer ProbeConfig : register(b0)</c> is the kind's packed config; <c>cbuffer ProbeFrame :
+/// register(b1)</c> is <c>{ float time; float deltaTime; uint frame; uint boundMask; }</c> — bit <c>i</c> set when
+/// socket <c>i</c> is bound; <c>RWStructuredBuffer&lt;uint&gt; Accumulate : register(u0)</c> is cleared per cycle;
+/// <c>RWStructuredBuffer&lt;float&gt; Channels : register(u1)</c> carries the channels then confidence; a declared
+/// output is <c>RWTexture2D&lt;float4&gt; Output : register(u2)</c>.</para>
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
@@ -43,12 +45,12 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
     private readonly int m_dispatchWidth;
     private readonly ID3D11ComputeShader* m_finalizeShader;
     private readonly ID3D11Buffer* m_frameBuffer;
-    private readonly int m_inputCount;
     private readonly ID3D11Texture2D* m_output;
     private readonly ID3D11Texture2D*[] m_outputTargets;
     private readonly ID3D11UnorderedAccessView* m_outputUav;
     private readonly long m_periodTicks;
     private readonly ID3D11Query* m_query;
+    private readonly int m_registerCount;
     private readonly ProbeReadingRing m_ring;
     private readonly LatestSlotPublication? m_slots;
     private readonly long m_startTimestamp = Stopwatch.GetTimestamp();
@@ -81,8 +83,8 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
 
         m_channelCount = request.ChannelCount;
         m_context = context;
-        m_inputCount = request.Inputs.Count;
         m_periodTicks = Math.Max(val1: 1L, val2: (Stopwatch.Frequency / request.RateHz));
+        m_registerCount = ProbeKernelInput.RegisterCount(inputs: request.Inputs);
         m_ring = ring;
         m_lastRunTimestamp = (m_startTimestamp - m_periodTicks);
 
@@ -271,15 +273,20 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
 
         _ = Interlocked.Exchange(location1: ref m_pendingConstants, value: constants.ToArray());
     }
-    /// <summary>Runs one cycle against the bound input views (<c>ID3D11ShaderResourceView*</c> as <see cref="nint"/>,
-    /// in request order). The caller holds the device's critical section. A cycle arriving inside the rate period is
-    /// skipped; a cycle with no writable output slot is dropped.</summary>
+    /// <summary>Runs one cycle against the bound registers (<c>ID3D11ShaderResourceView*</c> as <see cref="nint"/>,
+    /// flattened in socket order — a zero entry binds a null SRV, which is legal). The caller holds the device's
+    /// critical section. A cycle arriving inside the rate period is skipped; a cycle with no writable output slot is
+    /// dropped.</summary>
+    /// <param name="views">The flattened register list; a <see cref="ProbeKernelInput.StrobePair"/> socket
+    /// contributes two entries, every other socket one.</param>
+    /// <param name="boundMask">Bit <c>i</c> set when socket <c>i</c> is bound, written into the frame constants.</param>
+    /// <param name="captureTimestamp">The trigger frame's capture timestamp, published on the reading.</param>
     /// <returns><see langword="true"/> when a reading was published.</returns>
-    public bool TryRun(ReadOnlySpan<nint> inputViews, long captureTimestamp) {
+    public bool TryRun(ReadOnlySpan<nint> views, uint boundMask, long captureTimestamp) {
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
 
-        if (inputViews.Length != m_inputCount) {
-            throw new ArgumentException(message: $"the kernel binds {m_inputCount} inputs; {inputViews.Length} were given.", paramName: nameof(inputViews));
+        if (views.Length != m_registerCount) {
+            throw new ArgumentException(message: $"the kernel binds {m_registerCount} registers; {views.Length} were given.", paramName: nameof(views));
         }
 
         var now = Stopwatch.GetTimestamp();
@@ -299,8 +306,8 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
         var deltaSeconds = ((float)((now - m_lastRunTimestamp) / (double)Stopwatch.Frequency));
 
         m_lastRunTimestamp = now;
-        UpdateConstants(now: now, deltaSeconds: deltaSeconds);
-        Dispatch(inputViews: inputViews, slot: slot, channels: out var channels, confidence: out var confidence);
+        UpdateConstants(now: now, deltaSeconds: deltaSeconds, boundMask: boundMask);
+        Dispatch(inputViews: views, slot: slot, channels: out var channels, confidence: out var confidence);
 
         if (m_slots is { } publication) {
             publication.Publish(slot: slot);
@@ -415,14 +422,14 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
             m_context->Unmap(pResource: ((ID3D11Resource*)m_channelsStaging), Subresource: 0);
         }
     }
-    private void UpdateConstants(long now, float deltaSeconds) {
+    private void UpdateConstants(long now, float deltaSeconds, uint boundMask) {
         var time = ((float)((now - m_startTimestamp) / (double)Stopwatch.Frequency));
         var frame = stackalloc float[4];
 
         frame[0] = time;
         frame[1] = deltaSeconds;
         ((uint*)frame)[2] = unchecked((uint)m_cycles);
-        frame[3] = 0f;
+        ((uint*)frame)[3] = boundMask;
         m_context->UpdateSubresource(pDstResource: ((ID3D11Resource*)m_frameBuffer), DstSubresource: 0, pDstBox: null, pSrcData: frame, SrcRowPitch: 0, SrcDepthPitch: 0);
 
         if ((m_constantBuffer is null) || (Interlocked.Exchange(location1: ref m_pendingConstants, value: null) is not { } pending)) {

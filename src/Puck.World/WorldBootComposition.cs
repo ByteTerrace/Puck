@@ -74,7 +74,7 @@ internal static class WorldBootComposition {
         // presentation's frame source and scene emitter reach the same singleton.
         services.AddSingleton<WorldPerceptionAnchor>();
         // The seat authority router — a small fixed CAS table, one writer (WorldInstanceHost's transfer commit), consumed by
-        // WorldClient's seat-submission doors, WorldFrameSource's per-seat loop, WorldHudBindingResolver, and
+        // WorldClient's seat-submission doors, WorldFramePresenter's per-seat loop, WorldHudBindingResolver, and
         // WorldAudioDirector's listener resolution.
         services.AddSingleton<WorldSeatAuthorityRouter>();
         services.AddSingleton<IInputSlotResolver>(implementationFactory: static sp => sp.GetRequiredService<PlayerRoster>());
@@ -659,7 +659,7 @@ internal static class WorldBootComposition {
         // registers an IWorldPointerConsumer below; it does NOT add a second window-input observer.
         services.AddSingleton<WorldPointer>();
 
-        // The local mouse seat's right-drag camera orbit (WoW-style): the shared yaw/pitch state WorldFrameSource
+        // The local mouse seat's right-drag camera orbit (WoW-style): the shared yaw/pitch state WorldFramePresenter
         // composes onto the slot-0 chase camera anchor, and the pointer consumer that nudges it while the authored
         // arming button is held.
         services.AddSingleton<WorldSeatViewInput>();
@@ -782,7 +782,7 @@ internal static class WorldBootComposition {
         // it touches no GPU, and its constructor runs the ONE capacity probe, so the boot can resolve it before any
         // hosted service starts (WorldPostBuildWiring) and report an over-envelope world as an ordinary named boot
         // refusal instead of an unhandled service-factory exception mid-startup.
-        services.AddSingleton(implementationFactory: sp => new WorldFrameSource(
+        services.AddSingleton(implementationFactory: sp => new WorldFramePresenter(
             frameRate: sp.GetRequiredService<FrameRateMonitor>(),
             client: sp.GetRequiredService<WorldClient>(),
             simulation: sp.GetRequiredService<WorldSimulation>(),
@@ -827,7 +827,7 @@ internal static class WorldBootComposition {
                 TimingRecorder: (sp.GetService(serviceType: typeof(IGpuTimingRecorder)) as IGpuTimingRecorder)
             );
 
-            var frameSource = sp.GetRequiredService<WorldFrameSource>();
+            var frameSource = sp.GetRequiredService<WorldFramePresenter>();
 
             // Stand up the jumbotron view pool now the frame source has probed the render envelope: each View screen
             // registers a persistent offscreen camera render sized to these worst-case capacities, using the

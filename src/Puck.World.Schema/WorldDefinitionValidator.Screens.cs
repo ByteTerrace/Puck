@@ -560,6 +560,91 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path}.kit '{kit}' names no kit carrying a pad map.");
         }
     }
+    // The one frame-source gate, shared by a screen row/magazine entry's own Camera/View/Probe/Capture arms
+    // (ValidateScreenSource) and a probe socket (WorldDefinitionValidator.Probes.cs' ValidateProbeStream): a
+    // camera's sensor is defined (and, when authored, its profile/vendor controls); a view names a declared
+    // cameras[] row; a probe names another declared probes[] row; a capture's selector/profile are shaped like the
+    // screen validator's own capture gate. A probe socket binding a Camera source has no meaningful use for
+    // Profile (a probe kernel reads the hosting camera graph's existing feed rather than negotiating its own
+    // capture extent) — validated to the SAME shape as a screen row anyway rather than forking a second, looser
+    // gate for one field nobody reads. Self-reference (a probe socket naming its own enclosing row) is the ONE rule
+    // this method cannot see — the caller checks it, since only a probe socket call site knows which probe is
+    // enclosing.
+    private static void ValidateFrameSource(WorldDefinition definition, WorldFrameSource? source, string path, HashSet<string> cameras, List<string> errors) {
+        switch (source) {
+            case null:
+                errors.Add(item: $"{path} is required.");
+
+                break;
+            case WorldScreenSource.Camera camera:
+                if (camera.Profile is { } cameraProfile) {
+                    ValidateProfile(
+                        profile: cameraProfile,
+                        path: $"{path}.camera",
+                        errors: errors
+                    );
+                }
+
+                if (!Enum.IsDefined(value: camera.Sensor)) {
+                    errors.Add(item: $"{path}.camera.sensor '{camera.Sensor}' is not recognized.");
+                }
+
+                if (camera.Controls?.Vendor is { } vendorControls) {
+                    for (var index = 0; (index < vendorControls.Count); index++) {
+                        var control = vendorControls[index];
+
+                        if (control is null) {
+                            errors.Add(item: $"{path}.camera.controls.vendor[{index}] is required.");
+
+                            continue;
+                        }
+
+                        if ((control.Id < byte.MinValue) || (control.Id > byte.MaxValue)) {
+                            errors.Add(item: $"{path}.camera.controls.vendor[{index}].id {control.Id} is outside 0..255.");
+                        }
+
+                        if ((control.Value < byte.MinValue) || (control.Value > byte.MaxValue)) {
+                            errors.Add(item: $"{path}.camera.controls.vendor[{index}].value {control.Value} is outside 0..255.");
+                        }
+                    }
+                }
+
+                break;
+            case WorldScreenSource.View view:
+                if (!cameras.Contains(item: view.CameraName)) {
+                    errors.Add(item: $"{path}.view references undeclared camera '{view.CameraName}'.");
+                }
+
+                break;
+            case WorldScreenSource.Probe probe:
+                if (!DeclaresProbe(definition: definition, id: probe.Id)) {
+                    errors.Add(item: $"{path}.probe.id '{probe.Id}' names no declared probe.");
+                }
+
+                break;
+            case WorldScreenSource.Capture capture:
+                // Selector: monitor mode validates the index; window mode requires a title (its unused counterpart).
+                if (capture.MonitorIndex is { } monitorIndex) {
+                    if (monitorIndex < 0) {
+                        errors.Add(item: $"{path}.capture.monitorIndex must be non-negative.");
+                    }
+                } else if (string.IsNullOrWhiteSpace(value: capture.WindowTitle)) {
+                    errors.Add(item: $"{path}.capture.windowTitle is required.");
+                }
+
+                ValidateProfile(
+                    profile: capture.Profile,
+                    path: $"{path}.capture",
+                    errors: errors
+                );
+
+                break;
+            default:
+                errors.Add(item: $"{path} is an unrecognized frame source kind.");
+
+                break;
+        }
+    }
     // The one screen-source gate, shared by a declared source and every magazine entry — a pure extraction that closes a
     // real duplication risk (a magazine entry could otherwise name an undeclared camera). Returns whether the source is a
     // live CONSOLE (the caller counts these against the one-live ceiling).
@@ -604,65 +689,16 @@ public static partial class WorldDefinitionValidator {
                 }
 
                 return false;
-            case WorldScreenSource.Camera camera:
-                ValidateProfile(
-                    profile: camera.Profile,
-                    path: $"{path}.camera",
-                    errors: errors
+            case WorldFrameSource frame:
+                // Camera/View/Probe/Capture — the frame-producing arms — share ONE gate with a probe socket's own
+                // bound source (ValidateFrameSource above).
+                ValidateFrameSource(
+                    cameras: cameras,
+                    definition: definition,
+                    errors: errors,
+                    path: path,
+                    source: frame
                 );
-
-                if (!Enum.IsDefined(value: camera.Sensor)) {
-                    errors.Add(item: $"{path}.camera.sensor '{camera.Sensor}' is not recognized.");
-                }
-
-                if (camera.Controls?.Vendor is { } vendorControls) {
-                    for (var index = 0; (index < vendorControls.Count); index++) {
-                        var control = vendorControls[index];
-
-                        if (control is null) {
-                            errors.Add(item: $"{path}.camera.controls.vendor[{index}] is required.");
-
-                            continue;
-                        }
-
-                        if ((control.Id < byte.MinValue) || (control.Id > byte.MaxValue)) {
-                            errors.Add(item: $"{path}.camera.controls.vendor[{index}].id {control.Id} is outside 0..255.");
-                        }
-
-                        if ((control.Value < byte.MinValue) || (control.Value > byte.MaxValue)) {
-                            errors.Add(item: $"{path}.camera.controls.vendor[{index}].value {control.Value} is outside 0..255.");
-                        }
-                    }
-                }
-
-                return false;
-            case WorldScreenSource.Probe probe:
-                if (!DeclaresProbe(definition: definition, id: probe.Id)) {
-                    errors.Add(item: $"{path}.probe.id '{probe.Id}' names no declared probe.");
-                }
-
-                return false;
-            case WorldScreenSource.Capture capture:
-                // Selector: monitor mode validates the index; window mode requires a title (its unused counterpart).
-                if (capture.MonitorIndex is { } monitorIndex) {
-                    if (monitorIndex < 0) {
-                        errors.Add(item: $"{path}.capture.monitorIndex must be non-negative.");
-                    }
-                } else if (string.IsNullOrWhiteSpace(value: capture.WindowTitle)) {
-                    errors.Add(item: $"{path}.capture.windowTitle is required.");
-                }
-
-                ValidateProfile(
-                    profile: capture.Profile,
-                    path: $"{path}.capture",
-                    errors: errors
-                );
-
-                return false;
-            case WorldScreenSource.View view:
-                if (!cameras.Contains(item: view.CameraName)) {
-                    errors.Add(item: $"{path}.view references undeclared camera '{view.CameraName}'.");
-                }
 
                 return false;
             case WorldScreenSource.Console console:

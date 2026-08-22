@@ -708,10 +708,16 @@ token, so it composes with `$distance:`/`$argmax:` directly; see
 received a delivered neighbour refresh, 0 when fresh and 0 forever when the row
 authors no `livenessGraceSeconds`; the row name is proven at compile time, and
 this is a federation seam — unrelated to machine cable linking, which is the
-`Machine` source's own `cable` port) —
+`Machine` source's own `cable` port), and `$channel:<seat>:<channelName>` (the
+1-based LOCAL seat's own folded value for a declared `channels[]` row — the
+exact per-tick value settled from that seat's drained `CommandSnapshot`,
+riding the channel's own native fixed-point domain unchanged, so `1` already
+means "fully pressed/1.0" with no rescale; 0 for a seat outside
+`population.localSeats` or one no local seat currently occupies) —
 folding time, population, occupancy, machine memory, aggregates,
-reconnect-park state, and federation liveness into the string channel `State`
-already carries rather than a fact enum or a scheduler. `Mode` is `Level`
+reconnect-park state, federation liveness, and a local seat's own channel
+value into the string channel `State` already carries rather than a fact enum
+or a scheduler. `Mode` is `Level`
 (fires every tick the gate holds) or `Edge` (fires once per crossing, re-arming
 when the gate closes); a rule that writes a row almost always wants `Edge`.
 

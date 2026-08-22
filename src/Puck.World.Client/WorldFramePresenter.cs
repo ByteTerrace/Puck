@@ -36,7 +36,7 @@ namespace Puck.World.Client;
 /// binder, the seat rigs, and the shimmer baseline whenever the definition revision moves, before the host captures.
 /// </para>
 /// </remarks>
-public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
+public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     // The adjacency render half — neighbour solids and delivered bodies composed through the same isometry contact
     // and handoff use, with remote avatar transforms in its own frozen slot range.
     private readonly WorldAdjacencySceneEmitter m_adjacencies;
@@ -144,7 +144,7 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
     private readonly Dictionary<int, Func<SdfScreenDecalFrame?>> m_screenDecals = new();
     private readonly Dictionary<int, (WorldScreenSource.Text Text, PackedFontAtlasCatalog Catalog, SdfScreenDecalFrame Frame)> m_screenDecalCache = new();
 
-    /// <summary>Initializes a new instance of the <see cref="WorldFrameSource"/> class, composing the world scene
+    /// <summary>Initializes a new instance of the <see cref="WorldFramePresenter"/> class, composing the world scene
     /// emitter over the snapshot-fed client view (the primer snapshot must already be delivered, so the capacity probe
     /// and the first program declare the boot seats and census active).</summary>
     /// <param name="frameRate">The frame-rate witness sampled once per captured frame (the <c>world.fps</c> verb reads it).</param>
@@ -178,7 +178,7 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
     /// delegate (never a direct <c>WorldIconTable</c> reference) because <c>Puck.World.Client</c> cannot reference
     /// <c>Puck.World</c>, which owns the table.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldFrameSource(FrameRateMonitor frameRate, WorldClient client, IWorldSimulationClock simulation, WorldRenderSettings settings, IWorldScreenPresenter binder, WorldRenderEnvelope envelope, WorldSeatBindings seatBindings, WorldStampPool animator, IWorldAudioFrameFeed audio, WorldPerceptionAnchor anchor, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldContinuum continuum, WorldTextCatalog text, IWorldAdjacencySource adjacencies, MarkerStore markers, Func<string, OverlayResolvedGlyph> resolveIcon) {
+    public WorldFramePresenter(FrameRateMonitor frameRate, WorldClient client, IWorldSimulationClock simulation, WorldRenderSettings settings, IWorldScreenPresenter binder, WorldRenderEnvelope envelope, WorldSeatBindings seatBindings, WorldStampPool animator, IWorldAudioFrameFeed audio, WorldPerceptionAnchor anchor, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldContinuum continuum, WorldTextCatalog text, IWorldAdjacencySource adjacencies, MarkerStore markers, Func<string, OverlayResolvedGlyph> resolveIcon) {
         ArgumentNullException.ThrowIfNull(argument: frameRate);
         ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: anchor);
@@ -1350,7 +1350,7 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         // refuses 0 viewports outright ("composites 1 to N viewports"), so an empty m_views here would fail-fast
         // the whole process on the very next present rather than degrade gracefully — the last local occupant
         // departing via a portal/world.transfer is exactly this shape once the roster drops the departed seat
-        // (see WorldFrameSource's Dress remarks above). Present ONE fixed spectator view of the world instead,
+        // (see WorldFramePresenter's Dress remarks above). Present ONE fixed spectator view of the world instead,
         // deterministically derived from the world's OWN authored seat-spawn positions — no wall clock, no RNG;
         // float is fine, this is presentation only, nothing here feeds the sim. Narrated once on stderr when it
         // engages, and cleared the instant a rejoined seat fills m_views again so the ordinary composer path

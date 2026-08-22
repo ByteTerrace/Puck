@@ -9,6 +9,7 @@ public sealed class ProbeKernelCompilationTests {
     [Theory]
     [InlineData("ir-blob")]
     [InlineData("faerie")]
+    [InlineData("ir-marker")]
     [SupportedOSPlatform("windows10.0.10240")]
     public void Shipped_kernel_compiles_both_entry_points(string name) {
         var source = File.ReadAllText(path: KernelPath(name: name));

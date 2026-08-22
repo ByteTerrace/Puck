@@ -368,25 +368,35 @@ internal sealed class Win32FaceAuthenticationSharedGraph : Win32FaceAuthenticati
         var triggered = false;
 
         foreach (var input in request.Inputs) {
-            if (input.Sensor is not (CameraSensor.Color or CameraSensor.Infrared)) {
-                run = null;
-                fault = $"this graph carries no {input.Sensor} stream";
+            switch (input) {
+                case ProbeKernelInput.Sensor sensorInput:
+                    if (sensorInput.Kind is not (CameraSensor.Color or CameraSensor.Infrared)) {
+                        run = null;
+                        fault = $"this graph carries no {sensorInput.Kind} stream";
 
-                return false;
+                        return false;
+                    }
+
+                    triggered |= (sensorInput.Kind == request.Trigger);
+
+                    break;
+                case ProbeKernelInput.StrobePair strobeInput:
+                    if (CameraSensor.Infrared != strobeInput.Kind) {
+                        run = null;
+                        fault = "only the infrared stream strobes; a strobe-pair socket must name it";
+
+                        return false;
+                    }
+
+                    triggered |= (strobeInput.Kind == request.Trigger);
+
+                    break;
             }
-            if (input.Previous && (CameraSensor.Infrared != input.Sensor)) {
-                run = null;
-                fault = "only the infrared stream keeps a previous (unlit) frame";
-
-                return false;
-            }
-
-            triggered |= (input.Sensor == request.Trigger);
         }
 
         if (!triggered) {
             run = null;
-            fault = $"the trigger sensor {request.Trigger} is not among the kernel's inputs";
+            fault = $"the trigger sensor {request.Trigger} is not among the kernel's sensor/strobe-pair inputs";
 
             return false;
         }
@@ -396,9 +406,9 @@ internal sealed class Win32FaceAuthenticationSharedGraph : Win32FaceAuthenticati
 
         return true;
     }
-    nint IProbeInputResolver.Resolve(ProbeKernelInput input) => (input.Sensor switch {
+    nint IProbeInputResolver.Resolve(CameraSensor sensor, bool previous) => (sensor switch {
         CameraSensor.Color => (m_colorConverter?.OutputView ?? 0),
-        CameraSensor.Infrared => (input.Previous ? (m_infraredConverter?.PreviousView ?? 0) : (m_infraredConverter?.OutputView ?? 0)),
+        CameraSensor.Infrared => (previous ? (m_infraredConverter?.PreviousView ?? 0) : (m_infraredConverter?.OutputView ?? 0)),
         _ => 0,
     });
     (int Width, int Height) IProbeInputResolver.Extent(CameraSensor sensor) => ((CameraSensor.Infrared == sensor)

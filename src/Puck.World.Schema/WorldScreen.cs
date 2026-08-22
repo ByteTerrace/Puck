@@ -22,7 +22,11 @@ namespace Puck.World;
 [JsonDerivedType(typeof(WorldScreenSource.Probe), typeDiscriminator: "probe")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record WorldScreenSource {
-    private WorldScreenSource() {
+    // private protected (not private): WorldFrameSource — the intermediate arm below — derives from this type from
+    // outside its body, so its own constructor needs a base() it can reach; private protected still confines every
+    // arm to this assembly, matching the closed-hierarchy intent a bare private constructor states for the arms
+    // nested directly here.
+    private protected WorldScreenSource() {
     }
 
     /// <summary>No provider is bound — the engine lights the slot with its procedural no-signal fallback (an animated
@@ -52,9 +56,11 @@ public abstract record WorldScreenSource {
         string? Options,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldMachineCable? Cable = null
     ) : WorldScreenSource;
-    /// <summary>The platform's default live camera feed, with an explicit preferred capture profile. The platform may
-    /// negotiate a nearby extent; every screen sampling the same physical default device shares one session.</summary>
-    /// <param name="Profile">The preferred capture extent and maximum upload cadence.</param>
+    /// <summary>The platform's default live camera feed. The platform may negotiate a nearby extent; every screen
+    /// and probe socket naming the same sensor shares one feed, opened at the richest profile any screen row
+    /// requests.</summary>
+    /// <param name="Profile">The preferred capture extent and maximum upload cadence, or <see langword="null"/> for
+    /// the platform default — a probe socket never needs one. Omitted from the wire when null.</param>
     /// <param name="Controls">The authored device-control state (<see cref="WorldCameraControls"/>), or
     /// <see langword="null"/> to leave every control at its driver default. One physical device carries one control
     /// state across color and infrared, so the FIRST declared camera screen authoring this wins regardless of sensor
@@ -67,24 +73,25 @@ public abstract record WorldScreenSource {
     /// after both native streams prove live. A legacy provider available only to the Windows biometric broker is not a
     /// public dual-camera graph. An absent infrared source faults the bind loudly (the slot shows the no-signal card).
     /// </param>
-    public sealed record Camera(WorldFeedProfile Profile,
+    public sealed record Camera(
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldFeedProfile? Profile = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCameraControls? Controls = null,
-        WorldCameraSensor Sensor = WorldCameraSensor.Color) : WorldScreenSource;
+        WorldCameraSensor Sensor = WorldCameraSensor.Color) : WorldFrameSource;
     /// <summary>A named view from the presentation view stack, such as a monitor showing another camera's output.</summary>
     /// <param name="CameraName">The registered view name this slot samples.</param>
-    public sealed record View(string CameraName) : WorldScreenSource;
+    public sealed record View(string CameraName) : WorldFrameSource;
     /// <summary>A declared probe's texture output — the frame a kind that declares an <c>output</c> writes each cycle
     /// (a relit camera frame, a mask), published like a camera feed. The probe must be a <c>probes</c> row of this
     /// document; whether its kind writes a texture is checked at boot against the kind's manifest.</summary>
     /// <param name="Id">The <c>probes[].id</c> whose output this slot shows.</param>
-    public sealed record Probe(string Id) : WorldScreenSource;
+    public sealed record Probe(string Id) : WorldFrameSource;
     /// <summary>A live compositor capture feed — a desktop window keyed by title, or a whole monitor keyed by index. The
     /// selector is the altitude of the primitive: <paramref name="MonitorIndex"/> null is window mode; non-null is
     /// whole-monitor mode (and <paramref name="WindowTitle"/> is unused).</summary>
     /// <param name="WindowTitle">The captured window's title (window mode; ignored when <paramref name="MonitorIndex"/> is set).</param>
     /// <param name="Profile">This capture consumer's output extent and maximum refresh cadence.</param>
     /// <param name="MonitorIndex">The 0-based monitor to capture whole (0 = primary), or <see langword="null"/> for window mode.</param>
-    public sealed record Capture(string WindowTitle, WorldFeedProfile Profile, int? MonitorIndex = null) : WorldScreenSource;
+    public sealed record Capture(string WindowTitle, WorldFeedProfile Profile, int? MonitorIndex = null) : WorldFrameSource;
     /// <summary>A screen showing the developer console as an object in the world — the diegetic half of the control plane
     /// the unification contract names ("the on-screen panel and process stdin"). The frame is CPU-composed into a
     /// CRT-styled framebuffer and pushed through <c>IGpuSurfaceUpload</c>, exactly as the ported console feed does;
@@ -187,6 +194,23 @@ public abstract record WorldScreenSource {
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Foreground = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Background = null
     ) : WorldScreenSource;
+}
+/// <summary>The <see cref="WorldScreenSource"/> arms that produce a sampled frame — <see cref="WorldScreenSource.Camera"/>,
+/// <see cref="WorldScreenSource.View"/>, <see cref="WorldScreenSource.Probe"/>, and <see cref="WorldScreenSource.Capture"/>
+/// — carrying its own <see cref="JsonPolymorphicAttribute"/> over the SAME four discriminators
+/// (<c>camera</c>/<c>view</c>/<c>probe</c>/<c>capture</c>) their parent union uses, so a member declared as this
+/// narrower type round-trips the identical JSON a full <see cref="WorldScreenSource"/> screen row does. A
+/// <see cref="WorldProbe"/> socket is the driving consumer: it plugs one of these into each named input rather than
+/// the wider union, which would legally admit a decal/machine/console/qr/text/none source no probe kernel can
+/// sample.</summary>
+[JsonDerivedType(typeof(WorldScreenSource.Camera), typeDiscriminator: "camera")]
+[JsonDerivedType(typeof(WorldScreenSource.View), typeDiscriminator: "view")]
+[JsonDerivedType(typeof(WorldScreenSource.Probe), typeDiscriminator: "probe")]
+[JsonDerivedType(typeof(WorldScreenSource.Capture), typeDiscriminator: "capture")]
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
+public abstract record WorldFrameSource : WorldScreenSource {
+    private protected WorldFrameSource() {
+    }
 }
 /// <summary>An ordered set of sources one screen may show, plus the entry its selector starts on — the cycle primitive. A
 /// selection is a pointer into this list; changing it never changes how many screen slots exist, so a magazine costs no

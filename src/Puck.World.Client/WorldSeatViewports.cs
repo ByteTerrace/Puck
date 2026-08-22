@@ -18,7 +18,7 @@ public readonly record struct WorldSeatView(
     uint Height
 );
 /// <summary>
-/// Every local seat's resolved viewport + camera, published by <c>WorldFrameSource</c> once per dressed frame
+/// Every local seat's resolved viewport + camera, published by <c>WorldFramePresenter</c> once per dressed frame
 /// — the read seam a pointer consumer needs to turn a cursor pixel into a world ray without re-deriving the layout
 /// or the camera (which would fork the frame source's own resolution). Session-only presentation state.
 /// </summary>

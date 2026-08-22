@@ -23,7 +23,7 @@ public enum AmbientOcclusionMode {
 }
 /// <summary>
 /// The world's live render settings — the engine-wide levers (shadows, ambient occlusion, render scale) mutated by
-/// console verbs in real time and read by <c>WorldFrameSource</c> every captured frame. Session state, not
+/// console verbs in real time and read by <c>WorldFramePresenter</c> every captured frame. Session state, not
 /// identity: per-player preferences belong on the profile.
 /// </summary>
 public sealed class WorldRenderSettings {
@@ -73,7 +73,7 @@ public sealed class WorldRenderSettings {
     /// <see langword="false"/> (via <c>world.far-field bound off</c>) to march far-field sky rays to
     /// MaxDistance exactly — a pure performance isolator (output-identical when on), so it is session state, never
     /// durable config. Rides the per-frame <see cref="Puck.SdfVm.SdfFrame.DisableFarBound"/> lane
-    /// <c>WorldFrameSource</c> inverts each frame, so no rebuild.</summary>
+    /// <c>WorldFramePresenter</c> inverts each frame, so no rebuild.</summary>
     public bool FarBound { get => m_farBound; set { m_farBound = value; m_revision++; } }
     /// <summary>The engine-wide internal render-scale fraction, applied to every player view's
     /// <see cref="Puck.SdfVm.SdfViewSnapshot.RenderScale"/> each frame. Named tiers initialize it, while
@@ -88,7 +88,7 @@ public sealed class WorldRenderSettings {
     /// <see langword="true"/>). Set <see langword="false"/> (via <c>world.shadow.accumulate off</c>) to shade each
     /// frame's raw two-sample stochastic estimate directly — deliberately noisy, an A/B isolator rather than a quality
     /// tier. Session state, never durable config. Rides the per-frame
-    /// <see cref="Puck.SdfVm.SdfFrame.DisableShadowAccumulation"/> lane <c>WorldFrameSource</c> inverts
+    /// <see cref="Puck.SdfVm.SdfFrame.DisableShadowAccumulation"/> lane <c>WorldFramePresenter</c> inverts
     /// each frame, so no rebuild.</summary>
     public bool ShadowAccumulation { get => m_shadowAccumulation; set { m_shadowAccumulation = value; m_revision++; } }
     /// <summary>The soft-shadow crowd radius (world units): an avatar within this distance of any joined local seat casts
@@ -101,7 +101,7 @@ public sealed class WorldRenderSettings {
     /// <summary>Whether the soft-shadow light-side early exit is active (default <see langword="true"/>). Set
     /// <see langword="false"/> (via <c>world.far-field shadow off</c>) to run the full shadow step budget/reach — a
     /// march-path change, session state, not durable config. Rides the per-frame
-    /// <see cref="Puck.SdfVm.SdfFrame.DisableShadowEscapeExit"/> lane <c>WorldFrameSource</c> inverts each frame.</summary>
+    /// <see cref="Puck.SdfVm.SdfFrame.DisableShadowEscapeExit"/> lane <c>WorldFramePresenter</c> inverts each frame.</summary>
     public bool ShadowFarExit { get => m_shadowFarExit; set { m_shadowFarExit = value; m_revision++; } }
     /// <summary>The live soft-shadow march policy. Auto selects the bounded-cost path at 16 or more simulated stand-ins;
     /// exact and fast are explicit A/B overrides.</summary>

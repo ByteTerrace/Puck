@@ -71,7 +71,7 @@ internal sealed partial class WorldProbes {
             if ((nowTimestamp - reading.CaptureTimestamp) > control.MaxAgeTicks) {
                 continue;
             }
-            if (probe.Sensor is not { } sensor) {
+            if (probe.TriggerSensor is not { } sensor) {
                 continue;
             }
             if (

@@ -24,9 +24,15 @@ plus the pieces that need no OS-specific code at all.
   neutral fixed-point currency between an probe and every binding that
   consumes it; `ProbeReadingRing`, its triple-buffered seqlock latest-wins
   publication; `ICameraKernelHost`/`IProbeKernelRun`, the seam a kernel-class
-  probe attaches to a camera graph through (`ProbeKernelRequest` names the
-  inputs, the trigger sensor, and an optional output ring); `ProbeTrackPlayer`,
-  the hardware-free recorded-reading substitute for a live probe input.
+  probe attaches to a camera graph through. `ProbeKernelRequest.Inputs` is a
+  socket list of `ProbeKernelInput` arms — `Sensor` (a camera sensor's
+  converted frame), `StrobePair` (that sensor's lit frame and the unlit frame
+  kept beside it), `Ring` (an external `ISharedSlotRing` the host opens
+  read-only, e.g. another probe's output or an offscreen view export), or
+  `Unbound` (an optional socket left empty) — flattened to consecutive kernel
+  registers (`ProbeKernelInput.RegisterCount`; a `StrobePair` spans two,
+  every other arm one). `ProbeTrackPlayer` is the hardware-free
+  recorded-reading substitute for a live probe input.
 
 ## What does not live here
 

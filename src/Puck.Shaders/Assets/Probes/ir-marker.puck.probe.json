@@ -1,0 +1,26 @@
+{
+  "$schema": "puck.probe.v1",
+  "name": "ir-marker",
+  "class": "kernel",
+  "description": "Oriented rectangle over the strobe response's bright mass: lit-minus-unlit infrared above threshold gives zeroth/first/second moments, whose principal axes and eigenvalue half extents produce four corners assuming a uniform rectangular reflector — retroreflective tape on a real wall becomes a tracked painting frame another probe's sockets can bind.",
+  "inputs": [
+    { "name": "strobe", "class": "strobePair" }
+  ],
+  "trigger": "strobe",
+  "kernel": { "source": "ir-marker.hlsl", "accumulate": "accumulate", "finalize": "finalize" },
+  "channels": [
+    { "name": "x0", "min": -1, "max": 1, "neutral": 0, "description": "Corner 0 (top-left in image terms), horizontal." },
+    { "name": "y0", "min": -1, "max": 1, "neutral": 0, "description": "Corner 0 (top-left in image terms), vertical." },
+    { "name": "x1", "min": -1, "max": 1, "neutral": 0, "description": "Corner 1 (top-right in image terms), horizontal." },
+    { "name": "y1", "min": -1, "max": 1, "neutral": 0, "description": "Corner 1 (top-right in image terms), vertical." },
+    { "name": "x2", "min": -1, "max": 1, "neutral": 0, "description": "Corner 2 (bottom-right in image terms), horizontal." },
+    { "name": "y2", "min": -1, "max": 1, "neutral": 0, "description": "Corner 2 (bottom-right in image terms), vertical." },
+    { "name": "x3", "min": -1, "max": 1, "neutral": 0, "description": "Corner 3 (bottom-left in image terms), horizontal." },
+    { "name": "y3", "min": -1, "max": 1, "neutral": 0, "description": "Corner 3 (bottom-left in image terms), vertical." }
+  ],
+  "config": {
+    "threshold": { "type": "float", "default": 0.5, "min": 0, "max": 1, "description": "The strobe-response floor a pixel must clear to weigh into the mass." },
+    "gain": { "type": "float", "default": 3.0, "min": 0.1, "max": 32, "description": "The multiplier that maps raw lit-minus-unlit luminance to a 0..1 response." },
+    "minCoverage": { "type": "float", "default": 0.005, "min": 0, "max": 1, "description": "The coverage fraction confidence saturates at." }
+  }
+}

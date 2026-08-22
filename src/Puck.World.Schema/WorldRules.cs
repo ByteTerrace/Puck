@@ -126,8 +126,9 @@ public sealed record WorldRule(
 );
 /// <summary>The reserved <see cref="ActionPredicate.CompareState"/> channels a world rule may compare against instead
 /// of a declared <see cref="WorldStateRow"/> — time, population, region occupancy, a screen-machine's live memory,
-/// row aggregates/extrema, spatial facts between named bodies, and a body's own reconnect-park state, all folded into
-/// the same string channel <c>State</c> already carries, never a new fact enum and never a scheduler subsystem.
+/// row aggregates/extrema, spatial facts between named bodies, a body's own reconnect-park state, and a local seat's
+/// own channel value, all folded into the same string channel <c>State</c> already carries, never a new fact enum and
+/// never a scheduler subsystem.
 /// </summary>
 /// <remarks>Every one of them carries the <see cref="WorldStateRow.ReservedNamePrefix"/> that no authored row name may
 /// spell, so a reserved channel can never be shadowed by (or mistaken for) a real row — the validator refuses such a
@@ -149,6 +150,18 @@ public static class WorldRuleFacts {
     /// <summary>The prefix; <c>$argmin:&lt;row&gt;</c> is <see cref="ArgMaxPrefix"/>'s dual — the body naming the
     /// smallest cell.</summary>
     public const string ArgMinPrefix = "$argmin:";
+    /// <summary>The prefix; <c>$channel:&lt;seat&gt;:&lt;channelName&gt;</c> reads the 1-based local seat's current value of
+    /// a declared <c>channels[]</c> row as its body integrates it that tick — the drained
+    /// <see cref="Puck.Commands.CommandSnapshot"/> read folded with co-driving contributions and the admitted held
+    /// overlay (the path a held sample such as a probe axis reaches a channel by), the same value <c>player.channels</c>
+    /// reports as <c>composed</c>. The value rides the channel's own native <see cref="Puck.Maths.FixedQ4816"/>
+    /// domain unchanged — a bipolar/unipolar channel's <c>1</c> is already "fully pressed/1.0", so an authored
+    /// <c>compareState($channel:1:portal, greaterOrEqual, 1)</c> needs no rescale, unlike <see cref="ParkedPrefix"/>/
+    /// <see cref="MachinePrefix"/>'s raw integer counts. Deterministic by construction: every contributor is the
+    /// tick's own replay input. <c>seat</c> is bounds-checked at compile time against <c>population.localSeats</c>;
+    /// <c>channelName</c> against the declared <c>channels[]</c> rows. An unseated/absent seat reads <c>0</c> — the
+    /// convention <see cref="ParkedPrefix"/>/<see cref="MachinePrefix"/>/<see cref="RegionPrefix"/> already set.</summary>
+    public const string ChannelPrefix = "$channel:";
     /// <summary>The prefix; <c>$distance:&lt;bodyRefA&gt;:&lt;bodyRefB&gt;</c> reads the live straight-line distance
     /// between two named bodies — each a <c>body:&lt;n&gt;</c> literal 0-based index (the floor) or an
     /// <c>argmax:&lt;row&gt;</c>/<c>argmin:&lt;row&gt;</c> body reference (the entity-addressable widening — see
@@ -314,6 +327,9 @@ public enum WorldRuleFactKind : byte {
     /// <summary>Simulation ticks since one named adjacency row last received a delivered neighbour refresh
     /// (<see cref="WorldRuleFacts.LinkPrefix"/>).</summary>
     LinkStaleness,
+
+    /// <summary>One local seat's own folded channel value (<see cref="WorldRuleFacts.ChannelPrefix"/>).</summary>
+    Channel,
 }
 /// <summary>One resolved operand of a world-rule comparison — the (<see cref="Kind"/>, <see cref="Row"/>,
 /// <see cref="Key"/>) address plus the <see cref="Screen"/>/<see cref="Address"/> machine coordinates, the live
@@ -339,6 +355,10 @@ public enum WorldRuleFactKind : byte {
 /// <param name="BodyB">The second named body for <see cref="WorldRuleFactKind.BodyDistance"/>/
 /// <see cref="WorldRuleFactKind.LineOfSight"/>; <see langword="null"/> otherwise (including
 /// <see cref="WorldRuleFactKind.Parked"/>, which is single-body).</param>
+/// <param name="Seat">The 0-based local-seat body index for <see cref="WorldRuleFactKind.Channel"/>; unused
+/// otherwise.</param>
+/// <param name="ChannelOrdinal">The declared channel's document-order ordinal (the same ordinal
+/// <c>WorldChannelTable.Compile</c> assigns) for <see cref="WorldRuleFactKind.Channel"/>; unused otherwise.</param>
 public readonly record struct CompiledWorldOperand(
     WorldRuleFactKind Kind,
     string? Row,
@@ -347,7 +367,9 @@ public readonly record struct CompiledWorldOperand(
     int Address = 0,
     WorldStateReduceOp Reduce = WorldStateReduceOp.None,
     CompiledBodyRef? BodyA = null,
-    CompiledBodyRef? BodyB = null
+    CompiledBodyRef? BodyB = null,
+    int Seat = 0,
+    int ChannelOrdinal = 0
 );
 /// <summary>One compiled, flattened conjunct of a world rule's gate — <see cref="ActionPredicate.All"/> flattens away
 /// at compile time exactly as a per-body gate does, so evaluation walks one flat array with no recursion.</summary>
@@ -576,6 +598,12 @@ public enum WorldRuleRefusal : byte {
     [Refusal(door: "world.rule.compile", condition: "a '$link:' channel does not name exactly one declared 'adjacencies' row", kind: RefusalKind.Verdict)]
     LinkChannelMalformed,
 
+    /// <summary>A <c>$channel:</c> channel does not spell <c>$channel:&lt;seat&gt;:&lt;channelName&gt;</c> with
+    /// <c>seat</c> in <c>1..population.localSeats</c> and <c>channelName</c> naming a declared <c>channels[]</c>
+    /// row.</summary>
+    [Refusal(door: "world.rule.compile", condition: "a '$channel:' channel does not spell '$channel:<seat>:<channelName>' with seat in 1..population.localSeats and channelName naming a declared 'channels[]' row", kind: RefusalKind.Verdict)]
+    ChannelMalformed,
+
     /// <summary>A <c>body:&lt;n&gt;</c> reference names an index outside the document's declared entity-table
     /// capacity.</summary>
     [Refusal(door: "world.rule.compile", condition: "a 'body:<n>' reference names an index outside the document's declared entity-table capacity", kind: RefusalKind.Verdict)]
@@ -633,7 +661,7 @@ public sealed class WorldRuleException : ArgumentException {
 /// validation already proved success) inside the server's install path to obtain the live array the tick
 /// evaluates.</summary>
 public static class WorldRuleCompiler {
-    // SetState/AddState/CountdownState/Generate lift, and — riding the SAME "admit an existing WorldMutation kind" seam Generate
+    // SetState/AddState/CountdownState/Generate lift, and — riding the same "admit an existing WorldMutation kind" seam Generate
     // proved — so do upsertHudPanel/removeHudPanel/upsertPlacement/removePlacement: the rest of ActionEffect writes a
     // body's own kinematic or register state, which a world rule has none of. save admits on its OWN terms — not an
     // existing mutation kind at all, but engine I/O with no document effect (see ActionEffect.Save's remarks) —
@@ -740,7 +768,7 @@ public static class WorldRuleCompiler {
             + $"(≈{upperSeconds.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}s) — author one of those as 'valueSeconds', or (when no terminating decimal spells the ")
             + "intended duration exactly) author the raw whole engine-tick count directly via 'value' on the row and its companion decrement rule.");
     }
-    // Flattens the SAME ActionPredicate ADT a per-body gate walks: All recurses, CompareState resolves against world
+    // Flattens the same ActionPredicate ADT a per-body gate walks: All recurses, CompareState resolves against world
     // scope, every other case is irreducibly per-body and is refused by name (never reinterpreted).
     private static void FlattenPredicate(ActionPredicate? predicate, List<CompiledWorldPredicate> gate, string ruleName, WorldDefinition definition) {
         switch (predicate) {
@@ -802,6 +830,23 @@ public static class WorldRuleCompiler {
 
         return false;
     }
+    // Resolves a $channel: name to its declared document-order ordinal — the same ordinal WorldChannelTable.Compile
+    // assigns each channels[] row, since no compiled table exists yet at rule-compile time — or -1 when the document
+    // declares no such channel.
+    private static int ResolveChannelOrdinal(WorldDefinition definition, string name) {
+        var channels = definition.Channels;
+
+        for (var ordinal = 0; (ordinal < channels.Count); ordinal++) {
+            if (
+                (channels[ordinal] is { } channel) &&
+                string.Equals(a: channel.Name, b: name, comparisonType: StringComparison.Ordinal)
+            ) {
+                return ordinal;
+            }
+        }
+
+        return -1;
+    }
     private static void RefuseKeyOnReservedChannel(string? key, string ruleName, string name, string keyFieldLabel) {
         if (key is not null) {
             throw new WorldRuleException(
@@ -813,7 +858,7 @@ public static class WorldRuleCompiler {
     }
     // Parses ONE body-reference token pair (tokens[start], tokens[start+1]) — "body:<n>" (a literal 0-based index,
     // bounded against the document's OWN declared entity-table capacity) or "argmax:<row>"/"argmin:<row>" (a
-    // reduction-derived body key, resolved through the SAME ResolveNumericRow(requireKeyed: true) door the standalone
+    // reduction-derived body key, resolved through the same ResolveNumericRow(requireKeyed: true) door the standalone
     // $argmax:/$argmin: channel uses) — the shared grammar $distance:/$los: spend both their halves on.
     private static CompiledBodyRef ResolveBodyRefToken(string[] tokens, int start, string ruleName, WorldDefinition definition, string channel) {
         var kind = tokens[start];
@@ -1075,7 +1120,7 @@ public static class WorldRuleCompiler {
         return row;
     }
     // Resolves ANY read operand — a compareState's primary (State, Key) pair, its comparand (ComparandState,
-    // ComparandKey) pair, or a setState/addState's live copy source (FromState, FromKey) — through the SAME
+    // ComparandKey) pair, or a setState/addState's live copy source (FromState, FromKey) — through the same
     // reserved-channel/state-row walk, so no two of them can drift into different readings of the same name.
     // verb/fieldLabel/keyFieldLabel name the AUTHORED spelling in refusal text, since every caller is refused by the
     // same shapes under different-sounding names ("state"/"key" vs "comparandState"/"comparandKey" vs "fromState"/
@@ -1424,7 +1469,7 @@ public static class WorldRuleCompiler {
             );
         }
 
-        // $parked: — the SAME single-body-reference grammar $distance:/$los: spend one half of theirs on, so it
+        // $parked: — the same single-body-reference grammar $distance:/$los: spend one half of theirs on, so it
         // composes with argmax/argmin directly ($parked:argmax:threat).
         if (name.StartsWith(
             comparisonType: StringComparison.Ordinal,
@@ -1464,6 +1509,73 @@ public static class WorldRuleCompiler {
                     BodyA: parkedBody
                 ),
                 ValueKind: CellKind.Int,
+                Describe: describe
+            );
+        }
+
+        // $channel: — the 1-based local seat's own folded channel value, resolved to (seat, ordinal) once here so
+        // evaluation is a plain array read (Server.WorldServer.ReadChannelValue). The seat/channel-name pair is
+        // proven against population.localSeats and the declared channels[] rows, exactly as $machine:'s
+        // screen/address pair is proven against the declared screens.
+        if (name.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: WorldRuleFacts.ChannelPrefix
+        )) {
+            RefuseKeyOnReservedChannel(
+                key: key,
+                keyFieldLabel: keyFieldLabel,
+                name: name,
+                ruleName: ruleName
+            );
+
+            var suffix = name[WorldRuleFacts.ChannelPrefix.Length..];
+            var separator = suffix.IndexOf(
+                comparisonType: StringComparison.Ordinal,
+                value: ':'
+            );
+
+            if (
+                (separator < 0) ||
+                !int.TryParse(
+                s: suffix[..separator],
+                style: System.Globalization.NumberStyles.Integer,
+                provider: System.Globalization.CultureInfo.InvariantCulture,
+                result: out var seat
+            ) ||
+                (seat < 1) ||
+                (seat > definition.Population.LocalSeats) ||
+                string.IsNullOrEmpty(value: suffix[(separator + 1)..])
+            ) {
+                throw new WorldRuleException(
+                    refusal: WorldRuleRefusal.ChannelMalformed,
+                    ruleName: ruleName,
+                    detail: $"'{name}' does not spell '{WorldRuleFacts.ChannelPrefix}<seat>:<channelName>' with seat in 1..{definition.Population.LocalSeats}"
+                );
+            }
+
+            var channelName = suffix[(separator + 1)..];
+            var channelOrdinal = ResolveChannelOrdinal(
+                definition: definition,
+                name: channelName
+            );
+
+            if (channelOrdinal < 0) {
+                throw new WorldRuleException(
+                    refusal: WorldRuleRefusal.ChannelMalformed,
+                    ruleName: ruleName,
+                    detail: $"'{name}' names channel '{channelName}', which the document does not declare in 'channels[]'"
+                );
+            }
+
+            return new ResolvedOperand(
+                Operand: new CompiledWorldOperand(
+                    Kind: WorldRuleFactKind.Channel,
+                    Row: null,
+                    Key: null,
+                    Seat: (seat - 1),
+                    ChannelOrdinal: channelOrdinal
+                ),
+                ValueKind: CellKind.Fixed,
                 Describe: describe
             );
         }
@@ -1516,7 +1628,7 @@ public static class WorldRuleCompiler {
             throw new WorldRuleException(
                 refusal: WorldRuleRefusal.StateRowUnknown,
                 ruleName: ruleName,
-                detail: $"'{name}' carries the reserved '{WorldStateRow.ReservedNamePrefix}' prefix but names none of the reserved channels ('{WorldRuleFacts.Tick}', '{WorldRuleFacts.Population}', '{WorldRuleFacts.RegionPrefix}<placementId>', '{WorldRuleFacts.MachinePrefix}<screen>:<address>', '{WorldRuleFacts.ReducePrefix}<op>:<row>', '{WorldRuleFacts.ArgMaxPrefix}<row>', '{WorldRuleFacts.ArgMinPrefix}<row>', '{WorldRuleFacts.DistancePrefix}<a>:<b>', '{WorldRuleFacts.LineOfSightPrefix}<a>:<b>', '{WorldRuleFacts.ParkedPrefix}<bodyRef>', '{WorldRuleFacts.LinkPrefix}<adjacencyName>')"
+                detail: $"'{name}' carries the reserved '{WorldStateRow.ReservedNamePrefix}' prefix but names none of the reserved channels ('{WorldRuleFacts.Tick}', '{WorldRuleFacts.Population}', '{WorldRuleFacts.RegionPrefix}<placementId>', '{WorldRuleFacts.MachinePrefix}<screen>:<address>', '{WorldRuleFacts.ReducePrefix}<op>:<row>', '{WorldRuleFacts.ArgMaxPrefix}<row>', '{WorldRuleFacts.ArgMinPrefix}<row>', '{WorldRuleFacts.DistancePrefix}<a>:<b>', '{WorldRuleFacts.LineOfSightPrefix}<a>:<b>', '{WorldRuleFacts.ParkedPrefix}<bodyRef>', '{WorldRuleFacts.LinkPrefix}<adjacencyName>', '{WorldRuleFacts.ChannelPrefix}<seat>:<channelName>')"
             );
         }
 
@@ -1538,7 +1650,7 @@ public static class WorldRuleCompiler {
             ?? throw new WorldRuleException(
             refusal: WorldRuleRefusal.StateRowUnknown,
             ruleName: ruleName,
-            detail: $"'{name}' names no state row, and is not a reserved channel ('{WorldRuleFacts.Tick}', '{WorldRuleFacts.Population}', '{WorldRuleFacts.RegionPrefix}<placementId>', '{WorldRuleFacts.MachinePrefix}<screen>:<address>', '{WorldRuleFacts.ReducePrefix}<op>:<row>', '{WorldRuleFacts.ArgMaxPrefix}<row>', '{WorldRuleFacts.ArgMinPrefix}<row>', '{WorldRuleFacts.DistancePrefix}<a>:<b>', '{WorldRuleFacts.LineOfSightPrefix}<a>:<b>', '{WorldRuleFacts.ParkedPrefix}<bodyRef>', '{WorldRuleFacts.LinkPrefix}<adjacencyName>')"
+            detail: $"'{name}' names no state row, and is not a reserved channel ('{WorldRuleFacts.Tick}', '{WorldRuleFacts.Population}', '{WorldRuleFacts.RegionPrefix}<placementId>', '{WorldRuleFacts.MachinePrefix}<screen>:<address>', '{WorldRuleFacts.ReducePrefix}<op>:<row>', '{WorldRuleFacts.ArgMaxPrefix}<row>', '{WorldRuleFacts.ArgMinPrefix}<row>', '{WorldRuleFacts.DistancePrefix}<a>:<b>', '{WorldRuleFacts.LineOfSightPrefix}<a>:<b>', '{WorldRuleFacts.ParkedPrefix}<bodyRef>', '{WorldRuleFacts.LinkPrefix}<adjacencyName>', '{WorldRuleFacts.ChannelPrefix}<seat>:<channelName>')"
         ));
 
         if (row.Kind == CellKind.Text) {
@@ -1761,7 +1873,7 @@ public static class WorldRuleCompiler {
             Placement: effect.Placement
         );
     }
-    // value XOR valueSeconds XOR (fromState, fromKey): the SAME duality ResolvePredicate enforces for compareState's
+    // value XOR valueSeconds XOR (fromState, fromKey): the same duality ResolvePredicate enforces for compareState's
     // comparand, applied to the write side and widened by one spelling. 'fromKey' is an appendage of 'fromState' on
     // the same terms 'comparandKey' is.
     private static CompiledWorldEffect ResolveWrite(string rowName, string? key, ActionTarget target, WorldDocumentWriteKind write, float? value, string? fromState, string? fromKey, decimal? valueSeconds, string ruleName, WorldDefinition definition, string verb) {
@@ -2009,7 +2121,7 @@ public static class WorldRuleCompiler {
                     detail: "a rule declares a name"
                 );
             }
-            // The SAME reserved-prefix rule a state ROW name carries (see WorldStateRow.ReservedNamePrefix): '$' marks
+            // The same reserved-prefix rule a state ROW name carries (see WorldStateRow.ReservedNamePrefix): '$' marks
             // what the engine mints, and nothing mints a rule — so a '$'-prefixed name is refused rather than
             // accepted, evaluated, and persisted as an authored name that reads like engine bookkeeping.
             if (name.StartsWith(
@@ -2075,7 +2187,7 @@ public static class WorldRuleCompiler {
         for (var index = 0; (index < interactions.Count); index++) {
             var interaction = interactions[index];
             // WorldCellName already proved the shape at the JSON converter or console verb — a default-valued struct
-            // from a programmatically built definition is the one way an empty name still reaches here, the SAME
+            // from a programmatically built definition is the one way an empty name still reaches here, the same
             // caveat CompileAll's own name walk carries.
             var name = (interaction?.Name.Value ?? string.Empty);
 
@@ -2087,7 +2199,7 @@ public static class WorldRuleCompiler {
                     subject: "interaction"
                 );
             }
-            // The SAME reserved-prefix rule a rule name (and a state ROW name) carries: '$' marks what the engine
+            // The same reserved-prefix rule a rule name (and a state ROW name) carries: '$' marks what the engine
             // mints, and nothing mints an interaction.
             if (name.StartsWith(
                 comparisonType: StringComparison.Ordinal,
@@ -2137,7 +2249,7 @@ public static class WorldRuleCompiler {
                     }
 
                     // "The carrier most strongly tagged Left" within Range of "the carrier most strongly tagged
-                    // Right" — the SAME $argmax:/$distance: spelling a hand-authored rule already uses
+                    // Right" — the same $argmax:/$distance: spelling a hand-authored rule already uses
                     // ($distance:argmax:<row>:argmax:<row>), so it resolves through the identical operand walk
                     // (presence included: an untagged property's argmax resolves to -1, which $distance's own
                     // sentinel reads as "infinitely far", so the gate correctly stays closed with no separate
@@ -2152,7 +2264,7 @@ public static class WorldRuleCompiler {
                 case WorldInteractionCoOccurrence.Region:
                     // Presence must be checked explicitly here (unlike Distance): $region:'s occupant COUNT carries
                     // no sentinel for "nobody is tagged Left" the way $distance's infinite-distance sentinel does, so
-                    // the gate spells it as a second conjunct — the SAME 'argmax != -1' presence idiom $distance
+                    // the gate spells it as a second conjunct — the same 'argmax != -1' presence idiom $distance
                     // gets for free.
                     gate = new ActionPredicate.All(Predicates: [
                         new ActionPredicate.CompareState(

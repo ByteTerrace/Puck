@@ -108,12 +108,14 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldJudgeRow))]
 [JsonSerializable(typeof(WorldAudioDefaults))]
 [JsonSerializable(typeof(WorldAudioCue))]
-// The probes section rows (the document `probes` section). WorldProbeInput.Camera collides by simple name with
-// WorldScreenSource.Camera; explicit TypeInfoPropertyName entries resolve the source-gen collision (SYSLIB1031),
-// following the WorldSpeaker/WorldLook precedent above, and are applied uniformly across every arm here.
+// The probes section rows (the document `probes` section) and the frame-source vocabulary a probe socket shares
+// with a screen row's own Camera/View/Probe/Capture arms. WorldFrameSource is registered explicitly so
+// WorldProbe.Inputs' dictionary values (and this suite's own round-trip law) reach it through a typed
+// WorldJsonContext.Default accessor; WorldScreenSource.Probe collides by simple name with
+// WorldProbeParameterTarget.Probe, so its TypeInfoPropertyName entry (below) resolves that source-gen collision
+// (SYSLIB1031), following the WorldSpeaker/WorldLook precedent above.
 [JsonSerializable(typeof(WorldProbe))]
-[JsonSerializable(typeof(WorldProbeInput.Camera), TypeInfoPropertyName = "WorldProbeInputCamera")]
-[JsonSerializable(typeof(WorldProbeInput.Track), TypeInfoPropertyName = "WorldProbeInputTrack")]
+[JsonSerializable(typeof(WorldFrameSource), TypeInfoPropertyName = "WorldFrameSource")]
 [JsonSerializable(typeof(WorldProbeBinding.Axis), TypeInfoPropertyName = "WorldProbeBindingAxis")]
 [JsonSerializable(typeof(WorldProbeBinding.Parameter), TypeInfoPropertyName = "WorldProbeBindingParameter")]
 [JsonSerializable(typeof(WorldProbeBinding.Control), TypeInfoPropertyName = "WorldProbeBindingControl")]

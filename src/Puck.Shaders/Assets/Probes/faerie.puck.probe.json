@@ -2,11 +2,11 @@
   "$schema": "puck.probe.v1",
   "name": "faerie",
   "class": "kernel",
-  "description": "Relights the color frame by a small wandering light: the infrared strobe pair (lit minus unlit) is the subject's illumination response, which stands in for depth — a height field and its normals — so a light placed in the frame shades the subject with wrapped Lambert, Blinn-Phong, distance falloff, and a short shadow march, and draws itself as a glowing sprite orbiting its anchor. The anchor is config, so another probe's reading (a tracked head) can carry it.",
+  "description": "Relights the color frame by a small wandering light: the infrared strobe pair (lit minus unlit) is the subject's illumination response, which stands in for depth — a height field and its normals — so a light placed in the frame shades the subject with wrapped Lambert, Blinn-Phong, distance falloff, and a short shadow march, and draws itself as a glowing sprite orbiting its anchor. The anchor is config, so another probe's reading (a tracked head) can carry it. An optional third socket, painting, shows a rectangle of the color frame as a canvas hung on the wall when the strobe response there is background-level; journey carries the sprite from its orbit into that canvas.",
   "inputs": [
-    { "sensor": "color" },
-    { "sensor": "infrared" },
-    { "sensor": "infrared", "previous": true }
+    { "name": "color", "class": "frame" },
+    { "name": "strobe", "class": "strobePair" },
+    { "name": "painting", "class": "frame", "optional": true }
   ],
   "trigger": "color",
   "output": { "of": "color" },
@@ -15,7 +15,8 @@
     { "name": "x", "min": -1, "max": 1, "neutral": 0, "description": "The light's horizontal position this cycle, -1 (left) to 1 (right)." },
     { "name": "y", "min": -1, "max": 1, "neutral": 0, "description": "The light's vertical position this cycle, -1 (bottom) to 1 (top)." },
     { "name": "response", "min": 0, "max": 1, "neutral": 0, "description": "The mean illumination response (lit minus unlit infrared) over the frame." },
-    { "name": "coverage", "min": 0, "max": 1, "neutral": 0, "description": "The fraction of pixels whose response clears the floor — how much of the frame the light can shape." }
+    { "name": "coverage", "min": 0, "max": 1, "neutral": 0, "description": "The fraction of pixels whose response clears the floor — how much of the frame the light can shape." },
+    { "name": "portal", "min": 0, "max": 1, "neutral": 0, "description": "1 once journey reaches portalThreshold (the light has entered the painting), else 0." }
   ],
   "config": {
     "anchorX": { "type": "float", "default": 0.0, "min": -1, "max": 1, "description": "The orbit center, horizontal, -1 (left) to 1 (right) — bind a tracked centroid here." },
@@ -26,15 +27,26 @@
     "intensity": { "type": "float", "default": 1.8, "min": 0, "max": 10, "description": "The light's strength." },
     "radius": { "type": "float", "default": 0.55, "min": 0.01, "max": 4, "description": "The falloff distance at which the light halves, in frame-width units." },
     "ambient": { "type": "float", "default": 0.22, "min": 0, "max": 1, "description": "The frame's own light kept everywhere, as a fraction of the color frame." },
-    "tintR": { "type": "float", "default": 1.0, "min": 0, "max": 1, "description": "The light's color, red." },
-    "tintG": { "type": "float", "default": 0.86, "min": 0, "max": 1, "description": "The light's color, green." },
-    "tintB": { "type": "float", "default": 0.55, "min": 0, "max": 1, "description": "The light's color, blue." },
+    "tintR": { "type": "float", "default": 0.62, "min": 0, "max": 1, "description": "The light's color, red." },
+    "tintG": { "type": "float", "default": 0.32, "min": 0, "max": 1, "description": "The light's color, green." },
+    "tintB": { "type": "float", "default": 1.0, "min": 0, "max": 1, "description": "The light's color, blue." },
     "relief": { "type": "float", "default": 0.1, "min": 0, "max": 1, "description": "The height-field amplitude a full illumination response rises to, in frame-width units." },
-    "floor": { "type": "float", "default": 0.08, "min": 0, "max": 1, "description": "The response below which a pixel counts as background (unlit by the strobe, out of the light's reach)." },
+    "floor": { "type": "float", "default": 0.08, "min": 0, "max": 1, "description": "The response below which a pixel counts as background (unlit by the strobe, out of the light's reach) and eligible to show the painting." },
     "gain": { "type": "float", "default": 3.0, "min": 0.1, "max": 32, "description": "The multiplier that maps raw lit-minus-unlit luminance to a 0..1 response." },
     "irScale": { "type": "float", "default": 1.0, "min": 0.2, "max": 5, "description": "The infrared frame's scale relative to the color frame about their shared center, on top of the aspect-derived span (equal vertical fields of view at 1)." },
     "irOffsetX": { "type": "float", "default": 0.0, "min": -1, "max": 1, "description": "The infrared frame's horizontal offset relative to the color frame, in color-frame widths." },
     "irOffsetY": { "type": "float", "default": 0.0, "min": -1, "max": 1, "description": "The infrared frame's vertical offset relative to the color frame, in color-frame heights." },
-    "spriteSize": { "type": "float", "default": 0.035, "min": 0.001, "max": 0.5, "description": "The glowing sprite's radius, in frame-width units." }
+    "spriteSize": { "type": "float", "default": 0.035, "min": 0.001, "max": 0.5, "description": "The glowing sprite's radius at journey 0, in frame-width units." },
+    "paintingX0": { "type": "float", "default": -0.9, "min": -1, "max": 1, "description": "The painting quad's corner 0 (top-left in image terms), horizontal." },
+    "paintingY0": { "type": "float", "default": 0.85, "min": -1, "max": 1, "description": "The painting quad's corner 0 (top-left in image terms), vertical." },
+    "paintingX1": { "type": "float", "default": -0.3, "min": -1, "max": 1, "description": "The painting quad's corner 1 (top-right in image terms), horizontal." },
+    "paintingY1": { "type": "float", "default": 0.85, "min": -1, "max": 1, "description": "The painting quad's corner 1 (top-right in image terms), vertical." },
+    "paintingX2": { "type": "float", "default": -0.3, "min": -1, "max": 1, "description": "The painting quad's corner 2 (bottom-right in image terms), horizontal." },
+    "paintingY2": { "type": "float", "default": 0.25, "min": -1, "max": 1, "description": "The painting quad's corner 2 (bottom-right in image terms), vertical." },
+    "paintingX3": { "type": "float", "default": -0.9, "min": -1, "max": 1, "description": "The painting quad's corner 3 (bottom-left in image terms), horizontal." },
+    "paintingY3": { "type": "float", "default": 0.25, "min": -1, "max": 1, "description": "The painting quad's corner 3 (bottom-left in image terms), vertical." },
+    "paintingOpacity": { "type": "float", "default": 1.0, "min": 0, "max": 1, "description": "How much the painting texture replaces the wall's own color where it shows." },
+    "journey": { "type": "float", "default": 0.0, "min": 0, "max": 1, "description": "0 orbits the anchor as usual; 1 sits the light at the painting's centre, shrunk, as if it has receded into the canvas." },
+    "portalThreshold": { "type": "float", "default": 0.85, "min": 0, "max": 1, "description": "The journey value at or above which the portal channel reports 1." }
   }
 }

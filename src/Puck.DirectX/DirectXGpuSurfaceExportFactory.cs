@@ -43,8 +43,24 @@ public sealed class DirectXGpuSurfaceExportFactory : IGpuSurfaceExportFactory {
         new DirectXGpuExportableStorageImage(
             deviceContext: ((IDirectXDeviceContext)deviceContext),
             format: DirectXGpuFormats.ToDxgiFormat(gpuPixelFormat: format),
+            access: DirectXExportableImageAccess.ForeignWrite,
             height: height,
-            simultaneousAccess: true,
+            width: width
+        );
+    /// <summary>Creates an exportable storage image this device's compute work writes and a Direct3D 11 device can
+    /// open and sample — <c>ALLOW_UNORDERED_ACCESS</c> plus <c>ALLOW_SIMULTANEOUS_ACCESS</c>. The reader sees whichever
+    /// frame last landed; nothing fences the two devices.</summary>
+    /// <param name="deviceContext">The Direct3D 12 device context that allocates the texture.</param>
+    /// <param name="format">The neutral <see cref="GpuPixelFormat"/>.</param>
+    /// <param name="width">The image width in pixels.</param>
+    /// <param name="height">The image height in pixels.</param>
+    /// <returns>The exportable image (its <see cref="IGpuExportableStorageImage.SharedHandle"/> is the cross-API handle).</returns>
+    public IGpuExportableStorageImage CreateSharedComputeStorageImage(IGpuDeviceContext deviceContext, GpuPixelFormat format, uint width, uint height) =>
+        new DirectXGpuExportableStorageImage(
+            access: DirectXExportableImageAccess.ComputeWriteForeignRead,
+            deviceContext: ((IDirectXDeviceContext)deviceContext),
+            format: DirectXGpuFormats.ToDxgiFormat(gpuPixelFormat: format),
+            height: height,
             width: width
         );
 }

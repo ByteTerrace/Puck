@@ -6,13 +6,38 @@ public static partial class WorldDefinitionValidator {
         "saturation", "sharpness", "gain", "whiteBalance", "backlightCompensation", "fieldOfView",
     };
 
+    // A socket name: an ASCII letter, then zero or more ASCII letters, digits, or hyphens — the grammar a probe
+    // kind's manifest names its typed input slots with (e.g. "color", "strobe-pair"). Distinct from IsKebabCase
+    // (WorldDefinitionValidator.Screens.cs), which forbids a leading digit but also forbids upper-case and a
+    // trailing/doubled hyphen; a socket name admits both.
+    private static bool IsSocketIdentifier(string value) {
+        if (
+            string.IsNullOrEmpty(value: value) ||
+            !char.IsAsciiLetter(c: value[0])
+        ) {
+            return false;
+        }
+
+        for (var index = 1; (index < value.Length); index++) {
+            var character = value[index];
+
+            if (
+                !char.IsAsciiLetterOrDigit(c: character) &&
+                (character != '-')
+            ) {
+                return false;
+            }
+        }
+
+        return true;
+    }
     // Vocabulary and structural shape only — the shallow half of the shallow-then-deep split
-    // WorldRenderExtensionEntry.Config already establishes: a kind naming no registered probe kind, an probe
+    // WorldRenderExtensionEntry.Config already establishes: a kind naming no registered probe kind, a probe
     // reference resolving to nothing, or a source colliding with another axis binding refuses here, at load, by name
     // and index. A channel name is never checkable here (the manifest lives behind WorldProbeVocabularyHook, which
     // answers only "is this kind registered", not "what channels does it declare") — the host checks it by name at
     // boot, the same precedent an extension's own config field follows.
-    private static void ValidateProbes(WorldDefinition definition, List<string> errors) {
+    private static void ValidateProbes(WorldDefinition definition, HashSet<string> cameras, List<string> errors) {
         if (definition.ProbesRaw is not { } probes) {
             return;
         }
@@ -54,28 +79,13 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.rateHz {probe.RateHz} is outside 1..240.");
             }
 
-            switch (probe.Input) {
-                case null:
-                    errors.Add(item: $"{path}.input is required.");
-
-                    break;
-                case WorldProbeInput.Camera camera:
-                    if (!Enum.IsDefined(value: camera.Sensor)) {
-                        errors.Add(item: $"{path}.input.sensor '{camera.Sensor}' is not recognized.");
-                    }
-
-                    break;
-                case WorldProbeInput.Track track:
-                    if (string.IsNullOrWhiteSpace(value: track.Path)) {
-                        errors.Add(item: $"{path}.input.path is required.");
-                    }
-
-                    break;
-                default:
-                    errors.Add(item: $"{path}.input is an unrecognized probe input kind.");
-
-                    break;
-            }
+            ValidateProbeStream(
+                cameras: cameras,
+                definition: definition,
+                errors: errors,
+                path: path,
+                probe: probe
+            );
 
             if (probe.Bindings is not { } bindings) {
                 continue;
@@ -92,6 +102,60 @@ public static partial class WorldDefinitionValidator {
                     probeId: probe.Id
                 );
             }
+        }
+    }
+    // Exactly one of inputs/track: the live-hardware leg (named sockets, each a shared WorldFrameSource — the same
+    // vocabulary and gate a screen row's frame arms use, ValidateFrameSource) or the recorded-track leg (one
+    // document standing in for the whole set). A socket's own NAME grammar and the map's non-emptiness are checked
+    // here; the socket VOCABULARY a kind declares is not (it lives behind WorldProbeVocabularyHook, which answers
+    // only "is this kind registered" — the host checks a bound name against the kind's own manifest at boot). The
+    // one probe-specific rule ValidateFrameSource itself cannot see: a socket binding a WorldScreenSource.Probe
+    // naming its OWN enclosing row — a probe cannot steer itself, the same self-reference refusal
+    // ValidateProbeParameterBinding already carries for a parameter target.
+    private static void ValidateProbeStream(WorldDefinition definition, WorldProbe probe, string path, HashSet<string> cameras, List<string> errors) {
+        var hasInputs = (probe.Inputs is not null);
+        var hasTrack = (probe.Track is not null);
+
+        if (hasInputs && hasTrack) {
+            errors.Add(item: $"{path} declares both 'inputs' and 'track' — a probe reads live sockets or plays back a recorded track, never both.");
+        } else if (!hasInputs && !hasTrack) {
+            errors.Add(item: $"{path} declares neither 'inputs' nor 'track' — a probe needs exactly one input leg.");
+        }
+
+        if (probe.Inputs is { } inputs) {
+            if (inputs.Count == 0) {
+                errors.Add(item: $"{path}.inputs must declare at least one socket — omit the member entirely for the track leg instead.");
+            }
+
+            foreach (var (socket, source) in inputs) {
+                var socketPath = $"{path}.inputs['{socket}']";
+
+                if (!IsSocketIdentifier(value: socket)) {
+                    errors.Add(item: $"{socketPath} '{socket}' must be an identifier (a letter, then letters, digits, or hyphens).");
+                }
+
+                ValidateFrameSource(
+                    cameras: cameras,
+                    definition: definition,
+                    errors: errors,
+                    path: socketPath,
+                    source: source
+                );
+
+                if (
+                    (source is WorldScreenSource.Probe target) &&
+                    string.Equals(a: target.Id, b: probe.Id, comparisonType: StringComparison.Ordinal)
+                ) {
+                    errors.Add(item: $"{socketPath}.probe.id '{target.Id}' is the enclosing probe; a socket cannot bind its own probe.");
+                }
+            }
+        }
+
+        if (
+            hasTrack &&
+            string.IsNullOrWhiteSpace(value: probe.Track)
+        ) {
+            errors.Add(item: $"{path}.track is required.");
         }
     }
     // A probe id reference resolves against the declared rows by name — the same shallow check a parameter target's

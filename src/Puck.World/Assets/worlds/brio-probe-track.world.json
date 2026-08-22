@@ -14,10 +14,8 @@
   "probes": [
     {
       "id": "head",
-      "input": {
-        "$type": "track",
-        "path": "../probes/tracks/brio-head.probe-track.json"
-      }
+      "inputs": null,
+      "track": "../probes/tracks/brio-head.probe-track.json"
     }
   ]
 }

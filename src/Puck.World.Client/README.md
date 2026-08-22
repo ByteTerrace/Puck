@@ -13,7 +13,7 @@ vocabulary and the link-query seam; never `Puck.World.Server` — a live
 
 `WorldClientSeats` (implements the Server seam `IWorldEmbodiedSeats`) and
 `WorldAudioDirector` stay in `Puck.World` itself rather than living here: the
-audio director imports `Puck.World.Audio` types directly. `WorldFrameSource`,
+audio director imports `Puck.World.Audio` types directly. `WorldFramePresenter`,
 `WorldSceneEmitter`, and `WorldViewComposer` live here — their only
 root-crossing dependency was the audio director, narrowed to
 `IWorldAudioFrameFeed`/`IWorldAudioCueSink` below.
@@ -28,7 +28,7 @@ root-crossing dependency was the audio director, narrowed to
   the seat's per-tick `PlayerIntent` submission.
 - `WorldPerceptionAnchor.cs` — the per-seat perception anchor: the ONE body
   index all seat-relative presentation derives from — the chase-camera anchor
-  pose and seat-join cue site (`WorldFrameSource`), the spatial-audio listener
+  pose and seat-join cue site (`WorldFramePresenter`), the spatial-audio listener
   (through the seat's view-camera pose), the crowd soft-shadow centers
   (`WorldSceneEmitter`), and the
   `seat.<n>.position.*` HUD binding family. It resolves to the seat's bound
@@ -52,7 +52,7 @@ root-crossing dependency was the audio director, narrowed to
   authority correction glides visually while the simulation pose snaps. A
   snapshot entry flagged as a teleport snaps both endpoints so nothing
   interpolates across a jump.
-- `WorldFrameSource.cs` — composes the frame the SDF renderer draws: the
+- `WorldFramePresenter.cs` — composes the frame the SDF renderer draws: the
   avatar catalog's animated leaves, the static scene, placements, screens, and
   viewport layout; publishes the audio director's per-frame snapshot through
   `IWorldAudioFrameFeed`.
@@ -151,7 +151,7 @@ root-crossing dependency was the audio director, narrowed to
   `IWorldSimulationClock`/`IWorldScreenPresenter` use.
 - `IWorldAudioCueSink.cs` — the narrow write (`SubmitCue`) `WorldSceneEmitter`
   fires world-event cues through.
-- `IWorldAudioFrameFeed.cs` — the narrow read/write `WorldFrameSource` drives
+- `IWorldAudioFrameFeed.cs` — the narrow read/write `WorldFramePresenter` drives
   every produced frame (`Publish`, `ReconcileSpeakers`,
   `TryResolveSpeakerPose`, the `MachineSourceResolver` binding); extends
   `IWorldAudioCueSink` rather than re-declaring `SubmitCue`, since a frame

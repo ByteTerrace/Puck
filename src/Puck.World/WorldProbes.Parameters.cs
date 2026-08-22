@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using Puck.Shaders;
 
 namespace Puck.World;
@@ -117,10 +118,7 @@ internal sealed partial class WorldProbes {
             }
 
             if (parameter.TargetProbeIndex >= 0) {
-                var target = m_probes[parameter.TargetProbeIndex];
-
-                BitConverter.TryWriteBytes(destination: target.Constants.AsSpan(start: parameter.ConstantOffset), value: value);
-                target.Run?.SetConstants(constants: target.Constants);
+                WriteConstant(offset: parameter.ConstantOffset, target: m_probes[parameter.TargetProbeIndex], value: value);
             } else if (
                 !m_passes.TryGet(id: parameter.ExtensionId!, pass: out var pass) ||
                 !pass.TrySetConfig(field: parameter.ExtensionField!, value: value)
@@ -131,5 +129,60 @@ internal sealed partial class WorldProbes {
             parameter.LastValue = value;
             parameter.Writes++;
         }
+    }
+    /// <summary>Patches one float config field of a declared probe's kind live — the same write
+    /// <see cref="ServiceParameters"/> performs for a <c>probe</c>-target parameter binding, driven instead by the
+    /// <c>probe.set</c> verb. Bound only by the field's own declared range, never a binding's authored one; a
+    /// <c>parameter</c> binding targeting the same field overwrites this write on its own next changed reading.
+    /// </summary>
+    /// <param name="probeId">The declared probe id.</param>
+    /// <param name="field">The probe kind's float config field name.</param>
+    /// <param name="value">The value to write.</param>
+    /// <param name="reason">Why the write was refused, set only when this returns <see langword="false"/>.</param>
+    /// <returns><see langword="true"/> when the field was written.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="probeId"/> or <paramref name="field"/> is
+    /// <see langword="null"/>.</exception>
+    public bool TrySetField(string probeId, string field, float value, out string? reason) {
+        ArgumentNullException.ThrowIfNull(argument: probeId);
+        ArgumentNullException.ThrowIfNull(argument: field);
+
+        if (!m_probeIndexById.TryGetValue(
+            key: probeId,
+            value: out var probeIndex
+        )) {
+            reason = $"no probe '{probeId}'";
+
+            return false;
+        }
+
+        var probe = m_probes[probeIndex];
+        var manifest = probe.Manifest;
+
+        if (
+            !manifest.TryGetConstantOffset(field: field, offset: out var offset, type: out var type) ||
+            (type != ShaderValueType.Float) ||
+            (manifest.Config is not { } config) ||
+            !config.TryGetValue(key: field, value: out var configField)
+        ) {
+            reason = $"'{field}' names no float config field of probe kind '{manifest.Name}'";
+
+            return false;
+        }
+        if (!ShaderConfigBinding.InRange(field: configField, value: value)) {
+            reason = $"{value.ToString(format: "0.0000", provider: CultureInfo.InvariantCulture)} is outside the declared range of '{manifest.Name}.{field}' [{configField.Min}, {configField.Max}]";
+
+            return false;
+        }
+
+        WriteConstant(offset: offset, target: probe, value: value);
+        reason = null;
+
+        return true;
+    }
+    // The one place a probe's packed constants are patched and handed to its running kernel — a parameter
+    // binding's target write and probe.set's live write share this so the two paths can never drift.
+    private static void WriteConstant(int offset, ProbeState target, float value) {
+        BitConverter.TryWriteBytes(destination: target.Constants.AsSpan(start: offset), value: value);
+        target.Run?.SetConstants(constants: target.Constants);
     }
 }

@@ -359,7 +359,7 @@ internal static class WorldPostBuildWiring {
         // document takes, instead of tearing the host down from inside a service factory mid-startup. Presentation-
         // only: a headless boot composes no frame source and this resolves to null.
         try {
-            if (services.GetService<WorldFrameSource>() is { } composed) {
+            if (services.GetService<WorldFramePresenter>() is { } composed) {
                 // The probed envelope's own read-back: the frozen ceilings every live rebuild fits inside, stated
                 // once at boot beside the other origin lines, so the headroom a world is running on is observable
                 // rather than inferred from whether it crashed.

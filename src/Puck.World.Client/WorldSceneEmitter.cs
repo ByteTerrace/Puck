@@ -10,7 +10,7 @@ namespace Puck.World.Client;
 /// the diegetic screen slabs, the static placement stamps and the
 /// creation-stamp pool (animated and body-attached rows), and the population's active avatars as leaf-level dynamic
 /// instances. It owns what geometry
-/// exists; <see cref="WorldFrameSource"/> owns how a frame presents it (views, cameras, gizmos, audio).
+/// exists; <see cref="WorldFramePresenter"/> owns how a frame presents it (views, cameras, gizmos, audio).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -25,7 +25,7 @@ namespace Puck.World.Client;
 /// Admission (<see cref="ComposeCandidate"/>) is world policy, not composition-host business: what may enter the
 /// document is the document owner's question, so it is a member on this type rather than a mode on the generic
 /// emitter contract. It composes a candidate through the same emit path into a shared builder — see
-/// <see cref="Puck.World.Client.WorldFrameSource"/>'s joint measurer, which composes it alongside whatever
+/// <see cref="Puck.World.Client.WorldFramePresenter"/>'s joint measurer, which composes it alongside whatever
 /// <c>puck.sdf.v1</c> document is currently loaded before measuring the counts the render envelope compares, so a
 /// mutation is judged against the same program that would actually be built.
 /// </para>
@@ -59,7 +59,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
     private readonly WorldClient m_client;
     private readonly WorldContinuum m_continuum;
     // The binder's boot-reserved derived-face slot count — the band the headroom screen scan must leave alone (the
-    // binder registers it at boot from the same field, WorldFrameSource.m_derivedFaceScreens).
+    // binder registers it at boot from the same field, WorldFramePresenter.m_derivedFaceScreens).
     private readonly int m_derivedFaceScreens;
     private readonly float m_noseFactor;
     // The placement capacity reservation, in worst-case stamp instances: boot static instances + the authoring
@@ -69,7 +69,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
     private readonly WorldTextCatalog m_text;
 
     // The CURRENT derived-face screen ROWS (creation faces derived from placements x creations) — threaded in from
-    // WorldFrameSource.ReconcileDelivery's ONE WorldCreationFacets.Derive call each delivery via ObserveDelivery,
+    // WorldFramePresenter.ReconcileDelivery's ONE WorldCreationFacets.Derive call each delivery via ObserveDelivery,
     // NEVER re-derived here: the geometry this emitter composes and the binder's bound sources must read the SAME
     // set or a face's slab and its bound texture could disagree about which placement it belongs to. Seeded at
     // construction to the reserved-band PLACEHOLDER rows (WorldCreationFacets.ReservedFaceSlots — the identical
@@ -84,7 +84,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
     private int m_slotBase;
 
     // Where a creation-stamp body's catalog avatar parks (below the floor, culled) — the body renders its creation.
-    // The same point the composition host parks every unused slot at (WorldFrameSource sets it as ParkPosition).
+    // The same point the composition host parks every unused slot at (WorldFramePresenter sets it as ParkPosition).
     internal static readonly Vector3 HiddenAvatar = new(
         x: 0f,
         y: -1000f,
@@ -144,7 +144,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
         m_derivedFaceScreens = definition.Authoring.DerivedFaceScreens;
         // Placeholder rows until the first delivery calls ObserveDelivery with the real derived faces — matters only
         // for the construction-time capacity probe (SdfCompositionFrameSource's ctor runs it synchronously, before
-        // WorldFrameSource can ever reconcile a delivery), so the probe reserves this band's word/instance cost even
+        // WorldFramePresenter can ever reconcile a delivery), so the probe reserves this band's word/instance cost even
         // though no delivery has landed yet.
         m_derivedFaceRows = WorldCreationFacets.ReservedFaceSlots(
             derivedFaceBase: WorldCreationFacets.DerivedFaceBase,
@@ -218,7 +218,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
         //
         // TWO SOURCES, ONE EMISSION PATH: `screens` (the document's declared rows, padded with authoring headroom)
         // and `derivedFaces` (the reserved-band rows a creation's own faces resolve to — see WorldCreationFacets;
-        // WorldFrameSource threads the SAME derived set here that it hands the screen binder, so the geometry a
+        // WorldFramePresenter threads the SAME derived set here that it hands the screen binder, so the geometry a
         // derived face's slab occupies and the source the binder samples for it can never disagree about which
         // placement it belongs to). Both index ranges are disjoint by construction (WithAuthoringHeadroom skips the
         // reserved band), so emitting them back-to-back cannot double-declare a screen index.
@@ -569,7 +569,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// admission policy (what may enter the document is the document owner's question, never a mode on the generic
     /// emitter contract), factored so the render-capacity oracle can measure it composed alongside whatever
     /// <c>puck.sdf.v1</c> document (see <see cref="WorldSdfDocumentEmitter"/>) is currently loaded — see
-    /// <see cref="Puck.World.Client.WorldFrameSource"/>'s joint measurer. The packed tables a program carries (the
+    /// <see cref="Puck.World.Client.WorldFramePresenter"/>'s joint measurer. The packed tables a program carries (the
     /// instance grid, segment directory, world-segment list, rigid plan) are computed over the whole composed
     /// program and are not additive across emitters, so measuring this emitter alone in a throwaway builder would let
     /// a mutation spend capacity a loaded document already holds.</summary>
@@ -648,7 +648,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
             slotBase: context.SlotBase
         );
     }
-    /// <summary>Re-points this emitter's derived-face screen rows at the same set <see cref="WorldFrameSource"/>
+    /// <summary>Re-points this emitter's derived-face screen rows at the same set <see cref="WorldFramePresenter"/>
     /// just derived and handed the screen binder — never re-derived here (see <see cref="WorldCreationFacets.Derive"/>'s
     /// one call site), so the slab geometry this emitter composes and the binder's bound sources can never disagree
     /// about which face belongs to which placement. Call at the delivery boundary (a definition-revision move).</summary>

@@ -51,11 +51,18 @@ GPU tier so the coordinated pair reopens on CPU pixels.
 `Win32D3D11VideoDevice` is the source reader's DXVA
 device. Both shared-tier graphs are `ICameraKernelHost`s: `Win32ProbeKernelBench`
 holds the attached `Win32D3D11ProbeKernel`s and runs them on the graph's worker,
-on the graph's own device, right after the trigger frame converts — the
-FaceAuth graph binds the converter's lit output and the unlit frame it keeps
-beside it, the source reader its latest published slot; `Win32CameraControlSurface` maps the neutral control vocabulary onto
-either a WinRT `VideoDeviceController` or the legacy `IAMCameraControl`/
-`IAMVideoProcAmp` pair.
+on the graph's own device, right after the trigger frame converts. Each
+attached kernel's declared `Sensor`/`StrobePair` sockets resolve through
+`IProbeInputResolver` (the FaceAuth graph's converter output/previous view, or
+the source reader's latest published slot); a `Ring` socket's shared targets
+are opened once on the graph's device (`ID3D11Device1::OpenSharedResource1`,
+the same pattern the converter uses for its own output ring) and its latest
+slot is acquired and released around each run, running unbound (a null SRV,
+its `boundMask` bit clear) on a cycle with nothing published yet. A kernel
+compiles once every `Sensor`/`StrobePair` socket resolves; a `Ring`/`Unbound`
+socket never blocks that. `Win32CameraControlSurface` maps the neutral control
+vocabulary onto either a WinRT `VideoDeviceController` or the legacy
+`IAMCameraControl`/`IAMVideoProcAmp` pair.
 
 ## `WindowsPlatformServiceRegistration`
 

@@ -178,7 +178,7 @@ public sealed partial class WorldServer {
 
         return (b.FixedPosition - a.FixedPosition).Length;
     }
-    // $los: — the SAME WorldPopulation.HasLineOfSightBetween a sensed target's own RequiresLineOfSight check rides,
+    // $los: — the same WorldPopulation.HasLineOfSightBetween a sensed target's own RequiresLineOfSight check rides,
     // called against two RESOLVED body references. Either side resolving to no body (a negative index) reads as
     // false — no sight line to nothing, the ordinary "absent reads as the falsy value" convention.
     private bool ReadBodyLineOfSight(CompiledBodyRef bodyA, CompiledBodyRef bodyB, ulong tick) {
@@ -200,7 +200,7 @@ public sealed partial class WorldServer {
         )
         );
     }
-    // $parked: — the remaining reconnect-grace ticks for ONE named body, resolved through the SAME ResolveBodyRef
+    // $parked: — the remaining reconnect-grace ticks for ONE named body, resolved through the same ResolveBodyRef
     // walk $distance:/$los: use for each of their two body references. THREE REGIMES, deliberately distinct:
     // ABSENT (a reference resolving to no live body, or an unparked one) reads as 0 through
     // WorldPopulation.ParkedRemainingTicks' own guards — the ordinary "absent reads as the neutral falsy value"
@@ -217,12 +217,28 @@ public sealed partial class WorldServer {
             ),
             tick: tick
         );
+    // $channel: — the 1-based local seat's channel value as its body integrates it that tick: the drained
+    // CommandSnapshot's direct read folded with co-driving contributions and the admitted held overlay (a probe axis
+    // or any other held sample reaches a channel only through that overlay), in the channel's own FixedQ4816 domain.
+    // Compile time already bounded seat to 0..LocalSeatCount-1 and channelOrdinal to a declared channel; an
+    // out-of-range seat, or one no local seat currently occupies, reads Zero — the convention $parked:/$machine:/
+    // $region: already set.
+    private FixedQ4816 ReadChannelValue(int seat, int ordinal) {
+        if (
+            (((uint)seat) >= ((uint)m_population.LocalSeatCount)) ||
+            !m_population.IsHumanOccupied(bodyIndex: seat)
+        ) {
+            return FixedQ4816.Zero;
+        }
+
+        return (Body(index: seat)?.ChannelReadComposed[ordinal] ?? FixedQ4816.Zero);
+    }
     // The $reduce: aggregate — a thin delegation to WorldStateReader.Reduce, the ONE (row, key) read seam's sibling
     // for a whole-row aggregate: it resolves EACH cell's value through TryRead's own per-key path (not the row's
     // declared cell list raw), so a future per-cell advance widening flows through here for free. Count is always
     // integer regardless of the row's declared kind (a count is never fixed-point); Max/Min/Sum preserve the row's
     // kind, matching the compiler's own ValueKind (WorldRuleCompiler.ResolveOperand's reduce branch). An empty row
-    // reads as zero for every op — the SAME "absent reads as zero" precedent ReadStateCell itself follows for a
+    // reads as zero for every op — the same "absent reads as zero" precedent ReadStateCell itself follows for a
     // vanished cell.
     private FixedQ4816 ReadReduction(string row, WorldStateReduceOp op, ulong tick) =>
         WorldStateReader.Reduce(
@@ -264,11 +280,11 @@ public sealed partial class WorldServer {
         WorldRuleFactKind.Tick => Finite(value: FixedQ4816.FromInteger(value: unchecked((long)tick))),
         WorldRuleFactKind.Population => Finite(value: FixedQ4816.FromInteger(value: m_population.ActiveCount())),
         WorldRuleFactKind.RegionOccupancy => Finite(value: FixedQ4816.FromInteger(value: m_events.OccupantCount(placementId: operand.Row!))),
-        // $link: — the SAME per-tick staleness the link event family's own threshold comparison reads, in SIMULATION
+        // $link: — the same per-tick staleness the link event family's own threshold comparison reads, in SIMULATION
         // ticks. An edge whose livenessGraceSeconds is unauthored is held at 0 by the feed itself, so a staleness
         // gate stays closed rather than opening on a world that never asked for liveness sensing.
         WorldRuleFactKind.LinkStaleness => Finite(value: FixedQ4816.FromInteger(value: m_events.LinkStalenessTicks(adjacencyName: operand.Row!))),
-        // The SAME IWorldMachineMemoryPeek.TryPeek primitive WorldAddonRuntime's memory-watch family already rides,
+        // The same IWorldMachineMemoryPeek.TryPeek primitive WorldAddonRuntime's memory-watch family already rides,
         // called directly instead of accumulated as a change event. No machine booted (or no peek capability) reads
         // as 0 — never a hard refusal, since the machine can boot on a later tick.
         WorldRuleFactKind.MachineMemory => Finite(value: FixedQ4816.FromInteger(value: (Machines.TryPeek(
@@ -312,13 +328,17 @@ public sealed partial class WorldServer {
             Value: FixedQ4816.Zero,
             IsForever: true
         )),
+        WorldRuleFactKind.Channel => Finite(value: ReadChannelValue(
+        seat: operand.Seat,
+        ordinal: operand.ChannelOrdinal
+    )),
         _ => Finite(value: ReadStateCell(
         row: operand.Row!,
         key: operand.Key!,
         tick: tick
     )),
     };
-    // The $argmax:/$argmin: extremum — a thin delegation to WorldStateReader.ArgExtremum, the SAME per-key read seam
+    // The $argmax:/$argmin: extremum — a thin delegation to WorldStateReader.ArgExtremum, the same per-key read seam
     // ReadReduction's sibling resolves each candidate cell through, filtered here to the body indices the LIVE
     // population actually holds (a cell whose key does not parse as a non-negative index is excluded inside the
     // reader itself; the row can gain a non-numeric-keyed cell after compile via an ordinary world.state.cell.set,
@@ -344,7 +364,7 @@ public sealed partial class WorldServer {
     }
     // Resolves ONE body reference to a live 0-based index (or -1 for "no body") — a literal index passes through
     // unchanged (compile time already bounded it against the document's declared capacity), an argmax/argmin
-    // resolves through the SAME ResolveArgBody walk the standalone $argmax:/$argmin: channel uses.
+    // resolves through the same ResolveArgBody walk the standalone $argmax:/$argmin: channel uses.
     private int ResolveBodyRef(CompiledBodyRef bodyRef, ulong tick) => (bodyRef.Kind switch {
         CompiledBodyRefKind.Literal => bodyRef.Index,
         _ => ResolveArgBody(

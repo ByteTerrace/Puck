@@ -2,7 +2,7 @@ namespace Puck.World;
 
 /// <summary>
 /// The world's frame-rate witness: a ring of the most recent frame deltas, sampled by
-/// <c>WorldFrameSource.CaptureFrame</c> and read by the <c>world.fps</c> verb (the project's 120 FPS desktop
+/// <c>WorldFramePresenter.CaptureFrame</c> and read by the <c>world.fps</c> verb (the project's 120 FPS desktop
 /// contract, observed over the pipe).
 /// </summary>
 /// <remarks>Sampling and reading both run on the launcher pump thread, so no synchronization guards the queue.</remarks>

@@ -12,7 +12,7 @@ namespace Puck.World.Client;
 /// The session projection's content half: composes a destination world's static authored placement geometry plus its
 /// live mirrored avatars (see <see cref="WorldSessionMirror"/>'s own remarks) into an <see cref="SdfProgramBuilder"/>,
 /// and dresses the result into one <see cref="SdfFrame"/> framed through the destination's chosen camera — the
-/// <see cref="ISdfSceneEmitter"/>/<see cref="ISdfFrameDresser"/> split <c>WorldFrameSource</c> and
+/// <see cref="ISdfSceneEmitter"/>/<see cref="ISdfFrameDresser"/> split <c>WorldFramePresenter</c> and
 /// <c>WorldSceneEmitter</c> already establish, collapsed into one type here because a session
 /// projection has exactly one content source and needs no second host to own presentation separately.
 /// </summary>
@@ -224,7 +224,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             : null
         );
     }
-    // The spawn-centroid overview — the SAME construction WorldFrameSource.ResolveSpectatorCamera uses for the
+    // The spawn-centroid overview — the SAME construction WorldFramePresenter.ResolveSpectatorCamera uses for the
     // boot world's own no-local-seats fallback, applied here to a destination with no declared camera at all: a
     // pulled-back, elevated look-at over the centroid of its authored local-seat spawn points.
     private static CameraSnapshot ResolveOverviewCamera(WorldDefinition definition, uint width, uint height) {

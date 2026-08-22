@@ -758,13 +758,15 @@ internal sealed partial class WorldScreenBinder {
                 continue;
             }
 
+            var requested = (camera.Profile ?? WorldFeedProfile.Default);
+
             profile = (found
                 ? new WorldFeedProfile(
-                    Width: Math.Max(val1: profile.Width, val2: camera.Profile.Width),
-                    Height: Math.Max(val1: profile.Height, val2: camera.Profile.Height),
-                    RefreshRateHz: Math.Max(val1: profile.RefreshRateHz, val2: camera.Profile.RefreshRateHz)
+                    Width: Math.Max(val1: profile.Width, val2: requested.Width),
+                    Height: Math.Max(val1: profile.Height, val2: requested.Height),
+                    RefreshRateHz: Math.Max(val1: profile.RefreshRateHz, val2: requested.RefreshRateHz)
                 )
-                : camera.Profile
+                : requested
             );
             found = true;
         }

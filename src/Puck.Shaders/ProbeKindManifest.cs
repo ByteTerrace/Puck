@@ -5,33 +5,34 @@ using System.Text.Json.Serialization;
 
 namespace Puck.Shaders;
 
-/// <summary>An probe kind's declared input: which camera stream it reads and at which capture tier.</summary>
-[JsonConverter(typeof(ProbeInputSensorJsonConverter))]
-public enum ProbeInputSensor {
-    /// <summary>The visible-light color stream.</summary>
-    Color = 0,
-    /// <summary>The infrared stream.</summary>
-    Infrared = 1,
+/// <summary>A <see cref="ProbeKindManifest"/> socket's shape: what a bound <c>WorldFrameSource</c> must supply.</summary>
+[JsonConverter(typeof(ProbeSocketClassJsonConverter))]
+public enum ProbeSocketClass {
+    /// <summary>Any one frame.</summary>
+    Frame = 0,
+    /// <summary>A strobing infrared sensor's lit frame and the unlit frame kept before it — two consecutive
+    /// kernel registers, lit then unlit.</summary>
+    StrobePair = 1,
 }
-/// <summary>Converts <see cref="ProbeInputSensor"/> to/from its lower camelCase JSON string. Hand-written (not a
+/// <summary>Converts <see cref="ProbeSocketClass"/> to/from its lower camelCase JSON string. Hand-written (not a
 /// reflection-based <c>JsonStringEnumConverter</c> naming policy) to stay AOT/trim-safe.</summary>
-public sealed class ProbeInputSensorJsonConverter : JsonConverter<ProbeInputSensor> {
+public sealed class ProbeSocketClassJsonConverter : JsonConverter<ProbeSocketClass> {
     /// <inheritdoc/>
-    public override ProbeInputSensor Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
+    public override ProbeSocketClass Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
         var text = reader.GetString();
 
         return text switch {
-            "color" => ProbeInputSensor.Color,
-            "infrared" => ProbeInputSensor.Infrared,
-            _ => throw new JsonException(message: $"Unrecognized sense input sensor '{text}'; expected color or infrared."),
+            "frame" => ProbeSocketClass.Frame,
+            "strobePair" => ProbeSocketClass.StrobePair,
+            _ => throw new JsonException(message: $"Unrecognized probe socket class '{text}'; expected frame or strobePair."),
         };
     }
     /// <inheritdoc/>
-    public override void Write(Utf8JsonWriter writer, ProbeInputSensor value, JsonSerializerOptions options) {
+    public override void Write(Utf8JsonWriter writer, ProbeSocketClass value, JsonSerializerOptions options) {
         writer.WriteStringValue(value: value switch {
-            ProbeInputSensor.Color => "color",
-            ProbeInputSensor.Infrared => "infrared",
-            _ => throw new ArgumentOutOfRangeException(nameof(value), value, "The sense input sensor is not defined."),
+            ProbeSocketClass.Frame => "frame",
+            ProbeSocketClass.StrobePair => "strobePair",
+            _ => throw new ArgumentOutOfRangeException(nameof(value), value, "The probe socket class is not defined."),
         });
     }
 }
@@ -66,16 +67,18 @@ public sealed class ProbeKindClassJsonConverter : JsonConverter<ProbeKindClass> 
         });
     }
 }
-/// <summary>A <see cref="ProbeKindManifest"/>'s declared input.</summary>
-/// <param name="Sensor">Which camera stream the kind reads.</param>
-/// <param name="Previous">Whether the kind reads the frame kept before the current one — for infrared, the unlit
-/// half of a strobing pair.</param>
-public sealed record ProbeKindInput(ProbeInputSensor Sensor, bool Previous = false);
-/// <summary>A kind's texture output: one <c>rgba8</c> ring at the extent of the named sensor's stream, published
-/// like a camera frame; a screen names the probe as its source to show it.</summary>
-/// <param name="Of">The sensor whose stream extent the output takes.</param>
+/// <summary>A <see cref="ProbeKindManifest"/>'s declared socket: a document row plugs one <c>WorldFrameSource</c>
+/// into it.</summary>
+/// <param name="Name">The socket's identifier: letters, digits, or <c>-</c>, starting with a letter, unique within
+/// the manifest.</param>
+/// <param name="Class">What a bound source must supply.</param>
+/// <param name="Optional">Whether a document row may leave the socket unbound.</param>
+public sealed record ProbeKindInput(string Name, ProbeSocketClass Class, bool Optional = false);
+/// <summary>A kind's texture output: one <c>rgba8</c> ring at the bound source's extent for the named socket,
+/// published like a camera frame; a screen names the probe as its source to show it.</summary>
+/// <param name="Of">The socket whose bound source's extent the output takes.</param>
 /// <param name="Format">The pixel format; only <c>rgba8</c> is admitted.</param>
-public sealed record ProbeKindOutput(ProbeInputSensor Of, string Format = ProbeKindOutput.Rgba8) {
+public sealed record ProbeKindOutput(string Of, string Format = ProbeKindOutput.Rgba8) {
     public const string Rgba8 = "rgba8";
 }
 /// <summary>A KERNEL-class kind's compiled-shader entry points.</summary>
@@ -95,14 +98,16 @@ public sealed record ProbeKindKernel(string Source, string Accumulate, string Fi
 /// <param name="Schema">The schema tag; must equal <see cref="SchemaTag"/>.</param>
 /// <param name="Name">The kind's id; must equal the manifest's file stem (the text before <see cref="FileSuffix"/>).</param>
 /// <param name="Class">Where the kind runs.</param>
-/// <param name="Inputs">The kind's declared inputs, bound at <c>t0, t1, …</c> in this order.</param>
+/// <param name="Inputs">The kind's declared sockets, bound at <c>t0, t1, …</c> in this order; a
+/// <see cref="ProbeSocketClass.StrobePair"/> socket takes two consecutive registers.</param>
 /// <param name="Channels">The kind's channels, in declaration order; <c>1..</c><see cref="MaxChannels"/>.</param>
 /// <param name="Kernel">The kernel's source and entry points; required when <paramref name="Class"/> is
 /// <see cref="ProbeKindClass.Kernel"/>.</param>
 /// <param name="Description">What the kind measures; carried into the emitted config JSON Schema.</param>
 /// <param name="Config">The config schema, name → field, in the order a schema emits them; <see langword="null"/>
 /// when the kind takes no configuration.</param>
-/// <param name="Trigger">The sensor whose new frame starts a cycle; <see langword="null"/> takes the first input's.</param>
+/// <param name="Trigger">The socket whose new frame starts a cycle, by name; <see langword="null"/> takes the
+/// first socket.</param>
 /// <param name="Output">The texture the kind writes, or <see langword="null"/> when it only reports channels.</param>
 public sealed partial record ProbeKindManifest(
     [property: JsonPropertyName("$schema")] string Schema,
@@ -113,13 +118,28 @@ public sealed partial record ProbeKindManifest(
     ProbeKindKernel? Kernel = null,
     string? Description = null,
     IReadOnlyDictionary<string, ShaderConfigField>? Config = null,
-    ProbeInputSensor? Trigger = null,
+    string? Trigger = null,
     ProbeKindOutput? Output = null
 ) {
-    /// <summary>Gets the sensor whose new frame starts a cycle — <see cref="Trigger"/> when authored, else the first
-    /// input's sensor.</summary>
+    /// <summary>Gets the index into <see cref="Inputs"/> of the socket whose new frame starts a cycle —
+    /// <see cref="Trigger"/>'s socket when authored, else socket 0; -1 when <see cref="Trigger"/> names no
+    /// declared socket.</summary>
     [JsonIgnore]
-    public ProbeInputSensor TriggerSensor => (Trigger ?? Inputs[0].Sensor);
+    public int TriggerSocket {
+        get {
+            if (Trigger is null) {
+                return 0;
+            }
+
+            for (var index = 0; (index < Inputs.Count); index++) {
+                if (string.Equals(a: Inputs[index].Name, b: Trigger, comparisonType: StringComparison.Ordinal)) {
+                    return index;
+                }
+            }
+
+            return -1;
+        }
+    }
 
     /// <summary>The file suffix every manifest carries; the text before it is the kind's id.</summary>
     public const string FileSuffix = ".puck.probe.json";
@@ -128,6 +148,8 @@ public sealed partial record ProbeKindManifest(
     /// <summary>The channel-count ceiling — matches <c>Puck.Platform.Probes.ProbeReadingLimits.MaxChannels</c>,
     /// the fixed slot count a <c>ProbeReading</c> carries; keep the two in sync.</summary>
     public const int MaxChannels = 8;
+    /// <summary>The socket-count ceiling: a kind declares at least one socket and at most this many.</summary>
+    public const int MaxSockets = 8;
 
     /// <summary>Gets the directory the manifest was loaded from — where its kernel source resolves.</summary>
     [JsonIgnore]
@@ -170,22 +192,31 @@ public sealed partial record ProbeKindManifest(
         if ((manifest.Inputs is null) || (manifest.Inputs.Count == 0)) {
             throw new InvalidDataException(message: $"'{manifest.Name}' manifest declares no inputs.");
         }
+        if (manifest.Inputs.Count > MaxSockets) {
+            throw new InvalidDataException(message: $"'{manifest.Name}' manifest declares {manifest.Inputs.Count} sockets; a probe kind admits at most {MaxSockets}.");
+        }
 
-        var triggered = false;
+        var socketNames = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         foreach (var input in manifest.Inputs) {
-            if (input.Previous && (input.Sensor != ProbeInputSensor.Infrared)) {
-                throw new InvalidDataException(message: $"'{manifest.Name}' manifest asks for a previous frame of the {input.Sensor} sensor; only infrared keeps one.");
+            if (!IsValidSocketName(name: input.Name)) {
+                throw new InvalidDataException(message: $"'{manifest.Name}' manifest declares a socket named '{input.Name}'; a socket name is letters, digits, or '-', starting with a letter.");
             }
-
-            triggered |= (input.Sensor == manifest.TriggerSensor);
+            if (!socketNames.Add(item: input.Name)) {
+                throw new InvalidDataException(message: $"'{manifest.Name}' manifest declares socket '{input.Name}' twice.");
+            }
         }
 
-        if (!triggered) {
-            throw new InvalidDataException(message: $"'{manifest.Name}' manifest's trigger sensor is not among its inputs.");
+        if (manifest.TriggerSocket < 0) {
+            throw new InvalidDataException(message: $"'{manifest.Name}' manifest's trigger '{manifest.Trigger}' does not name a declared socket.");
         }
-        if ((manifest.Output is { } output) && !string.Equals(a: output.Format, b: ProbeKindOutput.Rgba8, comparisonType: StringComparison.Ordinal)) {
-            throw new InvalidDataException(message: $"'{manifest.Name}' manifest's output format '{output.Format}' is not {ProbeKindOutput.Rgba8}.");
+        if (manifest.Output is { } output) {
+            if (!socketNames.Contains(item: output.Of)) {
+                throw new InvalidDataException(message: $"'{manifest.Name}' manifest's output.of '{output.Of}' does not name a declared socket.");
+            }
+            if (!string.Equals(a: output.Format, b: ProbeKindOutput.Rgba8, comparisonType: StringComparison.Ordinal)) {
+                throw new InvalidDataException(message: $"'{manifest.Name}' manifest's output format '{output.Format}' is not {ProbeKindOutput.Rgba8}.");
+            }
         }
         if (manifest.Channels.Count == 0) {
             throw new InvalidDataException(message: $"'{manifest.Name}' manifest declares no channels.");
@@ -336,6 +367,19 @@ public sealed partial record ProbeKindManifest(
     }
 
     private static string Format(double value) => value.ToString(provider: CultureInfo.InvariantCulture);
+    private static bool IsValidSocketName(string name) {
+        if (string.IsNullOrEmpty(value: name) || !char.IsAsciiLetter(c: name[0])) {
+            return false;
+        }
+
+        foreach (var character in name) {
+            if (!char.IsAsciiLetterOrDigit(c: character) && (character != '-')) {
+                return false;
+            }
+        }
+
+        return true;
+    }
 }
 
 /// <summary>The source-generated (AOT/trim-safe) serialization context for <see cref="ProbeKindManifest"/>.</summary>

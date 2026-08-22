@@ -2,7 +2,7 @@ namespace Puck.World.Client;
 
 /// <summary>
 /// The per-seat PERCEPTION ANCHOR — the ONE body index all seat-relative presentation derives from: the chase-camera
-/// anchor pose and the seat-join cue site (<c>WorldFrameSource</c>), the spatial-audio listener (through the
+/// anchor pose and the seat-join cue site (<c>WorldFramePresenter</c>), the spatial-audio listener (through the
 /// seat's resolved view-camera pose the frame source hands <c>WorldAudioDirector</c>), the crowd soft-shadow
 /// centers (<c>WorldSceneEmitter</c>), and the <c>seat.&lt;n&gt;.position.*</c> HUD binding family
 /// (<c>WorldHudBindingResolver</c>). The anchor resolves to the seat's bound body (slot n perceives from body

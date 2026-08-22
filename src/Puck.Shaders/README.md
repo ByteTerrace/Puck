@@ -167,7 +167,7 @@ runs, only the kind's own `class`.
   "$schema": "puck.probe.v1",
   "name": "ir-blob",
   "class": "kernel",
-  "input": { "sensor": "infrared", "tier": "shared" },
+  "inputs": [{ "name": "lit", "class": "frame" }],
   "kernel": { "source": "ir-blob.hlsl", "accumulate": "accumulate", "finalize": "finalize" },
   "channels": [
     { "name": "x", "min": -1, "max": 1, "neutral": 0 },
@@ -187,9 +187,9 @@ runs, only the kind's own `class`.
 | `$schema` | `puck.probe.v1`. |
 | `name` | The kind's id; must equal the file stem before `.puck.probe.json`. |
 | `class` | `kernel` (handwritten GPU compute on the camera graph's own device and worker) or `model` (an out-of-process host; no host runs a `model` kind yet). |
-| `inputs[]` | `{ sensor: "color"\|"infrared", previous?: bool }`, `1..8` entries bound at `t0, t1, …` in this order; `previous` reads the frame kept before the current one (infrared only — the unlit half of a strobe pair). |
-| `trigger` | The sensor whose new frame starts a cycle; defaults to `inputs[0].sensor`, must be among the inputs. |
-| `output` | `{ of: "color"\|"infrared", format?: "rgba8" }` — a texture the kind writes each cycle at that sensor's stream extent, published like a camera frame; a screen shows it as a `probe` source. Absent for a channels-only kind. |
+| `inputs[]` | `{ name, class: "frame"\|"strobePair", optional?: bool }`, `1..8` sockets bound at `t0, t1, …` in this order (a `strobePair` socket takes two consecutive registers, lit then unlit). `name` is unique within the manifest: letters, digits, or `-`, starting with a letter. A document row plugs one `WorldFrameSource` into each socket by name; `optional` lets a row leave it unbound. |
+| `trigger` | The socket name whose new frame starts a cycle; defaults to `inputs[0].name`, must name a declared socket. |
+| `output` | `{ of: <socket name>, format?: "rgba8" }` — a texture the kind writes each cycle at the named socket's bound source extent, published like a camera frame; a screen shows it as a `probe` source. `of` must name a declared socket. Absent for a channels-only kind. |
 | `kernel` | `{ source, accumulate, finalize }`, required for a `kernel`-class kind; `source` is an HLSL file beside the manifest. |
 | `channels[]` | `{ name, min, max, neutral, description }`, `1..8` entries (a `ProbeReading` carries at most 8 channels); `neutral` must lie in `[min, max]`. |
 | `config` | Same shape as a shader set's `config` — bound through the same `ShaderConfigBinding`. |
@@ -201,9 +201,9 @@ reflection:
 
 | Binding | Declares |
 |---------|----------|
-| `Texture2D<float4> … : register(t0, t1, …)` | The converted frames `inputs[]` names, in order (color as RGBA, infrared as `r`). |
+| `Texture2D<float4> … : register(t0, t1, …)` | The bound sources `inputs[]` names, in socket declaration order; a `strobePair` socket takes two consecutive registers (lit, then unlit). An unbound optional socket binds a null SRV, which `Load` returns 0 for. |
 | `cbuffer ProbeConfig : register(b0)` | The bound config, packed via `ProbeKindManifest.ConstantsBlock` in declaration order (HLSL constant-buffer packing — the same rule as a shader set's push-constant block) and padded to a 16-byte multiple, the D3D11 constant-buffer granule. A `parameter` binding targeting the probe patches one float of it live. |
-| `cbuffer ProbeFrame : register(b1)` | `{ float time; float deltaTime; uint frame; uint pad; }` — seconds since the kernel attached, seconds since its last cycle, and the cycle ordinal. |
+| `cbuffer ProbeFrame : register(b1)` | `{ float time; float deltaTime; uint frame; uint boundMask; }` — seconds since the kernel attached, seconds since its last cycle, the cycle ordinal, and a bit-per-socket mask (bit *i* set when socket *i* is bound). |
 | `RWStructuredBuffer<uint> Accumulate : register(u0)` | Scratch space, cleared before `accumulate` dispatches over the trigger frame (or the output extent, when the kind declares one). |
 | `RWStructuredBuffer<float> Channels : register(u1)` | `channels.Count + 1` floats, written once by `finalize`: the kind's channels in declaration order, then confidence. |
 | `RWTexture2D<float4> Output : register(u2)` | The declared `output`, when the kind has one; written by `accumulate`, copied to the published ring slot after `finalize`. |
@@ -227,8 +227,30 @@ color frame from a light orbiting an authored anchor (wrapped Lambert,
 Blinn-Phong with Fresnel, inverse-square-style falloff, a six-step shadow
 march up the height field, crease occlusion), draws the light as a sprite,
 and writes the frame to `Output`; its channels are the light's position, the
-mean response, and the responsive coverage. `irScale`/`irOffsetX`/`irOffsetY`
-align the infrared frame to the color frame.
+mean response, the responsive coverage, and a portal flag. `irScale`/
+`irOffsetX`/`irOffsetY` align the infrared frame to the color frame. A fourth,
+optional `painting` socket shows a quadrilateral of the color frame — corners
+authored as `paintingX0..paintingY3`, or bound from `ir-marker`'s channels —
+as a flat canvas wherever the strobe response there is background-level (a
+subject in front occludes it): the pixel is inverse-mapped through the quad
+by a closed-form projective (homography) solve, not the coarser two-triangle
+barycentric approximation, and the resulting texel replaces the wall's albedo
+under `paintingOpacity`, lit by the same light with a flat normal instead of
+the height field's. `journey` lerps the light itself from its orbit to the
+painting's centre on the canvas plane, shrinking the sprite as it goes; the
+`portal` channel reports 1 once `journey` clears `portalThreshold`.
+
+`ir-marker.hlsl` (the shipped `ir-marker` kind) turns the same strobe pair
+into an oriented rectangle instead of a texture: pixels whose lit-minus-unlit
+response clears `threshold` accumulate zeroth/first/second moments (the same
+fixed-point-atomic scheme as `ir-blob.hlsl`'s centroid, extended to the 2×2
+covariance), and a single-thread `finalize` turns that covariance's principal
+axes and eigenvalues into four corners — half extent `sqrt(3 · eigenvalue)`,
+the closed form for a uniform rectangular reflector rather than a Gaussian
+blob. The corners come out top-left, top-right, bottom-right, bottom-left in
+image terms, in `faerie`'s `paintingX0..paintingY3` config order, so a
+`marker` probe's channels bind directly onto a `faerie` probe's painting
+quad — retroreflective tape on a real wall becomes a tracked painting frame.
 
 ## 🧪 Verification
 

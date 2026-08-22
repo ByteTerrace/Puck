@@ -533,6 +533,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
 
         DisposeCamera();
         DisposeProbeFeeds();
+        DisposeViewExports();
 
         // After the feeds: the camera's and every probe's shared targets live on this headless device, so it must
         // outlive them.

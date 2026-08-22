@@ -932,14 +932,17 @@
                 "additionalProperties": false
               },
               {
-                "description": "The platform\u0027s default live camera feed, with an explicit preferred capture profile. The platform may negotiate a nearby extent; every screen sampling the same physical default device shares one session.",
+                "description": "The platform\u0027s default live camera feed. The platform may negotiate a nearby extent; every screen and probe socket naming the same sensor shares one feed, opened at the richest profile any screen row requests.",
                 "properties": {
                   "$type": {
                     "const": "camera"
                   },
                   "profile": {
-                    "description": "The preferred capture extent and maximum upload cadence.",
-                    "type": "object",
+                    "description": "The preferred capture extent and maximum upload cadence, or null for the platform default \u2014 a probe socket never needs one. Omitted from the wire when null.",
+                    "type": [
+                      "object",
+                      "null"
+                    ],
                     "properties": {
                       "width": {
                         "description": "Requested output width in pixels.",
@@ -954,7 +957,8 @@
                         "type": "integer"
                       }
                     },
-                    "additionalProperties": false
+                    "additionalProperties": false,
+                    "default": null
                   },
                   "controls": {
                     "description": "The authored device-control state (WorldCameraControls), or null to leave every control at its driver default. One physical device carries one control state across color and infrared, so the FIRST declared camera screen authoring this wins regardless of sensor (matching the shared-device model); a later UpsertScreen mutation re-resolves and applies the change live. Omitted from the wire when null.",
@@ -1110,9 +1114,6 @@
                     "default": "Color"
                   }
                 },
-                "required": [
-                  "profile"
-                ],
                 "additionalProperties": false
               },
               {
@@ -1496,13 +1497,14 @@
                       "additionalProperties": false
                     },
                     {
-                      "description": "The platform\u0027s default live camera feed, with an explicit preferred capture profile. The platform may negotiate a nearby extent; every screen sampling the same physical default device shares one session.",
+                      "description": "The platform\u0027s default live camera feed. The platform may negotiate a nearby extent; every screen and probe socket naming the same sensor shares one feed, opened at the richest profile any screen row requests.",
                       "properties": {
                         "$type": {
                           "const": "camera"
                         },
                         "profile": {
-                          "$ref": "#/properties/screens/items/properties/source/anyOf/3/properties/profile"
+                          "$ref": "#/properties/screens/items/properties/source/anyOf/3/properties/profile",
+                          "default": null
                         },
                         "controls": {
                           "$ref": "#/properties/screens/items/properties/source/anyOf/3/properties/controls",
@@ -1517,9 +1519,6 @@
                           "default": "Color"
                         }
                       },
-                      "required": [
-                        "profile"
-                      ],
                       "additionalProperties": false
                     },
                     {
@@ -5644,13 +5643,14 @@
                       "additionalProperties": false
                     },
                     {
-                      "description": "The platform\u0027s default live camera feed, with an explicit preferred capture profile. The platform may negotiate a nearby extent; every screen sampling the same physical default device shares one session.",
+                      "description": "The platform\u0027s default live camera feed. The platform may negotiate a nearby extent; every screen and probe socket naming the same sensor shares one feed, opened at the richest profile any screen row requests.",
                       "properties": {
                         "$type": {
                           "const": "camera"
                         },
                         "profile": {
-                          "$ref": "#/properties/screens/items/properties/source/anyOf/3/properties/profile"
+                          "$ref": "#/properties/screens/items/properties/source/anyOf/3/properties/profile",
+                          "default": null
                         },
                         "controls": {
                           "$ref": "#/properties/screens/items/properties/source/anyOf/3/properties/controls",
@@ -5665,9 +5665,6 @@
                           "default": "Color"
                         }
                       },
-                      "required": [
-                        "profile"
-                      ],
                       "additionalProperties": false
                     },
                     {

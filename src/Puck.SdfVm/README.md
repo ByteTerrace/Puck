@@ -86,6 +86,15 @@ only consumer). `Puck.SdfVm.Views` holds the camera-rig shapes
 self-reference rule that keeps a screen wired to its own view from
 compounding frame over frame.
 
+`SdfCameraView.ExportFactory` puts that view's offscreen engine into export
+mode (`SdfWorldEngineOptions.CreateOutputImage` returning an
+`IGpuExportableStorageImage`): the same rendered image both keeps serving
+`Resolve`'s same-device view handle (a jumbotron still samples it unchanged)
+and exposes `ExportSharedHandle` for a same-adapter, cross-API consumer to
+open. Setting the factory after the engine already exists disposes it, so the
+change takes effect on the next resolve; `ExportGeneration` changes identity
+every rebuild (a late export request, a dimension change, device loss).
+
 ## 🐛 Debug and bench tooling
 
 `Puck.SdfVm.Debug` carries the fullscreen SDF-debug takeover

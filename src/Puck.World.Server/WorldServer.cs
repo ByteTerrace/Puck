@@ -394,7 +394,7 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// directly — loopback-only, like every other client↔server call that has not yet crossed a wire).</summary>
     public WorldEngagement Engagement => m_engagement;
     /// <summary>Gets this instance's own render-capacity oracle — configured by whatever presentation-side content
-    /// source renders this instance (the boot world's own <c>WorldFrameSource</c>, or an observing destination's
+    /// source renders this instance (the boot world's own <c>WorldFramePresenter</c>, or an observing destination's
     /// session or continuum view), so a document mutation the same instance receives is checked against the same
     /// probed floor a renderer already committed to. Unconfigured (nothing renders this instance yet) reads as
     /// "fits" — <see cref="WorldRenderEnvelope"/>'s own documented default.</summary>

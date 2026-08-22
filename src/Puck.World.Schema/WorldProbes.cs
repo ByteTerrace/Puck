@@ -4,10 +4,14 @@ using Puck.Assets.Documents;
 
 namespace Puck.World;
 
-/// <summary>One <c>probes</c> row: a registered probe kind reading a declared input at a bounded rate, and the bindings
-/// that route its channels. A world declares no <c>probes</c> rows when it wants no camera-derived reading at all.
-/// Boot-authored only: no <see cref="Protocol.WorldSection"/> dispatch axis carries a live mutation kind for it yet
-/// (see <see cref="Protocol.WorldSection.Probes"/>), the same standing <c>judges</c> carries.</summary>
+/// <summary>One <c>probes</c> row: a registered probe kind reading a declared SOCKET set at a bounded rate, and the
+/// bindings that route its channels. A socket is a named input slot the kind's manifest declares (e.g. <c>color</c>,
+/// <c>strobe</c>); a row plugs one <see cref="WorldFrameSource"/> into each socket name it binds. Exactly one of
+/// <see cref="Inputs"/>/<see cref="Track"/> is present — the live-hardware leg (named sockets) or the recorded-track
+/// leg (one <c>puck.probe-track.v1</c> document standing in for every socket at once), never both, never neither. A
+/// world declares no <c>probes</c> rows when it wants no camera-derived reading at all. Boot-authored only: no
+/// <see cref="Protocol.WorldSection"/> dispatch axis carries a live mutation kind for it yet (see
+/// <see cref="Protocol.WorldSection.Probes"/>), the same standing <c>judges</c> carries.</summary>
 /// <param name="Id">The probe's own name — <see cref="WorldSafeName"/>-shaped, unique among the rows; <c>probe.status</c>
 /// and <c>probe.record</c> address it.</param>
 /// <param name="Kind">The registered probe kind id (a <c>puck.probe.v1</c> manifest's file stem) — checked
@@ -15,9 +19,16 @@ namespace Puck.World;
 /// (<see cref="WorldProbeVocabularyHook.IsRegisteredProbeKind"/>), never interpreted here. The document never
 /// states where the kind runs; the kind's own registration decides kernel-on-device versus out-of-process
 /// model.</param>
-/// <param name="Input">The stream this probe reads.</param>
 /// <param name="RateHz">The probe's cadence ceiling, 1..240 Hz — a rate its host may run slower than
 /// (latest-wins throughout the pipeline), never faster.</param>
+/// <param name="Inputs">The kind's sockets, by name, each bound to the frame source that fills it — the live-hardware
+/// leg. The socket vocabulary itself lives behind the kind's manifest, unchecked here; the host checks a bound name
+/// against it by name at boot, the same shallow-then-deep split every kind-vocabulary field follows. Mutually
+/// exclusive with <see cref="Track"/>. Omitted from the wire when null.</param>
+/// <param name="Track">A recorded <c>puck.probe-track.v1</c> document path, resolved against the world document's own
+/// directory, played back in place of every socket at once — <c>probe.record</c>'s own output shape, the
+/// hardware-free leg every probe admits. Mutually exclusive with <see cref="Inputs"/>. Omitted from the wire when
+/// null.</param>
 /// <param name="Config">The kind's config values, or <see langword="null"/> when the kind declares none or every
 /// field has a default. Not validated at document load — the kind's own manifest config schema validates it at
 /// boot, matching <see cref="WorldRenderExtensionEntry.Config"/>'s shallow-then-deep precedent.</param>
@@ -25,30 +36,12 @@ namespace Puck.World;
 public sealed record WorldProbe(
     string Id,
     string Kind,
-    WorldProbeInput Input,
     uint RateHz,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, WorldFrameSource>? Inputs = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Track = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] JsonElement? Config = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldProbeBinding>? Bindings = null
 );
-/// <summary>The stream a <see cref="WorldProbe"/> reads — a live camera sensor, or a recorded
-/// <c>puck.probe-track.v1</c> track played back in its place (the hardware-free leg every probe admits). The
-/// <c>$type</c> string is the JSON discriminator.</summary>
-[JsonDerivedType(typeof(WorldProbeInput.Camera), typeDiscriminator: "camera")]
-[JsonDerivedType(typeof(WorldProbeInput.Track), typeDiscriminator: "track")]
-[JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
-public abstract record WorldProbeInput {
-    private WorldProbeInput() {
-    }
-
-    /// <summary>Reads a physical camera's shared-tier stream — the same sensor a <see cref="WorldScreenSource.Camera"/>
-    /// row names.</summary>
-    /// <param name="Sensor">Which physical sensor the probe reads.</param>
-    public sealed record Camera(WorldCameraSensor Sensor) : WorldProbeInput;
-    /// <summary>Plays a recorded <c>puck.probe-track.v1</c> document instead of a live device — <c>probe.record</c>'s
-    /// own output shape.</summary>
-    /// <param name="Path">The track document's path, resolved against the world document's own directory.</param>
-    public sealed record Track(string Path) : WorldProbeInput;
-}
 /// <summary>The presentation target a <see cref="WorldProbeBinding.Parameter"/> row writes. The <c>$type</c> string
 /// is the JSON discriminator; a future target (a view-rig op, an overlay layer transform) widens this union with
 /// another arm rather than adding parallel optional fields to the binding row.</summary>

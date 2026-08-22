@@ -33,7 +33,7 @@ namespace Puck.World.Client;
 /// <para><b>Cost.</b> Bounded per adjacency by <see cref="MaxInstancesPerBand"/> solid instances plus
 /// <see cref="MaxEntitiesPerBand"/> worst-case rigs, reserved by the construction-time probe exactly like the boot
 /// world's own placement headroom, so it folds into the same frozen ceiling
-/// <c>WorldFrameSource.ProgramWordCapacity</c>/<c>WorldFrameSource.InstanceCapacity</c> already report — no new
+/// <c>WorldFramePresenter.ProgramWordCapacity</c>/<c>WorldFramePresenter.InstanceCapacity</c> already report — no new
 /// reservation class. A band is reserved for every direct edge PLUS every derivable corner pair
 /// (<c>WorldAdjacencyBands.ProjectionCapacity</c>), so the reservation grows quadratically in authored edges.</para>
 /// </remarks>

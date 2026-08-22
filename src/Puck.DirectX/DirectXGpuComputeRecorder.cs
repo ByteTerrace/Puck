@@ -165,12 +165,15 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
         // neutral stage/access masks) and first-class layouts. The neutral oldLayout is honored directly — Undefined
         // maps to LAYOUT_UNDEFINED with a discard, so no per-resource state tracking is needed.
         if (UseEnhancedBarriers(deviceHandle: deviceHandle)) {
+            // A simultaneous-access texture (one a foreign device opens) only ever holds the COMMON layout, which
+            // admits every access; its layout never moves, so no discard either.
+            var simultaneous = DirectXSimultaneousAccessResources.Contains(resourceHandle: imageHandle);
             var textureBarrier = new D3D12_TEXTURE_BARRIER {
                 AccessAfter = ToTextureAccess(layout: newLayout),
                 AccessBefore = ToTextureAccess(layout: oldLayout),
-                Flags = ((oldLayout == GpuImageLayout.Undefined) ? D3D12_TEXTURE_BARRIER_FLAGS.D3D12_TEXTURE_BARRIER_FLAG_DISCARD : D3D12_TEXTURE_BARRIER_FLAGS.D3D12_TEXTURE_BARRIER_FLAG_NONE),
-                LayoutAfter = ToBarrierLayout(layout: newLayout),
-                LayoutBefore = ToBarrierLayout(layout: oldLayout),
+                Flags = (((oldLayout == GpuImageLayout.Undefined) && !simultaneous) ? D3D12_TEXTURE_BARRIER_FLAGS.D3D12_TEXTURE_BARRIER_FLAG_DISCARD : D3D12_TEXTURE_BARRIER_FLAGS.D3D12_TEXTURE_BARRIER_FLAG_NONE),
+                LayoutAfter = (simultaneous ? D3D12_BARRIER_LAYOUT.D3D12_BARRIER_LAYOUT_COMMON : ToBarrierLayout(layout: newLayout)),
+                LayoutBefore = (simultaneous ? D3D12_BARRIER_LAYOUT.D3D12_BARRIER_LAYOUT_COMMON : ToBarrierLayout(layout: oldLayout)),
                 pResource = ((ID3D12Resource*)imageHandle),
                 Subresources = new D3D12_BARRIER_SUBRESOURCE_RANGE { IndexOrFirstMipLevel = DirectXConstants.AllSubresources, },
                 SyncAfter = ToBarrierSync(stageMask: destinationStageMask),

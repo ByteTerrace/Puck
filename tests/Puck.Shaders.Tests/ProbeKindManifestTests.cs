@@ -14,9 +14,11 @@ public sealed class ProbeKindManifestTests {
 
         Assert.Equal(expected: "ir-blob", actual: manifest.Name);
         Assert.Equal(expected: ProbeKindClass.Kernel, actual: manifest.Class);
-        Assert.Equal(expected: ProbeInputSensor.Infrared, actual: manifest.TriggerSensor);
+        Assert.Equal(expected: 0, actual: manifest.TriggerSocket);
         Assert.Single(collection: manifest.Inputs);
-        Assert.False(condition: manifest.Inputs[0].Previous);
+        Assert.Equal(expected: "lit", actual: manifest.Inputs[0].Name);
+        Assert.Equal(expected: ProbeSocketClass.Frame, actual: manifest.Inputs[0].Class);
+        Assert.False(condition: manifest.Inputs[0].Optional);
         Assert.Null(@object: manifest.Output);
         Assert.Equal(expected: ["x", "y", "coverage", "luminance"], actual: manifest.Channels.Select(selector: channel => channel.Name).ToArray());
         Assert.Equal(expected: Path.GetDirectoryName(path: IrBlobManifestPath), actual: manifest.Directory);
@@ -183,10 +185,82 @@ public sealed class ProbeKindManifestTests {
         }
     }
     [Fact]
+    public void Duplicate_socket_name_refuses() {
+        var scratch = WriteMultiSocketManifest(mutate: node => node["inputs"]![2]!["name"] = "color");
+
+        try {
+            var exception = Assert.Throws<InvalidDataException>(testCode: () => ProbeKindManifest.Load(manifestPath: scratch));
+
+            Assert.Contains(expectedSubstring: "declares socket 'color' twice", actualString: exception.Message, comparisonType: StringComparison.Ordinal);
+        } finally {
+            Directory.Delete(path: Path.GetDirectoryName(path: scratch)!, recursive: true);
+        }
+    }
+    [Fact]
+    public void Trigger_naming_no_socket_refuses() {
+        var scratch = WriteMultiSocketManifest(mutate: node => node["trigger"] = "no-such-socket");
+
+        try {
+            var exception = Assert.Throws<InvalidDataException>(testCode: () => ProbeKindManifest.Load(manifestPath: scratch));
+
+            Assert.Contains(expectedSubstring: "trigger 'no-such-socket' does not name a declared socket", actualString: exception.Message, comparisonType: StringComparison.Ordinal);
+        } finally {
+            Directory.Delete(path: Path.GetDirectoryName(path: scratch)!, recursive: true);
+        }
+    }
+    [Fact]
+    public void Output_of_naming_no_socket_refuses() {
+        var scratch = WriteMultiSocketManifest(mutate: node => node["output"]!["of"] = "no-such-socket");
+
+        try {
+            var exception = Assert.Throws<InvalidDataException>(testCode: () => ProbeKindManifest.Load(manifestPath: scratch));
+
+            Assert.Contains(expectedSubstring: "output.of 'no-such-socket' does not name a declared socket", actualString: exception.Message, comparisonType: StringComparison.Ordinal);
+        } finally {
+            Directory.Delete(path: Path.GetDirectoryName(path: scratch)!, recursive: true);
+        }
+    }
+    [Fact]
+    public void StrobePair_and_optional_sockets_round_trip() {
+        var scratch = WriteMultiSocketManifest(mutate: static _ => { });
+
+        try {
+            var manifest = ProbeKindManifest.Load(manifestPath: scratch);
+
+            Assert.Equal(expected: "strobe", actual: manifest.Inputs[1].Name);
+            Assert.Equal(expected: ProbeSocketClass.StrobePair, actual: manifest.Inputs[1].Class);
+            Assert.False(condition: manifest.Inputs[1].Optional);
+            Assert.Equal(expected: "painting", actual: manifest.Inputs[2].Name);
+            Assert.Equal(expected: ProbeSocketClass.Frame, actual: manifest.Inputs[2].Class);
+            Assert.True(condition: manifest.Inputs[2].Optional);
+        } finally {
+            Directory.Delete(path: Path.GetDirectoryName(path: scratch)!, recursive: true);
+        }
+    }
+    [Fact]
+    public void TriggerSocket_resolves_the_authored_name_or_defaults_to_the_first_socket() {
+        var authored = WriteMultiSocketManifest(mutate: node => node["trigger"] = "strobe");
+
+        try {
+            Assert.Equal(expected: 1, actual: ProbeKindManifest.Load(manifestPath: authored).TriggerSocket);
+        } finally {
+            Directory.Delete(path: Path.GetDirectoryName(path: authored)!, recursive: true);
+        }
+
+        var defaulted = WriteMultiSocketManifest(mutate: node => node.Remove(propertyName: "trigger"));
+
+        try {
+            Assert.Equal(expected: 0, actual: ProbeKindManifest.Load(manifestPath: defaulted).TriggerSocket);
+        } finally {
+            Directory.Delete(path: Path.GetDirectoryName(path: defaulted)!, recursive: true);
+        }
+    }
+    [Fact]
     public void Catalog_finds_shipped_kinds_and_refuses_a_duplicate_id() {
         var catalog = ProbeKindCatalog.Scan(rootDirectory: ProbesDirectory);
 
-        Assert.Equal(expected: ["faerie", "ir-blob"], actual: catalog.Ids);
+        Assert.Contains(expected: "faerie", collection: catalog.Ids);
+        Assert.Contains(expected: "ir-blob", collection: catalog.Ids);
         Assert.True(condition: catalog.Contains(id: "ir-blob"));
         Assert.False(condition: catalog.Contains(id: "no-such-kind"));
         Assert.Equal(expected: "ir-blob", actual: catalog.Load(id: "ir-blob").Name);
@@ -229,4 +303,34 @@ public sealed class ProbeKindManifestTests {
 
         return manifestPath;
     }
+    private static string WriteMultiSocketManifest(Action<System.Text.Json.Nodes.JsonObject> mutate) {
+        var scratch = Directory.CreateTempSubdirectory(prefix: "puck-sense-manifest-");
+        var manifestPath = Path.Combine(path1: scratch.FullName, path2: "multi-socket.puck.probe.json");
+        var node = System.Text.Json.Nodes.JsonNode.Parse(json: MultiSocketManifestJson)!.AsObject();
+
+        mutate(obj: node);
+        File.WriteAllText(path: manifestPath, contents: node.ToJsonString());
+
+        return manifestPath;
+    }
+
+    // A MODEL-class kind (no kernel block, so no HLSL source needs to exist on disk) exercising every socket
+    // shape: a required frame socket, a required strobePair socket, and an optional frame socket.
+    private const string MultiSocketManifestJson = """
+    {
+      "$schema": "puck.probe.v1",
+      "name": "multi-socket",
+      "class": "model",
+      "inputs": [
+        { "name": "color", "class": "frame" },
+        { "name": "strobe", "class": "strobePair" },
+        { "name": "painting", "class": "frame", "optional": true }
+      ],
+      "trigger": "color",
+      "output": { "of": "color" },
+      "channels": [
+        { "name": "x", "min": -1, "max": 1, "neutral": 0 }
+      ]
+    }
+    """;
 }

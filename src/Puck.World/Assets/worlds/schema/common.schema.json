@@ -409,8 +409,10 @@
       "additionalProperties": false
     },
     "WorldFeedProfile": {
-      "description": "A live screen feed\u0027s requested output policy. It belongs to the source declaration rather than the binder, so two window captures can choose different extents and cadences. Camera extents are preferences because a physical device remains authoritative for its negotiated format.",
-      "type": "object",
+      "type": [
+        "object",
+        "null"
+      ],
       "properties": {
         "width": {
           "description": "Requested output width in pixels.",
@@ -575,14 +577,15 @@
       "additionalProperties": false
     },
     "WorldScreenSourceCamera": {
-      "description": "The platform\u0027s default live camera feed, with an explicit preferred capture profile. The platform may negotiate a nearby extent; every screen sampling the same physical default device shares one session.",
+      "description": "The platform\u0027s default live camera feed. The platform may negotiate a nearby extent; every screen and probe socket naming the same sensor shares one feed, opened at the richest profile any screen row requests.",
       "properties": {
         "$type": {
           "const": "camera"
         },
         "profile": {
           "$ref": "#/$defs/WorldFeedProfile",
-          "description": "The preferred capture extent and maximum upload cadence."
+          "description": "The preferred capture extent and maximum upload cadence, or null for the platform default \u2014 a probe socket never needs one. Omitted from the wire when null.",
+          "default": null
         },
         "controls": {
           "$ref": "#/$defs/WorldCameraControls",
@@ -598,9 +601,6 @@
           "default": "Color"
         }
       },
-      "required": [
-        "profile"
-      ],
       "additionalProperties": false
     },
     "WorldScreenSourceView": {
@@ -619,6 +619,25 @@
       ],
       "additionalProperties": false
     },
+    "WorldFeedProfileNonNullable": {
+      "description": "A live screen feed\u0027s requested output policy. It belongs to the source declaration rather than the binder, so two window captures can choose different extents and cadences. Camera extents are preferences because a physical device remains authoritative for its negotiated format.",
+      "type": "object",
+      "properties": {
+        "width": {
+          "description": "Requested output width in pixels.",
+          "type": "integer"
+        },
+        "height": {
+          "description": "Requested output height in pixels.",
+          "type": "integer"
+        },
+        "refreshRateHz": {
+          "description": "Maximum pull/upload cadence; it must divide the engine time base exactly.",
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false
+    },
     "WorldScreenSourceCapture": {
       "description": "A live compositor capture feed \u2014 a desktop window keyed by title, or a whole monitor keyed by index. The selector is the altitude of the primitive: MonitorIndex null is window mode; non-null is whole-monitor mode (and WindowTitle is unused).",
       "properties": {
@@ -630,7 +649,7 @@
           "type": "string"
         },
         "profile": {
-          "$ref": "#/$defs/WorldFeedProfile",
+          "$ref": "#/$defs/WorldFeedProfileNonNullable",
           "description": "This capture consumer\u0027s output extent and maximum refresh cadence."
         },
         "monitorIndex": {

@@ -81,9 +81,11 @@
         "threshold": 0.55
       },
       "id": "head",
-      "input": {
-        "$type": "camera",
-        "sensor": "Infrared"
+      "inputs": {
+        "lit": {
+          "$type": "camera",
+          "sensor": "Infrared"
+        }
       },
       "kind": "ir-blob",
       "rateHz": 15

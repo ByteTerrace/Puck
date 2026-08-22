@@ -6,7 +6,7 @@ namespace Puck.World;
 /// <summary>
 /// The World-side feed behind the unified overlay's authored-HUD source. Two reconcile domains share one published
 /// <see cref="HudStore"/> frame: world-scope panels (<see cref="WorldDefinition.Hud"/>) reconcile only when
-/// <see cref="WorldClient.DefinitionRevision"/> moves (the <c>WorldFrameSource</c> revision-reconcile pattern), so
+/// <see cref="WorldClient.DefinitionRevision"/> moves (the <c>WorldFramePresenter</c> revision-reconcile pattern), so
 /// most produced frames pay only the revision-compare cost; player-scope panels (each joined seat's
 /// <c>WorldProfile.Hud</c>) recompose every produced frame from a preallocated array — they depend on the roster
 /// (who is joined, in what view order), which the definition revision does not cover; the walk is bounded to
@@ -97,7 +97,7 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
                 continue;
             }
 
-            var viewport = WorldFrameSource.LayoutRegion(
+            var viewport = WorldFramePresenter.LayoutRegion(
                 count: joined,
                 index: localViewIndex
             );

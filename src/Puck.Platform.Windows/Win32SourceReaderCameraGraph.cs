@@ -540,16 +540,30 @@ internal sealed class Win32SourceReaderSharedGraph : Win32SourceReaderCameraGrap
     public bool TryAttachKernel(in ProbeKernelRequest request, ProbeReadingRing ring, [NotNullWhen(true)] out IProbeKernelRun? run, out string fault) {
         ArgumentNullException.ThrowIfNull(ring);
 
-        foreach (var input in request.Inputs) {
-            if ((CameraSensor.Color != input.Sensor) || input.Previous) {
-                run = null;
-                fault = "a single-sensor graph binds only its current color frame";
+        var triggered = false;
 
-                return false;
+        foreach (var input in request.Inputs) {
+            switch (input) {
+                case ProbeKernelInput.Sensor sensorInput:
+                    if (CameraSensor.Color != sensorInput.Kind) {
+                        run = null;
+                        fault = "a single-sensor graph binds only its current color frame";
+
+                        return false;
+                    }
+
+                    triggered |= (sensorInput.Kind == request.Trigger);
+
+                    break;
+                case ProbeKernelInput.StrobePair:
+                    run = null;
+                    fault = "a single-sensor graph carries no strobe pair";
+
+                    return false;
             }
         }
 
-        if ((request.Inputs.Count == 0) || (CameraSensor.Color != request.Trigger)) {
+        if (!triggered || (CameraSensor.Color != request.Trigger)) {
             run = null;
             fault = "the trigger sensor must be the graph's color stream";
 
@@ -561,7 +575,7 @@ internal sealed class Win32SourceReaderSharedGraph : Win32SourceReaderCameraGrap
 
         return true;
     }
-    nint IProbeInputResolver.Resolve(ProbeKernelInput input) => (((m_latestSlot >= 0) && (CameraSensor.Color == input.Sensor) && !input.Previous)
+    nint IProbeInputResolver.Resolve(CameraSensor sensor, bool previous) => (((m_latestSlot >= 0) && (CameraSensor.Color == sensor) && !previous)
         ? m_targetViews[m_latestSlot]
         : 0
     );

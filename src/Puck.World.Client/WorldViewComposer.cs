@@ -153,7 +153,7 @@ public sealed class WorldViewComposer {
         m_targetSlots.Clear();
 
         for (var index = 0; (index < joinedCount); index++) {
-            var region = WorldFrameSource.LayoutRegion(
+            var region = WorldFramePresenter.LayoutRegion(
                 count: joinedCount,
                 index: index
             );

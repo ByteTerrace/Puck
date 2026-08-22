@@ -82,15 +82,21 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
         var axisBindings = new List<AxisState>();
         var parameterBindings = new List<ParameterState>();
         var controlBindings = new List<ControlState>();
+        var probesById = new Dictionary<string, WorldProbe>(comparer: StringComparer.Ordinal);
+
+        foreach (var row in probes) {
+            probesById[row.Id] = row;
+        }
 
         // Every probe exists before any binding resolves: a parameter binding may steer a probe declared after its
-        // own row.
+        // own row, and a `probe` socket may name one declared after its own row too.
         for (var index = 0; (index < probes.Count); index++) {
             var row = probes[index];
 
             m_probes[index] = BuildProbe(
                 documentDirectory: documentDirectory,
                 index: index,
+                probesById: probesById,
                 row: row
             );
             m_probeIndexById[row.Id] = index;
@@ -275,20 +281,57 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
 
         wroteSegment = true;
     }
-    private void DescribeProbe(StringBuilder builder, ProbeState probe, long nowTimestamp) {
-        builder.Append(value: probe.Row.Id);
-        builder.Append(value: " kind=").Append(value: probe.Row.Kind);
-        builder.Append(value: " input=");
-
-        switch (probe.Row.Input) {
-            case WorldProbeInput.Camera camera:
+    // A socket's bound source, in the same "kind:detail" shorthand every screen/camera read-back already uses.
+    private static void AppendFrameSource(StringBuilder builder, WorldFrameSource source) {
+        switch (source) {
+            case WorldScreenSource.Camera camera:
                 builder.Append(value: "camera:").Append(value: camera.Sensor.ToString().ToLowerInvariant());
 
                 break;
-            case WorldProbeInput.Track:
-                builder.Append(value: "track");
+            case WorldScreenSource.View view:
+                builder.Append(value: "view:").Append(value: view.CameraName);
 
                 break;
+            case WorldScreenSource.Probe probe:
+                builder.Append(value: "probe:").Append(value: probe.Id);
+
+                break;
+            case WorldScreenSource.Capture capture:
+                builder.Append(value: "capture:").Append(value: ((capture.MonitorIndex is { } monitorIndex) ? $"monitor{monitorIndex}" : capture.WindowTitle));
+
+                break;
+            default:
+                builder.Append(value: "unknown");
+
+                break;
+        }
+    }
+    private void DescribeProbe(StringBuilder builder, ProbeState probe, long nowTimestamp) {
+        builder.Append(value: probe.Row.Id);
+        builder.Append(value: " kind=").Append(value: probe.Row.Kind);
+
+        if (probe.Row.Track is { } trackPath) {
+            builder.Append(value: " track=").Append(value: trackPath);
+        } else {
+            builder.Append(value: " input=");
+
+            var sockets = probe.Manifest.Inputs;
+
+            for (var index = 0; (index < sockets.Count); index++) {
+                if (index > 0) {
+                    builder.Append(value: ' ');
+                }
+
+                var socket = sockets[index];
+
+                builder.Append(value: socket.Name).Append(value: '=');
+
+                if ((probe.Row.Inputs is { } inputs) && inputs.TryGetValue(key: socket.Name, value: out var source)) {
+                    AppendFrameSource(builder: builder, source: source);
+                } else {
+                    builder.Append(value: "unbound");
+                }
+            }
         }
 
         if (probe.Track is not null) {
@@ -311,7 +354,7 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
         }
 
         if (probe.Manifest.Output is { } output) {
-            builder.Append(value: " output=").Append(value: output.Of.ToString().ToLowerInvariant());
+            builder.Append(value: " output=").Append(value: output.Of);
         }
 
         if (probe.Ring.TryReadLatest(reading: out var reading)) {
@@ -492,18 +535,22 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
 
     // One declared probe's live state: its loaded kind manifest, its packed constants (the bound config, patched in
     // place by a parameter binding that steers this probe), the reading ring every binding against it reads, and —
-    // for a camera-input probe — the attachment and output-ring generations its kernel run was started against and
-    // the run itself; for a track-input probe, the player advancing the same ring.
+    // for a socket-input probe — the sensor its trigger socket binds, the resolved extent its declared output takes
+    // (recomputed every ServiceProbes pass; read by another probe's own `probe` socket), the per-socket generation
+    // set its kernel run was last (re)started against, and the run itself; for a track-input probe, the player
+    // advancing the same ring. SocketGenerations null means the run is not currently attached (either never
+    // started, or every socket is being re-evaluated after an unready frame) — the next ready frame always attaches.
     private sealed class ProbeState {
         public required byte[] Constants { get; init; }
         public string? Fault { get; set; }
         public required ProbeKindManifest Manifest { get; init; }
+        public (int Width, int Height)? OutputExtent { get; set; }
         public object? OutputSet { get; set; }
         public required ProbeReadingRing Ring { get; init; }
         public required WorldProbe Row { get; init; }
         public IProbeKernelRun? Run { get; set; }
-        public WorldCameraSensor? Sensor { get; init; }
-        public object? TargetSet { get; set; }
+        public object?[]? SocketGenerations { get; set; }
+        public WorldCameraSensor? TriggerSensor { get; init; }
         public ProbeTrackPlayer? Track { get; init; }
     }
     // One declared axis binding's live state. Conditioner is a plain field (never a property): ProbeAxisConditioner
