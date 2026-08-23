@@ -43,8 +43,6 @@ public sealed record BindingProfileDocument(
 /// <summary>A player's on-screen binding-bar LOOK preferences — presentation only, never a binding. Each field
 /// overrides the world-authored policy when set; <see langword="null"/> defers to it.</summary>
 /// <param name="HideUnbound">Overrides whether a slot with no bound act on its page renders at all.</param>
-/// <param name="Stacked">Overrides whether every authored bank renders (<see langword="true"/>) or only the active
-/// bank (<see langword="false"/>).</param>
 /// <param name="Scale">Overrides the authored layout's uniform cluster scale.</param>
 /// <param name="ContrastBoost">A multiplier, in <c>[1, 2]</c>, applied over the resolved theme's scrim alphas and
 /// text contrast at the one theme resolve point — 1 leaves the authored theme unchanged; 2 pushes every scrim
@@ -54,7 +52,6 @@ public sealed record BindingProfileDocument(
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record BindingBarPreferences(
     bool? HideUnbound = null,
-    bool? Stacked = null,
     float? Scale = null,
     float? ContrastBoost = null,
     float? UiScale = null

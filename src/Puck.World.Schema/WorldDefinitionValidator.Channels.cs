@@ -238,6 +238,17 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path}.layoutCell '{layoutCell}' must be spelled state.<row>.<key>.");
         }
 
+        if (
+            (authoring.ModelCell is { } modelCell) &&
+            !(BindableState.TryParseBinding(
+            key: out var modelKey,
+            row: out _,
+            value: modelCell
+        ) && (modelKey is not null))
+        ) {
+            errors.Add(item: $"{path}.modelCell '{modelCell}' must be spelled state.<row>.<key>.");
+        }
+
         if (authoring.Banks is null) {
             errors.Add(item: $"{path}.banks is required.");
         } else if (authoring.Banks.Count == 0) {

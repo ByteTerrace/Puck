@@ -570,58 +570,6 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
     // so a durable bindings edit (identity.bindings.save) recomposes and hot-reloads the couch's mappings at once —
     // the seat handles are the same shared WorldIdentity the edit above mutated in place, so the new section reads
     // straight off the live handle. The ONE seat-refresh path this durable-edit verb uses.
-    // The player's own switch between the two bar models. "stacked": every authored bank draws around the anchor,
-    // the active one at full alpha and the rest as translucent wings. "paged": one bank at a time — the bank naming
-    // the seat's ACTIVE page — swapping as a chord is held or released. Both are one stored preference
-    // (BindingBarPreferences.Stacked) on the seat's identity; the authored bar is the same either way.
-    private CommandResult BarHandler(CommandContext context, WireArgs args) {
-        if (args.Count is < 1 or > 2) {
-            return CommandResult.Error(output: "[player.bar: expected <stacked|paged> [seat]]");
-        }
-
-        bool stacked;
-
-        if (args[0].Equals(other: "stacked", comparisonType: StringComparison.OrdinalIgnoreCase)) {
-            stacked = true;
-        } else if (args[0].Equals(other: "paged", comparisonType: StringComparison.OrdinalIgnoreCase)) {
-            stacked = false;
-        } else {
-            return CommandResult.Error(output: $"[player.bar: model must be stacked or paged, not '{args[0].ToString()}']");
-        }
-
-        if (!WorldArgs.TryParseIndex(
-            args: args,
-            at: 1,
-            fallback: PlayerRoster.DisplayNumber(slot: context.Slot),
-            max: PlayerRoster.MaxSlots,
-            min: 1,
-            value: out var seat
-        )) {
-            return CommandResult.Error(output: $"[player.bar: seat must be an integer 1..{PlayerRoster.MaxSlots}]");
-        }
-
-        var slot = PlayerRoster.SlotFromDisplay(number: seat);
-
-        if (m_roster.ProfileAt(slot: slot) is not { } profile) {
-            return CommandResult.Error(output: $"[player.bar: seat {seat} is not joined — see world.players]");
-        }
-
-        // A preference rides the identity's binding layer (the same document identity.bindings.save writes), so a
-        // profile carrying no bindings yet gets an otherwise-empty layer holding only the preference.
-        var bindings = (profile.Bindings ?? new BindingProfileDocument(
-            Chords: [],
-            Modifiers: [],
-            Version: BindingProfileDocument.CurrentVersion
-        ));
-
-        profile.Bindings = (bindings with {
-            BindingBar = ((bindings.BindingBar ?? new BindingBarPreferences()) with { Stacked = stacked, }),
-        });
-        m_ownedWorlds.Save();
-        RefreshSeatsBoundTo(profileId: profile.Id);
-
-        return new CommandResult(Output: $"[player.bar: seat {seat} {(stacked ? "stacked" : "paged")} → world:{profile.Id}]");
-    }
     private void RefreshSeatsBoundTo(string profileId) {
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
             if (
@@ -955,13 +903,6 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
             handler: (_, args) => ((args.Count > 0)
             ? CommandResult.Error(output: "[world.affordances: expected no arguments]")
             : new CommandResult(Output: DescribeAffordances()))
-        );
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
-            name: "player.bar",
-            description: "Chooses a seat's binding-bar model and persists it on the seat's identity: player.bar <stacked|paged> [seat]. stacked draws every authored bank around the anchor — the active one at full alpha, the rest as translucent wings; paged draws only the bank naming the seat's active page, swapping as a chord is held or released. The authored bar is identical under both; this is the player's look preference (BindingBarPreferences.Stacked), read back by world.binding-bar.",
-            handler: BarHandler,
-            routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,

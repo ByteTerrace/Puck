@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.Input.Devices;
@@ -32,9 +33,8 @@ namespace Puck.Overlays;
 /// reading as the live press it is not.</param>
 /// <param name="BadgeX">The badge's horizontal nudge as a signed multiple of the layout's glyph offset (+1 right).</param>
 /// <param name="BadgeY">The badge's vertical nudge as a signed multiple of the layout's glyph offset (+1 up).</param>
-/// <param name="AnchorEdge">The region edge this plate's bank hangs from.</param>
-/// <param name="AnchorInset">That edge's inset, pitches; with <paramref name="AnchorEdge"/>, the plate's anchor
-/// group — the frame its pitches are normalized in.</param>
+/// <param name="Frame">The index of the frame this plate hangs in (<see cref="OverlayBindingSeat.Frames"/>); its
+/// pitches are normalized to that frame.</param>
 public readonly record struct OverlayBindingSlot(
     ushort BadgeGlyph0,
     ushort BadgeGlyph1,
@@ -50,8 +50,7 @@ public readonly record struct OverlayBindingSlot(
     bool Accent = false,
     bool Latched = false,
     bool Toggled = false,
-    OverlayBarEdge AnchorEdge = OverlayBarEdge.Bottom,
-    float AnchorInset = 0f,
+    int Frame = 0,
     float BadgeX = 0f,
     float BadgeY = 0f
 );
@@ -79,6 +78,8 @@ public readonly record struct OverlayBindingModifier(
 /// <param name="Hints">The active group's command-chord hint lines (e.g. <c>"LT+RT Snapshot"</c>), pre-formatted
 /// ASCII — rendered as small text above the modifier indicators so a chord-fired act is discoverable.</param>
 /// <param name="Layout">The authored layout resolved for this seat.</param>
+/// <param name="Frames">The seat's compiled anchor groups; every slot's <see cref="OverlayBindingSlot.Frame"/> indexes
+/// here.</param>
 /// <param name="Visible">Whether this seat's bar currently draws.</param>
 public readonly record struct OverlayBindingSeat(
     NormalizedRect Viewport,
@@ -89,6 +90,7 @@ public readonly record struct OverlayBindingSeat(
     ReadOnlyMemory<OverlayBindingModifier> Modifiers,
     ReadOnlyMemory<string> Hints,
     BindingBarLayoutOptions Layout,
+    ReadOnlyMemory<BindingBarFrame> Frames,
     bool Visible
 );
 /// <summary>The per-frame binding-bar snapshot the unified overlay renders — one entry per joined seat.</summary>

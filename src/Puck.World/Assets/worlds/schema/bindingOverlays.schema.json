@@ -399,13 +399,6 @@
                 ],
                 "default": null
               },
-              "stacked": {
-                "type": [
-                  "boolean",
-                  "null"
-                ],
-                "default": null
-              },
               "scale": {
                 "type": [
                   "number",
@@ -786,6 +779,14 @@
           },
           "layoutCell": {
             "description": "A text state cell, state.\u003Crow\u003E.\u003Ckey\u003E, whose value names the live entry of Layouts; a value naming none falls back to Layout. Ordinary state: a chord, a wheel sector, or the console switches the bar\u0027s whole shape by writing the cell.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "modelCell": {
+            "description": "A text state cell, state.\u003Crow\u003E.\u003Ckey\u003E, whose value picks the bar\u0027s model: single draws one bar \u2014 the active page\u0027s bank, in the first authored bank\u0027s place, swapping in place as a chord is held or released; any other value (or no cell) draws every bank the live layout places, the active one at full alpha and the rest as wings. Ordinary state, flipped the same way LayoutCell is.",
             "type": [
               "string",
               "null"

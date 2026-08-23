@@ -11,14 +11,16 @@ namespace Puck.World;
 /// <param name="Reason">Why the current visibility resolved.</param>
 /// <param name="EffectiveHideUnbound"><see cref="Authoring"/>'s <c>HideUnbound</c>, overridden by the seat's own
 /// stored <see cref="BindingBarPreferences.HideUnbound"/> when set.</param>
-/// <param name="Stacked">Whether every authored bank renders (<see langword="true"/>) or only the seat's active
-/// bank (<see langword="false"/>) — the seat's stored <see cref="BindingBarPreferences.Stacked"/>, defaulting to
-/// <see langword="true"/> (stacked, the authored look) when unset.</param>
+/// <param name="Stacked">Whether every placed bank renders (<see langword="true"/>) or one swapping bar
+/// (<see langword="false"/>) — <see cref="WorldBindingBarAuthoring.ModelCell"/>'s cell reads
+/// <see cref="WorldBindingBarAuthoring.SingleModel"/>. Read per status like the layout.</param>
 /// <param name="EffectiveScale">The seat's own stored <see cref="BindingBarPreferences.Scale"/> when set to a finite
 /// positive value, else 1 — the runtime multiplier on the layout's button size.</param>
-/// <param name="Layout">The LIVE layout: the named entry <see cref="WorldBindingBarAuthoring.LayoutCell"/>'s cell
+/// <param name="Layout">The live layout: the named entry <see cref="WorldBindingBarAuthoring.LayoutCell"/>'s cell
 /// selects this frame, else the authoring row's own <c>layout</c>. Read per status, so a state write re-shapes the
 /// bar on the next frame.</param>
+/// <param name="Compiled">The live layout compiled — frames and normalized plates — built once per layout
+/// instance.</param>
 /// <param name="Presence">The authored <see cref="WorldBindingBarAuthoring.Visible"/> condition's presence, 0..1 —
 /// the bar's opacity multiplier, so a fading <c>recently</c> predicate fades the bar rather than cutting it. 1
 /// under a live override or with no condition.</param>
@@ -32,7 +34,8 @@ internal readonly record struct WorldBindingBarStatus(
     bool Stacked,
     float EffectiveScale,
     float Presence,
-    WorldBindingBarLayout Layout
+    WorldBindingBarLayout Layout,
+    CompiledBindingBarLayout Compiled
 );
 /// <summary>Resolves the world binding-bar floor with each seat identity's preference, its authored
 /// <see cref="WorldBindingBarAuthoring.Visible"/> condition, the seat's own stored LOOK preferences
@@ -40,6 +43,10 @@ internal readonly record struct WorldBindingBarStatus(
 /// <remarks>Read-only over the live override: the only writer is the <c>binding-bar</c> session lever's registered
 /// setter, so a forced bar has crossed the server's <c>Mutate</c> check over <c>section:bindings</c>.</remarks>
 internal sealed class WorldBindingBarControl {
+    // The compiled form of each seat's live layout, rebuilt only when the layout instance changes (a document
+    // swap or a layout-cell flip) — the one derivation a status call may hand out without allocating.
+    private readonly WorldBindingBarLayout?[] m_compiledSource = new WorldBindingBarLayout?[PlayerRoster.MaxSlots];
+    private readonly CompiledBindingBarLayout[] m_compiled = new CompiledBindingBarLayout[PlayerRoster.MaxSlots];
     private readonly WorldSeatBindings m_bindings;
     private readonly WorldClient m_client;
     private readonly WorldOverlayFacts m_facts;
@@ -123,6 +130,23 @@ internal sealed class WorldBindingBarControl {
         )
             ? layoutName
             : null));
+        var stacked = !((authoring.ModelCell is { } modelCell) && BindableState.TryParseBinding(
+            key: out var modelKey,
+            row: out var modelRow,
+            value: modelCell
+        ) && WorldStateReader.TryRead(
+            definition: m_client.Definition,
+            key: modelKey,
+            rawValue: out _,
+            row: out _,
+            rowName: modelRow,
+            text: out var modelName,
+            tick: m_client.Tick
+        ) && string.Equals(
+            a: modelName,
+            b: WorldBindingBarAuthoring.SingleModel,
+            comparisonType: StringComparison.Ordinal
+        ));
         var effectiveScale = 1f;
         var presence = ((hidden || (liveOverride is true))
             ? (hidden
@@ -150,9 +174,21 @@ internal sealed class WorldBindingBarControl {
             Override: liveOverride,
             Reason: reason,
             Source: source,
-            Stacked: (preferences?.Stacked ?? true),
+            Stacked: stacked,
             Presence: presence,
-            Layout: layout
+            Layout: layout,
+            Compiled: CompiledFor(
+                layout: layout,
+                slot: slot
+            )
         );
+    }
+    private CompiledBindingBarLayout CompiledFor(int slot, WorldBindingBarLayout layout) {
+        if (!ReferenceEquals(objA: m_compiledSource[slot], objB: layout)) {
+            m_compiled[slot] = layout.Compile();
+            m_compiledSource[slot] = layout;
+        }
+
+        return m_compiled[slot];
     }
 }

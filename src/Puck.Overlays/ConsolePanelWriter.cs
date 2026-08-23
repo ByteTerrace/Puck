@@ -104,38 +104,77 @@ public sealed class ConsolePanelWriter {
             y: (margin + ((bandHeight - microCell) * 0.5f))
         );
 
-        // Trailing history above the prompt row; the echoed input lines ("> ...") keep the sanctioned phosphor voice.
+        // Trailing history above the prompt row, wrapped at the column count: a line takes ceil(length / cols) rows,
+        // rows fill from the bottom so the newest lines always show whole, and the oldest line that only partly
+        // fits shows its tail. The echoed input lines ("> ...") keep the sanctioned phosphor voice.
         var lines = frame.Lines;
         var historyRows = (rows - 1);
-        var firstShown = Math.Max(
-            val1: 0,
-            val2: (lines.Count - historyRows)
-        );
         var contentX = (margin + pad);
         var contentY = ((margin + bandHeight) + pad);
+        // Walk back from the newest line, budgeting rows, to find the first (line, segment) drawn.
+        var firstShown = lines.Count;
+        var firstSegment = 0;
+        var rowsUsed = 0;
 
-        for (var row = 0; ((row < historyRows) && ((firstShown + row) < lines.Count)); row++) {
-            var line = lines[(firstShown + row)];
-            var isEcho = line.Text.StartsWith(
+        while ((firstShown > 0) && (rowsUsed < historyRows)) {
+            var segments = SegmentCount(
+                cols: cols,
+                length: lines[(firstShown - 1)].Text.Length
+            );
+            var room = (historyRows - rowsUsed);
+
+            firstShown--;
+
+            if (segments <= room) {
+                rowsUsed += segments;
+            } else {
+                firstSegment = (segments - room);
+                rowsUsed = historyRows;
+            }
+        }
+
+        var row = (historyRows - rowsUsed);
+
+        for (var index = firstShown; (index < lines.Count); index++) {
+            var line = lines[index];
+            var text = line.Text.AsSpan();
+            var isEcho = text.StartsWith(
                 comparisonType: StringComparison.Ordinal,
                 value: PromptPrefix
             );
-
-            // A refused row takes the same danger hue the toast channel uses for a rejection, so the panel and the toast
-            // agree on what a refusal looks like.
-            builder.WriteText(
-                alpha: 1f,
-                cellHeight: cellHeight,
-                maxChars: cols,
-                role: (line.Refused
+            var segments = SegmentCount(
+                cols: cols,
+                length: text.Length
+            );
+            // A refused row takes the same danger hue the toast channel uses for a rejection, so the panel and the
+            // toast agree on what a refusal looks like.
+            var role = (line.Refused
                 ? OverlayColorRole.Danger
                 : (isEcho
                     ? OverlayColorRole.Phosphor
-                    : OverlayColorRole.TextPrimary)),
-                text: line.Text,
-                x: contentX,
-                y: (contentY + (row * cellHeight))
+                    : OverlayColorRole.TextPrimary)
             );
+
+            for (var segment = ((index == firstShown) ? firstSegment : 0); (segment < segments); segment++) {
+                var start = (segment * cols);
+
+                builder.WriteText(
+                    alpha: 1f,
+                    cellHeight: cellHeight,
+                    maxChars: cols,
+                    role: role,
+                    text: text.Slice(
+                        length: Math.Min(
+                            val1: cols,
+                            val2: (text.Length - start)
+                        ),
+                        start: start
+                    ),
+                    x: contentX,
+                    y: (contentY + (row * cellHeight))
+                );
+                row++;
+            }
         }
 
         // The live prompt on the bottom row: the fixed prefix then the in-progress input.
@@ -188,4 +227,10 @@ public sealed class ConsolePanelWriter {
             y: promptY
         );
     }
+    // The rows a line of the given length occupies at the column count; an empty line still takes one.
+    private static int SegmentCount(int length, int cols) =>
+        Math.Max(
+            val1: 1,
+            val2: ((length + (cols - 1)) / cols)
+        );
 }

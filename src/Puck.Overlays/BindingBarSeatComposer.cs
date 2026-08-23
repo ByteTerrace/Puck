@@ -117,12 +117,11 @@ public static class BindingBarSeatComposer {
     /// <param name="text">Whether the bar draws atlas text badges.</param>
     /// <param name="hideUnbound">Whether an unbound slot is hidden rather than drawn disabled.</param>
     /// <param name="bankOrder">The bank's draw order.</param>
-    /// <param name="anchorEdge">The edge this bank hangs from.</param>
-    /// <param name="anchorInset">That edge's inset, pitches; with <paramref name="anchorEdge"/>, the bank's anchor group.</param>
+    /// <param name="frame">The index of the compiled frame this bank hangs in.</param>
     /// <param name="destination">The destination slots; exactly <paramref name="slotSet"/>.Count entries.</param>
     /// <exception cref="ArgumentException"><paramref name="destination"/> does not match <paramref name="slotSet"/>
     /// in length.</exception>
-    public static void ComposeBank(BindingPageView view, IReadOnlyList<string> slotSet, IReadOnlyDictionary<string, BindingPlatePlacement> plates, Func<string, OverlayResolvedGlyph> resolveBadge, Func<string?, OverlayResolvedGlyph> resolveIcon, Func<string, bool>? isPressed, Func<string, bool>? isCommandHeld, float bankAlpha, bool text, bool hideUnbound, int bankOrder, OverlayBarEdge anchorEdge, float anchorInset, Span<OverlayBindingSlot> destination) {
+    public static void ComposeBank(BindingPageView view, IReadOnlyList<string> slotSet, IReadOnlyDictionary<string, BindingPlatePlacement> plates, Func<string, OverlayResolvedGlyph> resolveBadge, Func<string?, OverlayResolvedGlyph> resolveIcon, Func<string, bool>? isPressed, Func<string, bool>? isCommandHeld, float bankAlpha, bool text, bool hideUnbound, int bankOrder, int frame, Span<OverlayBindingSlot> destination) {
         ArgumentNullException.ThrowIfNull(argument: view);
         ArgumentNullException.ThrowIfNull(argument: slotSet);
         ArgumentNullException.ThrowIfNull(argument: plates);
@@ -181,80 +180,10 @@ public static class BindingBarSeatComposer {
                 PitchY: plate.Position.Y,
                 Pressed: pressed,
                 Visible: ((binding is not null) || !hideUnbound),
-                AnchorEdge: anchorEdge,
-                AnchorInset: anchorInset,
+                Frame: frame,
                 BadgeX: plate.Badge.X,
                 BadgeY: plate.Badge.Y
             );
-        }
-    }
-    /// <summary>Normalizes every composed slot's pitches to its anchor group — the slots sharing one edge and
-    /// inset: along the edge's axis the group's plate nearest the edge moves to pitch 0 (so the writer can put its
-    /// edge on the inset line), across it the group's extent is centered on 0. Authored pitches stay relative to one
-    /// another; only where the whole group hangs is decided here, from the group's actual extent, so an inset means
-    /// "from the edge to the nearest plate" whatever shape the document drew. Hidden slots ride along but do not
-    /// set the extent.</summary>
-    /// <param name="slots">Every slot of one seat's bar, all banks.</param>
-    public static void AnchorGroups(Span<OverlayBindingSlot> slots) {
-        var done = ((slots.Length <= 256)
-            ? stackalloc bool[slots.Length]
-            : new bool[slots.Length]
-        );
-
-        for (var first = 0; (first < slots.Length); first++) {
-            if (done[first]) {
-                continue;
-            }
-
-            var edge = slots[first].AnchorEdge;
-            var inset = slots[first].AnchorInset;
-            var minX = float.MaxValue;
-            var maxX = float.MinValue;
-            var minY = float.MaxValue;
-            var maxY = float.MinValue;
-
-            for (var index = first; (index < slots.Length); index++) {
-                ref readonly var slot = ref slots[index];
-
-                if ((slot.AnchorEdge != edge) || (slot.AnchorInset != inset) || !slot.Visible) {
-                    continue;
-                }
-
-                minX = MathF.Min(x: minX, y: slot.PitchX);
-                maxX = MathF.Max(x: maxX, y: slot.PitchX);
-                minY = MathF.Min(x: minY, y: slot.PitchY);
-                maxY = MathF.Max(x: maxY, y: slot.PitchY);
-            }
-
-            var hasExtent = (minX <= maxX);
-            var shiftX = (!hasExtent
-                ? 0f
-                : (edge switch {
-                    OverlayBarEdge.Left => minX,
-                    OverlayBarEdge.Right => maxX,
-                    _ => ((minX + maxX) * 0.5f),
-                })
-            );
-            var shiftY = (!hasExtent
-                ? 0f
-                : (edge switch {
-                    OverlayBarEdge.Bottom => minY,
-                    OverlayBarEdge.Top => maxY,
-                    _ => ((minY + maxY) * 0.5f),
-                })
-            );
-
-            for (var index = first; (index < slots.Length); index++) {
-                if ((slots[index].AnchorEdge != edge) || (slots[index].AnchorInset != inset)) {
-                    continue;
-                }
-
-                slots[index] = slots[index] with {
-                    PitchX = (slots[index].PitchX - shiftX),
-                    PitchY = (slots[index].PitchY - shiftY),
-                };
-                done[index] = true;
-            }
         }
     }
 }

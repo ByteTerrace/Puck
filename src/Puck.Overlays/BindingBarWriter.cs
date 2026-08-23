@@ -1,3 +1,4 @@
+using Puck.Commands;
 namespace Puck.Overlays;
 
 /// <summary>
@@ -66,11 +67,12 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
         var regionOriginY = (region.Y * builder.Height);
         var regionAspect = (regionWidthPx / regionHeightPx);
         var slots = seat.Slots.Span;
-        // The authored size is a ceiling: a narrow pane shrinks every plate together until each anchor group fits.
-        var scaledButtonSize = BindingBarLayout.FitButtonSize(
+        var frames = seat.Frames.Span;
+        // The authored size is a ceiling: a narrow pane shrinks every plate together until each frame fits.
+        var scaledButtonSize = CompiledBindingBarLayout.FitButtonSize(
             aspect: regionAspect,
             buttonSize: (layout.ButtonSize * layout.Scale),
-            slots: slots
+            frames: frames
         );
         var barAnchor = BindingBarLayout.BarAnchor(
             aspect: regionAspect,
@@ -92,20 +94,22 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
         for (var index = 0; (index < slots.Length); index++) {
             var slot = slots[index];
 
-            if (!slot.Visible) {
+            if (!slot.Visible || ((uint)slot.Frame >= (uint)frames.Length)) {
                 continue;
             }
 
-            // Each plate hangs from its bank's anchor: a side column and the bottom strip of one bar share a seat
-            // and a region but not an edge.
+            var frame = frames[slot.Frame];
+
+            // Each plate hangs from its frame: a side column and the bottom strip of one bar share a seat and a
+            // region but not an edge.
             var center = BindingBarLayout.PlateCenter(
                 anchor: BindingBarLayout.BarAnchor(
                     aspect: regionAspect,
-                    edge: slot.AnchorEdge,
-                    inset: (slot.AnchorInset * scaledButtonSize)
+                    edge: frame.Edge,
+                    inset: (frame.Inset * scaledButtonSize)
                 ),
                 buttonSize: scaledButtonSize,
-                edge: slot.AnchorEdge,
+                edge: frame.Edge,
                 pitchX: slot.PitchX,
                 pitchY: slot.PitchY
             );

@@ -31,20 +31,21 @@
             "pageId": "pageRt"
           },
           {
-            "id": "ltRt",
-            "pageId": "pageLtRt",
+            "activeAlpha": 1,
             "alpha": 0.6,
-            "activeAlpha": 1
+            "id": "ltRt",
+            "pageId": "pageLtRt"
           },
           {
-            "id": "rtLt",
-            "pageId": "pageRtLt",
+            "activeAlpha": 1,
             "alpha": 0.6,
-            "activeAlpha": 1
+            "id": "rtLt",
+            "pageId": "pageRtLt"
           }
         ],
         "hideUnbound": false,
         "iconRow": "state.actionIcons",
+        "layout": "crossbar",
         "layoutCell": "state.bar.layout",
         "layouts": {
           "crossbar": {
@@ -52,214 +53,214 @@
               "edge": "Bottom",
               "inset": 0.67
             },
-            "buttonSize": 0.075,
-            "glyphOffsetRatio": 0.4375,
-            "glyphSizeRatio": 0.53333336,
-            "tables": {
-              "left": [
-                {
-                  "source": "gamepad.dpadUp",
-                  "x": 0,
-                  "y": 1,
-                  "badge": [
-                    0,
-                    1
-                  ]
-                },
-                {
-                  "source": "gamepad.dpadRight",
-                  "x": 1,
-                  "y": 0,
-                  "badge": [
-                    1,
-                    0
-                  ]
-                },
-                {
-                  "source": "gamepad.dpadDown",
-                  "x": 0,
-                  "y": -1,
-                  "badge": [
-                    0,
-                    -1
-                  ]
-                },
-                {
-                  "source": "gamepad.dpadLeft",
-                  "x": -1,
-                  "y": 0,
-                  "badge": [
-                    -1,
-                    0
-                  ]
-                },
-                {
-                  "source": "gamepad.leftShoulder",
-                  "x": -1,
-                  "y": 1,
-                  "badge": [
-                    -1,
-                    1
-                  ]
-                },
-                {
-                  "source": "gamepad.leftStickPress",
-                  "x": 0,
-                  "y": 0,
-                  "badge": [
-                    -1,
-                    -1
-                  ]
-                }
-              ],
-              "right": [
-                {
-                  "source": "gamepad.buttonNorth",
-                  "x": 0,
-                  "y": 1,
-                  "badge": [
-                    0,
-                    1
-                  ]
-                },
-                {
-                  "source": "gamepad.buttonWest",
-                  "x": -1,
-                  "y": 0,
-                  "badge": [
-                    -1,
-                    0
-                  ]
-                },
-                {
-                  "source": "gamepad.buttonSouth",
-                  "x": 0,
-                  "y": -1,
-                  "badge": [
-                    0,
-                    -1
-                  ]
-                },
-                {
-                  "source": "gamepad.buttonEast",
-                  "x": 1,
-                  "y": 0,
-                  "badge": [
-                    1,
-                    0
-                  ]
-                },
-                {
-                  "source": "gamepad.rightShoulder",
-                  "x": 1,
-                  "y": 1,
-                  "badge": [
-                    1,
-                    1
-                  ]
-                },
-                {
-                  "source": "gamepad.rightStickPress",
-                  "x": 0,
-                  "y": 0,
-                  "badge": [
-                    1,
-                    -1
-                  ]
-                }
-              ]
-            },
             "banks": {
-              "resting": {
-                "pieces": [
-                  {
-                    "table": "left",
-                    "at": [
-                      -5,
-                      0
-                    ]
-                  },
-                  {
-                    "table": "right",
-                    "at": [
-                      5,
-                      0
-                    ]
-                  }
-                ]
-              },
               "lt": {
                 "pieces": [
                   {
-                    "table": "left",
                     "at": [
                       -3,
                       1
-                    ]
+                    ],
+                    "table": "left"
                   },
                   {
-                    "table": "right",
                     "at": [
                       3,
                       1
-                    ]
-                  }
-                ]
-              },
-              "rt": {
-                "pieces": [
-                  {
-                    "table": "left",
-                    "at": [
-                      -3,
-                      -2
-                    ]
-                  },
-                  {
-                    "table": "right",
-                    "at": [
-                      3,
-                      -2
-                    ]
+                    ],
+                    "table": "right"
                   }
                 ]
               },
               "ltRt": {
                 "pieces": [
                   {
-                    "table": "left",
                     "at": [
                       -7,
                       2
-                    ]
+                    ],
+                    "table": "left"
                   },
                   {
-                    "table": "right",
                     "at": [
                       7,
                       2
-                    ]
+                    ],
+                    "table": "right"
+                  }
+                ]
+              },
+              "resting": {
+                "pieces": [
+                  {
+                    "at": [
+                      -5,
+                      0
+                    ],
+                    "table": "left"
+                  },
+                  {
+                    "at": [
+                      5,
+                      0
+                    ],
+                    "table": "right"
+                  }
+                ]
+              },
+              "rt": {
+                "pieces": [
+                  {
+                    "at": [
+                      -3,
+                      -2
+                    ],
+                    "table": "left"
+                  },
+                  {
+                    "at": [
+                      3,
+                      -2
+                    ],
+                    "table": "right"
                   }
                 ]
               },
               "rtLt": {
                 "pieces": [
                   {
-                    "table": "left",
                     "at": [
                       -6,
                       -2
-                    ]
+                    ],
+                    "table": "left"
                   },
                   {
-                    "table": "right",
                     "at": [
                       6,
                       -2
-                    ]
+                    ],
+                    "table": "right"
                   }
                 ]
               }
+            },
+            "buttonSize": 0.075,
+            "glyphOffsetRatio": 0.4375,
+            "glyphSizeRatio": 0.53333336,
+            "tables": {
+              "left": [
+                {
+                  "badge": [
+                    0,
+                    1
+                  ],
+                  "source": "gamepad.dpadUp",
+                  "x": 0,
+                  "y": 1
+                },
+                {
+                  "badge": [
+                    1,
+                    0
+                  ],
+                  "source": "gamepad.dpadRight",
+                  "x": 1,
+                  "y": 0
+                },
+                {
+                  "badge": [
+                    0,
+                    -1
+                  ],
+                  "source": "gamepad.dpadDown",
+                  "x": 0,
+                  "y": -1
+                },
+                {
+                  "badge": [
+                    -1,
+                    0
+                  ],
+                  "source": "gamepad.dpadLeft",
+                  "x": -1,
+                  "y": 0
+                },
+                {
+                  "badge": [
+                    -1,
+                    1
+                  ],
+                  "source": "gamepad.leftShoulder",
+                  "x": -1,
+                  "y": 1
+                },
+                {
+                  "badge": [
+                    -1,
+                    -1
+                  ],
+                  "source": "gamepad.leftStickPress",
+                  "x": 0,
+                  "y": 0
+                }
+              ],
+              "right": [
+                {
+                  "badge": [
+                    0,
+                    1
+                  ],
+                  "source": "gamepad.buttonNorth",
+                  "x": 0,
+                  "y": 1
+                },
+                {
+                  "badge": [
+                    -1,
+                    0
+                  ],
+                  "source": "gamepad.buttonWest",
+                  "x": -1,
+                  "y": 0
+                },
+                {
+                  "badge": [
+                    0,
+                    -1
+                  ],
+                  "source": "gamepad.buttonSouth",
+                  "x": 0,
+                  "y": -1
+                },
+                {
+                  "badge": [
+                    1,
+                    0
+                  ],
+                  "source": "gamepad.buttonEast",
+                  "x": 1,
+                  "y": 0
+                },
+                {
+                  "badge": [
+                    1,
+                    1
+                  ],
+                  "source": "gamepad.rightShoulder",
+                  "x": 1,
+                  "y": 1
+                },
+                {
+                  "badge": [
+                    1,
+                    -1
+                  ],
+                  "source": "gamepad.rightStickPress",
+                  "x": 0,
+                  "y": 0
+                }
+              ]
             }
           },
           "linear": {
@@ -267,72 +268,79 @@
               "edge": "Bottom",
               "inset": 0.33
             },
+            "banks": {
+              "lt": {
+                "anchor": {
+                  "edge": "Left",
+                  "inset": 0.5
+                },
+                "pieces": [
+                  {
+                    "table": "column"
+                  }
+                ]
+              },
+              "ltRt": {
+                "anchor": {
+                  "edge": "Left",
+                  "inset": 0.5
+                },
+                "pieces": [
+                  {
+                    "at": [
+                      1,
+                      0
+                    ],
+                    "table": "column"
+                  }
+                ]
+              },
+              "resting": {
+                "pieces": [
+                  {
+                    "table": "strip"
+                  }
+                ]
+              },
+              "rt": {
+                "anchor": {
+                  "edge": "Right",
+                  "inset": 0.5
+                },
+                "pieces": [
+                  {
+                    "badge": [
+                      -1,
+                      1
+                    ],
+                    "table": "column"
+                  }
+                ]
+              },
+              "rtLt": {
+                "anchor": {
+                  "edge": "Right",
+                  "inset": 0.5
+                },
+                "pieces": [
+                  {
+                    "at": [
+                      -1,
+                      0
+                    ],
+                    "badge": [
+                      -1,
+                      1
+                    ],
+                    "table": "column"
+                  }
+                ]
+              }
+            },
             "buttonSize": 0.075,
             "glyphOffsetRatio": 0.4375,
             "glyphSizeRatio": 0.53333336,
             "tables": {
-              "strip": [
-                {
-                  "source": "gamepad.dpadLeft",
-                  "x": -5.5,
-                  "y": 0
-                },
-                {
-                  "source": "gamepad.dpadUp",
-                  "x": -4.5,
-                  "y": 0
-                },
-                {
-                  "source": "gamepad.dpadDown",
-                  "x": -3.5,
-                  "y": 0
-                },
-                {
-                  "source": "gamepad.dpadRight",
-                  "x": -2.5,
-                  "y": 0
-                },
-                {
-                  "source": "gamepad.leftShoulder",
-                  "x": -1.5,
-                  "y": 0
-                },
-                {
-                  "source": "gamepad.leftStickPress",
-                  "x": -0.5,
-                  "y": 0
-                },
-                {
-                  "source": "gamepad.rightStickPress",
-                  "x": 0.5,
-                  "y": 0
-                },
-                {
-                  "source": "gamepad.rightShoulder",
-                  "x": 1.5,
-                  "y": 0
-                },
-                {
-                  "source": "gamepad.buttonWest",
-                  "x": 2.5,
-                  "y": 0
-                },
-                {
-                  "source": "gamepad.buttonNorth",
-                  "x": 3.5,
-                  "y": 0
-                },
-                {
-                  "source": "gamepad.buttonSouth",
-                  "x": 4.5,
-                  "y": 0
-                },
-                {
-                  "source": "gamepad.buttonEast",
-                  "x": 5.5,
-                  "y": 0
-                }
-              ],
               "column": [
                 {
                   "source": "gamepad.dpadUp",
@@ -394,79 +402,73 @@
                   "x": 0,
                   "y": -11
                 }
+              ],
+              "strip": [
+                {
+                  "source": "gamepad.dpadLeft",
+                  "x": -5.5,
+                  "y": 0
+                },
+                {
+                  "source": "gamepad.dpadUp",
+                  "x": -4.5,
+                  "y": 0
+                },
+                {
+                  "source": "gamepad.dpadDown",
+                  "x": -3.5,
+                  "y": 0
+                },
+                {
+                  "source": "gamepad.dpadRight",
+                  "x": -2.5,
+                  "y": 0
+                },
+                {
+                  "source": "gamepad.leftShoulder",
+                  "x": -1.5,
+                  "y": 0
+                },
+                {
+                  "source": "gamepad.leftStickPress",
+                  "x": -0.5,
+                  "y": 0
+                },
+                {
+                  "source": "gamepad.rightStickPress",
+                  "x": 0.5,
+                  "y": 0
+                },
+                {
+                  "source": "gamepad.rightShoulder",
+                  "x": 1.5,
+                  "y": 0
+                },
+                {
+                  "source": "gamepad.buttonWest",
+                  "x": 2.5,
+                  "y": 0
+                },
+                {
+                  "source": "gamepad.buttonNorth",
+                  "x": 3.5,
+                  "y": 0
+                },
+                {
+                  "source": "gamepad.buttonSouth",
+                  "x": 4.5,
+                  "y": 0
+                },
+                {
+                  "source": "gamepad.buttonEast",
+                  "x": 5.5,
+                  "y": 0
+                }
               ]
-            },
-            "banks": {
-              "resting": {
-                "pieces": [
-                  {
-                    "table": "strip"
-                  }
-                ]
-              },
-              "lt": {
-                "anchor": {
-                  "edge": "Left",
-                  "inset": 0.5
-                },
-                "pieces": [
-                  {
-                    "table": "column"
-                  }
-                ]
-              },
-              "ltRt": {
-                "anchor": {
-                  "edge": "Left",
-                  "inset": 0.5
-                },
-                "pieces": [
-                  {
-                    "table": "column",
-                    "at": [
-                      1,
-                      0
-                    ]
-                  }
-                ]
-              },
-              "rt": {
-                "anchor": {
-                  "edge": "Right",
-                  "inset": 0.5
-                },
-                "pieces": [
-                  {
-                    "table": "column",
-                    "badge": [
-                      -1,
-                      1
-                    ]
-                  }
-                ]
-              },
-              "rtLt": {
-                "anchor": {
-                  "edge": "Right",
-                  "inset": 0.5
-                },
-                "pieces": [
-                  {
-                    "table": "column",
-                    "at": [
-                      -1,
-                      0
-                    ],
-                    "badge": [
-                      -1,
-                      1
-                    ]
-                  }
-                ]
-              }
             }
           }
         },
+        "modelCell": "state.bar.model",
         "modifiers": false,
         "multiSeatAlpha": 0.5,
         "slotSet": [
@@ -489,8 +491,7 @@
           "fact": "SeatInput",
           "fadeSeconds": 2,
           "windowSeconds": 3
-        },
-        "layout": "crossbar"
+        }
       },
       "document": {
         "chords": [
@@ -886,13 +887,12 @@
             }
           },
           {
-            "group": "state.bindingGroups.defaultActionGroup",
             "chord": [
               "look",
               "rt"
             ],
+            "group": "state.bindingGroups.defaultActionGroup",
             "page": {
-              "id": "pageLtRt",
               "entries": [
                 {
                   "command": "player.move.strafe",
@@ -912,17 +912,17 @@
                     "gamepad.gyro"
                   ]
                 }
-              ]
+              ],
+              "id": "pageLtRt"
             }
           },
           {
-            "group": "state.bindingGroups.defaultActionGroup",
             "chord": [
               "rt",
               "look"
             ],
+            "group": "state.bindingGroups.defaultActionGroup",
             "page": {
-              "id": "pageRtLt",
               "entries": [
                 {
                   "command": "player.move.strafe",
@@ -942,7 +942,8 @@
                     "gamepad.gyro"
                   ]
                 }
-              ]
+              ],
+              "id": "pageRtLt"
             }
           }
         ],
@@ -1034,6 +1035,12 @@
                     "id": "barLayout",
                     "sources": null,
                     "text": "bar layout crossbar linear"
+                  },
+                  {
+                    "command": "player.state.cell.toggle",
+                    "id": "barModel",
+                    "sources": null,
+                    "text": "bar model multi single"
                   }
                 ],
                 "icon": null,
@@ -2069,6 +2076,242 @@
   "population": {
     "localSeats": 1
   },
+  "render": {
+    "cycle": {
+      "keys": [
+        {
+          "at": 0.0,
+          "lighting": {
+            "ambient": {
+              "base": 0.06,
+              "color": "state.colors.nightAmbient",
+              "hemisphere": 0.08
+            },
+            "sun": {
+              "color": "state.colors.nightSun",
+              "direction": [
+                0,
+                -1,
+                0
+              ],
+              "weight": 0.0
+            }
+          },
+          "sky": {
+            "clouds": {
+              "color": "state.colors.nightCloud",
+              "coverage": 0.3,
+              "drift": [
+                -0.008,
+                0.03
+              ],
+              "scale": 2.5,
+              "seed": 4242,
+              "softness": 0.3
+            },
+            "ground": "state.colors.nightGround",
+            "horizon": "state.colors.nightHorizon",
+            "stars": {
+              "brightness": 1.0,
+              "density": 64,
+              "seed": 1337
+            },
+            "sun": {
+              "discRadians": 0.045,
+              "intensity": 0
+            },
+            "zenith": "state.colors.nightZenith"
+          }
+        },
+        {
+          "at": 0.25,
+          "lighting": {
+            "ambient": {
+              "base": 0.16,
+              "color": "state.colors.dawnAmbient",
+              "hemisphere": 0.2
+            },
+            "sun": {
+              "color": "state.colors.dawnSun",
+              "direction": [
+                1,
+                0.15,
+                -0.2
+              ],
+              "weight": 0.7
+            }
+          },
+          "sky": {
+            "clouds": {
+              "color": "state.colors.dawnCloud",
+              "coverage": 0.4,
+              "drift": [
+                -0.008,
+                0.03
+              ],
+              "scale": 2.5,
+              "seed": 4242,
+              "softness": 0.3
+            },
+            "ground": "state.colors.dawnGround",
+            "horizon": "state.colors.dawnHorizon",
+            "stars": {
+              "brightness": 0.15,
+              "density": 64,
+              "seed": 1337
+            },
+            "sun": {
+              "discRadians": 0.045,
+              "intensity": 6
+            },
+            "zenith": "state.colors.dawnZenith"
+          }
+        },
+        {
+          "at": 0.5,
+          "lighting": {
+            "ambient": {
+              "base": 0.28,
+              "color": "state.colors.dayAmbient",
+              "hemisphere": 0.3
+            },
+            "sun": {
+              "color": "state.colors.daySun",
+              "direction": [
+                0.2,
+                1,
+                -0.3
+              ],
+              "weight": 1.0
+            }
+          },
+          "sky": {
+            "clouds": {
+              "color": "state.colors.paper",
+              "coverage": 0.45,
+              "drift": [
+                -0.008,
+                0.03
+              ],
+              "scale": 2.5,
+              "seed": 4242,
+              "softness": 0.3
+            },
+            "ground": "state.colors.dayGround",
+            "horizon": "state.colors.dayHorizon",
+            "stars": {
+              "brightness": 0.0,
+              "density": 64,
+              "seed": 1337
+            },
+            "sun": {
+              "discRadians": 0.03,
+              "intensity": 8
+            },
+            "zenith": "state.colors.dayZenith"
+          }
+        },
+        {
+          "at": 0.75,
+          "lighting": {
+            "ambient": {
+              "base": 0.16,
+              "color": "state.colors.duskAmbient",
+              "hemisphere": 0.2
+            },
+            "sun": {
+              "color": "state.colors.duskSun",
+              "direction": [
+                -1,
+                0.15,
+                -0.2
+              ],
+              "weight": 0.7
+            }
+          },
+          "sky": {
+            "clouds": {
+              "color": "state.colors.duskCloud",
+              "coverage": 0.4,
+              "drift": [
+                -0.008,
+                0.03
+              ],
+              "scale": 2.5,
+              "seed": 4242,
+              "softness": 0.3
+            },
+            "ground": "state.colors.duskGround",
+            "horizon": "state.colors.duskHorizon",
+            "stars": {
+              "brightness": 0.25,
+              "density": 64,
+              "seed": 1337
+            },
+            "sun": {
+              "discRadians": 0.045,
+              "intensity": 6
+            },
+            "zenith": "state.colors.duskZenith"
+          }
+        }
+      ],
+      "state": "timeOfDay"
+    },
+    "lighting": {
+      "ambient": {
+        "base": 0.18,
+        "color": "state.colors.baseAmbient",
+        "hemisphere": 0.22
+      },
+      "sun": {
+        "color": "state.colors.baseSun",
+        "direction": [
+          0.6,
+          0.2,
+          -0.75
+        ],
+        "weight": 0.9
+      }
+    },
+    "sky": {
+      "clouds": {
+        "color": "state.colors.baseCloud",
+        "coverage": 0.4,
+        "curl": 0.8,
+        "drift": [
+          -0.008,
+          0.03
+        ],
+        "scale": 2.5,
+        "seed": 4242,
+        "shear": [
+          -0.02,
+          0.015
+        ],
+        "softness": 0.3,
+        "spin": 0.004
+      },
+      "fogDensity": 0.015,
+      "ground": "state.colors.duskGround",
+      "horizon": "state.colors.duskHorizon",
+      "stars": {
+        "brightness": 0.85,
+        "density": 64,
+        "seed": 1337,
+        "twinkle": {
+          "depth": 0.6,
+          "rate": 1.5,
+          "share": 0.3
+        }
+      },
+      "sun": {
+        "discRadians": 0.045,
+        "intensity": 6
+      },
+      "zenith": "state.colors.duskZenith"
+    }
+  },
   "simulation": {
     "rateHz": 30
   },
@@ -2154,12 +2397,121 @@
           {
             "key": "laneDark",
             "value": "#6E8A72"
+          },
+          {
+            "key": "baseAmbient",
+            "value": "#4C5C8C"
+          },
+          {
+            "key": "baseCloud",
+            "value": "#C9BFC4"
+          },
+          {
+            "key": "baseSun",
+            "value": "#FFD9A6"
+          },
+          {
+            "key": "dawnAmbient",
+            "value": "#6E5A80"
+          },
+          {
+            "key": "dawnCloud",
+            "value": "#F0B9A0"
+          },
+          {
+            "key": "dawnGround",
+            "value": "#1A1418"
+          },
+          {
+            "key": "dawnHorizon",
+            "value": "#E89A6C"
+          },
+          {
+            "key": "dawnSun",
+            "value": "#FFB07A"
+          },
+          {
+            "key": "dawnZenith",
+            "value": "#2E3F7A"
+          },
+          {
+            "key": "dayAmbient",
+            "value": "#9DB4E0"
+          },
+          {
+            "key": "dayGround",
+            "value": "#6E7A88"
+          },
+          {
+            "key": "dayHorizon",
+            "value": "#BFD8F5"
+          },
+          {
+            "key": "daySun",
+            "value": "#FFF6E8"
+          },
+          {
+            "key": "dayZenith",
+            "value": "#3F7FDF"
+          },
+          {
+            "key": "duskAmbient",
+            "value": "#7A4C5C"
+          },
+          {
+            "key": "duskCloud",
+            "value": "#E8A07A"
+          },
+          {
+            "key": "duskGround",
+            "value": "#0B0D14"
+          },
+          {
+            "key": "duskHorizon",
+            "value": "#E08F6B"
+          },
+          {
+            "key": "duskSun",
+            "value": "#FF9A66"
+          },
+          {
+            "key": "duskZenith",
+            "value": "#1B2350"
+          },
+          {
+            "key": "nightAmbient",
+            "value": "#2A3560"
+          },
+          {
+            "key": "nightCloud",
+            "value": "#1A1E33"
+          },
+          {
+            "key": "nightGround",
+            "value": "#020308"
+          },
+          {
+            "key": "nightHorizon",
+            "value": "#0E1430"
+          },
+          {
+            "key": "nightSun",
+            "value": "#8090C0"
+          },
+          {
+            "key": "nightZenith",
+            "value": "#04050C"
+          },
+          {
+            "key": "paper",
+            "value": "#FFFFFF"
           }
         ],
         "kind": "text",
         "name": "colors"
       },
       {
+        "capacity": 21,
         "cells": [
           {
             "key": "jump",
@@ -2224,12 +2576,17 @@
           {
             "key": "barLayout",
             "value": "edit.style"
+          },
+          {
+            "key": "barModel",
+            "value": "edit.style"
           }
         ],
         "kind": "text",
         "name": "actionIcons"
       },
       {
+        "capacity": 12,
         "cells": [
           {
             "key": "cameraOverhead",
@@ -2258,6 +2615,10 @@
           {
             "key": "barLayout",
             "value": "Bar layout"
+          },
+          {
+            "key": "barModel",
+            "value": "Bar model"
           }
         ],
         "kind": "text",
@@ -2274,14 +2635,28 @@
         "name": "look"
       },
       {
+        "capacity": 4,
         "cells": [
           {
             "key": "layout",
             "value": "crossbar"
+          },
+          {
+            "key": "model",
+            "value": "multi"
           }
         ],
         "kind": "text",
         "name": "bar"
+      },
+      {
+        "advance": {
+          "rateDenominator": 57600,
+          "rateNumerator": 1
+        },
+        "kind": "fixed",
+        "name": "timeOfDay",
+        "value": "0.3"
       }
     ]
   },

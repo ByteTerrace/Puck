@@ -26,17 +26,6 @@ public static class WorldBindingBarCapacity {
     public const int MaxSlots = 32;
 }
 
-/// <summary>The viewport edge a bar hangs from.</summary>
-public enum WorldBindingBarEdge {
-    /// <summary>The bottom edge; the bar is centered left-to-right and its lowest plate sits at the margin.</summary>
-    Bottom,
-    /// <summary>The top edge; centered left-to-right, highest plate at the margin.</summary>
-    Top,
-    /// <summary>The left edge; centered top-to-bottom, leftmost plate at the margin.</summary>
-    Left,
-    /// <summary>The right edge; centered top-to-bottom, rightmost plate at the margin.</summary>
-    Right,
-}
 /// <summary>Where a bar hangs: a viewport edge and how far in from it. Every bank anchored to the same edge and
 /// inset shares one frame — their plates are laid out together on one pitch grid and the nearest plate of the whole
 /// group sits at the inset — so a nested crossbar is five banks on one anchor, and a strip with side columns is
@@ -45,7 +34,7 @@ public enum WorldBindingBarEdge {
 /// <param name="Inset">The gap between that edge and the nearest plate edge of everything anchored here, in button
 /// pitches — the same ruler every plate position uses. Along the other axis the group is centered.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldBindingBarAnchor(WorldBindingBarEdge Edge = WorldBindingBarEdge.Bottom, float Inset = 0f);
+public sealed record WorldBindingBarAnchor(BindingBarEdge Edge = BindingBarEdge.Bottom, float Inset = 0f);
 /// <summary>One physical control's plate on a bank, in button pitches from the bank's anchor — x right, y UP.</summary>
 /// <param name="Source">The physical control's input source id (a <c>slotSet</c> member).</param>
 /// <param name="X">Pitches right of the anchor (negative = left).</param>
@@ -149,73 +138,67 @@ public sealed record WorldBindingBarLayout(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? HintLineStepRatio = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? HintBaseGapRatio = null
 ) {
-    private static readonly IReadOnlyDictionary<string, BindingPlatePlacement> NoPlates = new Dictionary<string, BindingPlatePlacement>(comparer: StringComparer.Ordinal);
-    private Dictionary<string, IReadOnlyDictionary<string, BindingPlatePlacement>>? m_plates;
-
     /// <summary>The resolved <see cref="Anchor"/> an unauthored bar takes: the bottom edge, half a plate in.</summary>
     public static WorldBindingBarAnchor DefaultAnchor { get; } = new(
-        Edge: WorldBindingBarEdge.Bottom,
+        Edge: BindingBarEdge.Bottom,
         Inset: 0.5f
     );
 
-    /// <summary>Returns a bank's plate table by source — every piece's table rows moved by the piece's displacement —
-    /// built once for every bank on first call (the document is immutable), so the overlay's per-tick lookups carry
-    /// no cache of their own. A bank this layout does not place, or a piece naming no table, contributes nothing.</summary>
-    /// <param name="bankId">The bank id.</param>
-    public IReadOnlyDictionary<string, BindingPlatePlacement> Plates(string bankId) {
-        if (m_plates is null) {
-            var all = new Dictionary<string, IReadOnlyDictionary<string, BindingPlatePlacement>>(comparer: StringComparer.Ordinal);
+    /// <summary>Compiles this layout: each bank's pieces become one plate table (a later piece wins a source it
+    /// re-places, a piece-level badge overrides its rows, a piece naming no table contributes nothing), and the
+    /// banks are grouped into frames by anchor with their pitches normalized — see
+    /// <see cref="CompiledBindingBarLayout.Build"/>. Pure; call once per document.</summary>
+    public CompiledBindingBarLayout Compile() {
+        var banks = new List<(string, BindingBarEdge, float, IReadOnlyDictionary<string, BindingPlatePlacement>)>();
 
-            foreach (var (id, bank) in (Banks ?? new Dictionary<string, WorldBindingBarBankPlacement>())) {
-                var plates = new Dictionary<string, BindingPlatePlacement>(comparer: StringComparer.Ordinal);
-
-                foreach (var piece in (bank?.Pieces ?? [])) {
-                    if ((piece?.Table is not { Length: > 0 } tableName) || (Tables is null) || !Tables.TryGetValue(
-                        key: tableName,
-                        value: out var rows
-                    ) || (rows is null)) {
-                        continue;
-                    }
-
-                    var at = ((piece.At is { Count: 2 } authoredAt)
-                        ? new Vector2(
-                            x: authoredAt[0],
-                            y: authoredAt[1]
-                        )
-                        : Vector2.Zero
-                    );
-                    var badge = ((piece.Badge is { Count: 2 } authoredBadge)
-                        ? new Vector2(
-                            x: authoredBadge[0],
-                            y: authoredBadge[1]
-                        )
-                        : (Vector2?)null
-                    );
-
-                    foreach (var row in rows) {
-                        if (row?.Source is { Length: > 0 } source) {
-                            var plate = row.Plate;
-
-                            plates[source] = plate with {
-                                Position = (plate.Position + at),
-                                Badge = (badge ?? plate.Badge),
-                            };
-                        }
-                    }
-                }
-
-                all[id] = plates;
+        foreach (var (id, bank) in (Banks ?? new Dictionary<string, WorldBindingBarBankPlacement>())) {
+            if (bank is null) {
+                continue;
             }
 
-            m_plates = all;
+            var plates = new Dictionary<string, BindingPlatePlacement>(comparer: StringComparer.Ordinal);
+
+            foreach (var piece in (bank.Pieces ?? [])) {
+                if ((piece?.Table is not { Length: > 0 } tableName) || (Tables is null) || !Tables.TryGetValue(
+                    key: tableName,
+                    value: out var rows
+                ) || (rows is null)) {
+                    continue;
+                }
+
+                var at = ((piece.At is { Count: 2 } authoredAt)
+                    ? new Vector2(
+                        x: authoredAt[0],
+                        y: authoredAt[1]
+                    )
+                    : Vector2.Zero
+                );
+                var badge = ((piece.Badge is { Count: 2 } authoredBadge)
+                    ? new Vector2(
+                        x: authoredBadge[0],
+                        y: authoredBadge[1]
+                    )
+                    : (Vector2?)null
+                );
+
+                foreach (var row in rows) {
+                    if (row?.Source is { Length: > 0 } source) {
+                        var plate = row.Plate;
+
+                        plates[source] = plate with {
+                            Position = (plate.Position + at),
+                            Badge = (badge ?? plate.Badge),
+                        };
+                    }
+                }
+            }
+
+            var anchor = (bank.Anchor ?? ResolvedAnchor);
+
+            banks.Add(item: (id, anchor.Edge, anchor.Inset, plates));
         }
 
-        return (m_plates.TryGetValue(
-            key: bankId,
-            value: out var found
-        )
-            ? found
-            : NoPlates);
+        return CompiledBindingBarLayout.Build(banks: banks);
     }
     /// <summary>The resolved <see cref="ButtonSize"/> an unauthored bar takes (45/600).</summary>
     public const float DefaultButtonSize = (45f / 600f);
@@ -344,6 +327,10 @@ public sealed record WorldBindingBarBank(
 /// <param name="LayoutCell">A text state cell, <c>state.&lt;row&gt;.&lt;key&gt;</c>, whose value names the live entry of
 /// <paramref name="Layouts"/>; a value naming none falls back to <paramref name="Layout"/>. Ordinary state: a chord,
 /// a wheel sector, or the console switches the bar's whole shape by writing the cell.</param>
+/// <param name="ModelCell">A text state cell, <c>state.&lt;row&gt;.&lt;key&gt;</c>, whose value picks the bar's model:
+/// <c>single</c> draws one bar — the active page's bank, in the first authored bank's place, swapping in place as a
+/// chord is held or released; any other value (or no cell) draws every bank the live layout places, the active one
+/// at full alpha and the rest as wings. Ordinary state, flipped the same way <paramref name="LayoutCell"/> is.</param>
 /// <param name="Visible">The bar's visibility condition over presentation facts, or <see langword="null"/> for always.</param>
 public sealed record WorldBindingBarAuthoring(
     IReadOnlyList<string> SlotSet,
@@ -357,8 +344,12 @@ public sealed record WorldBindingBarAuthoring(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, WorldBindingBarLayout>? Layouts = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Layout = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? LayoutCell = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ModelCell = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] OverlayPredicate? Visible = null
 ) {
+    /// <summary>The <see cref="ModelCell"/> value that draws one swapping bar; every other value stacks.</summary>
+    public const string SingleModel = "single";
+
     /// <summary>Gets the policy applied when NEITHER an identity nor the world authors a binding-bar row — absence
     /// draws no bar at all, never a baked-in look.</summary>
     public static WorldBindingBarAuthoring Absent { get; } = new(

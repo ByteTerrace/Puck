@@ -133,14 +133,6 @@ internal sealed class WorldOverlayFeed {
             ));
         }
     }
-    private static OverlayBarEdge Edge(WorldBindingBarEdge edge) =>
-        edge switch {
-            WorldBindingBarEdge.Top => OverlayBarEdge.Top,
-            WorldBindingBarEdge.Left => OverlayBarEdge.Left,
-            WorldBindingBarEdge.Right => OverlayBarEdge.Right,
-            _ => OverlayBarEdge.Bottom,
-        };
-
     // The seat's chord-hint lines, re-formatted only when its published view changes (a page/group flip or a
     // recompose — human cadence, never per frame). One ASCII line per command-chord row of the active group:
     // the chord's modifier labels joined by '+', then the row's label (or its command name).
@@ -305,14 +297,15 @@ internal sealed class WorldOverlayFeed {
                         comparisonType: StringComparison.Ordinal
                     );
 
-                    if (
-                        (!stacked && !isActiveBank) ||
-                        !m_bindings.TryPageView(
+                    if (!m_bindings.TryPageView(
                         pageId: bank.PageId,
                         slot: slot,
                         view: out var bankView
-                    )
-                    ) {
+                    )) {
+                        continue;
+                    }
+
+                    if (!stacked && !isActiveBank) {
                         continue;
                     }
 
@@ -320,15 +313,18 @@ internal sealed class WorldOverlayFeed {
                         ? (bank.ActiveAlpha ?? 1f)
                         : bank.Alpha
                     ));
-                    // A bank the live layout does not place is not drawn in that layout.
-                    if (
-                        (liveLayout.Banks is not { } bankPlacements) ||
-                        !bankPlacements.TryGetValue(
-                        key: bank.Id,
-                        value: out var bankPlacement
-                    ) ||
-                        (bankPlacement is null)
-                    ) {
+                    // Single: one bar that swaps in place — the active bank's page drawn in the first authored
+                    // bank's frame and plates; its frame already carries the extent every bank gives it, so nothing
+                    // moves between the models. Multi: every bank the live layout places, where it places it.
+                    var placementId = (stacked
+                        ? bank.Id
+                        : banks[0].Id
+                    );
+
+                    if (!barStatus.Compiled.Banks.TryGetValue(
+                        key: placementId,
+                        value: out var placed
+                    )) {
                         continue;
                     }
 
@@ -336,11 +332,8 @@ internal sealed class WorldOverlayFeed {
                         val1: slotSet.Count,
                         val2: (destination.Length - writeOffset)
                     );
-                    var bankAnchor = (bankPlacement.Anchor ?? liveLayout.ResolvedAnchor);
 
                     BindingBarSeatComposer.ComposeBank(
-                        anchorEdge: Edge(edge: bankAnchor.Edge),
-                        anchorInset: bankAnchor.Inset,
                         bankAlpha: bankAlpha,
                         bankOrder: bankIndex,
                         destination: destination.AsSpan(
@@ -348,7 +341,8 @@ internal sealed class WorldOverlayFeed {
                             length: slotCount
                         ),
                         hideUnbound: barStatus.EffectiveHideUnbound,
-                        plates: liveLayout.Plates(bankId: bank.Id),
+                        frame: placed.Frame,
+                        plates: placed.Plates,
                         // Only the active bank lights a held control: a wing shows what a chord would make the
                         // control do, and a press is happening on the page that is live, not on that hypothetical.
                         isPressed: (isActiveBank
@@ -371,11 +365,6 @@ internal sealed class WorldOverlayFeed {
                     writeOffset += slotCount;
                 }
 
-                // Every bank is composed; now each anchor group hangs from its edge by its own extent.
-                BindingBarSeatComposer.AnchorGroups(slots: destination.AsSpan(
-                    start: 0,
-                    length: writeOffset
-                ));
             }
 
             var modifierCount = (authoring.Modifiers
@@ -415,7 +404,7 @@ internal sealed class WorldOverlayFeed {
                 ),
                 Viewport: viewport,
                 Layout: new BindingBarLayoutOptions(
-                    AnchorEdge: Edge(edge: authoredLayout.ResolvedAnchor.Edge),
+                    AnchorEdge: authoredLayout.ResolvedAnchor.Edge,
                     AnchorInset: authoredLayout.ResolvedAnchor.Inset,
                     ButtonSize: authoredLayout.ResolvedButtonSize,
                     GlyphOffsetRatio: authoredLayout.ResolvedGlyphOffsetRatio,
@@ -432,6 +421,7 @@ internal sealed class WorldOverlayFeed {
                     ModifierSpacingRatio: authoredLayout.ResolvedModifierSpacingRatio,
                     Scale: barStatus.EffectiveScale
                 ),
+                Frames: barStatus.Compiled.Frames,
                 Visible: !barStatus.Hidden
             );
 
