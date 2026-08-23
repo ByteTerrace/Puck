@@ -126,5 +126,6 @@ public sealed record WorldAuthorityCheckpoint(
     WorldInputHoldRuntime.WorldInputHoldCheckpoint InputHold,
     WorldEventFeed.WorldEventFeedCheckpoint EventFeed,
     WorldOwnedWorlds.WorldOwnedWorldsCheckpoint OwnedWorlds,
-    WorldAuthorityHostRowCheckpoint HostRow
+    WorldAuthorityHostRowCheckpoint HostRow,
+    WorldFieldLattice.WorldFieldCheckpoint? Fields = null
 );

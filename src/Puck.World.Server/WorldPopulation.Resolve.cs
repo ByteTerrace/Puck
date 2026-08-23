@@ -72,10 +72,17 @@ public sealed partial class WorldPopulation {
             (derivedSolids is null) &&
             (WorldContactSelection.RequiresField(collision: definition.Collision) || WorldTargetSelection.RequiresLineOfSight(definition: definition))
         ) {
+            // The lattice is boot-authored and its values outlive every document install, so it is created once.
+            m_fields ??= ((definition.Fields is { } fieldsSection)
+                ? new WorldFieldLattice(document: fieldsSection)
+                : null
+            );
+
             if (!WorldSolidField.TryBuild(
                 built: out derivedSolids,
                 definition: definition,
-                reason: out var reason
+                reason: out var reason,
+                lattice: m_fields
             )) {
                 throw new InvalidOperationException(message: $"the target/contact field could not compile the world's solids at boot: {reason}");
             }

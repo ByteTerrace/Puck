@@ -40,17 +40,19 @@ public sealed class WorldSolidField : IContactField {
         Z: FixedQ4816.Zero
     );
 
+    private readonly IFieldEvaluator m_contactField;
     private readonly SdfFieldEvaluator m_evaluator;
     private readonly FixedFieldContactSolver m_solver;
 
-    private WorldSolidField(SdfFieldEvaluator evaluator, int instructionCount, long placementShapeCount, WorldContactCensus census, FixedWorldCollision tuning) {
+    private WorldSolidField(SdfFieldEvaluator evaluator, IFieldEvaluator contactField, int instructionCount, long placementShapeCount, WorldContactCensus census, FixedWorldCollision tuning) {
         m_evaluator = evaluator;
+        m_contactField = contactField;
         InstructionCount = instructionCount;
         PlacementShapeCount = placementShapeCount;
         Census = census;
         m_solver = new FixedFieldContactSolver(
             contactSkin: tuning.ContactSkin,
-            field: evaluator,
+            field: contactField,
             gradientProbe: tuning.GradientProbe,
             gradientUp: tuning.GradientUp,
             groundedThreshold: tuning.GroundedThreshold,
@@ -120,8 +122,9 @@ public sealed class WorldSolidField : IContactField {
     /// <param name="built">The built field on success; <see langword="null"/> on failure.</param>
     /// <param name="reason">The forwarded <see cref="SdfFieldEvaluator"/> reject reason when a solid names an op the
     /// warp-free evaluator cannot interpret; empty on success.</param>
+    /// <param name="lattice">The field lattice whose height columns union with the solids for contact, or <see langword="null"/>.</param>
     /// <returns><see langword="true"/> when the field compiled, <see langword="false"/> with a named reason otherwise.</returns>
-    public static bool TryBuild(WorldDefinition definition, out WorldSolidField? built, out string reason) {
+    public static bool TryBuild(WorldDefinition definition, out WorldSolidField? built, out string reason, WorldFieldLattice? lattice = null) {
         built = null;
         reason = string.Empty;
 
@@ -230,8 +233,16 @@ public sealed class WorldSolidField : IContactField {
             return false;
         }
 
+        // A field lattice's height columns union with the authored solids for contact; sweeps and line of sight
+        // still march the authored program alone.
         built = new WorldSolidField(
             evaluator: evaluator,
+            contactField: ((lattice is null)
+                ? evaluator
+                : new WorldUnionField(
+                    a: evaluator,
+                    b: new WorldFieldLatticeSolid(lattice: lattice)
+                )),
             instructionCount: program.Instructions.Count,
             placementShapeCount: placementShapeCount,
             census: WorldColliderSet.Measure(definition: definition),
@@ -256,6 +267,7 @@ public sealed class WorldSolidField : IContactField {
     public WorldSolidField WithTuning(FixedWorldCollision tuning) =>
         new(
             evaluator: m_evaluator,
+            contactField: m_contactField,
             instructionCount: InstructionCount,
             placementShapeCount: PlacementShapeCount,
             census: Census,

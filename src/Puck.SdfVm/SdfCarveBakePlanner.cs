@@ -27,6 +27,15 @@ public interface ISdfBrickBakeService {
     /// <param name="slot">The pool slot, in <c>[0, <see cref="SdfBrickPoolLayout.MaxBricks"/>)</c>.</param>
     /// <param name="request">The bake request (box, cell size, dims, 1/λ, and the sphere carves).</param>
     void RequestBrickBake(int slot, BrickBakeRequest request);
+    /// <summary>Writes host-baked voxel distances straight into a brick slot and marks it ready — the path for a
+    /// brick whose field is produced on the CPU rather than by the sphere-union baker. Values are the pool's stored
+    /// scale (distance/λ).</summary>
+    /// <param name="slot">The brick slot.</param>
+    /// <param name="dimX">Voxels along X.</param>
+    /// <param name="dimY">Voxels along Y.</param>
+    /// <param name="dimZ">Voxels along Z.</param>
+    /// <param name="voxels">The voxel values, X fastest, then Y, then Z; exactly dimX·dimY·dimZ entries.</param>
+    void UploadBrick(int slot, int dimX, int dimY, int dimZ, ReadOnlySpan<float> voxels);
 }
 /// <summary>
 /// The SETTLE PLANNER: content-blind plumbing that watches a live carve pool, bins carves by

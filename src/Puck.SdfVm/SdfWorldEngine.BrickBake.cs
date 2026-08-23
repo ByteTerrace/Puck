@@ -165,5 +165,75 @@ public sealed partial class SdfWorldEngine {
     /// <summary>Whether this engine provisions a brick pool (its <c>BrickPoolVoxelCapacity</c> was non-zero) — the
     /// <see cref="ISdfBrickBakeService"/> predicate the carve-bake planner checks before ever proposing a bake, so a
     /// pool-less engine keeps every carve analytic instead of throwing at <see cref="RequestBrickBake"/>.</summary>
+    public void UploadBrick(int slot, int dimX, int dimY, int dimZ, ReadOnlySpan<float> voxels) {
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
+
+        if (
+            !m_brickPoolEnabled ||
+            (m_brickUploadPipeline is null)
+        ) {
+            throw new InvalidOperationException(message: "This engine has no brick pool or no upload kernel; UploadBrick is unavailable.");
+        }
+
+        if (
+            (slot < 0) ||
+            (slot >= SdfBrickPoolLayout.MaxBricks)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(slot),
+                message: $"A brick slot must be in [0, {SdfBrickPoolLayout.MaxBricks})."
+            );
+        }
+
+        ValidateBrickDimension(
+            value: dimX,
+            name: nameof(dimX)
+        );
+        ValidateBrickDimension(
+            value: dimY,
+            name: nameof(dimY)
+        );
+        ValidateBrickDimension(
+            value: dimZ,
+            name: nameof(dimZ)
+        );
+
+        var totalVoxels = ((dimX * dimY) * dimZ);
+
+        if (voxels.Length != totalVoxels) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(voxels),
+                message: $"A {dimX}x{dimY}x{dimZ} brick takes {totalVoxels} voxels; {voxels.Length} were supplied."
+            );
+        }
+
+        if ((SdfBrickPoolLayout.SlotWordOffset(slot: slot) + totalVoxels) > m_brickPoolVoxelCapacity) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(slot),
+                message: $"Brick slot {slot}'s {totalVoxels} voxels exceed the pool capacity {m_brickPoolVoxelCapacity}."
+            );
+        }
+
+        // The copy is recorded by a later frame, so the voxels are taken by value; a slot queued twice before a frame
+        // drains keeps only the newest.
+        var pending = m_brickUploads.ToArray();
+
+        m_brickUploads.Clear();
+
+        foreach (var entry in pending) {
+            if (entry.Slot != slot) {
+                m_brickUploads.Enqueue(item: entry);
+            }
+        }
+
+        m_brickUploads.Enqueue(item: (slot, totalVoxels, voxels.ToArray()));
+        m_brickStates[slot] = BrickBakeState.Baking;
+        m_brickTotalVoxels[slot] = totalVoxels;
+        m_brickVoxelCursor[slot] = totalVoxels;
+    }
+
     public bool BrickBakeAvailable => m_brickPoolEnabled;
 }

@@ -121,7 +121,7 @@ public sealed partial class SdfWorldEngine {
         // slice; when a slot's cursor reaches its total, it flips to Ready. A pool-write → pool-read barrier follows so
         // the beam/views marches see the just-written voxels this same frame (and the cross-frame barrier orders any
         // later frame's read after this frame's writes regardless).
-        if (RecordBrickBakeSlices(commandBuffer: commandBuffer)) {
+        if (RecordBrickUpload(commandBuffer: commandBuffer) | RecordBrickBakeSlices(commandBuffer: commandBuffer)) {
             recorder.MemoryBarrier(
                 commandBufferHandle: commandBuffer,
                 destinationAccessMask: GpuComputeAccess.ShaderRead,
@@ -598,6 +598,68 @@ public sealed partial class SdfWorldEngine {
     // slice was recorded (so Record inserts the pool-visibility barrier). A no-op when the pool is disabled or nothing
     // is baking — the bare room never pays it. Each slice is a plain direct dispatch of the standalone baker pipeline;
     // the bake writes are made visible to the render marches by the barrier Record adds after this returns true.
+    // One queued host-baked brick per produced frame: its voxels go into this ring slot's staging buffer and one
+    // dispatch copies them to the pool; the caller's barrier after this returns true makes the pool writes visible.
+    private bool RecordBrickUpload(nint commandBuffer) {
+        if (
+            (m_brickUploadPipeline is null) ||
+            (m_brickUploads.Count == 0) ||
+            (m_brickUploadStaging[m_currentSlot] is not { } staging)
+        ) {
+            return false;
+        }
+
+        var (slot, count, voxels) = m_brickUploads.Dequeue();
+        var recorder = m_gpu.ComputeRecorder;
+        var push = MemoryMarshal.Cast<byte, uint>(span: m_brickUploadPush.AsSpan());
+
+        staging.Write<float>(data: voxels.AsSpan(
+            length: count,
+            start: 0
+        ));
+        push[0] = ((uint)SdfBrickPoolLayout.SlotWordOffset(slot: slot)); push[1] = ((uint)count); push[2] = 0u; push[3] = 0u;
+
+        recorder.BeginDebugGroup(
+            commandBufferHandle: commandBuffer,
+            deviceHandle: m_deviceHandle,
+            label: "brick-upload"
+        );
+        recorder.BindComputePipeline(
+            commandBufferHandle: commandBuffer,
+            deviceHandle: m_deviceHandle,
+            pipelineHandle: m_brickUploadPipeline.Handle
+        );
+        recorder.BindComputeDescriptorSet(
+            commandBufferHandle: commandBuffer,
+            descriptorSetHandle: m_brickUploadSets[m_currentSlot],
+            deviceHandle: m_deviceHandle,
+            pipelineLayoutHandle: m_brickUploadPipeline.LayoutHandle
+        );
+        recorder.PushConstants(
+            commandBufferHandle: commandBuffer,
+            data: m_brickUploadPush,
+            deviceHandle: m_deviceHandle,
+            offset: 0,
+            pipelineLayoutHandle: m_brickUploadPipeline.LayoutHandle,
+            stageFlags: GpuShaderStage.Compute
+        );
+        recorder.Dispatch(
+            commandBufferHandle: commandBuffer,
+            deviceHandle: m_deviceHandle,
+            groupCountX: ((((uint)count) + (BrickBakeWorkgroupSize - 1)) / BrickBakeWorkgroupSize),
+            groupCountY: 1,
+            groupCountZ: 1
+        );
+        recorder.EndDebugGroup(
+            commandBufferHandle: commandBuffer,
+            deviceHandle: m_deviceHandle
+        );
+
+        m_brickStates[slot] = BrickBakeState.Ready;
+        m_brickSerials[slot]++;
+
+        return true;
+    }
     private bool RecordBrickBakeSlices(nint commandBuffer) {
         if (m_brickBakePipeline is null) {
             return false;

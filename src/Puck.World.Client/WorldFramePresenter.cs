@@ -40,6 +40,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     // The adjacency render half — neighbour solids and delivered bodies composed through the same isometry contact
     // and handoff use, with remote avatar transforms in its own frozen slot range.
     private readonly WorldAdjacencySceneEmitter m_adjacencies;
+    private readonly WorldFieldEmitter m_fields;
     // The per-seat perception anchor: every seat-relative derivation in this type (the camera anchor pose, the
     // seat-join cue site) resolves its body index through it — one resolution point, so a possession anchor swap
     // moves every derivation together.
@@ -255,13 +256,14 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             suppressEntity: entity => continuum.IsFollowed(entity: in entity)
         );
         m_audio.ReconcileSpeakers(definition: definition);
+        m_fields = new WorldFieldEmitter(client: client);
         // Composing the emitter runs the ONE capacity probe (its worst-case branch: all 128 avatars, the reserved
         // placement instances, the worst-case animated pool, and the authoring headroom), freezing the word, instance,
         // and dynamic-transform envelopes every live rebuild fits inside by construction.
         try {
             m_composed = new SdfCompositionFrameSource(
                 dresser: this,
-                emitters: [m_emitter, m_sdfDocuments, m_adjacencies]
+                emitters: [m_emitter, m_sdfDocuments, m_adjacencies, m_fields]
             ) {
                 // Park unused slots exactly where a hidden avatar and an unused pool slot already sit — below the floor,
                 // outside the camera and tile-cull reach.
@@ -1484,6 +1486,8 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         m_binder.NotifyDeviceLost();
     }
     /// <inheritdoc/>
+    /// <inheritdoc/>
+    public void AdvanceBricks(ISdfBrickBakeService bakes) => m_fields.AdvanceBricks(bakes: bakes);
     public void PrepareScreenSources(IGpuDeviceContext deviceContext, IGpuComputeServices gpu) {
         // Render + upload every CPU-fed screen for this frame off the sim tick advanced during CaptureFrame, so the
         // provider polled just after this call returns a handle to THIS frame's image. The engine seam calls this

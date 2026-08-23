@@ -118,6 +118,13 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
+            name: "world.fields",
+            description: "Reads the field lattice back (Immediate): its shape and cadence, and each field's nonzero cell count and mean.",
+            handler: (context, args) => new CommandResult(Output: server.DescribeFields()),
+            routing: CommandRouting.Immediate
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "world.population",
             description: "Sets the simulated peer count and its between-tape source: world.population [count] [idle|producer:<name>] (tokens are order-independent; no argument reads both).",
             handler: (context, args) => {

@@ -429,7 +429,8 @@ public sealed partial class WorldServer {
                 InputHold: m_inputHold.Capture(),
                 EventFeed: m_events.Capture(),
                 OwnedWorlds: m_profiles.Capture(),
-                HostRow: hostRow
+                HostRow: hostRow,
+                Fields: m_population.Fields?.Capture()
             );
             reason = string.Empty;
 
@@ -510,6 +511,13 @@ public sealed partial class WorldServer {
             tick: m_lastCompletedTick
         );
         m_grants.Restore(checkpoint: checkpoint.Grants);
+
+        if (
+            (m_population.Fields is { } lattice) &&
+            (checkpoint.Fields is { } fieldsCheckpoint)
+        ) {
+            lattice.Restore(checkpoint: fieldsCheckpoint);
+        }
 
         // A restored parked PEER generation is released right here, not at its grace deadline: the connection that
         // occupied it did not survive the restore and peer body-resume does not exist, so — exactly as the

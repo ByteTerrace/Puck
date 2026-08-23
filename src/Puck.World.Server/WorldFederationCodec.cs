@@ -767,6 +767,15 @@ public static class WorldFederationCodec {
             writer.WriteNullableString(value: entry.PlacementId);
         }
 
+        writer.WriteBoolean(value: snapshot.FieldsFull);
+        writer.WriteInt32(value: snapshot.FieldCells.Length);
+
+        foreach (var delta in snapshot.FieldCells.Span) {
+            writer.WriteInt32(value: delta.Cell);
+            writer.WriteByte(value: delta.Field);
+            writer.WriteInt64(value: delta.Raw);
+        }
+
         return writer.ToArray();
     }
     /// <summary>Encodes one forwarded submission frame behind its traveler credential.</summary>
@@ -1400,12 +1409,44 @@ public static class WorldFederationCodec {
             );
         }
 
+        var fieldsFull = reader.ReadBoolean();
+        var deltaCount = reader.ReadCount(
+            field: "snapshot field cell count",
+            maximum: (WorldFieldCapacity.MaxFields * WorldFieldCapacity.MaxCells),
+            minimum: 0
+        );
+
+        if (reader.Failed) {
+            snapshot = default;
+
+            return Finish(
+                failure: out failure,
+                reader: ref reader
+            );
+        }
+
+        var deltas = new FieldCellDelta[deltaCount];
+
+        for (var index = 0; (index < deltaCount); index++) {
+            var cell = reader.ReadInt32();
+            var field = reader.ReadByte();
+            var raw = reader.ReadInt64();
+
+            deltas[index] = new FieldCellDelta(
+                Cell: cell,
+                Field: field,
+                Raw: raw
+            );
+        }
+
         snapshot = new WorldSnapshot(
             Authority: authority,
             Entries: entries,
             Revision: revision,
             StepTicks: stepTicks,
-            Tick: tick
+            Tick: tick,
+            FieldCells: deltas,
+            FieldsFull: fieldsFull
         );
 
         return Finish(

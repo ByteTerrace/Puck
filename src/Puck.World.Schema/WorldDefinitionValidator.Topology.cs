@@ -754,4 +754,298 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"water.level must be finite (was {water.Level}).");
         }
     }
+    private static void ValidateFields(WorldDefinition definition, List<string> errors) {
+        if (definition.Fields is not { } fields) {
+            return;
+        }
+
+        var lattice = fields.Lattice;
+
+        if (lattice is null) {
+            errors.Add(item: "fields.lattice is required.");
+
+            return;
+        }
+
+        if (
+            !float.IsFinite(f: lattice.Origin.X) ||
+            !float.IsFinite(f: lattice.Origin.Y) ||
+            !float.IsFinite(f: lattice.Origin.Z)
+        ) {
+            errors.Add(item: "fields.lattice.origin must contain finite coordinates.");
+        }
+
+        if (
+            !float.IsFinite(f: lattice.CellSize) ||
+            (lattice.CellSize <= 0f)
+        ) {
+            errors.Add(item: $"fields.lattice.cellSize must be finite and greater than zero (was {lattice.CellSize}).");
+        }
+
+        if (
+            (lattice.Width < 1) ||
+            (lattice.Width > WorldFieldCapacity.MaxExtent) ||
+            (lattice.Depth < 1) ||
+            (lattice.Depth > WorldFieldCapacity.MaxExtent)
+        ) {
+            errors.Add(item: $"fields.lattice.width/depth must be in 1..{WorldFieldCapacity.MaxExtent} (was {lattice.Width}x{lattice.Depth}).");
+        }
+
+        if (
+            (lattice.Layers < 1) ||
+            (lattice.Layers > WorldFieldCapacity.MaxLayers)
+        ) {
+            errors.Add(item: $"fields.lattice.layers must be in 1..{WorldFieldCapacity.MaxLayers} (was {lattice.Layers}).");
+        }
+
+        if (((long)lattice.Width * lattice.Depth * lattice.Layers) > WorldFieldCapacity.MaxCells) {
+            errors.Add(item: $"fields.lattice declares {((long)lattice.Width * lattice.Depth * lattice.Layers)} cells, exceeding the {WorldFieldCapacity.MaxCells}-cell ceiling.");
+        }
+
+        if (lattice.StepEveryTicks < 1) {
+            errors.Add(item: $"fields.lattice.stepEveryTicks must be at least 1 (was {lattice.StepEveryTicks}).");
+        }
+
+        var rows = (fields.Fields ?? []);
+        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        if (rows.Count == 0) {
+            errors.Add(item: "fields.fields declares no field.");
+        }
+
+        if (rows.Count > WorldFieldCapacity.MaxFields) {
+            errors.Add(item: $"fields.fields declares {rows.Count} rows, exceeding the {WorldFieldCapacity.MaxFields}-field ceiling.");
+        }
+
+        for (var index = 0; (index < rows.Count); index++) {
+            var row = rows[index];
+            var path = $"fields.fields[{index}]";
+
+            if (row is null) {
+                errors.Add(item: $"{path} is null.");
+
+                continue;
+            }
+
+            if (
+                string.IsNullOrWhiteSpace(value: row.Name) ||
+                row.Name.Contains(value: '.') ||
+                row.Name.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: WorldStateRow.ReservedNamePrefix
+            )
+            ) {
+                errors.Add(item: $"{path}.name '{row.Name}' must be non-empty, dot-free, and not '{WorldStateRow.ReservedNamePrefix}'-prefixed.");
+            } else if (!names.Add(item: row.Name)) {
+                errors.Add(item: $"{path}.name '{row.Name}' is duplicated.");
+            }
+
+            if (
+                !float.IsFinite(f: row.Min) ||
+                !float.IsFinite(f: row.Max) ||
+                (row.Min >= row.Max)
+            ) {
+                errors.Add(item: $"{path} must declare finite min < max (was {row.Min}..{row.Max}).");
+            } else if (
+                !float.IsFinite(f: row.Initial) ||
+                (row.Initial < row.Min) ||
+                (row.Initial > row.Max)
+            ) {
+                errors.Add(item: $"{path}.initial {row.Initial} is outside {row.Min}..{row.Max}.");
+            }
+
+            if (
+                !float.IsFinite(f: row.HeightScale) ||
+                (row.HeightScale < 0f)
+            ) {
+                errors.Add(item: $"{path}.heightScale must be finite and non-negative (was {row.HeightScale}).");
+            }
+
+            if (row.HeightScale > 0f) {
+                if (
+                    (row.Color is null) ||
+                    !IsHexColor(value: row.Color)
+                ) {
+                    errors.Add(item: $"{path}.color must be #RRGGBB on a field carrying a heightScale.");
+                }
+
+                if ((row.Max * row.HeightScale) > (WorldFieldCapacity.MaxSurfaceCells * lattice.CellSize)) {
+                    errors.Add(item: $"{path} can raise {(row.Max * row.HeightScale)} units of surface, above the {(WorldFieldCapacity.MaxSurfaceCells * lattice.CellSize)}-unit ceiling ({WorldFieldCapacity.MaxSurfaceCells} cells of cellSize).");
+                }
+            } else if (
+                (row.Color is not null) &&
+                !IsHexColor(value: row.Color)
+            ) {
+                errors.Add(item: $"{path}.color '{row.Color}' is not #RRGGBB.");
+            }
+        }
+
+        var reactions = (fields.Reactions ?? []);
+
+        if (reactions.Count > WorldFieldCapacity.MaxReactions) {
+            errors.Add(item: $"fields.reactions declares {reactions.Count} rows, exceeding the {WorldFieldCapacity.MaxReactions}-reaction ceiling.");
+        }
+
+        void RequireField(string? name, string path) {
+            if (
+                (name is null) ||
+                !names.Contains(item: name)
+            ) {
+                errors.Add(item: $"{path} names field '{name}', which fields.fields does not declare.");
+            }
+        }
+
+        void RequireRate(float rate, string path) {
+            if (
+                !float.IsFinite(f: rate) ||
+                (rate < 0f) ||
+                (rate > 1f)
+            ) {
+                errors.Add(item: $"{path} must be in 0..1 (was {rate}).");
+            }
+        }
+
+        void RequireKeyedIntRow(string? row, string path) {
+            if (
+                (row is null) ||
+                (WorldDefinitionRows.FindStateRow(
+                rows: definition.State,
+                name: row
+            ) is not { } declared)
+            ) {
+                errors.Add(item: $"{path} names state row '{row}', which the document does not declare.");
+            } else if (
+                (declared.Kind != CellKind.Int) ||
+                !declared.IsKeyed
+            ) {
+                errors.Add(item: $"{path} names state row '{row}', which must be a keyed kind=int row.");
+            }
+        }
+
+        for (var index = 0; (index < reactions.Count); index++) {
+            var path = $"fields.reactions[{index}]";
+
+            switch (reactions[index]) {
+                case WorldReaction.Diffuse diffuse:
+                    RequireField(
+                        name: diffuse.Field,
+                        path: $"{path}.field"
+                    );
+                    RequireRate(
+                        rate: diffuse.Rate,
+                        path: $"{path}.rate"
+                    );
+                    break;
+                case WorldReaction.Decay decay:
+                    RequireField(
+                        name: decay.Field,
+                        path: $"{path}.field"
+                    );
+                    RequireRate(
+                        rate: decay.Rate,
+                        path: $"{path}.rate"
+                    );
+                    break;
+                case WorldReaction.Transform transform: {
+                        var conditions = (transform.When ?? []);
+                        var writes = (transform.Then ?? []);
+
+                        if (writes.Count == 0) {
+                            errors.Add(item: $"{path}.then is empty.");
+                        }
+
+                        for (var c = 0; (c < conditions.Count); c++) {
+                            RequireField(
+                                name: conditions[c]?.Field,
+                                path: $"{path}.when[{c}].field"
+                            );
+
+                            if ((conditions[c] is { } condition) && !float.IsFinite(f: condition.Value)) {
+                                errors.Add(item: $"{path}.when[{c}].value must be finite.");
+                            }
+                        }
+
+                        for (var t = 0; (t < writes.Count); t++) {
+                            RequireField(
+                                name: writes[t]?.Field,
+                                path: $"{path}.then[{t}].field"
+                            );
+
+                            if ((writes[t] is { } write) && !float.IsFinite(f: write.Value)) {
+                                errors.Add(item: $"{path}.then[{t}].value must be finite.");
+                            }
+                        }
+
+                        break;
+                    }
+                case WorldReaction.Emit emit:
+                    RequireField(
+                        name: emit.Field,
+                        path: $"{path}.field"
+                    );
+                    RequireKeyedIntRow(
+                        row: emit.Tag,
+                        path: $"{path}.tag"
+                    );
+
+                    if (!float.IsFinite(f: emit.Amount)) {
+                        errors.Add(item: $"{path}.amount must be finite.");
+                    }
+
+                    break;
+                case WorldReaction.Expose expose:
+                    RequireField(
+                        name: expose.Field,
+                        path: $"{path}.field"
+                    );
+                    RequireKeyedIntRow(
+                        row: expose.Row,
+                        path: $"{path}.row"
+                    );
+
+                    if (!float.IsFinite(f: expose.Value)) {
+                        errors.Add(item: $"{path}.value must be finite.");
+                    }
+
+                    break;
+                default:
+                    errors.Add(item: $"{path} is an unknown reaction kind.");
+                    break;
+            }
+        }
+
+        var paint = (fields.Paint ?? []);
+
+        if (paint.Count > WorldFieldCapacity.MaxPaint) {
+            errors.Add(item: $"fields.paint declares {paint.Count} rows, exceeding the {WorldFieldCapacity.MaxPaint}-row ceiling.");
+        }
+
+        for (var index = 0; (index < paint.Count); index++) {
+            var path = $"fields.paint[{index}]";
+            var row = paint[index];
+
+            if (row is null) {
+                errors.Add(item: $"{path} is null.");
+
+                continue;
+            }
+
+            RequireField(
+                name: row.Field,
+                path: $"{path}.field"
+            );
+
+            if (
+                !float.IsFinite(f: row.Value) ||
+                !float.IsFinite(f: row.MinX) ||
+                !float.IsFinite(f: row.MinZ) ||
+                !float.IsFinite(f: row.MaxX) ||
+                !float.IsFinite(f: row.MaxZ) ||
+                (row.MinX > row.MaxX) ||
+                (row.MinZ > row.MaxZ)
+            ) {
+                errors.Add(item: $"{path} must carry a finite value and a finite min <= max rectangle.");
+            }
+        }
+    }
 }

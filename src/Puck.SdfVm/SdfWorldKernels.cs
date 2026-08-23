@@ -22,6 +22,8 @@ namespace Puck.SdfVm;
 /// <param name="Composite">The Stage 2 source-agnostic compositor kernel.</param>
 /// <param name="BrickBake">The standalone carve-union brick baker (<c>sdf-brick-bake.comp</c>) — dispatched only when
 /// the engine provisions a brick pool.</param>
+/// <param name="BrickUpload">The host-baked brick uploader (<c>sdf-brick-upload.comp</c>) — a staging-to-pool copy, dispatched
+/// only when the engine provisions a brick pool.</param>
 public readonly record struct SdfWorldKernels(
     ReadOnlyMemory<byte> Sky,
     ReadOnlyMemory<byte> Beam,
@@ -30,7 +32,8 @@ public readonly record struct SdfWorldKernels(
     ReadOnlyMemory<byte> Views,
     ReadOnlyMemory<byte> ViewsCore,
     ReadOnlyMemory<byte> Composite,
-    ReadOnlyMemory<byte> BrickBake
+    ReadOnlyMemory<byte> BrickBake,
+    ReadOnlyMemory<byte> BrickUpload
 ) {
     /// <summary>The standard deploy location (<c>Assets/Shaders/Sdf</c> next to the application, where the
     /// <c>Puck.SdfVm</c> reference copies its committed bytecode) — <see cref="Load(string)"/>'s default directory,
@@ -54,6 +57,7 @@ public readonly record struct SdfWorldKernels(
         return new SdfWorldKernels(
             Beam: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-beam.comp{bytecodeExtension}")),
             BrickBake: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-brick-bake.comp{bytecodeExtension}")),
+            BrickUpload: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-brick-upload.comp{bytecodeExtension}")),
             Composite: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-world-composite.comp{bytecodeExtension}")),
             CullArgs: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-cull-args.comp{bytecodeExtension}")),
             InstanceCull: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-instance-cull.comp{bytecodeExtension}")),

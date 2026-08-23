@@ -22,7 +22,7 @@ public static partial class WorldAuthorityCheckpointCodec {
     private const int MaxHashChars = 128;
     private const int MaxSectionBytes = ((64 * 1024) * 1024);
     private const int MaxStringBytes = WireLimits.MaxStringBytes;
-    private const ushort SupportedVersion = 1;
+    private const ushort SupportedVersion = 2;
 
     private delegate T ReadItem<T>(ref WireReader reader);
     private delegate T ReadStructItem<T>(ref WireReader reader) where T : struct;
@@ -46,6 +46,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         body.WriteBlock(value: EncodeEventFeed(section: checkpoint.EventFeed));
         body.WriteBlock(value: EncodeOwnedWorlds(section: checkpoint.OwnedWorlds));
         body.WriteBlock(value: EncodeHostRow(section: checkpoint.HostRow));
+        body.WriteBlock(value: EncodeFields(section: checkpoint.Fields));
 
         var bodyBytes = body.ToArray();
         var writer = new WireWriter();
@@ -160,6 +161,10 @@ public static partial class WorldAuthorityCheckpointCodec {
             field: "host row section",
             maxBytes: MaxSectionBytes
         );
+        var fieldsBytes = body.ReadBlock(
+            field: "fields section",
+            maxBytes: MaxSectionBytes
+        );
 
         if (!body.TryFinish(failure: out var bodyFailure)) {
             reason = $"checkpoint body: {bodyFailure}";
@@ -240,6 +245,14 @@ public static partial class WorldAuthorityCheckpointCodec {
             return false;
         }
 
+        if (!TryDecodeFields(
+            bytes: fieldsBytes,
+            reason: out reason,
+            section: out var fields
+        )) {
+            return false;
+        }
+
         checkpoint = new WorldAuthorityCheckpoint(
             Escrow: escrow,
             EventFeed: eventFeed,
@@ -248,7 +261,8 @@ public static partial class WorldAuthorityCheckpointCodec {
             InputHold: inputHold,
             OwnedWorlds: ownedWorlds,
             Population: population,
-            Server: server
+            Server: server,
+            Fields: fields
         );
         reason = string.Empty;
 

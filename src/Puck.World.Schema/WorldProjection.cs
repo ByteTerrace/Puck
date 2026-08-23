@@ -87,6 +87,8 @@ public sealed record WorldProjectionProvenance(string Authority, string? Documen
 /// <param name="LookAssignment">The body-to-look assignment.</param>
 /// <param name="Hud">The HUD section.</param>
 /// <param name="Water">The standing-water medium, when the world authors one.</param>
+/// <param name="Fields">The field lattice declaration — a presentation peer renders field geometry from the snapshot's
+/// cell deltas and needs the lattice footprint, height scales, and colours to do it.</param>
 /// <param name="Simulation">The authored simulation rate, when the world authors one.</param>
 /// <param name="Interactions">The interaction table — carried for its distance reach alone (see the type remarks).</param>
 /// <param name="References">The named neighbouring documents.</param>
@@ -120,6 +122,7 @@ public sealed record WorldProjectionDocument(
     WorldRowAssignment LookAssignment,
     WorldHudSection Hud,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldWaterSection? Water = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldFieldsSection? Fields = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSimulationDefaults? Simulation = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldInteractionsSection? Interactions = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldReference>? References = null,
@@ -221,6 +224,7 @@ public static class WorldProjection {
             LookAssignment: definition.LookAssignment,
             Hud: definition.Hud,
             Water: definition.Water,
+            Fields: definition.Fields,
             Simulation: definition.Simulation,
             Interactions: definition.Interactions,
             References: definition.References,
@@ -356,6 +360,7 @@ public static class WorldProjection {
                 Participants: []
             ),
             Water: projection.Water,
+            Fields: projection.Fields,
             Simulation: projection.Simulation,
             Interactions: projection.Interactions,
             References: projection.References,

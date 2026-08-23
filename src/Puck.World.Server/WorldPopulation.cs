@@ -169,6 +169,10 @@ public sealed partial class WorldPopulation {
     private int m_simulatedCount;
     private WorldSolidField? m_targetField;
     private FixedQ4816? m_waterline;
+    private WorldFieldLattice? m_fields;
+
+    /// <summary>Gets the field lattice, when the world declares a <c>fields</c> section.</summary>
+    public WorldFieldLattice? Fields => m_fields;
 
     private WorldPlayerDefaults m_playerDefaults = null!;
     private WorldPopulationVariation m_peerVariation = null!;

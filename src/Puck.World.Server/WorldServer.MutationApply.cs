@@ -755,6 +755,12 @@ public sealed partial class WorldServer {
             );
         }
 
+        var fieldsFull = false;
+        var fieldCells = (m_population.Fields?.TakeDeltas(
+            full: !consumeContinuity,
+            isFull: out fieldsFull
+        ) ?? []);
+
         return new WorldSnapshot(
             Tick: tick,
             Revision: m_population.Revision,
@@ -763,7 +769,9 @@ public sealed partial class WorldServer {
                 length: count,
                 start: 0
             ),
-            Authority: AuthorityIdentity
+            Authority: AuthorityIdentity,
+            FieldCells: fieldCells,
+            FieldsFull: fieldsFull
         );
     }
     // The ONE grant-table DENIAL emission — the loud stderr line plus the submitter-routed denied echo. Grant's

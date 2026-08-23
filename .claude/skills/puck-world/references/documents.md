@@ -341,6 +341,29 @@ Omitting both is a declared-but-empty row.
 }
 ```
 
+### `fields` — the lattice (scalar fields, reactions, field-derived geometry)
+
+`WorldFields.cs`. A boot-authored `lattice` (origin, `cellSize`, `width` ×
+`depth` × `layers`, `stepEveryTicks`) of named fixed-point scalar `fields`
+(`initial`/`min`/`max`), seeded by `paint` rectangles and evolved by
+`reactions` in document order each step: `diffuse`, `decay`, `transform`
+(`when` conditions on the cell → `then` set/add writes), `emit` (bodies tagged
+nonzero in a keyed row deposit into the cell they stand in), `expose` (writes
+1/0 into a keyed row per body by a field test at the body's cell — the bridge
+to body-level chemistry). A field with `heightScale` IS geometry: its value
+raises a solid column above the origin that bodies stand on
+(`WorldFieldLatticeSolid`, unioned with the authored solids for contact) and
+the renderer shows (`WorldFieldEmitter`: one CPU-baked distance brick per
+height field, coloured by `color`, uploaded through the engine's brick pool).
+`layers: 1` is a ground lattice; more layers is a voxel volume and costs
+proportionally. Cell values are sim state beside the population — stepped
+after the rules, checkpointed (`Fields` block), delivered as `FieldCells`
+deltas on the snapshot (`FieldsFull` on a primer) — never document rows, so
+nothing journals them. Read back with `world.fields`. `elements.world.json`
+paints a fuel forest beside an ice glacier; a burning body emits heat, heat
+ignites fuel, fire emits heat and consumes fuel, heat melts ice into water,
+water quenches fire — no interaction names the boundary.
+
 ### Authored randomness — SOURCE x SITE x MOMENT
 
 One primitive, three separable parts. A **source** is a shape, a **site** is a

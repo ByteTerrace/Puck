@@ -979,6 +979,7 @@ public sealed partial class WorldServer {
             tick: tick,
             stepTicks: context.StepTicks
         );
+        StepFields(tick: tick);
         // Escrow recovery evaluates on the SAME terms, right beside rules — see ReclaimExpiredEscrows' own remarks.
         ReclaimExpiredEscrows(tick: tick);
         m_transferEscrow.ReclaimExpired(tick: tick);

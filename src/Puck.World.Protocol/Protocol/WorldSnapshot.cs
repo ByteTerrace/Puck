@@ -88,6 +88,10 @@ public readonly record struct EntitySnapshot(
 /// <param name="StepTicks">The engine ticks the reported step advanced by — the client's easer-decay delta.</param>
 /// <param name="Entries">The active entries this tick (one <see cref="EntitySnapshot"/> per drawn body).</param>
 /// <param name="Authority">The authority identity every entry belongs to.</param>
+/// <param name="FieldCells">The field-lattice cells written since the previous snapshot — or every cell when
+/// <paramref name="FieldsFull"/> is set. Empty for a world without a <c>fields</c> section.</param>
+/// <param name="FieldsFull"><see langword="true"/> when <paramref name="FieldCells"/> carries every cell (a primer or a
+/// resync), so a mirror replaces rather than patches.</param>
 /// <remarks>Machine engagement pads do not ride this snapshot: <c>Server.WorldEngagement.FoldTick</c>'s per-screen
 /// pad fold is read directly by <c>Server.WorldMachineHost.Advance</c> inside <c>WorldServer.Step</c>, in-process,
 /// since machine stepping runs server-side and needs no wire lane to a presentation-side consumer.</remarks>
@@ -96,8 +100,15 @@ public readonly record struct WorldSnapshot(
     int Revision,
     ulong StepTicks,
     ReadOnlyMemory<EntitySnapshot> Entries,
-    string Authority = ""
+    string Authority = "",
+    ReadOnlyMemory<FieldCellDelta> FieldCells = default,
+    bool FieldsFull = false
 );
+/// <summary>One field-lattice cell write carried on a snapshot.</summary>
+/// <param name="Cell">The cell index (row-major: z, then layer, then x).</param>
+/// <param name="Field">The field's index in the declared <c>fields.fields</c> list.</param>
+/// <param name="Raw">The cell's value, raw Q48.16 bits.</param>
+public readonly record struct FieldCellDelta(int Cell, byte Field, long Raw);
 /// <summary>One entity's submitted intent for a tick — the client's inbound movement currency for a body it drives (a
 /// connection carries up to four per tick, one per local seat). The server resolves the intent against the body's live
 /// tape and server-side producer in <c>NextIntent</c> precedence; <paramref name="HeldChannels"/> is the always-overlay

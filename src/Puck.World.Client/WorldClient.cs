@@ -39,6 +39,11 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
     // The server's live world definition — the boot definition at construction, replaced by DeliverDefinition after an
     // applied mutation batch or a swap. The frame source re-reads scene/screens from this behind the revision check.
     private WorldDefinition m_definition;
+    private WorldClientFieldLattice? m_fields;
+
+    /// <summary>Gets the mirror of the authority's field lattice, or <see langword="null"/> for a world without a
+    /// <c>fields</c> section.</summary>
+    public WorldClientFieldLattice? Fields => m_fields;
     private int m_definitionRevision;
     // The accepted-lever applier (see WorldSessionLeverSink). Optional so a client composed without the presentation
     // services — a headless or test host — simply drops accepted levers rather than failing to construct.
@@ -713,6 +718,12 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
         // Store the live definition and bump the delivery revision (one component of WriteRevision), so the frame source rebuilds
         // its program and re-reads scene/screens on its next capture. Poses still flow only through snapshots.
         m_definition = definition;
+        m_fields = ((definition.Fields is { } fields)
+            ? (((m_fields is { } existing) && (existing.Document.Lattice == fields.Lattice) && (existing.FieldCount == fields.Fields.Count))
+                ? existing
+                : new WorldClientFieldLattice(document: fields))
+            : null
+        );
         m_channels = WorldChannelTable.Compile(channels: definition.Channels);
         m_targets = WorldTargetRegisterTable.Compile(
             registers: definition.TargetRegisters,
@@ -729,6 +740,10 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
     /// <inheritdoc/>
     public void DeliverSnapshot(in WorldSnapshot snapshot) {
         Array.Clear(array: m_seen);
+        m_fields?.Apply(
+            deltas: snapshot.FieldCells.Span,
+            full: snapshot.FieldsFull
+        );
 
         foreach (ref readonly var entry in snapshot.Entries.Span) {
             var index = entry.Index;
