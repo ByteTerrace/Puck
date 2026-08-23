@@ -86,6 +86,15 @@ public readonly record struct OverlayHudTemplateSegment(bool IsPlaceholder, stri
 /// rounding, px.</param>
 /// <param name="Opacity">Meaningful only for <see cref="OverlayHudElementKind.Frame"/>: the element's opacity,
 /// <c>[0,1]</c>.</param>
+/// <param name="FrameSourceB">Meaningful only for <see cref="OverlayHudElementKind.Frame"/>: the key of the
+/// outgoing source while the element cross-fades, bound exactly like <paramref name="FrameSource"/>. -1 when the
+/// element shows <paramref name="FrameSource"/> alone. A cross-fading element occupies two
+/// <see cref="OverlayFrameSlots"/> slots for the frame.</param>
+/// <param name="FrameMix">Meaningful only for <see cref="OverlayHudElementKind.Frame"/>: the weight of
+/// <paramref name="FrameSource"/> (the incoming, winning source) in the cross-fade, <c>[0,1]</c>. 0 shows
+/// <paramref name="FrameSourceB"/> alone, 1 shows <paramref name="FrameSource"/> alone, so a fade runs 0 to 1 from
+/// the outgoing B to the incoming A. Ignored when <paramref name="FrameSourceB"/> is -1 or cannot be bound: the
+/// winner then draws at full weight.</param>
 public readonly record struct OverlayHudElement(
     OverlayHudElementKind Kind,
     OverlayHudRect Rect,
@@ -97,7 +106,9 @@ public readonly record struct OverlayHudElement(
     OverlayHudFrameFit Fit = OverlayHudFrameFit.Cover,
     bool Mirror = false,
     float Radius = 0f,
-    float Opacity = 1f
+    float Opacity = 1f,
+    int FrameSourceB = -1,
+    float FrameMix = 0f
 );
 /// <summary>One HUD panel the writer resolves and draws — the presentation-side twin of
 /// <c>Puck.World.WorldHudPanel</c>.</summary>
@@ -106,12 +117,15 @@ public readonly record struct OverlayHudElement(
 /// <param name="Band">Which band the panel draws in.</param>
 /// <param name="Style">The panel's chrome recipe.</param>
 /// <param name="Elements">The panel's child elements, in authored order.</param>
+/// <param name="Alpha">The panel's presence, 0..1 — its visibility predicate's eased value, multiplied into the
+/// chrome and every element's alpha so a fading predicate fades the panel rather than cutting it.</param>
 public readonly record struct OverlayHudPanel(
     string Id,
     OverlayHudRect Rect,
     OverlayHudBand Band,
     OverlayPanelStyle Style,
-    ReadOnlyMemory<OverlayHudElement> Elements
+    ReadOnlyMemory<OverlayHudElement> Elements,
+    float Alpha = 1f
 );
 /// <summary>One player-scope HUD panel: a profile's private single panel plus the local seat viewport it is confined
 /// to (screen-normalized, the same convention <c>Puck.Abstractions.Presentation.NormalizedRect</c> uses for a seat's

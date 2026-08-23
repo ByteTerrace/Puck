@@ -992,6 +992,45 @@
       ],
       "additionalProperties": false
     },
+    "WorldAnchorSeat": {
+      "description": "Rides a local seat\u0027s avatar \u2014 the body the seat perceives as its own, so possession follows \u2014 at its root or at a named part. Numbernull is the enclosing seat scope (the seat a HUD frame or view is being resolved for), an explicit number is 1-based. Presentation-only: a camera or speaker on this anchor is resolved per seat.",
+      "properties": {
+        "$type": {
+          "const": "seat"
+        },
+        "number": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "partId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false
+    },
+    "WorldAnchorRecentSpeaker": {
+      "description": "Rides the body that most recently spoke (see OverlayPredicate.Speaking), at its root or a named part; resolves nothing until something has spoken.",
+      "properties": {
+        "$type": {
+          "const": "recentSpeaker"
+        },
+        "partId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false
+    },
     "WorldCameraSubjectReference": {
       "description": "The program\u0027s externally supplied reference pose \u2014 a named camera\u0027s own WorldAnchor, or a seat rig\u0027s currently perceived body (the seat\u0027s own avatar, or a possessed camera body). Resolved outside the program and handed to it as the SdfAnchor the compiled rig receives every frame.",
       "properties": {
@@ -1681,6 +1720,421 @@
       ],
       "additionalProperties": false
     },
+    "WorldAnchor": {
+      "description": "WHERE a placeable thing rides \u2014 the one shared pose-target vocabulary a placeable WorldCamera and a placeable WorldSpeaker both consume through the SAME resolver, distinct from HOW the thing looks at or emits from that pose (a WorldCameraProgram, a feed). The $type string is the JSON discriminator; a new anchor kind is a new derived record plus its JsonDerivedTypeAttribute line.",
+      "type": "object",
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/WorldAnchorEntity"
+        },
+        {
+          "$ref": "#/$defs/WorldAnchorEntityPart"
+        },
+        {
+          "$ref": "#/$defs/WorldAnchorPlacement"
+        },
+        {
+          "$ref": "#/$defs/WorldAnchorGroup"
+        },
+        {
+          "$ref": "#/$defs/WorldAnchorSeat"
+        },
+        {
+          "$ref": "#/$defs/WorldAnchorRecentSpeaker"
+        }
+      ]
+    },
+    "OverlayFact": {
+      "description": "A presentation fact an overlay element\u0027s OverlayPredicate reads. Every fact is per local seat and never enters the simulation; a world-scope element (a hud.panels row) reads a fact as true when it holds for any joined local seat.",
+      "enum": [
+        "SeatInput",
+        "PointerMotion",
+        "WheelOpen",
+        "ConsoleOpen",
+        "SeatCameraApplication"
+      ]
+    },
+    "OverlayPredicateNow": {
+      "description": "The fact holds this frame.",
+      "properties": {
+        "$type": {
+          "const": "now"
+        },
+        "fact": {
+          "$ref": "#/$defs/OverlayFact"
+        }
+      },
+      "required": [
+        "fact"
+      ],
+      "additionalProperties": false
+    },
+    "OverlayPredicateRecently": {
+      "description": "The fact held within the last WindowSeconds.",
+      "properties": {
+        "$type": {
+          "const": "recently"
+        },
+        "fact": {
+          "$ref": "#/$defs/OverlayFact",
+          "description": "The fact whose recency is tested."
+        },
+        "windowSeconds": {
+          "description": "How long after the fact last held the predicate still holds in full.",
+          "type": "number"
+        },
+        "fadeSeconds": {
+          "description": "How long after the window the predicate\u0027s PRESENCE eases from 1 to 0 \u2014 a surface reading presence rather than the boolean fades out instead of cutting, and the predicate still HOLDS (presence above 0) throughout the fade. 0 cuts at the window\u0027s end.",
+          "type": "number",
+          "default": 0
+        }
+      },
+      "required": [
+        "fact",
+        "windowSeconds"
+      ],
+      "additionalProperties": false
+    },
+    "OverlayPredicateAll": {
+      "description": "Every predicate holds.",
+      "properties": {
+        "$type": {
+          "const": "all"
+        },
+        "predicates": {
+          "$ref": "#/$defs/OverlayPredicateListNonNullable"
+        }
+      },
+      "required": [
+        "predicates"
+      ],
+      "additionalProperties": false
+    },
+    "OverlayPredicateList": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/OverlayPredicateNullable"
+      }
+    },
+    "OverlayPredicateAny": {
+      "description": "At least one predicate holds.",
+      "properties": {
+        "$type": {
+          "const": "any"
+        },
+        "predicates": {
+          "$ref": "#/$defs/OverlayPredicateList"
+        }
+      },
+      "required": [
+        "predicates"
+      ],
+      "additionalProperties": false
+    },
+    "OverlayPredicateNot": {
+      "description": "The predicate does not hold.",
+      "properties": {
+        "$type": {
+          "const": "not"
+        },
+        "predicate": {
+          "$ref": "#/$defs/OverlayPredicate"
+        }
+      },
+      "required": [
+        "predicate"
+      ],
+      "additionalProperties": false
+    },
+    "OverlaySubjectSeat": {
+      "description": "A local seat\u0027s avatar \u2014 null is the enclosing seat scope (the seat whose panel, bar, or camera is being evaluated), an explicit number is 1-based like Camera.Seat.",
+      "properties": {
+        "$type": {
+          "const": "seat"
+        },
+        "number": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false
+    },
+    "OverlaySubjectPlacement": {
+      "description": "A placement instance, optionally one of its shapes.",
+      "properties": {
+        "$type": {
+          "const": "placement"
+        },
+        "placementId": {
+          "type": "string"
+        },
+        "shapeId": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "placementId"
+      ],
+      "additionalProperties": false
+    },
+    "OverlaySubjectEntity": {
+      "description": "A population entity by 0-based index.",
+      "properties": {
+        "$type": {
+          "const": "entity"
+        },
+        "index": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "index"
+      ],
+      "additionalProperties": false
+    },
+    "OverlaySubjectAnySeat": {
+      "description": "Any joined local seat\u0027s avatar \u2014 the predicate holds when it holds for at least one.",
+      "properties": {
+        "$type": {
+          "const": "anySeat"
+        }
+      },
+      "additionalProperties": false
+    },
+    "OverlaySubjectRecentSpeaker": {
+      "description": "The body that most recently spoke (see Speaking); nothing until something has.",
+      "properties": {
+        "$type": {
+          "const": "recentSpeaker"
+        }
+      },
+      "additionalProperties": false
+    },
+    "OverlaySubject": {
+      "description": "Who a subject-bearing presentation predicate is about \u2014 a seat\u0027s avatar, a placement, an entity, or a quantifier over seats or speakers. Presentation-only: a subject resolves to a body through the seat\u0027s perceived body (so possession follows) and never enters the simulation.",
+      "type": "object",
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/OverlaySubjectSeat"
+        },
+        {
+          "$ref": "#/$defs/OverlaySubjectPlacement"
+        },
+        {
+          "$ref": "#/$defs/OverlaySubjectEntity"
+        },
+        {
+          "$ref": "#/$defs/OverlaySubjectAnySeat"
+        },
+        {
+          "$ref": "#/$defs/OverlaySubjectRecentSpeaker"
+        }
+      ]
+    },
+    "OverlayPredicateSpeaking": {
+      "description": "The subject spoke within the last WindowSeconds \u2014 a chat line, a dialogue line, a live voice: every speech path stamps the same presentation clock, so the predicate reads one fact whatever produced it. Presence eases across FadeSeconds after the window like Recently.",
+      "properties": {
+        "$type": {
+          "const": "speaking"
+        },
+        "subject": {
+          "$ref": "#/$defs/OverlaySubject"
+        },
+        "windowSeconds": {
+          "type": "number"
+        },
+        "fadeSeconds": {
+          "type": "number",
+          "default": 0
+        }
+      },
+      "required": [
+        "subject",
+        "windowSeconds"
+      ],
+      "additionalProperties": false
+    },
+    "OverlaySubjectNullable": {
+      "description": "Who a subject-bearing presentation predicate is about \u2014 a seat\u0027s avatar, a placement, an entity, or a quantifier over seats or speakers. Presentation-only: a subject resolves to a body through the seat\u0027s perceived body (so possession follows) and never enters the simulation.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/OverlaySubjectSeat"
+        },
+        {
+          "$ref": "#/$defs/OverlaySubjectPlacement"
+        },
+        {
+          "$ref": "#/$defs/OverlaySubjectEntity"
+        },
+        {
+          "$ref": "#/$defs/OverlaySubjectAnySeat"
+        },
+        {
+          "$ref": "#/$defs/OverlaySubjectRecentSpeaker"
+        }
+      ]
+    },
+    "OverlayPredicateNear": {
+      "description": "The subject is within Distance world units of Of (the enclosing seat\u0027s avatar when null), read off the presentation poses each frame; an unresolvable subject is infinitely far.",
+      "properties": {
+        "$type": {
+          "const": "near"
+        },
+        "subject": {
+          "$ref": "#/$defs/OverlaySubject"
+        },
+        "distance": {
+          "type": "number"
+        },
+        "of": {
+          "$ref": "#/$defs/OverlaySubjectNullable",
+          "default": null
+        }
+      },
+      "required": [
+        "subject",
+        "distance"
+      ],
+      "additionalProperties": false
+    },
+    "ActionStateComparison": {
+      "enum": [
+        "Equal",
+        "NotEqual",
+        "Less",
+        "LessOrEqual",
+        "Greater",
+        "GreaterOrEqual"
+      ]
+    },
+    "OverlayPredicateState": {
+      "description": "A state cell compares to a literal: Binding is state.\u003Crow\u003E[.\u003Ckey\u003E], and exactly one of Value (numeric rows) or Text (text rows, compared ordinally; only Equal/NotEqual) is authored. The same cell a bar\u0027s layoutCell or a wheel sector writes.",
+      "properties": {
+        "$type": {
+          "const": "state"
+        },
+        "binding": {
+          "type": "string"
+        },
+        "comparison": {
+          "$ref": "#/$defs/ActionStateComparison",
+          "default": "Equal"
+        },
+        "value": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "text": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "binding"
+      ],
+      "additionalProperties": false
+    },
+    "OverlayPredicate": {
+      "description": "An overlay element\u0027s visibility condition \u2014 the presentation twin of ActionPredicate, over OverlayFacts. Absent on an element means always visible.",
+      "type": "object",
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/OverlayPredicateNow"
+        },
+        {
+          "$ref": "#/$defs/OverlayPredicateRecently"
+        },
+        {
+          "$ref": "#/$defs/OverlayPredicateAll"
+        },
+        {
+          "$ref": "#/$defs/OverlayPredicateAny"
+        },
+        {
+          "$ref": "#/$defs/OverlayPredicateNot"
+        },
+        {
+          "$ref": "#/$defs/OverlayPredicateSpeaking"
+        },
+        {
+          "$ref": "#/$defs/OverlayPredicateNear"
+        },
+        {
+          "$ref": "#/$defs/OverlayPredicateState"
+        }
+      ]
+    },
+    "OverlayPredicateNullable": {
+      "description": "An overlay element\u0027s visibility condition \u2014 the presentation twin of ActionPredicate, over OverlayFacts. Absent on an element means always visible.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/OverlayPredicateNow"
+        },
+        {
+          "$ref": "#/$defs/OverlayPredicateRecently"
+        },
+        {
+          "$ref": "#/$defs/OverlayPredicateAll"
+        },
+        {
+          "$ref": "#/$defs/OverlayPredicateAny"
+        },
+        {
+          "$ref": "#/$defs/OverlayPredicateNot"
+        },
+        {
+          "$ref": "#/$defs/OverlayPredicateSpeaking"
+        },
+        {
+          "$ref": "#/$defs/OverlayPredicateNear"
+        },
+        {
+          "$ref": "#/$defs/OverlayPredicateState"
+        }
+      ]
+    },
+    "OverlayPredicateListNonNullable": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/OverlayPredicateNullable"
+      }
+    },
     "WorldDistributionRegionDisc": {
       "description": "A planar disc centered on the consumer\u0027s origin.",
       "properties": {
@@ -2126,16 +2580,6 @@
         "windowSeconds"
       ],
       "additionalProperties": false
-    },
-    "ActionStateComparison": {
-      "enum": [
-        "Equal",
-        "NotEqual",
-        "Less",
-        "LessOrEqual",
-        "Greater",
-        "GreaterOrEqual"
-      ]
     },
     "ActionPredicateCompareState": {
       "description": "Compares a named state cell against either a fixed authored value, or \u2014 world scope only \u2014 another named state cell/reserved channel read live at the same evaluation. Both spellings are authorable; exactly one of Value and ComparandState may be present (refused by name when both or neither are). The comparand-row spelling is what lets a gate track a moving threshold \u2014 $tick compared against a schedule row the rule\u0027s own effects advance is \u0022every N ticks\u0022; a round row compared against a declared length row is a round boundary \u2014 composition over the same two-sided comparison, never a new mechanism.",
@@ -2641,165 +3085,6 @@
       },
       "additionalProperties": false
     },
-    "OverlayFact": {
-      "description": "A presentation fact an overlay element\u0027s OverlayPredicate reads. Every fact is per local seat and never enters the simulation; a world-scope element (a hud.panels row) reads a fact as true when it holds for any joined local seat.",
-      "enum": [
-        "SeatInput",
-        "PointerMotion",
-        "WheelOpen",
-        "ConsoleOpen",
-        "SeatCameraApplication"
-      ]
-    },
-    "OverlayPredicateNow": {
-      "description": "The fact holds this frame.",
-      "properties": {
-        "$type": {
-          "const": "now"
-        },
-        "fact": {
-          "$ref": "#/$defs/OverlayFact"
-        }
-      },
-      "required": [
-        "fact"
-      ],
-      "additionalProperties": false
-    },
-    "OverlayPredicateRecently": {
-      "description": "The fact held within the last WindowSeconds.",
-      "properties": {
-        "$type": {
-          "const": "recently"
-        },
-        "fact": {
-          "$ref": "#/$defs/OverlayFact",
-          "description": "The fact whose recency is tested."
-        },
-        "windowSeconds": {
-          "description": "How long after the fact last held the predicate still holds in full.",
-          "type": "number"
-        },
-        "fadeSeconds": {
-          "description": "How long after the window the predicate\u0027s PRESENCE eases from 1 to 0 \u2014 a surface reading presence rather than the boolean fades out instead of cutting, and the predicate still HOLDS (presence above 0) throughout the fade. 0 cuts at the window\u0027s end.",
-          "type": "number",
-          "default": 0
-        }
-      },
-      "required": [
-        "fact",
-        "windowSeconds"
-      ],
-      "additionalProperties": false
-    },
-    "OverlayPredicateAll": {
-      "description": "Every predicate holds.",
-      "properties": {
-        "$type": {
-          "const": "all"
-        },
-        "predicates": {
-          "$ref": "#/$defs/OverlayPredicateListNonNullable"
-        }
-      },
-      "required": [
-        "predicates"
-      ],
-      "additionalProperties": false
-    },
-    "OverlayPredicateList": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/OverlayPredicateNullable"
-      }
-    },
-    "OverlayPredicateAny": {
-      "description": "At least one predicate holds.",
-      "properties": {
-        "$type": {
-          "const": "any"
-        },
-        "predicates": {
-          "$ref": "#/$defs/OverlayPredicateList"
-        }
-      },
-      "required": [
-        "predicates"
-      ],
-      "additionalProperties": false
-    },
-    "OverlayPredicateNot": {
-      "description": "The predicate does not hold.",
-      "properties": {
-        "$type": {
-          "const": "not"
-        },
-        "predicate": {
-          "$ref": "#/$defs/OverlayPredicate"
-        }
-      },
-      "required": [
-        "predicate"
-      ],
-      "additionalProperties": false
-    },
-    "OverlayPredicate": {
-      "description": "An overlay element\u0027s visibility condition \u2014 the presentation twin of ActionPredicate, over OverlayFacts. Absent on an element means always visible.",
-      "type": "object",
-      "required": [
-        "$type"
-      ],
-      "anyOf": [
-        {
-          "$ref": "#/$defs/OverlayPredicateNow"
-        },
-        {
-          "$ref": "#/$defs/OverlayPredicateRecently"
-        },
-        {
-          "$ref": "#/$defs/OverlayPredicateAll"
-        },
-        {
-          "$ref": "#/$defs/OverlayPredicateAny"
-        },
-        {
-          "$ref": "#/$defs/OverlayPredicateNot"
-        }
-      ]
-    },
-    "OverlayPredicateNullable": {
-      "description": "An overlay element\u0027s visibility condition \u2014 the presentation twin of ActionPredicate, over OverlayFacts. Absent on an element means always visible.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "required": [
-        "$type"
-      ],
-      "anyOf": [
-        {
-          "$ref": "#/$defs/OverlayPredicateNow"
-        },
-        {
-          "$ref": "#/$defs/OverlayPredicateRecently"
-        },
-        {
-          "$ref": "#/$defs/OverlayPredicateAll"
-        },
-        {
-          "$ref": "#/$defs/OverlayPredicateAny"
-        },
-        {
-          "$ref": "#/$defs/OverlayPredicateNot"
-        }
-      ]
-    },
-    "OverlayPredicateListNonNullable": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/OverlayPredicateNullable"
-      }
-    },
     "WorldHudStyleToken": {
       "description": "A WorldHudElement\u0027s color role \u2014 a curated authored subset of Puck.Overlays.OverlayColorRole (Puck.World.Schema must not reference Puck.Overlays; the renderer maps this token to the concrete role).",
       "enum": [
@@ -2834,6 +3119,49 @@
           "$ref": "#/$defs/WorldScreenSourceCapture"
         }
       ]
+    },
+    "WorldFrameSourceNonNullable": {
+      "description": "The WorldScreenSource arms that produce a sampled frame \u2014 Camera, View, Probe, and Capture \u2014 carrying its own JsonPolymorphicAttribute over the SAME four discriminators (camera/view/probe/capture) their parent union uses, so a member declared as this narrower type round-trips the identical JSON a full WorldScreenSource screen row does. A WorldProbe socket is the driving consumer: it plugs one of these into each named input rather than the wider union, which would legally admit a decal/machine/console/qr/text/none source no probe kernel can sample.",
+      "type": "object",
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/WorldScreenSourceCamera"
+        },
+        {
+          "$ref": "#/$defs/WorldScreenSourceView"
+        },
+        {
+          "$ref": "#/$defs/WorldScreenSourceProbe"
+        },
+        {
+          "$ref": "#/$defs/WorldScreenSourceCapture"
+        }
+      ]
+    },
+    "WorldHudFrameCandidate": {
+      "description": "One ranked source candidate of a Frame element: the frame shown while When holds. Candidates are walked in authored order every frame and the first holding one wins; a null predicate always holds, so the last row is the default.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/WorldFrameSourceNonNullable",
+          "description": "The sampled frame while this candidate wins."
+        },
+        "when": {
+          "$ref": "#/$defs/OverlayPredicateNullable",
+          "description": "The condition, evaluated for the panel\u0027s seat.",
+          "default": null
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "additionalProperties": false
     },
     "WorldHudElement": {
       "description": "One HUD element row inside a WorldHudPanel \u2014 a stable id (unique within the owning panel), its kind, its local rect, its color role, an authored literal string (meaningful for Text), and an optional binding into the closed HudBindingVocabulary (meaningful for Text and Gauge \u2014 a bound text element\u0027s live value replaces the authored literal; a bound gauge element\u0027s live value drives its fill; an unbound gauge draws empty).",
@@ -2915,6 +3243,22 @@
           "description": "A Frame element\u0027s sampled-frame alpha, in [0, 1]. Ignored for every other kind.",
           "type": "number",
           "default": 1
+        },
+        "sources": {
+          "description": "A Frame element\u0027s ranked source candidates \u2014 a portrait that shows the speaking character, else the webcam when the player chose it, else the seat\u0027s own avatar. Refused beside Source: a bare Source is exactly a one-entry list with no condition. At most MaxFrameCandidatesPerElement entries, every one counted toward MaxFrameSources.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/WorldHudFrameCandidate"
+          },
+          "default": null
+        },
+        "fadeSeconds": {
+          "description": "How long a Frame element cross-fades when its winning candidate changes; 0 cuts. Finite and non-negative.",
+          "type": "number",
+          "default": 0
         }
       },
       "required": [

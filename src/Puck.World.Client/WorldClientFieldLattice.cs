@@ -5,6 +5,7 @@ namespace Puck.World.Client;
 /// <summary>The client's mirror of the authority's field lattice — raw Q48.16 cells patched from snapshot deltas.
 /// Presentation reads it; nothing here feeds the tick.</summary>
 public sealed class WorldClientFieldLattice {
+    private readonly int[] m_fieldRevisions;
     private readonly long[][] m_raw;
 
     public WorldClientFieldLattice(WorldFieldsSection document) {
@@ -16,6 +17,7 @@ public sealed class WorldClientFieldLattice {
         Layers = document.Lattice.Layers;
         CellCount = ((Width * Layers) * Depth);
         m_raw = new long[document.Fields.Count][];
+        m_fieldRevisions = new int[document.Fields.Count];
 
         for (var field = 0; (field < m_raw.Length); field++) {
             m_raw[field] = new long[CellCount];
@@ -30,6 +32,10 @@ public sealed class WorldClientFieldLattice {
     public WorldFieldsSection Document { get; }
     /// <summary>Gets the field count.</summary>
     public int FieldCount => m_raw.Length;
+    /// <summary>Gets the revision of one field's cell values.</summary>
+    /// <param name="field">The field index.</param>
+    /// <returns>The field-local revision.</returns>
+    public int FieldRevision(int field) => m_fieldRevisions[field];
     /// <summary>Gets the layer count.</summary>
     public int Layers { get; }
     /// <summary>Gets a counter that moves on every applied delta set.</summary>
@@ -48,6 +54,8 @@ public sealed class WorldClientFieldLattice {
             return;
         }
 
+        Span<bool> changed = stackalloc bool[WorldFieldCapacity.MaxFields];
+
         foreach (var delta in deltas) {
             if (
                 (delta.Field >= m_raw.Length) ||
@@ -56,7 +64,18 @@ public sealed class WorldClientFieldLattice {
                 continue;
             }
 
+            if (m_raw[delta.Field][delta.Cell] == delta.Raw) {
+                continue;
+            }
+
             m_raw[delta.Field][delta.Cell] = delta.Raw;
+            changed[delta.Field] = true;
+        }
+
+        for (var field = 0; (field < m_fieldRevisions.Length); field++) {
+            if (changed[field]) {
+                m_fieldRevisions[field]++;
+            }
         }
 
         Revision++;

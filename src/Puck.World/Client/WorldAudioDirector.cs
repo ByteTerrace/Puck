@@ -66,6 +66,9 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
 
     private readonly WorldStampPool? m_animator;
     private readonly WorldClient? m_client;
+    private readonly WorldPerceptionAnchor? m_perception;
+    private readonly WorldSpeechClock? m_speech;
+    private readonly IOverlayPredicateEvaluator? m_evaluator;
     private readonly AudioSnapshot[] m_slabs;
 
     private ulong m_cueOrdinal;
@@ -116,9 +119,17 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
     /// emitters resolve absent (honest silence); without an animator, placements resolve through the static stamp math.</summary>
     /// <param name="client">The snapshot-fed entity view, or <see langword="null"/> headless.</param>
     /// <param name="animator">The animated-placement replay pool, or <see langword="null"/> headless.</param>
-    public WorldAudioDirector(WorldClient? client, WorldStampPool? animator) {
+    /// <param name="perception">The per-seat perception anchor a seat-relative anchor resolves through, or
+    /// <see langword="null"/> headless (such anchors then resolve absent).</param>
+    /// <param name="speech">The speech clock a recent-speaker anchor reads, or <see langword="null"/> headless.</param>
+    /// <param name="evaluator">The predicate evaluator a ranked camera anchor list selects through, or
+    /// <see langword="null"/> (every candidate condition then holds).</param>
+    public WorldAudioDirector(WorldClient? client, WorldStampPool? animator, WorldPerceptionAnchor? perception = null, WorldSpeechClock? speech = null, IOverlayPredicateEvaluator? evaluator = null) {
         m_client = client;
         m_animator = animator;
+        m_perception = perception;
+        m_speech = speech;
+        m_evaluator = evaluator;
         m_slabs = new AudioSnapshot[SnapshotRotation];
 
         for (var index = 0; (index < SnapshotRotation); index++) {
@@ -231,15 +242,29 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
     private static string AnchorKindToken(WorldAnchor anchor) => anchor switch {
         WorldAnchor.Entity => "entity",
         WorldAnchor.EntityPart => "entityPart",
+        WorldAnchor.Seat => "seat",
+        WorldAnchor.RecentSpeaker => "recentSpeaker",
         _ => "placement",
     };
     // ---- small shared derivations ----------------------------------------------------------------------------------
 
+    // A seat-relative anchor (Seat, RecentSpeaker) resolves its body at plan time against seat 1 (a speaker has no
+    // enclosing seat) and is re-planned every derive, so possession and a new speaker follow on the next publish.
     private EmitterAnchor AnchorOf(WorldAnchor anchor, Vector3 offset) => anchor switch {
         WorldAnchor.Entity entity => EmitterAnchor.EntityRoot(
         index: entity.Index,
         offset: offset
     ),
+        WorldAnchor.Seat or WorldAnchor.RecentSpeaker when (SeatRelativeBody(anchor: anchor) is { } seatBody) => ((WorldSeatAnchors.PartOf(anchor: anchor) is { } seatPart)
+        ? EmitterAnchor.EntityPart(
+            index: seatBody,
+            partId: seatPart,
+            offset: offset
+        )
+        : EmitterAnchor.EntityRoot(
+            index: seatBody,
+            offset: offset
+        )),
         WorldAnchor.EntityPart part => EmitterAnchor.EntityPart(
         index: part.Index,
         partId: part.PartId,
@@ -256,6 +281,47 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
     ),
         _ => EmitterAnchor.FixedPoint(position: offset),
     };
+    private WorldAnchor? ListenerAnchor(WorldCamera camera) {
+        var anchor = WorldSeatAnchors.SelectAnchor(
+            camera: camera,
+            candidateIndex: out _,
+            evaluator: m_evaluator,
+            slot: 0
+        );
+
+        if (!WorldSeatAnchors.IsSeatRelative(anchor: anchor)) {
+            return anchor;
+        }
+
+        if (SeatRelativeBody(anchor: anchor!) is not { } body) {
+            return null;
+        }
+
+        return ((WorldSeatAnchors.PartOf(anchor: anchor) is { } partId)
+            ? new WorldAnchor.EntityPart(
+                Index: body,
+                PartId: partId
+            )
+            : new WorldAnchor.Entity(Index: body)
+        );
+    }
+    private int? SeatRelativeBody(WorldAnchor anchor) {
+        if ((m_perception is not { } perception) || (m_speech is not { } speech)) {
+            return null;
+        }
+
+        var body = WorldSeatAnchors.BodyOf(
+            anchor: anchor,
+            perception: perception,
+            slot: 0,
+            speech: speech
+        );
+
+        return ((((uint)body) < ((uint)WorldClient.EntityCapacity))
+            ? body
+            : null
+        );
+    }
     // ---- source hosting --------------------------------------------------------------------------------------------
 
     // Apply the derived bindings to the attached mixer: master gain, the patch set, and tune acquire/release with
@@ -766,8 +832,12 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
                 return null;
             }
 
+            // The anchor the camera rides for seat 1 this derive: the bare anchor or the winning ranked candidate,
+            // with a seat-relative kind rewritten to the body it resolves to so the entity arms below apply.
+            var cameraAnchor = ListenerAnchor(camera: camera);
+
             // An unanchored world-axis offset aimed at a world point has a directly resolvable listener pose.
-            if (camera.Anchor is null) {
+            if (cameraAnchor is null) {
                 return (((camera.Rig.OffsetOp is { WorldAxes: true } fixedOffset) && (camera.Rig.LookAtOp is { Subject: WorldCameraSubject.WorldPoint aim }))
                     ? (Eye: fixedOffset.Value.Value, Forward: (aim.Point.Value - fixedOffset.Value.Value))
                     : ((Vector3 Eye, Vector3 Forward)?)null
@@ -780,7 +850,7 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
 
             var plan = new EmitterPlan {
                 Anchor = AnchorOf(
-                anchor: camera.Anchor,
+                anchor: cameraAnchor,
                 offset: follow.Value
             ),
             };
@@ -792,15 +862,15 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
                 transforms: transforms
             ) &&
                 (m_client is { } client) &&
-                (camera.Anchor is WorldAnchor.Entity or WorldAnchor.EntityPart)
+                (cameraAnchor is WorldAnchor.Entity or WorldAnchor.EntityPart)
             ) {
-                var orientation = ((camera.Anchor is WorldAnchor.Entity entity)
+                var orientation = ((cameraAnchor is WorldAnchor.Entity entity)
                     ? client.Orientation(index: entity.Index)
                     : (((m_animator is { } animator) && WorldEntityPartResolver.TryPackedPose(
                         client: client,
                         stamps: animator,
-                        entityIndex: ((WorldAnchor.EntityPart)camera.Anchor).Index,
-                        partId: ((WorldAnchor.EntityPart)camera.Anchor).PartId,
+                        entityIndex: ((WorldAnchor.EntityPart)cameraAnchor).Index,
+                        partId: ((WorldAnchor.EntityPart)cameraAnchor).PartId,
                         transforms: transforms,
                         pose: out var partPose
                     ))

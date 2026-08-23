@@ -157,6 +157,26 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
         Assert.True(condition: equal, userMessage: DeepEqual.LastMismatchPath);
     }
     [Fact]
+    public void Field_section_round_trips_structurally() {
+        var checkpoint = CapturedCheckpoint() with {
+            Fields = new WorldFieldLattice.WorldFieldCheckpoint(Raw: [
+                [FixedQ4816.Zero.Value, FixedQ4816.FromInteger(value: 1).Value],
+                [FixedQ4816.FromInteger(value: -2).Value, FixedQ4816.FromInteger(value: 3).Value],
+            ]),
+        };
+        var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
+
+        Assert.True(condition: WorldAuthorityCheckpointCodec.TryDecode(
+            bytes: encoded,
+            checkpoint: out var decoded,
+            reason: out var reason
+        ), userMessage: reason);
+        Assert.True(
+            condition: DeepEqual.Compare(a: checkpoint.Fields, b: decoded!.Fields),
+            userMessage: DeepEqual.LastMismatchPath
+        );
+    }
+    [Fact]
     public void Encode_of_Decode_is_byte_identical() {
         var checkpoint = CapturedCheckpoint();
         var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);

@@ -68,16 +68,17 @@ public sealed partial class WorldPopulation {
         );
         var derivedSolids = solids;
 
+        // Field state exists independently of the selected contact/target provider. A world may use its lattice only
+        // for reactions, exposure rows, snapshots, or rendering and still owes the same authoritative state.
+        m_fields ??= ((definition.Fields is { } fieldsSection)
+            ? new WorldFieldLattice(document: fieldsSection)
+            : null
+        );
+
         if (
             (derivedSolids is null) &&
             (WorldContactSelection.RequiresField(collision: definition.Collision) || WorldTargetSelection.RequiresLineOfSight(definition: definition))
         ) {
-            // The lattice is boot-authored and its values outlive every document install, so it is created once.
-            m_fields ??= ((definition.Fields is { } fieldsSection)
-                ? new WorldFieldLattice(document: fieldsSection)
-                : null
-            );
-
             if (!WorldSolidField.TryBuild(
                 built: out derivedSolids,
                 definition: definition,

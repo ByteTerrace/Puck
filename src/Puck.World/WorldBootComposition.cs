@@ -73,6 +73,9 @@ internal static class WorldBootComposition {
         // CORE: the HUD binding resolver and player.where's anchor echo consume it in every boot shape;
         // presentation's frame source and scene emitter reach the same singleton.
         services.AddSingleton<WorldPerceptionAnchor>();
+        // The speech clock every speech path stamps (chat today) and every Speaking predicate / RecentSpeaker
+        // anchor reads. Core: chat is core, and the HUD read-back evaluates the predicate headless.
+        services.AddSingleton<WorldSpeechClock>();
         // The seat authority router — a small fixed CAS table, one writer (WorldInstanceHost's transfer commit), consumed by
         // WorldClient's seat-submission doors, WorldFramePresenter's per-seat loop, WorldHudBindingResolver, and
         // WorldAudioDirector's listener resolution.
@@ -112,7 +115,10 @@ internal static class WorldBootComposition {
         // attached is simply never drained — harmless headless).
         services.AddSingleton(implementationFactory: static sp => new WorldAudioDirector(
             client: sp.GetRequiredService<WorldClient>(),
-            animator: sp.GetRequiredService<WorldStampPool>()
+            animator: sp.GetRequiredService<WorldStampPool>(),
+            perception: sp.GetRequiredService<WorldPerceptionAnchor>(),
+            speech: sp.GetRequiredService<WorldSpeechClock>(),
+            evaluator: sp.GetRequiredService<IOverlayPredicateEvaluator>()
         ));
 
         // The server's entity table — the four local seats plus up to 124 network stand-ins the world.population verb
@@ -285,6 +291,11 @@ internal static class WorldBootComposition {
                 cameras: definition.Cameras,
                 anchors: sp.GetRequiredService<WorldClient>(),
                 stamps: sp.GetRequiredService<WorldStampPool>(),
+                // Seat-relative and ranked camera anchors resolve per seat through the perception anchor and the
+                // overlay facts; the facts are resolved lazily because they read the binder-independent input
+                // router, which the boot order registers after this factory runs.
+                perception: sp.GetRequiredService<WorldPerceptionAnchor>(),
+                facts: () => sp.GetRequiredService<WorldOverlayFacts>(),
                 // On the D3D12 host the window/monitor capture feeds publish GPU-side into shared textures the
                 // screens sample directly; the Vulkan host keeps the CPU-pixel transport for THOSE. The shared
                 // camera rides its GPU tier on both hosts (see CaptureCameraGpu). Headless never resolves either
@@ -400,7 +411,8 @@ internal static class WorldBootComposition {
         services.AddSingleton<ICommandModule>(implementationFactory: static sp => new WorldHudCommandModule(
             server: sp.GetRequiredService<WorldServer>(),
             bindings: sp.GetRequiredService<IHudBindingResolver>(),
-            roster: sp.GetRequiredService<PlayerRoster>()
+            roster: sp.GetRequiredService<PlayerRoster>(),
+            facts: sp.GetRequiredService<WorldOverlayFacts>()
         ));
 
         // The genre-neutral state section's FINE-GRAIN verb surface — world.state.cell.set (one cell, dispatching
@@ -505,11 +517,15 @@ internal static class WorldBootComposition {
             roster: sp.GetRequiredService<PlayerRoster>(),
             server: sp.GetRequiredService<WorldServer>(),
             seatBindings: sp.GetRequiredService<WorldSeatBindings>(),
+            perception: sp.GetRequiredService<WorldPerceptionAnchor>(),
+            stamps: sp.GetRequiredService<WorldStampPool>(),
+            speech: sp.GetRequiredService<WorldSpeechClock>(),
             router: () => sp.GetRequiredService<InputRouter>(),
             wheel: () => sp.GetService<WorldWheelFeed>(),
             pointer: sp.GetService<WorldPointer>(),
             consoles: sp.GetService<IConsoleSessions>()
         ));
+        services.AddSingleton<IOverlayPredicateEvaluator>(implementationFactory: static sp => sp.GetRequiredService<WorldOverlayFacts>());
         services.AddSingleton<WorldBindingBarControl>();
 
         // The overlay-UI verb surface — world.screenshot. CORE-registered with an optional renderer so headless and
@@ -805,6 +821,8 @@ internal static class WorldBootComposition {
             animator: sp.GetRequiredService<WorldStampPool>(),
             audio: sp.GetRequiredService<WorldAudioDirector>(),
             anchor: sp.GetRequiredService<WorldPerceptionAnchor>(),
+            speech: sp.GetRequiredService<WorldSpeechClock>(),
+            overlayFacts: sp.GetRequiredService<IOverlayPredicateEvaluator>(),
             composition: sp.GetRequiredService<WorldCompositionState>(),
             composer: sp.GetRequiredService<WorldViewComposer>(),
             sdfDocuments: sp.GetRequiredService<WorldSdfDocumentEmitter>(),

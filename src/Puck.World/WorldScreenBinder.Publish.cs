@@ -67,14 +67,17 @@ internal sealed partial class WorldScreenBinder {
                 (slot.View is { } view) &&
                 (ResolveCamera(name: view.Name) is { } camera)
             ) {
-                RegisterCameraView(camera: camera);
+                RegisterCameraView(
+                    camera: camera,
+                    seat: DefaultViewSeat
+                );
                 view.Stack = m_viewStack;
                 _ = (wiredByName.TryGetValue(
-                    key: camera.Name,
+                    key: view.Name,
                     value: out var indices
                 )
                     ? indices
-                    : (wiredByName[camera.Name] = new HashSet<int>())).Add(item: slot.Index);
+                    : (wiredByName[view.Name] = new HashSet<int>())).Add(item: slot.Index);
             }
         }
 

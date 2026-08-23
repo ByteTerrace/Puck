@@ -6,6 +6,7 @@ using Puck.Abstractions.Presentation;
 using Puck.Platform;
 using Puck.Platform.Probes;
 using Puck.SdfVm;
+using Puck.World.Client;
 using Puck.SdfVm.Views;
 
 namespace Puck.World;
@@ -180,8 +181,15 @@ internal sealed partial class WorldScreenBinder {
         feed.Detach();
         feed.View.ExportFactory = null;
 
-        if (0 == WiredScreensFor(name: cameraName).Count) {
-            ReleaseOrphanedCameraView(name: cameraName);
+        if (ResolveCamera(name: cameraName) is { } camera) {
+            var registrationName = WorldSeatAnchors.RegistrationName(
+                camera: camera,
+                seat: DefaultViewSeat
+            );
+
+            if (0 == WiredScreensFor(name: registrationName).Count) {
+                ReleaseOrphanedCameraView(name: registrationName);
+            }
         }
     }
     private bool HasViewExportReferences(string cameraName) => m_viewExportReferences.ContainsKey(key: cameraName);
@@ -198,9 +206,15 @@ internal sealed partial class WorldScreenBinder {
     // Every caller already guards TryGetViewExport's own OS-version check before reaching here.
     [SupportedOSPlatform("windows10.0.10240")]
     private ViewExportFeed GetOrAddViewExport(WorldCamera camera) {
-        RegisterCameraView(camera: camera);
+        RegisterCameraView(
+            camera: camera,
+            seat: DefaultViewSeat
+        );
 
-        var view = m_cameraViews[camera.Name].View;
+        var view = m_cameraViews[WorldSeatAnchors.RegistrationName(
+            camera: camera,
+            seat: DefaultViewSeat
+        )].View;
 
         if (m_viewExports.TryGetValue(key: camera.Name, value: out var existing)) {
             if (ReferenceEquals(objA: existing.View, objB: view)) {

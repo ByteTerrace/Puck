@@ -446,6 +446,12 @@ public sealed partial class WorldServer {
 
         var server = checkpoint.Server;
 
+        if ((m_population.Fields is null) != (checkpoint.Fields is null)) {
+            throw new InvalidOperationException(message: "the checkpoint's fields-section presence does not match its world definition.");
+        }
+
+        m_population.Fields?.ValidateCheckpoint(checkpoint: checkpoint.Fields!);
+
         m_definition = WorldDefinitionSerialization.Deserialize(utf8Json: server.DefinitionJson);
         m_base = WorldDefinitionSerialization.Deserialize(utf8Json: server.BaseDefinitionJson);
         m_baseOrigin = server.BaseOrigin;
@@ -512,11 +518,8 @@ public sealed partial class WorldServer {
         );
         m_grants.Restore(checkpoint: checkpoint.Grants);
 
-        if (
-            (m_population.Fields is { } lattice) &&
-            (checkpoint.Fields is { } fieldsCheckpoint)
-        ) {
-            lattice.Restore(checkpoint: fieldsCheckpoint);
+        if (m_population.Fields is { } lattice) {
+            lattice.Restore(checkpoint: checkpoint.Fields!);
         }
 
         // A restored parked PEER generation is released right here, not at its grace deadline: the connection that

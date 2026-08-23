@@ -759,6 +759,12 @@ public static partial class WorldDefinitionValidator {
             return;
         }
 
+        static bool FitsFixed(float value) => (
+            float.IsFinite(f: value) &&
+            (value >= (((double)long.MinValue) / 65536.0)) &&
+            (value <= (((double)long.MaxValue) / 65536.0))
+        );
+
         var lattice = fields.Lattice;
 
         if (lattice is null) {
@@ -776,10 +782,28 @@ public static partial class WorldDefinitionValidator {
         }
 
         if (
-            !float.IsFinite(f: lattice.CellSize) ||
-            (lattice.CellSize <= 0f)
+            !FitsFixed(value: lattice.CellSize) ||
+            (FixedQ4816.FromDouble(value: lattice.CellSize) <= FixedQ4816.Zero)
         ) {
-            errors.Add(item: $"fields.lattice.cellSize must be finite and greater than zero (was {lattice.CellSize}).");
+            errors.Add(item: $"fields.lattice.cellSize must quantize to a positive Q48.16 value (was {lattice.CellSize}).");
+        }
+
+        if (
+            !FitsFixed(value: lattice.Origin.X) ||
+            !FitsFixed(value: lattice.Origin.Y) ||
+            !FitsFixed(value: lattice.Origin.Z)
+        ) {
+            errors.Add(item: "fields.lattice.origin must fit Q48.16.");
+        } else if (
+            FitsFixed(value: lattice.CellSize) &&
+            (lattice.CellSize > 0f) &&
+            (
+                !FitsFixed(value: ((float)(((double)lattice.Origin.X) + (((double)lattice.CellSize) * lattice.Width)))) ||
+                !FitsFixed(value: ((float)(((double)lattice.Origin.Y) + (((double)lattice.CellSize) * lattice.Layers)))) ||
+                !FitsFixed(value: ((float)(((double)lattice.Origin.Z) + (((double)lattice.CellSize) * lattice.Depth))))
+            )
+        ) {
+            errors.Add(item: "fields.lattice extent must fit Q48.16.");
         }
 
         if (
@@ -808,6 +832,7 @@ public static partial class WorldDefinitionValidator {
 
         var rows = (fields.Fields ?? []);
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var hasHeightField = false;
 
         if (rows.Count == 0) {
             errors.Add(item: "fields.fields declares no field.");
@@ -841,13 +866,13 @@ public static partial class WorldDefinitionValidator {
             }
 
             if (
-                !float.IsFinite(f: row.Min) ||
-                !float.IsFinite(f: row.Max) ||
-                (row.Min >= row.Max)
+                !FitsFixed(value: row.Min) ||
+                !FitsFixed(value: row.Max) ||
+                (FixedQ4816.FromDouble(value: row.Min) >= FixedQ4816.FromDouble(value: row.Max))
             ) {
-                errors.Add(item: $"{path} must declare finite min < max (was {row.Min}..{row.Max}).");
+                errors.Add(item: $"{path} must declare Q48.16-representable min < max after quantization (was {row.Min}..{row.Max}).");
             } else if (
-                !float.IsFinite(f: row.Initial) ||
+                !FitsFixed(value: row.Initial) ||
                 (row.Initial < row.Min) ||
                 (row.Initial > row.Max)
             ) {
@@ -855,13 +880,15 @@ public static partial class WorldDefinitionValidator {
             }
 
             if (
-                !float.IsFinite(f: row.HeightScale) ||
+                !FitsFixed(value: row.HeightScale) ||
                 (row.HeightScale < 0f)
             ) {
                 errors.Add(item: $"{path}.heightScale must be finite and non-negative (was {row.HeightScale}).");
             }
 
             if (row.HeightScale > 0f) {
+                hasHeightField = true;
+
                 if (
                     (row.Color is null) ||
                     !IsHexColor(value: row.Color)
@@ -869,8 +896,15 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{path}.color must be #RRGGBB on a field carrying a heightScale.");
                 }
 
-                if ((row.Max * row.HeightScale) > (WorldFieldCapacity.MaxSurfaceCells * lattice.CellSize)) {
-                    errors.Add(item: $"{path} can raise {(row.Max * row.HeightScale)} units of surface, above the {(WorldFieldCapacity.MaxSurfaceCells * lattice.CellSize)}-unit ceiling ({WorldFieldCapacity.MaxSurfaceCells} cells of cellSize).");
+                var maximumRaise = (((double)row.Max * row.HeightScale) * lattice.Layers);
+                var minimumRaise = (((double)row.Min * row.HeightScale) * lattice.Layers);
+
+                if (maximumRaise > (WorldFieldCapacity.MaxSurfaceCells * ((double)lattice.CellSize))) {
+                    errors.Add(item: $"{path} can raise {maximumRaise} units of surface across {lattice.Layers} layers, above the {(WorldFieldCapacity.MaxSurfaceCells * lattice.CellSize)}-unit ceiling ({WorldFieldCapacity.MaxSurfaceCells} cells of cellSize).");
+                }
+
+                if (minimumRaise < (((double)long.MinValue) / 65536.0)) {
+                    errors.Add(item: $"{path}'s minimum layered height {minimumRaise} does not fit Q48.16.");
                 }
             } else if (
                 (row.Color is not null) &&
@@ -878,6 +912,13 @@ public static partial class WorldDefinitionValidator {
             ) {
                 errors.Add(item: $"{path}.color '{row.Color}' is not #RRGGBB.");
             }
+        }
+
+        if (
+            hasHeightField &&
+            ((lattice.Width > WorldFieldCapacity.MaxSurfaceCells) || (lattice.Depth > WorldFieldCapacity.MaxSurfaceCells))
+        ) {
+            errors.Add(item: $"fields.lattice width/depth must be at most {WorldFieldCapacity.MaxSurfaceCells} when a field carries heightScale; one {WorldFieldCapacity.MaxSurfaceCells + 2}-voxel render brick must cover the lattice plus its border (was {lattice.Width}x{lattice.Depth}).");
         }
 
         var reactions = (fields.Reactions ?? []);
@@ -950,6 +991,14 @@ public static partial class WorldDefinitionValidator {
                         var conditions = (transform.When ?? []);
                         var writes = (transform.Then ?? []);
 
+                        if (conditions.Count > WorldFieldCapacity.MaxTransformTerms) {
+                            errors.Add(item: $"{path}.when declares {conditions.Count} conditions, exceeding the {WorldFieldCapacity.MaxTransformTerms}-term ceiling.");
+                        }
+
+                        if (writes.Count > WorldFieldCapacity.MaxTransformTerms) {
+                            errors.Add(item: $"{path}.then declares {writes.Count} writes, exceeding the {WorldFieldCapacity.MaxTransformTerms}-term ceiling.");
+                        }
+
                         if (writes.Count == 0) {
                             errors.Add(item: $"{path}.then is empty.");
                         }
@@ -960,8 +1009,12 @@ public static partial class WorldDefinitionValidator {
                                 path: $"{path}.when[{c}].field"
                             );
 
-                            if ((conditions[c] is { } condition) && !float.IsFinite(f: condition.Value)) {
-                                errors.Add(item: $"{path}.when[{c}].value must be finite.");
+                            if ((conditions[c] is { } condition) && !FitsFixed(value: condition.Value)) {
+                                errors.Add(item: $"{path}.when[{c}].value must fit Q48.16.");
+                            }
+
+                            if ((conditions[c] is { } definedCondition) && !Enum.IsDefined(value: definedCondition.Comparison)) {
+                                errors.Add(item: $"{path}.when[{c}].comparison '{definedCondition.Comparison}' is unknown.");
                             }
                         }
 
@@ -971,8 +1024,12 @@ public static partial class WorldDefinitionValidator {
                                 path: $"{path}.then[{t}].field"
                             );
 
-                            if ((writes[t] is { } write) && !float.IsFinite(f: write.Value)) {
-                                errors.Add(item: $"{path}.then[{t}].value must be finite.");
+                            if ((writes[t] is { } write) && !FitsFixed(value: write.Value)) {
+                                errors.Add(item: $"{path}.then[{t}].value must fit Q48.16.");
+                            }
+
+                            if ((writes[t] is { } definedWrite) && !Enum.IsDefined(value: definedWrite.Op)) {
+                                errors.Add(item: $"{path}.then[{t}].op '{definedWrite.Op}' is unknown.");
                             }
                         }
 
@@ -988,8 +1045,8 @@ public static partial class WorldDefinitionValidator {
                         path: $"{path}.tag"
                     );
 
-                    if (!float.IsFinite(f: emit.Amount)) {
-                        errors.Add(item: $"{path}.amount must be finite.");
+                    if (!FitsFixed(value: emit.Amount)) {
+                        errors.Add(item: $"{path}.amount must fit Q48.16.");
                     }
 
                     break;
@@ -1003,8 +1060,12 @@ public static partial class WorldDefinitionValidator {
                         path: $"{path}.row"
                     );
 
-                    if (!float.IsFinite(f: expose.Value)) {
-                        errors.Add(item: $"{path}.value must be finite.");
+                    if (!FitsFixed(value: expose.Value)) {
+                        errors.Add(item: $"{path}.value must fit Q48.16.");
+                    }
+
+                    if (!Enum.IsDefined(value: expose.Comparison)) {
+                        errors.Add(item: $"{path}.comparison '{expose.Comparison}' is unknown.");
                     }
 
                     break;
@@ -1036,11 +1097,11 @@ public static partial class WorldDefinitionValidator {
             );
 
             if (
-                !float.IsFinite(f: row.Value) ||
-                !float.IsFinite(f: row.MinX) ||
-                !float.IsFinite(f: row.MinZ) ||
-                !float.IsFinite(f: row.MaxX) ||
-                !float.IsFinite(f: row.MaxZ) ||
+                !FitsFixed(value: row.Value) ||
+                !FitsFixed(value: row.MinX) ||
+                !FitsFixed(value: row.MinZ) ||
+                !FitsFixed(value: row.MaxX) ||
+                !FitsFixed(value: row.MaxZ) ||
                 (row.MinX > row.MaxX) ||
                 (row.MinZ > row.MaxZ)
             ) {

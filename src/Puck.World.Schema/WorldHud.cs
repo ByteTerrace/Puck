@@ -94,6 +94,13 @@ public enum WorldHudStyleToken : byte {
 /// <param name="Height">The rect's height, normalized — must be positive.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public readonly record struct WorldHudRect(float X, float Y, float Width, float Height);
+/// <summary>One ranked source candidate of a <see cref="WorldHudElementKind.Frame"/> element: the frame shown while
+/// <paramref name="When"/> holds. Candidates are walked in authored order every frame and the first holding one wins;
+/// a <see langword="null"/> predicate always holds, so the last row is the default.</summary>
+/// <param name="Source">The sampled frame while this candidate wins.</param>
+/// <param name="When">The condition, evaluated for the panel's seat.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldHudFrameCandidate(WorldFrameSource Source, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] OverlayPredicate? When = null);
 /// <summary>One HUD element row inside a <see cref="WorldHudPanel"/> — a stable id (unique within the owning panel),
 /// its kind, its local rect, its color role, an authored literal string (meaningful for <see cref="WorldHudElementKind.Text"/>),
 /// and an optional binding into the closed <see cref="HudBindingVocabulary"/> (meaningful for
@@ -131,6 +138,13 @@ public readonly record struct WorldHudRect(float X, float Y, float Width, float 
 /// be finite and non-negative. Ignored for every other kind. Omitted from the wire at its default (0).</param>
 /// <param name="Opacity">A <see cref="WorldHudElementKind.Frame"/> element's sampled-frame alpha, in [0, 1]. Ignored
 /// for every other kind.</param>
+/// <param name="Sources">A <see cref="WorldHudElementKind.Frame"/> element's ranked source candidates — a portrait that
+/// shows the speaking character, else the webcam when the player chose it, else the seat's own avatar. Refused beside
+/// <paramref name="Source"/>: a bare <paramref name="Source"/> is exactly a one-entry list with no condition. At most
+/// <see cref="WorldHudCapacity.MaxFrameCandidatesPerElement"/> entries, every one counted toward
+/// <see cref="WorldHudCapacity.MaxFrameSources"/>.</param>
+/// <param name="FadeSeconds">How long a <see cref="WorldHudElementKind.Frame"/> element cross-fades when its winning
+/// candidate changes; 0 cuts. Finite and non-negative.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldHudElement(
     string Id,
@@ -144,8 +158,19 @@ public sealed record WorldHudElement(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] WorldHudFrameFit Fit = WorldHudFrameFit.Cover,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Mirror = false,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float Radius = 0f,
-    float Opacity = 1f
-);
+    float Opacity = 1f,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldHudFrameCandidate>? Sources = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float FadeSeconds = 0f
+) {
+    /// <summary>Gets the frame candidates in rank order — <see cref="Sources"/>, else the bare <see cref="Source"/>
+    /// as one unconditional entry, else none. The one shape every reader of a frame element's sources takes.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<WorldHudFrameCandidate> FrameCandidates =>
+        (Sources
+            ?? ((Source is { } single)
+                ? [new WorldHudFrameCandidate(Source: single)]
+                : []));
+}
 /// <summary>One HUD panel row — a stable id (unique within the section), a normalized viewport rect in screen space,
 /// which band it draws in, its chrome style, and its child elements. <c>WorldMutation.UpsertHudPanel</c> carries
 /// the whole row (elements included) as one cross-row transaction boundary; <c>WorldMutation.UpsertHudElement</c>/
@@ -243,6 +268,8 @@ public static class WorldHudCapacity {
     public const int MaxFrameSources = 8;
     /// <summary>The per-panel element-row ceiling (world scope).</summary>
     public const int MaxElementsPerPanel = 24;
+    /// <summary>The most ranked source candidates one frame element carries.</summary>
+    public const int MaxFrameCandidatesPerElement = 4;
     /// <summary>The per-seat player-scope panel's element-row ceiling — capped smaller than the world scope's
     /// <see cref="MaxElementsPerPanel"/> because it is confined to a single seat's viewport rather than the whole
     /// screen.</summary>

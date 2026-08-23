@@ -162,9 +162,15 @@ public sealed partial class SdfWorldEngine {
         m_brickSerials[slot]++;
     }
 
-    /// <summary>Whether this engine provisions a brick pool (its <c>BrickPoolVoxelCapacity</c> was non-zero) — the
-    /// <see cref="ISdfBrickBakeService"/> predicate the carve-bake planner checks before ever proposing a bake, so a
-    /// pool-less engine keeps every carve analytic instead of throwing at <see cref="RequestBrickBake"/>.</summary>
+    /// <summary>Queues a host-baked brick upload. A later produced frame records the copy and moves the slot to
+    /// <see cref="BrickBakeState.Ready"/>; re-queuing the same slot before that frame keeps only the newest values.</summary>
+    /// <param name="slot">The brick slot.</param>
+    /// <param name="dimX">Voxels along X.</param>
+    /// <param name="dimY">Voxels along Y.</param>
+    /// <param name="dimZ">Voxels along Z.</param>
+    /// <param name="voxels">Stored-scale voxel values, X fastest, then Y, then Z.</param>
+    /// <exception cref="InvalidOperationException">The engine has no brick upload path.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A slot, dimension, pool range, or voxel count is invalid.</exception>
     public void UploadBrick(int slot, int dimX, int dimY, int dimZ, ReadOnlySpan<float> voxels) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
@@ -210,6 +216,15 @@ public sealed partial class SdfWorldEngine {
             );
         }
 
+        for (var index = 0; (index < voxels.Length); index++) {
+            if (!float.IsFinite(f: voxels[index])) {
+                throw new ArgumentOutOfRangeException(
+                    paramName: nameof(voxels),
+                    message: $"Brick voxel {index} is not finite."
+                );
+            }
+        }
+
         if ((SdfBrickPoolLayout.SlotWordOffset(slot: slot) + totalVoxels) > m_brickPoolVoxelCapacity) {
             throw new ArgumentOutOfRangeException(
                 paramName: nameof(slot),
@@ -235,5 +250,8 @@ public sealed partial class SdfWorldEngine {
         m_brickVoxelCursor[slot] = totalVoxels;
     }
 
+    /// <summary>Whether this engine provisions a brick pool (its <c>BrickPoolVoxelCapacity</c> was non-zero) — the
+    /// <see cref="ISdfBrickBakeService"/> predicate the carve-bake planner checks before ever proposing a bake, so a
+    /// pool-less engine keeps every carve analytic instead of throwing at <see cref="RequestBrickBake"/>.</summary>
     public bool BrickBakeAvailable => m_brickPoolEnabled;
 }

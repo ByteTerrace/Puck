@@ -5,14 +5,14 @@ namespace Puck.World.Server;
 
 /// <summary>Encodes and decodes a full <see cref="WorldAuthorityCheckpoint"/> over the same bounded
 /// <see cref="WireWriter"/>/<see cref="WireReader"/> discipline every peer decoder in this engine follows: a
-/// <c>"PCKP"</c> magic, a fail-closed <c>u16</c> version (refuses any value other than 1 by name — a checkpoint
+/// <c>"PCKP"</c> magic, a fail-closed <c>u16</c> version (refuses any value other than 2 by name — a checkpoint
 /// carries no compat path), a <c>sha256-64</c> content pin of the whole framed body, then that body — itself a
-/// <c>sha256-64</c> pin of the captured definition JSON followed by the checkpoint's eight sections in the record's
+/// <c>sha256-64</c> pin of the captured definition JSON followed by the checkpoint's nine sections in the record's
 /// own declared order, each its own length-prefixed block. Journal entries and a buffered
 /// <see cref="WorldPendingOpCheckpoint.Mutate"/> op reuse <see cref="WorldSubmissionCodec"/>'s own mutation leaf
 /// verbatim; every embedded document (the definition, the base definition, an escrow lease's destination definition)
 /// reuses <see cref="WorldDefinitionSerialization.Serialize"/> bytes verbatim — this codec never re-serializes a
-/// document itself. Every read is bounded; every decoder — the outer envelope, the body, and each of the eight
+/// document itself. Every read is bounded; every decoder — the outer envelope, the body, and each of the nine
 /// sections — asks its own <see cref="WireReader.TryFinish"/> exactly once, so a truncated or trailing-byte payload
 /// refuses by name at the scope that actually owns the leftover bytes.</summary>
 public static partial class WorldAuthorityCheckpointCodec {

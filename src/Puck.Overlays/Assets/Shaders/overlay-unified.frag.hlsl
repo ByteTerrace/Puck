@@ -256,9 +256,12 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
     //             (uint: 0 = none, else a token color-role index — a lit ring AT the piece's edge plus an outward
     //             halo, the selection/outcome indicator) — a FILLED annular sector, the radial menu's piece. The
     //             OVERLAY_ROLE_CUSTOM fill role draws NO fill: glow only (a closed wheel's local outcome).
-    //   frame:    (frameSlot << 4) | (mirror << 12) | (fit << 13, 0 = cover, 1 = contain, 2 = stretch) · 0..3 rect
-    //             (normalized) · 6 corner radius (px) · 7 alpha — a live OverlayFrameSlots slot sampled into a
-    //             rounded rect (the HUD picture-in-picture, e.g. a face cam); see frameSlotDimensions/sampleFrameSlot.
+    //   frame:    (frameSlot << 4) | (mirror << 12) | (fit << 13, 0 = cover, 1 = contain, 2 = stretch) |
+    //             ((frameSlotB + 1) << 16, 0 = no second slot) · 0..3 rect (normalized) · 6 corner radius (px) ·
+    //             7 alpha · 8 mix (0..1, the weight of frameSlot; meaningful only with a second slot) — a live
+    //             OverlayFrameSlots slot sampled into a rounded rect (the HUD picture-in-picture, e.g. a face cam),
+    //             cross-faded from frameSlotB when present: both slots take the same fit/mirror uv and blend as
+    //             lerp(slotB, slot, mix) before the single composite; see frameSlotDimensions/sampleFrameSlot.
     for (int e = 0; (e < elementCount); e++) {
         uint o = (elementBase + ((uint)e * ELEMENT_WORDS));
 
@@ -375,9 +378,11 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
         } else if (kind == 4u) {
             // A SAMPLED FRAME: a live WorldFrameSource picture-in-picture (e.g. the HUD face-cam element) drawn from
             // one of the FRAME_SLOT_COUNT frame-slot bindings — "role" (bits 4..11) is this record's slot index.
+            // Bits 16.. carry the outgoing cross-fade slot plus one (0 = none); word 8 is the incoming slot's weight.
             uint slot = role;
             bool mirror = (((packed >> 12u) & 0x1u) != 0u);
             uint fit = ((packed >> 13u) & 0x3u);
+            uint slotBPlusOne = ((packed >> 16u) & 0xFFu);
             float2 size = (ab * dims);
 
             if ((local.x < -edgeAa) || (local.y < -edgeAa) || (local.x >= (size.x + edgeAa)) || (local.y >= (size.y + edgeAa))) {
@@ -414,6 +419,13 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
 
             if (all(uv >= 0.0) && all(uv <= 1.0)) {
                 float3 sample = sampleFrameSlot(slot, uv).rgb;
+
+                if (slotBPlusOne != 0u) {
+                    float mix = OverlayFloat(overlayData, (o + 8u));
+                    float3 sampleB = sampleFrameSlot((slotBPlusOne - 1u), uv).rgb;
+
+                    sample = lerp(sampleB, sample, saturate(mix));
+                }
 
                 color = lerp(color, sample, (mask * alpha));
             }

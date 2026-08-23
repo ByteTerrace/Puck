@@ -826,9 +826,8 @@ internal sealed partial class WorldScreenBinder {
     // Tears one device's open graph down and detaches every one of its feeds; a fault, when given, is what the feeds
     // report until the next open lands.
     private static void CloseCameraGraphFor(CameraDevice device, string? fault) {
-        device.Shared?.Dispose();
+        DisposeOffThread(shared: device.Shared, pixels: device.Pixels);
         device.Shared = null;
-        device.Pixels?.Dispose();
         device.Pixels = null;
         device.AppliedControls = null;
 
@@ -865,9 +864,21 @@ internal sealed partial class WorldScreenBinder {
 
         device.Feeds.Clear();
     }
+    // A camera graph's Dispose joins its capture worker and shuts the platform session down — hundreds of
+    // milliseconds the presentation thread must never spend. The graph is disposable from any thread (an interlocked
+    // once-only door), so teardown runs on the pool and the frame that retired the camera proceeds at once.
+    private static void DisposeOffThread(ICameraGraph<ICameraSharedStream>? shared, ICameraGraph<ICameraPixelStream>? pixels) {
+        if ((shared is null) && (pixels is null)) {
+            return;
+        }
+
+        _ = Task.Run(action: () => {
+            shared?.Dispose();
+            pixels?.Dispose();
+        });
+    }
     private static void DisposeCameraOpenResult(CameraOpenResult result) {
-        result.Shared?.Dispose();
-        result.Pixels?.Dispose();
+        DisposeOffThread(shared: result.Shared, pixels: result.Pixels);
     }
     // The shared tier's rings are render-device-owned: drop every device's graph with them so the next publish
     // reopens on the live device (a CPU-pixel graph survives device loss untouched). An open in flight adopts against

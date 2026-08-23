@@ -374,6 +374,17 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
+        ValidateHudVisible(
+            definition: (isIdentityScope ? null : definition),
+            path: "hud.defaults.visible",
+            predicate: hud.Defaults?.Visible
+        );
+        ValidateHudVisible(
+            definition: (isIdentityScope ? null : definition),
+            path: "hud.defaults.cursor.visible",
+            predicate: hud.Defaults?.Cursor?.Visible
+        );
+
         if (panels.Count > maxPanels) {
             throw new HudValidationException(
                 reason: HudRefusal.TooManyPanels,
@@ -429,24 +440,33 @@ public static partial class WorldDefinitionValidator {
                 maxElements: maxElements,
                 stateRows: stateRows
             );
+            ValidateHudVisible(
+                definition: (isIdentityScope ? null : definition),
+                path: $"{panelPath}.visible",
+                predicate: panel.Visible
+            );
 
             foreach (var element in panel.Elements) {
-                if (
-                    (element.Kind != WorldHudElementKind.Frame) ||
-                    (element.Source is not { } source) ||
-                    !frameSources.Add(item: JsonSerializer.Serialize(
-                        value: source,
-                        jsonTypeInfo: WorldJsonContext.Default.WorldFrameSource
-                    ))
-                ) {
+                if (element.Kind != WorldHudElementKind.Frame) {
                     continue;
                 }
 
-                if (frameSources.Count > WorldHudCapacity.MaxFrameSources) {
-                    throw new HudValidationException(
-                        reason: HudRefusal.TooManyFrameSources,
-                        message: $"{panelPath} ('{panel.Id}') element '{element.Id}' introduces distinct frame source {frameSources.Count}, exceeding WorldHudCapacity.MaxFrameSources ({WorldHudCapacity.MaxFrameSources}). Repeated elements may share the same source."
-                    );
+                // Every candidate counts: a ranked element may show any of them, and the overlay's slot table is
+                // sized for the distinct sources a section can reach, not the ones winning this frame.
+                foreach (var candidate in element.FrameCandidates) {
+                    if ((candidate?.Source is not { } source) || !frameSources.Add(item: JsonSerializer.Serialize(
+                        value: source,
+                        jsonTypeInfo: WorldJsonContext.Default.WorldFrameSource
+                    ))) {
+                        continue;
+                    }
+
+                    if (frameSources.Count > WorldHudCapacity.MaxFrameSources) {
+                        throw new HudValidationException(
+                            reason: HudRefusal.TooManyFrameSources,
+                            message: $"{panelPath} ('{panel.Id}') element '{element.Id}' introduces distinct frame source {frameSources.Count}, exceeding WorldHudCapacity.MaxFrameSources ({WorldHudCapacity.MaxFrameSources}). Repeated elements and candidates may share the same source."
+                        );
+                    }
                 }
             }
         }
@@ -1200,6 +1220,25 @@ public static partial class WorldDefinitionValidator {
             string.IsNullOrWhiteSpace(value: userId)
         ) {
             errors.Add(item: "storage.userId must be non-empty or null.");
+        }
+    }
+    // A malformed visible predicate is a hud.validate verdict like every other HUD refusal; identity scope passes no
+    // definition, so subject and state references are admitted unresolved there.
+    private static void ValidateHudVisible(OverlayPredicate? predicate, string path, WorldDefinition? definition) {
+        var errors = new List<string>();
+
+        ValidateOverlayPredicate(
+            definition: definition,
+            errors: errors,
+            path: path,
+            predicate: predicate
+        );
+
+        if (errors.Count > 0) {
+            throw new HudValidationException(
+                message: string.Join(separator: " ", values: errors),
+                reason: HudRefusal.VisiblePredicateInvalid
+            );
         }
     }
 }

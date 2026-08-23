@@ -85,6 +85,20 @@ internal enum HudRefusal {
     /// non-finite or outside [0, 1].</summary>
     [Refusal(door: "hud.validate", condition: "a frame element's opacity is non-finite or outside [0, 1]", kind: RefusalKind.Verdict)]
     InvalidFrameOpacity,
+    /// <summary>A <see cref="WorldHudElementKind.Frame"/> element authors both <see cref="WorldHudElement.Source"/>
+    /// and <see cref="WorldHudElement.Sources"/>, or an empty or over-long candidate list.</summary>
+    [Refusal(door: "hud.validate", condition: "a frame element authors both source and sources, or sources is empty or exceeds WorldHudCapacity.MaxFrameCandidatesPerElement", kind: RefusalKind.Verdict)]
+    FrameCandidatesInvalid,
+    /// <summary>A frame candidate's <c>when</c> predicate is malformed.</summary>
+    [Refusal(door: "hud.validate", condition: "a frame candidate's when predicate is malformed", kind: RefusalKind.Verdict)]
+    FramePredicateInvalid,
+    /// <summary>A <see cref="WorldHudElementKind.Frame"/> element's <see cref="WorldHudElement.FadeSeconds"/> is
+    /// non-finite or negative.</summary>
+    [Refusal(door: "hud.validate", condition: "a frame element's fadeSeconds is non-finite or negative", kind: RefusalKind.Verdict)]
+    InvalidFrameFade,
+    /// <summary>A panel, defaults, or cursor <c>visible</c> predicate is malformed.</summary>
+    [Refusal(door: "hud.validate", condition: "a visible predicate is malformed", kind: RefusalKind.Verdict)]
+    VisiblePredicateInvalid,
 }
 /// <summary>
 /// Row-level HUD validation shared by <see cref="WorldDefinitionValidator"/> (world-scope panels, capped by
@@ -144,7 +158,7 @@ internal static class HudRowValidation {
         var isFrame = (element.Kind == WorldHudElementKind.Frame);
 
         if (!isFrame) {
-            if (element.Source is not null) {
+            if ((element.Source is not null) || (element.Sources is not null)) {
                 throw new HudValidationException(
                     message: $"{path}.source is only legal on a 'frame' kind element (got '{element.Kind}').",
                     reason: HudRefusal.FrameSourceNotAllowed
@@ -154,20 +168,66 @@ internal static class HudRowValidation {
             return;
         }
 
-        var frameErrors = new List<string>();
-
-        WorldDefinitionValidator.ValidateFrameSource(
-            cameras: (cameras ?? []),
-            definition: definition!,
-            errors: frameErrors,
-            path: $"{path}.source",
-            source: element.Source
-        );
-
-        if (frameErrors.Count > 0) {
+        if ((element.Source is not null) && (element.Sources is not null)) {
             throw new HudValidationException(
-                message: string.Join(separator: " ", values: frameErrors),
-                reason: HudRefusal.FrameSourceInvalid
+                message: $"{path} authors both source and sources — a single unconditional source is 'source', a ranked list is 'sources'.",
+                reason: HudRefusal.FrameCandidatesInvalid
+            );
+        }
+
+        var candidates = element.FrameCandidates;
+
+        if ((candidates.Count == 0) || (candidates.Count > WorldHudCapacity.MaxFrameCandidatesPerElement)) {
+            throw new HudValidationException(
+                message: $"{path} needs 1..{WorldHudCapacity.MaxFrameCandidatesPerElement} frame source candidates (got {candidates.Count}).",
+                reason: HudRefusal.FrameCandidatesInvalid
+            );
+        }
+
+        for (var index = 0; (index < candidates.Count); index++) {
+            var candidate = candidates[index];
+            var candidatePath = ((element.Sources is null)
+                ? $"{path}.source"
+                : $"{path}.sources[{index}]"
+            );
+            var frameErrors = new List<string>();
+
+            WorldDefinitionValidator.ValidateFrameSource(
+                cameras: (cameras ?? []),
+                definition: definition!,
+                errors: frameErrors,
+                path: ((element.Sources is null) ? candidatePath : $"{candidatePath}.source"),
+                source: candidate?.Source
+            );
+
+            if (frameErrors.Count > 0) {
+                throw new HudValidationException(
+                    message: string.Join(separator: " ", values: frameErrors),
+                    reason: HudRefusal.FrameSourceInvalid
+                );
+            }
+
+            var predicateErrors = new List<string>();
+
+            WorldDefinitionValidator.ValidateOverlayPredicate(
+                definition: definition,
+                errors: predicateErrors,
+                path: $"{candidatePath}.when",
+                predicate: candidate?.When
+            );
+
+            if (predicateErrors.Count > 0) {
+                throw new HudValidationException(
+                    message: string.Join(separator: " ", values: predicateErrors),
+                    reason: HudRefusal.FramePredicateInvalid
+                );
+            }
+        }
+
+        if (!float.IsFinite(f: element.FadeSeconds) || (element.FadeSeconds < 0f)) {
+            throw new HudValidationException(
+                message: $"{path}.fadeSeconds must be finite and non-negative (got {element.FadeSeconds}).",
+                reason: HudRefusal.InvalidFrameFade
             );
         }
 

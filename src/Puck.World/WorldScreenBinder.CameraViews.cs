@@ -13,7 +13,8 @@ internal sealed partial class WorldScreenBinder {
     private void ApplyCameraPose(CameraRegistration registration, WorldCamera camera) {
         ConfigureCameraView(
             view: registration.View,
-            camera: camera
+            camera: camera,
+            seat: registration.Seat
         );
 
         registration.Row = camera;
@@ -33,8 +34,25 @@ internal sealed partial class WorldScreenBinder {
 
         return outcome;
     }
-    // Compiles the camera axes and wires their reference-frame source.
-    private void ConfigureCameraView(SdfCameraView view, WorldCamera camera) {
+    // Compiles the camera axes and wires their reference-frame source. A ranked anchor list or a seat-relative anchor
+    // resolves every frame through RankedAnchorSource for the registration's seat; the bare kinds keep their
+    // configure-time sources.
+    private void ConfigureCameraView(SdfCameraView view, WorldCamera camera, int seat) {
+        if ((camera.Anchors is not null) || WorldSeatAnchors.IsSeatRelative(anchor: camera.Anchor)) {
+            view.AnchorSource = new RankedAnchorSource(
+                owner: this,
+                camera: camera,
+                slot: (seat - 1)
+            );
+            view.AnchorIdSource = static () => 0;
+            CompileCameraRig(
+                camera: camera,
+                view: view
+            );
+
+            return;
+        }
+
         switch (camera.Anchor) {
             case null:
                 view.AnchorSource = null;
@@ -72,9 +90,15 @@ internal sealed partial class WorldScreenBinder {
                 break;
         }
 
-        // A camera program's state bindings, placement subjects, and blend names all resolve against the live
-        // document, which only the client anchor source carries (the same seam StaticAnchorPosition/GroupCentroid
-        // read). Without one there is no document to compile against and the view resolves no signal.
+        CompileCameraRig(
+            camera: camera,
+            view: view
+        );
+    }
+    // A camera program's state bindings, placement subjects, and blend names all resolve against the live document,
+    // which only the client anchor source carries (the same seam StaticAnchorPosition/GroupCentroid read). Without
+    // one there is no document to compile against and the view resolves no signal.
+    private void CompileCameraRig(SdfCameraView view, WorldCamera camera) {
         if (m_anchors is WorldClient client) {
             view.Rig = WorldCameraRigCompiler.Compile(
                 definition: client.Definition,
@@ -99,11 +123,16 @@ internal sealed partial class WorldScreenBinder {
     // SdfCameraView for a camera. Fixed cameras carry their own world-space look-at; anchored cameras resolve their
     // WorldAnchor's entity each frame and pose a FirstPersonRig at the resolved anchor-local offset. A camera FILMS
     // an already-lit world, so it is a budgeted offscreen render with no room glow of its own.
-    private void RegisterCameraView(WorldCamera camera) {
+    private void RegisterCameraView(WorldCamera camera, int seat) {
         m_viewStack ??= new ViewStack();
 
+        var name = WorldSeatAnchors.RegistrationName(
+            camera: camera,
+            seat: seat
+        );
+
         if (!m_cameraViews.TryGetValue(
-            key: camera.Name,
+            key: name,
             value: out var registration
         )) {
             var view = new SdfCameraView(
@@ -123,17 +152,22 @@ internal sealed partial class WorldScreenBinder {
 
             ConfigureCameraView(
                 camera: camera,
-                view: view
+                view: view,
+                seat: seat
             );
 
-            registration = new CameraRegistration { Row = camera, View = view };
-            m_cameraViews[camera.Name] = registration;
+            registration = new CameraRegistration { Row = camera, Seat = seat, View = view };
+            m_cameraViews[name] = registration;
         }
 
+        // A parked view keeps its engine and its last image but spends no refresh budget: a hidden HUD frame or a
+        // candidate that stopped winning parks rather than tearing down, so showing it again costs nothing.
+        _ = m_parkedViews.Remove(item: name);
         _ = m_viewStack.Register(
-            name: camera.Name,
+            name: name,
             content: registration.View,
-            band: ScreenSlotPriority.Ambient
+            band: ScreenSlotPriority.Ambient,
+            isLive: () => !m_parkedViews.Contains(item: name)
         );
     }
     // A removed camera row: every slot filming it unbinds (a slot whose DECLARED source still names it — possible only
@@ -157,7 +191,10 @@ internal sealed partial class WorldScreenBinder {
             }
         }
 
-        RetireViewExportForRecreation(cameraName: name);
+        if (m_cameraViews.TryGetValue(key: name, value: out var registration)) {
+            RetireViewExportForRecreation(cameraName: registration.Row.Name);
+        }
+
         m_viewStack?.Release(name: name);
         _ = m_cameraViews.Remove(key: name);
         Console.Error.WriteLine(value: $"[world.camera: view '{name}' released — camera removed]");
@@ -173,8 +210,14 @@ internal sealed partial class WorldScreenBinder {
         }
 
         var wired = WiredScreensFor(name: name);
+        // A probe export holds the seat-1 registration of its camera (the only one it ever opens).
+        var exported = (
+            m_cameraViews.TryGetValue(key: name, value: out var registration) &&
+            (registration.Seat == DefaultViewSeat) &&
+            HasViewExportReferences(cameraName: registration.Row.Name)
+        );
 
-        if ((wired.Count == 0) && !HasViewExportReferences(cameraName: name) && !HasRetainedView(cameraName: name)) {
+        if ((wired.Count == 0) && !exported && !HasRetainedView(registrationName: name)) {
             stack.Release(name: name);
             _ = m_cameraViews.Remove(key: name);
             Console.Error.WriteLine(value: $"[world.screen: camera view '{name}' released — no remaining screen references it]");
@@ -225,6 +268,72 @@ internal sealed partial class WorldScreenBinder {
             )
             : Vector3.Zero
         );
+    private bool TryResolveRankedAnchor(WorldCamera camera, int slot, out SdfAnchor anchor) {
+        var selected = WorldSeatAnchors.SelectAnchor(
+            camera: camera,
+            candidateIndex: out _,
+            evaluator: m_facts(),
+            slot: slot
+        );
+
+        switch (selected) {
+            case null:
+                anchor = new SdfAnchor(
+                    Position: Vector3.Zero,
+                    Orientation: Quaternion.Identity
+                );
+
+                return true;
+            case WorldAnchor.Entity entity:
+                return m_anchors.TryResolveAnchor(
+                    anchor: out anchor,
+                    anchorId: entity.Index
+                );
+            case WorldAnchor.EntityPart part:
+                return TryResolveEntityPart(
+                    anchor: out anchor,
+                    part: part
+                );
+            case WorldAnchor.Placement placement:
+                anchor = new SdfAnchor(
+                    Position: (((m_anchors is WorldClient client) && m_stamps.TryShapePosition(
+                        client: client,
+                        placementId: placement.PlacementId,
+                        position: out var live,
+                        shapeId: placement.ShapeId
+                    ))
+                        ? live
+                        : StaticAnchorPosition(placement: placement)),
+                    Orientation: Quaternion.Identity
+                );
+
+                return true;
+            case WorldAnchor.Group group:
+                anchor = new SdfAnchor(
+                    Position: GroupCentroid(group: group),
+                    Orientation: Quaternion.Identity
+                );
+
+                return true;
+            default:
+                if (m_anchors is WorldClient seatClient) {
+                    return WorldSeatAnchors.TryResolve(
+                        anchor: selected,
+                        client: seatClient,
+                        perception: m_perception,
+                        pose: out anchor,
+                        slot: slot,
+                        speech: m_facts().Speech,
+                        stamps: m_stamps,
+                        transforms: m_viewTransforms
+                    );
+                }
+
+                anchor = default;
+
+                return false;
+        }
+    }
     private bool TryResolveEntityPart(WorldAnchor.EntityPart part, out SdfAnchor anchor) {
         if (m_anchors is WorldClient client) {
             return WorldEntityPartResolver.TryPackedPose(
@@ -286,7 +395,7 @@ internal sealed partial class WorldScreenBinder {
         foreach (var name in m_cameraReconcileScratch) {
             var registration = m_cameraViews[name];
 
-            if (ResolveCamera(name: name) is not { } next) {
+            if (ResolveCamera(name: registration.Row.Name) is not { } next) {
                 ReleaseCameraRow(name: name);
 
                 continue;
@@ -301,15 +410,27 @@ internal sealed partial class WorldScreenBinder {
 
             if (
                 (next.RenderWidth != registration.Row.RenderWidth) ||
-                (next.RenderHeight != registration.Row.RenderHeight)
+                (next.RenderHeight != registration.Row.RenderHeight) ||
+                !string.Equals(
+                a: WorldSeatAnchors.RegistrationName(
+                    camera: next,
+                    seat: registration.Seat
+                ),
+                b: name,
+                comparisonType: StringComparison.Ordinal
+            )
             ) {
                 // The offscreen render target is sized (and the rig shaped) at construction: release the registration
                 // (ViewStack.Release disposes the SdfCameraView and its engine) and rebuild fresh from the new row,
-                // re-narrowing the survivors' self-reference set.
-                RetireViewExportForRecreation(cameraName: name);
+                // re-narrowing the survivors' self-reference set. A row that became (or stopped being) seat-relative
+                // changes its registration name the same way.
+                RetireViewExportForRecreation(cameraName: registration.Row.Name);
                 m_viewStack?.Release(name: name);
                 _ = m_cameraViews.Remove(key: name);
-                RegisterCameraView(camera: next);
+                RegisterCameraView(
+                    camera: next,
+                    seat: registration.Seat
+                );
                 m_viewStack?.SetWiredScreens(
                     name: name,
                     screenIndices: WiredScreensFor(name: name)
@@ -371,14 +492,21 @@ internal sealed partial class WorldScreenBinder {
         }
 
         var previousView = slot.View;
+        var registrationName = WorldSeatAnchors.RegistrationName(
+            camera: camera,
+            seat: DefaultViewSeat
+        );
 
-        RegisterCameraView(camera: camera);
+        RegisterCameraView(
+            camera: camera,
+            seat: DefaultViewSeat
+        );
         slot.ClearLive();
-        slot.View = new ViewFeed(name: camera.Name) { Stack = m_viewStack };
+        slot.View = new ViewFeed(name: registrationName) { Stack = m_viewStack };
         slot.DeclaredFault = null;
         m_viewStack!.SetWiredScreens(
-            name: camera.Name,
-            screenIndices: WiredScreensFor(name: camera.Name)
+            name: registrationName,
+            screenIndices: WiredScreensFor(name: registrationName)
         );
 
         // A re-point away from another camera releases (or re-narrows) the superseded registration AFTER the new bind,
@@ -387,7 +515,7 @@ internal sealed partial class WorldScreenBinder {
             (previousView is { } previous) &&
             !string.Equals(
             a: previous.Name,
-            b: camera.Name,
+            b: registrationName,
             comparisonType: StringComparison.Ordinal
         )
         ) {
@@ -407,10 +535,26 @@ internal sealed partial class WorldScreenBinder {
             );
         }
     }
+    // Resolves a camera's anchor every frame: the winning ranked candidate (or the bare seat-relative anchor) for the
+    // registration's seat, then that anchor's pose through the same resolvers the configure-time sources use. A
+    // frame with no holding candidate rides the world frame.
+    private sealed class RankedAnchorSource(WorldScreenBinder owner, WorldCamera camera, int slot) : ISdfAnchorSource {
+        public bool TryResolveAnchor(int anchorId, out SdfAnchor anchor) {
+            _ = anchorId;
+
+            return owner.TryResolveRankedAnchor(
+                anchor: out anchor,
+                camera: camera,
+                slot: slot
+            );
+        }
+    }
     // One persistent camera-view registration: the live SdfCameraView plus the WorldCamera row it currently embodies
-    // (advanced by pose edits, replaced wholesale on recreate) — the diff baseline ReconcileCameras works against.
+    // (advanced by pose edits, replaced wholesale on recreate) — the diff baseline ReconcileCameras works against —
+    // and the 1-based seat a seat-relative registration resolves for (1 for a shared registration).
     private sealed class CameraRegistration {
         public required WorldCamera Row { get; set; }
+        public required int Seat { get; init; }
         public required SdfCameraView View { get; init; }
     }
     // One named jumbotron view a screen samples: the shared ViewStack (set at ConfigureViews) and the camera name to

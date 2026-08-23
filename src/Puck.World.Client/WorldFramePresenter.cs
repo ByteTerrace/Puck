@@ -45,6 +45,8 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     // seat-join cue site) resolves its body index through it — one resolution point, so a possession anchor swap
     // moves every derivation together.
     private readonly WorldPerceptionAnchor m_anchor;
+    private readonly WorldSpeechClock m_speech;
+    private readonly IOverlayPredicateEvaluator? m_overlayFacts;
     private readonly WorldStampPool m_animator;
     // The audio director: its emitter derivation reconciles at the delivery boundary (AFTER the screen binder —
     // the chiasmus ordering, speakers consume screen slots) and its snapshot publishes at the end of every dress.
@@ -178,11 +180,15 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     /// marker row's <c>icon</c> name resolves through it, same as every other icon reference. Threaded in as a
     /// delegate (never a direct <c>WorldIconTable</c> reference) because <c>Puck.World.Client</c> cannot reference
     /// <c>Puck.World</c>, which owns the table.</param>
+    /// <param name="speech">The speech clock a <see cref="WorldAnchor.RecentSpeaker"/> camera anchor reads.</param>
+    /// <param name="overlayFacts">The predicate evaluator a ranked camera anchor list selects through, or
+    /// <see langword="null"/> (every candidate condition then holds).</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldFramePresenter(FrameRateMonitor frameRate, WorldClient client, IWorldSimulationClock simulation, WorldRenderSettings settings, IWorldScreenPresenter binder, WorldRenderEnvelope envelope, WorldSeatBindings seatBindings, WorldStampPool animator, IWorldAudioFrameFeed audio, WorldPerceptionAnchor anchor, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldContinuum continuum, WorldTextCatalog text, IWorldAdjacencySource adjacencies, MarkerStore markers, Func<string, OverlayResolvedGlyph> resolveIcon) {
+    public WorldFramePresenter(FrameRateMonitor frameRate, WorldClient client, IWorldSimulationClock simulation, WorldRenderSettings settings, IWorldScreenPresenter binder, WorldRenderEnvelope envelope, WorldSeatBindings seatBindings, WorldStampPool animator, IWorldAudioFrameFeed audio, WorldPerceptionAnchor anchor, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldContinuum continuum, WorldTextCatalog text, IWorldAdjacencySource adjacencies, MarkerStore markers, Func<string, OverlayResolvedGlyph> resolveIcon, WorldSpeechClock speech, IOverlayPredicateEvaluator? overlayFacts = null) {
         ArgumentNullException.ThrowIfNull(argument: frameRate);
         ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: anchor);
+        ArgumentNullException.ThrowIfNull(argument: speech);
         ArgumentNullException.ThrowIfNull(argument: continuum);
         ArgumentNullException.ThrowIfNull(argument: text);
         ArgumentNullException.ThrowIfNull(argument: simulation);
@@ -222,6 +228,8 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         m_frameRate = frameRate;
         m_client = client;
         m_anchor = anchor;
+        m_speech = speech;
+        m_overlayFacts = overlayFacts;
         m_roster = client.Roster;
         m_simulation = simulation;
         m_settings = settings;
@@ -943,9 +951,19 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     }
     // The one shared anchor→pose resolver the camera path reads: entity/part ride the live snapshot pose, a
     // placement rides its stamped transform (WorldAnchorGeometry, the same math speakers read), a group rides its
-    // smoothed centroid + spread, and a null anchor is the world origin. A group has no facing → identity orientation.
+    // smoothed centroid + spread, a seat-relative anchor rides the seat's perceived body (or the recent speaker),
+    // and a null anchor is the world origin. A ranked list selects its winner every frame for the slot the view is
+    // resolved for; a camera-bearing layout slot has no seat and resolves as seat 1. A group has no facing →
+    // identity orientation.
     private (Vector3 Position, Quaternion Orientation, float Spread) ResolveCameraAnchorPose(WorldCamera row, float deltaSeconds) {
-        switch (row.Anchor) {
+        var anchor = WorldSeatAnchors.SelectAnchor(
+            camera: row,
+            candidateIndex: out _,
+            evaluator: m_overlayFacts,
+            slot: 0
+        );
+
+        switch (anchor) {
             case WorldAnchor.Entity entity:
                 return (m_client.Position(index: entity.Index), m_client.Orientation(index: entity.Index), 0f);
             case WorldAnchor.EntityPart part: {
@@ -978,6 +996,20 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
 
                     return (centroid, Quaternion.Identity, spread);
                 }
+            case WorldAnchor.Seat or WorldAnchor.RecentSpeaker:
+                return (WorldSeatAnchors.TryResolve(
+                    anchor: anchor,
+                    client: m_client,
+                    perception: m_anchor,
+                    pose: out var seatPose,
+                    slot: 0,
+                    speech: m_speech,
+                    stamps: m_animator,
+                    transforms: m_transforms
+                )
+                    ? (seatPose.Position, seatPose.Orientation, 0f)
+                    : (Vector3.Zero, Quaternion.Identity, 0f)
+                );
             default:
                 return (Vector3.Zero, Quaternion.Identity, 0f);
         }

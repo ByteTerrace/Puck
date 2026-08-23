@@ -24,13 +24,39 @@ public abstract record WorldLookSource {
     /// state cell; it must resolve at validation.</param>
     public sealed record Creation(DocumentIdentifier CreationId) : WorldLookSource;
 }
+/// <summary>One cue of a creation look: a named timeline frame the body holds for <paramref name="HoldSeconds"/>
+/// when the cue fires — a blink, a twitch, a tail flick. A cue fires by itself on a semi-random interval drawn
+/// uniformly from <paramref name="MinSeconds"/>..<paramref name="MaxSeconds"/> (a deterministic presentation draw
+/// seeded by the body, never simulation state), and fires on demand through the stamp pool's
+/// <c>TriggerCue</c> door, which is how a face probe reading the player's own camera blinks the avatar in sync; a
+/// triggered cue re-arms the interval, so a driven cue never double-fires with the self schedule. Both interval
+/// bounds absent is a cue that fires only on demand.</summary>
+/// <param name="Frame">The creation timeline frame's name.</param>
+/// <param name="HoldSeconds">How long the frame holds, seconds.</param>
+/// <param name="MinSeconds">The shortest rest between self-fires, seconds, or <see langword="null"/> with
+/// <paramref name="MaxSeconds"/> for a cue that never self-fires.</param>
+/// <param name="MaxSeconds">The longest rest between self-fires, seconds.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldLookCue(
+    string Frame,
+    float HoldSeconds,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? MinSeconds = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? MaxSeconds = null
+);
 /// <summary>How a look animates with the body it clothes. presentation-only: read by the client's stamp pool and the
 /// catalog packer, never by <c>WorldBody</c>. Catalog looks read <see cref="GaitAmplitude"/>; creation looks read
-/// <see cref="ReplayFrames"/> and <see cref="SecondsPerFrame"/>.</summary>
+/// <see cref="ReplayFrames"/>, <see cref="SecondsPerFrame"/>, and <see cref="Cues"/>.</summary>
 /// <param name="GaitAmplitude">The catalog rig's limb-swing scale (1 = the pre-look default; 0 stills the gait).</param>
 /// <param name="ReplayFrames">Whether a creation look replays its authored timeline on the render clock.</param>
 /// <param name="SecondsPerFrame">The creation timeline cadence when <see cref="ReplayFrames"/> is set.</param>
-public readonly record struct WorldLookMotion(float GaitAmplitude, bool ReplayFrames, float SecondsPerFrame) {
+/// <param name="Cues">The creation look's cues (see <see cref="WorldLookCue"/>); a firing cue's frame overrides the
+/// replay cursor for its hold.</param>
+public readonly record struct WorldLookMotion(
+    float GaitAmplitude,
+    bool ReplayFrames,
+    float SecondsPerFrame,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldLookCue>? Cues = null
+) {
     /// <summary>Gets the implicit look motion — full gait, no timeline replay — every body wore before this arc.</summary>
     public static WorldLookMotion Default { get; } = new WorldLookMotion(
         GaitAmplitude: 1f,

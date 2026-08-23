@@ -15,7 +15,7 @@
         "type": "string"
       },
       "anchor": {
-        "description": "What the camera rides, or null for the world reference frame.",
+        "description": "What the camera rides, or null for the world reference frame (or for Anchors to decide).",
         "type": [
           "object",
           "null"
@@ -35,6 +35,12 @@
           },
           {
             "$ref": "./common.schema.json#/$defs/WorldAnchorGroup"
+          },
+          {
+            "$ref": "./common.schema.json#/$defs/WorldAnchorSeat"
+          },
+          {
+            "$ref": "./common.schema.json#/$defs/WorldAnchorRecentSpeaker"
           }
         ]
       },
@@ -49,6 +55,36 @@
       "renderHeight": {
         "description": "The offscreen render height in pixels.",
         "type": "integer"
+      },
+      "anchors": {
+        "description": "Ranked anchor candidates, first holding wins each frame \u2014 a portrait camera that rides the speaking character while they speak and the seat\u0027s own avatar otherwise. Refused beside Anchor; a single unconditional anchor is Anchor.",
+        "type": [
+          "array",
+          "null"
+        ],
+        "items": {
+          "description": "One ranked anchor candidate of a WorldCamera: the anchor the camera rides while When holds. Candidates are walked in authored order every frame and the first holding one wins; a null predicate always holds, so the last row is the default.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "anchor": {
+              "$ref": "./common.schema.json#/$defs/WorldAnchor",
+              "description": "What the camera rides while this candidate wins."
+            },
+            "when": {
+              "$ref": "./common.schema.json#/$defs/OverlayPredicateNullable",
+              "description": "The condition, evaluated for the seat the view is resolved for.",
+              "default": null
+            }
+          },
+          "required": [
+            "anchor"
+          ],
+          "additionalProperties": false
+        },
+        "default": null
       }
     },
     "required": [

@@ -1041,6 +1041,12 @@
                     "id": "barModel",
                     "sources": null,
                     "text": "bar model multi single"
+                  },
+                  {
+                    "command": "player.state.cell.toggle",
+                    "id": "portrait",
+                    "sources": null,
+                    "text": "portrait source avatar webcam off"
                   }
                 ],
                 "icon": null,
@@ -1108,6 +1114,64 @@
                 0
               ]
             }
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 0.6
+          }
+        ],
+        "version": "puck.camera.v1"
+      }
+    },
+    {
+      "anchor": null,
+      "anchors": [
+        {
+          "anchor": {
+            "$type": "recentSpeaker"
+          },
+          "when": {
+            "$type": "speaking",
+            "fadeSeconds": 0,
+            "subject": {
+              "$type": "recentSpeaker"
+            },
+            "windowSeconds": 3
+          }
+        },
+        {
+          "anchor": {
+            "$type": "seat"
+          }
+        }
+      ],
+      "name": "portrait",
+      "renderHeight": 256,
+      "renderWidth": 256,
+      "rig": {
+        "name": "portrait",
+        "operations": [
+          {
+            "$type": "offset",
+            "value": [
+              0,
+              1.0,
+              -2.4
+            ],
+            "worldAxes": false
+          },
+          {
+            "$type": "lookAt",
+            "focusDistance": 2.4,
+            "subject": {
+              "$type": "reference"
+            },
+            "targetOffset": [
+              0,
+              0.95,
+              0
+            ],
+            "worldAxes": false
           },
           {
             "$type": "fov",
@@ -1254,20 +1318,10 @@
           },
           {
             "blend": "Union",
-            "domain": [
-              {
-                "$type": "symmetry",
-                "normal": [
-                  1,
-                  0,
-                  0
-                ]
-              }
-            ],
             "group": 0,
             "id": 1,
             "material": 2,
-            "name": "eye",
+            "name": "eyeLeft",
             "position": [
               0.2,
               1.1,
@@ -1289,22 +1343,62 @@
           },
           {
             "blend": "Union",
-            "domain": [
-              {
-                "$type": "symmetry",
-                "normal": [
-                  1,
-                  0,
-                  0
-                ]
-              }
-            ],
             "group": 0,
             "id": 2,
             "material": 3,
-            "name": "pupil",
+            "name": "pupilLeft",
             "position": [
               0.2,
+              1.1,
+              0.54
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.055,
+              0.055,
+              0.055
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 3,
+            "material": 2,
+            "name": "eyeRight",
+            "position": [
+              -0.2,
+              1.1,
+              0.42
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.14,
+              0.14,
+              0.14
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 4,
+            "material": 3,
+            "name": "pupilRight",
+            "position": [
+              -0.2,
               1.1,
               0.54
             ],
@@ -1343,6 +1437,108 @@
             ],
             "shapeId": 0,
             "text": "K"
+          }
+        ],
+        "frames": [
+          {
+            "name": "blink",
+            "transforms": [
+              {
+                "id": 0,
+                "position": [
+                  0,
+                  0.5,
+                  0
+                ],
+                "rotation": [
+                  0,
+                  0,
+                  0,
+                  1
+                ],
+                "scale": [
+                  0.35,
+                  1.75,
+                  0.35
+                ]
+              },
+              {
+                "id": 1,
+                "position": [
+                  0.2,
+                  1.1,
+                  0.0
+                ],
+                "rotation": [
+                  0,
+                  0,
+                  0,
+                  1
+                ],
+                "scale": [
+                  0.14,
+                  0.14,
+                  0.14
+                ]
+              },
+              {
+                "id": 2,
+                "position": [
+                  0.2,
+                  1.1,
+                  0.0
+                ],
+                "rotation": [
+                  0,
+                  0,
+                  0,
+                  1
+                ],
+                "scale": [
+                  0.055,
+                  0.055,
+                  0.055
+                ]
+              },
+              {
+                "id": 3,
+                "position": [
+                  -0.2,
+                  1.1,
+                  0.0
+                ],
+                "rotation": [
+                  0,
+                  0,
+                  0,
+                  1
+                ],
+                "scale": [
+                  0.14,
+                  0.14,
+                  0.14
+                ]
+              },
+              {
+                "id": 4,
+                "position": [
+                  -0.2,
+                  1.1,
+                  0.0
+                ],
+                "rotation": [
+                  0,
+                  0,
+                  0,
+                  1
+                ],
+                "scale": [
+                  0.055,
+                  0.055,
+                  0.055
+                ]
+              }
+            ]
           }
         ]
       },
@@ -1391,7 +1587,73 @@
       },
       "enabled": true
     },
-    "panels": []
+    "panels": [
+      {
+        "elements": [
+          {
+            "fadeSeconds": 0.35,
+            "fit": "Cover",
+            "id": "face",
+            "kind": "Frame",
+            "radius": 10,
+            "rect": {
+              "height": 1,
+              "width": 1,
+              "x": 0,
+              "y": 0
+            },
+            "sources": [
+              {
+                "source": {
+                  "$type": "camera",
+                  "sensor": "Color"
+                },
+                "when": {
+                  "$type": "state",
+                  "binding": "state.portrait.source",
+                  "text": "webcam"
+                }
+              },
+              {
+                "source": {
+                  "$type": "view",
+                  "cameraName": "portrait"
+                }
+              }
+            ],
+            "style": "Primary"
+          }
+        ],
+        "id": "portrait",
+        "layer": "Over",
+        "rect": {
+          "height": 0.16,
+          "width": 0.1,
+          "x": 0.45,
+          "y": 0.72
+        },
+        "style": "Chip",
+        "visible": {
+          "$type": "all",
+          "predicates": [
+            {
+              "$type": "not",
+              "predicate": {
+                "$type": "state",
+                "binding": "state.portrait.source",
+                "text": "off"
+              }
+            },
+            {
+              "$type": "recently",
+              "fact": "SeatInput",
+              "fadeSeconds": 2,
+              "windowSeconds": 3
+            }
+          ]
+        }
+      }
+    ]
   },
   "icons": {
     "badges": [
@@ -2033,7 +2295,15 @@
       "motion": {
         "gaitAmplitude": 0,
         "replayFrames": false,
-        "secondsPerFrame": 0
+        "secondsPerFrame": 0,
+        "cues": [
+          {
+            "frame": "blink",
+            "holdSeconds": 0.12,
+            "minSeconds": 2.0,
+            "maxSeconds": 6.0
+          }
+        ]
       },
       "name": "pip",
       "scale": 1,
@@ -2580,6 +2850,10 @@
           {
             "key": "barModel",
             "value": "edit.style"
+          },
+          {
+            "key": "portrait",
+            "value": "action.target"
           }
         ],
         "kind": "text",
@@ -2619,6 +2893,10 @@
           {
             "key": "barModel",
             "value": "Bar model"
+          },
+          {
+            "key": "portrait",
+            "value": "Portrait"
           }
         ],
         "kind": "text",
@@ -2657,6 +2935,17 @@
         "kind": "fixed",
         "name": "timeOfDay",
         "value": "0.3"
+      },
+      {
+        "capacity": 4,
+        "cells": [
+          {
+            "key": "source",
+            "value": "avatar"
+          }
+        ],
+        "kind": "text",
+        "name": "portrait"
       }
     ]
   },

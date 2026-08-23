@@ -61,7 +61,9 @@ public sealed class WorldStampPool {
     /// <param name="BodyIndex">The population entity index whose interpolated pose roots the stamp.</param>
     /// <param name="Creation">The creation whose geometry the body wears.</param>
     /// <param name="Scale">The uniform render scale (a placement's scale, or a look's scale).</param>
-    public readonly record struct BodyStamp(int BodyIndex, WorldCreation Creation, float Scale);
+    /// <param name="Cues">The look's cues, or <see langword="null"/> for none.</param>
+    /// <param name="ReplayFrames">Whether the look replays the creation timeline on the render clock.</param>
+    public readonly record struct BodyStamp(int BodyIndex, WorldCreation Creation, float Scale, IReadOnlyList<WorldLookCue>? Cues = null, bool ReplayFrames = false);
 
     // One live registration: the resolved creation, its root source (a placement row — static or attached — OR a body
     // index), and the replay cursor state.
@@ -73,6 +75,20 @@ public sealed class WorldStampPool {
         public float Clock;
         public required WorldCreation Creation;
         public int FrameCursor;
+        // Cue state: the look's cues, each cue's timeline frame (1-based cursor, 0 = unresolved), when each next
+        // self-fires on the cue clock, its fire count (the draw's seed), and the cue frame holding now (0 = none).
+        public IReadOnlyList<WorldLookCue>? Cues;
+        // Whether the timeline replays on the render clock (an animated row always does; a body look only when its
+        // motion says so — a cue-only timeline otherwise rests on frame 0, the live pose).
+        public bool Replay = true;
+        public int[] CueFrames = [];
+        public float[] CueNextSeconds = [];
+        public uint[] CueFires = [];
+        public float CueClock;
+        public int CueFrame;
+        public float CueHoldUntil;
+        // The cursor the frame reads: a firing cue's frame overrides the replay cursor for its hold.
+        public int EffectiveCursor => ((CueFrame > 0) ? CueFrame : FrameCursor);
         // Memoized per-frame shape-id → pose index (a pure derivation of the immutable document).
         public Dictionary<int, FrameTransformDocument>?[] FramePoses = [];
         public required string Key;
@@ -498,14 +514,97 @@ public sealed class WorldStampPool {
 
         return ids;
     }
-    private static Registration RegisterBody(BodyStamp stamp) => new() {
-        Key = $"body:{stamp.BodyIndex}",
-        BodyIndex = stamp.BodyIndex,
-        Creation = stamp.Creation,
-        Parts = CreationPartCompiler.Compile(document: stamp.Creation.Document),
-        Scale = stamp.Scale,
-        FramePoses = new Dictionary<int, FrameTransformDocument>?[((stamp.Creation.Document.Frames?.Count ?? 0) + 1)],
-    };
+    private static Registration RegisterBody(BodyStamp stamp) {
+        var registration = new Registration {
+            Key = $"body:{stamp.BodyIndex}",
+            BodyIndex = stamp.BodyIndex,
+            Creation = stamp.Creation,
+            Parts = CreationPartCompiler.Compile(document: stamp.Creation.Document),
+            Scale = stamp.Scale,
+            FramePoses = new Dictionary<int, FrameTransformDocument>?[((stamp.Creation.Document.Frames?.Count ?? 0) + 1)],
+            Cues = stamp.Cues,
+            Replay = stamp.ReplayFrames,
+        };
+
+        if (stamp.Cues is { Count: > 0 } cues) {
+            var frames = (stamp.Creation.Document.Frames ?? []);
+
+            registration.CueFrames = new int[cues.Count];
+            registration.CueNextSeconds = new float[cues.Count];
+            registration.CueFires = new uint[cues.Count];
+
+            for (var index = 0; (index < cues.Count); index++) {
+                for (var frame = 0; (frame < frames.Count); frame++) {
+                    if (string.Equals(a: frames[frame]?.Name, b: cues[index].Frame, comparisonType: StringComparison.Ordinal)) {
+                        registration.CueFrames[index] = (frame + 1);
+
+                        break;
+                    }
+                }
+
+                registration.CueNextSeconds[index] = CueRest(
+                    cue: cues[index],
+                    fires: 0,
+                    seed: (uint)stamp.BodyIndex
+                );
+            }
+        }
+
+        return registration;
+    }
+    // The rest before a cue's next self-fire: a uniform draw in min..max from a splitmix of (body, fire count) — the
+    // same body blinks the same way on every run, and no two bodies in step. Infinity for a demand-only cue.
+    private static float CueRest(WorldLookCue cue, uint fires, uint seed) {
+        if ((cue.MinSeconds is not { } min) || (cue.MaxSeconds is not { } max)) {
+            return float.PositiveInfinity;
+        }
+
+        var state = ((((ulong)seed + 1UL) * 0x9E3779B97F4A7C15UL) ^ (((ulong)fires + 1UL) * 0xBF58476D1CE4E5B9UL));
+
+        state ^= (state >> 30);
+        state *= 0xBF58476D1CE4E5B9UL;
+        state ^= (state >> 27);
+        state *= 0x94D049BB133111EBUL;
+        state ^= (state >> 31);
+
+        var unit = ((state >> 40) * (1f / (1UL << 24)));
+
+        return (min + ((max - min) * unit));
+    }
+    /// <summary>Fires one of a body look's cues now — the door a driver (a face probe reading the player's camera, a
+    /// dialogue line) blinks or mouths the avatar through; the cue's self-fire interval re-arms from this fire.</summary>
+    /// <param name="bodyIndex">The population entity index.</param>
+    /// <param name="frame">The cue's frame name.</param>
+    /// <returns><see langword="true"/> when the body wears a creation look with such a cue.</returns>
+    public bool TriggerCue(int bodyIndex, string frame) {
+        if (!TryFindBody(bodyIndex: bodyIndex, live: out var live, poolIndex: out _) || (live.Cues is not { } cues)) {
+            return false;
+        }
+
+        for (var index = 0; (index < cues.Count); index++) {
+            if (!string.Equals(a: cues[index].Frame, b: frame, comparisonType: StringComparison.Ordinal)) {
+                continue;
+            }
+
+            FireCue(index: index, live: live);
+
+            return true;
+        }
+
+        return false;
+    }
+    private static void FireCue(Registration live, int index) {
+        var cue = live.Cues![index];
+
+        live.CueFrame = live.CueFrames[index];
+        live.CueHoldUntil = (live.CueClock + cue.HoldSeconds);
+        live.CueFires[index]++;
+        live.CueNextSeconds[index] = (live.CueHoldUntil + CueRest(
+            cue: cue,
+            fires: live.CueFires[index],
+            seed: (uint)(live.BodyIndex ?? 0)
+        ));
+    }
     private static Registration RegisterRow(WorldPlacement row, WorldCreation creation) => new() {
         Key = row.Id,
         Row = row,
@@ -664,7 +763,7 @@ public sealed class WorldStampPool {
 
             var shapes = (live.Creation.EngineDocument.Shapes ?? []);
             var poses = FramePoses(
-                frameCursor: live.FrameCursor,
+                frameCursor: live.EffectiveCursor,
                 live: live
             );
 
@@ -847,6 +946,24 @@ public sealed class WorldStampPool {
                 continue;
             }
 
+            if (live.Cues is { Count: > 0 } cues) {
+                live.CueClock += deltaSeconds;
+
+                if ((live.CueFrame > 0) && (live.CueClock >= live.CueHoldUntil)) {
+                    live.CueFrame = 0;
+                }
+
+                for (var index = 0; (index < cues.Count); index++) {
+                    if ((live.CueFrames[index] > 0) && (live.CueClock >= live.CueNextSeconds[index])) {
+                        FireCue(index: index, live: live);
+                    }
+                }
+            }
+
+            if (!live.Replay) {
+                continue;
+            }
+
             live.Clock += deltaSeconds;
 
             while (live.Clock >= WorldPlacementPolicy.TimelineSecondsPerFrame) {
@@ -882,7 +999,7 @@ public sealed class WorldStampPool {
 
         var shape = shapes[shapeSlot];
         var poses = FramePoses(
-            frameCursor: live.FrameCursor,
+            frameCursor: live.EffectiveCursor,
             live: live
         );
 
@@ -1019,7 +1136,7 @@ public sealed class WorldStampPool {
         }
 
         var poses = FramePoses(
-            frameCursor: live.FrameCursor,
+            frameCursor: live.EffectiveCursor,
             live: live
         );
 

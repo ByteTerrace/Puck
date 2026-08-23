@@ -1,6 +1,7 @@
 using Puck.Abstractions.Gpu;
 using Puck.Commands;
 using Puck.SdfVm;
+using Puck.World.Client;
 using Puck.SdfVm.Views;
 
 namespace Puck.World;
@@ -49,7 +50,10 @@ internal sealed partial class WorldScreenBinder {
                 break;
             case WorldScreenSource.View view:
                 if (ResolveCamera(name: view.CameraName) is { } resolvedCamera) {
-                    RegisterCameraView(camera: resolvedCamera);
+                    RegisterCameraView(
+                        camera: resolvedCamera,
+                        seat: seat
+                    );
                 }
 
                 break;
@@ -127,7 +131,35 @@ internal sealed partial class WorldScreenBinder {
                 // imperatively here.
                 break;
             case WorldScreenSource.View view:
-                ReleaseOrphanedCameraView(name: view.CameraName);
+                // Parked, not torn down: the structure still names this source, so it may draw again any frame.
+                // Teardown waits for ForgetFrameSource, when the structure itself lets go.
+                ParkCameraView(name: ViewRegistrationName(
+                    cameraName: view.CameraName,
+                    seat: seat
+                ));
+
+                break;
+            case WorldScreenSource.Capture:
+                break;
+        }
+    }
+    /// <summary>Forgets one source the HUD structure no longer names at all (a document change), tearing down the
+    /// producer a release only parked — the seat's camera view, a capture feed.</summary>
+    /// <param name="source">The source.</param>
+    /// <param name="seat">The enclosing 1-based seat it was retained for.</param>
+    public void ForgetFrameSource(WorldFrameSource source, int seat) {
+        ArgumentNullException.ThrowIfNull(argument: source);
+
+        if (m_frameSourceReferences.ContainsKey(key: (source, seat))) {
+            return;
+        }
+
+        switch (source) {
+            case WorldScreenSource.View view:
+                ReleaseOrphanedCameraView(name: ViewRegistrationName(
+                    cameraName: view.CameraName,
+                    seat: seat
+                ));
 
                 break;
             case WorldScreenSource.Capture:
@@ -136,6 +168,18 @@ internal sealed partial class WorldScreenBinder {
                 }
 
                 break;
+        }
+    }
+    // Parks a camera view no frame source retains: it keeps rendering only while a screen or export still films it.
+    private void ParkCameraView(string name) {
+        if ((m_viewStack is null) || !m_cameraViews.TryGetValue(key: name, value: out var registration)) {
+            return;
+        }
+
+        var exported = ((registration.Seat == DefaultViewSeat) && HasViewExportReferences(cameraName: registration.Row.Name));
+
+        if ((WiredScreensFor(name: name).Count == 0) && !exported) {
+            _ = m_parkedViews.Add(item: name);
         }
     }
     private static WorldFeedProfile RichestProfile(WorldFeedProfile left, WorldFeedProfile right) => new(
@@ -183,11 +227,20 @@ internal sealed partial class WorldScreenBinder {
 
         return false;
     }
-    private bool HasRetainedView(string cameraName) {
+    // Whether any retained HUD source names this view registration — a seat-relative camera's retains count only
+    // for the seat whose registration is asked about.
+    private bool HasRetainedView(string registrationName) {
         foreach (var entry in m_frameSourceReferences.Keys) {
             if (
                 (entry.Source is WorldScreenSource.View view) &&
-                string.Equals(a: view.CameraName, b: cameraName, comparisonType: StringComparison.Ordinal)
+                string.Equals(
+                a: ViewRegistrationName(
+                    cameraName: view.CameraName,
+                    seat: entry.Seat
+                ),
+                b: registrationName,
+                comparisonType: StringComparison.Ordinal
+            )
             ) {
                 return true;
             }
@@ -195,6 +248,16 @@ internal sealed partial class WorldScreenBinder {
 
         return false;
     }
+    // The registration a View source resolves to in a seat scope: seat-qualified for a seat-relative camera, the
+    // bare camera name otherwise (and for an undeclared camera, so a fault still names what was asked for).
+    private string ViewRegistrationName(string cameraName, int seat) =>
+        ((ResolveCamera(name: cameraName) is { } camera)
+            ? WorldSeatAnchors.RegistrationName(
+                camera: camera,
+                seat: seat
+            )
+            : cameraName
+        );
     private static void MergeCameraDemand(
         Dictionary<(int Seat, WorldCameraSensor Sensor), WorldFeedProfile> demands,
         WorldScreenSource.Camera camera,
@@ -333,7 +396,10 @@ internal sealed partial class WorldScreenBinder {
                 break;
             case WorldScreenSource.View view:
                 if (m_viewStack is { } stack) {
-                    var handle = stack.Resolve(name: view.CameraName);
+                    var handle = stack.Resolve(name: ViewRegistrationName(
+                        cameraName: view.CameraName,
+                        seat: seat
+                    ));
 
                     frame = handle;
 

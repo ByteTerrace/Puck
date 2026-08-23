@@ -581,9 +581,12 @@ public sealed class OverlayFrameBuilder {
         m_panelCount++;
     }
     /// <summary>Packs one sampled-frame element (a HUD picture-in-picture: a live <see cref="OverlayFrameSlots"/>
-    /// slot's content drawn into the element rect, e.g. the face-cam panel). Word layout (12): 0..3 rect (normalized)
-    /// · 4 = 4 | (slot &lt;&lt; 4) | (mirror &lt;&lt; 12) | (fit &lt;&lt; 13) · 6 corner radius (px float) · 7 alpha ·
-    /// 9 clip index.</summary>
+    /// slot's content drawn into the element rect, e.g. the face-cam panel), optionally cross-faded with a second
+    /// slot. Word layout (12): 0..3 rect (normalized) · 4 = 4 | (slot &lt;&lt; 4) | (mirror &lt;&lt; 12) |
+    /// (fit &lt;&lt; 13) | ((slotB + 1) &lt;&lt; 16, 0 = no second slot) · 6 corner radius (px float) · 7 alpha ·
+    /// 8 mix (float, the weight of <paramref name="slot"/>; the shader samples both slots with the same fit/mirror
+    /// uv and blends <c>lerp(slotB, slot, mix)</c> before compositing) · 9 clip index. Word 8 is written only when
+    /// a second slot is present; it stays zero otherwise.</summary>
     /// <param name="x">Left, px.</param>
     /// <param name="y">Top, px.</param>
     /// <param name="w">Width, px.</param>
@@ -594,8 +597,13 @@ public sealed class OverlayFrameBuilder {
     /// <param name="mirror">Whether the sampled content flips horizontally.</param>
     /// <param name="radius">The corner radius, px.</param>
     /// <param name="alpha">The element opacity.</param>
+    /// <param name="slotB">The outgoing <see cref="OverlayFrameSlots"/> slot the shader cross-fades from, or -1 to
+    /// draw <paramref name="slot"/> alone.</param>
+    /// <param name="mix">The weight of <paramref name="slot"/> in the cross-fade, <c>[0,1]</c> (0 shows
+    /// <paramref name="slotB"/> alone, 1 shows <paramref name="slot"/> alone). Ignored when <paramref name="slotB"/>
+    /// is -1.</param>
     /// <exception cref="InvalidOperationException">No channel scope is open.</exception>
-    public void WriteFrame(float x, float y, float w, float h, int slot, OverlayHudFrameFit fit, bool mirror, float radius, float alpha) {
+    public void WriteFrame(float x, float y, float w, float h, int slot, OverlayHudFrameFit fit, bool mirror, float radius, float alpha, int slotB = -1, float mix = 1f) {
         if (!TryTakeElement()) {
             return;
         }
@@ -613,9 +621,15 @@ public sealed class OverlayFrameBuilder {
             : 0u
             )
             | (((uint)fit) << 13)
+            | (((uint)(slotB + 1)) << 16)
         );
         m_scratch[(offset + 6)] = Pack(value: radius);
         m_scratch[(offset + 7)] = Pack(value: alpha);
+
+        if (slotB >= 0) {
+            m_scratch[(offset + 8)] = Pack(value: mix);
+        }
+
         m_scratch[(offset + 9)] = ((uint)m_activeClip);
         m_elementCount++;
     }

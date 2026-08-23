@@ -12,8 +12,17 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
     private const int Reach = 2;
 
     private readonly WorldClient m_client;
-    private int m_bakedRevision = -1;
-    private WorldClientFieldLattice? m_bakedLattice;
+    private int m_cursor;
+    private int m_pendingField = -1;
+    private int m_pendingRevision;
+    private ulong m_pendingSerial;
+    private int m_pendingSlot;
+    private int m_programRevision;
+    private bool[] m_ready = [];
+    private float[] m_heights = [];
+    private int[] m_uploadedRevisions = [];
+    private WorldClientFieldLattice? m_uploadedLattice;
+    private ISdfBrickBakeService? m_uploadService;
     private float[] m_voxels = [];
 
     public WorldFieldEmitter(WorldClient client) {
@@ -28,7 +37,7 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
         var tallest = 0f;
 
         foreach (var row in document.Fields) {
-            tallest = MathF.Max(tallest, (row.Max * row.HeightScale));
+            tallest = MathF.Max(tallest, ((row.Max * row.HeightScale) * document.Lattice.Layers));
         }
 
         return Math.Min(
@@ -57,23 +66,44 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
         val1: SdfBrickPoolLayout.BrickDim,
         val2: cells
     );
-    private static IEnumerable<(int Field, WorldFieldRow Row, int Slot)> HeightFields(WorldFieldsSection document) {
+    private static int HeightFieldCount(WorldFieldsSection document) {
+        var count = 0;
+
+        for (var field = 0; (field < document.Fields.Count); field++) {
+            if (document.Fields[field].HeightScale > 0f) {
+                count++;
+            }
+        }
+
+        return Math.Min(
+            val1: count,
+            val2: SdfBrickPoolLayout.MaxBricks
+        );
+    }
+    private static (int Field, WorldFieldRow Row, int Slot) HeightField(WorldFieldsSection document, int ordinal) {
         var slot = 0;
 
         for (var field = 0; (field < document.Fields.Count); field++) {
             var row = document.Fields[field];
 
-            if (
-                (row.HeightScale <= 0f) ||
-                (slot >= SdfBrickPoolLayout.MaxBricks)
-            ) {
+            if (row.HeightScale <= 0f) {
                 continue;
             }
 
-            yield return (field, row, slot++);
+            if (slot == ordinal) {
+                return (field, row, slot);
+            }
+
+            slot++;
         }
+
+        throw new ArgumentOutOfRangeException(paramName: nameof(ordinal));
     }
 
+    /// <inheritdoc/>
+    public int RevisionComponentCount => 1;
+    /// <inheritdoc/>
+    public void WriteRevision(Span<int> destination) => destination[0] = m_programRevision;
     /// <inheritdoc/>
     public void Emit(SdfProgramBuilder builder, in SdfEmitContext context) {
         ArgumentNullException.ThrowIfNull(argument: builder);
@@ -94,7 +124,21 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
         var dimZ = Clamp(cells: (lattice.Depth + 2));
         var dimY = BrickLayers(document: document);
 
-        foreach (var (_, row, slot) in HeightFields(document: document)) {
+        var heightFieldCount = HeightFieldCount(document: document);
+
+        for (var ordinal = 0; (ordinal < heightFieldCount); ordinal++) {
+            var (field, row, slot) = HeightField(document: document, ordinal: ordinal);
+
+            // The pool's zero-filled/uninitialized bytes describe a surface, not empty space. Keep a live program from
+            // naming a slot until its first upload has completed; the probe still declares every possible brick so the
+            // frozen capacity envelope dominates the later rebuild.
+            if (
+                !context.Probe &&
+                ((field >= m_ready.Length) || !m_ready[field])
+            ) {
+                continue;
+            }
+
             var material = builder.AddMaterial(material: new SdfMaterial(Albedo: ParseColor(hex: row.Color)));
 
             _ = builder.ResetPoint().SampledRegion(
@@ -115,6 +159,15 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
     public void AdvanceBricks(ISdfBrickBakeService bakes) {
         ArgumentNullException.ThrowIfNull(argument: bakes);
 
+        if (!ReferenceEquals(bakes, m_uploadService)) {
+            m_uploadService = bakes;
+            m_uploadedLattice = null;
+            m_ready = [];
+            m_uploadedRevisions = [];
+            m_pendingField = -1;
+            m_programRevision++;
+        }
+
         if (
             !bakes.BrickBakeAvailable ||
             (m_client.Fields is not { } lattice)
@@ -122,11 +175,34 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
             return;
         }
 
-        if (
-            ReferenceEquals(lattice, m_bakedLattice) &&
-            (lattice.Revision == m_bakedRevision)
-        ) {
-            return;
+        if (!ReferenceEquals(lattice, m_uploadedLattice)) {
+            m_uploadedLattice = lattice;
+            m_uploadedRevisions = new int[lattice.FieldCount];
+            Array.Fill(array: m_uploadedRevisions, value: int.MinValue);
+            m_ready = new bool[lattice.FieldCount];
+            m_pendingField = -1;
+            m_cursor = 0;
+            m_programRevision++;
+        }
+
+        if (m_pendingField >= 0) {
+            var status = bakes.GetBrickState(slot: m_pendingSlot);
+
+            if (
+                (status.State != BrickBakeState.Ready) ||
+                (status.Serial == m_pendingSerial)
+            ) {
+                return;
+            }
+
+            m_uploadedRevisions[m_pendingField] = m_pendingRevision;
+
+            if (!m_ready[m_pendingField]) {
+                m_ready[m_pendingField] = true;
+                m_programRevision++;
+            }
+
+            m_pendingField = -1;
         }
 
         var document = lattice.Document;
@@ -140,10 +216,25 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
             m_voxels = new float[total];
         }
 
-        var heights = new float[lattice.Width * lattice.Depth];
+        var heightFieldCount = HeightFieldCount(document: document);
 
-        foreach (var (field, row, slot) in HeightFields(document: document)) {
-            // Column tops for this field alone: the sum over layers of value × heightScale above the origin.
+        for (var offset = 0; (offset < heightFieldCount); offset++) {
+            var candidate = ((m_cursor + offset) % heightFieldCount);
+            var (field, row, slot) = HeightField(document: document, ordinal: candidate);
+            var revision = lattice.FieldRevision(field: field);
+
+            if (m_uploadedRevisions[field] == revision) {
+                continue;
+            }
+
+            var heightCellCount = (lattice.Width * lattice.Depth);
+
+            if (m_heights.Length < heightCellCount) {
+                m_heights = new float[heightCellCount];
+            }
+
+            // Queue at most one field per produced frame. The engine owns one upload staging region per ring slot;
+            // repeatedly replacing a whole multi-field queue faster than it drains starves every slot but the first.
             for (var z = 0; (z < lattice.Depth); z++) {
                 for (var x = 0; (x < lattice.Width); x++) {
                     var raised = 0f;
@@ -155,7 +246,7 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
                         ) * row.HeightScale);
                     }
 
-                    heights[(z * lattice.Width) + x] = raised;
+                    m_heights[(z * lattice.Width) + x] = raised;
                 }
             }
 
@@ -164,9 +255,12 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
                 dimX: dimX,
                 dimY: dimY,
                 dimZ: dimZ,
-                heights: heights,
+                heights: m_heights,
                 lattice: lattice
             );
+
+            var before = bakes.GetBrickState(slot: slot);
+
             bakes.UploadBrick(
                 dimX: dimX,
                 dimY: dimY,
@@ -177,10 +271,14 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
                     start: 0
                 )
             );
-        }
+            m_pendingField = field;
+            m_pendingRevision = revision;
+            m_pendingSerial = before.Serial;
+            m_pendingSlot = slot;
+            m_cursor = ((candidate + 1) % heightFieldCount);
 
-        m_bakedLattice = lattice;
-        m_bakedRevision = lattice.Revision;
+            return;
+        }
     }
     // Each voxel holds the distance to the union of the nearby raised columns (boxes from one cell below the origin
     // to the column top), exact within Reach cells and a conservative lower bound beyond, scaled by 1/√3 as the

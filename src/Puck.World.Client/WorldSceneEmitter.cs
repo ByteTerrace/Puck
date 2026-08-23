@@ -404,7 +404,9 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 ? new WorldStampPool.BodyStamp(
                     BodyIndex: index,
                     Creation: creation,
-                    Scale: (placement.Scale * look.Scale)
+                    Scale: (placement.Scale * look.Scale),
+                    Cues: look.Motion.Cues,
+                    ReplayFrames: look.Motion.ReplayFrames
                 )
                 : null
             );
@@ -418,7 +420,9 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 ? new WorldStampPool.BodyStamp(
                     BodyIndex: index,
                     Creation: creation,
-                    Scale: look.Scale
+                    Scale: look.Scale,
+                    Cues: look.Motion.Cues,
+                    ReplayFrames: look.Motion.ReplayFrames
                 )
                 : null
             );

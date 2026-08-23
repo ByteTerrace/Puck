@@ -1789,7 +1789,7 @@
             "type": "string"
           },
           "anchor": {
-            "description": "What the camera rides, or null for the world reference frame.",
+            "description": "What the camera rides, or null for the world reference frame (or for Anchors to decide).",
             "type": [
               "object",
               "null"
@@ -1884,6 +1884,45 @@
                   "indices",
                   "smoothRate"
                 ],
+                "additionalProperties": false
+              },
+              {
+                "description": "Rides a local seat\u0027s avatar \u2014 the body the seat perceives as its own, so possession follows \u2014 at its root or at a named part. Numbernull is the enclosing seat scope (the seat a HUD frame or view is being resolved for), an explicit number is 1-based. Presentation-only: a camera or speaker on this anchor is resolved per seat.",
+                "properties": {
+                  "$type": {
+                    "const": "seat"
+                  },
+                  "number": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "default": null
+                  },
+                  "partId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "default": null
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "description": "Rides the body that most recently spoke (see OverlayPredicate.Speaking), at its root or a named part; resolves nothing until something has spoken.",
+                "properties": {
+                  "$type": {
+                    "const": "recentSpeaker"
+                  },
+                  "partId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "default": null
+                  }
+                },
                 "additionalProperties": false
               }
             ]
@@ -2542,6 +2581,972 @@
           "renderHeight": {
             "description": "The offscreen render height in pixels.",
             "type": "integer"
+          },
+          "anchors": {
+            "description": "Ranked anchor candidates, first holding wins each frame \u2014 a portrait camera that rides the speaking character while they speak and the seat\u0027s own avatar otherwise. Refused beside Anchor; a single unconditional anchor is Anchor.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "description": "One ranked anchor candidate of a WorldCamera: the anchor the camera rides while When holds. Candidates are walked in authored order every frame and the first holding one wins; a null predicate always holds, so the last row is the default.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "anchor": {
+                  "description": "What the camera rides while this candidate wins.",
+                  "type": "object",
+                  "required": [
+                    "$type"
+                  ],
+                  "anyOf": [
+                    {
+                      "description": "Rides one population entity\u0027s ROOT pose \u2014 a walking avatar\u0027s whole-body position and orientation.",
+                      "properties": {
+                        "$type": {
+                          "const": "entity"
+                        },
+                        "index": {
+                          "description": "The 0-based entity index, bounded by the world\u0027s authored population capacity.",
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "index"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Rides one entity look\u0027s authored part pose rather than its whole-body root. The active look publishes the mapping from PartId to its packed transform slot; the slot remains an engine detail.",
+                      "properties": {
+                        "$type": {
+                          "const": "entityPart"
+                        },
+                        "index": {
+                          "description": "The 0-based entity index.",
+                          "type": "integer"
+                        },
+                        "partId": {
+                          "description": "The ordinal, case-sensitive part identifier published by the entity\u0027s active look.",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "index",
+                        "partId"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Rides a placement INSTANCE\u0027s stamped transform \u2014 a creation stamped into the world by reference (the same placement-reference shape CreationCameraDocument uses), optionally narrowed to one of its own authored shapes rather than the stamp\u0027s root.",
+                      "properties": {
+                        "$type": {
+                          "const": "placement"
+                        },
+                        "placementId": {
+                          "description": "The referenced Id (must resolve).",
+                          "type": "string"
+                        },
+                        "shapeId": {
+                          "description": "The referenced creation\u0027s ShapeDocument.Id to ride, or null for the placement\u0027s own stamped root transform.",
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "placementId",
+                        "shapeId"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Rides the smoothed CENTROID of a set of population entities \u2014 the establishing-shot anchor. Also publishes the set\u0027s SPREAD (mean distance from the centroid), which a camera program\u0027s Offset consumes through its SpreadPullback. A group has no facing, so its orientation resolves to identity.",
+                      "properties": {
+                        "$type": {
+                          "const": "group"
+                        },
+                        "indices": {
+                          "$ref": "#/properties/cameras/items/properties/anchor/anyOf/3/properties/indices"
+                        },
+                        "smoothRate": {
+                          "description": "The exponential smoothing rate (per second) the centroid/spread ease at (validated positive and finite) \u2014 seeded un-smoothed on first resolve so a camera does not fly in from the origin.",
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "indices",
+                        "smoothRate"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Rides a local seat\u0027s avatar \u2014 the body the seat perceives as its own, so possession follows \u2014 at its root or at a named part. Numbernull is the enclosing seat scope (the seat a HUD frame or view is being resolved for), an explicit number is 1-based. Presentation-only: a camera or speaker on this anchor is resolved per seat.",
+                      "properties": {
+                        "$type": {
+                          "const": "seat"
+                        },
+                        "number": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "partId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "default": null
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Rides the body that most recently spoke (see OverlayPredicate.Speaking), at its root or a named part; resolves nothing until something has spoken.",
+                      "properties": {
+                        "$type": {
+                          "const": "recentSpeaker"
+                        },
+                        "partId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "default": null
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "when": {
+                  "description": "The condition, evaluated for the seat the view is resolved for.",
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "required": [
+                    "$type"
+                  ],
+                  "anyOf": [
+                    {
+                      "description": "The fact holds this frame.",
+                      "properties": {
+                        "$type": {
+                          "const": "now"
+                        },
+                        "fact": {
+                          "enum": [
+                            "SeatInput",
+                            "PointerMotion",
+                            "WheelOpen",
+                            "ConsoleOpen",
+                            "SeatCameraApplication"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "fact"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "The fact held within the last WindowSeconds.",
+                      "properties": {
+                        "$type": {
+                          "const": "recently"
+                        },
+                        "fact": {
+                          "description": "The fact whose recency is tested.",
+                          "enum": [
+                            "SeatInput",
+                            "PointerMotion",
+                            "WheelOpen",
+                            "ConsoleOpen",
+                            "SeatCameraApplication"
+                          ]
+                        },
+                        "windowSeconds": {
+                          "description": "How long after the fact last held the predicate still holds in full.",
+                          "type": "number"
+                        },
+                        "fadeSeconds": {
+                          "description": "How long after the window the predicate\u0027s PRESENCE eases from 1 to 0 \u2014 a surface reading presence rather than the boolean fades out instead of cutting, and the predicate still HOLDS (presence above 0) throughout the fade. 0 cuts at the window\u0027s end.",
+                          "type": "number",
+                          "default": 0
+                        }
+                      },
+                      "required": [
+                        "fact",
+                        "windowSeconds"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Every predicate holds.",
+                      "properties": {
+                        "$type": {
+                          "const": "all"
+                        },
+                        "predicates": {
+                          "type": "array",
+                          "items": {
+                            "description": "An overlay element\u0027s visibility condition \u2014 the presentation twin of ActionPredicate, over OverlayFacts. Absent on an element means always visible.",
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "required": [
+                              "$type"
+                            ],
+                            "anyOf": [
+                              {
+                                "description": "The fact holds this frame.",
+                                "properties": {
+                                  "$type": {
+                                    "const": "now"
+                                  },
+                                  "fact": {
+                                    "enum": [
+                                      "SeatInput",
+                                      "PointerMotion",
+                                      "WheelOpen",
+                                      "ConsoleOpen",
+                                      "SeatCameraApplication"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "fact"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "description": "The fact held within the last WindowSeconds.",
+                                "properties": {
+                                  "$type": {
+                                    "const": "recently"
+                                  },
+                                  "fact": {
+                                    "description": "The fact whose recency is tested.",
+                                    "enum": [
+                                      "SeatInput",
+                                      "PointerMotion",
+                                      "WheelOpen",
+                                      "ConsoleOpen",
+                                      "SeatCameraApplication"
+                                    ]
+                                  },
+                                  "windowSeconds": {
+                                    "description": "How long after the fact last held the predicate still holds in full.",
+                                    "type": "number"
+                                  },
+                                  "fadeSeconds": {
+                                    "description": "How long after the window the predicate\u0027s PRESENCE eases from 1 to 0 \u2014 a surface reading presence rather than the boolean fades out instead of cutting, and the predicate still HOLDS (presence above 0) throughout the fade. 0 cuts at the window\u0027s end.",
+                                    "type": "number",
+                                    "default": 0
+                                  }
+                                },
+                                "required": [
+                                  "fact",
+                                  "windowSeconds"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "description": "Every predicate holds.",
+                                "properties": {
+                                  "$type": {
+                                    "const": "all"
+                                  },
+                                  "predicates": {
+                                    "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates"
+                                  }
+                                },
+                                "required": [
+                                  "predicates"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "description": "At least one predicate holds.",
+                                "properties": {
+                                  "$type": {
+                                    "const": "any"
+                                  },
+                                  "predicates": {
+                                    "type": "array",
+                                    "items": {
+                                      "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates/items"
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "predicates"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "description": "The predicate does not hold.",
+                                "properties": {
+                                  "$type": {
+                                    "const": "not"
+                                  },
+                                  "predicate": {
+                                    "type": "object",
+                                    "required": [
+                                      "$type"
+                                    ],
+                                    "anyOf": [
+                                      {
+                                        "description": "The fact holds this frame.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "now"
+                                          },
+                                          "fact": {
+                                            "enum": [
+                                              "SeatInput",
+                                              "PointerMotion",
+                                              "WheelOpen",
+                                              "ConsoleOpen",
+                                              "SeatCameraApplication"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "fact"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "The fact held within the last WindowSeconds.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "recently"
+                                          },
+                                          "fact": {
+                                            "description": "The fact whose recency is tested.",
+                                            "enum": [
+                                              "SeatInput",
+                                              "PointerMotion",
+                                              "WheelOpen",
+                                              "ConsoleOpen",
+                                              "SeatCameraApplication"
+                                            ]
+                                          },
+                                          "windowSeconds": {
+                                            "description": "How long after the fact last held the predicate still holds in full.",
+                                            "type": "number"
+                                          },
+                                          "fadeSeconds": {
+                                            "description": "How long after the window the predicate\u0027s PRESENCE eases from 1 to 0 \u2014 a surface reading presence rather than the boolean fades out instead of cutting, and the predicate still HOLDS (presence above 0) throughout the fade. 0 cuts at the window\u0027s end.",
+                                            "type": "number",
+                                            "default": 0
+                                          }
+                                        },
+                                        "required": [
+                                          "fact",
+                                          "windowSeconds"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Every predicate holds.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "all"
+                                          },
+                                          "predicates": {
+                                            "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates"
+                                          }
+                                        },
+                                        "required": [
+                                          "predicates"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "At least one predicate holds.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "any"
+                                          },
+                                          "predicates": {
+                                            "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates/items/anyOf/3/properties/predicates"
+                                          }
+                                        },
+                                        "required": [
+                                          "predicates"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "The predicate does not hold.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "not"
+                                          },
+                                          "predicate": {
+                                            "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates/items/anyOf/4/properties/predicate"
+                                          }
+                                        },
+                                        "required": [
+                                          "predicate"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "The subject spoke within the last WindowSeconds \u2014 a chat line, a dialogue line, a live voice: every speech path stamps the same presentation clock, so the predicate reads one fact whatever produced it. Presence eases across FadeSeconds after the window like Recently.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "speaking"
+                                          },
+                                          "subject": {
+                                            "type": "object",
+                                            "required": [
+                                              "$type"
+                                            ],
+                                            "anyOf": [
+                                              {
+                                                "description": "A local seat\u0027s avatar \u2014 null is the enclosing seat scope (the seat whose panel, bar, or camera is being evaluated), an explicit number is 1-based like Camera.Seat.",
+                                                "properties": {
+                                                  "$type": {
+                                                    "const": "seat"
+                                                  },
+                                                  "number": {
+                                                    "type": [
+                                                      "integer",
+                                                      "null"
+                                                    ],
+                                                    "default": null
+                                                  }
+                                                },
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "description": "A placement instance, optionally one of its shapes.",
+                                                "properties": {
+                                                  "$type": {
+                                                    "const": "placement"
+                                                  },
+                                                  "placementId": {
+                                                    "type": "string"
+                                                  },
+                                                  "shapeId": {
+                                                    "type": [
+                                                      "integer",
+                                                      "null"
+                                                    ],
+                                                    "default": null
+                                                  }
+                                                },
+                                                "required": [
+                                                  "placementId"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "description": "A population entity by 0-based index.",
+                                                "properties": {
+                                                  "$type": {
+                                                    "const": "entity"
+                                                  },
+                                                  "index": {
+                                                    "type": "integer"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "index"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "description": "Any joined local seat\u0027s avatar \u2014 the predicate holds when it holds for at least one.",
+                                                "properties": {
+                                                  "$type": {
+                                                    "const": "anySeat"
+                                                  }
+                                                },
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "description": "The body that most recently spoke (see Speaking); nothing until something has.",
+                                                "properties": {
+                                                  "$type": {
+                                                    "const": "recentSpeaker"
+                                                  }
+                                                },
+                                                "additionalProperties": false
+                                              }
+                                            ]
+                                          },
+                                          "windowSeconds": {
+                                            "type": "number"
+                                          },
+                                          "fadeSeconds": {
+                                            "type": "number",
+                                            "default": 0
+                                          }
+                                        },
+                                        "required": [
+                                          "subject",
+                                          "windowSeconds"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "The subject is within Distance world units of Of (the enclosing seat\u0027s avatar when null), read off the presentation poses each frame; an unresolvable subject is infinitely far.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "near"
+                                          },
+                                          "subject": {
+                                            "type": "object",
+                                            "required": [
+                                              "$type"
+                                            ],
+                                            "anyOf": [
+                                              {
+                                                "description": "A local seat\u0027s avatar \u2014 null is the enclosing seat scope (the seat whose panel, bar, or camera is being evaluated), an explicit number is 1-based like Camera.Seat.",
+                                                "properties": {
+                                                  "$type": {
+                                                    "const": "seat"
+                                                  },
+                                                  "number": {
+                                                    "type": [
+                                                      "integer",
+                                                      "null"
+                                                    ],
+                                                    "default": null
+                                                  }
+                                                },
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "description": "A placement instance, optionally one of its shapes.",
+                                                "properties": {
+                                                  "$type": {
+                                                    "const": "placement"
+                                                  },
+                                                  "placementId": {
+                                                    "type": "string"
+                                                  },
+                                                  "shapeId": {
+                                                    "type": [
+                                                      "integer",
+                                                      "null"
+                                                    ],
+                                                    "default": null
+                                                  }
+                                                },
+                                                "required": [
+                                                  "placementId"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "description": "A population entity by 0-based index.",
+                                                "properties": {
+                                                  "$type": {
+                                                    "const": "entity"
+                                                  },
+                                                  "index": {
+                                                    "type": "integer"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "index"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "description": "Any joined local seat\u0027s avatar \u2014 the predicate holds when it holds for at least one.",
+                                                "properties": {
+                                                  "$type": {
+                                                    "const": "anySeat"
+                                                  }
+                                                },
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "description": "The body that most recently spoke (see Speaking); nothing until something has.",
+                                                "properties": {
+                                                  "$type": {
+                                                    "const": "recentSpeaker"
+                                                  }
+                                                },
+                                                "additionalProperties": false
+                                              }
+                                            ]
+                                          },
+                                          "distance": {
+                                            "type": "number"
+                                          },
+                                          "of": {
+                                            "type": [
+                                              "object",
+                                              "null"
+                                            ],
+                                            "required": [
+                                              "$type"
+                                            ],
+                                            "anyOf": [
+                                              {
+                                                "description": "A local seat\u0027s avatar \u2014 null is the enclosing seat scope (the seat whose panel, bar, or camera is being evaluated), an explicit number is 1-based like Camera.Seat.",
+                                                "properties": {
+                                                  "$type": {
+                                                    "const": "seat"
+                                                  },
+                                                  "number": {
+                                                    "type": [
+                                                      "integer",
+                                                      "null"
+                                                    ],
+                                                    "default": null
+                                                  }
+                                                },
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "description": "A placement instance, optionally one of its shapes.",
+                                                "properties": {
+                                                  "$type": {
+                                                    "const": "placement"
+                                                  },
+                                                  "placementId": {
+                                                    "type": "string"
+                                                  },
+                                                  "shapeId": {
+                                                    "type": [
+                                                      "integer",
+                                                      "null"
+                                                    ],
+                                                    "default": null
+                                                  }
+                                                },
+                                                "required": [
+                                                  "placementId"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "description": "A population entity by 0-based index.",
+                                                "properties": {
+                                                  "$type": {
+                                                    "const": "entity"
+                                                  },
+                                                  "index": {
+                                                    "type": "integer"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "index"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "description": "Any joined local seat\u0027s avatar \u2014 the predicate holds when it holds for at least one.",
+                                                "properties": {
+                                                  "$type": {
+                                                    "const": "anySeat"
+                                                  }
+                                                },
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "description": "The body that most recently spoke (see Speaking); nothing until something has.",
+                                                "properties": {
+                                                  "$type": {
+                                                    "const": "recentSpeaker"
+                                                  }
+                                                },
+                                                "additionalProperties": false
+                                              }
+                                            ],
+                                            "default": null
+                                          }
+                                        },
+                                        "required": [
+                                          "subject",
+                                          "distance"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "A state cell compares to a literal: Binding is state.\u003Crow\u003E[.\u003Ckey\u003E], and exactly one of Value (numeric rows) or Text (text rows, compared ordinally; only Equal/NotEqual) is authored. The same cell a bar\u0027s layoutCell or a wheel sector writes.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "state"
+                                          },
+                                          "binding": {
+                                            "type": "string"
+                                          },
+                                          "comparison": {
+                                            "enum": [
+                                              "Equal",
+                                              "NotEqual",
+                                              "Less",
+                                              "LessOrEqual",
+                                              "Greater",
+                                              "GreaterOrEqual"
+                                            ],
+                                            "default": "Equal"
+                                          },
+                                          "value": {
+                                            "type": [
+                                              "number",
+                                              "null"
+                                            ],
+                                            "default": null
+                                          },
+                                          "text": {
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ],
+                                            "default": null
+                                          }
+                                        },
+                                        "required": [
+                                          "binding"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "predicate"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "description": "The subject spoke within the last WindowSeconds \u2014 a chat line, a dialogue line, a live voice: every speech path stamps the same presentation clock, so the predicate reads one fact whatever produced it. Presence eases across FadeSeconds after the window like Recently.",
+                                "properties": {
+                                  "$type": {
+                                    "const": "speaking"
+                                  },
+                                  "subject": {
+                                    "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates/items/anyOf/4/properties/predicate/anyOf/5/properties/subject"
+                                  },
+                                  "windowSeconds": {
+                                    "type": "number"
+                                  },
+                                  "fadeSeconds": {
+                                    "type": "number",
+                                    "default": 0
+                                  }
+                                },
+                                "required": [
+                                  "subject",
+                                  "windowSeconds"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "description": "The subject is within Distance world units of Of (the enclosing seat\u0027s avatar when null), read off the presentation poses each frame; an unresolvable subject is infinitely far.",
+                                "properties": {
+                                  "$type": {
+                                    "const": "near"
+                                  },
+                                  "subject": {
+                                    "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates/items/anyOf/4/properties/predicate/anyOf/6/properties/subject"
+                                  },
+                                  "distance": {
+                                    "type": "number"
+                                  },
+                                  "of": {
+                                    "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates/items/anyOf/4/properties/predicate/anyOf/6/properties/of",
+                                    "default": null
+                                  }
+                                },
+                                "required": [
+                                  "subject",
+                                  "distance"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "description": "A state cell compares to a literal: Binding is state.\u003Crow\u003E[.\u003Ckey\u003E], and exactly one of Value (numeric rows) or Text (text rows, compared ordinally; only Equal/NotEqual) is authored. The same cell a bar\u0027s layoutCell or a wheel sector writes.",
+                                "properties": {
+                                  "$type": {
+                                    "const": "state"
+                                  },
+                                  "binding": {
+                                    "type": "string"
+                                  },
+                                  "comparison": {
+                                    "enum": [
+                                      "Equal",
+                                      "NotEqual",
+                                      "Less",
+                                      "LessOrEqual",
+                                      "Greater",
+                                      "GreaterOrEqual"
+                                    ],
+                                    "default": "Equal"
+                                  },
+                                  "value": {
+                                    "type": [
+                                      "number",
+                                      "null"
+                                    ],
+                                    "default": null
+                                  },
+                                  "text": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ],
+                                    "default": null
+                                  }
+                                },
+                                "required": [
+                                  "binding"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "predicates"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "At least one predicate holds.",
+                      "properties": {
+                        "$type": {
+                          "const": "any"
+                        },
+                        "predicates": {
+                          "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates/items/anyOf/3/properties/predicates"
+                        }
+                      },
+                      "required": [
+                        "predicates"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "The predicate does not hold.",
+                      "properties": {
+                        "$type": {
+                          "const": "not"
+                        },
+                        "predicate": {
+                          "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates/items/anyOf/4/properties/predicate"
+                        }
+                      },
+                      "required": [
+                        "predicate"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "The subject spoke within the last WindowSeconds \u2014 a chat line, a dialogue line, a live voice: every speech path stamps the same presentation clock, so the predicate reads one fact whatever produced it. Presence eases across FadeSeconds after the window like Recently.",
+                      "properties": {
+                        "$type": {
+                          "const": "speaking"
+                        },
+                        "subject": {
+                          "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates/items/anyOf/4/properties/predicate/anyOf/5/properties/subject"
+                        },
+                        "windowSeconds": {
+                          "type": "number"
+                        },
+                        "fadeSeconds": {
+                          "type": "number",
+                          "default": 0
+                        }
+                      },
+                      "required": [
+                        "subject",
+                        "windowSeconds"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "The subject is within Distance world units of Of (the enclosing seat\u0027s avatar when null), read off the presentation poses each frame; an unresolvable subject is infinitely far.",
+                      "properties": {
+                        "$type": {
+                          "const": "near"
+                        },
+                        "subject": {
+                          "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates/items/anyOf/4/properties/predicate/anyOf/6/properties/subject"
+                        },
+                        "distance": {
+                          "type": "number"
+                        },
+                        "of": {
+                          "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates/items/anyOf/4/properties/predicate/anyOf/6/properties/of",
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "subject",
+                        "distance"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "A state cell compares to a literal: Binding is state.\u003Crow\u003E[.\u003Ckey\u003E], and exactly one of Value (numeric rows) or Text (text rows, compared ordinally; only Equal/NotEqual) is authored. The same cell a bar\u0027s layoutCell or a wheel sector writes.",
+                      "properties": {
+                        "$type": {
+                          "const": "state"
+                        },
+                        "binding": {
+                          "type": "string"
+                        },
+                        "comparison": {
+                          "enum": [
+                            "Equal",
+                            "NotEqual",
+                            "Less",
+                            "LessOrEqual",
+                            "Greater",
+                            "GreaterOrEqual"
+                          ],
+                          "default": "Equal"
+                        },
+                        "value": {
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "text": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "binding"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ],
+                  "default": null
+                }
+              },
+              "required": [
+                "anchor"
+              ],
+              "additionalProperties": false
+            },
+            "default": null
           }
         },
         "required": [
@@ -5289,223 +6294,7 @@
                         "const": "all"
                       },
                       "predicates": {
-                        "type": "array",
-                        "items": {
-                          "description": "An overlay element\u0027s visibility condition \u2014 the presentation twin of ActionPredicate, over OverlayFacts. Absent on an element means always visible.",
-                          "type": [
-                            "object",
-                            "null"
-                          ],
-                          "required": [
-                            "$type"
-                          ],
-                          "anyOf": [
-                            {
-                              "description": "The fact holds this frame.",
-                              "properties": {
-                                "$type": {
-                                  "const": "now"
-                                },
-                                "fact": {
-                                  "enum": [
-                                    "SeatInput",
-                                    "PointerMotion",
-                                    "WheelOpen",
-                                    "ConsoleOpen",
-                                    "SeatCameraApplication"
-                                  ]
-                                }
-                              },
-                              "required": [
-                                "fact"
-                              ],
-                              "additionalProperties": false
-                            },
-                            {
-                              "description": "The fact held within the last WindowSeconds.",
-                              "properties": {
-                                "$type": {
-                                  "const": "recently"
-                                },
-                                "fact": {
-                                  "description": "The fact whose recency is tested.",
-                                  "enum": [
-                                    "SeatInput",
-                                    "PointerMotion",
-                                    "WheelOpen",
-                                    "ConsoleOpen",
-                                    "SeatCameraApplication"
-                                  ]
-                                },
-                                "windowSeconds": {
-                                  "description": "How long after the fact last held the predicate still holds in full.",
-                                  "type": "number"
-                                },
-                                "fadeSeconds": {
-                                  "description": "How long after the window the predicate\u0027s PRESENCE eases from 1 to 0 \u2014 a surface reading presence rather than the boolean fades out instead of cutting, and the predicate still HOLDS (presence above 0) throughout the fade. 0 cuts at the window\u0027s end.",
-                                  "type": "number",
-                                  "default": 0
-                                }
-                              },
-                              "required": [
-                                "fact",
-                                "windowSeconds"
-                              ],
-                              "additionalProperties": false
-                            },
-                            {
-                              "description": "Every predicate holds.",
-                              "properties": {
-                                "$type": {
-                                  "const": "all"
-                                },
-                                "predicates": {
-                                  "$ref": "#/properties/bindingOverlays/items/properties/bindingBar/properties/visible/anyOf/2/properties/predicates"
-                                }
-                              },
-                              "required": [
-                                "predicates"
-                              ],
-                              "additionalProperties": false
-                            },
-                            {
-                              "description": "At least one predicate holds.",
-                              "properties": {
-                                "$type": {
-                                  "const": "any"
-                                },
-                                "predicates": {
-                                  "type": "array",
-                                  "items": {
-                                    "$ref": "#/properties/bindingOverlays/items/properties/bindingBar/properties/visible/anyOf/2/properties/predicates/items"
-                                  }
-                                }
-                              },
-                              "required": [
-                                "predicates"
-                              ],
-                              "additionalProperties": false
-                            },
-                            {
-                              "description": "The predicate does not hold.",
-                              "properties": {
-                                "$type": {
-                                  "const": "not"
-                                },
-                                "predicate": {
-                                  "type": "object",
-                                  "required": [
-                                    "$type"
-                                  ],
-                                  "anyOf": [
-                                    {
-                                      "description": "The fact holds this frame.",
-                                      "properties": {
-                                        "$type": {
-                                          "const": "now"
-                                        },
-                                        "fact": {
-                                          "enum": [
-                                            "SeatInput",
-                                            "PointerMotion",
-                                            "WheelOpen",
-                                            "ConsoleOpen",
-                                            "SeatCameraApplication"
-                                          ]
-                                        }
-                                      },
-                                      "required": [
-                                        "fact"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "description": "The fact held within the last WindowSeconds.",
-                                      "properties": {
-                                        "$type": {
-                                          "const": "recently"
-                                        },
-                                        "fact": {
-                                          "description": "The fact whose recency is tested.",
-                                          "enum": [
-                                            "SeatInput",
-                                            "PointerMotion",
-                                            "WheelOpen",
-                                            "ConsoleOpen",
-                                            "SeatCameraApplication"
-                                          ]
-                                        },
-                                        "windowSeconds": {
-                                          "description": "How long after the fact last held the predicate still holds in full.",
-                                          "type": "number"
-                                        },
-                                        "fadeSeconds": {
-                                          "description": "How long after the window the predicate\u0027s PRESENCE eases from 1 to 0 \u2014 a surface reading presence rather than the boolean fades out instead of cutting, and the predicate still HOLDS (presence above 0) throughout the fade. 0 cuts at the window\u0027s end.",
-                                          "type": "number",
-                                          "default": 0
-                                        }
-                                      },
-                                      "required": [
-                                        "fact",
-                                        "windowSeconds"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "description": "Every predicate holds.",
-                                      "properties": {
-                                        "$type": {
-                                          "const": "all"
-                                        },
-                                        "predicates": {
-                                          "$ref": "#/properties/bindingOverlays/items/properties/bindingBar/properties/visible/anyOf/2/properties/predicates"
-                                        }
-                                      },
-                                      "required": [
-                                        "predicates"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "description": "At least one predicate holds.",
-                                      "properties": {
-                                        "$type": {
-                                          "const": "any"
-                                        },
-                                        "predicates": {
-                                          "$ref": "#/properties/bindingOverlays/items/properties/bindingBar/properties/visible/anyOf/2/properties/predicates/items/anyOf/3/properties/predicates"
-                                        }
-                                      },
-                                      "required": [
-                                        "predicates"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "description": "The predicate does not hold.",
-                                      "properties": {
-                                        "$type": {
-                                          "const": "not"
-                                        },
-                                        "predicate": {
-                                          "$ref": "#/properties/bindingOverlays/items/properties/bindingBar/properties/visible/anyOf/2/properties/predicates/items/anyOf/4/properties/predicate"
-                                        }
-                                      },
-                                      "required": [
-                                        "predicate"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  ]
-                                }
-                              },
-                              "required": [
-                                "predicate"
-                              ],
-                              "additionalProperties": false
-                            }
-                          ]
-                        }
+                        "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates"
                       }
                     },
                     "required": [
@@ -5520,7 +6309,7 @@
                         "const": "any"
                       },
                       "predicates": {
-                        "$ref": "#/properties/bindingOverlays/items/properties/bindingBar/properties/visible/anyOf/2/properties/predicates/items/anyOf/3/properties/predicates"
+                        "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates/items/anyOf/3/properties/predicates"
                       }
                     },
                     "required": [
@@ -5535,11 +6324,97 @@
                         "const": "not"
                       },
                       "predicate": {
-                        "$ref": "#/properties/bindingOverlays/items/properties/bindingBar/properties/visible/anyOf/2/properties/predicates/items/anyOf/4/properties/predicate"
+                        "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates/items/anyOf/4/properties/predicate"
                       }
                     },
                     "required": [
                       "predicate"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "description": "The subject spoke within the last WindowSeconds \u2014 a chat line, a dialogue line, a live voice: every speech path stamps the same presentation clock, so the predicate reads one fact whatever produced it. Presence eases across FadeSeconds after the window like Recently.",
+                    "properties": {
+                      "$type": {
+                        "const": "speaking"
+                      },
+                      "subject": {
+                        "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates/items/anyOf/4/properties/predicate/anyOf/5/properties/subject"
+                      },
+                      "windowSeconds": {
+                        "type": "number"
+                      },
+                      "fadeSeconds": {
+                        "type": "number",
+                        "default": 0
+                      }
+                    },
+                    "required": [
+                      "subject",
+                      "windowSeconds"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "description": "The subject is within Distance world units of Of (the enclosing seat\u0027s avatar when null), read off the presentation poses each frame; an unresolvable subject is infinitely far.",
+                    "properties": {
+                      "$type": {
+                        "const": "near"
+                      },
+                      "subject": {
+                        "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates/items/anyOf/4/properties/predicate/anyOf/6/properties/subject"
+                      },
+                      "distance": {
+                        "type": "number"
+                      },
+                      "of": {
+                        "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates/items/anyOf/4/properties/predicate/anyOf/6/properties/of",
+                        "default": null
+                      }
+                    },
+                    "required": [
+                      "subject",
+                      "distance"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "description": "A state cell compares to a literal: Binding is state.\u003Crow\u003E[.\u003Ckey\u003E], and exactly one of Value (numeric rows) or Text (text rows, compared ordinally; only Equal/NotEqual) is authored. The same cell a bar\u0027s layoutCell or a wheel sector writes.",
+                    "properties": {
+                      "$type": {
+                        "const": "state"
+                      },
+                      "binding": {
+                        "type": "string"
+                      },
+                      "comparison": {
+                        "enum": [
+                          "Equal",
+                          "NotEqual",
+                          "Less",
+                          "LessOrEqual",
+                          "Greater",
+                          "GreaterOrEqual"
+                        ],
+                        "default": "Equal"
+                      },
+                      "value": {
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "text": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "default": null
+                      }
+                    },
+                    "required": [
+                      "binding"
                     ],
                     "additionalProperties": false
                   }
@@ -6509,6 +7384,45 @@
                       "smoothRate"
                     ],
                     "additionalProperties": false
+                  },
+                  {
+                    "description": "Rides a local seat\u0027s avatar \u2014 the body the seat perceives as its own, so possession follows \u2014 at its root or at a named part. Numbernull is the enclosing seat scope (the seat a HUD frame or view is being resolved for), an explicit number is 1-based. Presentation-only: a camera or speaker on this anchor is resolved per seat.",
+                    "properties": {
+                      "$type": {
+                        "const": "seat"
+                      },
+                      "number": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "partId": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "default": null
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "description": "Rides the body that most recently spoke (see OverlayPredicate.Speaking), at its root or a named part; resolves nothing until something has spoken.",
+                    "properties": {
+                      "$type": {
+                        "const": "recentSpeaker"
+                      },
+                      "partId": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "default": null
+                      }
+                    },
+                    "additionalProperties": false
                   }
                 ]
               },
@@ -7153,6 +8067,51 @@
               "secondsPerFrame": {
                 "description": "The creation timeline cadence when ReplayFrames is set.",
                 "type": "number"
+              },
+              "cues": {
+                "description": "The creation look\u0027s cues (see WorldLookCue); a firing cue\u0027s frame overrides the replay cursor for its hold.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "description": "One cue of a creation look: a named timeline frame the body holds for HoldSeconds when the cue fires \u2014 a blink, a twitch, a tail flick. A cue fires by itself on a semi-random interval drawn uniformly from MinSeconds..MaxSeconds (a deterministic presentation draw seeded by the body, never simulation state), and fires on demand through the stamp pool\u0027s TriggerCue door, which is how a face probe reading the player\u0027s own camera blinks the avatar in sync; a triggered cue re-arms the interval, so a driven cue never double-fires with the self schedule. Both interval bounds absent is a cue that fires only on demand.",
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "frame": {
+                      "description": "The creation timeline frame\u0027s name.",
+                      "type": "string"
+                    },
+                    "holdSeconds": {
+                      "description": "How long the frame holds, seconds.",
+                      "type": "number"
+                    },
+                    "minSeconds": {
+                      "description": "The shortest rest between self-fires, seconds, or null with MaxSeconds for a cue that never self-fires.",
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "maxSeconds": {
+                      "description": "The longest rest between self-fires, seconds.",
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    }
+                  },
+                  "required": [
+                    "frame",
+                    "holdSeconds"
+                  ],
+                  "additionalProperties": false
+                }
               }
             },
             "additionalProperties": false
@@ -7290,7 +8249,7 @@
                           "const": "all"
                         },
                         "predicates": {
-                          "$ref": "#/properties/bindingOverlays/items/properties/bindingBar/properties/visible/anyOf/2/properties/predicates"
+                          "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates"
                         }
                       },
                       "required": [
@@ -7305,7 +8264,7 @@
                           "const": "any"
                         },
                         "predicates": {
-                          "$ref": "#/properties/bindingOverlays/items/properties/bindingBar/properties/visible/anyOf/2/properties/predicates/items/anyOf/3/properties/predicates"
+                          "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates/items/anyOf/3/properties/predicates"
                         }
                       },
                       "required": [
@@ -7320,11 +8279,97 @@
                           "const": "not"
                         },
                         "predicate": {
-                          "$ref": "#/properties/bindingOverlays/items/properties/bindingBar/properties/visible/anyOf/2/properties/predicates/items/anyOf/4/properties/predicate"
+                          "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates/items/anyOf/4/properties/predicate"
                         }
                       },
                       "required": [
                         "predicate"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "The subject spoke within the last WindowSeconds \u2014 a chat line, a dialogue line, a live voice: every speech path stamps the same presentation clock, so the predicate reads one fact whatever produced it. Presence eases across FadeSeconds after the window like Recently.",
+                      "properties": {
+                        "$type": {
+                          "const": "speaking"
+                        },
+                        "subject": {
+                          "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates/items/anyOf/4/properties/predicate/anyOf/5/properties/subject"
+                        },
+                        "windowSeconds": {
+                          "type": "number"
+                        },
+                        "fadeSeconds": {
+                          "type": "number",
+                          "default": 0
+                        }
+                      },
+                      "required": [
+                        "subject",
+                        "windowSeconds"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "The subject is within Distance world units of Of (the enclosing seat\u0027s avatar when null), read off the presentation poses each frame; an unresolvable subject is infinitely far.",
+                      "properties": {
+                        "$type": {
+                          "const": "near"
+                        },
+                        "subject": {
+                          "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates/items/anyOf/4/properties/predicate/anyOf/6/properties/subject"
+                        },
+                        "distance": {
+                          "type": "number"
+                        },
+                        "of": {
+                          "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates/items/anyOf/4/properties/predicate/anyOf/6/properties/of",
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "subject",
+                        "distance"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "A state cell compares to a literal: Binding is state.\u003Crow\u003E[.\u003Ckey\u003E], and exactly one of Value (numeric rows) or Text (text rows, compared ordinally; only Equal/NotEqual) is authored. The same cell a bar\u0027s layoutCell or a wheel sector writes.",
+                      "properties": {
+                        "$type": {
+                          "const": "state"
+                        },
+                        "binding": {
+                          "type": "string"
+                        },
+                        "comparison": {
+                          "enum": [
+                            "Equal",
+                            "NotEqual",
+                            "Less",
+                            "LessOrEqual",
+                            "Greater",
+                            "GreaterOrEqual"
+                          ],
+                          "default": "Equal"
+                        },
+                        "value": {
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "text": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "binding"
                       ],
                       "additionalProperties": false
                     }
@@ -7410,7 +8455,7 @@
                       "const": "all"
                     },
                     "predicates": {
-                      "$ref": "#/properties/bindingOverlays/items/properties/bindingBar/properties/visible/anyOf/2/properties/predicates"
+                      "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates"
                     }
                   },
                   "required": [
@@ -7425,7 +8470,7 @@
                       "const": "any"
                     },
                     "predicates": {
-                      "$ref": "#/properties/bindingOverlays/items/properties/bindingBar/properties/visible/anyOf/2/properties/predicates/items/anyOf/3/properties/predicates"
+                      "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates/items/anyOf/3/properties/predicates"
                     }
                   },
                   "required": [
@@ -7440,11 +8485,97 @@
                       "const": "not"
                     },
                     "predicate": {
-                      "$ref": "#/properties/bindingOverlays/items/properties/bindingBar/properties/visible/anyOf/2/properties/predicates/items/anyOf/4/properties/predicate"
+                      "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates/items/anyOf/4/properties/predicate"
                     }
                   },
                   "required": [
                     "predicate"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "description": "The subject spoke within the last WindowSeconds \u2014 a chat line, a dialogue line, a live voice: every speech path stamps the same presentation clock, so the predicate reads one fact whatever produced it. Presence eases across FadeSeconds after the window like Recently.",
+                  "properties": {
+                    "$type": {
+                      "const": "speaking"
+                    },
+                    "subject": {
+                      "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates/items/anyOf/4/properties/predicate/anyOf/5/properties/subject"
+                    },
+                    "windowSeconds": {
+                      "type": "number"
+                    },
+                    "fadeSeconds": {
+                      "type": "number",
+                      "default": 0
+                    }
+                  },
+                  "required": [
+                    "subject",
+                    "windowSeconds"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "description": "The subject is within Distance world units of Of (the enclosing seat\u0027s avatar when null), read off the presentation poses each frame; an unresolvable subject is infinitely far.",
+                  "properties": {
+                    "$type": {
+                      "const": "near"
+                    },
+                    "subject": {
+                      "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates/items/anyOf/4/properties/predicate/anyOf/6/properties/subject"
+                    },
+                    "distance": {
+                      "type": "number"
+                    },
+                    "of": {
+                      "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates/items/anyOf/4/properties/predicate/anyOf/6/properties/of",
+                      "default": null
+                    }
+                  },
+                  "required": [
+                    "subject",
+                    "distance"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "description": "A state cell compares to a literal: Binding is state.\u003Crow\u003E[.\u003Ckey\u003E], and exactly one of Value (numeric rows) or Text (text rows, compared ordinally; only Equal/NotEqual) is authored. The same cell a bar\u0027s layoutCell or a wheel sector writes.",
+                  "properties": {
+                    "$type": {
+                      "const": "state"
+                    },
+                    "binding": {
+                      "type": "string"
+                    },
+                    "comparison": {
+                      "enum": [
+                        "Equal",
+                        "NotEqual",
+                        "Less",
+                        "LessOrEqual",
+                        "Greater",
+                        "GreaterOrEqual"
+                      ],
+                      "default": "Equal"
+                    },
+                    "value": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "text": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "default": null
+                    }
+                  },
+                  "required": [
+                    "binding"
                   ],
                   "additionalProperties": false
                 }
@@ -7580,7 +8711,7 @@
                         "const": "all"
                       },
                       "predicates": {
-                        "$ref": "#/properties/bindingOverlays/items/properties/bindingBar/properties/visible/anyOf/2/properties/predicates"
+                        "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates"
                       }
                     },
                     "required": [
@@ -7595,7 +8726,7 @@
                         "const": "any"
                       },
                       "predicates": {
-                        "$ref": "#/properties/bindingOverlays/items/properties/bindingBar/properties/visible/anyOf/2/properties/predicates/items/anyOf/3/properties/predicates"
+                        "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates/items/anyOf/3/properties/predicates"
                       }
                     },
                     "required": [
@@ -7610,11 +8741,97 @@
                         "const": "not"
                       },
                       "predicate": {
-                        "$ref": "#/properties/bindingOverlays/items/properties/bindingBar/properties/visible/anyOf/2/properties/predicates/items/anyOf/4/properties/predicate"
+                        "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates/items/anyOf/4/properties/predicate"
                       }
                     },
                     "required": [
                       "predicate"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "description": "The subject spoke within the last WindowSeconds \u2014 a chat line, a dialogue line, a live voice: every speech path stamps the same presentation clock, so the predicate reads one fact whatever produced it. Presence eases across FadeSeconds after the window like Recently.",
+                    "properties": {
+                      "$type": {
+                        "const": "speaking"
+                      },
+                      "subject": {
+                        "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates/items/anyOf/4/properties/predicate/anyOf/5/properties/subject"
+                      },
+                      "windowSeconds": {
+                        "type": "number"
+                      },
+                      "fadeSeconds": {
+                        "type": "number",
+                        "default": 0
+                      }
+                    },
+                    "required": [
+                      "subject",
+                      "windowSeconds"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "description": "The subject is within Distance world units of Of (the enclosing seat\u0027s avatar when null), read off the presentation poses each frame; an unresolvable subject is infinitely far.",
+                    "properties": {
+                      "$type": {
+                        "const": "near"
+                      },
+                      "subject": {
+                        "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates/items/anyOf/4/properties/predicate/anyOf/6/properties/subject"
+                      },
+                      "distance": {
+                        "type": "number"
+                      },
+                      "of": {
+                        "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates/items/anyOf/4/properties/predicate/anyOf/6/properties/of",
+                        "default": null
+                      }
+                    },
+                    "required": [
+                      "subject",
+                      "distance"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "description": "A state cell compares to a literal: Binding is state.\u003Crow\u003E[.\u003Ckey\u003E], and exactly one of Value (numeric rows) or Text (text rows, compared ordinally; only Equal/NotEqual) is authored. The same cell a bar\u0027s layoutCell or a wheel sector writes.",
+                    "properties": {
+                      "$type": {
+                        "const": "state"
+                      },
+                      "binding": {
+                        "type": "string"
+                      },
+                      "comparison": {
+                        "enum": [
+                          "Equal",
+                          "NotEqual",
+                          "Less",
+                          "LessOrEqual",
+                          "Greater",
+                          "GreaterOrEqual"
+                        ],
+                        "default": "Equal"
+                      },
+                      "value": {
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "text": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "default": null
+                      }
+                    },
+                    "required": [
+                      "binding"
                     ],
                     "additionalProperties": false
                   }
@@ -7831,6 +9048,331 @@
                       "description": "A Frame element\u0027s sampled-frame alpha, in [0, 1]. Ignored for every other kind.",
                       "type": "number",
                       "default": 1
+                    },
+                    "sources": {
+                      "description": "A Frame element\u0027s ranked source candidates \u2014 a portrait that shows the speaking character, else the webcam when the player chose it, else the seat\u0027s own avatar. Refused beside Source: a bare Source is exactly a one-entry list with no condition. At most MaxFrameCandidatesPerElement entries, every one counted toward MaxFrameSources.",
+                      "type": [
+                        "array",
+                        "null"
+                      ],
+                      "items": {
+                        "description": "One ranked source candidate of a Frame element: the frame shown while When holds. Candidates are walked in authored order every frame and the first holding one wins; a null predicate always holds, so the last row is the default.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "source": {
+                            "description": "The sampled frame while this candidate wins.",
+                            "type": "object",
+                            "required": [
+                              "$type"
+                            ],
+                            "anyOf": [
+                              {
+                                "description": "The platform\u0027s default live camera feed. The platform may negotiate a nearby extent; every screen and probe socket naming the same sensor shares one feed, opened at the richest profile any screen row requests.",
+                                "properties": {
+                                  "$type": {
+                                    "const": "camera"
+                                  },
+                                  "profile": {
+                                    "$ref": "#/properties/screens/items/properties/source/anyOf/3/properties/profile",
+                                    "default": null
+                                  },
+                                  "controls": {
+                                    "$ref": "#/properties/screens/items/properties/source/anyOf/3/properties/controls",
+                                    "default": null
+                                  },
+                                  "sensor": {
+                                    "description": "Which physical sensor this row\u0027s shared feed opens: Color (the default) or Infrared \u2014 the infrared frame source a Windows Hello capable device carries. Each sensor gets its own shared feed, so different rows may request different sensors at once; the engine honors a Windows Face Authentication Profile V2 when published and admits simultaneous capture only after both native streams prove live. A legacy provider available only to the Windows biometric broker is not a public dual-camera graph. An absent infrared source faults the bind loudly (the slot shows the no-signal card).",
+                                    "enum": [
+                                      "Color",
+                                      "Infrared"
+                                    ],
+                                    "default": "Color"
+                                  },
+                                  "seat": {
+                                    "description": "The 1-based local seat this row names \u2014 a camera is an input device seated like a pad, never hardware named directly. null means the enclosing seat scope (an identity\u0027s HUD panel, a seat-scoped probe socket) or seat 1 at world scope \u2014 the same explicit-index convention $channel:\u003Cseat\u003E and axis bindings already use. Validated within 1..population.localSeats when present. Omitted from the wire when null.",
+                                    "type": [
+                                      "integer",
+                                      "null"
+                                    ],
+                                    "default": null
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              {
+                                "description": "A named view from the presentation view stack, such as a monitor showing another camera\u0027s output.",
+                                "properties": {
+                                  "$type": {
+                                    "const": "view"
+                                  },
+                                  "cameraName": {
+                                    "description": "The registered view name this slot samples.",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "cameraName"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "description": "A declared probe\u0027s texture output \u2014 the frame a kind that declares an output writes each cycle (a relit camera frame, a mask), published like a camera feed. The probe must be a probes row of this document; whether its kind writes a texture is checked at boot against the kind\u0027s manifest.",
+                                "properties": {
+                                  "$type": {
+                                    "const": "probe"
+                                  },
+                                  "id": {
+                                    "description": "The probes[].id whose output this slot shows.",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "description": "A live compositor capture feed \u2014 a desktop window keyed by title, or a whole monitor keyed by index. The selector is the altitude of the primitive: MonitorIndex null is window mode; non-null is whole-monitor mode (and WindowTitle is unused).",
+                                "properties": {
+                                  "$type": {
+                                    "const": "capture"
+                                  },
+                                  "windowTitle": {
+                                    "description": "The captured window\u0027s title (window mode; ignored when MonitorIndex is set).",
+                                    "type": "string"
+                                  },
+                                  "profile": {
+                                    "$ref": "#/properties/screens/items/properties/source/anyOf/5/properties/profile"
+                                  },
+                                  "monitorIndex": {
+                                    "description": "The 0-based monitor to capture whole (0 = primary), or null for window mode.",
+                                    "type": [
+                                      "integer",
+                                      "null"
+                                    ],
+                                    "default": null
+                                  }
+                                },
+                                "required": [
+                                  "windowTitle",
+                                  "profile"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ]
+                          },
+                          "when": {
+                            "description": "The condition, evaluated for the panel\u0027s seat.",
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "required": [
+                              "$type"
+                            ],
+                            "anyOf": [
+                              {
+                                "description": "The fact holds this frame.",
+                                "properties": {
+                                  "$type": {
+                                    "const": "now"
+                                  },
+                                  "fact": {
+                                    "enum": [
+                                      "SeatInput",
+                                      "PointerMotion",
+                                      "WheelOpen",
+                                      "ConsoleOpen",
+                                      "SeatCameraApplication"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "fact"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "description": "The fact held within the last WindowSeconds.",
+                                "properties": {
+                                  "$type": {
+                                    "const": "recently"
+                                  },
+                                  "fact": {
+                                    "description": "The fact whose recency is tested.",
+                                    "enum": [
+                                      "SeatInput",
+                                      "PointerMotion",
+                                      "WheelOpen",
+                                      "ConsoleOpen",
+                                      "SeatCameraApplication"
+                                    ]
+                                  },
+                                  "windowSeconds": {
+                                    "description": "How long after the fact last held the predicate still holds in full.",
+                                    "type": "number"
+                                  },
+                                  "fadeSeconds": {
+                                    "description": "How long after the window the predicate\u0027s PRESENCE eases from 1 to 0 \u2014 a surface reading presence rather than the boolean fades out instead of cutting, and the predicate still HOLDS (presence above 0) throughout the fade. 0 cuts at the window\u0027s end.",
+                                    "type": "number",
+                                    "default": 0
+                                  }
+                                },
+                                "required": [
+                                  "fact",
+                                  "windowSeconds"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "description": "Every predicate holds.",
+                                "properties": {
+                                  "$type": {
+                                    "const": "all"
+                                  },
+                                  "predicates": {
+                                    "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates"
+                                  }
+                                },
+                                "required": [
+                                  "predicates"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "description": "At least one predicate holds.",
+                                "properties": {
+                                  "$type": {
+                                    "const": "any"
+                                  },
+                                  "predicates": {
+                                    "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates/items/anyOf/3/properties/predicates"
+                                  }
+                                },
+                                "required": [
+                                  "predicates"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "description": "The predicate does not hold.",
+                                "properties": {
+                                  "$type": {
+                                    "const": "not"
+                                  },
+                                  "predicate": {
+                                    "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates/items/anyOf/4/properties/predicate"
+                                  }
+                                },
+                                "required": [
+                                  "predicate"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "description": "The subject spoke within the last WindowSeconds \u2014 a chat line, a dialogue line, a live voice: every speech path stamps the same presentation clock, so the predicate reads one fact whatever produced it. Presence eases across FadeSeconds after the window like Recently.",
+                                "properties": {
+                                  "$type": {
+                                    "const": "speaking"
+                                  },
+                                  "subject": {
+                                    "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates/items/anyOf/4/properties/predicate/anyOf/5/properties/subject"
+                                  },
+                                  "windowSeconds": {
+                                    "type": "number"
+                                  },
+                                  "fadeSeconds": {
+                                    "type": "number",
+                                    "default": 0
+                                  }
+                                },
+                                "required": [
+                                  "subject",
+                                  "windowSeconds"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "description": "The subject is within Distance world units of Of (the enclosing seat\u0027s avatar when null), read off the presentation poses each frame; an unresolvable subject is infinitely far.",
+                                "properties": {
+                                  "$type": {
+                                    "const": "near"
+                                  },
+                                  "subject": {
+                                    "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates/items/anyOf/4/properties/predicate/anyOf/6/properties/subject"
+                                  },
+                                  "distance": {
+                                    "type": "number"
+                                  },
+                                  "of": {
+                                    "$ref": "#/properties/cameras/items/properties/anchors/items/properties/when/anyOf/2/properties/predicates/items/anyOf/4/properties/predicate/anyOf/6/properties/of",
+                                    "default": null
+                                  }
+                                },
+                                "required": [
+                                  "subject",
+                                  "distance"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "description": "A state cell compares to a literal: Binding is state.\u003Crow\u003E[.\u003Ckey\u003E], and exactly one of Value (numeric rows) or Text (text rows, compared ordinally; only Equal/NotEqual) is authored. The same cell a bar\u0027s layoutCell or a wheel sector writes.",
+                                "properties": {
+                                  "$type": {
+                                    "const": "state"
+                                  },
+                                  "binding": {
+                                    "type": "string"
+                                  },
+                                  "comparison": {
+                                    "enum": [
+                                      "Equal",
+                                      "NotEqual",
+                                      "Less",
+                                      "LessOrEqual",
+                                      "Greater",
+                                      "GreaterOrEqual"
+                                    ],
+                                    "default": "Equal"
+                                  },
+                                  "value": {
+                                    "type": [
+                                      "number",
+                                      "null"
+                                    ],
+                                    "default": null
+                                  },
+                                  "text": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ],
+                                    "default": null
+                                  }
+                                },
+                                "required": [
+                                  "binding"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ],
+                            "default": null
+                          }
+                        },
+                        "required": [
+                          "source"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "default": null
+                    },
+                    "fadeSeconds": {
+                      "description": "How long a Frame element cross-fades when its winning candidate changes; 0 cuts. Finite and non-negative.",
+                      "type": "number",
+                      "default": 0
                     }
                   },
                   "required": [
@@ -7874,6 +9416,369 @@
       },
       "required": [
         "level"
+      ],
+      "additionalProperties": false,
+      "default": null
+    },
+    "fields": {
+      "description": "The field lattice declaration \u2014 a presentation peer renders field geometry from the snapshot\u0027s cell deltas and needs the lattice footprint, height scales, and colours to do it.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "lattice": {
+          "description": "The lattice\u0027s extent, resolution, and step cadence.",
+          "type": "object",
+          "properties": {
+            "origin": {
+              "description": "The minimum corner, world units."
+            },
+            "cellSize": {
+              "description": "The cubic cell edge, world units.",
+              "type": "number"
+            },
+            "width": {
+              "description": "Cells along \u002BX.",
+              "type": "integer"
+            },
+            "depth": {
+              "description": "Cells along \u002BZ.",
+              "type": "integer"
+            },
+            "layers": {
+              "description": "Cells along \u002BY.",
+              "type": "integer",
+              "default": 1
+            },
+            "stepEveryTicks": {
+              "description": "Simulation ticks between reaction steps.",
+              "type": "integer",
+              "default": 8
+            }
+          },
+          "required": [
+            "origin",
+            "cellSize",
+            "width",
+            "depth"
+          ],
+          "additionalProperties": false
+        },
+        "fields": {
+          "description": "The declared fields, in order; a reaction, paint, or render row names them.",
+          "type": "array",
+          "items": {
+            "description": "One field: a scalar per cell clamped to [Min, Max].",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "name": {
+                "description": "The field\u0027s name \u2014 unique within the section, dot-free.",
+                "type": "string"
+              },
+              "initial": {
+                "description": "The value every cell starts at before paint.",
+                "type": "number",
+                "default": 0
+              },
+              "min": {
+                "description": "The least value a cell holds.",
+                "type": "number",
+                "default": 0
+              },
+              "max": {
+                "description": "The greatest value a cell holds.",
+                "type": "number",
+                "default": 1
+              },
+              "heightScale": {
+                "description": "World units of solid surface per unit of value above the lattice origin \u2014 0 for a field that is not geometry.",
+                "type": "number",
+                "default": 0
+              },
+              "color": {
+                "description": "The #RRGGBB the field\u0027s surface shades with; required when HeightScale is nonzero.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "reactions": {
+          "description": "The per-step reactions, applied in document order each lattice step.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "description": "One reaction \u2014 a local rule every cell (or every tagged body) applies each lattice step. Reactions run in document order; Diffuse reads the previous step\u0027s values for the whole field, every other kind reads and writes cells in place, row-major.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "$type"
+            ],
+            "anyOf": [
+              {
+                "description": "Moves each cell a fraction of the way toward the mean of its face neighbours (four on a ground lattice, six in a volume).",
+                "properties": {
+                  "$type": {
+                    "const": "diffuse"
+                  },
+                  "field": {
+                    "description": "The field diffused.",
+                    "type": "string"
+                  },
+                  "rate": {
+                    "description": "The fraction per step, in [0, 1].",
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "field",
+                  "rate"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "description": "Scales each cell toward zero: v -= v\u00B7rate.",
+                "properties": {
+                  "$type": {
+                    "const": "decay"
+                  },
+                  "field": {
+                    "description": "The field decayed.",
+                    "type": "string"
+                  },
+                  "rate": {
+                    "description": "The fraction per step, in [0, 1].",
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "field",
+                  "rate"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "description": "Where every condition holds at a cell, applies every write at that cell \u2014 ignition, melting, evaporation, freezing are rows of this shape.",
+                "properties": {
+                  "$type": {
+                    "const": "transform"
+                  },
+                  "when": {
+                    "description": "The conditions, all of which must hold.",
+                    "type": "array",
+                    "items": {
+                      "description": "One per-cell condition of a Transform.",
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "field": {
+                          "description": "The field read at the cell.",
+                          "type": "string"
+                        },
+                        "comparison": {
+                          "description": "The comparison.",
+                          "enum": [
+                            "Equal",
+                            "NotEqual",
+                            "Less",
+                            "LessOrEqual",
+                            "Greater",
+                            "GreaterOrEqual"
+                          ]
+                        },
+                        "value": {
+                          "description": "The constant compared against.",
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "field",
+                        "comparison",
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "then": {
+                    "description": "The writes, applied in order.",
+                    "type": "array",
+                    "items": {
+                      "description": "One per-cell write of a Transform.",
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "field": {
+                          "description": "The field written at the cell.",
+                          "type": "string"
+                        },
+                        "op": {
+                          "description": "Set or add.",
+                          "enum": [
+                            "Set",
+                            "Add"
+                          ]
+                        },
+                        "value": {
+                          "description": "The constant written or added; the result clamps to the field\u0027s range.",
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "field",
+                        "op",
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "when",
+                  "then"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "description": "Every active body whose cell in the keyed state row Tag reads nonzero adds Amount to Field at the cell it occupies \u2014 a burning body is a heat source.",
+                "properties": {
+                  "$type": {
+                    "const": "emit"
+                  },
+                  "tag": {
+                    "description": "The keyed int state row whose nonzero cells name the emitting bodies.",
+                    "type": "string"
+                  },
+                  "field": {
+                    "description": "The field deposited into.",
+                    "type": "string"
+                  },
+                  "amount": {
+                    "description": "The amount per step; the cell clamps to the field\u0027s range.",
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "tag",
+                  "field",
+                  "amount"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "description": "Writes 1 or 0 into Row\u0027s cell for every active body, by whether Field at the body\u0027s cell satisfies the comparison \u2014 a body standing in a burning cell becomes tagged, and body-level chemistry takes it from there.",
+                "properties": {
+                  "$type": {
+                    "const": "expose"
+                  },
+                  "field": {
+                    "description": "The field sampled at the body.",
+                    "type": "string"
+                  },
+                  "comparison": {
+                    "description": "The comparison.",
+                    "enum": [
+                      "Equal",
+                      "NotEqual",
+                      "Less",
+                      "LessOrEqual",
+                      "Greater",
+                      "GreaterOrEqual"
+                    ]
+                  },
+                  "value": {
+                    "description": "The constant compared against.",
+                    "type": "number"
+                  },
+                  "row": {
+                    "description": "The keyed int state row written, keyed by body index.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "field",
+                  "comparison",
+                  "value",
+                  "row"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "default": null
+        },
+        "paint": {
+          "description": "The initial fills, applied in order over the fields\u0027 Initial.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "description": "One initial fill: every cell whose XZ centre lies in the rectangle takes Value.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "field": {
+                "description": "The field painted.",
+                "type": "string"
+              },
+              "value": {
+                "description": "The value written.",
+                "type": "number"
+              },
+              "minX": {
+                "description": "The rectangle\u0027s least X, world units.",
+                "type": "number"
+              },
+              "minZ": {
+                "description": "The rectangle\u0027s least Z, world units.",
+                "type": "number"
+              },
+              "maxX": {
+                "description": "The rectangle\u0027s greatest X, world units.",
+                "type": "number"
+              },
+              "maxZ": {
+                "description": "The rectangle\u0027s greatest Z, world units.",
+                "type": "number"
+              }
+            },
+            "required": [
+              "field",
+              "value",
+              "minX",
+              "minZ",
+              "maxX",
+              "maxZ"
+            ],
+            "additionalProperties": false
+          },
+          "default": null
+        }
+      },
+      "required": [
+        "lattice",
+        "fields"
       ],
       "additionalProperties": false,
       "default": null

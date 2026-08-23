@@ -12,6 +12,8 @@ namespace Puck.World;
 [JsonDerivedType(typeof(WorldAnchor.EntityPart), typeDiscriminator: "entityPart")]
 [JsonDerivedType(typeof(WorldAnchor.Placement), typeDiscriminator: "placement")]
 [JsonDerivedType(typeof(WorldAnchor.Group), typeDiscriminator: "group")]
+[JsonDerivedType(typeof(WorldAnchor.Seat), typeDiscriminator: "seat")]
+[JsonDerivedType(typeof(WorldAnchor.RecentSpeaker), typeDiscriminator: "recentSpeaker")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record WorldAnchor {
     private WorldAnchor() {
@@ -42,4 +44,15 @@ public abstract record WorldAnchor {
     /// <param name="SmoothRate">The exponential smoothing rate (per second) the centroid/spread ease at (validated
     /// positive and finite) — seeded un-smoothed on first resolve so a camera does not fly in from the origin.</param>
     public sealed record Group(IReadOnlyList<int>? Indices, float SmoothRate) : WorldAnchor;
+    /// <summary>Rides a local seat's avatar — the body the seat perceives as its own, so possession follows — at its
+    /// root or at a named part. <paramref name="Number"/> <see langword="null"/> is the enclosing seat scope (the seat
+    /// a HUD frame or view is being resolved for), an explicit number is 1-based. Presentation-only: a camera or
+    /// speaker on this anchor is resolved per seat.</summary>
+    public sealed record Seat(
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Number = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? PartId = null
+    ) : WorldAnchor;
+    /// <summary>Rides the body that most recently spoke (see <c>OverlayPredicate.Speaking</c>), at its root or a named
+    /// part; resolves nothing until something has spoken.</summary>
+    public sealed record RecentSpeaker([property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? PartId = null) : WorldAnchor;
 }

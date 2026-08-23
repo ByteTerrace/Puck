@@ -32,7 +32,7 @@ namespace Puck.World;
 /// <c>Server.WorldOwnedWorlds.Decide</c> already applies to an undeclared cross-document delivery target,
 /// restated here for a self-write so the two never disagree about what "undeclared" means.</para>
 /// </remarks>
-internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster roster, WorldServer server) : ICommandModule {
+internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster roster, WorldServer server, WorldOverlayFacts facts) : ICommandModule {
     /// <summary>The bounded, evicting row every log/inbox declares — small enough to prove eviction with a short
     /// script, large enough to be a plausible chat window.</summary>
     private const int ChatCapacity = 8;
@@ -42,6 +42,7 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
     private readonly WorldOwnedWorlds m_worlds = worlds;
     private readonly PlayerRoster m_roster = roster;
     private readonly WorldServer m_server = server;
+    private readonly WorldOverlayFacts m_facts = facts;
 
     private CommandResult Allow(CommandContext context, WireArgs args) {
         if (args.Count is not (1 or 2)) {
@@ -290,10 +291,22 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
         }
 
         m_worlds.Save();
+        NoteSpoke(player: player);
 
         return new CommandResult(Output: $"[chat.log: p{player} world:{identity.Id} appended{((evicted is { } victim)
             ? $" evicted={victim}"
             : string.Empty)}]");
+    }
+    // A spoken line stamps the speech clock for the body the player drives (its own body when the slot drives
+    // nothing), so a Speaking predicate or a RecentSpeaker anchor follows the driven avatar.
+    private void NoteSpoke(int player) {
+        var slot = (player - 1);
+        var target = m_roster.DriveTarget(slot: slot);
+
+        m_facts.NoteSpoke(bodyIndex: ((((uint)target) < ((uint)WorldClient.EntityCapacity))
+            ? target
+            : slot
+        ));
     }
     // The raw text tail after skipTokensIncludingVerb whitespace-delimited tokens (verb included) — the SAME
     // reconstruction-from-raw-line approach WorldStateCommandModule.RawTextTail/IdentityCommandModule.DeliverTextTail
@@ -467,6 +480,10 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
             Text: text
         );
         var receipt = m_worlds.Submit(submission: submission);
+
+        if (receipt.Accepted) {
+            NoteSpoke(player: player);
+        }
 
         return new CommandResult(Output: $"[chat.whisper: from=world:{identity.Id} to=world:{recipientId} verdict={(receipt.Accepted
             ? "accepted"

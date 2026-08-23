@@ -122,6 +122,22 @@ public static partial class WorldDefinitionValidator {
                 }
 
                 break;
+            case WorldAnchor.Seat seat:
+                if ((seat.Number is { } number) && ((number < 1) || (number > WorldPopulationLimits.LocalSeatCount))) {
+                    errors.Add(item: $"{path}.number {number} is outside 1..{WorldPopulationLimits.LocalSeatCount}.");
+                }
+
+                if ((seat.PartId is { } seatPart) && string.IsNullOrWhiteSpace(value: seatPart)) {
+                    errors.Add(item: $"{path}.partId must not be blank when present.");
+                }
+
+                break;
+            case WorldAnchor.RecentSpeaker speaker:
+                if ((speaker.PartId is { } speakerPart) && string.IsNullOrWhiteSpace(value: speakerPart)) {
+                    errors.Add(item: $"{path}.partId must not be blank when present.");
+                }
+
+                break;
             default:
                 errors.Add(item: $"{path} is an unknown anchor kind.");
 
@@ -735,7 +751,7 @@ public static partial class WorldDefinitionValidator {
     // the GPU-safety MaxLookScale ceiling, and non-negative motion values — rejecting a zero-hold replay (an infinite
     // loop) and a timeline replay on a catalog source (no timeline to replay) LOUDLY, never silently. Returns the
     // resolved look-name set (a future Inhabit facet resolves its Look against it).
-    private static HashSet<string> ValidateLooks(IReadOnlyList<WorldLook> looks, HashSet<string> creationIds, List<string> errors) {
+    private static HashSet<string> ValidateLooks(IReadOnlyList<WorldLook> looks, HashSet<string> creationIds, IReadOnlyList<WorldCreation> creations, List<string> errors) {
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         for (var index = 0; (index < looks.Count); index++) {
@@ -822,6 +838,44 @@ public static partial class WorldDefinitionValidator {
                 (!float.IsFinite(f: look.Motion.SecondsPerFrame) || (look.Motion.SecondsPerFrame <= 0f))
             ) {
                 errors.Add(item: $"{path}.motion.replayFrames requires a positive secondsPerFrame (a zero-hold replay is an infinite loop).");
+            }
+
+            if (look.Motion.Cues is { } cues) {
+                var frames = ((!isCatalog && (look.Source is WorldLookSource.Creation cueCreation))
+                    ? WorldDefinitionRows.FindCreation(creations: creations, id: cueCreation.CreationId)?.Document.Frames
+                    : null
+                );
+
+                if (isCatalog) {
+                    errors.Add(item: $"{path}.motion.cues cannot be set on a catalog source — there is no timeline to cue.");
+                }
+
+                for (var cueIndex = 0; (cueIndex < cues.Count); cueIndex++) {
+                    var cue = cues[cueIndex];
+                    var cuePath = $"{path}.motion.cues[{cueIndex}]";
+
+                    if (cue is null) {
+                        errors.Add(item: $"{cuePath} is required.");
+
+                        continue;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(value: cue.Frame)) {
+                        errors.Add(item: $"{cuePath}.frame is required.");
+                    } else if (!isCatalog && (frames is not null) && !frames.Any(predicate: frame => string.Equals(a: frame?.Name, b: cue.Frame, comparisonType: StringComparison.Ordinal))) {
+                        errors.Add(item: $"{cuePath}.frame '{cue.Frame}' names no frame of the look's creation timeline.");
+                    }
+
+                    if (!float.IsFinite(f: cue.HoldSeconds) || (cue.HoldSeconds <= 0f)) {
+                        errors.Add(item: $"{cuePath}.holdSeconds must be positive and finite.");
+                    }
+
+                    if ((cue.MinSeconds is null) != (cue.MaxSeconds is null)) {
+                        errors.Add(item: $"{cuePath} needs both minSeconds and maxSeconds, or neither (a cue that fires only on demand).");
+                    } else if ((cue.MinSeconds is { } min) && (cue.MaxSeconds is { } max) && (!float.IsFinite(f: min) || !float.IsFinite(f: max) || (min < 0f) || (max < min))) {
+                        errors.Add(item: $"{cuePath} needs 0 <= minSeconds <= maxSeconds, finite.");
+                    }
+                }
             }
         }
 

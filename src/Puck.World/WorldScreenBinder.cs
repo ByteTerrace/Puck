@@ -64,6 +64,9 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     // Every session-sourced screen's registration name, so a lifecycle/teardown pass can re-derive the ViewStack key
     // without threading it through every call site.
     private const string SessionRegistrationPrefix = "session:";
+    // The seat a screen row, a probe export, or a console bind resolves a seat-relative camera against: none of
+    // them carries an enclosing seat, so they film seat 1's view.
+    private const int DefaultViewSeat = 1;
 
     // The anchor source for anchored cameras (the client's snapshot-fed entity view). Anchor ids are entity indices,
     // so an Anchored view follows the same interpolated render pose the main world draws without reaching into
@@ -84,6 +87,9 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     // type's own remarks.
     private readonly WorldMachineHost m_machines;
     private readonly WorldStampPool m_stamps;
+    private readonly WorldPerceptionAnchor m_perception;
+    // Resolved lazily: the facts read the input router, which the composition root registers after this binder.
+    private readonly Func<WorldOverlayFacts> m_facts;
     private readonly DirectXGpuSurfaceExportFactory? m_surfaceExport;
     // The backend-neutral surface-transfer factory — the Vulkan host's camera GPU tier imports its shared camera
     // targets through it (the D3D12 host samples its own resources directly and never calls it for the camera).
@@ -163,6 +169,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     // camera mutation diffs against the row the LIVE view embodies (pose edit = rig property write; dimension/kind
     // change = release + recreate).
     private readonly Dictionary<string, CameraRegistration> m_cameraViews = new(comparer: StringComparer.Ordinal);
+    private readonly HashSet<string> m_parkedViews = new(comparer: StringComparer.Ordinal);
     // Reused scratch for ReconcileCameras (the registered names snapshot walked while m_cameraViews mutates).
     private readonly List<string> m_cameraReconcileScratch = new();
     // A jumbotron is a diegetic 160x144 display, not another full-rate player view. ViewStack already persists the last
@@ -185,6 +192,8 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     /// <param name="cameras">The world's placeable cameras a View (jumbotron) screen resolves its camera name against.</param>
     /// <param name="anchors">The entity anchor source used by anchored cameras (the client's snapshot-fed view).</param>
     /// <param name="stamps">The compiled creation-look pool supplying authored entity parts.</param>
+    /// <param name="perception">The per-seat perception anchor a seat-relative camera anchor resolves through.</param>
+    /// <param name="facts">The overlay facts a ranked camera anchor list selects through (resolved on first use).</param>
     /// <param name="hostsOnDirectX">Whether the host backend is Direct3D 12 — selects the GPU capture transport for
     /// window/monitor captures (the Vulkan host keeps their CPU-pixel path). The shared camera rides its GPU tier on
     /// both hosts; this flag only picks how its shared targets are allocated and sampled.</param>
@@ -192,7 +201,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     /// destination instance is found or started here.</param>
     /// <param name="roster">The player roster — resolves a seat to its bound camera device.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldScreenBinder(IReadOnlyList<WorldScreen> screens, WorldMachineHost machines, ICameraCaptureService cameraCapture, INativeImageCaptureService windowCapture, IGpuSurfaceTransferFactory? surfaceTransfers, IReadOnlyList<WorldCamera> cameras, ISdfAnchorSource anchors, WorldStampPool stamps, bool hostsOnDirectX, WorldInstanceHost instanceHost, PlayerRoster roster) {
+    public WorldScreenBinder(IReadOnlyList<WorldScreen> screens, WorldMachineHost machines, ICameraCaptureService cameraCapture, INativeImageCaptureService windowCapture, IGpuSurfaceTransferFactory? surfaceTransfers, IReadOnlyList<WorldCamera> cameras, ISdfAnchorSource anchors, WorldStampPool stamps, WorldPerceptionAnchor perception, Func<WorldOverlayFacts> facts, bool hostsOnDirectX, WorldInstanceHost instanceHost, PlayerRoster roster) {
         ArgumentNullException.ThrowIfNull(argument: screens);
         ArgumentNullException.ThrowIfNull(argument: machines);
         ArgumentNullException.ThrowIfNull(argument: cameraCapture);
@@ -200,6 +209,8 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         ArgumentNullException.ThrowIfNull(argument: cameras);
         ArgumentNullException.ThrowIfNull(argument: anchors);
         ArgumentNullException.ThrowIfNull(argument: stamps);
+        ArgumentNullException.ThrowIfNull(argument: perception);
+        ArgumentNullException.ThrowIfNull(argument: facts);
         ArgumentNullException.ThrowIfNull(argument: instanceHost);
         ArgumentNullException.ThrowIfNull(argument: roster);
 
@@ -210,6 +221,8 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         m_cameras = cameras;
         m_anchors = anchors;
         m_stamps = stamps;
+        m_perception = perception;
+        m_facts = facts;
         m_hostsOnDirectX = hostsOnDirectX;
         m_instanceHost = instanceHost;
         m_roster = roster;
@@ -279,7 +292,10 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
                     // deferred to ConfigureViews (the offscreen render envelope is not known until the frame source has
                     // probed it).
                     if (ResolveCamera(name: view.CameraName) is { } camera) {
-                        slot.View = new ViewFeed(name: camera.Name);
+                        slot.View = new ViewFeed(name: WorldSeatAnchors.RegistrationName(
+                            camera: camera,
+                            seat: DefaultViewSeat
+                        ));
                     } else {
                         slot.DeclaredFault = $"camera '{view.CameraName}' not declared";
                     }

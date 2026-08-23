@@ -573,7 +573,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
 
         m_frameSlotOverflowEpisodeOpen = true;
 
-        Console.Error.WriteLine(value: $"[unified-overlay] more than {OverlayFrameSlots.SlotCount} distinct HUD frame source bindings were requested this frame; the additional element was omitted because every shader-backed frame slot was occupied. Each HUD document is capped at {OverlayFrameSlots.SlotCount}; reduce the combined world-plus-seat source set.");
+        Console.Error.WriteLine(value: $"[unified-overlay] more than {OverlayFrameSlots.SlotCount} distinct HUD frame source bindings were requested this frame; the additional element was omitted because every shader-backed frame slot was occupied. Each HUD document is capped at {OverlayFrameSlots.SlotCount}, and a cross-fading element occupies two slots (its incoming and outgoing sources) until the fade completes; reduce the combined world-plus-seat source set.");
     }
     // CAUSE 2: the writer itself refused content before ever offering it to the builder (NoteRefused), or a
     // WriteText run was truncated by its own caller's maxChars — a deliberate, pinned limit the writer authored,

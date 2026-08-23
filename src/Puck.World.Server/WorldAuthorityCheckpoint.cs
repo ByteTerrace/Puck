@@ -116,7 +116,8 @@ public sealed record WorldAuthorityHostRowCheckpoint(
 /// <summary>
 /// A full simulation-state image of one <see cref="WorldServer"/> and the subsystems it owns, plus this row's slice
 /// of the host engine — see <see cref="WorldServer.TryCaptureCheckpoint"/> for the capture point, the arm gate, and
-/// what each section excludes and why.
+/// what each section excludes and why. <see cref="WorldAuthorityCheckpoint.Fields"/> is present exactly when the
+/// captured definition declares a field lattice.
 /// </summary>
 public sealed record WorldAuthorityCheckpoint(
     WorldServer.WorldServerCheckpoint Server,

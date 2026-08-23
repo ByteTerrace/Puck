@@ -52,6 +52,7 @@ internal sealed class WorldOverlayFrameSources : IOverlayFrameSources {
             return;
         }
 
+        m_binder.ForgetFrameSource(source: entry.Source, seat: entry.Seat);
         _ = m_keys.Remove(key: (entry.StructuralSource, entry.Seat));
         m_sources[key] = null;
         m_freeKeys.Push(item: key);

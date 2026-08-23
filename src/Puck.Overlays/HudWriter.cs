@@ -11,6 +11,8 @@ namespace Puck.Overlays;
 /// clip-scope contract every per-seat writer uses.
 /// </summary>
 public sealed class HudWriter {
+    // The panel being emitted's presence — multiplied into its chrome and every element's alpha.
+    private float m_panelAlpha = 1f;
     // A gauge's label run is clipped to this many characters; TextRunChars is the wider bound the reservation takes.
     private const int GaugeLabelChars = 16;
 
@@ -122,7 +124,7 @@ public sealed class HudWriter {
                     h: h,
                     role: element.Role,
                     radius: 0f,
-                    alpha: 1f
+                    alpha: m_panelAlpha
                 );
 
                 break;
@@ -162,7 +164,9 @@ public sealed class HudWriter {
     }
     // A slot with no live lease this frame (an unassigned source, an unopened camera, every slot already taken)
     // draws nothing — never a placeholder — so a face cam with no camera attached is simply an empty rect, not a
-    // stand-in graphic the writer would need to author.
+    // stand-in graphic the writer would need to author. The outgoing side of a cross-fade degrades the same way:
+    // when its bind fails the winner draws alone at full mix, since the fade exists to soften a switch that has
+    // already happened, never to hold the picture hostage to a source that cannot show.
     private void EmitFrame(OverlayFrameBuilder builder, in OverlayHudElement element, float x, float y, float w, float h) {
         if (element.FrameSource < 0) {
             return;
@@ -174,13 +178,26 @@ public sealed class HudWriter {
             return;
         }
 
+        var slotB = -1;
+        var mix = 1f;
+
+        if (element.FrameSourceB >= 0) {
+            slotB = m_frameSlots.Bind(key: element.FrameSourceB);
+
+            if (slotB >= 0) {
+                mix = element.FrameMix;
+            }
+        }
+
         builder.WriteFrame(
-            alpha: element.Opacity,
+            alpha: (element.Opacity * m_panelAlpha),
             fit: element.Fit,
             h: h,
             mirror: element.Mirror,
+            mix: mix,
             radius: element.Radius,
             slot: slot,
+            slotB: slotB,
             w: w,
             x: x,
             y: y
@@ -209,7 +226,7 @@ public sealed class HudWriter {
         // Track (always the full extent) + fill (scaled by the resolved fraction) + a short value label — the
         // GaugeElementCost records the reservation counts per gauge.
         builder.WriteRect(
-            alpha: m_theme.Current.Chrome.DimQuietAlpha,
+            alpha: (m_theme.Current.Chrome.DimQuietAlpha * m_panelAlpha),
             h: h,
             radius: 0f,
             role: OverlayColorRole.SurfaceInset,
@@ -224,14 +241,14 @@ public sealed class HudWriter {
             h: h,
             role: element.Role,
             radius: 0f,
-            alpha: 1f
+            alpha: m_panelAlpha
         );
 
         if (label.Length > 0) {
             var cellHeight = OverlayFrameBuilder.CellHeight(sizePx: h);
 
             builder.WriteText(
-                alpha: 1f,
+                alpha: m_panelAlpha,
                 cellHeight: cellHeight,
                 maxChars: GaugeLabelChars,
                 role: OverlayColorRole.TextPrimary,
@@ -243,6 +260,8 @@ public sealed class HudWriter {
     }
     private void EmitPanel(OverlayFrameBuilder builder, in OverlayHudPanel panel) {
         var rect = panel.Rect;
+
+        m_panelAlpha = panel.Alpha;
 
         if (
             (rect.Width <= 0f) ||
@@ -271,7 +290,7 @@ public sealed class HudWriter {
             bandHeight: 0f,
             style: panel.Style,
             ringRole: null,
-            alpha: 1f
+            alpha: panel.Alpha
         );
 
         var elements = panel.Elements.Span;
@@ -314,6 +333,8 @@ public sealed class HudWriter {
         var panel = seat.Panel;
         var rect = panel.Rect;
 
+        m_panelAlpha = panel.Alpha;
+
         if (
             (rect.Width > 0f) &&
             (rect.Height > 0f)
@@ -332,7 +353,7 @@ public sealed class HudWriter {
                 bandHeight: 0f,
                 style: panel.Style,
                 ringRole: null,
-                alpha: 1f
+                alpha: panel.Alpha
             );
 
             var elements = panel.Elements.Span;

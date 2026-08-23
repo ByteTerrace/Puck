@@ -27,9 +27,9 @@ public interface ISdfBrickBakeService {
     /// <param name="slot">The pool slot, in <c>[0, <see cref="SdfBrickPoolLayout.MaxBricks"/>)</c>.</param>
     /// <param name="request">The bake request (box, cell size, dims, 1/λ, and the sphere carves).</param>
     void RequestBrickBake(int slot, BrickBakeRequest request);
-    /// <summary>Writes host-baked voxel distances straight into a brick slot and marks it ready — the path for a
-    /// brick whose field is produced on the CPU rather than by the sphere-union baker. Values are the pool's stored
-    /// scale (distance/λ).</summary>
+    /// <summary>Queues host-baked voxel distances for a brick slot — the path for a field produced on the CPU rather
+    /// than by the sphere-union baker. The engine marks the slot <see cref="BrickBakeState.Ready"/> after a later
+    /// produced frame records the upload; values are the pool's stored scale (distance/λ).</summary>
     /// <param name="slot">The brick slot.</param>
     /// <param name="dimX">Voxels along X.</param>
     /// <param name="dimY">Voxels along Y.</param>

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Puck.Overlays;
 using Puck.World.Client;
 
@@ -16,7 +17,10 @@ namespace Puck.World;
 /// refreshed the other. Live binding values are resolved separately, every frame, by <see cref="HudWriter"/> through
 /// <see cref="WorldHudBindingResolver"/>; this feed only republishes structure (which panels/elements exist, their
 /// rects, their style, which binding token or parsed template runs each names, and which seat's viewport a
-/// player-scope panel is confined to).
+/// player-scope panel is confined to). A <c>Frame</c> element's ranked source candidates are keyed once at structure
+/// build and ranked every produced frame: the first candidate whose condition holds wins, and a change of winner
+/// cross-fades on the presentation clock for the element's <c>fadeSeconds</c>, both keys staying active until the
+/// fade completes. Fade state lives per (panel, element, seat) inside the build, so a steady frame allocates nothing.
 /// </summary>
 internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudStore store, WorldOverlayFacts facts, WorldOverlayFrameSources frameSources) {
     private readonly WorldClient m_client = client;
@@ -29,18 +33,21 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
     // edit publishes a new WorldHudPanel instance, so reference identity is an exact staleness test — the cheap
     // revision check world scope has, expressed at the only grain seat scope offers.
     private readonly WorldHudPanel?[] m_seatSources = new WorldHudPanel?[PlayerRoster.MaxSlots];
-    private readonly OverlayHudPanel[] m_seatBuilds = new OverlayHudPanel[PlayerRoster.MaxSlots];
+    private readonly PanelBuild?[] m_seatBuilds = new PanelBuild?[PlayerRoster.MaxSlots];
     private int m_seenRevision = -1;
-    private OverlayHudPanel[] m_worldPanels = [];
+    private WorldHudSection? m_seenHud;
+    private PanelBuild[] m_worldPanels = [];
     private OverlayHudPanel[] m_visiblePanels = [];
     private WorldHudPanel[] m_worldSources = [];
 
-    // A Frame element's Source (present only for that kind, enforced at validation) resolves through the process's
-    // one WorldOverlayFrameSources — the same key a non-Frame element carries -1 for, meaning "no source to bind".
-    // seat is the enclosing seat scope a bare (Seat-less) camera source falls back to: the owning identity panel's
-    // slot+1 for a player-scope panel, or 1 for a world-scope panel.
-    private OverlayHudElement[] BuildElements(IReadOnlyList<WorldHudElement> elements, int seat) {
+    // Every Frame candidate's source (present only for that kind, enforced at validation) resolves to a key through
+    // the process's one WorldOverlayFrameSources at build; a non-Frame element carries no candidate state and -1 for
+    // "no source to bind". seat is the enclosing seat scope a bare (Seat-less) camera source falls back to: the
+    // owning identity panel's slot+1 for a player-scope panel, or 1 for a world-scope panel.
+    private PanelBuild BuildPanel(WorldHudPanel panel, int seat, int slot) {
+        var elements = panel.Elements;
         var built = new OverlayHudElement[elements.Count];
+        var frames = new FrameElementState?[elements.Count];
 
         for (var index = 0; (index < elements.Count); index++) {
             var element = elements[index];
@@ -52,66 +59,136 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
                 Text: element.Text,
                 Binding: element.Binding,
                 Template: BuildTemplate(template: element.Template),
-                FrameSource: ((element.Source is { } source)
-                    ? m_frameSources.KeyFor(source: source, seat: seat)
-                    : -1
-                ),
+                FrameSource: -1,
                 Fit: ToFit(fit: element.Fit),
                 Mirror: element.Mirror,
                 Radius: element.Radius,
                 Opacity: element.Opacity
             );
+
+            if (element.Kind != WorldHudElementKind.Frame) {
+                continue;
+            }
+
+            var candidates = element.FrameCandidates;
+
+            if (candidates.Count == 0) {
+                continue;
+            }
+
+            var keys = new int[candidates.Count];
+            var whens = new OverlayPredicate?[candidates.Count];
+
+            for (var candidate = 0; (candidate < candidates.Count); candidate++) {
+                keys[candidate] = m_frameSources.KeyFor(
+                    seat: seat,
+                    source: candidates[candidate].Source
+                );
+                whens[candidate] = candidates[candidate].When;
+            }
+
+            frames[index] = new FrameElementState(
+                fadeSeconds: element.FadeSeconds,
+                keys: keys,
+                whens: whens
+            );
         }
 
-        return built;
-    }
-    private OverlayHudPanel BuildPanel(WorldHudPanel panel, int seat) {
-        return new OverlayHudPanel(
-            Id: panel.Id,
-            Rect: ToOverlayRect(rect: panel.Rect),
-            Band: ToBand(layer: panel.Layer),
-            Style: ToStyle(style: panel.Style),
-            Elements: BuildElements(elements: panel.Elements, seat: seat)
+        return new PanelBuild(
+            elements: built,
+            frames: frames,
+            panel: new OverlayHudPanel(
+                Id: panel.Id,
+                Rect: ToOverlayRect(rect: panel.Rect),
+                Band: ToBand(layer: panel.Layer),
+                Style: ToStyle(style: panel.Style),
+                Elements: built
+            ),
+            slot: slot
         );
     }
-    private OverlayHudPanel[] BuildPanels(IReadOnlyList<WorldHudPanel> panels) {
-        var built = new OverlayHudPanel[panels.Count];
+    private PanelBuild[] BuildPanels(IReadOnlyList<WorldHudPanel> panels) {
+        var built = new PanelBuild[panels.Count];
 
         for (var index = 0; (index < panels.Count); index++) {
-            built[index] = BuildPanel(panel: panels[index], seat: 1);
+            built[index] = BuildPanel(
+                panel: panels[index],
+                seat: 1,
+                slot: -1
+            );
         }
 
         return built;
     }
-    private void MarkFrameSources(OverlayHudPanel panel) {
-        foreach (var element in panel.Elements.Span) {
-            if (element.FrameSource >= 0) {
-                m_frameSources.MarkActive(key: element.FrameSource);
+    private static double NowSeconds() => (((double)Stopwatch.GetTimestamp()) / Stopwatch.Frequency);
+    // Ranks every Frame element of a visible build for this frame: the first candidate whose condition holds for
+    // the build's scope wins, the element's cross-fade advances on the presentation clock, and the winner (plus the
+    // outgoing key while a fade runs) is marked into the generation so the binder keeps both producers alive.
+    private void RankFrames(PanelBuild build, double nowSeconds) {
+        var frames = build.Frames;
+
+        for (var index = 0; (index < frames.Length); index++) {
+            if (frames[index] is not { } frame) {
+                continue;
+            }
+
+            var winner = OverlayRanking.FirstHolding(
+                candidates: frame.Whens,
+                evaluator: m_facts,
+                slot: build.Slot,
+                when: static when => when
+            );
+
+            frame.Crossfade.Advance(
+                fadeSeconds: frame.FadeSeconds,
+                nowSeconds: nowSeconds,
+                winner: ((winner >= 0) ? frame.Keys[winner] : -1)
+            );
+
+            var current = frame.Crossfade.Current;
+            var outgoing = frame.Crossfade.Outgoing;
+
+            build.Elements[index] = (build.Elements[index] with {
+                FrameSource = current,
+                FrameSourceB = outgoing,
+                FrameMix = frame.Crossfade.Mix,
+            });
+
+            if (current >= 0) {
+                m_frameSources.MarkActive(key: current);
+            }
+
+            if (outgoing >= 0) {
+                m_frameSources.MarkActive(key: outgoing);
             }
         }
     }
-    private void ReleaseFrameSources(OverlayHudPanel panel) {
-        foreach (var element in panel.Elements.Span) {
-            if (element.FrameSource >= 0) {
-                m_frameSources.ReleaseStructureKey(key: element.FrameSource);
+    private void ReleaseFrameSources(PanelBuild build) {
+        foreach (var frame in build.Frames) {
+            if (frame is null) {
+                continue;
+            }
+
+            foreach (var key in frame.Keys) {
+                m_frameSources.ReleaseStructureKey(key: key);
             }
         }
     }
     private void ReleaseSeatBuild(int slot) {
-        if (m_seatSources[slot] is null) {
+        if (m_seatBuilds[slot] is not { } build) {
             return;
         }
 
-        ReleaseFrameSources(panel: m_seatBuilds[slot]);
+        ReleaseFrameSources(build: build);
         m_seatSources[slot] = null;
-        m_seatBuilds[slot] = default;
+        m_seatBuilds[slot] = null;
     }
     // Walks the joined roster in view order (the SAME order WorldOverlayFeed lays seats out in — LayoutRegion is a
     // pure function of (count, view index), so calling it here with identical arguments reproduces the exact rect a
     // seat's binding bar/editor HUD already renders in, with no cross-feed dependency), publishing one entry per
     // seat that is BOTH joined and has authored a player-scope panel. Reuses the preallocated array, and rebuilds a
     // seat's panel only when its document row is a different instance — zero steady-state allocation.
-    private int BuildSeatPanels() {
+    private int BuildSeatPanels(double nowSeconds) {
         var joined = m_roster.Count;
         var viewIndex = 0;
         var count = 0;
@@ -143,12 +220,25 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
             )) {
                 ReleaseSeatBuild(slot: slot);
                 m_seatSources[slot] = panel;
-                m_seatBuilds[slot] = BuildPanel(panel: panel, seat: (slot + 1));
+                m_seatBuilds[slot] = BuildPanel(
+                    panel: panel,
+                    seat: (slot + 1),
+                    slot: slot
+                );
             }
-            if (!m_facts.Evaluate(predicate: panel.Visible, slot: slot)) {
+            var presence = m_facts.Presence(predicate: panel.Visible, slot: slot);
+
+            if (presence <= 0f) {
                 continue;
             }
 
+            var build = m_seatBuilds[slot]!;
+
+            RankFrames(
+                build: build,
+                nowSeconds: nowSeconds
+            );
+            build.Panel = (build.Panel with { Alpha = presence, });
             m_seatPanels[count++] = new OverlayHudSeatPanel(
                 Viewport: new OverlayHudRect(
                     X: viewport.X,
@@ -156,9 +246,8 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
                     Width: viewport.Width,
                     Height: viewport.Height
                 ),
-                Panel: m_seatBuilds[slot]
+                Panel: build.Panel
             );
-            MarkFrameSources(panel: m_seatBuilds[slot]);
         }
 
         return count;
@@ -245,15 +334,18 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
 
         try {
             var revision = m_client.DefinitionRevision;
+            var nowSeconds = NowSeconds();
 
             var hud = m_client.Definition.Hud;
 
-            if (revision != m_seenRevision) {
-                m_seenRevision = revision;
+            // A revision moves on every mutation — a state cell write included — but the HUD section is the same
+            // instance unless a HUD row changed; only then is the structure rebuilt. The new builds take their keys
+            // before the old release theirs, so a source both name never drops to zero references in between (which
+            // would tear its producer down and rebuild it a frame later).
+            if ((revision != m_seenRevision) && !ReferenceEquals(objA: hud, objB: m_seenHud)) {
+                m_seenHud = hud;
 
-                foreach (var panel in m_worldPanels) {
-                    ReleaseFrameSources(panel: panel);
-                }
+                var previous = m_worldPanels;
 
                 m_worldSources = (hud.Defaults.Enabled
                     ? [.. hud.Panels]
@@ -261,25 +353,43 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
                 );
                 m_worldPanels = BuildPanels(panels: m_worldSources);
                 m_visiblePanels = new OverlayHudPanel[m_worldPanels.Length];
+
+                foreach (var build in previous) {
+                    ReleaseFrameSources(build: build);
+                }
             }
+
+            m_seenRevision = revision;
 
             // The world-scope gate (hud.defaults.visible) then each panel's own; both evaluated across every joined seat.
             // Only panels that survive both gates mark their Frame sources into this generation: structural caches keep
             // stable keys, while the binder's producer ownership follows what can actually draw this frame.
             var visibleCount = 0;
 
-            if (m_facts.EvaluateAnySeat(predicate: hud.Defaults.Visible)) {
-                for (var index = 0; (index < m_worldPanels.Length); index++) {
-                    if (m_facts.EvaluateAnySeat(predicate: m_worldSources[index].Visible)) {
-                        var panel = m_worldPanels[index];
+            // Presence, not a boolean: a fading predicate eases the panel out. World scope takes the strongest
+            // presence over the joined seats, the same quantifier EvaluateAnySeat applies.
+            var defaultsPresence = PresenceAnySeat(predicate: hud.Defaults.Visible);
 
-                        m_visiblePanels[visibleCount++] = panel;
-                        MarkFrameSources(panel: panel);
+            if (defaultsPresence > 0f) {
+                for (var index = 0; (index < m_worldPanels.Length); index++) {
+                    var presence = (defaultsPresence * PresenceAnySeat(predicate: m_worldSources[index].Visible));
+
+                    if (presence <= 0f) {
+                        continue;
                     }
+
+                    var build = m_worldPanels[index];
+
+                    RankFrames(
+                        build: build,
+                        nowSeconds: nowSeconds
+                    );
+                    build.Panel = (build.Panel with { Alpha = presence, });
+                    m_visiblePanels[visibleCount++] = build.Panel;
                 }
             }
 
-            var seatCount = BuildSeatPanels();
+            var seatCount = BuildSeatPanels(nowSeconds: nowSeconds);
 
             m_store.Publish(frame: new OverlayHudFrame(
                 Panels: m_visiblePanels.AsMemory(
@@ -294,5 +404,38 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
         } finally {
             m_frameSources.EndGeneration();
         }
+    }
+
+    // One Frame element's ranked candidates: the key each source resolved to, its condition, the authored fade, and
+    // the element's live cross-fade. Per build, so per (panel, element, seat).
+    private sealed class FrameElementState(int[] keys, OverlayPredicate?[] whens, float fadeSeconds) {
+        public OverlayFrameCrossfade Crossfade;
+
+        public float FadeSeconds { get; } = fadeSeconds;
+        public int[] Keys { get; } = keys;
+        public OverlayPredicate?[] Whens { get; } = whens;
+    }
+    // One built panel: the published snapshot, the element array it wraps (rewritten in place as winners and fades
+    // move), the per-element frame state, and the scope it ranks in (a 0-based seat, or -1 for the world scope).
+    private sealed class PanelBuild(OverlayHudPanel panel, OverlayHudElement[] elements, FrameElementState?[] frames, int slot) {
+        public OverlayHudElement[] Elements { get; } = elements;
+        public FrameElementState?[] Frames { get; } = frames;
+        public OverlayHudPanel Panel { get; set; } = panel;
+        public int Slot { get; } = slot;
+    }
+    private float PresenceAnySeat(OverlayPredicate? predicate) {
+        if (predicate is null) {
+            return 1f;
+        }
+
+        var strongest = 0f;
+
+        for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
+            if (m_roster.IsJoined(slot: slot)) {
+                strongest = MathF.Max(x: strongest, y: m_facts.Presence(predicate: predicate, slot: slot));
+            }
+        }
+
+        return strongest;
     }
 }

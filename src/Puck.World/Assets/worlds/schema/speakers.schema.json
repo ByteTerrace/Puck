@@ -50,25 +50,8 @@
             "const": "anchored"
           },
           "anchor": {
-            "description": "What the speaker rides (see WorldAnchor).",
-            "type": "object",
-            "required": [
-              "$type"
-            ],
-            "anyOf": [
-              {
-                "$ref": "./common.schema.json#/$defs/WorldAnchorEntity"
-              },
-              {
-                "$ref": "./common.schema.json#/$defs/WorldAnchorEntityPart"
-              },
-              {
-                "$ref": "./common.schema.json#/$defs/WorldAnchorPlacement"
-              },
-              {
-                "$ref": "./common.schema.json#/$defs/WorldAnchorGroup"
-              }
-            ]
+            "$ref": "./common.schema.json#/$defs/WorldAnchor",
+            "description": "What the speaker rides (see WorldAnchor)."
           },
           "offset": {
             "description": "The attachment point relative to the anchor\u0027s resolved pose, in anchor-local axes."

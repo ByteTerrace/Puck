@@ -4,13 +4,50 @@ using System.Text.Json;
 
 namespace Puck.World;
 
+/// <summary>One ranked anchor candidate of a <see cref="WorldCamera"/>: the anchor the camera rides while
+/// <paramref name="When"/> holds. Candidates are walked in authored order every frame and the first holding one wins;
+/// a <see langword="null"/> predicate always holds, so the last row is the default.</summary>
+/// <param name="Anchor">What the camera rides while this candidate wins.</param>
+/// <param name="When">The condition, evaluated for the seat the view is resolved for.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldCameraAnchorCandidate(WorldAnchor Anchor, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] OverlayPredicate? When = null);
 /// <summary>One placeable camera composed from a reference frame, local motion, framing policy, lens, and render target.</summary>
 /// <param name="Name">The camera's stable name — the handle a View screen / layout slot samples by.</param>
-/// <param name="Anchor">What the camera rides, or <see langword="null"/> for the world reference frame.</param>
+/// <param name="Anchor">What the camera rides, or <see langword="null"/> for the world reference frame (or for
+/// <paramref name="Anchors"/> to decide).</param>
 /// <param name="Rig">The independent local motion, aim, and lens axes.</param>
 /// <param name="RenderWidth">The offscreen render width in pixels.</param>
 /// <param name="RenderHeight">The offscreen render height in pixels.</param>
-public sealed record WorldCamera(string Name, WorldAnchor? Anchor, WorldCameraProgram Rig, uint RenderWidth, uint RenderHeight);
+/// <param name="Anchors">Ranked anchor candidates, first holding wins each frame — a portrait camera that rides the
+/// speaking character while they speak and the seat's own avatar otherwise. Refused beside <paramref name="Anchor"/>;
+/// a single unconditional anchor is <paramref name="Anchor"/>.</param>
+public sealed record WorldCamera(
+    string Name,
+    WorldAnchor? Anchor,
+    WorldCameraProgram Rig,
+    uint RenderWidth,
+    uint RenderHeight,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldCameraAnchorCandidate>? Anchors = null
+) {
+    /// <summary>Gets a value indicating whether any candidate or the anchor is seat-relative, so the view must be
+    /// resolved per seat.</summary>
+    [JsonIgnore]
+    public bool IsSeatRelative {
+        get {
+            if (Anchor is WorldAnchor.Seat) {
+                return true;
+            }
+
+            foreach (var candidate in (Anchors ?? [])) {
+                if (candidate?.Anchor is WorldAnchor.Seat) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+}
 public static class WorldApplicationDefaults {
     /// <summary>The built-in world ships with no bundled AGB cartridge — an asset-free default, never an owner-local
     /// absolute path or a copyrighted dump. Durable per-deployment cartridge/BIOS paths belong in the world data file

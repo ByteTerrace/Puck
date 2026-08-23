@@ -13,7 +13,8 @@ namespace Puck.World.Server;
 public sealed class WorldFieldLattice {
     private readonly FixedQ4816 m_cellSize;
     private readonly int m_depth;
-    private readonly List<FieldCellDelta> m_deltas = [];
+    private readonly List<int> m_deltas = [];
+    private readonly bool[][] m_deltaDirty;
     private readonly WorldFieldsSection m_document;
     private readonly FixedQ4816[] m_heightScale;
     private readonly int m_layers;
@@ -68,6 +69,7 @@ public sealed class WorldFieldLattice {
         m_max = new FixedQ4816[fields.Count];
         m_heightScale = new FixedQ4816[fields.Count];
         m_values = new FixedQ4816[fields.Count][];
+        m_deltaDirty = new bool[fields.Count][];
         m_scratch = new FixedQ4816[CellCount];
 
         for (var field = 0; (field < fields.Count); field++) {
@@ -78,6 +80,7 @@ public sealed class WorldFieldLattice {
             m_max[field] = FixedQ4816.FromDouble(value: row.Max);
             m_heightScale[field] = FixedQ4816.FromDouble(value: row.HeightScale);
             m_values[field] = new FixedQ4816[CellCount];
+            m_deltaDirty[field] = new bool[CellCount];
 
             var initial = FixedQ4816.FromDouble(value: row.Initial);
 
@@ -222,6 +225,50 @@ public sealed class WorldFieldLattice {
         minimum: m_min[field],
         value: value
     );
+    private FixedQ4816 AddClamped(int field, FixedQ4816 x, FixedQ4816 y) {
+        var raw = (((Int128)x.Value) + y.Value);
+
+        if (raw <= m_min[field].Value) {
+            return m_min[field];
+        }
+
+        if (raw >= m_max[field].Value) {
+            return m_max[field];
+        }
+
+        return FixedQ4816.FromRawBits(value: ((long)raw));
+    }
+    private static FixedQ4816 Mean(Int128 rawSum, int count) {
+        var negative = (rawSum < Int128.Zero);
+        var magnitude = ((UInt128)(negative ? -rawSum : rawSum));
+        var divisor = ((UInt128)(uint)count);
+        var quotient = (magnitude / divisor);
+        var remainder = (magnitude % divisor);
+
+        if (
+            ((remainder * 2U) > divisor) ||
+            (((remainder * 2U) == divisor) && ((quotient & 1U) != 0U))
+        ) {
+            quotient++;
+        }
+
+        var raw = (negative
+            ? ((quotient == (((UInt128)1U) << 63)) ? long.MinValue : -((long)quotient))
+            : ((long)quotient)
+        );
+
+        return FixedQ4816.FromRawBits(value: raw);
+    }
+    private void ClearDeltas() {
+        foreach (var key in m_deltas) {
+            var field = (key / CellCount);
+            var cell = (key - (field * CellCount));
+
+            m_deltaDirty[field][cell] = false;
+        }
+
+        m_deltas.Clear();
+    }
     private int FieldIndex(string name) {
         var index = Array.IndexOf(
             array: m_names,
@@ -244,11 +291,12 @@ public sealed class WorldFieldLattice {
         }
 
         m_values[field][cell] = clamped;
-        m_deltas.Add(item: new FieldCellDelta(
-            Cell: cell,
-            Field: ((byte)field),
-            Raw: clamped.Value
-        ));
+
+        if (!m_deltaDirty[field][cell]) {
+            m_deltaDirty[field][cell] = true;
+            m_deltas.Add(item: ((field * CellCount) + cell));
+        }
+
         m_revision++;
     }
     /// <summary>Resolves the cell a world position falls in, or <see langword="false"/> when it lies outside the
@@ -259,19 +307,21 @@ public sealed class WorldFieldLattice {
     public bool TryCellOf(in FixedVector3 position, out int cell) {
         cell = -1;
 
-        var local = (position - m_origin);
+        var localX = (((Int128)position.X.Value) - m_origin.X.Value);
+        var localY = (((Int128)position.Y.Value) - m_origin.Y.Value);
+        var localZ = (((Int128)position.Z.Value) - m_origin.Z.Value);
 
         if (
-            (local.X < FixedQ4816.Zero) ||
-            (local.Y < FixedQ4816.Zero) ||
-            (local.Z < FixedQ4816.Zero)
+            (localX < Int128.Zero) ||
+            (localY < Int128.Zero) ||
+            (localZ < Int128.Zero)
         ) {
             return false;
         }
 
-        var x = (int)(FixedQ4816.Floor(value: (local.X / m_cellSize)).Value >> 16);
-        var y = (int)(FixedQ4816.Floor(value: (local.Y / m_cellSize)).Value >> 16);
-        var z = (int)(FixedQ4816.Floor(value: (local.Z / m_cellSize)).Value >> 16);
+        var x = (localX / m_cellSize.Value);
+        var y = (localY / m_cellSize.Value);
+        var z = (localZ / m_cellSize.Value);
 
         if (
             (x >= m_width) ||
@@ -282,9 +332,9 @@ public sealed class WorldFieldLattice {
         }
 
         cell = CellIndex(
-            x: x,
-            y: y,
-            z: z
+            x: ((int)x),
+            y: ((int)y),
+            z: ((int)z)
         );
 
         return true;
@@ -375,7 +425,11 @@ public sealed class WorldFieldLattice {
                         Write(
                             cell: cell,
                             field: reaction.Field,
-                            value: (m_values[reaction.Field][cell] + reaction.Rate)
+                            value: AddClamped(
+                                field: reaction.Field,
+                                x: m_values[reaction.Field][cell],
+                                y: reaction.Rate
+                            )
                         );
                     }
 
@@ -421,21 +475,21 @@ public sealed class WorldFieldLattice {
             for (var y = 0; (y < m_layers); y++) {
                 for (var x = 0; (x < m_width); x++) {
                     var cell = CellIndex(x: x, y: y, z: z);
-                    var sum = FixedQ4816.Zero;
+                    Int128 rawSum = 0;
                     var count = 0;
 
-                    if (x > 0) { sum += m_scratch[CellIndex(x: (x - 1), y: y, z: z)]; count++; }
-                    if (x < (m_width - 1)) { sum += m_scratch[CellIndex(x: (x + 1), y: y, z: z)]; count++; }
-                    if (z > 0) { sum += m_scratch[CellIndex(x: x, y: y, z: (z - 1))]; count++; }
-                    if (z < (m_depth - 1)) { sum += m_scratch[CellIndex(x: x, y: y, z: (z + 1))]; count++; }
-                    if (y > 0) { sum += m_scratch[CellIndex(x: x, y: (y - 1), z: z)]; count++; }
-                    if (y < (m_layers - 1)) { sum += m_scratch[CellIndex(x: x, y: (y + 1), z: z)]; count++; }
+                    if (x > 0) { rawSum += m_scratch[CellIndex(x: (x - 1), y: y, z: z)].Value; count++; }
+                    if (x < (m_width - 1)) { rawSum += m_scratch[CellIndex(x: (x + 1), y: y, z: z)].Value; count++; }
+                    if (z > 0) { rawSum += m_scratch[CellIndex(x: x, y: y, z: (z - 1))].Value; count++; }
+                    if (z < (m_depth - 1)) { rawSum += m_scratch[CellIndex(x: x, y: y, z: (z + 1))].Value; count++; }
+                    if (y > 0) { rawSum += m_scratch[CellIndex(x: x, y: (y - 1), z: z)].Value; count++; }
+                    if (y < (m_layers - 1)) { rawSum += m_scratch[CellIndex(x: x, y: (y + 1), z: z)].Value; count++; }
 
                     if (count == 0) {
                         continue;
                     }
 
-                    var mean = (sum / FixedQ4816.FromInteger(value: count));
+                    var mean = Mean(rawSum: rawSum, count: count);
                     var current = m_scratch[cell];
 
                     Write(
@@ -488,7 +542,11 @@ public sealed class WorldFieldLattice {
                     cell: cell,
                     field: write.Field,
                     value: ((write.Op == WorldFieldWriteOp.Add)
-                        ? (m_values[write.Field][cell] + write.Value)
+                        ? AddClamped(
+                            field: write.Field,
+                            x: m_values[write.Field][cell],
+                            y: write.Value
+                        )
                         : write.Value)
                 );
             }
@@ -515,8 +573,12 @@ public sealed class WorldFieldLattice {
                 }
             }
 
-            m_deltas.Clear();
-            m_fullResync = false;
+            // An explicit full take is a per-sink primer and must not steal the shared incremental stream. Only the
+            // lattice-owned resync flag (construction/restore) consumes pending writes for everybody.
+            if (!full) {
+                ClearDeltas();
+                m_fullResync = false;
+            }
             isFull = true;
 
             return all;
@@ -528,9 +590,21 @@ public sealed class WorldFieldLattice {
             return [];
         }
 
-        var taken = m_deltas.ToArray();
+        var taken = new FieldCellDelta[m_deltas.Count];
 
-        m_deltas.Clear();
+        for (var index = 0; (index < m_deltas.Count); index++) {
+            var key = m_deltas[index];
+            var field = (key / CellCount);
+            var cell = (key - (field * CellCount));
+
+            taken[index] = new FieldCellDelta(
+                Cell: cell,
+                Field: ((byte)field),
+                Raw: m_values[field][cell].Value
+            );
+        }
+
+        ClearDeltas();
 
         return taken;
     }
@@ -549,9 +623,9 @@ public sealed class WorldFieldLattice {
 
         return new WorldFieldCheckpoint(Raw: raw);
     }
-    /// <summary>Restores every cell from a checkpoint whose shape matches this lattice.</summary>
+    /// <summary>Validates that a checkpoint has this lattice's shape and declared value ranges.</summary>
     /// <param name="checkpoint">The checkpoint.</param>
-    public void Restore(WorldFieldCheckpoint checkpoint) {
+    public void ValidateCheckpoint(WorldFieldCheckpoint checkpoint) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
 
         if (checkpoint.Raw.Count != FieldCount) {
@@ -564,11 +638,29 @@ public sealed class WorldFieldLattice {
             }
 
             for (var cell = 0; (cell < CellCount); cell++) {
+                var value = FixedQ4816.FromRawBits(value: checkpoint.Raw[field][cell]);
+
+                if (
+                    (value < m_min[field]) ||
+                    (value > m_max[field])
+                ) {
+                    throw new InvalidOperationException(message: $"fields checkpoint field {field} cell {cell} is outside the declared range.");
+                }
+            }
+        }
+    }
+    /// <summary>Restores every cell from a checkpoint whose shape and values match this lattice.</summary>
+    /// <param name="checkpoint">The checkpoint.</param>
+    public void Restore(WorldFieldCheckpoint checkpoint) {
+        ValidateCheckpoint(checkpoint: checkpoint);
+
+        for (var field = 0; (field < FieldCount); field++) {
+            for (var cell = 0; (cell < CellCount); cell++) {
                 m_values[field][cell] = FixedQ4816.FromRawBits(value: checkpoint.Raw[field][cell]);
             }
         }
 
-        m_deltas.Clear();
+        ClearDeltas();
         m_fullResync = true;
         m_revision++;
     }

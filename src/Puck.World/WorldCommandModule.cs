@@ -21,7 +21,41 @@ namespace Puck.World;
 /// not through an environment variable. Every setting rides <see cref="WorldRenderSettings"/> or a live control
 /// (<see cref="PresentPacingControl"/>, <see cref="GpuTimingControl"/>), read by the frame source each captured frame.
 /// </summary>
-internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPacingControl pacing, WorldPopulation population, WorldRenderSettings settings, WorldRenderProbe renderProbe, WorldServer server, WorldScreenBinder screens, IServerLink link) : ICommandModule {
+internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPacingControl pacing, WorldPopulation population, WorldRenderSettings settings, WorldRenderProbe renderProbe, WorldServer server, WorldScreenBinder screens, IServerLink link, WorldOverlayFacts facts, PlayerRoster roster) : ICommandModule {
+    // A ranked camera's listing: every candidate's anchor kind in rank order, then the candidate currently winning
+    // for each joined seat (a seat-relative list can win differently per seat).
+    private string CameraAnchorCandidates(WorldCamera camera) {
+        var candidates = camera.Anchors!;
+        var builder = new StringBuilder(value: "anchors=[");
+
+        for (var index = 0; (index < candidates.Count); index++) {
+            _ = builder.Append(value: ((index == 0) ? "" : ",")).Append(value: CameraAnchorKind(anchor: candidates[index].Anchor));
+        }
+
+        _ = builder.Append(value: "] winner=");
+
+        var any = false;
+
+        for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
+            if (!roster.IsJoined(slot: slot)) {
+                continue;
+            }
+
+            _ = WorldSeatAnchors.SelectAnchor(
+                camera: camera,
+                candidateIndex: out var winner,
+                evaluator: facts,
+                slot: slot
+            );
+            _ = builder.Append(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"{(any ? "," : "")}seat{(slot + 1)}:{((winner >= 0) ? winner.ToString(provider: CultureInfo.InvariantCulture) : "none")}"
+            );
+            any = true;
+        }
+
+        return (any ? builder.ToString() : builder.Append(value: "none").ToString());
+    }
     // The anchor keyword for a camera's declared ride — kind plus the target it names, the stable token a piped proof
     // asserts against. An unanchored camera's own offset IS its world position, so it reads 'none'.
     private static string CameraAnchorKind(WorldAnchor? anchor) {
@@ -46,6 +80,17 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             ? indices.Count.ToString(provider: CultureInfo.InvariantCulture)
             : "all")}"
         ),
+            WorldAnchor.Seat seat => string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"anchor=seat:{((seat.Number is { } number)
+            ? number.ToString(provider: CultureInfo.InvariantCulture)
+            : "enclosing")}{((seat.PartId is { } seatPart)
+            ? $"/{seatPart}"
+            : "")}"
+        ),
+            WorldAnchor.RecentSpeaker speaker => $"anchor=recentSpeaker{((speaker.PartId is { } speakerPart)
+            ? $"/{speakerPart}"
+            : "")}",
             _ => "anchor=none",
         };
     }
@@ -87,7 +132,9 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 provider: CultureInfo.InvariantCulture,
                 handler: $"{((index == 0)
                 ? " "
-                : " | ")}{camera.Name} {CameraAnchorKind(anchor: camera.Anchor)} {CameraRigKind(rig: camera.Rig)} {camera.RenderWidth}x{camera.RenderHeight}"
+                : " | ")}{camera.Name} {((camera.Anchors is { Count: > 0 })
+                ? CameraAnchorCandidates(camera: camera)
+                : CameraAnchorKind(anchor: camera.Anchor))} {CameraRigKind(rig: camera.Rig)} {camera.RenderWidth}x{camera.RenderHeight}"
             );
         }
 

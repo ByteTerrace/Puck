@@ -145,8 +145,9 @@ public enum WorldFieldWriteOp : byte {
 }
 /// <summary>Capacity constants for a lattice.</summary>
 public static class WorldFieldCapacity {
-    /// <summary>The most cells a lattice may declare (width × depth × layers).</summary>
-    public const int MaxCells = (1 << 20);
+    /// <summary>The most cells a lattice may declare (width × depth × layers). Eight full fields plus the rest of a
+    /// primer snapshot must fit the federation wire's 32 MiB frame ceiling.</summary>
+    public const int MaxCells = (1 << 18);
     /// <summary>The most fields a section may declare.</summary>
     public const int MaxFields = 8;
     /// <summary>The most cells along any one axis.</summary>
@@ -158,6 +159,8 @@ public static class WorldFieldCapacity {
     public const int MaxSurfaceCells = 126;
     /// <summary>The most reactions a section may declare.</summary>
     public const int MaxReactions = 64;
+    /// <summary>The most conditions or writes one transform reaction may declare.</summary>
+    public const int MaxTransformTerms = 64;
     /// <summary>The most paint rows a section may declare.</summary>
     public const int MaxPaint = 256;
 }

@@ -23,26 +23,52 @@ namespace Puck.World;
 /// <see cref="HudBindingVocabulary"/> and the live document's own <c>state</c> section, resolved on demand and never
 /// stored — the console-only twin of what a <see cref="WorldHudElement.Template"/> row does when authored.
 /// </summary>
-internal sealed class WorldHudCommandModule(WorldServer server, IHudBindingResolver bindings, PlayerRoster roster) : ICommandModule {
+internal sealed class WorldHudCommandModule(WorldServer server, IHudBindingResolver bindings, PlayerRoster roster, WorldOverlayFacts facts) : ICommandModule {
     private const string SeatFilterPrefix = "seat:";
 
-    private string DescribeElement(string panelId, WorldHudElement element) {
+    // A frame element's candidates in rank order (source JSON plus its condition, when one is authored) and the
+    // candidate winning now for the scope asked about — the same first-holding rule the feed publishes by. slot -1
+    // is the world scope (any joined seat).
+    private string DescribeFrameCandidates(WorldHudElement element, int slot) {
+        var candidates = element.FrameCandidates;
+        var winner = OverlayRanking.FirstHolding(
+            candidates: candidates,
+            evaluator: facts,
+            slot: slot,
+            when: static candidate => candidate.When
+        );
+        var builder = new System.Text.StringBuilder(value: " candidates=[");
+
+        for (var index = 0; (index < candidates.Count); index++) {
+            var candidate = candidates[index];
+
+            _ = builder.Append(value: ((index == 0) ? "" : " | ")).Append(value: JsonSerializer.Serialize(
+                value: candidate.Source,
+                jsonTypeInfo: WorldJsonContext.Default.WorldFrameSource
+            ));
+
+            if (candidate.When is { } when) {
+                _ = builder.Append(value: " when=").Append(value: when.GetType().Name.ToLowerInvariant());
+            }
+        }
+
+        return builder.Append(
+            provider: System.Globalization.CultureInfo.InvariantCulture,
+            handler: $"] winner={((winner >= 0) ? winner.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) : "none")} fadeSeconds={element.FadeSeconds:0.###} fit={element.Fit.ToString().ToLowerInvariant()} mirror={(element.Mirror ? "true" : "false")} radius={element.Radius:0.###} opacity={element.Opacity:0.###}"
+        ).ToString();
+    }
+    private string DescribeElement(string panelId, WorldHudElement element, int slot) {
         var bindingToken = (element.Binding ?? "(none)");
         var frameText = string.Empty;
         var valueText = string.Empty;
 
         if (
             (WorldHudElementKind.Frame == element.Kind) &&
-            (element.Source is { } source)
+            (element.FrameCandidates.Count > 0)
         ) {
-            var sourceJson = JsonSerializer.Serialize(
-                value: source,
-                jsonTypeInfo: WorldJsonContext.Default.WorldFrameSource
-            );
-
-            frameText = string.Create(
-                provider: System.Globalization.CultureInfo.InvariantCulture,
-                handler: $" source={sourceJson} fit={element.Fit.ToString().ToLowerInvariant()} mirror={(element.Mirror ? "true" : "false")} radius={element.Radius:0.###} opacity={element.Opacity:0.###}"
+            frameText = DescribeFrameCandidates(
+                element: element,
+                slot: slot
             );
         }
 
@@ -93,7 +119,8 @@ internal sealed class WorldHudCommandModule(WorldServer server, IHudBindingResol
             foreach (var element in panel.Elements) {
                 lines.Add(item: DescribeElement(
                     panelId: panel.Id,
-                    element: element
+                    element: element,
+                    slot: -1
                 ));
             }
         }
@@ -138,7 +165,8 @@ internal sealed class WorldHudCommandModule(WorldServer server, IHudBindingResol
         foreach (var element in panel.Elements) {
             lines.Add(item: DescribeElement(
                 panelId: panel.Id,
-                element: element
+                element: element,
+                slot: slot
             ));
         }
 
@@ -274,7 +302,7 @@ internal sealed class WorldHudCommandModule(WorldServer server, IHudBindingResol
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.hud",
-            description: "Reads back the live hud state (Immediate): with no argument, the world-scope defaults row, every panel's id/layer/style/rect/element count against WorldHudCapacity's schema caps, and every element's kind/style/binding. A frame element additionally echoes its complete source JSON plus fit/mirror/radius/opacity. With seat:<n> (1..4), that LOCAL seat's PRIVATE player-scope panel instead — authored through identity.hud <panel-json> [player] — or a refusal naming why there is none: world.hud [seat:<n>]. Either form resolves a bound element's LIVE value through the SAME IHudBindingResolver the renderer uses, and a templated element's placeholders through the SAME resolver too, so this read-back and what is on screen can never disagree.",
+            description: "Reads back the live hud state (Immediate): with no argument, the world-scope defaults row, every panel's id/layer/style/rect/element count against WorldHudCapacity's schema caps, and every element's kind/style/binding. A frame element additionally echoes its ranked source candidates (source JSON plus its condition's kind), the candidate winning now for the scope (world: any joined seat; seat:<n>: that seat), and fadeSeconds/fit/mirror/radius/opacity. With seat:<n> (1..4), that LOCAL seat's PRIVATE player-scope panel instead — authored through identity.hud <panel-json> [player] — or a refusal naming why there is none: world.hud [seat:<n>]. Either form resolves a bound element's LIVE value through the SAME IHudBindingResolver the renderer uses, and a templated element's placeholders through the SAME resolver too, so this read-back and what is on screen can never disagree.",
             handler: (_, args) => DescribeHudHandler(args: args),
             routing: CommandRouting.Immediate
         );

@@ -1,3 +1,4 @@
+using Puck.Physics.Motion;
 using System.Globalization;
 using System.Numerics;
 using System.Text.Json;
@@ -97,6 +98,19 @@ namespace Puck.World;
 [JsonSerializable(typeof(OverlayPredicate.All), TypeInfoPropertyName = "OverlayPredicateAll")]
 [JsonSerializable(typeof(OverlayPredicate.Any), TypeInfoPropertyName = "OverlayPredicateAny")]
 [JsonSerializable(typeof(OverlayPredicate.Not), TypeInfoPropertyName = "OverlayPredicateNot")]
+[JsonSerializable(typeof(OverlayPredicate.Speaking), TypeInfoPropertyName = "OverlayPredicateSpeaking")]
+[JsonSerializable(typeof(OverlayPredicate.Near), TypeInfoPropertyName = "OverlayPredicateNear")]
+[JsonSerializable(typeof(OverlayPredicate.State), TypeInfoPropertyName = "OverlayPredicateState")]
+[JsonSerializable(typeof(OverlaySubject.Seat), TypeInfoPropertyName = "OverlaySubjectSeat")]
+[JsonSerializable(typeof(OverlaySubject.Placement), TypeInfoPropertyName = "OverlaySubjectPlacement")]
+[JsonSerializable(typeof(OverlaySubject.Entity), TypeInfoPropertyName = "OverlaySubjectEntity")]
+[JsonSerializable(typeof(OverlaySubject.AnySeat), TypeInfoPropertyName = "OverlaySubjectAnySeat")]
+[JsonSerializable(typeof(OverlaySubject.RecentSpeaker), TypeInfoPropertyName = "OverlaySubjectRecentSpeaker")]
+[JsonSerializable(typeof(WorldAnchor.Seat), TypeInfoPropertyName = "WorldAnchorSeat")]
+[JsonSerializable(typeof(WorldAnchor.RecentSpeaker), TypeInfoPropertyName = "WorldAnchorRecentSpeaker")]
+[JsonSerializable(typeof(WorldCameraAnchorCandidate))]
+[JsonSerializable(typeof(WorldLookCue))]
+[JsonSerializable(typeof(WorldHudFrameCandidate))]
 [JsonSerializable(typeof(WorldSpeaker.Fixed), TypeInfoPropertyName = "WorldSpeakerFixed")]
 [JsonSerializable(typeof(WorldSpeaker.Anchored), TypeInfoPropertyName = "WorldSpeakerAnchored")]
 [JsonSerializable(typeof(WorldSpeakerSource.None), TypeInfoPropertyName = "WorldSpeakerSourceNone")]
@@ -198,7 +212,7 @@ namespace Puck.World;
     // CommandPhase (Puck.Commands) cannot carry a [JsonConverter] attribute at its own declaration without a new
     // ProjectReference to Puck.Abstractions from that leaner project; registering its CLOSED StrictEnumConverter<T>
     // instance here instead keeps the strict posture without that edge.
-    Converters = new[] { typeof(Puck.Assets.Documents.Vector2JsonConverter), typeof(Puck.Assets.Documents.Vector3JsonConverter), typeof(Puck.Assets.Documents.QuaternionJsonConverter), typeof(CommandValueJsonConverter), typeof(CreationDocumentJsonConverter), typeof(AudioDocumentJsonConverter), typeof(SynthPatchDocumentJsonConverter), typeof(WorldBackendPreferenceJsonConverter), typeof(SurfaceFormatJsonConverter), typeof(GrantSubjectJsonConverter), typeof(WorldPrincipalJsonConverter), typeof(ChannelReachMaskJsonConverter), typeof(ChannelConsentMaskJsonConverter), typeof(MutationKindMaskJsonConverter), typeof(DocumentWriteMaskJsonConverter), typeof(WorldStateRowJsonConverter), typeof(WorldSafeNameJsonConverter), typeof(WorldCellNameJsonConverter), typeof(WorldDestinationDurabilityJsonConverter), typeof(WorldPortalTravelJsonConverter), typeof(WorldPortalArrivalJsonConverter), typeof(WorldDestinationScopeJsonConverter), typeof(StrictEnumConverter<CommandPhase>), typeof(StrictEnumConverter<ChannelRole>), typeof(StrictEnumConverter<BindingActivatorMode>), typeof(StrictEnumConverter<BindingEntryMode>), typeof(StrictEnumConverter<BindingWheelSpatialSelectionMode>), typeof(StrictEnumConverter<BindingWheelPlacement>), typeof(StrictEnumConverter<BindingBarEdge>), typeof(StrictEnumConverter<BindingWheelRingSelectionMode>) },
+    Converters = new[] { typeof(Puck.Assets.Documents.Vector2JsonConverter), typeof(Puck.Assets.Documents.Vector3JsonConverter), typeof(Puck.Assets.Documents.QuaternionJsonConverter), typeof(CommandValueJsonConverter), typeof(CreationDocumentJsonConverter), typeof(AudioDocumentJsonConverter), typeof(SynthPatchDocumentJsonConverter), typeof(WorldBackendPreferenceJsonConverter), typeof(SurfaceFormatJsonConverter), typeof(GrantSubjectJsonConverter), typeof(WorldPrincipalJsonConverter), typeof(ChannelReachMaskJsonConverter), typeof(ChannelConsentMaskJsonConverter), typeof(MutationKindMaskJsonConverter), typeof(DocumentWriteMaskJsonConverter), typeof(WorldStateRowJsonConverter), typeof(WorldSafeNameJsonConverter), typeof(WorldCellNameJsonConverter), typeof(WorldDestinationDurabilityJsonConverter), typeof(WorldPortalTravelJsonConverter), typeof(WorldPortalArrivalJsonConverter), typeof(WorldDestinationScopeJsonConverter), typeof(StrictEnumConverter<CommandPhase>), typeof(StrictEnumConverter<ChannelRole>), typeof(StrictEnumConverter<BindingActivatorMode>), typeof(StrictEnumConverter<BindingEntryMode>), typeof(StrictEnumConverter<BindingWheelSpatialSelectionMode>), typeof(StrictEnumConverter<BindingWheelPlacement>), typeof(StrictEnumConverter<BindingBarEdge>), typeof(StrictEnumConverter<ActionStateComparison>), typeof(StrictEnumConverter<BindingWheelRingSelectionMode>) },
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     // The OTHER half of strict parse. UnmappedMemberHandling below refuses a member the model does not have; this
     // refuses a member the model REQUIRES and the document does not carry. Without it, a constructor parameter with

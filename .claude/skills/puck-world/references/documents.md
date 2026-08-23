@@ -356,7 +356,11 @@ raises a solid column above the origin that bodies stand on
 the renderer shows (`WorldFieldEmitter`: one CPU-baked distance brick per
 height field, coloured by `color`, uploaded through the engine's brick pool).
 `layers: 1` is a ground lattice; more layers is a voxel volume and costs
-proportionally. Cell values are sim state beside the population — stepped
+proportionally. A lattice carries at most 262,144 cells so a full eight-field
+primer remains inside the federation frame; when any field has `heightScale`,
+the XZ footprint is at most 126 × 126 cells and the sum across layers may raise
+at most 126 cells, fitting the padded 128³ render brick without truncation.
+Cell values are sim state beside the population — stepped
 after the rules, checkpointed (`Fields` block), delivered as `FieldCells`
 deltas on the snapshot (`FieldsFull` on a primer) — never document rows, so
 nothing journals them. Read back with `world.fields`. `elements.world.json`

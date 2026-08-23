@@ -352,9 +352,119 @@ public static partial class WorldDefinitionValidator {
             );
         }
     }
-    private static void ValidateOverlayPredicate(OverlayPredicate? predicate, string path, List<string> errors) {
+    // definition null = identity scope: a document authored independent of any world cannot resolve a placement id
+    // or a state row, so those checks are skipped there and the reference is refused at the seam instead.
+    private static void ValidateOverlaySubject(OverlaySubject? subject, string path, List<string> errors, WorldDefinition? definition) {
+        switch (subject) {
+            case null:
+                errors.Add(item: $"{path} is required.");
+
+                return;
+            case OverlaySubject.Seat seat:
+                if ((seat.Number is { } number) && ((number < 1) || (number > WorldPopulationLimits.LocalSeatCount))) {
+                    errors.Add(item: $"{path}.number {number} is outside 1..{WorldPopulationLimits.LocalSeatCount}.");
+                }
+
+                return;
+            case OverlaySubject.Entity entity:
+                if ((entity.Index < 0) || ((definition is not null) && (entity.Index >= definition.Population.Capacity))) {
+                    errors.Add(item: $"{path}.index {entity.Index} is outside the authored population capacity.");
+                }
+
+                return;
+            case OverlaySubject.Placement placement:
+                if (string.IsNullOrWhiteSpace(value: placement.PlacementId)) {
+                    errors.Add(item: $"{path}.placementId is required.");
+                } else if ((definition is not null) && (WorldDefinitionRows.FindPlacement(placements: definition.Placements, id: placement.PlacementId) is null)) {
+                    errors.Add(item: $"{path}.placementId '{placement.PlacementId}' names no placement row.");
+                }
+
+                return;
+            case OverlaySubject.AnySeat:
+            case OverlaySubject.RecentSpeaker:
+                return;
+            default:
+                errors.Add(item: $"{path} is an unknown subject kind.");
+
+                return;
+        }
+    }
+    internal static void ValidateOverlayPredicate(OverlayPredicate? predicate, string path, List<string> errors, WorldDefinition? definition = null) {
         switch (predicate) {
             case null:
+                return;
+            case OverlayPredicate.Speaking speaking:
+                ValidateOverlaySubject(
+                    definition: definition,
+                    errors: errors,
+                    path: $"{path}.subject",
+                    subject: speaking.Subject
+                );
+
+                if (!float.IsFinite(f: speaking.WindowSeconds) || (speaking.WindowSeconds < 0f)) {
+                    errors.Add(item: $"{path}.windowSeconds must be finite and non-negative.");
+                }
+
+                if (!float.IsFinite(f: speaking.FadeSeconds) || (speaking.FadeSeconds < 0f)) {
+                    errors.Add(item: $"{path}.fadeSeconds must be finite and non-negative.");
+                }
+
+                return;
+            case OverlayPredicate.Near near:
+                ValidateOverlaySubject(
+                    definition: definition,
+                    errors: errors,
+                    path: $"{path}.subject",
+                    subject: near.Subject
+                );
+
+                if (near.Of is { } of) {
+                    ValidateOverlaySubject(
+                        definition: definition,
+                        errors: errors,
+                        path: $"{path}.of",
+                        subject: of
+                    );
+                }
+
+                if (!float.IsFinite(f: near.Distance) || (near.Distance < 0f)) {
+                    errors.Add(item: $"{path}.distance must be finite and non-negative.");
+                }
+
+                return;
+            case OverlayPredicate.State state:
+                if (!BindableState.TryParseBinding(
+                    key: out var stateKey,
+                    row: out var stateRow,
+                    value: state.Binding
+                )) {
+                    errors.Add(item: $"{path}.binding '{state.Binding}' must be spelled state.<row>[.<key>].");
+                } else if (definition is not null) {
+                    var row = definition.State.FirstOrDefault(predicate: candidate => string.Equals(a: candidate.Name.ToString(), b: stateRow, comparisonType: StringComparison.Ordinal));
+
+                    if (row is null) {
+                        errors.Add(item: $"{path}.binding '{state.Binding}' names no declared state row.");
+                    } else if ((row.Kind == CellKind.Text) != (state.Text is not null)) {
+                        errors.Add(item: $"{path} compares {((row.Kind == CellKind.Text) ? "a text row, which needs 'text'" : "a numeric row, which needs 'value'")}.");
+                    }
+                }
+
+                if ((state.Value is null) == (state.Text is null)) {
+                    errors.Add(item: $"{path} needs exactly one of 'value' or 'text'.");
+                }
+
+                if ((state.Text is not null) && (state.Comparison is not (ActionStateComparison.Equal or ActionStateComparison.NotEqual))) {
+                    errors.Add(item: $"{path}.comparison {state.Comparison} is not a text comparison (equal or notEqual).");
+                }
+
+                if ((state.Value is { } value) && !float.IsFinite(f: value)) {
+                    errors.Add(item: $"{path}.value must be finite.");
+                }
+
+                if (!Enum.IsDefined(value: state.Comparison)) {
+                    errors.Add(item: $"{path}.comparison is not a defined comparison.");
+                }
+
                 return;
             case OverlayPredicate.Now now when !Enum.IsDefined(value: now.Fact):
                 errors.Add(item: $"{path}.fact is not a defined OverlayFact.");
@@ -382,6 +492,7 @@ public static partial class WorldDefinitionValidator {
             case OverlayPredicate.All all:
                 for (var index = 0; (index < (all.Predicates?.Count ?? 0)); index++) {
                     ValidateOverlayPredicate(
+                        definition: definition,
                         errors: errors,
                         path: $"{path}.predicates[{index}]",
                         predicate: all.Predicates![index]
@@ -392,6 +503,7 @@ public static partial class WorldDefinitionValidator {
             case OverlayPredicate.Any any:
                 for (var index = 0; (index < (any.Predicates?.Count ?? 0)); index++) {
                     ValidateOverlayPredicate(
+                        definition: definition,
                         errors: errors,
                         path: $"{path}.predicates[{index}]",
                         predicate: any.Predicates![index]
@@ -401,6 +513,7 @@ public static partial class WorldDefinitionValidator {
                 return;
             case OverlayPredicate.Not not:
                 ValidateOverlayPredicate(
+                    definition: definition,
                     errors: errors,
                     path: $"{path}.predicate",
                     predicate: not.Predicate
@@ -1057,7 +1170,8 @@ public static partial class WorldDefinitionValidator {
         // returns) and BEFORE ValidatePlacements (a future Inhabit facet will resolve its Look against the look-name set
         // this returns) — the same forward-threading creationIds already rides.
         var lookNames = ValidateLooks(
-            looks: definition.Looks,
+            creations: definition.Creations,
+                looks: definition.Looks,
             creationIds: creationIds,
             errors: errors
         );
@@ -1124,6 +1238,43 @@ public static partial class WorldDefinitionValidator {
                         path: $"{path}.anchor",
                         errors: errors
                     );
+                }
+
+                if (camera.Anchors is { } candidates) {
+                    if (camera.Anchor is not null) {
+                        errors.Add(item: $"{path} authors both anchor and anchors — a single unconditional anchor is 'anchor', a ranked list is 'anchors'.");
+                    }
+
+                    if (candidates.Count == 0) {
+                        errors.Add(item: $"{path}.anchors must carry at least one candidate.");
+                    }
+
+                    for (var candidateIndex = 0; (candidateIndex < candidates.Count); candidateIndex++) {
+                        var candidate = candidates[candidateIndex];
+                        var candidatePath = $"{path}.anchors[{candidateIndex}]";
+
+                        if (candidate is null) {
+                            errors.Add(item: $"{candidatePath} is required.");
+
+                            continue;
+                        }
+
+                        ValidateAnchor(
+                            anchor: candidate.Anchor,
+                            placements: definition.Placements,
+                            placementIds: placementIds,
+                            creations: definition.Creations,
+                            populationCapacity: definition.Population.Capacity,
+                            path: $"{candidatePath}.anchor",
+                            errors: errors
+                        );
+                        ValidateOverlayPredicate(
+                            definition: definition,
+                            errors: errors,
+                            path: $"{candidatePath}.when",
+                            predicate: candidate.When
+                        );
+                    }
                 }
 
                 ValidateProgram(
