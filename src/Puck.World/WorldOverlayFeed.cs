@@ -33,9 +33,6 @@ internal sealed class WorldOverlayFeed {
     // Per-SEAT parsed-slot-set cache: re-parses the authored button-name strings only when the resolved
     // WorldBindingBarAuthoring instance changes (a document delivery or profile switch), never every frame — the
     // resolved document graph is reference-stable while nothing changes, so reference equality is the change key.
-    private readonly WorldBindingBarAuthoring?[] m_barAuthoringSeen;
-    private readonly string[][] m_barSlotSet;
-    private readonly Dictionary<object, IReadOnlyDictionary<string, System.Numerics.Vector2>>[] m_placements;
     // This tick's active page view per seat — the ONE mutable cell m_pressedBySource's preallocated (per-seat,
     // ctor-time) closures read, so a physical-press probe threads through every bank's ComposeBank call with no
     // per-frame delegate allocation.
@@ -49,8 +46,6 @@ internal sealed class WorldOverlayFeed {
     // instead of a fresh closure, the same "mutable cell + preallocated delegate" shape m_pressedBySource already takes.
     private readonly Func<string, OverlayResolvedGlyph> m_resolveBadge;
     private static readonly Func<string, OverlayResolvedGlyph> NoBadge = static _ => OverlayResolvedGlyph.None;
-    private static readonly WorldBindingBarBankPlacement AnchorBank = new();
-    private static readonly IReadOnlyDictionary<string, System.Numerics.Vector2> NoPlacements = new Dictionary<string, System.Numerics.Vector2>(comparer: StringComparer.Ordinal);
     // Same "mutable cell + preallocated delegate" shape as m_resolveBadge: the per-tick input is WHICH state row
     // this seat's bar named (m_currentIconRow), so the delegate is allocated once rather than per seat per tick.
     // Nothing is cached across ticks — the row's cells are live, so an ordinary state mutation retargets an icon
@@ -118,9 +113,6 @@ internal sealed class WorldOverlayFeed {
         m_slots = new OverlayBindingSlot[PlayerRoster.MaxSlots][];
         m_modifiers = new OverlayBindingModifier[PlayerRoster.MaxSlots][];
         m_pressedBySlot = new Func<string, bool>[PlayerRoster.MaxSlots];
-        m_barAuthoringSeen = new WorldBindingBarAuthoring?[PlayerRoster.MaxSlots];
-        m_barSlotSet = new string[PlayerRoster.MaxSlots][];
-        m_placements = new Dictionary<object, IReadOnlyDictionary<string, System.Numerics.Vector2>>[PlayerRoster.MaxSlots];
         m_activeBarView = new BindingPageView?[PlayerRoster.MaxSlots];
         m_pressedBySource = new Func<string, bool>[PlayerRoster.MaxSlots];
 
@@ -130,8 +122,6 @@ internal sealed class WorldOverlayFeed {
             m_hintLines[index] = [];
             m_slots[index] = new OverlayBindingSlot[(WorldBindingBarCapacity.MaxBanks * WorldBindingBarCapacity.MaxSlots)];
             m_modifiers[index] = new OverlayBindingModifier[WorldBindingBarCapacity.MaxModifiers];
-            m_barSlotSet[index] = [];
-            m_placements[index] = new Dictionary<object, IReadOnlyDictionary<string, System.Numerics.Vector2>>(comparer: ReferenceEqualityComparer.Instance);
             m_pressedBySlot[index] = command => router.IsCommandHeld(
                 command: command,
                 slot: slot
@@ -143,35 +133,6 @@ internal sealed class WorldOverlayFeed {
             ));
         }
     }
-    // The plate table by source for one authored slot list — the layout's or a bank's own — built once per list
-    // instance and kept by reference, so every tick's lookups allocate nothing; the cache empties with the authoring
-    // it was built from (ResolveSlotSet), never growing past the live document's lists.
-    private IReadOnlyDictionary<string, System.Numerics.Vector2> ResolvePlacements(int slot, IReadOnlyList<WorldBindingBarSlotPlacement>? slots) {
-        if (slots is null) {
-            return NoPlacements;
-        }
-
-        if (!m_placements[slot].TryGetValue(
-            key: slots,
-            value: out var table
-        )) {
-            var built = new Dictionary<string, System.Numerics.Vector2>(comparer: StringComparer.Ordinal);
-
-            foreach (var placement in slots) {
-                if (placement?.Source is { Length: > 0 } source) {
-                    built[source] = new System.Numerics.Vector2(
-                        x: placement.X,
-                        y: placement.Y
-                    );
-                }
-            }
-
-            table = built;
-            m_placements[slot][slots] = table;
-        }
-
-        return table;
-    }
     private static OverlayBarEdge Edge(WorldBindingBarEdge edge) =>
         edge switch {
             WorldBindingBarEdge.Top => OverlayBarEdge.Top,
@@ -179,17 +140,6 @@ internal sealed class WorldOverlayFeed {
             WorldBindingBarEdge.Right => OverlayBarEdge.Right,
             _ => OverlayBarEdge.Bottom,
         };
-    // Snapshots a seat's authored slot set only when the resolved WorldBindingBarAuthoring instance changes — the
-    // authored ids ARE the ids the composer matches a page's bindings against, so this copies rather than parses.
-    private ReadOnlySpan<string> ResolveSlotSet(int slot, WorldBindingBarAuthoring authoring) {
-        if (!ReferenceEquals(objA: m_barAuthoringSeen[slot], objB: authoring)) {
-            m_barSlotSet[slot] = [.. authoring.SlotSet];
-            m_barAuthoringSeen[slot] = authoring;
-            m_placements[slot].Clear();
-        }
-
-        return m_barSlotSet[slot];
-    }
 
     // The seat's chord-hint lines, re-formatted only when its published view changes (a page/group flip or a
     // recompose — human cadence, never per frame). One ASCII line per command-chord row of the active group:
@@ -322,10 +272,7 @@ internal sealed class WorldOverlayFeed {
             var barAlpha = (((joined > 1)
                 ? authoring.MultiSeatAlpha
                 : 1f) * barStatus.Presence);
-            var slotSet = ResolveSlotSet(
-                authoring: authoring,
-                slot: slot
-            );
+            var slotSet = authoring.SlotSet;
             var banks = authoring.Banks;
             var destination = m_slots[viewIndex];
             var writeOffset = 0;
@@ -333,7 +280,7 @@ internal sealed class WorldOverlayFeed {
             m_activeBarView[slot] = view;
 
             if (
-                (slotSet.Length > 0) &&
+                (slotSet.Count > 0) &&
                 (banks.Count > 0)
             ) {
                 // A player's own "stacked off" preference still needs SOME bank to show — fall back to the full
@@ -373,54 +320,50 @@ internal sealed class WorldOverlayFeed {
                         ? (bank.ActiveAlpha ?? 1f)
                         : bank.Alpha
                     ));
-                    var bankPlacement = (((liveLayout.Banks is { } bankPlacements) && bankPlacements.TryGetValue(
+                    // A bank the live layout does not place is not drawn in that layout.
+                    if (
+                        (liveLayout.Banks is not { } bankPlacements) ||
+                        !bankPlacements.TryGetValue(
                         key: bank.Id,
-                        value: out var placed
-                    ) && (placed is not null))
-                        ? placed
-                        : AnchorBank
-                    );
+                        value: out var bankPlacement
+                    ) ||
+                        (bankPlacement is null)
+                    ) {
+                        continue;
+                    }
+
                     var slotCount = Math.Min(
-                        val1: slotSet.Length,
+                        val1: slotSet.Count,
                         val2: (destination.Length - writeOffset)
                     );
-
                     var bankAnchor = (bankPlacement.Anchor ?? liveLayout.ResolvedAnchor);
 
                     BindingBarSeatComposer.ComposeBank(
                         anchorEdge: Edge(edge: bankAnchor.Edge),
-                        anchorMargin: bankAnchor.Margin,
+                        anchorInset: bankAnchor.Inset,
                         bankAlpha: bankAlpha,
-                        bankMirror: bankPlacement.Mirror,
-                        bankOffset: new System.Numerics.Vector2(
-                            x: bankPlacement.OffsetX,
-                            y: bankPlacement.OffsetY
-                        ),
-                        bankOrder: bank.Order,
+                        bankOrder: bankIndex,
                         destination: destination.AsSpan(
                             start: writeOffset,
                             length: slotCount
                         ),
                         hideUnbound: barStatus.EffectiveHideUnbound,
-                        placements: ResolvePlacements(
-                            slot: slot,
-                            slots: (bankPlacement.Slots ?? liveLayout.Slots)
-                        ),
-                        unplacedRowLift: liveLayout.ResolvedUnplacedRowLift,
-                        unplacedSlotSpacing: liveLayout.ResolvedUnplacedSlotSpacing,
-                        // Only the ACTIVE bank lights a held control: a wing shows what a chord WOULD make the
+                        plates: liveLayout.Plates(bankId: bank.Id),
+                        // Only the active bank lights a held control: a wing shows what a chord would make the
                         // control do, and a press is happening on the page that is live, not on that hypothetical.
                         isPressed: (isActiveBank
                             ? m_pressedBySource[slot]
                             : null),
                         isCommandHeld: m_pressedBySlot[slot],
-                        // The physical-button badge belongs to the live page too: a wing shows what a chord WOULD
-                        // make each plate do, and which control a plate IS is already read off the active bank.
+                        // The physical-button badge belongs to the live page too: a wing shows what a chord would
+                        // make each plate do, and which control a plate is comes off the active bank.
                         resolveBadge: (isActiveBank
                             ? m_resolveBadge
                             : NoBadge),
                         resolveIcon: m_resolveIcon,
-                        slotSet: slotSet[..slotCount],
+                        slotSet: ((slotCount == slotSet.Count)
+                            ? slotSet
+                            : slotSet.Take(count: slotCount).ToArray()),
                         text: barText,
                         view: bankView
                     );
@@ -473,11 +416,8 @@ internal sealed class WorldOverlayFeed {
                 Viewport: viewport,
                 Layout: new BindingBarLayoutOptions(
                     AnchorEdge: Edge(edge: authoredLayout.ResolvedAnchor.Edge),
-                    AnchorMargin: authoredLayout.ResolvedAnchor.Margin,
-                    BadgeCorner: authoredLayout.ResolvedBadgeCorner,
+                    AnchorInset: authoredLayout.ResolvedAnchor.Inset,
                     ButtonSize: authoredLayout.ResolvedButtonSize,
-                    UnplacedRowLift: authoredLayout.ResolvedUnplacedRowLift,
-                    UnplacedSlotSpacing: authoredLayout.ResolvedUnplacedSlotSpacing,
                     GlyphOffsetRatio: authoredLayout.ResolvedGlyphOffsetRatio,
                     GlyphSizeRatio: authoredLayout.ResolvedGlyphSizeRatio,
                     HintBaseGapRatio: authoredLayout.ResolvedHintBaseGapRatio,

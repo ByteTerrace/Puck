@@ -60,21 +60,27 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
         // The latched-toggle border's phase: one march per TogglePeriodSeconds on the presentation clock — never
         // simulation time; every latched plate in the frame shares it so they march together.
         var togglePhase = (float)((System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: 0L).TotalSeconds % TogglePeriodSeconds) / TogglePeriodSeconds);
-        var scaledButtonSize = (layout.ButtonSize * layout.Scale);
         var regionWidthPx = (region.Width * builder.Width);
         var regionHeightPx = (region.Height * builder.Height);
         var regionOriginX = (region.X * builder.Width);
         var regionOriginY = (region.Y * builder.Height);
         var regionAspect = (regionWidthPx / regionHeightPx);
         var slots = seat.Slots.Span;
+        // The authored size is a ceiling: a narrow pane shrinks every plate together until each anchor group fits.
+        var scaledButtonSize = BindingBarLayout.FitButtonSize(
+            aspect: regionAspect,
+            buttonSize: (layout.ButtonSize * layout.Scale),
+            slots: slots
+        );
         var barAnchor = BindingBarLayout.BarAnchor(
             aspect: regionAspect,
             edge: layout.AnchorEdge,
-            margin: layout.AnchorMargin
+            inset: (layout.AnchorInset * scaledButtonSize)
         );
         var plateHalf = ((scaledButtonSize * 0.5f) * regionHeightPx);
         var glyphHalf = (((scaledButtonSize * layout.GlyphSizeRatio) * 0.5f) * regionHeightPx);
-        var badgeNudge = (((scaledButtonSize * layout.GlyphOffsetRatio) * layout.BadgeCorner) * regionHeightPx);
+        // One glyph offset; each plate's badge takes its own signed multiple of it (see OverlayBindingSlot.BadgeX/Y).
+        var badgeNudge = ((scaledButtonSize * layout.GlyphOffsetRatio) * regionHeightPx);
 
         builder.BeginClip(
             h: regionHeightPx,
@@ -90,13 +96,13 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
                 continue;
             }
 
-            // Each plate hangs from ITS bank's anchor: a side column and the bottom strip of one bar share a seat
+            // Each plate hangs from its bank's anchor: a side column and the bottom strip of one bar share a seat
             // and a region but not an edge.
             var center = BindingBarLayout.PlateCenter(
                 anchor: BindingBarLayout.BarAnchor(
                     aspect: regionAspect,
                     edge: slot.AnchorEdge,
-                    margin: slot.AnchorMargin
+                    inset: (slot.AnchorInset * scaledButtonSize)
                 ),
                 buttonSize: scaledButtonSize,
                 edge: slot.AnchorEdge,
@@ -122,8 +128,8 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
                 centerX: centerX,
                 centerY: centerY,
                 glyphHalf: glyphHalf,
-                glyphOffsetX: badgeNudge,
-                glyphOffsetY: -badgeNudge,
+                glyphOffsetX: (badgeNudge * slot.BadgeX),
+                glyphOffsetY: (-badgeNudge * slot.BadgeY),
                 iconGlyph0: slot.IconGlyph0,
                 iconGlyph1: slot.IconGlyph1,
                 plateHalf: plateHalf,

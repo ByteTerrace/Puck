@@ -93,20 +93,48 @@ public static partial class WorldDefinitionValidator {
                 if ((placement is not null) && (!float.IsFinite(f: placement.X) || !float.IsFinite(f: placement.Y))) {
                     errors.Add(item: $"{slotPath} needs finite x and y pitches.");
                 }
+
+                if (placement?.Badge is { } badge) {
+                    if (badge.Count != 2) {
+                        errors.Add(item: $"{slotPath}.badge needs exactly [x, y].");
+                    } else if (!float.IsFinite(f: badge[0]) || !float.IsFinite(f: badge[1]) || (MathF.Abs(x: badge[0]) > 1f) || (MathF.Abs(x: badge[1]) > 1f)) {
+                        errors.Add(item: $"{slotPath}.badge [{badge[0]}, {badge[1]}] is outside [-1, 1] on an axis.");
+                    }
+                }
             }
         }
 
-        void ValidatePlacements(WorldBindingBarLayout layout, string layoutPath) {
-            ValidateSlots(
-                slots: (layout.Slots ?? []),
-                slotsPath: $"{layoutPath}.slots"
-            );
+        void ValidateAnchor(WorldBindingBarAnchor anchor, string anchorPath) {
+            if (!float.IsFinite(f: anchor.Inset) || (anchor.Inset < 0f)) {
+                errors.Add(item: $"{anchorPath}.inset {anchor.Inset} must be a non-negative number of button pitches.");
+            }
+        }
 
+        void ValidateLayout(WorldBindingBarLayout layout, string layoutPath) {
             if (layout.Anchor is { } layoutAnchor) {
                 ValidateAnchor(
                     anchor: layoutAnchor,
                     anchorPath: $"{layoutPath}.anchor"
                 );
+            }
+
+            var tableNames = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+            if (layout.Tables is { } tables) {
+                foreach (var (tableName, rows) in tables) {
+                    tableNames.Add(item: tableName);
+
+                    if (rows is null) {
+                        errors.Add(item: $"{layoutPath}.tables['{tableName}'] is required.");
+
+                        continue;
+                    }
+
+                    ValidateSlots(
+                        slots: rows,
+                        slotsPath: $"{layoutPath}.tables['{tableName}']"
+                    );
+                }
             }
 
             if (layout.Banks is { } bankPlacements) {
@@ -119,8 +147,8 @@ public static partial class WorldDefinitionValidator {
                         errors.Add(item: $"{bankPath} names no bank in {path}.banks.");
                     }
 
-                    if ((placement is null) || !float.IsFinite(f: placement.OffsetX) || !float.IsFinite(f: placement.OffsetY)) {
-                        errors.Add(item: $"{bankPath} needs finite offsetX and offsetY pitches.");
+                    if (placement is null) {
+                        errors.Add(item: $"{bankPath} is required.");
 
                         continue;
                     }
@@ -132,27 +160,50 @@ public static partial class WorldDefinitionValidator {
                         );
                     }
 
-                    if (placement.Slots is { } bankSlots) {
-                        ValidateSlots(
-                            slots: bankSlots,
-                            slotsPath: $"{bankPath}.slots"
-                        );
+                    if (placement.Pieces is null) {
+                        errors.Add(item: $"{bankPath}.pieces is required — a bank shows what it places.");
+
+                        continue;
+                    }
+
+                    for (var index = 0; (index < placement.Pieces.Count); index++) {
+                        var piece = placement.Pieces[index];
+                        var piecePath = $"{bankPath}.pieces[{index}]";
+
+                        if (piece is null || string.IsNullOrWhiteSpace(value: piece.Table)) {
+                            errors.Add(item: $"{piecePath}.table is required.");
+
+                            continue;
+                        }
+
+                        if (!tableNames.Contains(item: piece.Table)) {
+                            errors.Add(item: $"{piecePath}.table '{piece.Table}' names no entry of {layoutPath}.tables.");
+                        }
+
+                        if ((piece.At is { } at) && ((at.Count != 2) || !float.IsFinite(f: at[0]) || !float.IsFinite(f: at[1]))) {
+                            errors.Add(item: $"{piecePath}.at needs finite [x, y] pitches.");
+                        }
+
+                        if ((piece.Badge is { } badge) && ((badge.Count != 2) || !float.IsFinite(f: badge[0]) || !float.IsFinite(f: badge[1]) || (MathF.Abs(x: badge[0]) > 1f) || (MathF.Abs(x: badge[1]) > 1f))) {
+                            errors.Add(item: $"{piecePath}.badge needs [x, y] within [-1, 1].");
+                        }
                     }
                 }
             }
-        }
 
-        void ValidateAnchor(WorldBindingBarAnchor anchor, string anchorPath) {
-            if (!float.IsFinite(f: anchor.Margin) || (anchor.Margin < 0f) || (anchor.Margin >= 0.5f)) {
-                errors.Add(item: $"{anchorPath}.margin {anchor.Margin} is outside [0, 0.5) — a fraction of the viewport's extent along the edge's axis.");
-            }
-        }
-
-        if (authoring.Layout is { } defaultLayout) {
-            ValidatePlacements(
-                layout: defaultLayout,
-                layoutPath: $"{path}.layout"
-            );
+            RequireOptionalPositive(errors: errors, name: $"{layoutPath}.buttonSize", value: layout.ButtonSize);
+            RequireOptionalNonNegative(errors: errors, name: $"{layoutPath}.glyphOffsetRatio", value: layout.GlyphOffsetRatio);
+            RequireOptionalPositive(errors: errors, name: $"{layoutPath}.glyphSizeRatio", value: layout.GlyphSizeRatio);
+            RequireOptionalPositive(errors: errors, name: $"{layoutPath}.modifierHalfRatio", value: layout.ModifierHalfRatio);
+            RequireOptionalPositive(errors: errors, name: $"{layoutPath}.modifierSpacingRatio", value: layout.ModifierSpacingRatio);
+            RequireOptionalPositive(errors: errors, name: $"{layoutPath}.modifierGlyphRatio", value: layout.ModifierGlyphRatio);
+            RequireOptionalPositive(errors: errors, name: $"{layoutPath}.labelCellRatio", value: layout.LabelCellRatio);
+            RequireOptionalPositive(errors: errors, name: $"{layoutPath}.labelCellMinPx", value: layout.LabelCellMinPx);
+            RequireOptionalFinite(errors: errors, name: $"{layoutPath}.labelGapRatio", value: layout.LabelGapRatio);
+            RequireOptionalPositive(errors: errors, name: $"{layoutPath}.hintCellRatio", value: layout.HintCellRatio);
+            RequireOptionalPositive(errors: errors, name: $"{layoutPath}.hintCellMinPx", value: layout.HintCellMinPx);
+            RequireOptionalPositive(errors: errors, name: $"{layoutPath}.hintLineStepRatio", value: layout.HintLineStepRatio);
+            RequireOptionalFinite(errors: errors, name: $"{layoutPath}.hintBaseGapRatio", value: layout.HintBaseGapRatio);
         }
 
         if (authoring.Layouts is { } namedLayouts) {
@@ -163,11 +214,17 @@ public static partial class WorldDefinitionValidator {
                     continue;
                 }
 
-                ValidatePlacements(
+                ValidateLayout(
                     layout: named,
                     layoutPath: $"{path}.layouts['{name}']"
                 );
             }
+
+            if ((authoring.Layout is { } defaultName) && !namedLayouts.ContainsKey(key: defaultName)) {
+                errors.Add(item: $"{path}.layout '{defaultName}' names no entry of {path}.layouts.");
+            }
+        } else if (authoring.Layout is { } orphanName) {
+            errors.Add(item: $"{path}.layout '{orphanName}' names no entry of {path}.layouts — none are authored.");
         }
 
         if (
@@ -189,7 +246,6 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path}.banks declares {authoring.Banks.Count} entries, exceeding the {WorldBindingBarCapacity.MaxBanks}-bank ceiling.");
         } else {
             var seenBanks = new HashSet<string>(comparer: StringComparer.Ordinal);
-            var seenOrders = new HashSet<int>();
 
             for (var index = 0; (index < authoring.Banks.Count); index++) {
                 var bank = authoring.Banks[index];
@@ -211,15 +267,6 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{bankPath}.pageId is required.");
                 }
 
-                // Order is draw order: a repeated order would leave two overlapping banks with nothing to say which
-                // is in front.
-                if (bank.Order < 0) {
-                    errors.Add(item: $"{bankPath}.order {bank.Order} must not be negative.");
-                } else if (!seenOrders.Add(item: bank.Order)) {
-                    errors.Add(item: $"{bankPath}.order {bank.Order} is duplicated.");
-                }
-
-
                 if (
                     !float.IsFinite(f: bank.Alpha) ||
                     (bank.Alpha < 0f) ||
@@ -237,32 +284,6 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
-        if (authoring.Layout is not { } layout) {
-            return;
-        }
-
-        RequirePositive(
-            value: layout.Scale,
-            name: $"{path}.layout.scale",
-            errors: errors
-        );
-        RequireOptionalPositive(errors: errors, name: $"{path}.layout.buttonSize", value: layout.ButtonSize);
-
-        RequireOptionalNonNegative(errors: errors, name: $"{path}.layout.glyphOffsetRatio", value: layout.GlyphOffsetRatio);
-        RequireOptionalPositive(errors: errors, name: $"{path}.layout.glyphSizeRatio", value: layout.GlyphSizeRatio);
-        RequireOptionalFinite(errors: errors, name: $"{path}.layout.unplacedRowLift", value: layout.UnplacedRowLift);
-        RequireOptionalPositive(errors: errors, name: $"{path}.layout.unplacedSlotSpacing", value: layout.UnplacedSlotSpacing);
-        RequireOptionalFinite(errors: errors, name: $"{path}.layout.badgeCorner", value: layout.BadgeCorner);
-        RequireOptionalPositive(errors: errors, name: $"{path}.layout.modifierHalfRatio", value: layout.ModifierHalfRatio);
-        RequireOptionalPositive(errors: errors, name: $"{path}.layout.modifierSpacingRatio", value: layout.ModifierSpacingRatio);
-        RequireOptionalPositive(errors: errors, name: $"{path}.layout.modifierGlyphRatio", value: layout.ModifierGlyphRatio);
-        RequireOptionalPositive(errors: errors, name: $"{path}.layout.labelCellRatio", value: layout.LabelCellRatio);
-        RequireOptionalPositive(errors: errors, name: $"{path}.layout.labelCellMinPx", value: layout.LabelCellMinPx);
-        RequireOptionalFinite(errors: errors, name: $"{path}.layout.labelGapRatio", value: layout.LabelGapRatio);
-        RequireOptionalPositive(errors: errors, name: $"{path}.layout.hintCellRatio", value: layout.HintCellRatio);
-        RequireOptionalPositive(errors: errors, name: $"{path}.layout.hintCellMinPx", value: layout.HintCellMinPx);
-        RequireOptionalPositive(errors: errors, name: $"{path}.layout.hintLineStepRatio", value: layout.HintLineStepRatio);
-        RequireOptionalFinite(errors: errors, name: $"{path}.layout.hintBaseGapRatio", value: layout.HintBaseGapRatio);
     }
     private static void RequireOptionalFinite(float? value, string name, List<string> errors) {
         if (value is { } authored) {

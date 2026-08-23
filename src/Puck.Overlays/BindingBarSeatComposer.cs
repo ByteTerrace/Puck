@@ -1,4 +1,3 @@
-using System.Numerics;
 using Puck.Commands;
 
 namespace Puck.Overlays;
@@ -101,15 +100,14 @@ public static class BindingBarSeatComposer {
 
         return count;
     }
-    /// <summary>Composes one bank's slots: each <paramref name="slotSet"/> control gets its badge, its bound action's
-    /// icon and state from <paramref name="view"/>, and its PLACE — the authored pitch position from
-    /// <paramref name="placements"/> (or the unplaced row, left to right in slot-set order) plus the bank's offset,
-    /// applied outward per plate when the bank mirrors.</summary>
+    /// <summary>Composes one bank's slots: each <paramref name="slotSet"/> control the bank places gets its badge,
+    /// its bound action's icon and state from <paramref name="view"/>, and its plate from <paramref name="plates"/>;
+    /// a control the bank does not place is written hidden.</summary>
     /// <param name="view">The page view this bank renders.</param>
     /// <param name="slotSet">The bar's slot set, in authored order.</param>
-    /// <param name="placements">The authored plate positions by source, button pitches from the anchor (x right, y up).</param>
+    /// <param name="plates">The bank's plate table by source.</param>
     /// <param name="resolveBadge">Resolves a source id to its badge content.</param>
-    /// <param name="resolveIcon">Resolves a bound row's presentation KEY (its id, else its action name) to its icon
+    /// <param name="resolveIcon">Resolves a bound row's presentation key (its id, else its action name) to its icon
     /// content.</param>
     /// <param name="isPressed">Answers whether a physical control is currently held this frame, or <see langword="null"/>
     /// for a bank that is not live.</param>
@@ -119,56 +117,37 @@ public static class BindingBarSeatComposer {
     /// <param name="text">Whether the bar draws atlas text badges.</param>
     /// <param name="hideUnbound">Whether an unbound slot is hidden rather than drawn disabled.</param>
     /// <param name="bankOrder">The bank's draw order.</param>
-    /// <param name="bankOffset">The bank's displacement, button pitches (x right, y up).</param>
-    /// <param name="bankMirror">Whether the bank's x displacement is applied outward per plate.</param>
-    /// <param name="unplacedRowLift">The unplaced row's lift, pitches.</param>
-    /// <param name="unplacedSlotSpacing">The unplaced row's pitch between plates.</param>
     /// <param name="anchorEdge">The edge this bank hangs from.</param>
-    /// <param name="anchorMargin">That edge's margin; with <paramref name="anchorEdge"/>, the bank's anchor GROUP.</param>
-    /// <param name="destination">The destination slots; exactly <paramref name="slotSet"/>.Length entries.</param>
+    /// <param name="anchorInset">That edge's inset, pitches; with <paramref name="anchorEdge"/>, the bank's anchor group.</param>
+    /// <param name="destination">The destination slots; exactly <paramref name="slotSet"/>.Count entries.</param>
     /// <exception cref="ArgumentException"><paramref name="destination"/> does not match <paramref name="slotSet"/>
     /// in length.</exception>
-    public static void ComposeBank(BindingPageView view, ReadOnlySpan<string> slotSet, IReadOnlyDictionary<string, Vector2> placements, Func<string, OverlayResolvedGlyph> resolveBadge, Func<string?, OverlayResolvedGlyph> resolveIcon, Func<string, bool>? isPressed, Func<string, bool>? isCommandHeld, float bankAlpha, bool text, bool hideUnbound, int bankOrder, Vector2 bankOffset, bool bankMirror, float unplacedRowLift, float unplacedSlotSpacing, OverlayBarEdge anchorEdge, float anchorMargin, Span<OverlayBindingSlot> destination) {
+    public static void ComposeBank(BindingPageView view, IReadOnlyList<string> slotSet, IReadOnlyDictionary<string, BindingPlatePlacement> plates, Func<string, OverlayResolvedGlyph> resolveBadge, Func<string?, OverlayResolvedGlyph> resolveIcon, Func<string, bool>? isPressed, Func<string, bool>? isCommandHeld, float bankAlpha, bool text, bool hideUnbound, int bankOrder, OverlayBarEdge anchorEdge, float anchorInset, Span<OverlayBindingSlot> destination) {
         ArgumentNullException.ThrowIfNull(argument: view);
-        ArgumentNullException.ThrowIfNull(argument: placements);
+        ArgumentNullException.ThrowIfNull(argument: slotSet);
+        ArgumentNullException.ThrowIfNull(argument: plates);
         ArgumentNullException.ThrowIfNull(argument: resolveBadge);
         ArgumentNullException.ThrowIfNull(argument: resolveIcon);
 
-        if (destination.Length != slotSet.Length) {
+        if (destination.Length != slotSet.Count) {
             throw new ArgumentException(
-                message: $"Expected {slotSet.Length} slots; got {destination.Length}.",
+                message: $"Expected {slotSet.Count} slots; got {destination.Length}.",
                 paramName: nameof(destination)
             );
         }
 
-        var unplacedCount = 0;
-
-        foreach (var slotSource in slotSet) {
-            if (!placements.ContainsKey(key: slotSource)) {
-                unplacedCount++;
-            }
-        }
-
-        var unplacedSeen = 0;
-
-        for (var index = 0; (index < slotSet.Length); index++) {
+        for (var index = 0; (index < slotSet.Count); index++) {
             var source = slotSet[index];
-            var position = (placements.TryGetValue(
+
+            if (!plates.TryGetValue(
                 key: source,
-                value: out var authored
-            )
-                ? authored
-                : new Vector2(
-                    x: ((unplacedSeen++ - ((unplacedCount - 1) * 0.5f)) * unplacedSlotSpacing),
-                    y: unplacedRowLift
-                )
-            );
-            // The bank's offset: a mirrored bank fans OUTWARD — a plate left of the anchor goes left, right goes
-            // right, on the line stays — so a two-cluster bar's wings nest like a pair of hands.
-            var outward = (bankMirror
-                ? MathF.Sign(x: position.X)
-                : 1f
-            );
+                value: out var plate
+            )) {
+                destination[index] = default;
+
+                continue;
+            }
+
             var glyph = Badge(
                 glyph: resolveBadge(source),
                 text: text
@@ -177,8 +156,8 @@ public static class BindingBarSeatComposer {
                 view: view,
                 source: source
             );
-            // A momentary press lights only on the live bank (isPressed is null for a wing). A LATCHED toggle is a
-            // fact about the seat, not the live page: it lights on every bank that binds it, judged against THIS
+            // A momentary press lights only on the live bank (isPressed is null for a wing). A latched toggle is a
+            // fact about the seat, not the live page: it lights on every bank that binds it, judged against this
             // bank's own row (the wing's L3 may latch a different channel than the base's), faded with the bank.
             var livePress = ((isPressed is not null) && isPressed(source));
             var latched = ((binding is { Toggle: true }) && (isCommandHeld is not null) && isCommandHeld(binding.Command));
@@ -198,19 +177,21 @@ public static class BindingBarSeatComposer {
                 Toggled: latched,
                 IconGlyph0: icon.Glyph0,
                 IconGlyph1: icon.Glyph1,
-                PitchX: (position.X + (outward * bankOffset.X)),
-                PitchY: (position.Y + bankOffset.Y),
+                PitchX: plate.Position.X,
+                PitchY: plate.Position.Y,
                 Pressed: pressed,
                 Visible: ((binding is not null) || !hideUnbound),
                 AnchorEdge: anchorEdge,
-                AnchorMargin: anchorMargin
+                AnchorInset: anchorInset,
+                BadgeX: plate.Badge.X,
+                BadgeY: plate.Badge.Y
             );
         }
     }
     /// <summary>Normalizes every composed slot's pitches to its anchor group — the slots sharing one edge and
-    /// margin: along the edge's axis the group's plate nearest the edge moves to pitch 0 (so the writer can put its
-    /// EDGE on the margin line), across it the group's extent is centered on 0. Authored pitches stay relative to one
-    /// another; only where the whole group hangs is decided here, from the group's actual extent, so a margin means
+    /// inset: along the edge's axis the group's plate nearest the edge moves to pitch 0 (so the writer can put its
+    /// edge on the inset line), across it the group's extent is centered on 0. Authored pitches stay relative to one
+    /// another; only where the whole group hangs is decided here, from the group's actual extent, so an inset means
     /// "from the edge to the nearest plate" whatever shape the document drew. Hidden slots ride along but do not
     /// set the extent.</summary>
     /// <param name="slots">Every slot of one seat's bar, all banks.</param>
@@ -226,7 +207,7 @@ public static class BindingBarSeatComposer {
             }
 
             var edge = slots[first].AnchorEdge;
-            var margin = slots[first].AnchorMargin;
+            var inset = slots[first].AnchorInset;
             var minX = float.MaxValue;
             var maxX = float.MinValue;
             var minY = float.MaxValue;
@@ -235,7 +216,7 @@ public static class BindingBarSeatComposer {
             for (var index = first; (index < slots.Length); index++) {
                 ref readonly var slot = ref slots[index];
 
-                if ((slot.AnchorEdge != edge) || (slot.AnchorMargin != margin) || !slot.Visible) {
+                if ((slot.AnchorEdge != edge) || (slot.AnchorInset != inset) || !slot.Visible) {
                     continue;
                 }
 
@@ -264,7 +245,7 @@ public static class BindingBarSeatComposer {
             );
 
             for (var index = first; (index < slots.Length); index++) {
-                if ((slots[index].AnchorEdge != edge) || (slots[index].AnchorMargin != margin)) {
+                if ((slots[index].AnchorEdge != edge) || (slots[index].AnchorInset != inset)) {
                     continue;
                 }
 

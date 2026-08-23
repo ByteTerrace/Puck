@@ -4831,7 +4831,7 @@
             ],
             "properties": {
               "slotSet": {
-                "description": "The physical controls this bar shows, by INPUT SOURCE ID (gamepad.buttonSouth, mouse.button1, \u2026) in authored order (an exotic slot\u0027s left-to-right position in its row follows this order) \u2014 the same vocabulary a binding entry\u0027s sources speak, every id validated against the engine\u0027s input-source catalog, unique, at most MaxSlots.",
+                "description": "The physical controls this bar shows, by input source id (gamepad.buttonSouth, mouse.button1, \u2026) \u2014 the same vocabulary a binding entry\u0027s sources speak, every id validated against the engine\u0027s input-source catalog, unique, at most MaxSlots. A layout\u0027s bank places these; one it does not place is not shown on that bank.",
                 "type": "array",
                 "items": {
                   "type": [
@@ -4841,26 +4841,22 @@
                 }
               },
               "banks": {
-                "description": "The stacked banks \u2014 at least one, at most MaxBanks, unique ids, each naming a page the composed binding profile actually declares.",
+                "description": "The stacked banks \u2014 at least one, at most MaxBanks, unique ids, each naming a page the composed binding profile actually declares. List order is draw order.",
                 "type": "array",
                 "items": {
-                  "description": "One stacked binding-bar bank: the page it renders and its position in the stack. Several banks of the SAME slot set render simultaneously, each showing what that bank\u0027s OWN page binds \u2014 the WoW-addon original\u0027s \u0022five banks of one compass\u0022 idea (resting, LT, RT, LT\u003ERT, RT\u003ELT are the natural five, though a bank may name any page). Where each bank sits is the live layout\u0027s banks table\u0027s to say; this row carries only what a bank IS.",
+                  "description": "One stacked binding-bar bank: what it is \u2014 the page it renders and its opacities. Several banks of the same slot set render simultaneously, each showing what that bank\u0027s OWN page binds. Where a bank sits, and which plates it shows, is each layout\u0027s banks table\u0027s to say; draw order is this list\u0027s order (later draws on top).",
                   "type": [
                     "object",
                     "null"
                   ],
                   "properties": {
                     "id": {
-                      "description": "The bank\u0027s stable id \u2014 its mutation address (unique within the authoring row).",
+                      "description": "The bank\u0027s stable id \u2014 its mutation address and its key in every layout\u0027s bank table.",
                       "type": "string"
                     },
                     "pageId": {
                       "description": "The BindingPageDefinition.Id this bank renders \u2014 validated to exist somewhere in the composed binding profile.",
                       "type": "string"
-                    },
-                    "order": {
-                      "description": "This bank\u0027s draw order (unique within the authoring row): higher draws later, on top. Where the bank sits is the active layout\u0027s banks table\u0027s, not this number\u0027s.",
-                      "type": "integer"
                     },
                     "alpha": {
                       "description": "This bank\u0027s opacity when it is NOT the seat\u0027s currently active page.",
@@ -4878,7 +4874,6 @@
                   "required": [
                     "id",
                     "pageId",
-                    "order",
                     "alpha"
                   ],
                   "additionalProperties": false
@@ -4890,7 +4885,7 @@
                 "default": true
               },
               "text": {
-                "description": "Whether the bar draws the ATLAS TEXT it composes \u2014 a badge whose icon row carries a Label (LB/RB, LT/RT, LS/RS, the menu trio, the exotics), the active page\u0027s name under the modifier indicators, and the chord-hint lines above them. false drops every label-content badge outright and leaves a purely pictographic bar: every plate, the glyph-content badges (the d-pad arrows and the face-position marks), the bound actions\u0027 icons, and the modifier indicators all still draw.",
+                "description": "Whether the bar draws the atlas text it composes \u2014 a badge whose icon row carries a Label (LB/RB, LT/RT, LS/RS, the menu trio, the exotics), the active page\u0027s name under the modifier indicators, and the chord-hint lines above them. false drops every label-content badge outright and leaves a purely pictographic bar: every plate, the glyph-content badges (the d-pad arrows and the face-position marks), the bound actions\u0027 icons, and the modifier indicators all still draw.",
                 "type": "boolean",
                 "default": true
               },
@@ -4900,7 +4895,7 @@
                 "default": true
               },
               "hideUnbound": {
-                "description": "Whether a slot with no bound act on its bank\u0027s page should not render at all, rather than drawing the DISABLED tier-0 plate. A player\u0027s own BindingBarPreferences.HideUnbound overrides this.",
+                "description": "Whether a slot with no bound act on its bank\u0027s page should not render at all, rather than drawing the disabled tier-0 plate. A player\u0027s own BindingBarPreferences.HideUnbound overrides this.",
                 "type": "boolean",
                 "default": false
               },
@@ -4918,154 +4913,128 @@
                 "default": null
               },
               "layouts": {
-                "description": "Named alternative layouts \u2014 a crossbar, a strip, whatever an author adds next \u2014 each a whole WorldBindingBarLayout. Which one is live is LayoutCell\u0027s to say.",
+                "description": "The bar\u0027s layouts by name \u2014 a crossbar, a strip, whatever an author adds next \u2014 each a whole WorldBindingBarLayout.",
                 "type": [
                   "object",
                   "null"
                 ],
                 "additionalProperties": {
-                  "description": "The authored layout of one on-screen binding bar. Every field but Scale is an OPTIONAL override of the engine\u0027s resolved default (the Default* constants below): lengths are fractions of the seat viewport\u0027s height, every *Ratio/*Lift/*Spacing is a multiple of the scaled button size, and every *MinPx is a device-pixel floor. Scale uniformly scales the slot cluster around its bottom-center anchor.",
+                  "description": "The authored layout of one on-screen binding bar: its tables, its banks, and its size tuning. Every tuning field is an optional override of the engine\u0027s resolved default (the Default* constants below): lengths are fractions of the seat viewport\u0027s height, every *Ratio is a multiple of the button size, and every *MinPx is a device-pixel floor.",
                   "type": [
                     "object",
                     "null"
                   ],
                   "properties": {
-                    "scale": {
-                      "description": "The uniform cluster scale.",
-                      "type": "number",
-                      "default": 1
-                    },
-                    "buttonSize": {
-                      "description": "The unscaled slot-plate size.",
-                      "type": [
-                        "number",
-                        "null"
-                      ],
-                      "default": null
-                    },
-                    "anchor": {
-                      "description": "Where the bar hangs \u2014 the edge and margin every bank without its own anchor shares.",
-                      "type": [
-                        "object",
-                        "null"
-                      ],
-                      "properties": {
-                        "edge": {
-                          "description": "The viewport edge.",
-                          "enum": [
-                            "Bottom",
-                            "Top",
-                            "Left",
-                            "Right"
-                          ],
-                          "default": "Bottom"
-                        },
-                        "margin": {
-                          "description": "The gap between that edge and the nearest plate edge of everything anchored here, as a fraction of the viewport\u0027s extent ALONG that edge\u0027s axis (height for top/bottom, width for left/right) \u2014 so 0.025 reads as \u00222.5% in\u0022 on any aspect. Along the other axis the group is centered.",
-                          "type": "number",
-                          "default": 0
-                        }
-                      },
-                      "additionalProperties": false,
-                      "default": null
-                    },
-                    "glyphOffsetRatio": {
-                      "description": "The badge\u0027s corner offset as a fraction of ButtonSize.",
-                      "type": [
-                        "number",
-                        "null"
-                      ],
-                      "default": null
-                    },
-                    "glyphSizeRatio": {
-                      "description": "The badge\u0027s size as a fraction of ButtonSize.",
-                      "type": [
-                        "number",
-                        "null"
-                      ],
-                      "default": null
-                    },
-                    "unplacedRowLift": {
-                      "description": "The row every slot NOT named in Slots falls into: its lift above the anchor, in scaled button sizes.",
-                      "type": [
-                        "number",
-                        "null"
-                      ],
-                      "default": null
-                    },
-                    "unplacedSlotSpacing": {
-                      "description": "The unplaced row\u0027s slot pitch, in scaled button sizes; the row runs left to right in slotSet order, centered on the anchor.",
-                      "type": [
-                        "number",
-                        "null"
-                      ],
-                      "default": null
-                    },
-                    "slots": {
-                      "description": "Where each physical control\u0027s plate sits, in button pitches from the bar\u0027s anchor (x right, y UP) \u2014 the bar\u0027s SHAPE. A crossbar, a linear strip, a keyboard block: all are tables here, none is engine policy. A control in slotSet with no row here takes the unplaced row. Absent places nothing, so every slot lines up in the unplaced row.",
-                      "type": [
-                        "array",
-                        "null"
-                      ],
-                      "items": {
-                        "description": "One physical control\u0027s place on a bar, in button pitches from the bar\u0027s anchor \u2014 x right, y UP. The unit a bank\u0027s offset shares, so an author lays a bar out on one grid.",
-                        "type": [
-                          "object",
-                          "null"
-                        ],
-                        "properties": {
-                          "source": {
-                            "description": "The physical control\u0027s input source id (a slotSet member).",
-                            "type": "string"
-                          },
-                          "x": {
-                            "description": "Pitches right of the anchor (negative = left).",
-                            "type": "number"
-                          },
-                          "y": {
-                            "description": "Pitches above the anchor (negative = below).",
-                            "type": "number"
-                          }
-                        },
-                        "required": [
-                          "source",
-                          "x",
-                          "y"
-                        ],
-                        "additionalProperties": false
-                      },
-                      "default": null
-                    },
-                    "banks": {
-                      "description": "Where each bank sits, by bank id, in the same pitches \u2014 a layout is a slot table AND a bank table, so a crossbar\u0027s nested wings and a strip\u0027s side-by-side wings are each one self-contained layout. A bank with no row here sits on the anchor.",
+                    "tables": {
+                      "description": "The plate tables by name \u2014 a cross, a strip, a column \u2014 each authored once and placed by the banks\u0027 pieces as many times as the layout needs.",
                       "type": [
                         "object",
                         "null"
                       ],
                       "additionalProperties": {
-                        "description": "One bank\u0027s place on a bar, in button pitches (x right, y UP) \u2014 the layout\u0027s half of a bank, beside the bank row\u0027s identity/page/order/alpha half. A bank is \u0022just a bar\u0022: it may hang from its own edge and carry its own plate table, or share the layout\u0027s.",
+                        "type": [
+                          "array",
+                          "null"
+                        ],
+                        "items": {
+                          "description": "One physical control\u0027s plate on a bank, in button pitches from the bank\u0027s anchor \u2014 x right, y UP.",
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "properties": {
+                            "source": {
+                              "description": "The physical control\u0027s input source id (a slotSet member).",
+                              "type": "string"
+                            },
+                            "x": {
+                              "description": "Pitches right of the anchor (negative = left).",
+                              "type": "number"
+                            },
+                            "y": {
+                              "description": "Pitches above the anchor (negative = below).",
+                              "type": "number"
+                            },
+                            "badge": {
+                              "description": "Where the plate\u0027s physical-button badge sits, [x, y] as signed multiples of the layout\u0027s glyph offset: \u002B1 right / up, \u22121 left / down, 0 centered. A plate in a cluster points its badge outward \u2014 a d-pad\u0027s up button badges up, its left button left \u2014 so the badge never lands on a neighbour. null is the up-right corner, [1, 1].",
+                              "type": [
+                                "array",
+                                "null"
+                              ],
+                              "items": {
+                                "type": "number"
+                              },
+                              "default": null
+                            }
+                          },
+                          "required": [
+                            "source",
+                            "x",
+                            "y"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "default": null
+                    },
+                    "banks": {
+                      "description": "Where each bank sits and what it shows, by bank id. A bank with no row here is not drawn in this layout.",
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "additionalProperties": {
+                        "description": "One bank\u0027s place on a layout \u2014 a bank is a bar: where it hangs and the pieces it is made of. A control in the slot set that no piece places is not shown on this bank; a source placed by two pieces takes the later one.",
                         "type": [
                           "object",
                           "null"
                         ],
                         "properties": {
-                          "offsetX": {
-                            "description": "Pitches right of the anchor.",
-                            "type": "number",
-                            "default": 0
-                          },
-                          "offsetY": {
-                            "description": "Pitches above the anchor.",
-                            "type": "number",
-                            "default": 0
-                          },
-                          "mirror": {
-                            "description": "Whether OffsetX is applied OUTWARD per plate \u2014 a plate left of the anchor moves left, one right of it moves right, one on the anchor line does not move \u2014 so a two-cluster bar fans its wings like a pair of mirrored hands. false translates the whole bank as one piece.",
-                            "type": "boolean",
-                            "default": false
+                          "pieces": {
+                            "description": "The placed tables, in order.",
+                            "type": "array",
+                            "items": {
+                              "description": "One placed table: a named table of the layout, moved by At.",
+                              "type": [
+                                "object",
+                                "null"
+                              ],
+                              "properties": {
+                                "table": {
+                                  "description": "The key of a table in the layout\u0027s tables.",
+                                  "type": "string"
+                                },
+                                "at": {
+                                  "description": "The displacement, [x, y] in button pitches (x right, y up); null is none.",
+                                  "type": [
+                                    "array",
+                                    "null"
+                                  ],
+                                  "items": {
+                                    "type": "number"
+                                  },
+                                  "default": null
+                                },
+                                "badge": {
+                                  "description": "A badge direction for every plate of this piece, overriding the table rows\u0027; see Badge. null keeps each row\u0027s own.",
+                                  "type": [
+                                    "array",
+                                    "null"
+                                  ],
+                                  "items": {
+                                    "type": "number"
+                                  },
+                                  "default": null
+                                }
+                              },
+                              "required": [
+                                "table"
+                              ],
+                              "additionalProperties": false
+                            }
                           },
                           "anchor": {
-                            "description": "Where THIS bank hangs, or null to share the layout\u0027s anchor (and so its frame: the offsets then nest it against the other banks there).",
+                            "description": "Where this bank hangs, or null to share the layout\u0027s anchor (and so its frame: the pieces then nest against the other banks there).",
                             "type": [
                               "object",
                               "null"
@@ -5081,33 +5050,67 @@
                                 ],
                                 "default": "Bottom"
                               },
-                              "margin": {
-                                "description": "The gap between that edge and the nearest plate edge of everything anchored here, as a fraction of the viewport\u0027s extent ALONG that edge\u0027s axis (height for top/bottom, width for left/right) \u2014 so 0.025 reads as \u00222.5% in\u0022 on any aspect. Along the other axis the group is centered.",
+                              "inset": {
+                                "description": "The gap between that edge and the nearest plate edge of everything anchored here, in button pitches \u2014 the same ruler every plate position uses. Along the other axis the group is centered.",
                                 "type": "number",
                                 "default": 0
                               }
                             },
                             "additionalProperties": false,
                             "default": null
-                          },
-                          "slots": {
-                            "description": "This bank\u0027s own plate table, or null to share the layout\u0027s \u2014 a side column and a bottom strip show the same controls in different shapes.",
-                            "type": [
-                              "array",
-                              "null"
-                            ],
-                            "items": {
-                              "$ref": "#/properties/bindingOverlays/items/properties/bindingBar/properties/layouts/additionalProperties/properties/slots/items"
-                            },
-                            "default": null
                           }
                         },
+                        "required": [
+                          "pieces"
+                        ],
                         "additionalProperties": false
                       },
                       "default": null
                     },
-                    "badgeCorner": {
-                      "description": "The corner the physical-button badge nudges toward, as a signed multiple of the glyph offset: \u002B1 up-right, -1 down-left, 0 centered on the plate.",
+                    "anchor": {
+                      "description": "Where the bar\u0027s own anchor (the modifier row, page label, chord hints) hangs, and the anchor every bank without its own shares.",
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "edge": {
+                          "description": "The viewport edge.",
+                          "enum": [
+                            "Bottom",
+                            "Top",
+                            "Left",
+                            "Right"
+                          ],
+                          "default": "Bottom"
+                        },
+                        "inset": {
+                          "description": "The gap between that edge and the nearest plate edge of everything anchored here, in button pitches \u2014 the same ruler every plate position uses. Along the other axis the group is centered.",
+                          "type": "number",
+                          "default": 0
+                        }
+                      },
+                      "additionalProperties": false,
+                      "default": null
+                    },
+                    "buttonSize": {
+                      "description": "The slot-plate size at most: the writer shrinks it so every anchor group fits its seat region, and a seat\u0027s stored bar scale multiplies it.",
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "glyphOffsetRatio": {
+                      "description": "The badge\u0027s offset as a fraction of ButtonSize \u2014 each plate\u0027s badge takes its own signed multiples of it (Badge).",
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "glyphSizeRatio": {
+                      "description": "The badge\u0027s size as a fraction of ButtonSize.",
                       "type": [
                         "number",
                         "null"
@@ -5115,7 +5118,7 @@
                       "default": null
                     },
                     "modifierHalfRatio": {
-                      "description": "The modifier indicator\u0027s plate half-extent, in scaled button sizes.",
+                      "description": "The modifier indicator\u0027s plate half-extent, in button sizes.",
                       "type": [
                         "number",
                         "null"
@@ -5123,7 +5126,7 @@
                       "default": null
                     },
                     "modifierSpacingRatio": {
-                      "description": "The modifier indicators\u0027 pitch, in scaled button sizes.",
+                      "description": "The modifier indicators\u0027 pitch, in button sizes.",
                       "type": [
                         "number",
                         "null"
@@ -5199,168 +5202,20 @@
                 },
                 "default": null
               },
-              "layoutCell": {
-                "description": "A text state cell, state.\u003Crow\u003E.\u003Ckey\u003E, whose value names the live entry of Layouts; a value naming none falls back to Layout. Ordinary state: a chord, a wheel sector, or the console switches the bar\u0027s whole shape by writing the cell.",
+              "layout": {
+                "description": "The name of the layout drawn when LayoutCell is absent or names none.",
                 "type": [
                   "string",
                   "null"
                 ],
                 "default": null
               },
-              "layout": {
-                "description": "The bar\u0027s tuning when no named layout is selected; null uses Default.",
+              "layoutCell": {
+                "description": "A text state cell, state.\u003Crow\u003E.\u003Ckey\u003E, whose value names the live entry of Layouts; a value naming none falls back to Layout. Ordinary state: a chord, a wheel sector, or the console switches the bar\u0027s whole shape by writing the cell.",
                 "type": [
-                  "object",
+                  "string",
                   "null"
                 ],
-                "properties": {
-                  "scale": {
-                    "description": "The uniform cluster scale.",
-                    "type": "number",
-                    "default": 1
-                  },
-                  "buttonSize": {
-                    "description": "The unscaled slot-plate size.",
-                    "type": [
-                      "number",
-                      "null"
-                    ],
-                    "default": null
-                  },
-                  "anchor": {
-                    "$ref": "#/properties/bindingOverlays/items/properties/bindingBar/properties/layouts/additionalProperties/properties/anchor",
-                    "default": null
-                  },
-                  "glyphOffsetRatio": {
-                    "description": "The badge\u0027s corner offset as a fraction of ButtonSize.",
-                    "type": [
-                      "number",
-                      "null"
-                    ],
-                    "default": null
-                  },
-                  "glyphSizeRatio": {
-                    "description": "The badge\u0027s size as a fraction of ButtonSize.",
-                    "type": [
-                      "number",
-                      "null"
-                    ],
-                    "default": null
-                  },
-                  "unplacedRowLift": {
-                    "description": "The row every slot NOT named in Slots falls into: its lift above the anchor, in scaled button sizes.",
-                    "type": [
-                      "number",
-                      "null"
-                    ],
-                    "default": null
-                  },
-                  "unplacedSlotSpacing": {
-                    "description": "The unplaced row\u0027s slot pitch, in scaled button sizes; the row runs left to right in slotSet order, centered on the anchor.",
-                    "type": [
-                      "number",
-                      "null"
-                    ],
-                    "default": null
-                  },
-                  "slots": {
-                    "$ref": "#/properties/bindingOverlays/items/properties/bindingBar/properties/layouts/additionalProperties/properties/slots",
-                    "default": null
-                  },
-                  "banks": {
-                    "$ref": "#/properties/bindingOverlays/items/properties/bindingBar/properties/layouts/additionalProperties/properties/banks",
-                    "default": null
-                  },
-                  "badgeCorner": {
-                    "description": "The corner the physical-button badge nudges toward, as a signed multiple of the glyph offset: \u002B1 up-right, -1 down-left, 0 centered on the plate.",
-                    "type": [
-                      "number",
-                      "null"
-                    ],
-                    "default": null
-                  },
-                  "modifierHalfRatio": {
-                    "description": "The modifier indicator\u0027s plate half-extent, in scaled button sizes.",
-                    "type": [
-                      "number",
-                      "null"
-                    ],
-                    "default": null
-                  },
-                  "modifierSpacingRatio": {
-                    "description": "The modifier indicators\u0027 pitch, in scaled button sizes.",
-                    "type": [
-                      "number",
-                      "null"
-                    ],
-                    "default": null
-                  },
-                  "modifierGlyphRatio": {
-                    "description": "The modifier badge\u0027s half-extent, as a fraction of the modifier plate half.",
-                    "type": [
-                      "number",
-                      "null"
-                    ],
-                    "default": null
-                  },
-                  "labelCellRatio": {
-                    "description": "The page label\u0027s glyph-cell height, as a fraction of the modifier plate half.",
-                    "type": [
-                      "number",
-                      "null"
-                    ],
-                    "default": null
-                  },
-                  "labelCellMinPx": {
-                    "description": "The page label\u0027s glyph-cell floor, px.",
-                    "type": [
-                      "number",
-                      "null"
-                    ],
-                    "default": null
-                  },
-                  "labelGapRatio": {
-                    "description": "The page label\u0027s drop below the anchor, as a fraction of the modifier plate half.",
-                    "type": [
-                      "number",
-                      "null"
-                    ],
-                    "default": null
-                  },
-                  "hintCellRatio": {
-                    "description": "A chord-hint line\u0027s glyph-cell height, as a fraction of the modifier plate half.",
-                    "type": [
-                      "number",
-                      "null"
-                    ],
-                    "default": null
-                  },
-                  "hintCellMinPx": {
-                    "description": "A chord-hint line\u0027s glyph-cell floor, px.",
-                    "type": [
-                      "number",
-                      "null"
-                    ],
-                    "default": null
-                  },
-                  "hintLineStepRatio": {
-                    "description": "The chord-hint line pitch, as a fraction of the hint cell height.",
-                    "type": [
-                      "number",
-                      "null"
-                    ],
-                    "default": null
-                  },
-                  "hintBaseGapRatio": {
-                    "description": "The hint stack\u0027s lift above the anchor, as a fraction of the modifier plate half.",
-                    "type": [
-                      "number",
-                      "null"
-                    ],
-                    "default": null
-                  }
-                },
-                "additionalProperties": false,
                 "default": null
               },
               "visible": {

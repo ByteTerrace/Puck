@@ -30,9 +30,11 @@ namespace Puck.Overlays;
 /// <param name="Latched">Whether <see cref="Pressed"/> is a toggle's latch shown on a bank that is NOT live — drawn
 /// at the held tier but quieted with its bank (the theme's quiet-dim), so a latch stays legible on a wing without
 /// reading as the live press it is not.</param>
+/// <param name="BadgeX">The badge's horizontal nudge as a signed multiple of the layout's glyph offset (+1 right).</param>
+/// <param name="BadgeY">The badge's vertical nudge as a signed multiple of the layout's glyph offset (+1 up).</param>
 /// <param name="AnchorEdge">The region edge this plate's bank hangs from.</param>
-/// <param name="AnchorMargin">That edge's inset; with <paramref name="AnchorEdge"/>, the plate's anchor group — the
-/// frame its pitches are normalized in.</param>
+/// <param name="AnchorInset">That edge's inset, pitches; with <paramref name="AnchorEdge"/>, the plate's anchor
+/// group — the frame its pitches are normalized in.</param>
 public readonly record struct OverlayBindingSlot(
     ushort BadgeGlyph0,
     ushort BadgeGlyph1,
@@ -49,7 +51,9 @@ public readonly record struct OverlayBindingSlot(
     bool Latched = false,
     bool Toggled = false,
     OverlayBarEdge AnchorEdge = OverlayBarEdge.Bottom,
-    float AnchorMargin = 0f
+    float AnchorInset = 0f,
+    float BadgeX = 0f,
+    float BadgeY = 0f
 );
 /// <summary>One declared modifier as the renderer consumes it (the trigger indicators between the clusters).</summary>
 /// <param name="BadgeGlyph0">The modifier's first (or only) badge atlas glyph index, 1-based, 0 = none.</param>

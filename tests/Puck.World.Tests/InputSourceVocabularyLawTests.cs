@@ -114,7 +114,7 @@ public sealed class InputSourceVocabularyLawTests {
                     ]
                 ),
                 BindingBar: new WorldBindingBarAuthoring(
-                    Banks: [new WorldBindingBarBank(Id: "resting", PageId: "base", Order: 0, Alpha: 1f)],
+                    Banks: [new WorldBindingBarBank(Id: "resting", PageId: "base", Alpha: 1f)],
                     SlotSet: [source]
                 )
             ),

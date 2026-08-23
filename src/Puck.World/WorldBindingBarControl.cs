@@ -14,8 +14,8 @@ namespace Puck.World;
 /// <param name="Stacked">Whether every authored bank renders (<see langword="true"/>) or only the seat's active
 /// bank (<see langword="false"/>) — the seat's stored <see cref="BindingBarPreferences.Stacked"/>, defaulting to
 /// <see langword="true"/> (stacked, the authored look) when unset.</param>
-/// <param name="EffectiveScale"><see cref="Authoring"/>'s resolved layout scale, overridden by the seat's own
-/// stored <see cref="BindingBarPreferences.Scale"/> when set to a finite positive value.</param>
+/// <param name="EffectiveScale">The seat's own stored <see cref="BindingBarPreferences.Scale"/> when set to a finite
+/// positive value, else 1 — the runtime multiplier on the layout's button size.</param>
 /// <param name="Layout">The LIVE layout: the named entry <see cref="WorldBindingBarAuthoring.LayoutCell"/>'s cell
 /// selects this frame, else the authoring row's own <c>layout</c>. Read per status, so a state write re-shapes the
 /// bar on the next frame.</param>
@@ -123,7 +123,7 @@ internal sealed class WorldBindingBarControl {
         )
             ? layoutName
             : null));
-        var effectiveScale = layout.Scale;
+        var effectiveScale = 1f;
         var presence = ((hidden || (liveOverride is true))
             ? (hidden
                 ? 0f
