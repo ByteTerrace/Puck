@@ -14,40 +14,423 @@
       "bindingBar": {
         "banks": [
           {
+            "alpha": 1,
             "id": "resting",
             "order": 0,
-            "pageId": "base",
-            "alpha": 1
+            "pageId": "base"
           },
           {
+            "activeAlpha": 1,
+            "alpha": 0.6,
             "id": "lt",
             "order": 1,
-            "pageId": "pageLt",
-            "alpha": 0.6,
-            "activeAlpha": 1
+            "pageId": "pageLt"
           },
           {
+            "activeAlpha": 1,
+            "alpha": 0.6,
             "id": "rt",
             "order": 2,
-            "pageId": "pageRt",
-            "alpha": 0.6,
-            "activeAlpha": 1
+            "pageId": "pageRt"
           }
         ],
         "hideUnbound": false,
         "iconRow": "state.actionIcons",
         "layout": {
-          "anchorOffsetY": 0.3125,
           "badgeCorner": 1,
+          "banks": {
+            "lt": {
+              "mirror": true,
+              "offsetX": -2,
+              "offsetY": 1
+            },
+            "rt": {
+              "mirror": true,
+              "offsetX": -2,
+              "offsetY": -2
+            }
+          },
           "buttonSize": 0.075,
-          "centerGap": 0.15,
-          "centerRowLift": 1.9,
-          "centerSlotSpacing": 1.15,
-          "exoticRowLift": 3.6,
-          "exoticSlotSpacing": 1.15,
           "glyphOffsetRatio": 0.4375,
           "glyphSizeRatio": 0.53333336,
-          "scale": 1
+          "scale": 1,
+          "slots": [
+            {
+              "source": "gamepad.dpadUp",
+              "x": -5,
+              "y": 1
+            },
+            {
+              "source": "gamepad.dpadRight",
+              "x": -4,
+              "y": 0
+            },
+            {
+              "source": "gamepad.dpadDown",
+              "x": -5,
+              "y": -1
+            },
+            {
+              "source": "gamepad.dpadLeft",
+              "x": -6,
+              "y": 0
+            },
+            {
+              "source": "gamepad.leftShoulder",
+              "x": -6,
+              "y": 1
+            },
+            {
+              "source": "gamepad.leftStickPress",
+              "x": -5,
+              "y": 0
+            },
+            {
+              "source": "gamepad.buttonNorth",
+              "x": 5,
+              "y": 1
+            },
+            {
+              "source": "gamepad.buttonWest",
+              "x": 4,
+              "y": 0
+            },
+            {
+              "source": "gamepad.buttonSouth",
+              "x": 5,
+              "y": -1
+            },
+            {
+              "source": "gamepad.buttonEast",
+              "x": 6,
+              "y": 0
+            },
+            {
+              "source": "gamepad.rightShoulder",
+              "x": 6,
+              "y": 1
+            },
+            {
+              "source": "gamepad.rightStickPress",
+              "x": 5,
+              "y": 0
+            }
+          ],
+          "unplacedRowLift": 3,
+          "unplacedSlotSpacing": 1.15,
+          "anchor": {
+            "edge": "Bottom",
+            "margin": 0.05
+          }
+        },
+        "layoutCell": "state.bar.layout",
+        "layouts": {
+          "crossbar": {
+            "badgeCorner": 1,
+            "banks": {
+              "lt": {
+                "mirror": true,
+                "offsetX": -2,
+                "offsetY": 1
+              },
+              "rt": {
+                "mirror": true,
+                "offsetX": -2,
+                "offsetY": -2
+              }
+            },
+            "buttonSize": 0.075,
+            "glyphOffsetRatio": 0.4375,
+            "glyphSizeRatio": 0.53333336,
+            "scale": 1,
+            "slots": [
+              {
+                "source": "gamepad.dpadUp",
+                "x": -5,
+                "y": 1
+              },
+              {
+                "source": "gamepad.dpadRight",
+                "x": -4,
+                "y": 0
+              },
+              {
+                "source": "gamepad.dpadDown",
+                "x": -5,
+                "y": -1
+              },
+              {
+                "source": "gamepad.dpadLeft",
+                "x": -6,
+                "y": 0
+              },
+              {
+                "source": "gamepad.leftShoulder",
+                "x": -6,
+                "y": 1
+              },
+              {
+                "source": "gamepad.leftStickPress",
+                "x": -5,
+                "y": 0
+              },
+              {
+                "source": "gamepad.buttonNorth",
+                "x": 5,
+                "y": 1
+              },
+              {
+                "source": "gamepad.buttonWest",
+                "x": 4,
+                "y": 0
+              },
+              {
+                "source": "gamepad.buttonSouth",
+                "x": 5,
+                "y": -1
+              },
+              {
+                "source": "gamepad.buttonEast",
+                "x": 6,
+                "y": 0
+              },
+              {
+                "source": "gamepad.rightShoulder",
+                "x": 6,
+                "y": 1
+              },
+              {
+                "source": "gamepad.rightStickPress",
+                "x": 5,
+                "y": 0
+              }
+            ],
+            "unplacedRowLift": 3,
+            "unplacedSlotSpacing": 1.15,
+            "anchor": {
+              "edge": "Bottom",
+              "margin": 0.05
+            }
+          },
+          "linear": {
+            "badgeCorner": 1,
+            "banks": {
+              "lt": {
+                "anchor": {
+                  "edge": "Left",
+                  "margin": 0.025
+                },
+                "mirror": false,
+                "offsetX": 0,
+                "offsetY": 0,
+                "slots": [
+                  {
+                    "source": "gamepad.dpadUp",
+                    "x": 0,
+                    "y": 0.0
+                  },
+                  {
+                    "source": "gamepad.dpadRight",
+                    "x": 0,
+                    "y": -1.15
+                  },
+                  {
+                    "source": "gamepad.dpadDown",
+                    "x": 0,
+                    "y": -2.3
+                  },
+                  {
+                    "source": "gamepad.dpadLeft",
+                    "x": 0,
+                    "y": -3.45
+                  },
+                  {
+                    "source": "gamepad.leftShoulder",
+                    "x": 0,
+                    "y": -4.6
+                  },
+                  {
+                    "source": "gamepad.leftStickPress",
+                    "x": 0,
+                    "y": -5.75
+                  },
+                  {
+                    "source": "gamepad.buttonNorth",
+                    "x": 0,
+                    "y": -6.9
+                  },
+                  {
+                    "source": "gamepad.buttonWest",
+                    "x": 0,
+                    "y": -8.05
+                  },
+                  {
+                    "source": "gamepad.buttonSouth",
+                    "x": 0,
+                    "y": -9.2
+                  },
+                  {
+                    "source": "gamepad.buttonEast",
+                    "x": 0,
+                    "y": -10.35
+                  },
+                  {
+                    "source": "gamepad.rightShoulder",
+                    "x": 0,
+                    "y": -11.5
+                  },
+                  {
+                    "source": "gamepad.rightStickPress",
+                    "x": 0,
+                    "y": -12.65
+                  }
+                ]
+              },
+              "rt": {
+                "anchor": {
+                  "edge": "Right",
+                  "margin": 0.025
+                },
+                "mirror": false,
+                "offsetX": 0,
+                "offsetY": 0,
+                "slots": [
+                  {
+                    "source": "gamepad.dpadUp",
+                    "x": 0,
+                    "y": 0.0
+                  },
+                  {
+                    "source": "gamepad.dpadRight",
+                    "x": 0,
+                    "y": -1.15
+                  },
+                  {
+                    "source": "gamepad.dpadDown",
+                    "x": 0,
+                    "y": -2.3
+                  },
+                  {
+                    "source": "gamepad.dpadLeft",
+                    "x": 0,
+                    "y": -3.45
+                  },
+                  {
+                    "source": "gamepad.leftShoulder",
+                    "x": 0,
+                    "y": -4.6
+                  },
+                  {
+                    "source": "gamepad.leftStickPress",
+                    "x": 0,
+                    "y": -5.75
+                  },
+                  {
+                    "source": "gamepad.buttonNorth",
+                    "x": 0,
+                    "y": -6.9
+                  },
+                  {
+                    "source": "gamepad.buttonWest",
+                    "x": 0,
+                    "y": -8.05
+                  },
+                  {
+                    "source": "gamepad.buttonSouth",
+                    "x": 0,
+                    "y": -9.2
+                  },
+                  {
+                    "source": "gamepad.buttonEast",
+                    "x": 0,
+                    "y": -10.35
+                  },
+                  {
+                    "source": "gamepad.rightShoulder",
+                    "x": 0,
+                    "y": -11.5
+                  },
+                  {
+                    "source": "gamepad.rightStickPress",
+                    "x": 0,
+                    "y": -12.65
+                  }
+                ]
+              }
+            },
+            "buttonSize": 0.075,
+            "glyphOffsetRatio": 0.4375,
+            "glyphSizeRatio": 0.53333336,
+            "scale": 0.9,
+            "slots": [
+              {
+                "source": "gamepad.dpadLeft",
+                "x": -6.324999999999999,
+                "y": 0
+              },
+              {
+                "source": "gamepad.dpadUp",
+                "x": -5.175,
+                "y": 0
+              },
+              {
+                "source": "gamepad.dpadDown",
+                "x": -4.0249999999999995,
+                "y": 0
+              },
+              {
+                "source": "gamepad.dpadRight",
+                "x": -2.875,
+                "y": 0
+              },
+              {
+                "source": "gamepad.leftShoulder",
+                "x": -1.7249999999999999,
+                "y": 0
+              },
+              {
+                "source": "gamepad.leftStickPress",
+                "x": -0.575,
+                "y": 0
+              },
+              {
+                "source": "gamepad.rightStickPress",
+                "x": 0.575,
+                "y": 0
+              },
+              {
+                "source": "gamepad.rightShoulder",
+                "x": 1.7249999999999999,
+                "y": 0
+              },
+              {
+                "source": "gamepad.buttonWest",
+                "x": 2.875,
+                "y": 0
+              },
+              {
+                "source": "gamepad.buttonNorth",
+                "x": 4.0249999999999995,
+                "y": 0
+              },
+              {
+                "source": "gamepad.buttonSouth",
+                "x": 5.175,
+                "y": 0
+              },
+              {
+                "source": "gamepad.buttonEast",
+                "x": 6.324999999999999,
+                "y": 0
+              }
+            ],
+            "unplacedRowLift": 3,
+            "unplacedSlotSpacing": 1.15,
+            "anchor": {
+              "edge": "Bottom",
+              "margin": 0.025
+            }
+          }
         },
         "modifiers": false,
         "multiSeatAlpha": 0.5,
@@ -69,8 +452,8 @@
         "visible": {
           "$type": "recently",
           "fact": "SeatInput",
-          "windowSeconds": 3,
-          "fadeSeconds": 2
+          "fadeSeconds": 2,
+          "windowSeconds": 3
         }
       },
       "document": {
@@ -334,7 +717,6 @@
             ],
             "group": "state.bindingGroups.defaultActionGroup",
             "page": {
-              "id": "pageLt",
               "entries": [
                 {
                   "command": "player.move.strafe",
@@ -364,6 +746,9 @@
                 {
                   "command": "view.override",
                   "id": "cameraOverhead",
+                  "sources": [
+                    "gamepad.buttonWest"
+                  ],
                   "value": {
                     "kind": "Axis1D",
                     "raw": [
@@ -372,14 +757,14 @@
                       0,
                       0
                     ]
-                  },
-                  "sources": [
-                    "gamepad.buttonWest"
-                  ]
+                  }
                 },
                 {
                   "command": "view.override",
                   "id": "cameraAction",
+                  "sources": [
+                    "gamepad.buttonEast"
+                  ],
                   "value": {
                     "kind": "Axis1D",
                     "raw": [
@@ -388,10 +773,7 @@
                       0,
                       0
                     ]
-                  },
-                  "sources": [
-                    "gamepad.buttonEast"
-                  ]
+                  }
                 },
                 {
                   "channel": "forward",
@@ -413,7 +795,8 @@
                     "gamepad.rightStickPress"
                   ]
                 }
-              ]
+              ],
+              "id": "pageLt"
             }
           },
           {
@@ -422,7 +805,6 @@
             ],
             "group": "state.bindingGroups.defaultActionGroup",
             "page": {
-              "id": "pageRt",
               "entries": [
                 {
                   "command": "player.move.strafe",
@@ -463,7 +845,8 @@
                     "gamepad.buttonEast"
                   ]
                 }
-              ]
+              ],
+              "id": "pageRt"
             }
           }
         ],
@@ -501,12 +884,15 @@
             "holdPages": [
               "actionWheel"
             ],
+            "iconRow": "state.actionIcons",
             "id": "defaultActionWheel",
+            "labelRow": "state.wheelLabels",
             "rings": [
               {
                 "entries": [
                   {
                     "command": "view.override",
+                    "id": "cameraOverhead",
                     "sources": null,
                     "value": {
                       "kind": "Axis1D",
@@ -516,11 +902,11 @@
                         0,
                         0
                       ]
-                    },
-                    "id": "cameraOverhead"
+                    }
                   },
                   {
                     "command": "view.override",
+                    "id": "cameraAction",
                     "sources": null,
                     "value": {
                       "kind": "Axis1D",
@@ -530,23 +916,28 @@
                         0,
                         0
                       ]
-                    },
-                    "id": "cameraAction"
+                    }
                   },
                   {
                     "command": "quit",
-                    "sources": null,
-                    "id": "quit"
+                    "id": "quit",
+                    "sources": null
                   },
                   {
                     "command": "console",
-                    "sources": null,
-                    "id": "console"
+                    "id": "console",
+                    "sources": null
                   },
                   {
                     "command": "world.reload",
                     "id": "reload",
                     "sources": null
+                  },
+                  {
+                    "command": "player.state.cell.toggle",
+                    "id": "barLayout",
+                    "sources": null,
+                    "text": "bar layout crossbar linear"
                   }
                 ],
                 "icon": null,
@@ -556,14 +947,12 @@
             ],
             "style": {
               "axisDeadZone": 0.08,
-              "placement": "ViewportCenter",
-              "selectionGraceSeconds": 0.13,
-              "switchFraction": 0.4,
               "deadZoneFraction": 0.11,
-              "ringWidthFraction": 0.13
-            },
-            "labelRow": "state.wheelLabels",
-            "iconRow": "state.actionIcons"
+              "placement": "ViewportCenter",
+              "ringWidthFraction": 0.13,
+              "selectionGraceSeconds": 0.13,
+              "switchFraction": 0.4
+            }
           }
         ]
       },
@@ -855,6 +1244,13 @@
         ]
       },
       "id": "pip"
+    }
+  ],
+  "grants": [
+    {
+      "capability": "Mutate",
+      "principal": "seat1",
+      "subject": "all"
     }
   ],
   "gravity": {
@@ -1728,6 +2124,10 @@
           {
             "key": "autoJetpack",
             "value": "move.ascend"
+          },
+          {
+            "key": "barLayout",
+            "value": "edit.style"
           }
         ],
         "kind": "text",
@@ -1758,6 +2158,10 @@
           {
             "key": "cancel",
             "value": "Cancel"
+          },
+          {
+            "key": "barLayout",
+            "value": "Bar layout"
           }
         ],
         "kind": "text",
@@ -1772,6 +2176,16 @@
         ],
         "kind": "fixed",
         "name": "look"
+      },
+      {
+        "cells": [
+          {
+            "key": "layout",
+            "value": "crossbar"
+          }
+        ],
+        "kind": "text",
+        "name": "bar"
       }
     ]
   },
@@ -2076,12 +2490,5 @@
       ],
       "version": "puck.camera.v1"
     }
-  },
-  "grants": [
-    {
-      "principal": "seat1",
-      "capability": "Mutate",
-      "subject": "all"
-    }
-  ]
+  }
 }

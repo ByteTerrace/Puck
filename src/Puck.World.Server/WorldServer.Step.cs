@@ -133,7 +133,7 @@ public sealed partial class WorldServer {
     // m_rules/m_interactions — and iterating a field an inner call reassigns is how a rule would silently stop seeing
     // its siblings mid-tick. Every row declared at the top of the tick evaluates during this tick; a row ADDED by
     // this tick's effects starts on the next one, the same next-tick boundary every other mutation already lands on.
-    private bool EvaluateCompiledRules(CompiledWorldRule[] rules, Dictionary<string, bool> latch, ulong tick, ulong stepTicks) {
+    private bool EvaluateCompiledRules(CompiledWorldRule[] rules, RuleLatch latch, ulong tick, ulong stepTicks) {
         var applied = false;
 
         if (rules.Length == 0) {
@@ -141,8 +141,11 @@ public sealed partial class WorldServer {
         }
 
         foreach (var rule in rules) {
+            var bindings = latch.Bindings(name: rule.Name);
+
             if (rule.Interaction is { } interaction) {
                 applied |= EvaluateInteraction(
+                    bindings: bindings,
                     interaction: interaction,
                     latch: latch,
                     rule: rule,
@@ -156,11 +159,21 @@ public sealed partial class WorldServer {
             if (rule.ForEach is { } forEach) {
                 // The keys are snapshotted before the first evaluation, so an effect minting a cell (a status
                 // applied to a new carrier) starts ticking next tick, never mid-iteration.
-                foreach (var key in CarrierKeys(row: forEach)) {
+                CarrierKeys(
+                    into: m_carrierScratchLeft,
+                    row: forEach
+                );
+                latch.BeginSweep();
+
+                foreach (var key in m_carrierScratchLeft) {
                     m_boundEach = key;
                     applied |= EvaluateOnce(
                         latch: latch,
-                        latchKey: $"{rule.Name}#{key}",
+                        binding: new LatchKey(
+                            Left: key,
+                            Right: -1
+                        ),
+                        bindings: bindings,
                         rule: rule,
                         stepTicks: stepTicks,
                         tick: tick
@@ -168,13 +181,15 @@ public sealed partial class WorldServer {
                 }
 
                 m_boundEach = -1;
+                latch.EndSweep(bindings: bindings);
 
                 continue;
             }
 
             applied |= EvaluateOnce(
                 latch: latch,
-                latchKey: rule.Name,
+                binding: LatchKey.None,
+                bindings: bindings,
                 rule: rule,
                 stepTicks: stepTicks,
                 tick: tick
@@ -185,15 +200,23 @@ public sealed partial class WorldServer {
     }
     // One gate-and-fire under the bindings already in place. EDGE fires on the CROSSING alone and re-arms only when
     // the gate closes again; LEVEL fires every tick the gate holds — one vocabulary, the same ActionTriggerMode a
-    // per-body fact trigger reads. The latch is per evaluation key (a bound body or pair), never per rule alone.
-    private bool EvaluateOnce(CompiledWorldRule rule, Dictionary<string, bool> latch, string latchKey, ulong tick, ulong stepTicks) {
+    // per-body fact trigger reads. The latch is per evaluation binding (a bound body or pair), never per rule alone;
+    // a bound entry that is not evaluated this tick (the pair left range, the carrier lost its tag or despawned) is
+    // closed by the enclosing sweep, which is what re-arms an Edge interaction whose synthesized gate is always open.
+    private bool EvaluateOnce(CompiledWorldRule rule, RuleLatch latch, Dictionary<LatchKey, bool> bindings, LatchKey binding, ulong tick, ulong stepTicks) {
         var open = RuleGateOpen(
             gate: rule.Gate,
             tick: tick
         );
-        var wasOpen = latch.GetValueOrDefault(key: latchKey);
+        ref var slot = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(
+            dictionary: bindings,
+            exists: out _,
+            key: binding
+        );
+        var wasOpen = slot;
 
-        latch[latchKey] = open;
+        slot = open;
+        latch.Touch(binding: binding);
 
         if (
             !open ||
@@ -216,12 +239,16 @@ public sealed partial class WorldServer {
     }
     // Every (left carrier, right carrier) pair within range, or every left carrier inside the region, fires the
     // interaction once with left/right bound — the chemistry is evaluated over all carriers, never one argmax pair.
-    private bool EvaluateInteraction(CompiledWorldRule rule, CompiledInteraction interaction, Dictionary<string, bool> latch, ulong tick, ulong stepTicks) {
+    private bool EvaluateInteraction(CompiledWorldRule rule, CompiledInteraction interaction, RuleLatch latch, Dictionary<LatchKey, bool> bindings, ulong tick, ulong stepTicks) {
         var applied = false;
-        var lefts = Carriers(
+        var lefts = m_carrierScratchLeft;
+
+        Carriers(
+            into: lefts,
             row: interaction.Left,
             tick: tick
         );
+        latch.BeginSweep();
 
         if (interaction.CoOccurrence == WorldInteractionCoOccurrence.Region) {
             foreach (var left in lefts) {
@@ -236,28 +263,43 @@ public sealed partial class WorldServer {
                 m_boundRight = -1;
                 applied |= EvaluateOnce(
                     latch: latch,
-                    latchKey: $"{rule.Name}#{left}",
+                    binding: new LatchKey(
+                        Left: left,
+                        Right: -1
+                    ),
+                    bindings: bindings,
                     rule: rule,
                     stepTicks: stepTicks,
                     tick: tick
                 );
             }
         } else {
-            var rights = Carriers(
+            var rights = m_carrierScratchRight;
+            // Range is a finite non-negative authored distance; its square only leaves the carrier past 2^39 raw,
+            // where every saturated LengthSquared already compares within it.
+            var rangeSquared = ((interaction.Range.Value < (1L << 39))
+                ? (interaction.Range * interaction.Range)
+                : FixedQ4816.MaxValue
+            );
+
+            Carriers(
+                into: rights,
                 row: interaction.Right,
                 tick: tick
             );
 
             foreach (var left in lefts) {
-                if (Body(index: left) is not { } leftBody) {
-                    continue;
-                }
-
                 foreach (var right in rights) {
+                    // A carrier an earlier pair's effect despawned mid-sweep reads the sentinel, never a distance.
+                    var distanceSquared = ReadBodyDistanceSquared(
+                        bodyA: left,
+                        bodyB: right
+                    );
+
                     if (
                         (right == left) ||
-                        (Body(index: right) is not { } rightBody) ||
-                        ((rightBody.FixedPosition - leftBody.FixedPosition).Length > interaction.Range)
+                        (distanceSquared == NoBodyDistance) ||
+                        (distanceSquared > rangeSquared)
                     ) {
                         continue;
                     }
@@ -266,7 +308,11 @@ public sealed partial class WorldServer {
                     m_boundRight = right;
                     applied |= EvaluateOnce(
                         latch: latch,
-                        latchKey: $"{rule.Name}#{left}#{right}",
+                        binding: new LatchKey(
+                            Left: left,
+                            Right: right
+                        ),
+                        bindings: bindings,
                         rule: rule,
                         stepTicks: stepTicks,
                         tick: tick
@@ -277,48 +323,69 @@ public sealed partial class WorldServer {
 
         m_boundLeft = -1;
         m_boundRight = -1;
+        latch.EndSweep(bindings: bindings);
 
         return applied;
     }
-    // The integer keys a keyed row holds at this moment, ascending — the iteration set of a forEach rule.
-    private List<int> CarrierKeys(string row) {
-        var keys = new List<int>();
+    // The integer keys a keyed row holds at this moment, ascending — the iteration set of a forEach rule. Fills the
+    // caller's scratch list; the cells themselves are not retained.
+    private void CarrierKeys(string row, List<int> into) {
+        into.Clear();
 
         if (WorldDefinitionRows.FindStateRow(
             rows: m_definition.State,
             name: row
         ) is { Cells: { } cells }) {
             foreach (var cell in cells) {
-                if (int.TryParse(
-                    s: cell.Key,
-                    style: System.Globalization.NumberStyles.Integer,
-                    provider: System.Globalization.CultureInfo.InvariantCulture,
-                    result: out var key
-                ) && (key >= 0)) {
-                    keys.Add(item: key);
+                if (WorldStateReader.TryParseCandidateIndex(
+                    index: out var key,
+                    key: cell.Key
+                )) {
+                    into.Add(item: key);
                 }
             }
         }
 
-        keys.Sort();
-
-        return keys;
+        into.Sort();
     }
-    // The active bodies whose cell in a keyed tag row reads nonzero, ascending.
-    private List<int> Carriers(string row, ulong tick) {
-        var carriers = CarrierKeys(row: row);
+    // The active bodies whose cell in a keyed tag row reads nonzero, ascending, into the caller's scratch list. A
+    // plain cell's stored value is its live value; only an advancing cell goes through the reader's as-of-tick walk.
+    private void Carriers(string row, ulong tick, List<int> into) {
+        into.Clear();
 
-        carriers.RemoveAll(match: index => (
-            (index >= m_population.Capacity) ||
-            (Body(index: index) is null) ||
-            (ReadStateCell(
-                row: row,
-                key: index.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
-                tick: tick
-            ) == FixedQ4816.Zero)
-        ));
+        if (WorldDefinitionRows.FindStateRow(
+            rows: m_definition.State,
+            name: row
+        ) is not { Cells: { } cells }) {
+            return;
+        }
 
-        return carriers;
+        foreach (var cell in cells) {
+            if (
+                !WorldStateReader.TryParseCandidateIndex(
+                index: out var index,
+                key: cell.Key
+            ) ||
+                (Body(index: index) is null)
+            ) {
+                continue;
+            }
+
+            var nonzero = ((cell.Advance is null)
+                ? (cell.Value != 0L)
+                : (ReadStateCell(
+                    row: row,
+                    key: cell.Key,
+                    tick: tick
+                ) != FixedQ4816.Zero)
+            );
+
+            if (nonzero) {
+                into.Add(item: index);
+            }
+        }
+
+        into.Sort();
     }
     // Evaluates every compiled rule's gate and fires its effects, in DOCUMENT ORDER — then every compiled
     // INTERACTION's, same terms, AFTER every rule. That ordering (rules, then interactions, each internally in
@@ -587,14 +654,29 @@ public sealed partial class WorldServer {
     // but as the world's own act — no drive-gate or grant check, since a gated body is one a rule still needs to
     // move.
     private void FirePoseEffect(CompiledWorldEffect effect, ulong tick) {
-        var bodyIndex = int.Parse(
-            s: ResolveOperandKey(
-                key: effect.Key,
-                keyFrom: effect.KeyFrom,
-                tick: tick
-            ),
-            provider: System.Globalization.CultureInfo.InvariantCulture
+        // A '$cell:' indirection yields the cell's integer, which may exceed int — a body index it can never name.
+        var spelled = ResolveOperandKey(
+            key: effect.Key,
+            keyFrom: effect.KeyFrom,
+            tick: tick
         );
+
+        if (
+            !long.TryParse(
+                s: spelled,
+                style: System.Globalization.NumberStyles.AllowLeadingSign,
+                provider: System.Globalization.CultureInfo.InvariantCulture,
+                result: out var resolved
+            ) ||
+            (resolved < 0L) ||
+            (resolved > int.MaxValue)
+        ) {
+            Console.Error.WriteLine(value: $"[world.rule: pose skipped — key '{spelled}' is not a body index]");
+
+            return;
+        }
+
+        var bodyIndex = (int)resolved;
 
         if (Body(index: bodyIndex) is not { } body) {
             Console.Error.WriteLine(value: $"[world.rule: pose skipped — body:{bodyIndex} is inactive]");
@@ -632,33 +714,6 @@ public sealed partial class WorldServer {
         );
         Console.Error.WriteLine(value: $"[world.rule: pose body:{bodyIndex} -> ({pose.Position.X}, {pose.Position.Y}, {pose.Position.Z})]");
     }
-    // A rule/interaction that no longer exists loses its latch; every surviving name KEEPS its bit, which is the
-    // whole reason the latch does not live inside the recompiled array. Shared by m_ruleGateHeld/m_interactions'
-    // OWN latch — the two never cross since each call is handed only its own compiled array.
-    private static void PruneGateLatch(Dictionary<string, bool> latch, CompiledWorldRule[] compiled) {
-        if (latch.Count == 0) {
-            return;
-        }
-
-        var live = new HashSet<string>(comparer: StringComparer.Ordinal);
-
-        foreach (var rule in compiled) {
-            _ = live.Add(item: rule.Name);
-        }
-
-        // A per-binding latch is keyed "<name>#<body>" or "<name>#<left>#<right>" and lives with its rule.
-        foreach (var key in latch.Keys.ToArray()) {
-            var hash = key.IndexOf(value: '#');
-            var name = ((hash < 0)
-                ? key
-                : key[..hash]
-            );
-
-            if (!live.Contains(item: name)) {
-                _ = latch.Remove(key: key);
-            }
-        }
-    }
     // Recompiles the rules section and prunes the edge latch to the surviving names. The compiler is called here
     // UNWRAPPED because WorldDefinitionValidator already compiled this exact candidate and refused it if it could
     // not — the same trusted-second-call shape every other derived-state rebuild in Install has.
@@ -666,14 +721,8 @@ public sealed partial class WorldServer {
         m_rules = WorldRuleCompiler.CompileAll(definition: definition);
         m_interactions = WorldRuleCompiler.CompileAllInteractions(definition: definition);
 
-        PruneGateLatch(
-            compiled: m_rules,
-            latch: m_ruleGateHeld
-        );
-        PruneGateLatch(
-            compiled: m_interactions,
-            latch: m_interactionGateHeld
-        );
+        m_ruleGateHeld.Prune(compiled: m_rules);
+        m_interactionGateHeld.Prune(compiled: m_interactions);
     }
     private bool RuleGateOpen(CompiledWorldPredicate[] gate, ulong tick) {
         foreach (var predicate in gate) {
@@ -1265,6 +1314,184 @@ public sealed partial class WorldServer {
         public sealed record Mutate(WorldMutation Mutation, int ConnectionId, long CorrelationId, long SourceAddonInstanceId = -1L, ushort ActOrdinal = 0, Action<bool>? OutcomeObserved = null) : PendingOp;
         public sealed record Rebuild(WorldRebuildRequest Request, WorldPrincipal Principal, int ConnectionId, long CorrelationId, string? ExpectedContentHash = null, string? PreparationFailure = null) : PendingOp;
         public sealed record Undo(int Count, WorldPrincipal Principal, int ConnectionId, long CorrelationId) : PendingOp;
+    }
+    // The evaluation binding a latch entry belongs to: a forEach key or a region-interaction carrier in Left with
+    // Right -1, a distance-interaction pair in both, and None for a rule evaluated once.
+    private readonly record struct LatchKey(int Left, int Right) {
+        public static readonly LatchKey None = new(
+            Left: -1,
+            Right: -1
+        );
+        // Checkpoint spelling: "" for None, else ":left" or ":left:right" — ':' is reserved out of WorldCellName, so
+        // the rule name it trails can never contain it. KEEP IN SYNC with TryParse.
+        public string Format() => ((Left < 0)
+            ? string.Empty
+            : ((Right < 0)
+                ? string.Create(
+                    provider: System.Globalization.CultureInfo.InvariantCulture,
+                    handler: $":{Left}"
+                )
+                : string.Create(
+                    provider: System.Globalization.CultureInfo.InvariantCulture,
+                    handler: $":{Left}:{Right}"
+                )
+            )
+        );
+        public static bool TryParse(ReadOnlySpan<char> text, out LatchKey binding) {
+            binding = None;
+
+            if (text.IsEmpty) {
+                return true;
+            }
+
+            if (text[0] != ':') {
+                return false;
+            }
+
+            text = text[1..];
+
+            var split = text.IndexOf(value: ':');
+            var leftText = ((split < 0)
+                ? text
+                : text[..split]
+            );
+            var rightText = ((split < 0)
+                ? ReadOnlySpan<char>.Empty
+                : text[(split + 1)..]
+            );
+
+            if (!int.TryParse(
+                s: leftText,
+                style: System.Globalization.NumberStyles.None,
+                provider: System.Globalization.CultureInfo.InvariantCulture,
+                result: out var left
+            )) {
+                return false;
+            }
+
+            var right = -1;
+
+            if (
+                (split >= 0) &&
+                !int.TryParse(
+                s: rightText,
+                style: System.Globalization.NumberStyles.None,
+                provider: System.Globalization.CultureInfo.InvariantCulture,
+                result: out right
+            )
+            ) {
+                return false;
+            }
+
+            binding = new LatchKey(
+                Left: left,
+                Right: right
+            );
+
+            return true;
+        }
+    }
+    // One family's edge latch (rules or interactions), per rule name and per binding, kept outside the compiled
+    // array because a rule's own effect recompiles it. A bound entry not touched between BeginSweep and EndSweep is
+    // closed: that is how a pair that left range, or a carrier that despawned, re-arms and is forgotten.
+    private sealed class RuleLatch {
+        private readonly Dictionary<string, Dictionary<LatchKey, bool>> m_byRule = new(comparer: StringComparer.Ordinal);
+        private readonly HashSet<LatchKey> m_touched = [];
+
+        public int Count {
+            get {
+                var count = 0;
+
+                foreach (var bindings in m_byRule.Values) {
+                    count += bindings.Count;
+                }
+
+                return count;
+            }
+        }
+
+        public void BeginSweep() => m_touched.Clear();
+        public Dictionary<LatchKey, bool> Bindings(string name) {
+            ref var bindings = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(
+                dictionary: m_byRule,
+                exists: out _,
+                key: name
+            );
+
+            return (bindings ??= []);
+        }
+        public void Clear() => m_byRule.Clear();
+        public void EndSweep(Dictionary<LatchKey, bool> bindings) {
+            // Dictionary.Remove does not invalidate an in-flight enumerator.
+            foreach (var pair in bindings) {
+                if (!m_touched.Contains(item: pair.Key)) {
+                    _ = bindings.Remove(key: pair.Key);
+                }
+            }
+        }
+        public void Flatten(List<(string, bool)> into) {
+            foreach (var (name, bindings) in m_byRule) {
+                foreach (var (binding, held) in bindings) {
+                    into.Add(item: (string.Concat(
+                        str0: name,
+                        str1: binding.Format()
+                    ), held));
+                }
+            }
+        }
+        // Held when the gate held at the last evaluation of any binding of the rule.
+        public bool Held(string name) {
+            if (!m_byRule.TryGetValue(
+                key: name,
+                value: out var bindings
+            )) {
+                return false;
+            }
+
+            foreach (var held in bindings.Values) {
+                if (held) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+        // Every surviving name keeps its entries; a name no longer compiled loses them.
+        public void Prune(CompiledWorldRule[] compiled) {
+            if (m_byRule.Count == 0) {
+                return;
+            }
+
+            var live = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+            foreach (var rule in compiled) {
+                _ = live.Add(item: rule.Name);
+            }
+
+            foreach (var name in m_byRule.Keys) {
+                if (!live.Contains(item: name)) {
+                    _ = m_byRule.Remove(key: name);
+                }
+            }
+        }
+        // The inverse of Flatten; a checkpoint entry that does not parse is dropped rather than mis-keyed.
+        public void Restore(string key, bool held) {
+            var split = key.IndexOf(value: ':');
+            var name = ((split < 0)
+                ? key
+                : key[..split]
+            );
+
+            if (LatchKey.TryParse(
+                binding: out var binding,
+                text: ((split < 0)
+                    ? ReadOnlySpan<char>.Empty
+                    : key.AsSpan(start: split))
+            )) {
+                Bindings(name: name)[binding] = held;
+            }
+        }
+        public void Touch(LatchKey binding) => m_touched.Add(item: binding);
     }
     // One entry in the ordered domain (see m_ordered's own remarks): the envelope plus the completion its submitter
     // supplied (null when the caller does not need one).

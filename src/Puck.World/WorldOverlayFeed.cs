@@ -35,6 +35,7 @@ internal sealed class WorldOverlayFeed {
     // resolved document graph is reference-stable while nothing changes, so reference equality is the change key.
     private readonly WorldBindingBarAuthoring?[] m_barAuthoringSeen;
     private readonly string[][] m_barSlotSet;
+    private readonly Dictionary<object, IReadOnlyDictionary<string, System.Numerics.Vector2>>[] m_placements;
     // This tick's active page view per seat — the ONE mutable cell m_pressedBySource's preallocated (per-seat,
     // ctor-time) closures read, so a physical-press probe threads through every bank's ComposeBank call with no
     // per-frame delegate allocation.
@@ -48,6 +49,8 @@ internal sealed class WorldOverlayFeed {
     // instead of a fresh closure, the same "mutable cell + preallocated delegate" shape m_pressedBySource already takes.
     private readonly Func<string, OverlayResolvedGlyph> m_resolveBadge;
     private static readonly Func<string, OverlayResolvedGlyph> NoBadge = static _ => OverlayResolvedGlyph.None;
+    private static readonly WorldBindingBarBankPlacement AnchorBank = new();
+    private static readonly IReadOnlyDictionary<string, System.Numerics.Vector2> NoPlacements = new Dictionary<string, System.Numerics.Vector2>(comparer: StringComparer.Ordinal);
     // Same "mutable cell + preallocated delegate" shape as m_resolveBadge: the per-tick input is WHICH state row
     // this seat's bar named (m_currentIconRow), so the delegate is allocated once rather than per seat per tick.
     // Nothing is cached across ticks — the row's cells are live, so an ordinary state mutation retargets an icon
@@ -117,6 +120,7 @@ internal sealed class WorldOverlayFeed {
         m_pressedBySlot = new Func<string, bool>[PlayerRoster.MaxSlots];
         m_barAuthoringSeen = new WorldBindingBarAuthoring?[PlayerRoster.MaxSlots];
         m_barSlotSet = new string[PlayerRoster.MaxSlots][];
+        m_placements = new Dictionary<object, IReadOnlyDictionary<string, System.Numerics.Vector2>>[PlayerRoster.MaxSlots];
         m_activeBarView = new BindingPageView?[PlayerRoster.MaxSlots];
         m_pressedBySource = new Func<string, bool>[PlayerRoster.MaxSlots];
 
@@ -127,6 +131,7 @@ internal sealed class WorldOverlayFeed {
             m_slots[index] = new OverlayBindingSlot[(WorldBindingBarCapacity.MaxBanks * WorldBindingBarCapacity.MaxSlots)];
             m_modifiers[index] = new OverlayBindingModifier[WorldBindingBarCapacity.MaxModifiers];
             m_barSlotSet[index] = [];
+            m_placements[index] = new Dictionary<object, IReadOnlyDictionary<string, System.Numerics.Vector2>>(comparer: ReferenceEqualityComparer.Instance);
             m_pressedBySlot[index] = command => router.IsCommandHeld(
                 command: command,
                 slot: slot
@@ -138,12 +143,49 @@ internal sealed class WorldOverlayFeed {
             ));
         }
     }
+    // The plate table by source for one authored slot list — the layout's or a bank's own — built once per list
+    // instance and kept by reference, so every tick's lookups allocate nothing; the cache empties with the authoring
+    // it was built from (ResolveSlotSet), never growing past the live document's lists.
+    private IReadOnlyDictionary<string, System.Numerics.Vector2> ResolvePlacements(int slot, IReadOnlyList<WorldBindingBarSlotPlacement>? slots) {
+        if (slots is null) {
+            return NoPlacements;
+        }
+
+        if (!m_placements[slot].TryGetValue(
+            key: slots,
+            value: out var table
+        )) {
+            var built = new Dictionary<string, System.Numerics.Vector2>(comparer: StringComparer.Ordinal);
+
+            foreach (var placement in slots) {
+                if (placement?.Source is { Length: > 0 } source) {
+                    built[source] = new System.Numerics.Vector2(
+                        x: placement.X,
+                        y: placement.Y
+                    );
+                }
+            }
+
+            table = built;
+            m_placements[slot][slots] = table;
+        }
+
+        return table;
+    }
+    private static OverlayBarEdge Edge(WorldBindingBarEdge edge) =>
+        edge switch {
+            WorldBindingBarEdge.Top => OverlayBarEdge.Top,
+            WorldBindingBarEdge.Left => OverlayBarEdge.Left,
+            WorldBindingBarEdge.Right => OverlayBarEdge.Right,
+            _ => OverlayBarEdge.Bottom,
+        };
     // Snapshots a seat's authored slot set only when the resolved WorldBindingBarAuthoring instance changes — the
     // authored ids ARE the ids the composer matches a page's bindings against, so this copies rather than parses.
     private ReadOnlySpan<string> ResolveSlotSet(int slot, WorldBindingBarAuthoring authoring) {
         if (!ReferenceEquals(objA: m_barAuthoringSeen[slot], objB: authoring)) {
             m_barSlotSet[slot] = [.. authoring.SlotSet];
             m_barAuthoringSeen[slot] = authoring;
+            m_placements[slot].Clear();
         }
 
         return m_barSlotSet[slot];
@@ -264,6 +306,7 @@ internal sealed class WorldOverlayFeed {
             // stays dumb: a suppressed badge is OverlayResolvedGlyph.None, a suppressed label is the empty string,
             // and suppressed hints are an empty span, each already a case the writer draws nothing for.
             var barText = authoring.Text;
+            var liveLayout = barStatus.Layout;
 
             // "What does this action look like" is a lookup in authored state, not an engine table: the bar names
             // the row, the bound action names the cell, the cell's value names the icon.
@@ -330,22 +373,41 @@ internal sealed class WorldOverlayFeed {
                         ? (bank.ActiveAlpha ?? 1f)
                         : bank.Alpha
                     ));
+                    var bankPlacement = (((liveLayout.Banks is { } bankPlacements) && bankPlacements.TryGetValue(
+                        key: bank.Id,
+                        value: out var placed
+                    ) && (placed is not null))
+                        ? placed
+                        : AnchorBank
+                    );
                     var slotCount = Math.Min(
                         val1: slotSet.Length,
                         val2: (destination.Length - writeOffset)
                     );
 
+                    var bankAnchor = (bankPlacement.Anchor ?? liveLayout.ResolvedAnchor);
+
                     BindingBarSeatComposer.ComposeBank(
+                        anchorEdge: Edge(edge: bankAnchor.Edge),
+                        anchorMargin: bankAnchor.Margin,
                         bankAlpha: bankAlpha,
-                        bankOffsetOverride: (((bank.OffsetX is not null) || (bank.OffsetY is not null))
-                            ? new System.Numerics.Vector2((bank.OffsetX ?? 0f), (bank.OffsetY ?? 0f))
-                            : null),
+                        bankMirror: bankPlacement.Mirror,
+                        bankOffset: new System.Numerics.Vector2(
+                            x: bankPlacement.OffsetX,
+                            y: bankPlacement.OffsetY
+                        ),
                         bankOrder: bank.Order,
                         destination: destination.AsSpan(
                             start: writeOffset,
                             length: slotCount
                         ),
                         hideUnbound: barStatus.EffectiveHideUnbound,
+                        placements: ResolvePlacements(
+                            slot: slot,
+                            slots: (bankPlacement.Slots ?? liveLayout.Slots)
+                        ),
+                        unplacedRowLift: liveLayout.ResolvedUnplacedRowLift,
+                        unplacedSlotSpacing: liveLayout.ResolvedUnplacedSlotSpacing,
                         // Only the ACTIVE bank lights a held control: a wing shows what a chord WOULD make the
                         // control do, and a press is happening on the page that is live, not on that hypothetical.
                         isPressed: (isActiveBank
@@ -365,6 +427,12 @@ internal sealed class WorldOverlayFeed {
 
                     writeOffset += slotCount;
                 }
+
+                // Every bank is composed; now each anchor group hangs from its edge by its own extent.
+                BindingBarSeatComposer.AnchorGroups(slots: destination.AsSpan(
+                    start: 0,
+                    length: writeOffset
+                ));
             }
 
             var modifierCount = (authoring.Modifiers
@@ -380,7 +448,7 @@ internal sealed class WorldOverlayFeed {
                 count: joined,
                 index: viewIndex
             );
-            var authoredLayout = authoring.ResolvedLayout;
+            var authoredLayout = liveLayout;
 
             m_seats[viewIndex] = new OverlayBindingSeat(
                 Group: view.Group,
@@ -404,14 +472,12 @@ internal sealed class WorldOverlayFeed {
                 ),
                 Viewport: viewport,
                 Layout: new BindingBarLayoutOptions(
-                    AnchorOffsetY: authoredLayout.ResolvedAnchorOffsetY,
+                    AnchorEdge: Edge(edge: authoredLayout.ResolvedAnchor.Edge),
+                    AnchorMargin: authoredLayout.ResolvedAnchor.Margin,
                     BadgeCorner: authoredLayout.ResolvedBadgeCorner,
                     ButtonSize: authoredLayout.ResolvedButtonSize,
-                    CenterGap: authoredLayout.ResolvedCenterGap,
-                    CenterRowLift: authoredLayout.ResolvedCenterRowLift,
-                    CenterSlotSpacing: authoredLayout.ResolvedCenterSlotSpacing,
-                    ExoticRowLift: authoredLayout.ResolvedExoticRowLift,
-                    ExoticSlotSpacing: authoredLayout.ResolvedExoticSlotSpacing,
+                    UnplacedRowLift: authoredLayout.ResolvedUnplacedRowLift,
+                    UnplacedSlotSpacing: authoredLayout.ResolvedUnplacedSlotSpacing,
                     GlyphOffsetRatio: authoredLayout.ResolvedGlyphOffsetRatio,
                     GlyphSizeRatio: authoredLayout.ResolvedGlyphSizeRatio,
                     HintBaseGapRatio: authoredLayout.ResolvedHintBaseGapRatio,

@@ -16,6 +16,9 @@ namespace Puck.World;
 /// <see langword="true"/> (stacked, the authored look) when unset.</param>
 /// <param name="EffectiveScale"><see cref="Authoring"/>'s resolved layout scale, overridden by the seat's own
 /// stored <see cref="BindingBarPreferences.Scale"/> when set to a finite positive value.</param>
+/// <param name="Layout">The LIVE layout: the named entry <see cref="WorldBindingBarAuthoring.LayoutCell"/>'s cell
+/// selects this frame, else the authoring row's own <c>layout</c>. Read per status, so a state write re-shapes the
+/// bar on the next frame.</param>
 /// <param name="Presence">The authored <see cref="WorldBindingBarAuthoring.Visible"/> condition's presence, 0..1 —
 /// the bar's opacity multiplier, so a fading <c>recently</c> predicate fades the bar rather than cutting it. 1
 /// under a live override or with no condition.</param>
@@ -28,7 +31,8 @@ internal readonly record struct WorldBindingBarStatus(
     bool EffectiveHideUnbound,
     bool Stacked,
     float EffectiveScale,
-    float Presence
+    float Presence,
+    WorldBindingBarLayout Layout
 );
 /// <summary>Resolves the world binding-bar floor with each seat identity's preference, its authored
 /// <see cref="WorldBindingBarAuthoring.Visible"/> condition, the seat's own stored LOOK preferences
@@ -103,7 +107,23 @@ internal sealed class WorldBindingBarControl {
         }
 
         var preferences = m_bindings.ProfileBindings(slot: slot)?.BindingBar;
-        var effectiveScale = authoring.ResolvedLayout.Scale;
+        // Which layout is live is a state cell's answer, read now: the bar's shape is data the player can flip.
+        var layout = authoring.LayoutNamed(name: ((authoring.LayoutCell is { } layoutCell) && BindableState.TryParseBinding(
+            key: out var layoutKey,
+            row: out var layoutRow,
+            value: layoutCell
+        ) && WorldStateReader.TryRead(
+            definition: m_client.Definition,
+            key: layoutKey,
+            rawValue: out _,
+            row: out _,
+            rowName: layoutRow,
+            text: out var layoutName,
+            tick: m_client.Tick
+        )
+            ? layoutName
+            : null));
+        var effectiveScale = layout.Scale;
         var presence = ((hidden || (liveOverride is true))
             ? (hidden
                 ? 0f
@@ -131,7 +151,8 @@ internal sealed class WorldBindingBarControl {
             Reason: reason,
             Source: source,
             Stacked: (preferences?.Stacked ?? true),
-            Presence: presence
+            Presence: presence,
+            Layout: layout
         );
     }
 }

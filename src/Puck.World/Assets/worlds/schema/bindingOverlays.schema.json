@@ -291,13 +291,9 @@
                       "type": "number",
                       "default": 0.5
                     },
-                    "rotationDegrees": {
+                    "sectorOffset": {
                       "type": "number",
                       "default": 0
-                    },
-                    "clockwise": {
-                      "type": "boolean",
-                      "default": true
                     },
                     "initialRing": {
                       "type": "integer",
@@ -464,7 +460,7 @@
             "description": "The stacked banks \u2014 at least one, at most MaxBanks, unique ids, each naming a page the composed binding profile actually declares.",
             "type": "array",
             "items": {
-              "description": "One stacked binding-bar bank: the page it renders and its position in the stack. Several banks of the SAME slot set render simultaneously, each showing what that bank\u0027s OWN page binds \u2014 the WoW-addon original\u0027s \u0022five banks of one compass\u0022 idea (resting, LT, RT, LT\u003ERT, RT\u003ELT are the natural five, though a bank may name any page). The engine ARRANGES the stack from Order alone on a fixed button-pitch nested-cross table; the two offsets exist only for a world that wants to place one bank by hand.",
+              "description": "One stacked binding-bar bank: the page it renders and its position in the stack. Several banks of the SAME slot set render simultaneously, each showing what that bank\u0027s OWN page binds \u2014 the WoW-addon original\u0027s \u0022five banks of one compass\u0022 idea (resting, LT, RT, LT\u003ERT, RT\u003ELT are the natural five, though a bank may name any page). Where each bank sits is the live layout\u0027s banks table\u0027s to say; this row carries only what a bank IS.",
               "type": [
                 "object",
                 "null"
@@ -479,7 +475,7 @@
                   "type": "string"
                 },
                 "order": {
-                  "description": "This bank\u0027s place in the derived stack (unique within the authoring row): 0 sits on the bar\u0027s shared anchor; 1 nests up and inward, 2 down and inward, and 3/4 sit straight above/below. Later orders alternate farther above and below.",
+                  "description": "This bank\u0027s draw order (unique within the authoring row): higher draws later, on top. Where the bank sits is the active layout\u0027s banks table\u0027s, not this number\u0027s.",
                   "type": "integer"
                 },
                 "alpha": {
@@ -488,22 +484,6 @@
                 },
                 "activeAlpha": {
                   "description": "This bank\u0027s opacity when it IS the seat\u0027s currently active page; null draws fully opaque (1.0) while active.",
-                  "type": [
-                    "number",
-                    "null"
-                  ],
-                  "default": null
-                },
-                "offsetX": {
-                  "description": "Overrides the derived horizontal displacement from the bar\u0027s shared anchor, in region-height units; null takes the derived arrangement. Authoring one offset overrides BOTH axes\u0027 derivation only for the axis it names.",
-                  "type": [
-                    "number",
-                    "null"
-                  ],
-                  "default": null
-                },
-                "offsetY": {
-                  "description": "Overrides the derived vertical displacement, region-height units, Y DOWN (positive moves toward the bottom of the seat\u0027s viewport); null takes the derived arrangement.",
                   "type": [
                     "number",
                     "null"
@@ -553,180 +533,28 @@
             ],
             "default": null
           },
-          "layout": {
-            "description": "The bar\u0027s tuning; null uses Default.",
+          "layouts": {
+            "description": "Named alternative layouts \u2014 a crossbar, a strip, whatever an author adds next \u2014 each a whole WorldBindingBarLayout. Which one is live is LayoutCell\u0027s to say.",
             "type": [
               "object",
               "null"
             ],
-            "properties": {
-              "scale": {
-                "description": "The uniform cluster scale.",
-                "type": "number",
-                "default": 1
-              },
-              "buttonSize": {
-                "description": "The unscaled slot-plate size.",
-                "type": [
-                  "number",
-                  "null"
-                ],
-                "default": null
-              },
-              "centerGap": {
-                "description": "The unscaled extra half-gap between the mirrored clusters.",
-                "type": [
-                  "number",
-                  "null"
-                ],
-                "default": null
-              },
-              "anchorOffsetY": {
-                "description": "The anchor\u0027s lift above the viewport\u0027s bottom edge.",
-                "type": [
-                  "number",
-                  "null"
-                ],
-                "default": null
-              },
-              "glyphOffsetRatio": {
-                "description": "The badge\u0027s corner offset as a fraction of ButtonSize.",
-                "type": [
-                  "number",
-                  "null"
-                ],
-                "default": null
-              },
-              "glyphSizeRatio": {
-                "description": "The badge\u0027s size as a fraction of ButtonSize.",
-                "type": [
-                  "number",
-                  "null"
-                ],
-                "default": null
-              },
-              "centerRowLift": {
-                "description": "The menu row\u0027s lift above the anchor, in scaled button sizes.",
-                "type": [
-                  "number",
-                  "null"
-                ],
-                "default": null
-              },
-              "centerSlotSpacing": {
-                "description": "The menu row\u0027s slot pitch, in scaled button sizes.",
-                "type": [
-                  "number",
-                  "null"
-                ],
-                "default": null
-              },
-              "exoticRowLift": {
-                "description": "The exotics row\u0027s lift above the anchor, in scaled button sizes.",
-                "type": [
-                  "number",
-                  "null"
-                ],
-                "default": null
-              },
-              "exoticSlotSpacing": {
-                "description": "The exotics row\u0027s slot pitch, in scaled button sizes.",
-                "type": [
-                  "number",
-                  "null"
-                ],
-                "default": null
-              },
-              "badgeCorner": {
-                "description": "The fixed corner direction a menu/exotics slot\u0027s badge nudges toward (the compass categories take their direction from the pad pictogram geometry instead).",
-                "type": [
-                  "number",
-                  "null"
-                ],
-                "default": null
-              },
-              "modifierHalfRatio": {
-                "description": "The modifier indicator\u0027s plate half-extent, in scaled button sizes.",
-                "type": [
-                  "number",
-                  "null"
-                ],
-                "default": null
-              },
-              "modifierSpacingRatio": {
-                "description": "The modifier indicators\u0027 pitch, in scaled button sizes.",
-                "type": [
-                  "number",
-                  "null"
-                ],
-                "default": null
-              },
-              "modifierGlyphRatio": {
-                "description": "The modifier badge\u0027s half-extent, as a fraction of the modifier plate half.",
-                "type": [
-                  "number",
-                  "null"
-                ],
-                "default": null
-              },
-              "labelCellRatio": {
-                "description": "The page label\u0027s glyph-cell height, as a fraction of the modifier plate half.",
-                "type": [
-                  "number",
-                  "null"
-                ],
-                "default": null
-              },
-              "labelCellMinPx": {
-                "description": "The page label\u0027s glyph-cell floor, px.",
-                "type": [
-                  "number",
-                  "null"
-                ],
-                "default": null
-              },
-              "labelGapRatio": {
-                "description": "The page label\u0027s drop below the anchor, as a fraction of the modifier plate half.",
-                "type": [
-                  "number",
-                  "null"
-                ],
-                "default": null
-              },
-              "hintCellRatio": {
-                "description": "A chord-hint line\u0027s glyph-cell height, as a fraction of the modifier plate half.",
-                "type": [
-                  "number",
-                  "null"
-                ],
-                "default": null
-              },
-              "hintCellMinPx": {
-                "description": "A chord-hint line\u0027s glyph-cell floor, px.",
-                "type": [
-                  "number",
-                  "null"
-                ],
-                "default": null
-              },
-              "hintLineStepRatio": {
-                "description": "The chord-hint line pitch, as a fraction of the hint cell height.",
-                "type": [
-                  "number",
-                  "null"
-                ],
-                "default": null
-              },
-              "hintBaseGapRatio": {
-                "description": "The hint stack\u0027s lift above the anchor, as a fraction of the modifier plate half.",
-                "type": [
-                  "number",
-                  "null"
-                ],
-                "default": null
-              }
+            "additionalProperties": {
+              "$ref": "./common.schema.json#/$defs/WorldBindingBarLayout"
             },
-            "additionalProperties": false,
+            "default": null
+          },
+          "layoutCell": {
+            "description": "A text state cell, state.\u003Crow\u003E.\u003Ckey\u003E, whose value names the live entry of Layouts; a value naming none falls back to Layout. Ordinary state: a chord, a wheel sector, or the console switches the bar\u0027s whole shape by writing the cell.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "layout": {
+            "$ref": "./common.schema.json#/$defs/WorldBindingBarLayout",
+            "description": "The bar\u0027s tuning when no named layout is selected; null uses Default.",
             "default": null
           },
           "visible": {

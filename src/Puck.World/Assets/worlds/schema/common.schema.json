@@ -3734,6 +3734,275 @@
       ],
       "additionalProperties": false
     },
+    "WorldBindingBarAnchor": {
+      "description": "Where a bar hangs: a viewport edge and how far in from it. Every bank anchored to the SAME edge and margin shares one frame \u2014 their plates are laid out together on one pitch grid and the nearest plate of the whole group sits at the margin \u2014 so a nested crossbar is three banks on one anchor, and a strip with side columns is three banks on three.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "edge": {
+          "description": "The viewport edge.",
+          "enum": [
+            "Bottom",
+            "Top",
+            "Left",
+            "Right"
+          ],
+          "default": "Bottom"
+        },
+        "margin": {
+          "description": "The gap between that edge and the nearest plate edge of everything anchored here, as a fraction of the viewport\u0027s extent ALONG that edge\u0027s axis (height for top/bottom, width for left/right) \u2014 so 0.025 reads as \u00222.5% in\u0022 on any aspect. Along the other axis the group is centered.",
+          "type": "number",
+          "default": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "WorldBindingBarSlotPlacement": {
+      "description": "One physical control\u0027s place on a bar, in button pitches from the bar\u0027s anchor \u2014 x right, y UP. The unit a bank\u0027s offset shares, so an author lays a bar out on one grid.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "source": {
+          "description": "The physical control\u0027s input source id (a slotSet member).",
+          "type": "string"
+        },
+        "x": {
+          "description": "Pitches right of the anchor (negative = left).",
+          "type": "number"
+        },
+        "y": {
+          "description": "Pitches above the anchor (negative = below).",
+          "type": "number"
+        }
+      },
+      "required": [
+        "source",
+        "x",
+        "y"
+      ],
+      "additionalProperties": false
+    },
+    "WorldBindingBarSlotPlacementList": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/WorldBindingBarSlotPlacement"
+      }
+    },
+    "WorldBindingBarBankPlacement": {
+      "description": "One bank\u0027s place on a bar, in button pitches (x right, y UP) \u2014 the layout\u0027s half of a bank, beside the bank row\u0027s identity/page/order/alpha half. A bank is \u0022just a bar\u0022: it may hang from its own edge and carry its own plate table, or share the layout\u0027s.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "offsetX": {
+          "description": "Pitches right of the anchor.",
+          "type": "number",
+          "default": 0
+        },
+        "offsetY": {
+          "description": "Pitches above the anchor.",
+          "type": "number",
+          "default": 0
+        },
+        "mirror": {
+          "description": "Whether OffsetX is applied OUTWARD per plate \u2014 a plate left of the anchor moves left, one right of it moves right, one on the anchor line does not move \u2014 so a two-cluster bar fans its wings like a pair of mirrored hands. false translates the whole bank as one piece.",
+          "type": "boolean",
+          "default": false
+        },
+        "anchor": {
+          "$ref": "#/$defs/WorldBindingBarAnchor",
+          "description": "Where THIS bank hangs, or null to share the layout\u0027s anchor (and so its frame: the offsets then nest it against the other banks there).",
+          "default": null
+        },
+        "slots": {
+          "description": "This bank\u0027s own plate table, or null to share the layout\u0027s \u2014 a side column and a bottom strip show the same controls in different shapes.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/WorldBindingBarSlotPlacement"
+          },
+          "default": null
+        }
+      },
+      "additionalProperties": false
+    },
+    "IReadOnlyDictionaryStringWorldBindingBarBankPlacement": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": {
+        "$ref": "#/$defs/WorldBindingBarBankPlacement"
+      }
+    },
+    "WorldBindingBarLayout": {
+      "description": "The authored layout of one on-screen binding bar. Every field but Scale is an OPTIONAL override of the engine\u0027s resolved default (the Default* constants below): lengths are fractions of the seat viewport\u0027s height, every *Ratio/*Lift/*Spacing is a multiple of the scaled button size, and every *MinPx is a device-pixel floor. Scale uniformly scales the slot cluster around its bottom-center anchor.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "scale": {
+          "description": "The uniform cluster scale.",
+          "type": "number",
+          "default": 1
+        },
+        "buttonSize": {
+          "description": "The unscaled slot-plate size.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "anchor": {
+          "$ref": "#/$defs/WorldBindingBarAnchor",
+          "description": "Where the bar hangs \u2014 the edge and margin every bank without its own anchor shares.",
+          "default": null
+        },
+        "glyphOffsetRatio": {
+          "description": "The badge\u0027s corner offset as a fraction of ButtonSize.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "glyphSizeRatio": {
+          "description": "The badge\u0027s size as a fraction of ButtonSize.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "unplacedRowLift": {
+          "description": "The row every slot NOT named in Slots falls into: its lift above the anchor, in scaled button sizes.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "unplacedSlotSpacing": {
+          "description": "The unplaced row\u0027s slot pitch, in scaled button sizes; the row runs left to right in slotSet order, centered on the anchor.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "slots": {
+          "$ref": "#/$defs/WorldBindingBarSlotPlacementList",
+          "description": "Where each physical control\u0027s plate sits, in button pitches from the bar\u0027s anchor (x right, y UP) \u2014 the bar\u0027s SHAPE. A crossbar, a linear strip, a keyboard block: all are tables here, none is engine policy. A control in slotSet with no row here takes the unplaced row. Absent places nothing, so every slot lines up in the unplaced row.",
+          "default": null
+        },
+        "banks": {
+          "$ref": "#/$defs/IReadOnlyDictionaryStringWorldBindingBarBankPlacement",
+          "description": "Where each bank sits, by bank id, in the same pitches \u2014 a layout is a slot table AND a bank table, so a crossbar\u0027s nested wings and a strip\u0027s side-by-side wings are each one self-contained layout. A bank with no row here sits on the anchor.",
+          "default": null
+        },
+        "badgeCorner": {
+          "description": "The corner the physical-button badge nudges toward, as a signed multiple of the glyph offset: \u002B1 up-right, -1 down-left, 0 centered on the plate.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "modifierHalfRatio": {
+          "description": "The modifier indicator\u0027s plate half-extent, in scaled button sizes.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "modifierSpacingRatio": {
+          "description": "The modifier indicators\u0027 pitch, in scaled button sizes.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "modifierGlyphRatio": {
+          "description": "The modifier badge\u0027s half-extent, as a fraction of the modifier plate half.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "labelCellRatio": {
+          "description": "The page label\u0027s glyph-cell height, as a fraction of the modifier plate half.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "labelCellMinPx": {
+          "description": "The page label\u0027s glyph-cell floor, px.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "labelGapRatio": {
+          "description": "The page label\u0027s drop below the anchor, as a fraction of the modifier plate half.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "hintCellRatio": {
+          "description": "A chord-hint line\u0027s glyph-cell height, as a fraction of the modifier plate half.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "hintCellMinPx": {
+          "description": "A chord-hint line\u0027s glyph-cell floor, px.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "hintLineStepRatio": {
+          "description": "The chord-hint line pitch, as a fraction of the hint cell height.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "hintBaseGapRatio": {
+          "description": "The hint stack\u0027s lift above the anchor, as a fraction of the modifier plate half.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false
+    },
     "WorldSpeakerSourceMachine": {
       "description": "A live screen-hosted machine\u0027s audio, identified by screen slot \u2014 screen index is machine identity for screen-hosted machines. The validator checks only that the screen row exists, never that its declared source is $type machine (runtime inserts overlay declared sources); no live machine at drain time is silence plus a state echo, never a reject.",
       "properties": {

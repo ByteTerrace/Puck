@@ -1211,18 +1211,40 @@ public sealed partial class WorldServer {
                     // ordered mutation domain of its own) also runs, so the two can never disagree about a victim or a
                     // reserved-cell refusal. TryComposeTextCell itself refuses BY NAME when row.Kind is not Text, which is
                     // this arm's ONE check for "a text operand against a numeric/bool row".
-                    if (isTextWrite) {
-                        if (m.AlternateRawToken is not null) {
-                            candidate = current;
-                            reason = $"state row '{m.Row}' cell '{m.Key}' cannot combine text with a numeric toggle";
+                    // A cycle on a TEXT row: the next token after the one the live cell reads, wrapping; the write
+                    // is then an ordinary text set of that token.
+                    var isTextCycle = ((row.Kind == CellKind.Text) && (m.CycleTokens is { Count: >= 2 }));
 
-                            return false;
+                    if (isTextCycle && (m.Kind != WorldDocumentWriteKind.Set)) {
+                        candidate = current;
+                        reason = $"state row '{m.Row}' cell '{m.Key}' cycle needs a set write";
+
+                        return false;
+                    }
+
+                    if (isTextWrite || isTextCycle) {
+                        var textToWrite = m.Text!;
+
+                        if (isTextCycle) {
+                            _ = WorldStateReader.TryRead(
+                                definition: current,
+                                rowName: m.Row,
+                                key: m.Key,
+                                tick: tick,
+                                row: out _,
+                                rawValue: out _,
+                                text: out var currentText
+                            );
+                            textToWrite = NextInCycle(
+                                tokens: m.CycleTokens!,
+                                matches: token => string.Equals(a: token, b: currentText, comparisonType: StringComparison.Ordinal)
+                            );
                         }
 
                         if (!WorldStateCellWriter.TryComposeTextCell(
                             row: row,
                             key: cellKey,
-                            text: m.Text!,
+                            text: textToWrite,
                             cells: out var textCells,
                             evictedKey: out evictedKey,
                             reason: out var composeTextReason
@@ -1264,11 +1286,11 @@ public sealed partial class WorldServer {
                     }
 
                     if (
-                        (m.AlternateRawToken is not null) &&
-                        ((m.Kind != WorldDocumentWriteKind.Set) || (m.RawToken is null))
+                        (m.CycleTokens is not null) &&
+                        ((m.CycleTokens.Count < 2) || (m.Kind != WorldDocumentWriteKind.Set))
                     ) {
                         candidate = current;
-                        reason = $"state row '{m.Row}' cell '{m.Key}' toggle needs two raw tokens and a set write";
+                        reason = $"state row '{m.Row}' cell '{m.Key}' cycle needs at least two tokens and a set write";
 
                         return false;
                     }
@@ -1280,7 +1302,44 @@ public sealed partial class WorldServer {
                     // directly. See WorldMutation.UpsertStateCell.RawToken's remarks.
                     long operand;
 
-                    if (m.RawToken is { } rawToken) {
+                    if (m.CycleTokens is { Count: >= 2 } cycleTokens) {
+                        // A cycle on a numeric row: every token must parse against THIS row's kind; the operand is the
+                        // token after the one the live value equals (wrapping), else the first. The live value is the
+                        // same read every gate and binding runs, so an advancing row cycles from what a reader sees.
+                        var parsed = new long[cycleTokens.Count];
+
+                        for (var index = 0; (index < parsed.Length); index++) {
+                            if (!WorldStateCellWriter.TryParseNumericToken(
+                                kind: row.Kind,
+                                token: cycleTokens[index],
+                                value: out parsed[index],
+                                reason: out var cycleReason
+                            )) {
+                                candidate = current;
+                                reason = $"state row '{m.Row}' cell '{m.Key}' {cycleReason}";
+
+                                return false;
+                            }
+                        }
+
+                        _ = WorldStateReader.TryRead(
+                            definition: current,
+                            rowName: m.Row,
+                            key: m.Key,
+                            tick: tick,
+                            row: out _,
+                            rawValue: out var live,
+                            text: out _
+                        );
+                        var at = Array.IndexOf(
+                            array: parsed,
+                            value: (live ?? long.MinValue)
+                        );
+
+                        operand = parsed[((at < 0)
+                            ? 0
+                            : ((at + 1) % parsed.Length))];
+                    } else if (m.RawToken is { } rawToken) {
                         if (!WorldStateCellWriter.TryParseNumericToken(
                             kind: row.Kind,
                             token: rawToken,
@@ -1313,32 +1372,6 @@ public sealed partial class WorldServer {
                         rawValue: out var addend,
                         text: out _
                     );
-
-                    if (m.AlternateRawToken is { } alternateRawToken) {
-                        if (!WorldStateCellWriter.TryParseNumericToken(
-                            kind: row.Kind,
-                            token: alternateRawToken,
-                            value: out var alternate,
-                            reason: out var alternateReason
-                        )) {
-                            candidate = current;
-                            reason = $"state row '{m.Row}' cell '{m.Key}' {alternateReason}";
-
-                            return false;
-                        }
-
-                        if (alternate == operand) {
-                            candidate = current;
-                            reason = $"state row '{m.Row}' cell '{m.Key}' toggle endpoints must differ";
-
-                            return false;
-                        }
-
-                        operand = ((addend == operand)
-                            ? alternate
-                            : operand
-                        );
-                    }
 
                     long value;
 
@@ -2157,4 +2190,15 @@ public sealed partial class WorldServer {
 
         return result;
     }
+    // The token after the one <paramref name="matches"/> accepts, wrapping; the first when none matches.
+    private static string NextInCycle(IReadOnlyList<string> tokens, Func<string, bool> matches) {
+        for (var index = 0; (index < tokens.Count); index++) {
+            if (matches(arg: tokens[index])) {
+                return tokens[((index + 1) % tokens.Count)];
+            }
+        }
+
+        return tokens[0];
+    }
+
 }

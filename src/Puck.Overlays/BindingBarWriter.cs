@@ -41,7 +41,7 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
             seat: in seat
         );
 
-    // One seat's cluster: the layout runs in the seat REGION's own space (its aspect, its bottom-center anchor,
+    // One seat's cluster: the layout runs in the seat REGION's own space (its aspect, its edge anchors,
     // every length a fraction of the region height), then maps to pixels — so a bar shrinks with its pane through
     // the split-screen ladder and a fullscreen seat draws the classic full-size cluster.
     private void EmitSeat(OverlayFrameBuilder builder, in OverlayBindingSeat seat) {
@@ -67,6 +67,14 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
         var regionOriginY = (region.Y * builder.Height);
         var regionAspect = (regionWidthPx / regionHeightPx);
         var slots = seat.Slots.Span;
+        var barAnchor = BindingBarLayout.BarAnchor(
+            aspect: regionAspect,
+            edge: layout.AnchorEdge,
+            margin: layout.AnchorMargin
+        );
+        var plateHalf = ((scaledButtonSize * 0.5f) * regionHeightPx);
+        var glyphHalf = (((scaledButtonSize * layout.GlyphSizeRatio) * 0.5f) * regionHeightPx);
+        var badgeNudge = (((scaledButtonSize * layout.GlyphOffsetRatio) * layout.BadgeCorner) * regionHeightPx);
 
         builder.BeginClip(
             h: regionHeightPx,
@@ -82,24 +90,21 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
                 continue;
             }
 
-            var placement = BindingBarLayout.Place(
-                aspect: regionAspect,
-                category: slot.Category,
-                categoryCount: slot.CategoryCount,
-                categoryIndex: slot.CategoryIndex,
-                options: in layout
-            );
-            var derived = BindingBarLayout.BankOffset(
+            // Each plate hangs from ITS bank's anchor: a side column and the bottom strip of one bar share a seat
+            // and a region but not an edge.
+            var center = BindingBarLayout.PlateCenter(
+                anchor: BindingBarLayout.BarAnchor(
+                    aspect: regionAspect,
+                    edge: slot.AnchorEdge,
+                    margin: slot.AnchorMargin
+                ),
                 buttonSize: scaledButtonSize,
-                order: slot.BankOrder,
-                side: BindingBarLayout.ClusterSide(
-                    category: slot.Category,
-                    categoryIndex: slot.CategoryIndex
-                )
+                edge: slot.AnchorEdge,
+                pitchX: slot.PitchX,
+                pitchY: slot.PitchY
             );
-            var bankOffset = (slot.BankOffsetOverride ?? derived);
-            var centerX = ((regionOriginX + (placement.Center.X * regionHeightPx)) + (bankOffset.X * regionHeightPx));
-            var centerY = ((regionOriginY + (placement.Center.Y * regionHeightPx)) + (bankOffset.Y * regionHeightPx));
+            var centerX = (regionOriginX + (center.X * regionHeightPx));
+            var centerY = (regionOriginY + (center.Y * regionHeightPx));
 
             builder.WriteIcon(
                 accent: slot.Accent,
@@ -116,12 +121,12 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
                 bound: slot.Bound,
                 centerX: centerX,
                 centerY: centerY,
-                glyphHalf: (placement.GlyphHalfSize * regionHeightPx),
-                glyphOffsetX: ((placement.GlyphCenter.X - placement.Center.X) * regionHeightPx),
-                glyphOffsetY: ((placement.GlyphCenter.Y - placement.Center.Y) * regionHeightPx),
+                glyphHalf: glyphHalf,
+                glyphOffsetX: badgeNudge,
+                glyphOffsetY: -badgeNudge,
                 iconGlyph0: slot.IconGlyph0,
                 iconGlyph1: slot.IconGlyph1,
-                plateHalf: (placement.HalfSize * regionHeightPx),
+                plateHalf: plateHalf,
                 pressed: slot.Pressed,
                 toggled: slot.Toggled,
                 togglePhase: togglePhase
@@ -130,10 +135,7 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
 
         // The modifier indicators sit between the clusters on the bar's anchor line, lit while held.
         var modifiers = seat.Modifiers.Span;
-        var anchor = BindingBarLayout.BarAnchor(
-            anchorOffsetY: layout.AnchorOffsetY,
-            aspect: regionAspect
-        );
+        var anchor = barAnchor;
         var anchorX = (regionOriginX + (anchor.X * regionHeightPx));
         var anchorY = (regionOriginY + (anchor.Y * regionHeightPx));
         var modifierHalf = ((scaledButtonSize * layout.ModifierHalfRatio) * regionHeightPx);

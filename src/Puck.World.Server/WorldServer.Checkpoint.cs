@@ -391,15 +391,11 @@ public sealed partial class WorldServer {
 
             var ruleGateHeld = new List<(string, bool)>(capacity: m_ruleGateHeld.Count);
 
-            foreach (var pair in m_ruleGateHeld) {
-                ruleGateHeld.Add(item: (pair.Key, pair.Value));
-            }
+            m_ruleGateHeld.Flatten(into: ruleGateHeld);
 
             var interactionGateHeld = new List<(string, bool)>(capacity: m_interactionGateHeld.Count);
 
-            foreach (var pair in m_interactionGateHeld) {
-                interactionGateHeld.Add(item: (pair.Key, pair.Value));
-            }
+            m_interactionGateHeld.Flatten(into: interactionGateHeld);
 
             var server = new WorldServerCheckpoint(
                 DefinitionJson: WorldDefinitionSerialization.Serialize(definition: m_definition),
@@ -468,11 +464,17 @@ public sealed partial class WorldServer {
         }
         m_ruleGateHeld.Clear();
         foreach (var (rule, held) in server.RuleGateHeld) {
-            m_ruleGateHeld[rule] = held;
+            m_ruleGateHeld.Restore(
+                held: held,
+                key: rule
+            );
         }
         m_interactionGateHeld.Clear();
         foreach (var (interaction, held) in server.InteractionGateHeld) {
-            m_interactionGateHeld[interaction] = held;
+            m_interactionGateHeld.Restore(
+                held: held,
+                key: interaction
+            );
         }
         m_lastDocumentReceipt = server.LastDocumentReceipt;
         m_solidRevision = server.SolidRevision;

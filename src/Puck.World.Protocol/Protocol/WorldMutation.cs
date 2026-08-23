@@ -379,14 +379,15 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// same-batch <see cref="UpsertStateRow"/> ahead of this one has already installed into), is what makes a
     /// same-batch declare-then-write deterministic: see <see cref="WorldStateCellWriter"/>'s token parser, which the
     /// compose arm runs when this is set.</param>
-    /// <param name="AlternateRawToken">The second human-authored token for an atomic two-value toggle, or
-    /// <see langword="null"/> for an ordinary set/add. When present, <see cref="Kind"/> must be
-    /// <see cref="WorldDocumentWriteKind.Set"/> and <see cref="RawToken"/> must also be present. The compose arm
-    /// compares the destination's current value to <see cref="RawToken"/> and writes this token when equal, or
-    /// <see cref="RawToken"/> otherwise. The comparison and write therefore happen against the destination
-    /// authority's one live candidate, never against a stale client projection.</param>
+    /// <param name="CycleTokens">The human-authored tokens of an atomic cycle, or <see langword="null"/> for an ordinary
+    /// set/add. When present (two or more), <see cref="Kind"/> must be <see cref="WorldDocumentWriteKind.Set"/>. The
+    /// compose arm reads the destination's current value, finds the token it equals, and writes the NEXT token
+    /// (wrapping); a value matching none writes the first. Numeric rows compare parsed values, text rows compare text.
+    /// The comparison and write happen against the destination authority's one live candidate, never a stale client
+    /// projection — which is what lets a bound press (<c>player.state.cell.toggle</c>) flip a cell in whatever world
+    /// the seat is actually in.</param>
     [MutationKind(ordinal: 49, section: WorldSection.State)]
-    public sealed record UpsertStateCell(WorldPrincipal Principal, string Row, string Key, long Value, WorldDocumentWriteKind Kind, string? Text = null, string? RawToken = null, string? AlternateRawToken = null) : WorldMutation(Principal);
+    public sealed record UpsertStateCell(WorldPrincipal Principal, string Row, string Key, long Value, WorldDocumentWriteKind Kind, string? Text = null, string? RawToken = null, IReadOnlyList<string>? CycleTokens = null) : WorldMutation(Principal);
     /// <summary>Removes one cell from an already-declared <see cref="WorldStateRow"/>. Rejected if <see cref="Row"/>
     /// names no state row, or if no cell inside it carries <see cref="Key"/>. Checked twice — see
     /// <see cref="UpsertStateCell"/>'s remarks.</summary>

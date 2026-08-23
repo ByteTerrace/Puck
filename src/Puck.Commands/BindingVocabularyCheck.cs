@@ -19,7 +19,8 @@ namespace Puck.Commands;
 /// target a command whose <see cref="CommandMetadata.AcceptsWireArgs"/> is true; and the value kind the binding
 /// dispatches — its constant <c>Value</c> when it carries one, else the physical source's declared kind when the
 /// caller can resolve it — must equal the command's declared <see cref="CommandMetadata.ValueKind"/>. A text-bearing
-/// ordinary source must also be digital because analog samples carry no press edge. A source the caller's catalog
+/// ordinary source must also be digital because analog samples carry no press edge, and so must every step of a
+/// <see cref="BindingActivatorMode.Tapped"/> activator's sequence. A source the caller's catalog
 /// cannot resolve (its lookup answering <see langword="null"/>) skips the source-kind half only: existence and
 /// eligibility are always checked. Empty sources/commands are skipped entirely — they are the structural gate's
 /// findings, not this one's.</para></remarks>
@@ -162,11 +163,23 @@ public static class BindingVocabularyCheck {
                                     separator: ", ",
                                     values: (activator.Sequence ?? [])
                                 )}] names unaddressable control \"{step}\"");
-                            } else if (sourceKind(arg: step) is null) {
+                            } else if (sourceKind(arg: step) is not { } stepKind) {
                                 errors.Add(item: $"page \"{page.Id}\" activator [{string.Join(
                                     separator: ", ",
                                     values: (activator.Sequence ?? [])
                                 )}] names unknown control \"{step}\"");
+                            } else if (
+                                (activator.Mode == BindingActivatorMode.Tapped) &&
+                                (stepKind != CommandValueKind.Digital)
+                            ) {
+                                // RowActivatorTracker.ApplyTapped advances only on CommandPhase.Started; analog
+                                // sources (triggers, sticks, gyro) emit Active/Completed only, so a tapped step
+                                // naming one can never be satisfied. Held is unaffected: HeldOrderTracker latches
+                                // on the analog value crossing its threshold.
+                                errors.Add(item: $"page \"{page.Id}\" tapped activator [{string.Join(
+                                    separator: ", ",
+                                    values: (activator.Sequence ?? [])
+                                )}] names {Word(kind: stepKind)} control \"{step}\", which emits no press edge");
                             }
                         }
                     }

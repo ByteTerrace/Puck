@@ -1661,13 +1661,18 @@ public sealed class InputRouter {
             return false;
         }
 
+        // A text-bearing activation (a wheel sector with an authored payload) submits its line exactly as a bound
+        // press does: "<command> <text>", dispatched by the registry under the seat's principal.
         Enqueue(injection: new CommandInjection(
             CommandId: commandId,
             Value: activation.Value,
             Phase: activation.Phase,
             Origin: CommandOrigin.Binding,
             Principal: default,
-            Slot: slot
+            Slot: slot,
+            Text: ((activation.Text is { Length: > 0 } text)
+                ? $"{activation.Command} {text}"
+                : null)
         ));
 
         return true;

@@ -154,19 +154,23 @@ internal sealed class WorldRoutedRowCommandModule(PlayerRoster roster, WorldSeat
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "player.state.cell.toggle",
-            description: "Flips ONE numeric state cell between two authored values for the ACTING seat: player.state.cell.toggle <row> <key> <a> <b> — the cell becomes <b> when it currently reads <a>, else <a>. BINDABLE with a text payload (a chord row or page entry's \"text\": \"look behind 0 3.14159\"), which is how an authored press flips a cell the camera program, a HUD, or an action reads — look behind is a seat rig whose orbit yaw binds state.look.behind and a chord that toggles it. Routes and stamps exactly as player.state.cell.set; the destination's row kind resolves the raw tokens.",
+            description: "Cycles ONE state cell through authored values for the ACTING seat, resolved AT THE DESTINATION: player.state.cell.toggle <row> <key> <a> <b> [<c>...] — the cell becomes the value after the one it currently reads (wrapping), else <a>; numeric rows compare parsed values, text rows compare text. The tokens travel unresolved (UpsertStateCell.CycleTokens) and the authority that owns the row decides, so a crossed seat flips the world it is in, never a stale local copy. BINDABLE with a text payload (a chord row, page entry, or wheel sector's \"text\": \"look behind 0 3.14159\"), which is how an authored press flips a cell the camera program, the binding bar, a HUD, or an action reads — look behind is a seat rig whose orbit yaw binds state.look.behind; a bar layout switch is a bar whose layoutCell binds state.bar.layout. Routes and stamps exactly as player.state.cell.set.",
             handler: (context, args) => {
-                if (args.Count != 4) {
-                    return CommandResult.Error(output: "[player.state.cell.toggle: expected <row> <key> <a> <b>]");
+                if (args.Count < 4) {
+                    return CommandResult.Error(output: "[player.state.cell.toggle: expected <row> <key> <a> <b> [<c>...]]");
                 }
 
                 var row = args[0].ToString();
                 var key = args[1].ToString();
-                var a = args[2].ToString();
-                var b = args[3].ToString();
+                var cycle = new string[(args.Count - 2)];
+
+                for (var index = 0; (index < cycle.Length); index++) {
+                    cycle[index] = args[(index + 2)].ToString();
+                }
+
                 return Route(
                     context: context,
-                    described: $"state cell '{row}'.'{key}' toggle",
+                    described: $"state cell '{row}'.'{key}' cycle",
                     display: PlayerRoster.DisplayNumber(slot: context.Slot),
                     mutation: new WorldMutation.UpsertStateCell(
                         Principal: context.ActingPrincipal(),
@@ -174,8 +178,7 @@ internal sealed class WorldRoutedRowCommandModule(PlayerRoster roster, WorldSeat
                         Key: key,
                         Value: 0L,
                         Kind: WorldDocumentWriteKind.Set,
-                        RawToken: a,
-                        AlternateRawToken: b
+                        CycleTokens: cycle
                     ),
                     verb: "player.state.cell.toggle"
                 );

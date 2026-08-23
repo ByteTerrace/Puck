@@ -101,7 +101,9 @@ public sealed record BindingWheelExcursionDefinition(
     float Hysteresis = 0.02f
 );
 /// <summary>Author-controlled radial presentation policy. Fractions are relative to the seat viewport's smaller
-/// extent; rotation is degrees clockwise from twelve o'clock.</summary>
+/// extent. A wheel's shape has exactly two independent authored facts: the ENTRY ORDER (which action sits where —
+/// sector zero is the first entry and sectors advance clockwise) and <see cref="SectorOffset"/> (where the seams
+/// fall). Nothing else here moves a piece, so no two documents draw the same wheel two ways.</summary>
 /// <param name="PointerSelection">How pointer location selects a sector: disabled, angle-only, or direct target.</param>
 /// <param name="Placement">Where the wheel hub is anchored when the radial opens.</param>
 /// <param name="DeadZoneFraction">The visual hub radius and spatial-input dead zone as a fraction of the seat
@@ -109,8 +111,12 @@ public sealed record BindingWheelExcursionDefinition(
 /// <param name="RingWidthFraction">One ring's radial width as a viewport fraction.</param>
 /// <param name="OuterGraceRingFraction">Additional direct-target selecting distance beyond the last visual ring,
 /// in ring widths.</param>
-/// <param name="RotationDegrees">Sector-zero rotation clockwise from twelve o'clock.</param>
-/// <param name="Clockwise">Whether sector indices advance clockwise.</param>
+/// <param name="SectorOffset">Sector zero's clockwise displacement from twelve o'clock, in SECTORS, on
+/// <c>[0, 1)</c>: 0 centers the first entry on north; 0.5 makes north the seam between the last entry and the
+/// first; 0.25 is a quarter sector clockwise. The unit is the sector, so the intent survives adding or removing
+/// entries, and the range stops at one whole sector because a full sector of rotation is an entry REORDER —
+/// move the entry instead. Clockwise is the only advance direction: counter-clockwise is the same list written
+/// in the other order.</param>
 /// <param name="InitialRing">The initially active ring, zero-based.</param>
 /// <param name="RingSelection">Whether bindings select rings explicitly or selector excursion selects them.</param>
 /// <param name="Excursion">The required neutral-relative ranges when <paramref name="RingSelection"/> is
@@ -136,8 +142,7 @@ public sealed record BindingWheelStyleDefinition(
     float DeadZoneFraction = 0.10f,
     float RingWidthFraction = 0.07f,
     float OuterGraceRingFraction = 0.5f,
-    float RotationDegrees = 0f,
-    bool Clockwise = true,
+    float SectorOffset = 0f,
     int InitialRing = 0,
     BindingWheelRingSelectionMode RingSelection = BindingWheelRingSelectionMode.Explicit,
     BindingWheelExcursionDefinition? Excursion = null,

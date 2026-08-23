@@ -16,15 +16,21 @@ public sealed class BindingBarAuthoringValidationLawTests {
         yield return ["iconRow 'state.scalarIcons' names a scalar row", Policy(layout: layout) with { IconRow = "state.scalarIcons" }, Policy(layout: layout) with { IconRow = "state.actionIcons" }];
         yield return ["visible.predicates[0].windowSeconds", Policy(layout: layout) with { Visible = new OverlayPredicate.Any(Predicates: [new OverlayPredicate.Recently(Fact: OverlayFact.SeatInput, WindowSeconds: float.NaN)]) }, Policy(layout: layout) with { Visible = new OverlayPredicate.Any(Predicates: [new OverlayPredicate.Now(Fact: OverlayFact.WheelOpen)]) }];
         yield return ["layout.buttonSize", Policy(layout: layout with { ButtonSize = 0f }), Policy(layout: layout with { ButtonSize = 0.01f })];
-        yield return ["layout.centerGap", Policy(layout: layout with { CenterGap = -0.01f }), Policy(layout: layout with { CenterGap = 0f })];
-        yield return ["layout.anchorOffsetY", Policy(layout: layout with { AnchorOffsetY = 1.01f }), Policy(layout: layout with { AnchorOffsetY = 1f })];
+        yield return ["layout.anchor.margin", Policy(layout: layout with { Anchor = new WorldBindingBarAnchor(Margin: 0.5f) }), Policy(layout: layout with { Anchor = new WorldBindingBarAnchor(Margin: 0.499f) })];
+        yield return ["layout.banks['resting'].anchor.margin", Policy(layout: layout with { Banks = new Dictionary<string, WorldBindingBarBankPlacement>(comparer: StringComparer.Ordinal) { ["resting"] = new WorldBindingBarBankPlacement(Anchor: new WorldBindingBarAnchor(Edge: WorldBindingBarEdge.Left, Margin: -0.01f)) } }), Policy(layout: layout with { Banks = new Dictionary<string, WorldBindingBarBankPlacement>(comparer: StringComparer.Ordinal) { ["resting"] = new WorldBindingBarBankPlacement(Anchor: new WorldBindingBarAnchor(Edge: WorldBindingBarEdge.Left, Margin: 0f)) } })];
+        yield return ["layout.banks['resting'].slots[0].source 'mouse.button1' is not in", Policy(layout: layout with { Banks = new Dictionary<string, WorldBindingBarBankPlacement>(comparer: StringComparer.Ordinal) { ["resting"] = new WorldBindingBarBankPlacement(Slots: [new WorldBindingBarSlotPlacement(Source: InputSources.Mouse.Button(number: 1), X: 0f, Y: 0f)]) } }), Policy(layout: layout with { Banks = new Dictionary<string, WorldBindingBarBankPlacement>(comparer: StringComparer.Ordinal) { ["resting"] = new WorldBindingBarBankPlacement(Slots: [new WorldBindingBarSlotPlacement(Source: InputSources.Gamepad.DpadUp, X: 0f, Y: 0f)]) } })];
         yield return ["layout.glyphOffsetRatio", Policy(layout: layout with { GlyphOffsetRatio = -0.01f }), Policy(layout: layout with { GlyphOffsetRatio = 0f })];
         yield return ["layout.glyphSizeRatio", Policy(layout: layout with { GlyphSizeRatio = 0f }), Policy(layout: layout with { GlyphSizeRatio = 0.01f })];
         yield return ["layout.scale", Policy(layout: layout with { Scale = 0f }), Policy(layout: layout with { Scale = 0.01f })];
-        yield return ["layout.centerRowLift", Policy(layout: layout with { CenterRowLift = -0.01f }), Policy(layout: layout with { CenterRowLift = 1.9f })];
-        yield return ["layout.centerSlotSpacing", Policy(layout: layout with { CenterSlotSpacing = 0f }), Policy(layout: layout with { CenterSlotSpacing = 1.15f })];
-        yield return ["layout.exoticRowLift", Policy(layout: layout with { ExoticRowLift = float.NaN }), Policy(layout: layout with { ExoticRowLift = 3.6f })];
-        yield return ["layout.exoticSlotSpacing", Policy(layout: layout with { ExoticSlotSpacing = 0f }), Policy(layout: layout with { ExoticSlotSpacing = 1.15f })];
+        yield return ["layout.unplacedRowLift", Policy(layout: layout with { UnplacedRowLift = float.NaN }), Policy(layout: layout with { UnplacedRowLift = -3f })];
+        yield return ["layout.unplacedSlotSpacing", Policy(layout: layout with { UnplacedSlotSpacing = 0f }), Policy(layout: layout with { UnplacedSlotSpacing = 1.15f })];
+        yield return ["layout.slots[0].source 'gamepad.buttonSouth' is not in", Policy(layout: layout with { Slots = [new WorldBindingBarSlotPlacement(Source: InputSources.Gamepad.ButtonSouth, X: 0f, Y: 0f)] }), Policy(layout: layout with { Slots = [new WorldBindingBarSlotPlacement(Source: InputSources.Gamepad.DpadUp, X: -5f, Y: 1f)] })];
+        yield return ["layout.slots[1].source 'gamepad.dpadUp' is placed twice", Policy(layout: layout with { Slots = [new WorldBindingBarSlotPlacement(Source: InputSources.Gamepad.DpadUp, X: 0f, Y: 0f), new WorldBindingBarSlotPlacement(Source: InputSources.Gamepad.DpadUp, X: 1f, Y: 0f)] }), Policy(layout: layout with { Slots = [new WorldBindingBarSlotPlacement(Source: InputSources.Gamepad.DpadUp, X: 0f, Y: 0f)] })];
+        yield return ["layout.slots[0] needs finite x and y", Policy(layout: layout with { Slots = [new WorldBindingBarSlotPlacement(Source: InputSources.Gamepad.DpadUp, X: float.NaN, Y: 0f)] }), Policy(layout: layout with { Slots = [new WorldBindingBarSlotPlacement(Source: InputSources.Gamepad.DpadUp, X: 0f, Y: 0f)] })];
+        yield return ["layout.banks['ghost'] names no bank", Policy(layout: layout with { Banks = new Dictionary<string, WorldBindingBarBankPlacement>(comparer: StringComparer.Ordinal) { ["ghost"] = new WorldBindingBarBankPlacement(OffsetX: 1f) } }), Policy(layout: layout with { Banks = new Dictionary<string, WorldBindingBarBankPlacement>(comparer: StringComparer.Ordinal) { ["resting"] = new WorldBindingBarBankPlacement(OffsetX: 1f) } })];
+        yield return ["layout.banks['resting'] needs finite", Policy(layout: layout with { Banks = new Dictionary<string, WorldBindingBarBankPlacement>(comparer: StringComparer.Ordinal) { ["resting"] = new WorldBindingBarBankPlacement(OffsetY: float.NaN) } }), Policy(layout: layout with { Banks = new Dictionary<string, WorldBindingBarBankPlacement>(comparer: StringComparer.Ordinal) { ["resting"] = new WorldBindingBarBankPlacement(OffsetY: -2f, Mirror: true) } })];
+        yield return ["layouts['linear'].slots[0].source 'gamepad.buttonSouth' is not in", Policy(layout: layout) with { Layouts = new Dictionary<string, WorldBindingBarLayout>(comparer: StringComparer.Ordinal) { ["linear"] = (layout with { Slots = [new WorldBindingBarSlotPlacement(Source: InputSources.Gamepad.ButtonSouth, X: 0f, Y: 0f)] }) } }, Policy(layout: layout) with { Layouts = new Dictionary<string, WorldBindingBarLayout>(comparer: StringComparer.Ordinal) { ["linear"] = layout } }];
+        yield return ["layoutCell 'bar' must be spelled state.<row>.<key>", Policy(layout: layout) with { LayoutCell = "bar" }, Policy(layout: layout) with { LayoutCell = "state.bar.layout" }];
         yield return ["layout.badgeCorner", Policy(layout: layout with { BadgeCorner = float.NaN }), Policy(layout: layout with { BadgeCorner = -1f })];
         yield return ["layout.modifierHalfRatio", Policy(layout: layout with { ModifierHalfRatio = 0f }), Policy(layout: layout with { ModifierHalfRatio = 0.35f })];
         yield return ["layout.modifierSpacingRatio", Policy(layout: layout with { ModifierSpacingRatio = 0f }), Policy(layout: layout with { ModifierSpacingRatio = 1.1f })];
@@ -44,8 +50,6 @@ public sealed class BindingBarAuthoringValidationLawTests {
         yield return ["banks[1].id", Policy(layout: layout) with { Banks = [OneBank[0], (OneBank[0] with { Order = 1 })] }, Policy(layout: layout) with { Banks = [OneBank[0], (OneBank[0] with { Id = "second", Order = 1 })] }];
         yield return ["banks[1].order 0 is duplicated", Policy(layout: layout) with { Banks = [OneBank[0], (OneBank[0] with { Id = "second" })] }, Policy(layout: layout) with { Banks = [OneBank[0], (OneBank[0] with { Id = "second", Order = 1 })] }];
         yield return ["banks[0].order -1", Policy(layout: layout) with { Banks = [OneBank[0] with { Order = -1 }] }, Policy(layout: layout)];
-        yield return ["banks[0].offsetX", Policy(layout: layout) with { Banks = [OneBank[0] with { OffsetX = float.NaN }] }, Policy(layout: layout) with { Banks = [OneBank[0] with { OffsetX = -0.24f }] }];
-        yield return ["banks[0].offsetY", Policy(layout: layout) with { Banks = [OneBank[0] with { OffsetY = float.PositiveInfinity }] }, Policy(layout: layout) with { Banks = [OneBank[0] with { OffsetY = -0.18f }] }];
         yield return ["banks[0].pageId 'no-such-page'", Policy(layout: layout) with { Banks = [OneBank[0] with { PageId = "no-such-page" }] }, Policy(layout: layout)];
         yield return ["banks[0].alpha", Policy(layout: layout) with { Banks = [OneBank[0] with { Alpha = 1.5f }] }, Policy(layout: layout)];
     }
@@ -68,8 +72,8 @@ public sealed class BindingBarAuthoringValidationLawTests {
         var bare = new WorldBindingBarLayout();
 
         Assert.Equal(expected: WorldBindingBarLayout.DefaultButtonSize, actual: bare.ResolvedButtonSize);
-        Assert.Equal(expected: WorldBindingBarLayout.DefaultCenterRowLift, actual: bare.ResolvedCenterRowLift);
-        Assert.Equal(expected: WorldBindingBarLayout.DefaultExoticRowLift, actual: bare.ResolvedExoticRowLift);
+        Assert.Equal(expected: WorldBindingBarLayout.DefaultUnplacedRowLift, actual: bare.ResolvedUnplacedRowLift);
+        Assert.Equal(expected: WorldBindingBarLayout.DefaultUnplacedSlotSpacing, actual: bare.ResolvedUnplacedSlotSpacing);
         Assert.Equal(expected: WorldBindingBarLayout.DefaultModifierHalfRatio, actual: bare.ResolvedModifierHalfRatio);
         Assert.Equal(expected: WorldBindingBarLayout.DefaultHintBaseGapRatio, actual: bare.ResolvedHintBaseGapRatio);
         Assert.Equal(expected: 1f, actual: bare.Scale);
@@ -77,7 +81,7 @@ public sealed class BindingBarAuthoringValidationLawTests {
         var authored = (bare with { ButtonSize = 0.5f });
 
         Assert.Equal(expected: 0.5f, actual: authored.ResolvedButtonSize);
-        Assert.Equal(expected: WorldBindingBarLayout.DefaultCenterGap, actual: authored.ResolvedCenterGap);
+        Assert.Equal(expected: WorldBindingBarLayout.DefaultGlyphSizeRatio, actual: authored.ResolvedGlyphSizeRatio);
     }
 
     private static readonly WorldBindingBarBank[] OneBank = [new WorldBindingBarBank(Id: "resting", PageId: "base", Order: 0, Alpha: 1f)];

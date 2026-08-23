@@ -25,6 +25,54 @@ public static class WorldBindingBarCapacity {
     public const int MaxSlots = 32;
 }
 
+/// <summary>The viewport edge a bar hangs from.</summary>
+public enum WorldBindingBarEdge {
+    /// <summary>The bottom edge; the bar is centered left-to-right and its lowest plate sits at the margin.</summary>
+    Bottom,
+    /// <summary>The top edge; centered left-to-right, highest plate at the margin.</summary>
+    Top,
+    /// <summary>The left edge; centered top-to-bottom, leftmost plate at the margin.</summary>
+    Left,
+    /// <summary>The right edge; centered top-to-bottom, rightmost plate at the margin.</summary>
+    Right,
+}
+/// <summary>Where a bar hangs: a viewport edge and how far in from it. Every bank anchored to the SAME edge and
+/// margin shares one frame — their plates are laid out together on one pitch grid and the nearest plate of the whole
+/// group sits at the margin — so a nested crossbar is three banks on one anchor, and a strip with side columns is
+/// three banks on three.</summary>
+/// <param name="Edge">The viewport edge.</param>
+/// <param name="Margin">The gap between that edge and the nearest plate edge of everything anchored here, as a
+/// fraction of the viewport's extent ALONG that edge's axis (height for top/bottom, width for left/right) — so 0.025
+/// reads as "2.5% in" on any aspect. Along the other axis the group is centered.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldBindingBarAnchor(WorldBindingBarEdge Edge = WorldBindingBarEdge.Bottom, float Margin = 0f);
+/// <summary>One bank's place on a bar, in button pitches (x right, y UP) — the layout's half of a bank, beside the
+/// bank row's identity/page/order/alpha half. A bank is "just a bar": it may hang from its own edge and carry its own
+/// plate table, or share the layout's.</summary>
+/// <param name="OffsetX">Pitches right of the anchor.</param>
+/// <param name="OffsetY">Pitches above the anchor.</param>
+/// <param name="Mirror">Whether <paramref name="OffsetX"/> is applied OUTWARD per plate — a plate left of the anchor
+/// moves left, one right of it moves right, one on the anchor line does not move — so a two-cluster bar fans its
+/// wings like a pair of mirrored hands. <see langword="false"/> translates the whole bank as one piece.</param>
+/// <param name="Anchor">Where THIS bank hangs, or <see langword="null"/> to share the layout's anchor (and so its
+/// frame: the offsets then nest it against the other banks there).</param>
+/// <param name="Slots">This bank's own plate table, or <see langword="null"/> to share the layout's — a side column
+/// and a bottom strip show the same controls in different shapes.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldBindingBarBankPlacement(
+    float OffsetX = 0f,
+    float OffsetY = 0f,
+    bool Mirror = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldBindingBarAnchor? Anchor = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldBindingBarSlotPlacement>? Slots = null
+);
+/// <summary>One physical control's place on a bar, in button pitches from the bar's anchor — x right, y UP. The unit
+/// a bank's offset shares, so an author lays a bar out on one grid.</summary>
+/// <param name="Source">The physical control's input source id (a <c>slotSet</c> member).</param>
+/// <param name="X">Pitches right of the anchor (negative = left).</param>
+/// <param name="Y">Pitches above the anchor (negative = below).</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldBindingBarSlotPlacement(string Source, float X, float Y);
 /// <summary>The authored layout of one on-screen binding bar. Every field but <see cref="Scale"/> is an OPTIONAL
 /// override of the engine's resolved default (the <c>Default*</c> constants below): lengths are fractions of the seat
 /// viewport's height, every <c>*Ratio</c>/<c>*Lift</c>/<c>*Spacing</c> is a multiple of the scaled button size, and
@@ -32,16 +80,22 @@ public static class WorldBindingBarCapacity {
 /// bottom-center anchor.</summary>
 /// <param name="Scale">The uniform cluster scale.</param>
 /// <param name="ButtonSize">The unscaled slot-plate size.</param>
-/// <param name="CenterGap">The unscaled extra half-gap between the mirrored clusters.</param>
-/// <param name="AnchorOffsetY">The anchor's lift above the viewport's bottom edge.</param>
+/// <param name="Anchor">Where the bar hangs — the edge and margin every bank without its own anchor shares.</param>
 /// <param name="GlyphOffsetRatio">The badge's corner offset as a fraction of <paramref name="ButtonSize"/>.</param>
 /// <param name="GlyphSizeRatio">The badge's size as a fraction of <paramref name="ButtonSize"/>.</param>
-/// <param name="CenterRowLift">The menu row's lift above the anchor, in scaled button sizes.</param>
-/// <param name="CenterSlotSpacing">The menu row's slot pitch, in scaled button sizes.</param>
-/// <param name="ExoticRowLift">The exotics row's lift above the anchor, in scaled button sizes.</param>
-/// <param name="ExoticSlotSpacing">The exotics row's slot pitch, in scaled button sizes.</param>
-/// <param name="BadgeCorner">The fixed corner direction a menu/exotics slot's badge nudges toward (the compass
-/// categories take their direction from the pad pictogram geometry instead).</param>
+/// <param name="UnplacedRowLift">The row every slot NOT named in <paramref name="Slots"/> falls into: its lift above
+/// the anchor, in scaled button sizes.</param>
+/// <param name="UnplacedSlotSpacing">The unplaced row's slot pitch, in scaled button sizes; the row runs left to
+/// right in <c>slotSet</c> order, centered on the anchor.</param>
+/// <param name="Banks">Where each bank sits, by bank id, in the same pitches — a layout is a slot table AND a bank
+/// table, so a crossbar's nested wings and a strip's side-by-side wings are each one self-contained layout. A bank
+/// with no row here sits on the anchor.</param>
+/// <param name="Slots">Where each physical control's plate sits, in button pitches from the bar's anchor (x right,
+/// y UP) — the bar's SHAPE. A crossbar, a linear strip, a keyboard block: all are tables here, none is engine
+/// policy. A control in <c>slotSet</c> with no row here takes the unplaced row. Absent places nothing, so every
+/// slot lines up in the unplaced row.</param>
+/// <param name="BadgeCorner">The corner the physical-button badge nudges toward, as a signed multiple of the glyph
+/// offset: +1 up-right, -1 down-left, 0 centered on the plate.</param>
 /// <param name="ModifierHalfRatio">The modifier indicator's plate half-extent, in scaled button sizes.</param>
 /// <param name="ModifierSpacingRatio">The modifier indicators' pitch, in scaled button sizes.</param>
 /// <param name="ModifierGlyphRatio">The modifier badge's half-extent, as a fraction of the modifier plate half.</param>
@@ -56,14 +110,13 @@ public static class WorldBindingBarCapacity {
 public sealed record WorldBindingBarLayout(
     float Scale = 1f,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? ButtonSize = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? CenterGap = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? AnchorOffsetY = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldBindingBarAnchor? Anchor = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? GlyphOffsetRatio = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? GlyphSizeRatio = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? CenterRowLift = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? CenterSlotSpacing = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? ExoticRowLift = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? ExoticSlotSpacing = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? UnplacedRowLift = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? UnplacedSlotSpacing = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldBindingBarSlotPlacement>? Slots = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, WorldBindingBarBankPlacement>? Banks = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? BadgeCorner = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? ModifierHalfRatio = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? ModifierSpacingRatio = null,
@@ -76,22 +129,20 @@ public sealed record WorldBindingBarLayout(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? HintLineStepRatio = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? HintBaseGapRatio = null
 ) {
-    /// <summary>The resolved <see cref="AnchorOffsetY"/> an unauthored bar takes (220/600).</summary>
-    public const float DefaultAnchorOffsetY = (220f / 600f);
+    /// <summary>The resolved <see cref="Anchor"/> an unauthored bar takes: the bottom edge, 5% in.</summary>
+    public static WorldBindingBarAnchor DefaultAnchor { get; } = new(
+        Edge: WorldBindingBarEdge.Bottom,
+        Margin: 0.05f
+    );
     /// <summary>The resolved <see cref="BadgeCorner"/> an unauthored bar takes.</summary>
     public const float DefaultBadgeCorner = 1f;
     /// <summary>The resolved <see cref="ButtonSize"/> an unauthored bar takes (45/600).</summary>
     public const float DefaultButtonSize = (45f / 600f);
-    /// <summary>The resolved <see cref="CenterGap"/> an unauthored bar takes (60/600).</summary>
-    public const float DefaultCenterGap = (60f / 600f);
-    /// <summary>The resolved <see cref="CenterRowLift"/> an unauthored bar takes.</summary>
-    public const float DefaultCenterRowLift = 1.9f;
-    /// <summary>The resolved <see cref="CenterSlotSpacing"/> an unauthored bar takes.</summary>
-    public const float DefaultCenterSlotSpacing = 1.15f;
-    /// <summary>The resolved <see cref="ExoticRowLift"/> an unauthored bar takes — clear of the menu row.</summary>
-    public const float DefaultExoticRowLift = (DefaultCenterRowLift + 1.7f);
-    /// <summary>The resolved <see cref="ExoticSlotSpacing"/> an unauthored bar takes.</summary>
-    public const float DefaultExoticSlotSpacing = 1.15f;
+    /// <summary>The resolved <see cref="UnplacedRowLift"/> an unauthored bar takes — three pitches up, clear of a
+    /// three-row cluster on the anchor.</summary>
+    public const float DefaultUnplacedRowLift = 3f;
+    /// <summary>The resolved <see cref="UnplacedSlotSpacing"/> an unauthored bar takes.</summary>
+    public const float DefaultUnplacedSlotSpacing = 1.15f;
     /// <summary>The resolved <see cref="GlyphOffsetRatio"/> an unauthored bar takes.</summary>
     public const float DefaultGlyphOffsetRatio = 0.4375f;
     /// <summary>The resolved <see cref="GlyphSizeRatio"/> an unauthored bar takes (24/45).</summary>
@@ -122,9 +173,9 @@ public sealed record WorldBindingBarLayout(
     /// <see cref="WorldBindingBarAuthoring.Absent"/>, whose disabled state hides it before this tuning is read).</summary>
     public static WorldBindingBarLayout Default { get; } = new();
 
-    /// <summary>Gets the resolved anchor lift.</summary>
+    /// <summary>Gets the resolved anchor.</summary>
     [JsonIgnore]
-    public float ResolvedAnchorOffsetY => (AnchorOffsetY ?? DefaultAnchorOffsetY);
+    public WorldBindingBarAnchor ResolvedAnchor => (Anchor ?? DefaultAnchor);
     /// <summary>Gets the resolved fixed badge-corner direction.</summary>
     [JsonIgnore]
     public float ResolvedBadgeCorner => (BadgeCorner ?? DefaultBadgeCorner);
@@ -132,20 +183,14 @@ public sealed record WorldBindingBarLayout(
     [JsonIgnore]
     public float ResolvedButtonSize => (ButtonSize ?? DefaultButtonSize);
     /// <summary>Gets the resolved cluster half-gap.</summary>
-    [JsonIgnore]
-    public float ResolvedCenterGap => (CenterGap ?? DefaultCenterGap);
     /// <summary>Gets the resolved menu-row lift.</summary>
-    [JsonIgnore]
-    public float ResolvedCenterRowLift => (CenterRowLift ?? DefaultCenterRowLift);
     /// <summary>Gets the resolved menu-row slot pitch.</summary>
-    [JsonIgnore]
-    public float ResolvedCenterSlotSpacing => (CenterSlotSpacing ?? DefaultCenterSlotSpacing);
     /// <summary>Gets the resolved exotics-row lift.</summary>
     [JsonIgnore]
-    public float ResolvedExoticRowLift => (ExoticRowLift ?? DefaultExoticRowLift);
+    public float ResolvedUnplacedRowLift => (UnplacedRowLift ?? DefaultUnplacedRowLift);
     /// <summary>Gets the resolved exotics-row slot pitch.</summary>
     [JsonIgnore]
-    public float ResolvedExoticSlotSpacing => (ExoticSlotSpacing ?? DefaultExoticSlotSpacing);
+    public float ResolvedUnplacedSlotSpacing => (UnplacedSlotSpacing ?? DefaultUnplacedSlotSpacing);
     /// <summary>Gets the resolved badge corner offset ratio.</summary>
     [JsonIgnore]
     public float ResolvedGlyphOffsetRatio => (GlyphOffsetRatio ?? DefaultGlyphOffsetRatio);
@@ -186,30 +231,22 @@ public sealed record WorldBindingBarLayout(
 /// <summary>One stacked binding-bar bank: the page it renders and its position in the stack. Several banks of the
 /// SAME slot set render simultaneously, each showing what that bank's OWN page binds — the WoW-addon original's
 /// "five banks of one compass" idea (resting, LT, RT, LT&gt;RT, RT&gt;LT are the natural five, though a bank may name
-/// any page). The engine ARRANGES the stack from <paramref name="Order"/> alone on a fixed button-pitch nested-cross
-/// table; the two offsets exist only for a world that wants to place one bank by hand.</summary>
+/// any page). Where each bank sits is the live layout's <c>banks</c> table's to say; this row carries only what a
+/// bank IS.</summary>
 /// <param name="Id">The bank's stable id — its mutation address (unique within the authoring row).</param>
 /// <param name="PageId">The <c>BindingPageDefinition.Id</c> this bank renders — validated to exist somewhere in the
 /// composed binding profile.</param>
-/// <param name="Order">This bank's place in the derived stack (unique within the authoring row): 0 sits on the bar's
-/// shared anchor; 1 nests up and inward, 2 down and inward, and 3/4 sit straight above/below. Later orders alternate
-/// farther above and below.</param>
+/// <param name="Order">This bank's draw order (unique within the authoring row): higher draws later, on top. Where
+/// the bank sits is the active layout's <c>banks</c> table's, not this number's.</param>
 /// <param name="Alpha">This bank's opacity when it is NOT the seat's currently active page.</param>
 /// <param name="ActiveAlpha">This bank's opacity when it IS the seat's currently active page; <see langword="null"/>
 /// draws fully opaque (1.0) while active.</param>
-/// <param name="OffsetX">Overrides the derived horizontal displacement from the bar's shared anchor, in region-height
-/// units; <see langword="null"/> takes the derived arrangement. Authoring one offset overrides BOTH axes' derivation
-/// only for the axis it names.</param>
-/// <param name="OffsetY">Overrides the derived vertical displacement, region-height units, Y DOWN (positive moves
-/// toward the bottom of the seat's viewport); <see langword="null"/> takes the derived arrangement.</param>
 public sealed record WorldBindingBarBank(
     string Id,
     string PageId,
     int Order,
     float Alpha,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? ActiveAlpha = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? OffsetX = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? OffsetY = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? ActiveAlpha = null
 );
 /// <summary>The authored visibility, layout, and slot vocabulary of the on-screen binding bar. Absence of a whole
 /// <see cref="WorldBindingBarAuthoring"/> row (no identity, no world authoring) draws no bar at all — see
@@ -244,7 +281,13 @@ public sealed record WorldBindingBarBank(
 /// authored state, so it is written, read, and MUTATED like any other state (<c>world.state.cell.set</c>) — a spell
 /// minted at runtime gets its icon by writing a cell, never by reshaping the document. <see langword="null"/>
 /// resolves no slot icons at all; a key the row does not carry simply draws no icon.</param>
-/// <param name="Layout">The bar's tuning; <see langword="null"/> uses <see cref="WorldBindingBarLayout.Default"/>.</param>
+/// <param name="Layout">The bar's tuning when no named layout is selected; <see langword="null"/> uses
+/// <see cref="WorldBindingBarLayout.Default"/>.</param>
+/// <param name="Layouts">Named alternative layouts — a crossbar, a strip, whatever an author adds next — each a
+/// whole <see cref="WorldBindingBarLayout"/>. Which one is live is <paramref name="LayoutCell"/>'s to say.</param>
+/// <param name="LayoutCell">A text state cell, <c>state.&lt;row&gt;.&lt;key&gt;</c>, whose value names the live entry of
+/// <paramref name="Layouts"/>; a value naming none falls back to <paramref name="Layout"/>. Ordinary state: a chord,
+/// a wheel sector, or the console switches the bar's whole shape by writing the cell.</param>
 /// <param name="Visible">The bar's visibility condition over presentation facts, or <see langword="null"/> for always.</param>
 public sealed record WorldBindingBarAuthoring(
     IReadOnlyList<string> SlotSet,
@@ -255,6 +298,8 @@ public sealed record WorldBindingBarAuthoring(
     bool HideUnbound = false,
     float MultiSeatAlpha = 1f,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? IconRow = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, WorldBindingBarLayout>? Layouts = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? LayoutCell = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldBindingBarLayout? Layout = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] OverlayPredicate? Visible = null
 ) {
@@ -269,6 +314,16 @@ public sealed record WorldBindingBarAuthoring(
     /// <summary>Gets the resolved authored layout.</summary>
     [JsonIgnore]
     public WorldBindingBarLayout ResolvedLayout => (Layout ?? WorldBindingBarLayout.Default);
+    /// <summary>The layout a selector value names: <see cref="Layouts"/>[<paramref name="name"/>] when it exists, else
+    /// <see cref="ResolvedLayout"/>.</summary>
+    /// <param name="name">The live <see cref="LayoutCell"/> value, or <see langword="null"/>.</param>
+    public WorldBindingBarLayout LayoutNamed(string? name) =>
+        (((name is { Length: > 0 }) && (Layouts is { } layouts) && layouts.TryGetValue(
+            key: name,
+            value: out var named
+        ))
+            ? named
+            : ResolvedLayout);
 }
 /// <summary>One per-world binding overlay — a whole <see cref="BindingProfileDocument"/> layered over the engine
 /// default beneath every seat's profile bindings, so a world can contextualize the controls (a kart world remapping a

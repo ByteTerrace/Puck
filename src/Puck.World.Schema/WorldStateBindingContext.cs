@@ -242,8 +242,16 @@ public static class WorldStateBindingContext {
                 continue;
             }
 
-            for (var ringIndex = 0; (ringIndex < wheel.Rings.Count); ringIndex++) {
-                if (wheel.Rings[ringIndex]?.Entries is not { } sectors) {
+            // An explicit "rings": null survives parse (the context sets no RespectNullableAnnotations), so refuse it
+            // by name here rather than dereferencing it; BindingProfile.Compile applies the same guard.
+            if (wheel.Rings is not { } rings) {
+                errors.Add(item: $"wheels row {wheelIndex}.rings is required when labelRow or iconRow is authored");
+
+                continue;
+            }
+
+            for (var ringIndex = 0; (ringIndex < rings.Count); ringIndex++) {
+                if (rings[ringIndex]?.Entries is not { } sectors) {
                     continue;
                 }
 

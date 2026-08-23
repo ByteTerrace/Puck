@@ -3,33 +3,89 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
-/// <summary>An authored two-value state toggle is decided atomically at the destination mutation compose boundary.
-/// The client carries both raw tokens and never guesses from a potentially stale or differently routed document.</summary>
+/// <summary>An authored state cycle is decided atomically at the destination mutation compose boundary: the client
+/// carries every token and never guesses from a potentially stale or differently routed document. The cell becomes
+/// the token after the one it currently equals (wrapping); a value matching none becomes the first.</summary>
 public sealed class StateCellToggleLawTests {
     private const string RowName = "toggleProbe";
     private const string CellKey = "value";
 
     [Fact]
-    public void AlternateRawToken_TogglesAgainstDestinationValueAcrossWireRoundTrip() {
+    public void CycleTokens_TwoValues_ToggleAgainstDestinationValueAcrossWireRoundTrip() {
+        using var fixture = Fixtures.FreshServer(definition: Fixtures.BuildDocument().WithWorldState(rows: [NumericRow(initial: 3L)]));
+        var transport = new LoopbackTransport(server: fixture.Server);
+
+        Cycle(transport: transport, tokens: ["3", "7"]);
+        fixture.Step();
+        Assert.Equal(expected: 7L, actual: ReadNumeric(fixture: fixture));
+
+        Cycle(transport: transport, tokens: ["3", "7"]);
+        fixture.Step();
+        Assert.Equal(expected: 3L, actual: ReadNumeric(fixture: fixture));
+    }
+
+    [Fact]
+    public void CycleTokens_ThreeValues_WrapAndRestartFromTheFirstWhenNoneMatch() {
+        using var fixture = Fixtures.FreshServer(definition: Fixtures.BuildDocument().WithWorldState(rows: [NumericRow(initial: 99L)]));
+        var transport = new LoopbackTransport(server: fixture.Server);
+
+        // 99 matches none -> the first.
+        Cycle(transport: transport, tokens: ["1", "2", "3"]);
+        fixture.Step();
+        Assert.Equal(expected: 1L, actual: ReadNumeric(fixture: fixture));
+
+        Cycle(transport: transport, tokens: ["1", "2", "3"]);
+        fixture.Step();
+        Assert.Equal(expected: 2L, actual: ReadNumeric(fixture: fixture));
+
+        Cycle(transport: transport, tokens: ["1", "2", "3"]);
+        fixture.Step();
+        Assert.Equal(expected: 3L, actual: ReadNumeric(fixture: fixture));
+
+        // 3 is the last -> wraps to the first.
+        Cycle(transport: transport, tokens: ["1", "2", "3"]);
+        fixture.Step();
+        Assert.Equal(expected: 1L, actual: ReadNumeric(fixture: fixture));
+    }
+
+    [Fact]
+    public void CycleTokens_TextRow_CyclesByTextAtTheDestination() {
         var row = new WorldStateRow(
             Name: WorldCellName.Parse(candidate: RowName),
-            Kind: CellKind.Int,
+            Kind: CellKind.Text,
             Capacity: 1,
-            Cells: [new WorldStateCell(Key: WorldCellName.Parse(candidate: CellKey), Value: 3L)]
+            Cells: [new WorldStateCell(Key: WorldCellName.Parse(candidate: CellKey), Text: "crossbar")]
         );
         using var fixture = Fixtures.FreshServer(definition: Fixtures.BuildDocument().WithWorldState(rows: [row]));
         var transport = new LoopbackTransport(server: fixture.Server);
 
-        Toggle(transport: transport);
+        Cycle(transport: transport, tokens: ["crossbar", "linear"]);
         fixture.Step();
-        Assert.Equal(expected: 7L, actual: Read(fixture: fixture));
+        Assert.Equal(expected: "linear", actual: ReadText(fixture: fixture));
 
-        Toggle(transport: transport);
+        Cycle(transport: transport, tokens: ["crossbar", "linear"]);
         fixture.Step();
-        Assert.Equal(expected: 3L, actual: Read(fixture: fixture));
+        Assert.Equal(expected: "crossbar", actual: ReadText(fixture: fixture));
     }
 
-    private static long Read(WorldFixture fixture) {
+    [Fact]
+    public void CycleTokens_OneToken_IsRefusedAndLeavesTheCell() {
+        using var fixture = Fixtures.FreshServer(definition: Fixtures.BuildDocument().WithWorldState(rows: [NumericRow(initial: 3L)]));
+        var transport = new LoopbackTransport(server: fixture.Server);
+
+        Cycle(transport: transport, tokens: ["7"]);
+        fixture.Step();
+        Assert.Equal(expected: 3L, actual: ReadNumeric(fixture: fixture));
+    }
+
+    private static WorldStateRow NumericRow(long initial) => new(
+        Name: WorldCellName.Parse(candidate: RowName),
+        Kind: CellKind.Int,
+        Capacity: 1,
+        Cells: [new WorldStateCell(Key: WorldCellName.Parse(candidate: CellKey), Value: initial)]
+    );
+
+    private static long ReadNumeric(WorldFixture fixture) {
         Assert.True(WorldStateReader.TryRead(
             definition: fixture.Server.Definition,
             rowName: RowName,
@@ -43,13 +99,26 @@ public sealed class StateCellToggleLawTests {
         return Assert.IsType<long>(@object: raw);
     }
 
-    private static void Toggle(LoopbackTransport transport) => transport.SubmitWorldMutation(mutation: new WorldMutation.UpsertStateCell(
+    private static string ReadText(WorldFixture fixture) {
+        Assert.True(WorldStateReader.TryRead(
+            definition: fixture.Server.Definition,
+            rowName: RowName,
+            key: CellKey,
+            tick: fixture.Server.NextInputTick,
+            row: out _,
+            rawValue: out _,
+            text: out var text
+        ));
+
+        return Assert.IsType<string>(@object: text);
+    }
+
+    private static void Cycle(LoopbackTransport transport, string[] tokens) => transport.SubmitWorldMutation(mutation: new WorldMutation.UpsertStateCell(
         Principal: WorldPrincipal.Console,
         Row: RowName,
         Key: CellKey,
         Value: 0L,
         Kind: WorldDocumentWriteKind.Set,
-        RawToken: "3",
-        AlternateRawToken: "7"
+        CycleTokens: tokens
     ));
 }

@@ -1,17 +1,13 @@
-using System.Numerics;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.Input.Devices;
 
 namespace Puck.Overlays;
 
-/// <summary>One binding-bar slot as the renderer consumes it — everything family- and binding-resolved on the CPU.
-/// One physical button rendered once PER BANK that carries it in its slot set; <see cref="Category"/>/
-/// <see cref="CategoryIndex"/>/<see cref="CategoryCount"/> are the geometry inputs the writer feeds
-/// <see cref="BindingBarLayout.Place"/> (the region's pixel aspect is a write-time fact, so the placement itself is
-/// resolved there, not here), and <see cref="BankOrder"/>/<see cref="BankOffsetOverride"/> carry that slot's owning
-/// bank's place in the stack — the writer derives the displacement from
-/// <see cref="BindingBarLayout.BankOffset"/>'s nested-cross table unless the override answers.</summary>
+/// <summary>One binding-bar slot as the renderer consumes it — everything family-, binding-, and placement-resolved on
+/// the CPU. One physical button rendered once PER BANK that carries it in its slot set, at <see cref="PitchX"/>/
+/// <see cref="PitchY"/>: the authored plate position plus the owning bank's offset, in button pitches from the bar
+/// anchor; the writer only scales that to the region.</summary>
 /// <param name="BadgeGlyph0">The physical-button badge's first (or only) atlas glyph index — already family- and
 /// world-icon-table-resolved, 1-based, 0 = no badge (see <see cref="OverlayFrameBuilder.WriteIcon"/>).</param>
 /// <param name="BadgeGlyph1">The badge's second atlas glyph index (a 2-character label's second cell), 1-based,
@@ -22,13 +18,9 @@ namespace Puck.Overlays;
 /// <param name="Pressed">Whether the physical button is currently down — the chip's HELD tier-1 state.</param>
 /// <param name="Alpha">The slot opacity: the owning bank's authored alpha (or active-alpha), folded with the seat's
 /// own multi-seat dim. The unbound dim is the writer's, from the live theme.</param>
-/// <param name="Category">The slot's placement category.</param>
-/// <param name="CategoryIndex">The slot's index within its category (see <see cref="BindingBarLayout.Place"/>).</param>
-/// <param name="CategoryCount">The bar's total exotic-category slots (centers the exotics row); meaningless
-/// otherwise.</param>
-/// <param name="BankOrder">The owning bank's declared stack order.</param>
-/// <param name="BankOffsetOverride">The owning bank's authored displacement override, region-height units, y-down, or
-/// <see langword="null"/> to take the derived arrangement.</param>
+/// <param name="PitchX">The plate's resolved position, button pitches right of the bar anchor.</param>
+/// <param name="PitchY">The plate's resolved position, button pitches ABOVE the bar anchor.</param>
+/// <param name="BankOrder">The owning bank's draw order.</param>
 /// <param name="Bound">Whether a real action is bound to this physical button; <see langword="false"/> is the chip's
 /// DISABLED tier-0 state (a free/unbound button, still shown so the socket reads) unless the resolved policy hides
 /// unbound slots, in which case it is not <see cref="Visible"/> instead.</param>
@@ -38,6 +30,9 @@ namespace Puck.Overlays;
 /// <param name="Latched">Whether <see cref="Pressed"/> is a toggle's latch shown on a bank that is NOT live — drawn
 /// at the held tier but quieted with its bank (the theme's quiet-dim), so a latch stays legible on a wing without
 /// reading as the live press it is not.</param>
+/// <param name="AnchorEdge">The region edge this plate's bank hangs from.</param>
+/// <param name="AnchorMargin">That edge's inset; with <paramref name="AnchorEdge"/>, the plate's anchor group — the
+/// frame its pitches are normalized in.</param>
 public readonly record struct OverlayBindingSlot(
     ushort BadgeGlyph0,
     ushort BadgeGlyph1,
@@ -46,15 +41,15 @@ public readonly record struct OverlayBindingSlot(
     bool Visible,
     bool Pressed,
     float Alpha,
-    BindingSlotCategory Category,
-    int CategoryIndex,
-    int CategoryCount,
+    float PitchX,
+    float PitchY,
     int BankOrder,
-    Vector2? BankOffsetOverride,
     bool Bound = true,
     bool Accent = false,
     bool Latched = false,
-    bool Toggled = false
+    bool Toggled = false,
+    OverlayBarEdge AnchorEdge = OverlayBarEdge.Bottom,
+    float AnchorMargin = 0f
 );
 /// <summary>One declared modifier as the renderer consumes it (the trigger indicators between the clusters).</summary>
 /// <param name="BadgeGlyph0">The modifier's first (or only) badge atlas glyph index, 1-based, 0 = none.</param>

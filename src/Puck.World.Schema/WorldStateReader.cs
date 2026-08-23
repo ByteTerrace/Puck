@@ -87,13 +87,10 @@ public static class WorldStateReader {
 
         foreach (var candidate in (declared.Cells ?? [])) {
             if (
-                !int.TryParse(
-                s: candidate.Key,
-                style: System.Globalization.NumberStyles.Integer,
-                provider: System.Globalization.CultureInfo.InvariantCulture,
-                result: out var index
+                !TryParseCandidateIndex(
+                key: candidate.Key,
+                index: out var index
             ) ||
-                (index < 0) ||
                 ((isCandidateIndex is not null) && !isCandidateIndex(index))
             ) {
                 continue;
@@ -134,6 +131,29 @@ public static class WorldStateReader {
         }
 
         return bestKey;
+    }
+    /// <summary>Parses a keyed row's cell key as a candidate body index: a non-negative integer in invariant
+    /// decimal form. The one definition of which cell keys name a body, shared by <see cref="ArgExtremum"/> and
+    /// the server's carrier scans.</summary>
+    /// <param name="key">The cell key.</param>
+    /// <param name="index">The parsed index, or -1 when the key is not a candidate.</param>
+    /// <returns><see langword="true"/> when <paramref name="key"/> parses as a non-negative integer.</returns>
+    public static bool TryParseCandidateIndex(string key, out int index) {
+        if (
+            int.TryParse(
+            s: key,
+            style: System.Globalization.NumberStyles.Integer,
+            provider: System.Globalization.CultureInfo.InvariantCulture,
+            result: out index
+        ) &&
+            (index >= 0)
+        ) {
+            return true;
+        }
+
+        index = -1;
+
+        return false;
     }
     /// <summary>Reduces a keyed row's cell values with <paramref name="op"/>, resolving each cell through this same
     /// per-(row, key) seam as <see cref="TryRead"/> rather than walking the row's declared cell list raw — so a

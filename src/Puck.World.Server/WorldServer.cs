@@ -204,7 +204,7 @@ public sealed partial class WorldServer : IWorldServerHost {
     // definition, which recompiles m_rules, so a latch living in the compiled record would clear itself every time it
     // fired — which is exactly the 503-entries-in-500-ticks shape edge mode exists to close. Surviving names keep
     // their bit across an install; vanished names are dropped.
-    private readonly Dictionary<string, bool> m_ruleGateHeld = new(comparer: StringComparer.Ordinal);
+    private readonly RuleLatch m_ruleGateHeld = new();
     // The compiled `interactions` section — a SECOND compiled array, evaluated after m_rules (see
     // EvaluateWorldRules), never merged into it: an interaction desugars into a synthesized WorldRule and rides the
     // SAME per-rule evaluation, but interactions occupy their OWN name namespace (WorldInteraction.Name), so a
@@ -212,7 +212,11 @@ public sealed partial class WorldServer : IWorldServerHost {
     private CompiledWorldRule[] m_interactions = [];
     // The interaction family's own EDGE latch — the SAME shape m_ruleGateHeld is, kept separate for the identical
     // aliasing reason m_interactions itself is kept separate from m_rules.
-    private readonly Dictionary<string, bool> m_interactionGateHeld = new(comparer: StringComparer.Ordinal);
+    private readonly RuleLatch m_interactionGateHeld = new();
+    // Reused carrier/key scratch for rule evaluation: left (and forEach keys) and right, both live during one
+    // distance interaction.
+    private readonly List<int> m_carrierScratchLeft = [];
+    private readonly List<int> m_carrierScratchRight = [];
     // Reused scratch for the despawn-ownership guard (FireWorldRuleEffect's RemovePlacement arm) — rule-fire cadence
     // only, cleared and refilled on every check rather than allocated per firing.
     private readonly List<int> m_ruleInhabitantScratch = [];

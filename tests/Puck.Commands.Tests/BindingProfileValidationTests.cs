@@ -116,7 +116,8 @@ public sealed class BindingProfileValidationTests {
                 ),
             ]
         )));
-        _ = Assert.Throws<ArgumentException>(testCode: static () => BindingProfile.Compile(document: DocumentWithWheel(
+        // A wheel sector's commit is a press: its text rides the activation as a submitted line.
+        Assert.NotNull(@object: BindingProfile.Compile(document: DocumentWithWheel(
             new BindingPageEntryDefinition(Sources: null, Command: "action", Text: "argument"),
             new BindingPageEntryDefinition(Sources: null, Command: "action")
         )));

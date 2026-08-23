@@ -11,6 +11,31 @@ namespace Puck.World;
 /// validation already proved success) inside the server's install path to obtain the live array the tick
 /// evaluates.</summary>
 public static class WorldRuleCompiler {
+    // Shared by rules and interactions: an empty or absent effect list is refused in the subject's own noun.
+    private static CompiledWorldEffect[] CompileEffects(IReadOnlyList<ActionEffect>? effects, string ruleName, WorldDefinition definition, string subject) {
+        if (effects is not { Count: > 0 }) {
+            throw new WorldRuleException(
+                refusal: WorldRuleRefusal.EffectKindInadmissible,
+                ruleName: ruleName,
+                detail: $"{((subject == "rule")
+                    ? "a"
+                    : "an")} {subject} must carry a non-empty effect list",
+                subject: subject
+            );
+        }
+
+        var compiled = new CompiledWorldEffect[effects.Count];
+
+        for (var index = 0; (index < compiled.Length); index++) {
+            compiled[index] = CompileEffect(
+                effect: effects[index],
+                ruleName: ruleName,
+                definition: definition
+            );
+        }
+
+        return compiled;
+    }
     // SetState/AddState/CountdownState/Generate lift, and — riding the same "admit an existing WorldMutation kind" seam Generate
     // proved — so do upsertHudPanel/removeHudPanel/upsertPlacement/removePlacement: the rest of ActionEffect writes a
     // body's own kinematic or register state, which a world rule has none of. save admits on its OWN terms — not an
@@ -388,7 +413,7 @@ public static class WorldRuleCompiler {
             throw new WorldRuleException(
                 refusal: WorldRuleRefusal.SpatialChannelMalformed,
                 ruleName: ruleName,
-                detail: $"'{channel}' names '{kind}' with no value — a body reference is 'body:<n>', 'argmax:<row>'/'argmin:<row>', 'cell:<row>:<key>', or a bound 'each'/'left'/'right'"
+                detail: $"'{channel}' names '{kind}' with no value — a body reference is {s_bodyRefVocabulary}"
             );
         }
 
@@ -636,18 +661,46 @@ public static class WorldRuleCompiler {
     [ThreadStatic]
     private static RuleBinding[]? s_bindingScope;
 
-    private static RuleBinding BindingOfKeyToken(string? key) => key switch {
-        WorldRuleFacts.EachKey => RuleBinding.Each,
-        WorldRuleFacts.LeftKey => RuleBinding.Left,
-        WorldRuleFacts.RightKey => RuleBinding.Right,
-        _ => RuleBinding.None,
-    };
-    private static RuleBinding BindingOfBodyToken(string token) => token switch {
-        "each" => RuleBinding.Each,
-        "left" => RuleBinding.Left,
-        "right" => RuleBinding.Right,
-        _ => RuleBinding.None,
-    };
+    private static RuleBinding BindingOfKeyToken(string? key) {
+        foreach (var (binding, keyToken, _) in WorldRuleFacts.Bindings) {
+            if (string.Equals(
+                a: key,
+                b: keyToken,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                return binding;
+            }
+        }
+
+        return RuleBinding.None;
+    }
+    private static RuleBinding BindingOfBodyToken(string token) {
+        foreach (var (binding, keyToken, _) in WorldRuleFacts.Bindings) {
+            if (string.Equals(
+                a: token,
+                b: WorldRuleFacts.BodyTokenOf(keyToken: keyToken),
+                comparisonType: StringComparison.Ordinal
+            )) {
+                return binding;
+            }
+        }
+
+        return RuleBinding.None;
+    }
+    // The body-reference grammar as a refusal spells it; the bound tokens come from the same table the parser reads.
+    private static readonly string s_bodyRefVocabulary =
+        "a 'body:<n>', 'argmax:<row>'/'argmin:<row>', 'cell:<row>:<key>', or a bound " +
+        string.Join(
+            separator: '/',
+            values: WorldRuleFacts.Bindings.Select(selector: static entry => $"'{WorldRuleFacts.BodyTokenOf(keyToken: entry.KeyToken)}'")
+        ) +
+        " reference";
+    private static readonly string s_bindingScopes = string.Join(
+        separator: ", ",
+        values: WorldRuleFacts.Bindings.Select(selector: static (entry, index) => $"'{entry.KeyToken}' {((index == 0)
+            ? "binds inside "
+            : "inside ")}{entry.Scope}")
+    );
     private static void RequireBindingInScope(RuleBinding binding, string spelled, string ruleName, string where) {
         if (Array.IndexOf(
             array: (s_bindingScope ?? []),
@@ -656,7 +709,7 @@ public static class WorldRuleCompiler {
             throw new WorldRuleException(
                 refusal: WorldRuleRefusal.StateCellUnaddressable,
                 ruleName: ruleName,
-                detail: $"{where} names '{spelled}', which is not bound here — '$each' binds inside a rule declaring 'forEach', '$left' inside an interaction, '$right' inside a Distance interaction"
+                detail: $"{where} names '{spelled}', which is not bound here — {s_bindingScopes}"
             );
         }
     }
@@ -1144,7 +1197,7 @@ public static class WorldRuleCompiler {
                     ruleName: ruleName,
                     detail: $"'{name}' does not spell '{(isDistance
                     ? WorldRuleFacts.DistancePrefix
-                    : WorldRuleFacts.LineOfSightPrefix)}<bodyRefA>:<bodyRefB>' (each a 'body:<n>', 'argmax:<row>'/'argmin:<row>' or 'cell:<row>:<key>' reference)"
+                    : WorldRuleFacts.LineOfSightPrefix)}<bodyRefA>:<bodyRefB>' (each {s_bodyRefVocabulary})"
                 );
             }
 
@@ -1357,7 +1410,7 @@ public static class WorldRuleCompiler {
                 throw new WorldRuleException(
                     refusal: WorldRuleRefusal.SpatialChannelMalformed,
                     ruleName: ruleName,
-                    detail: $"'{name}' does not spell '{WorldRuleFacts.NearestPrefix}<bodyRef>:<row>' (a 'body:<n>', 'argmax:<row>'/'argmin:<row>' or 'cell:<row>:<key>' reference, then the keyed tag row)"
+                    detail: $"'{name}' does not spell '{WorldRuleFacts.NearestPrefix}<bodyRef>:<row>' ({s_bodyRefVocabulary}, then the keyed tag row)"
                 );
             }
 
@@ -1951,29 +2004,16 @@ public static class WorldRuleCompiler {
                 definition: definition
             );
 
-            if (rule.Effects is not { Count: > 0 }) {
-                throw new WorldRuleException(
-                    refusal: WorldRuleRefusal.EffectKindInadmissible,
-                    ruleName: rule.Name,
-                    detail: "a rule must carry a non-empty effect list"
-                );
-            }
-
-            var effects = new CompiledWorldEffect[rule.Effects.Count];
-
-            for (var index = 0; (index < effects.Length); index++) {
-                effects[index] = CompileEffect(
-                    effect: rule.Effects[index],
-                    ruleName: rule.Name,
-                    definition: definition
-                );
-            }
-
             return new CompiledWorldRule(
                 Name: rule.Name,
                 Mode: rule.Mode,
                 Gate: gate.ToArray(),
-                Effects: effects,
+                Effects: CompileEffects(
+                    effects: rule.Effects,
+                    ruleName: rule.Name,
+                    definition: definition,
+                    subject: "rule"
+                ),
                 ForEach: rule.ForEach
             );
         } finally {
@@ -2197,30 +2237,16 @@ public static class WorldRuleCompiler {
             }
 
             try {
-                if (row.Effects is not { Count: > 0 }) {
-                    throw new WorldRuleException(
-                        refusal: WorldRuleRefusal.EffectKindInadmissible,
-                        ruleName: name,
-                        detail: "an interaction must carry a non-empty effect list",
-                        subject: "interaction"
-                    );
-                }
-
-                var effects = new CompiledWorldEffect[row.Effects.Count];
-
-                for (var effectIndex = 0; (effectIndex < effects.Length); effectIndex++) {
-                    effects[effectIndex] = CompileEffect(
-                        effect: row.Effects[effectIndex],
-                        ruleName: name,
-                        definition: definition
-                    );
-                }
-
                 compiled[index] = new CompiledWorldRule(
                     Name: name,
                     Mode: row.Mode,
                     Gate: [],
-                    Effects: effects,
+                    Effects: CompileEffects(
+                        effects: row.Effects,
+                        ruleName: name,
+                        definition: definition,
+                        subject: "interaction"
+                    ),
                     Interaction: new CompiledInteraction(
                         CoOccurrence: row.CoOccurrence,
                         Left: row.Left,

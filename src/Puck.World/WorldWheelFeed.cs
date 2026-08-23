@@ -352,8 +352,7 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
             RingWidth: (unit * wheel.Style.RingWidthFraction),
             ActiveRing: state.ActiveRing,
             HoveredSector: hoverSector,
-            RotationRadians: (wheel.Style.RotationDegrees * (MathF.PI / 180f)),
-            Clockwise: wheel.Style.Clockwise,
+            SectorOffset: wheel.Style.SectorOffset,
             Rings: state.RingCache,
             HubLabel: (HubLabel(
                 slot: slot,

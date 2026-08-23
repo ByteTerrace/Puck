@@ -25,6 +25,40 @@ public sealed class BindingRadialTests {
         Assert.Equal(expected: 0, actual: BindingWheelGeometry.ResolveExcursionRing(vector: new Vector2(x: 0.32f, y: 0f), excursion: excursion, previousRing: 1));
     }
     [Fact]
+    public void SectorOffsetIsInSectorsSoHalfMakesNorthTheSeamForAnyCount() {
+        var centered = new BindingWheelStyleDefinition(AxisDeadZone: 0.1f);
+        var seam = new BindingWheelStyleDefinition(AxisDeadZone: 0.1f, SectorOffset: 0.5f);
+        var justEast = new Vector2(x: 0.05f, y: 1f);
+        var justWest = new Vector2(x: -0.05f, y: 1f);
+
+        foreach (var count in new[] { 3, 4, 6, 7, }) {
+            // Offset 0: the first entry straddles north on either side.
+            Assert.Equal(expected: 0, actual: BindingWheelGeometry.SelectAxis(vector: justEast, sectorCount: count, style: centered).Sector);
+            Assert.Equal(expected: 0, actual: BindingWheelGeometry.SelectAxis(vector: justWest, sectorCount: count, style: centered).Sector);
+            // Offset 0.5: north is the seam — east of it the first entry, west of it the last — whatever the count.
+            Assert.Equal(expected: 0, actual: BindingWheelGeometry.SelectAxis(vector: justEast, sectorCount: count, style: seam).Sector);
+            Assert.Equal(expected: (count - 1), actual: BindingWheelGeometry.SelectAxis(vector: justWest, sectorCount: count, style: seam).Sector);
+        }
+
+        // Sectors advance clockwise: due east on a four-wheel is entry 1 either way.
+        Assert.Equal(expected: 1, actual: BindingWheelGeometry.SelectAxis(vector: new Vector2(x: 1f, y: 0f), sectorCount: 4, style: centered).Sector);
+        Assert.Equal(expected: 1, actual: BindingWheelGeometry.SelectAxis(vector: new Vector2(x: 1f, y: 0f), sectorCount: 4, style: seam).Sector);
+    }
+
+    [Fact]
+    public void AWholeSectorOfOffsetIsRefusedAsAReorder() {
+        var profile = Profile();
+        var document = profile with {
+            Wheels = [profile.Wheels![0] with { Style = new BindingWheelStyleDefinition(SectorOffset: 1f), },],
+        };
+
+        var refusal = Assert.Throws<ArgumentException>(testCode: () => BindingProfile.Compile(document: document));
+
+        Assert.Contains(expectedSubstring: "sectorOffset", actualString: refusal.Message);
+        Assert.Contains(expectedSubstring: "reorder", actualString: refusal.Message);
+    }
+
+    [Fact]
     public void AngleUsesInputNeutralWhileHitTargetUsesTheDisplayedHub() {
         var openingInput = new Vector2(x: 700f, y: 500f);
         var centeredHub = new Vector2(x: 400f, y: 300f);
@@ -427,7 +461,7 @@ public sealed class BindingRadialTests {
         Assert.Equal(expected: "primary", actual: primary.Id);
         Assert.Equal(expected: BindingWheelSpatialSelectionMode.HitTarget, actual: primary.Style.PointerSelection);
         Assert.Equal(expected: BindingWheelPlacement.ViewportCenter, actual: primary.Style.Placement);
-        Assert.Equal(expected: 30f, actual: primary.Style.RotationDegrees);
+        Assert.Equal(expected: 0.25f, actual: primary.Style.SectorOffset);
         var selector = Assert.Single(collection: bindings.Resolve(slot: 2, source: "gamepad.leftStick")!);
 
         Assert.Equal(expected: "test.radial.select", actual: selector.Command);
@@ -567,8 +601,7 @@ public sealed class BindingRadialTests {
             AxisDeadZone: 0.06f,
             RingWidthFraction: 0.08f,
             OuterGraceRingFraction: 0.25f,
-            RotationDegrees: 30f,
-            Clockwise: false,
+            SectorOffset: 0.25f,
             InitialRing: 0
         )
     );

@@ -45,8 +45,8 @@ public enum OverlayWheelOutcome : byte {
 /// <param name="HoveredSector">The 0-based hovered sector within the active ring, or <c>-1</c> when the active
 /// selection input is in its dead zone, outside an authored hit-target ring, or nowhere known — the accent
 /// highlight.</param>
-/// <param name="RotationRadians">Sector-zero rotation clockwise from twelve o'clock.</param>
-/// <param name="Clockwise">Whether sector indices advance clockwise.</param>
+/// <param name="SectorOffset">Sector zero's center, in sectors clockwise from twelve o'clock, on [0, 1); sectors
+/// advance clockwise from it.</param>
 /// <param name="Rings">The rings, innermost first.</param>
 /// <param name="Outcome">What the glow says this frame — hover accent while open, then the decided outcome for the
 /// few frames the seat lingers after closing.</param>
@@ -62,8 +62,7 @@ public readonly record struct OverlayWheelSeat(
     float RingWidth,
     int ActiveRing,
     int HoveredSector,
-    float RotationRadians,
-    bool Clockwise,
+    float SectorOffset,
     ReadOnlyMemory<OverlayWheelRing> Rings,
     OverlayWheelOutcome Outcome = OverlayWheelOutcome.None,
     int OutcomeSector = -1,

@@ -159,25 +159,29 @@ public sealed partial class WorldServer {
     // $distance: — the straight-line distance between two named bodies, read through WorldServer.Body(int)'s own
     // bounds check (null for an out-of-range index or an inactive slot). Either side missing reads as
     // s_noBodyDistance rather than zero (see its own remarks).
-    private FixedQ4816 ReadBodyDistance(CompiledBodyRef bodyA, CompiledBodyRef bodyB, ulong tick) {
-        var a = Body(index: ResolveBodyRef(
-            bodyRef: bodyA,
-            tick: tick
-        ));
-        var b = Body(index: ResolveBodyRef(
-            bodyRef: bodyB,
-            tick: tick
-        ));
-
-        if (
-            (a is null) ||
-            (b is null)
-        ) {
-            return NoBodyDistance;
-        }
-
-        return (b.FixedPosition - a.FixedPosition).Length;
-    }
+    private FixedQ4816 ReadBodyDistance(CompiledBodyRef bodyA, CompiledBodyRef bodyB, ulong tick) =>
+        ReadBodyDistance(
+            bodyA: ResolveBodyRef(
+                bodyRef: bodyA,
+                tick: tick
+            ),
+            bodyB: ResolveBodyRef(
+                bodyRef: bodyB,
+                tick: tick
+            )
+        );
+    private FixedQ4816 ReadBodyDistance(int bodyA, int bodyB) => (
+        ((Body(index: bodyA) is { } a) && (Body(index: bodyB) is { } b))
+            ? (b.FixedPosition - a.FixedPosition).Length
+            : NoBodyDistance
+    );
+    // The squared sibling for a range test that never needs the root; the same NoBodyDistance sentinel for a
+    // missing side, which a caller must test for before comparing against an unbounded range.
+    private FixedQ4816 ReadBodyDistanceSquared(int bodyA, int bodyB) => (
+        ((Body(index: bodyA) is { } a) && (Body(index: bodyB) is { } b))
+            ? (b.FixedPosition - a.FixedPosition).LengthSquared
+            : NoBodyDistance
+    );
     // $los: — the same WorldPopulation.HasLineOfSightBetween a sensed target's own RequiresLineOfSight check rides,
     // called against two RESOLVED body references. Either side resolving to no body (a negative index) reads as
     // false — no sight line to nothing, the ordinary "absent reads as the falsy value" convention.

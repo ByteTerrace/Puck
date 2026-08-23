@@ -1164,10 +1164,17 @@ public static class BindingProfile {
                 (style.RingWidthFraction >= 0.5f) ||
                 !float.IsFinite(f: style.OuterGraceRingFraction) ||
                 (style.OuterGraceRingFraction < 0f) ||
-                !float.IsFinite(f: style.RotationDegrees)
+                !float.IsFinite(f: style.SectorOffset)
             ) {
                 throw new ArgumentException(
                     message: $"Wheel \"{wheel.Id}\" carries invalid style geometry.",
+                    paramName: nameof(document)
+                );
+            }
+
+            if ((style.SectorOffset < 0f) || (style.SectorOffset >= 1f)) {
+                throw new ArgumentException(
+                    message: $"Wheel \"{wheel.Id}\" sectorOffset {style.SectorOffset} is outside [0, 1): a whole sector of rotation is an entry reorder — move the entry instead.",
                     paramName: nameof(document)
                 );
             }
@@ -1401,12 +1408,6 @@ public static class BindingProfile {
                             paramName: nameof(document)
                         );
                     }
-                    if (sector.Text is not null) {
-                        throw new ArgumentException(
-                            message: $"{sectorPath} carries text — a radial activation carries a value, not a submitted command line.",
-                            paramName: nameof(document)
-                        );
-                    }
 
                     if (
                         !Enum.IsDefined(value: sector.Mode) ||
@@ -1433,7 +1434,8 @@ public static class BindingProfile {
                         Activation: new BindingActivation(
                             command: sector.Command!,
                             value: value,
-                            phase: phase
+                            phase: phase,
+                            text: sector.Text
                         ),
                         Id: sector.Id
                     );

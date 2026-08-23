@@ -41,15 +41,14 @@ public static class BindingWheelGeometry {
             clockwiseAngle += MathF.Tau;
         }
 
-        var rotation = (style.RotationDegrees * (MathF.PI / 180f));
-        var relative = (style.Clockwise
-            ? (clockwiseAngle - rotation)
-            : (rotation - clockwiseAngle)
-        );
+        // Sector k is CENTERED at (k + SectorOffset) sectors clockwise from north, so its sweep starts half a
+        // sector before that. The writer draws with the identical rule, so the piece under the selector is the
+        // piece that lights.
+        var span = (MathF.Tau / sectorCount);
+        var relative = ((clockwiseAngle - (style.SectorOffset * span)) + (span * 0.5f));
 
         relative = (((relative % MathF.Tau) + MathF.Tau) % MathF.Tau);
-        var span = (MathF.Tau / sectorCount);
-        var sector = (((int)((relative + (span * 0.5f)) / span)) % sectorCount);
+        var sector = (((int)(relative / span)) % sectorCount);
 
         return new BindingWheelSelection(
             Outcome: BindingWheelSelectionOutcome.Sector,

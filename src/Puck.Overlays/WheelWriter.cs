@@ -184,22 +184,20 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
             }
 
             var span = (MathF.Tau / sectorCount);
-            var direction = (seat.Clockwise
-                ? 1f
-                : -1f
-            );
 
             for (var sectorIndex = 0; (sectorIndex < sectorCount); sectorIndex++) {
                 // Layout policy is authored with the radial. The host uses the identical transform for selection:
-                // sector N is CENTERED on its angle, so the piece starts half a span before it.
-                var angle = (seat.RotationRadians + ((direction * sectorIndex) * span));
+                // piece k is CENTERED (k + offset) sectors clockwise from north, so it starts half a span before.
+                var angle = ((sectorIndex + seat.SectorOffset) * span);
                 var sector = sectors[sectorIndex];
                 var isHovered = (isActive && (sectorIndex == seat.HoveredSector));
                 var isOutcome = (isActive && (seat.Outcome != OverlayWheelOutcome.None) && (sectorIndex == seat.OutcomeSector));
                 // Selection and the local dispatch outcome are a GLOW on the piece's edge, never a different fill:
-                // the piece itself, and whatever the world shows beneath it, stay exactly as they were.
+                // the piece itself, and whatever the world shows beneath it, stay exactly as they were. The hover
+                // is the accent; the verdict is positive or danger — a different hue from the hover it replaces,
+                // so the commit is SEEN as a switch, not a continuation.
                 var glow = ((isOutcome && (seat.Outcome == OverlayWheelOutcome.Dispatched))
-                    ? OverlayColorRole.Accent
+                    ? OverlayColorRole.Positive
                     : ((isOutcome && (seat.Outcome == OverlayWheelOutcome.Errored))
                         ? OverlayColorRole.Danger
                         : (isHovered
@@ -289,7 +287,7 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
             gap: 0f,
             glow: (!hasOutcomeSector
                 ? (seat.Outcome switch {
-                    OverlayWheelOutcome.Dispatched => OverlayColorRole.Accent,
+                    OverlayWheelOutcome.Dispatched => OverlayColorRole.Positive,
                     OverlayWheelOutcome.Cancelled or OverlayWheelOutcome.Errored => OverlayColorRole.Danger,
                     _ => (!hasHoveredSector
                         ? OverlayColorRole.Accent

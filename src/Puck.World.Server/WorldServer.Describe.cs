@@ -281,7 +281,7 @@ public sealed partial class WorldServer {
     //
     // `latch=held|open` is HELD when the gate held at the last evaluation (an Edge row will not fire again until it
     // lets go) and OPEN when it did not (so the next tick the gate holds is a crossing, and an Edge row fires).
-    private static string DescribeCompiledRules(string verb, CompiledWorldRule[] rules, Dictionary<string, bool> latch) {
+    private static string DescribeCompiledRules(string verb, CompiledWorldRule[] rules, RuleLatch latch) {
         if (rules.Length == 0) {
             return $"[{verb}: none]";
         }
@@ -301,20 +301,7 @@ public sealed partial class WorldServer {
                 values: rule.Effects.Select(selector: static effect => effect.Describe)
             );
 
-            var held = latch.GetValueOrDefault(key: rule.Name);
-            var prefix = $"{rule.Name}#";
-
-            // A forEach rule or an interaction keeps one latch per bound key/pair: held when any is.
-            foreach (var pair in latch) {
-                if (pair.Value && pair.Key.StartsWith(
-                    comparisonType: StringComparison.Ordinal,
-                    value: prefix
-                )) {
-                    held = true;
-                    break;
-                }
-            }
-
+            var held = latch.Held(name: rule.Name);
             var scope = ((rule.Interaction is { } interaction)
                 ? $" {interaction.CoOccurrence.ToString().ToLowerInvariant()} {interaction.Left} x {interaction.Right}{((interaction.CoOccurrence == WorldInteractionCoOccurrence.Distance)
                     ? $" <= {(double)interaction.Range}"
