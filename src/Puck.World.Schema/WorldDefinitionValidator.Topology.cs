@@ -30,7 +30,7 @@ public static partial class WorldDefinitionValidator {
                     (alternative is not null) &&
                     (WorldHostTokens.ParseBackend(token: alternative.Token) is null)
                 ) {
-                    errors.Add(item: $"host.backendDraw could emit token '{alternative.Token}', which names no backend ('{WorldHostTokens.BackendAuto}', '{WorldHostTokens.BackendDirectX}', or '{WorldHostTokens.BackendVulkan}').");
+                    errors.Add(item: $"a backend-row generator could emit token '{alternative.Token}', which names no backend ('{WorldHostTokens.BackendAuto}', '{WorldHostTokens.BackendDirectX}', or '{WorldHostTokens.BackendVulkan}').");
                 }
             }
         }
@@ -135,7 +135,7 @@ public static partial class WorldDefinitionValidator {
 
         return names;
     }
-    private static void ValidateHost(WorldHostDefaults host, IReadOnlyList<WorldGeneratorRow>? generators, List<string> errors) {
+    private static void ValidateHost(WorldHostDefaults host, IReadOnlyList<WorldGeneratorRow>? generators, IReadOnlyList<WorldStateRow> stateRows, List<string> errors) {
         if (!Enum.IsDefined(value: host.Presentation)) {
             errors.Add(item: $"host.presentation '{host.Presentation}' is not a defined WorldHostPresentation.");
         }
@@ -181,29 +181,24 @@ public static partial class WorldDefinitionValidator {
         // cannot do this — see its own remarks). Declaring NEITHER stays legitimate and reads as 'auto'.
         if (
             (host.Backend is not null) &&
-            (host.BackendDraw is not null)
+            (host.BackendRow is not null)
         ) {
-            errors.Add(item: "host declares both 'backend' and 'backendDraw' — the backend is an authored literal or a draw, never both.");
+            errors.Add(item: "host declares both 'backend' and 'backendRow' — the backend is an authored literal or a row read, never both.");
         }
 
-        if (host.BackendDraw is { } backendDraw) {
-            // A TEXT site: the backend is drawn BY NAME, so the source is held to the same kind predicate as any
-            // other text site. No numeric domain applies, hence the full band.
-            ValidateDrawSite(
-                bootOnly: true,
-                domainHigh: long.MaxValue,
-                domainLow: long.MinValue,
-                draw: backendDraw,
-                errors: errors,
-                generators: generators,
-                path: "host.backendDraw",
-                targetKind: CellKind.Text
-            );
-            ValidateBackendTokens(
-                draw: backendDraw,
-                errors: errors,
-                generators: generators
-            );
+        if (host.BackendRow is { } backendRow) {
+            if (WorldDefinitionRows.FindStateRow(
+                rows: stateRows,
+                name: backendRow
+            ) is not { } tokenRow) {
+                errors.Add(item: $"host.backendRow names state row '{backendRow}', which the document does not declare.");
+            } else if (
+                (tokenRow.Kind != CellKind.Text) ||
+                tokenRow.IsKeyed ||
+                (tokenRow.Lattice is not null)
+            ) {
+                errors.Add(item: $"host.backendRow names state row '{backendRow}', which must be a scalar kind=text row.");
+            }
         }
 
         if (!Enum.IsDefined(value: host.PresentMode)) {

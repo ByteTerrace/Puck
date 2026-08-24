@@ -38,10 +38,10 @@ public enum SeatActivationPolicy : byte {
 /// a live edit takes effect on the next disconnect, never retroactively on an already-parked body. See
 /// <c>Server.WorldPopulation</c>'s park-with-grace remarks and the <c>$parked:&lt;bodyRef&gt;</c> reserved rule
 /// channel (<see cref="WorldRuleFacts.ParkedPrefix"/>) that reads a parked body's remaining count.</summary>
-/// <remarks><see cref="CapacityDraw"/> is the census's authored-randomness facet, or <see langword="null"/> for an
+/// <remarks><c>capacityRow</c> is the census's authored-randomness facet, or <see langword="null"/> for an
 /// ordinary literal <see cref="CapacityRaw"/>. A boot-only site (<see cref="WorldDrawSites.PopulationCapacity"/>):
 /// settled into <see cref="CapacityRaw"/>, cleared, and narrated exactly like
-/// <see cref="WorldHostDefaults.BackendDraw"/>. The site's admissible domain is not the capacity ceiling alone —
+/// <c>host.backendRow</c>. The site's admissible domain is not the capacity ceiling alone —
 /// <see cref="NetworkPlayers"/> is validated against capacity minus the local seats, so a drawn capacity below
 /// that sum is a document this same validator would refuse once resolved; the domain is narrowed statically at
 /// authoring instead, so the roll can never decide whether the world boots. <see cref="Disclosure"/> is the
@@ -62,17 +62,23 @@ public readonly record struct WorldPopulationDefaults(
     [property: JsonPropertyName("peerColors"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSequence? PeerColorsRaw = null,
     [property: JsonPropertyName("capacity"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? CapacityRaw = null,
     float ReconnectGraceSeconds = 3.0f,
-    // OPTIONAL — the authored-randomness facet over CapacityRaw above (see the param docs).
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldDraw? CapacityDraw = null,
+    // OPTIONAL — reads the census from a scalar kind=int state row's slot at boot, AFTER row first-fills, so a
+    // Boot-drawn row IS the drawn census: the draw facet lives on the ROW, this site only reads it. Re-resolved on
+    // every fresh load; the row itself is the persisted evidence of what was drawn.
+    [property: JsonPropertyName("capacityRow"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CapacityRow = null,
     // OPTIONAL per-observer snapshot disclosure. Null resolves to WorldObserverDisclosure.Default (disclose-all),
     // which is what every world authoring none delivers.
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldObserverDisclosure? Disclosure = null
 ) {
     /// <summary>Gets the total authoritative body capacity, including reserved local seats — ABSENT resolves to
     /// <see cref="LocalSeats"/> plus <see cref="NetworkPlayers"/> (no simulated peers beyond the seats the document
-    /// actually declares).</summary>
+    /// actually declares). While a <see cref="CapacityRow"/> read is PENDING (pre-resolve validation, before the boot
+    /// resolver settles the row into <see cref="CapacityRaw"/>) this reads the admission ceiling, so capacity-bounded
+    /// checks stay permissive exactly once and exact on the post-resolve revalidation.</summary>
     [JsonIgnore]
-    public int Capacity => (CapacityRaw ?? (LocalSeats + NetworkPlayers));
+    public int Capacity => (CapacityRaw ?? ((CapacityRow is not null)
+        ? WorldPopulationLimits.CapacityCeiling
+        : (LocalSeats + NetworkPlayers)));
     /// <summary>Gets the inert census — zero local seats, zero capacity, no simulated peers.</summary>
     public static WorldPopulationDefaults Default { get; } = new();
     /// <summary>Gets the boot intent-source template every network stand-in wakes on — ABSENT resolves to

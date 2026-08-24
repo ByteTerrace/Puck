@@ -82,10 +82,10 @@ public sealed record WorldDraw(
 /// adding one), silently re-pointing a live site's stream while its cursor kept counting.</para>
 /// </remarks>
 public static class WorldDrawSites {
-    /// <summary>The descriptor <c>host.backendDraw</c> resolves under.</summary>
+    /// <summary>The descriptor <c>host.backendRow</c> boot read narrates under.</summary>
     public const string HostBackend = "host.backend";
-    /// <summary>The descriptor <c>population.capacityDraw</c> resolves under.</summary>
-    public const string PopulationCapacity = "population.capacity";
+    /// <summary>The descriptor <c>bodies.capacityRow</c> boot read narrates under.</summary>
+    public const string PopulationCapacity = "bodies.capacity";
 
     /// <summary>Determines whether <paramref name="site"/> is a BOOT-ONLY document field — drawn once at composition, settled
     /// into an ordinary literal, and cleared (see this type's remarks).</summary>

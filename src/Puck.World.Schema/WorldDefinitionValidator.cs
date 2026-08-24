@@ -865,29 +865,22 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"bodies.capacity {definition.Population.Capacity} is outside {localSeats}..{WorldPopulationLimits.CapacityCeiling}.");
         }
 
-        if (definition.Population.CapacityDraw is { } capacityDraw) {
-            // The census coherence rule: the admissible domain is not the ceiling alone. networkPlayers is checked
-            // against capacity MINUS the local seats, so a drawn capacity below that sum is a document THIS SAME
-            // validator refuses once the draw resolves — the roll would decide whether the world boots. Narrow the
-            // domain statically instead.
-            var censusFloor = (localSeats + definition.Population.NetworkPlayers);
+        if (definition.Population.CapacityRow is { } capacityRow) {
+            // A literal beside the row is legitimate AFTER the boot resolver settles the row into it — the row is
+            // the source and overwrites the literal on every fresh load, so nothing shadows silently.
 
-            // The draw domain floors at the census the document already owes room for (seats plus declared network
-            // players) — the same coherence rule an authored literal capacity answers to. The sub-ceiling crash that
-            // once forced a floor at the ceiling itself was fixed at its root (the avatar catalog now scans the live
-            // population's own capacity), so a drawn capacity below 128 is an ordinary authored value.
-            var drawFloor = censusFloor;
-
-            ValidateDrawSite(
-                draw: capacityDraw,
-                generators: definition.Generators,
-                targetKind: CellKind.Int,
-                bootOnly: true,
-                domainLow: drawFloor,
-                domainHigh: WorldPopulationLimits.CapacityCeiling,
-                path: "bodies.capacityDraw",
-                errors: errors
-            );
+            if (WorldDefinitionRows.FindStateRow(
+                rows: definition.State,
+                name: capacityRow
+            ) is not { } censusRow) {
+                errors.Add(item: $"bodies.capacityRow names state row '{capacityRow}', which the document does not declare.");
+            } else if (
+                (censusRow.Kind != CellKind.Int) ||
+                censusRow.IsKeyed ||
+                (censusRow.Lattice is not null)
+            ) {
+                errors.Add(item: $"bodies.capacityRow names state row '{capacityRow}', which must be a scalar kind=int row.");
+            }
         }
 
         var peerCapacity = Math.Max(
@@ -1154,6 +1147,7 @@ public static partial class WorldDefinitionValidator {
             ValidateHost(
                 host: authoredHost,
                 generators: definition.Generators,
+                stateRows: definition.State,
                 errors: errors
             );
         }

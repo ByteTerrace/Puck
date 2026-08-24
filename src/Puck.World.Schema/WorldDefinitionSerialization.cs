@@ -171,7 +171,7 @@ namespace Puck.World;
 // row converter is hand-written; its nested objects are ordinary strict-parsed STJ).
 [JsonSerializable(typeof(WorldGenerator))]
 // The authored-randomness facet a state row (WorldStateRow.Draw), the population section
-// (WorldPopulationDefaults.CapacityDraw), or the host section (WorldHostDefaults.BackendDraw) may declare.
+// (bodies.capacityRow reading a boot-drawn row), or the host section (WorldHostDefaults.BackendDraw) may declare.
 [JsonSerializable(typeof(WorldDraw))]
 [JsonSerializable(typeof(WorldStateLatticeTrait))]
 [JsonSerializable(typeof(WorldStateLatticeTopology))]

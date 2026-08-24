@@ -92,7 +92,7 @@ internal sealed record WorldHostSettings(
         ArgumentNullException.ThrowIfNull(argument: defaults);
 
         // The document's own backend is settled by WorldDrawBootResolver before anything reaches here (a drawn
-        // backendDraw becomes an ordinary literal), so a null at this point means the document authored neither —
+        // a backendRow read settles the literal), so a null at this point means the document authored neither —
         // which reads as Auto, exactly as it did when the field was non-nullable.
         var requested = (backendOverride ?? (defaults.Backend ?? WorldBackendPreference.Auto));
         var fromCli = (backendOverride is not null);

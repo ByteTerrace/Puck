@@ -8,8 +8,8 @@ namespace Puck.World;
 /// about what a site's cursor position means.
 /// </summary>
 /// <remarks>
-/// <para><b>Two site classes, two settle rules.</b> A BOOT-ONLY site — <see cref="WorldPopulationDefaults.CapacityDraw"/>
-/// and <see cref="WorldHostDefaults.BackendDraw"/> — is a document FIELD read exactly once at composition: this
+/// <para><b>Two site classes, two settle rules.</b> A BOOT-ONLY site — <c>bodies.capacityRow</c>
+/// and <c>host.backendRow</c> — is a document FIELD read exactly once at composition: this
 /// resolver draws it, writes the settled value into the ordinary literal field, CLEARS the facet, and NARRATES the
 /// settlement on stderr. The narration is not decoration: settling erases the only evidence the value was random, so
 /// without it nothing anywhere could say the census or the backend was drawn, or which site decided it. A STATE site
@@ -83,72 +83,7 @@ internal static class WorldDrawBootResolver {
         var host = definition.Host;
         var changed = false;
 
-        if (population.CapacityDraw is { } capacityDraw) {
-            if (!TryDrawSite(
-                definition: definition,
-                worldSeed: worldSeed,
-                instanceIdentity: instanceIdentity,
-                site: WorldDrawSites.PopulationCapacity,
-                draw: capacityDraw,
-                targetKind: CellKind.Int,
-                fired: out var fired,
-                reason: out reason
-            )) {
-                return false;
-            }
 
-            var drawn = fired.Numeric!.Value;
-
-            if (
-                (drawn < int.MinValue) ||
-                (drawn > int.MaxValue)
-            ) {
-                reason = $"{WorldDrawSites.PopulationCapacity} drew {drawn}, which does not fit population.capacity's int32 storage";
-
-                return false;
-            }
-
-            Narrate(
-                site: WorldDrawSites.PopulationCapacity,
-                instanceIdentity: instanceIdentity,
-                settled: drawn.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)
-            );
-
-            population = (population with { CapacityRaw = ((int)drawn), CapacityDraw = null });
-            changed = true;
-        }
-
-        if (host.BackendDraw is { } backendDraw) {
-            if (!TryDrawSite(
-                definition: definition,
-                worldSeed: worldSeed,
-                instanceIdentity: instanceIdentity,
-                site: WorldDrawSites.HostBackend,
-                draw: backendDraw,
-                targetKind: CellKind.Text,
-                fired: out var fired,
-                reason: out reason
-            )) {
-                return false;
-            }
-
-            var token = (fired.Text ?? string.Empty);
-
-            if (WorldHostTokens.ParseBackend(token: token) is not { } backend) {
-                reason = $"{WorldDrawSites.HostBackend} drew token '{token}', which names no backend ('{WorldHostTokens.BackendAuto}', '{WorldHostTokens.BackendDirectX}', or '{WorldHostTokens.BackendVulkan}')";
-
-                return false;
-            }
-
-            Narrate(
-                site: WorldDrawSites.HostBackend,
-                instanceIdentity: instanceIdentity,
-                settled: WorldHostTokens.BackendToken(backend: backend)
-            );
-
-            host = (host with { Backend = backend, BackendDraw = null });
-            changed = true;
-        }
 
         var state = new List<WorldStateRow>(capacity: definition.State.Count);
 
@@ -191,6 +126,57 @@ internal static class WorldDrawBootResolver {
             );
 
             state.Add(item: (row with { Cells = [cell], DrawCursor = (row.DrawCursor + fired.Samples), DrawDecks = (fired.Decks ?? row.DrawDecks) }));
+            changed = true;
+        }
+
+        // SITE READS run AFTER row first-fills, so a Boot-drawn row is readable the same boot it draws. The value
+        // narrated here is the row's — the row itself stays the persisted evidence, so nothing is cleared.
+        if (population.CapacityRow is { } capacityRow) {
+            var rows = state;
+            var declared = rows.Find(match: r => string.Equals(a: r.Name.Value, b: capacityRow, comparisonType: StringComparison.Ordinal));
+
+            if (declared?.Cells is not [{ } censusCell, ..]) {
+                reason = $"bodies.capacityRow '{capacityRow}' names no filled scalar row this boot could read";
+
+                return false;
+            }
+
+            var census = censusCell.Value;
+
+            if ((census < 0) || (census > int.MaxValue)) {
+                reason = $"bodies.capacityRow '{capacityRow}' read {census}, which does not fit a non-negative int32 census";
+
+                return false;
+            }
+
+            Narrate(
+                site: WorldDrawSites.PopulationCapacity,
+                instanceIdentity: instanceIdentity,
+                settled: census.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)
+            );
+
+            population = (population with { CapacityRaw = ((int)census) });
+            changed = true;
+        }
+
+        if (host.BackendRow is { } backendRow) {
+            var rows = state;
+            var declared = rows.Find(match: r => string.Equals(a: r.Name.Value, b: backendRow, comparisonType: StringComparison.Ordinal));
+            var token = (((declared?.Cells is [{ } tokenCell, ..]) ? tokenCell.Text : null) ?? string.Empty);
+
+            if (WorldHostTokens.ParseBackend(token: token) is not { } backend) {
+                reason = $"host.backendRow '{backendRow}' read token '{token}', which names no backend ('{WorldHostTokens.BackendAuto}', '{WorldHostTokens.BackendDirectX}', or '{WorldHostTokens.BackendVulkan}')";
+
+                return false;
+            }
+
+            Narrate(
+                site: WorldDrawSites.HostBackend,
+                instanceIdentity: instanceIdentity,
+                settled: WorldHostTokens.BackendToken(backend: backend)
+            );
+
+            host = (host with { Backend = backend });
             changed = true;
         }
 

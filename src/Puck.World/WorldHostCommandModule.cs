@@ -45,8 +45,8 @@ internal sealed class WorldHostCommandModule(WorldServer server, WorldHostSettin
             : "off")}}}]");
     }
     private static string DescribeRow(WorldHostDefaults host) =>
-        ((((string)$"backend={((host.BackendDraw is not null)
-            ? "<draw>"
+        ((((string)$"backend={((host.BackendRow is not null)
+            ? $"<row:{host.BackendRow}>"
             : WorldHostTokens.BackendToken(backend: (host.Backend ?? WorldBackendPreference.Auto)))} width={host.Width} height={host.Height} surfaceFormat={WorldHostTokens.SurfaceFormatToken(format: host.SurfaceFormat)} fullscreen={Bool(value: host.Fullscreen)} ") +
         $"presentMode={PresentModeToken(mode: host.PresentMode)} targetHertz={HertzToken(hertz: host.TargetHertz)} ") +
         $"exitAfterSeconds={host.ExitAfterSeconds} rayQuery={Bool(value: host.RayQuery)} timing={Bool(value: host.Timing)} genlock={Genlock(value: host.Genlock)} listen={Endpoint(value: host.Listen)} authority={Endpoint(value: host.Authority)}");

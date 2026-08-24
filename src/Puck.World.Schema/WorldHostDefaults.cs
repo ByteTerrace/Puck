@@ -179,7 +179,7 @@ public enum WorldHostPresentation : byte {
 /// to <see cref="WorldHostPresentation.Windowed"/>, so every world authored before this field existed boots
 /// byte-identically; the <c>--headless</c> CLI flag reflects <see cref="WorldHostPresentation.None"/> for a single run
 /// without editing the document.</param>
-/// <param name="BackendDraw">The backend choice's authored-randomness facet, or <see langword="null"/> for an ordinary
+/// <param name="BackendRow">A scalar kind=text state row whose slot names the backend token, read at boot after
 /// literal <paramref name="Backend"/>. A boot-only site (<see cref="WorldDrawSites.HostBackend"/>): the resolver draws
 /// it once at composition, writes the settled preference into <paramref name="Backend"/>, clears this facet, and
 /// narrates the settlement on stderr — the only surface that can say the backend was drawn at all, since a settled
@@ -190,7 +190,7 @@ public enum WorldHostPresentation : byte {
 /// rather than an ordinal is deliberate: an ordinal draw over an enum silently re-points itself the day a member is
 /// inserted, and reads at the authoring site as a number nothing explains.</para>
 /// <para>Declared together with <paramref name="Backend"/> it is refused by name — this record is a class, so
-/// presence is honestly observable here, unlike <see cref="WorldPopulationDefaults.CapacityDraw"/>'s struct-typed
+/// presence is honestly observable here, unlike <c>bodies.capacityRow</c>'s struct-typed
 /// site.</para></param>
 /// <param name="Width">The window client width in pixels.</param>
 /// <param name="Height">The window client height in pixels.</param>
@@ -214,7 +214,7 @@ public enum WorldHostPresentation : byte {
 /// it as a destination, or <see langword="null"/> when the authority is colocated with the resolver. Colocation
 /// short-circuits the authority transport; it does not select a separate transfer path.</param>
 /// <param name="Backend">The preferred graphics backend (<see cref="WorldBackendPreference.Auto"/> is OS-portable), or
-/// <see langword="null"/> when <paramref name="BackendDraw"/> draws it — omitting both reads as
+/// <see langword="null"/> when <paramref name="BackendRow"/> reads it from a row — omitting both reads as
 /// <see cref="WorldBackendPreference.Auto"/>.</param>
 public sealed record WorldHostDefaults(
     WorldHostPresentation Presentation,
@@ -233,8 +233,8 @@ public sealed record WorldHostDefaults(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldBackendPreference? Backend = null,
     // OPTIONAL — the authored-randomness facet over Backend above (see the param docs). XOR-BY-PRESENCE against it:
     // WorldHostDefaults is a CLASS, so a null Backend is honestly distinguishable from an authored one and declaring
-    // both is refused BY NAME. (WorldPopulationDefaults.CapacityDraw's site cannot do this — see its own remarks.)
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldDraw? BackendDraw = null
+    // both is refused BY NAME. (the capacity-row site needs no such guard — see its own remarks.)
+    [property: JsonPropertyName("backendRow"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? BackendRow = null
 ) {
     /// <summary>Gets the inert absence — no presentation (<see cref="WorldHostPresentation.None"/>: no window, no
     /// GPU device), zero extent, no pacing, no listener. The engine holds no boot shape of its own: the standard
