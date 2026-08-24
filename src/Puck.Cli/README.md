@@ -176,45 +176,43 @@ future transport arm, not a reshape of `authorities`' current members.
 
 ---
 
-## `puck parity` — cross-backend composed-frame comparison
+## `puck parity` — cross-backend parity over the authored parity world
 
-For every corpus entry — the authored pattern worlds under
-[tests/Puck.Parity/](../../tests/Puck.Parity/README.md)
-(gradient, edges, modifiers, glyphs, each stressing one contract slice) plus the
-shipped default world — `puck parity` boots the real `Puck.World` windowed
-twice, once on Vulkan and once on Direct3D 12, arms `world.screenshot` at the
-same fenced simulation moment in each run, and compares the backend pair under
-the relaxed parity envelope: mean absolute channel delta at most 0.35 LSB over
-every pixel, and at most 20% of pixels differing at all. Benign ±1-LSB
-shader-codegen noise passes; a missing, relocated, or recolored region lands
-in multiples of 1.0 and fails. There are no stored baselines — both frames of
-a pair come from the same build, so content changes cannot fail the check.
-Two different patterns rendered by the same backend must fail the same
-envelope — a comparator that cannot refuse cannot report green.
+`puck parity` boots `tests/Puck.Parity/parity.world.json` once per graphics
+backend (Vulkan, Direct3D 12) with `host.presentation: offscreen` — no window
+is shown — and lets the world's own `captures` rows land every tick-scheduled
+capture and write a `puck.parity.manifest.v1`. Because both backends capture
+the same simulation ticks, each pair observes one moment by construction.
+The two manifest directories are then compared by `puck parity compare` under
+the contract versioned beside the world
+(`tests/Puck.Parity/parity.contract.json`).
 
 ```
-puck parity                                 run the pattern corpus plus the shipped default world
-puck parity --world <path>                  additionally run the named world as a corpus entry
-puck parity --generate [--hashes id=hex64,...]   regenerate tests/Puck.Parity/*.world.json from their pattern definitions
+puck parity                                            full run: both backends, then compare
+puck parity compare <leftDir> <rightDir> --contract <file> [--out <dir>]   compare two captured runs
 ```
 
+Per capture, three independent verdicts, in order:
+
+1. **Content gate** — a capture refused as camera-inside-geometry
+   (`map(cameraPos) <= 0`), missing, or below its station's census floor never
+   reaches comparison: agreement between degenerate frames is vacuous.
+2. **State verdict** — `stateHash` equality, exact, no envelope. A one-bit
+   sim-state divergence is a defect, never noise.
+3. **Pixel verdict** — per-tile mean/max deltas against the station's contract
+   thresholds. A localized defect cannot dilute itself across a whole-frame
+   mean.
+
+Failures write both frames, a per-pixel delta heatmap, and a per-verdict
+summary into the run's `evidence/` directory — a red names its tile and shows
+its pixels. There are no stored baselines: both runs come from the same build,
+so content changes cannot fail the check, only a cross-backend divergence can.
 The runner builds `Puck.World` once, runs each leg from fresh state with its
-own `--state-dir`, requires every scripted command accepted (`wire.errors`
-must close the transcript with zero rejections), and leaves the frames and
-both transcripts in a per-run temp directory it names on stdout. It needs a
-display and both GPU devices, and it covers composed-frame agreement only —
-nothing about the SDF ISA, document schemas, or deterministic numerics.
-Exit codes are 0 for parity held and the discriminator refused, 1 for an
-observed failure, and 2 for usage, build, or infrastructure refusal.
-
-`--generate` rebuilds every pattern world from its shape/material/screen
-definitions in `ParityCorpusGenerator.cs` — edit that file, never the JSON, the
-same discipline `tests/Puck.Parity/README.md` states for editing a pattern. A
-regenerated creation's canonical hash cannot be derived by the generator (the
-validator's canonicalizer sits outside `Puck.Cli`); boot the affected world
-once, read the canonical hash the validator's own refusal names, and pass every
-pattern's hash back via `--hashes id=hex64,...` (an id with no override is
-stamped with the all-zero placeholder).
+own `--state-dir`, and requires every scripted command accepted
+(`wire.errors` closes each transcript with zero rejections). It needs both
+GPU devices but takes over no display. Exit codes: 0 every capture held all
+three verdicts, 2 a verdict failed or a leg/build refused, 3 malformed
+manifest or contract.
 
 ---
 

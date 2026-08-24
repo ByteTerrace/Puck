@@ -1,0 +1,74 @@
+{
+  "type": [
+    "object",
+    "null"
+  ],
+  "properties": {
+    "directory": {
+      "description": "The output directory every scheduled capture in this document writes into, and where manifest.json (the puck.parity.manifest.v1 document) lands once at least one capture has landed \u2014 relative to the process\u0027s current directory unless rooted. A --capture-dir boot flag overrides this for a deployment run (the --state-dir pattern), so two backend legs of the same document can target sibling directories without two document copies.",
+      "type": "string"
+    },
+    "rows": {
+      "description": "The scheduled stations. Station names are unique; capacity MaxRows.",
+      "type": "array",
+      "items": {
+        "description": "One tick-scheduled capture station: a stable name, the exact engine ticks it arms a composed-frame capture at, and the palette its per-pixel census sorts against. A station carries no camera reference of its own \u2014 what the composed frame shows at a given tick is the document\u0027s own doing (a state row plus rules driving a camera program\u0027s select op; see docs/views.md), so two backends that step the identical document capture the identical moment by construction, and this row only says WHEN to look, never AT WHAT.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "station": {
+            "description": "The stable name \u2014 the manifest\u0027s station field and the frame filename\u0027s own prefix (\u003Cstation\u003E-\u003Ctick\u003E.png). A WorldCellName: dot-free, non-empty, free of the reserved character set.",
+            "type": "string"
+          },
+          "ticks": {
+            "description": "The exact simulation ticks (completed-tick coordinates, ascending, none repeated) this station arms a capture at. Capacity: MaxTicksPerRow.",
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          },
+          "palette": {
+            "description": "The per-pixel census\u0027s material table \u2014 at least one entry, at most MaxPaletteEntriesPerRow, unique Material indices.",
+            "type": "array",
+            "items": {
+              "description": "One material bucket a capture\u0027s per-pixel census sorts against: the nearest-color match in a station\u0027s authored palette, since the composed render target carries pixel colors, not a per-pixel material-id buffer, and this is the mechanically honest fallback the render path actually supports (see Puck.World.WorldCaptureScheduler\u0027s own remarks for the exact matching rule).",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "material": {
+                  "description": "The material\u0027s index \u2014 the manifest\u0027s census key. Author-chosen, unique within a row; not read against any other section\u0027s material table.",
+                  "type": "integer"
+                },
+                "color": {
+                  "description": "The material\u0027s reference color, #RRGGBB or #RRGGBBAA (alpha ignored \u2014 the composed frame carries none).",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "material",
+                "color"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "station",
+          "ticks",
+          "palette"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "directory",
+    "rows"
+  ],
+  "additionalProperties": false,
+  "default": null
+}

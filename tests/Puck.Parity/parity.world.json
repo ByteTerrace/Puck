@@ -1,0 +1,229 @@
+{
+  "schema": "puck.world.def.v1",
+  "documentId": "parity-vocabulary",
+  "host": {
+    "presentation": "offscreen",
+    "backend": "auto",
+    "width": 640,
+    "height": 480,
+    "surfaceFormat": "r8g8b8a8",
+    "fullscreen": false,
+    "presentMode": "Immediate",
+    "targetHertz": 0,
+    "exitAfterSeconds": 0,
+    "rayQuery": true,
+    "timing": false,
+    "genlock": null,
+    "listen": null
+  },
+  "simulation": {
+    "rateHz": 240
+  },
+  "generation": {
+    "worldSeed": 424242
+  },
+  "collision": {
+    "requirements": ["SmoothUnionContact"],
+    "contactSkin": 0.02,
+    "maxIterations": 4,
+    "maxSlopeDegrees": 60.0,
+    "gradientProbe": 0.0
+  },
+  "state": {
+    "world": [
+      { "name": "station", "kind": "int", "value": 0 },
+      {
+        "name": "bump",
+        "kind": "fixed",
+        "lattice": {
+          "topology": "parityLattice",
+          "initial": 0,
+          "min": 0,
+          "max": 1,
+          "heightScale": 2.0,
+          "color": "#3FAF6F",
+          "paint": [
+            { "$type": "rect", "value": 1, "minX": 284, "minZ": -4, "maxX": 292, "maxZ": 4 }
+          ]
+        }
+      }
+    ],
+    "lattices": [
+      {
+        "name": "parityLattice",
+        "origin": [280, 0, -8],
+        "cellSize": 1.0,
+        "width": 16,
+        "depth": 16,
+        "layers": 1,
+        "stepEveryTicks": 240,
+        "reactions": []
+      }
+    ]
+  },
+  "rules": [
+    {
+      "name": "toMaterials",
+      "mode": "Edge",
+      "gate": { "$type": "compareState", "state": "$tick", "comparison": "GreaterOrEqual", "value": 700 },
+      "effects": [ { "$type": "setState", "state": "station", "value": 1 } ]
+    },
+    {
+      "name": "toLattice",
+      "mode": "Edge",
+      "gate": { "$type": "compareState", "state": "$tick", "comparison": "GreaterOrEqual", "value": 850 },
+      "effects": [ { "$type": "setState", "state": "station", "value": 2 } ]
+    },
+    {
+      "name": "toNoise",
+      "mode": "Edge",
+      "gate": { "$type": "compareState", "state": "$tick", "comparison": "GreaterOrEqual", "value": 1000 },
+      "effects": [ { "$type": "setState", "state": "station", "value": 3 } ]
+    }
+  ],
+  "captures": {
+    "directory": "captures",
+    "rows": [
+      {
+        "station": "sky",
+        "ticks": [600, 620],
+        "palette": [
+          { "material": 0, "color": "#000000" },
+          { "material": 1, "color": "#FFFFFF" }
+        ]
+      },
+      {
+        "station": "materials",
+        "ticks": [720, 740],
+        "palette": [
+          { "material": 0, "color": "#2E333D" },
+          { "material": 1, "color": "#EBC74C" }
+        ]
+      },
+      {
+        "station": "lattice",
+        "ticks": [860, 880],
+        "palette": [
+          { "material": 0, "color": "#3FAF6F" },
+          { "material": 1, "color": "#101010" }
+        ]
+      },
+      {
+        "station": "noise",
+        "ticks": [1010, 1030],
+        "palette": [
+          { "material": 0, "color": "#D8594D" },
+          { "material": 1, "color": "#101010" }
+        ]
+      }
+    ]
+  },
+  "cameras": [
+    {
+      "name": "sky-cam",
+      "anchor": null,
+      "renderWidth": 640,
+      "renderHeight": 480,
+      "rig": {
+        "name": "sky-cam",
+        "version": "puck.camera.v1",
+        "operations": [
+          { "$type": "anchor", "subject": { "$type": "worldPoint", "point": [0, 80, 0] } },
+          { "$type": "lookAt", "subject": { "$type": "worldPoint", "point": [0, 60, -300] } },
+          { "$type": "fov", "fieldOfViewRadians": 0.9 }
+        ]
+      }
+    },
+    {
+      "name": "materials-cam",
+      "anchor": null,
+      "renderWidth": 640,
+      "renderHeight": 480,
+      "rig": {
+        "name": "materials-cam",
+        "version": "puck.camera.v1",
+        "operations": [
+          { "$type": "offset", "value": [0, 1.9, 12], "worldAxes": true },
+          { "$type": "lookAt", "subject": { "$type": "worldPoint", "point": [0, 1.9, 20.6] } },
+          { "$type": "fov", "fieldOfViewRadians": 0.75 }
+        ]
+      }
+    },
+    {
+      "name": "lattice-cam",
+      "anchor": null,
+      "renderWidth": 640,
+      "renderHeight": 480,
+      "rig": {
+        "name": "lattice-cam",
+        "version": "puck.camera.v1",
+        "operations": [
+          { "$type": "anchor", "subject": { "$type": "worldPoint", "point": [288, 6, -10] } },
+          { "$type": "lookAt", "subject": { "$type": "worldPoint", "point": [288, 0.5, 0] } },
+          { "$type": "fov", "fieldOfViewRadians": 0.85 }
+        ]
+      }
+    },
+    {
+      "name": "noise-cam",
+      "anchor": null,
+      "renderWidth": 640,
+      "renderHeight": 480,
+      "rig": {
+        "name": "noise-cam",
+        "version": "puck.camera.v1",
+        "operations": [
+          { "$type": "anchor", "subject": { "$type": "worldPoint", "point": [400, 1, -4] } },
+          { "$type": "lookAt", "subject": { "$type": "worldPoint", "point": [400, 1, 0] } },
+          { "$type": "fov", "fieldOfViewRadians": 0.75 }
+        ]
+      }
+    },
+    {
+      "name": "parity-select",
+      "anchor": null,
+      "renderWidth": 640,
+      "renderHeight": 480,
+      "rig": {
+        "name": "parity-select",
+        "version": "puck.camera.v1",
+        "operations": [
+          {
+            "$type": "select",
+            "key": "state.station",
+            "cases": [
+              { "value": 0, "program": "sky-cam" },
+              { "value": 1, "program": "materials-cam" },
+              { "value": 2, "program": "lattice-cam" },
+              { "value": 3, "program": "noise-cam" }
+            ],
+            "default": "sky-cam"
+          }
+        ]
+      }
+    }
+  ],
+  "views": {
+    "seatControl": { "yawReference": "World", "minPitch": -0.35, "maxPitch": 1.2 },
+    "seatRig": {
+      "name": "unusedSeatRig",
+      "version": "puck.camera.v1",
+      "operations": [
+        { "$type": "orbit", "distance": 5, "yaw": 0, "pitch": 0.3 },
+        { "$type": "lookAt", "subject": { "$type": "reference" } },
+        { "$type": "fov", "fieldOfViewRadians": 0.9 }
+      ]
+    },
+    "layouts": [
+      {
+        "name": "parity",
+        "seatCount": 0,
+        "slots": [
+          { "x": 0, "y": 0, "width": 1, "height": 1, "camera": "parity-select" }
+        ],
+        "transitionSeconds": 0,
+        "transitionRenderScale": 1
+      }
+    ]
+  }
+}

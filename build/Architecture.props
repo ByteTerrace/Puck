@@ -294,9 +294,14 @@
         Puck.Networking grants nothing: its peer refusal tests drive an unsigned, wrongly-signed, or tampered
         message frame onto an otherwise-honest link through the public IPeerTransport seam (a test-side transport
         decorator hands the test the control stream), so no unattested-send member exists to befriend.
+
+        Puck.Cli grants Puck.Cli.Tests its parity comparator internals (the manifest/contract loaders, the
+        per-tile pixel comparer, the gate/state/pixel outcome model) — a CLI verb's own plumbing, never a public
+        API. Test-only, like every other grant here.
     -->
     <ItemGroup>
         <PuckArchitectureFriends Include="Puck.Attestation" Friends="Puck.Attestation.Tests" />
+        <PuckArchitectureFriends Include="Puck.Cli" Friends="Puck.Cli.Tests" />
         <PuckArchitectureFriends Include="Puck.Input" Friends="Puck.Input.Tests" />
         <PuckArchitectureFriends Include="Puck.Maths" Friends="Puck.Maths.Tests" />
         <PuckArchitectureFriends Include="Puck.Physics" Friends="Puck.Physics.Tests" />

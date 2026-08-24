@@ -8,7 +8,8 @@
       "description": "Which boot shape the world composes \u2014 see WorldHostPresentation. Defaults to Windowed, so every world authored before this field existed boots byte-identically; the --headless CLI flag reflects None for a single run without editing the document.",
       "enum": [
         "Windowed",
-        "None"
+        "None",
+        "Offscreen"
       ]
     },
     "width": {

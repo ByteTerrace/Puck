@@ -1418,6 +1418,11 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
 
+        ValidateCaptures(
+            definition: definition,
+            errors: errors
+        );
+
         // The window composition. The engine holds no rig of its own, so views is REQUIRED exactly when the census
         // implies a body to look at (a derived refusal, not a flat floor, mirroring kits): a seatless document
         // composes no seat view and may author none. Named cameras a layout slot references must resolve against the

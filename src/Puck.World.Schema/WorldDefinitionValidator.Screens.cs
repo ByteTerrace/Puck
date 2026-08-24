@@ -271,6 +271,7 @@ public static partial class WorldDefinitionValidator {
         var seenOrbit = false;
         var seenDynamics = false;
         var seenBlend = false;
+        var seenSelect = false;
 
         for (var index = 0; (index < operations.Count); index++) {
             var opPath = $"{path}.operations[{index}]";
@@ -447,6 +448,52 @@ public static partial class WorldDefinitionValidator {
                     );
 
                     break;
+                case WorldCameraProgramOp.Select select:
+                    if (seenSelect) {
+                        errors.Add(item: $"{opPath} is a second 'select' op — at most one is admitted.");
+                    }
+
+                    seenSelect = true;
+
+                    RequireBindableScalar(
+                        definition: definition,
+                        errors: errors,
+                        path: $"{opPath}.key",
+                        scalar: select.Key
+                    );
+
+                    if (string.IsNullOrWhiteSpace(value: select.Default)) {
+                        errors.Add(item: $"{opPath} needs a non-empty 'default' program name.");
+                    }
+
+                    var cases = (select.Cases ?? []);
+
+                    if (cases.Count == 0) {
+                        errors.Add(item: $"{opPath}.cases must declare at least one candidate.");
+                    }
+
+                    var caseValues = new HashSet<long>();
+
+                    for (var caseIndex = 0; (caseIndex < cases.Count); caseIndex++) {
+                        var candidate = cases[caseIndex];
+                        var casePath = $"{opPath}.cases[{caseIndex}]";
+
+                        if (candidate is null) {
+                            errors.Add(item: $"{casePath} is required.");
+
+                            continue;
+                        }
+
+                        if (string.IsNullOrWhiteSpace(value: candidate.Program)) {
+                            errors.Add(item: $"{casePath} needs a non-empty program name.");
+                        }
+
+                        if (!caseValues.Add(item: candidate.Value)) {
+                            errors.Add(item: $"{casePath}.value {candidate.Value} is declared more than once.");
+                        }
+                    }
+
+                    break;
                 default:
                     errors.Add(item: $"{opPath} is an unknown camera program op kind.");
 
@@ -456,9 +503,10 @@ public static partial class WorldDefinitionValidator {
 
         if (
             !seenFov &&
-            !seenBlend
+            !seenBlend &&
+            !seenSelect
         ) {
-            errors.Add(item: $"{path}.operations must include a 'fov' op (or a 'blend' op resolving to programs that do) — every rig needs a rendered field of view.");
+            errors.Add(item: $"{path}.operations must include a 'fov' op (or a 'blend'/'select' op resolving to programs that do) — every rig needs a rendered field of view.");
         }
     }
     // Cross-program blend references: every cameras[].rig, views.seatRig, and views.cameraRig shares ONE name
@@ -507,6 +555,37 @@ public static partial class WorldDefinitionValidator {
                     Walk(
                         name: blend.B,
                         path: $"{path} -> '{blend.B}'"
+                    );
+                }
+            }
+
+            if (program.SelectOp is { } select) {
+                if (
+                    !string.IsNullOrWhiteSpace(value: select.Default) &&
+                    !programs.ContainsKey(key: select.Default)
+                ) {
+                    errors.Add(item: $"{path} select.default names undeclared camera program '{select.Default}'.");
+                } else if (!string.IsNullOrWhiteSpace(value: select.Default)) {
+                    Walk(
+                        name: select.Default,
+                        path: $"{path} -> '{select.Default}'"
+                    );
+                }
+
+                foreach (var candidate in (select.Cases ?? [])) {
+                    if (candidate is not { Program: { Length: > 0 } candidateProgram }) {
+                        continue;
+                    }
+
+                    if (!programs.ContainsKey(key: candidateProgram)) {
+                        errors.Add(item: $"{path} select.cases names undeclared camera program '{candidateProgram}'.");
+
+                        continue;
+                    }
+
+                    Walk(
+                        name: candidateProgram,
+                        path: $"{path} -> '{candidateProgram}'"
                     );
                 }
             }

@@ -55,6 +55,10 @@ var stateDirOption = new Option<string?>(name: "--state-dir") {
     DefaultValueFactory = static _ => null,
     Description = "Override the on-disk state root (profile catalog, replays). Absent uses %LOCALAPPDATA%\\Puck\\World. A developer/deployment override: parallel verification runs and multiple hosts on one machine each need their own root.",
 };
+var captureDirOption = new Option<string?>(name: "--capture-dir") {
+    DefaultValueFactory = static _ => null,
+    Description = "Override the world document's captures.directory. A developer/deployment override, the --state-dir pattern: a cross-backend parity run needs the two legs' captures kept apart.",
+};
 // A DEVELOPER REFLECTION of the document's host.presentation field, not a separate product (the unification
 // contract): absent lets the document decide; a bare --headless (or --headless true) forces host.presentation=none
 // for this run only (no window, no GPU device, no swapchain, no audio device); --headless false forces windowed.
@@ -93,6 +97,7 @@ var launchCommand = new RootCommand(description: "Puck World") {
     backendOption,
     connectOption,
     federationKeyFileOption,
+    captureDirOption,
     exitAfterSecondsOption,
     headlessOption,
     stateDirOption,
@@ -120,6 +125,9 @@ if (parseResult.Errors.Count > 0) {
 var connectTarget = parseResult.GetValue(option: connectOption);
 if (parseResult.GetValue(option: stateDirOption) is { } stateDirOverride) {
     Puck.World.Server.WorldStateRoot.Override(path: stateDirOverride);
+}
+if (parseResult.GetValue(option: captureDirOption) is { } captureDirOverride) {
+    WorldCaptureRoot.Override(path: captureDirOverride);
 }
 // Parse the nullable host CLI overrides at the boundary, keeping World's loud typo hard-exits for --backend / --present-
 // mode. A null override means "the document decides" (WorldHostSettings.Resolve coalesces to the authored defaults).
@@ -308,6 +316,16 @@ if (hostSettings.Headless) {
     if (OperatingSystem.IsWindows()) {
         services.AddWindowsPrecisionWaiter();
     }
+    services.AddFixedStepSimulation<HeadlessWorldSimulation>(bindings: seatBindings);
+} else if (hostSettings.Offscreen) {
+    // A real GPU device and the composed-frame render pipeline, with NO window and NO swap chain — see
+    // WorldBootComposition.AddWorldOffscreenPresentation. The server steps exactly like the headless shape
+    // (HeadlessWorldSimulation); OffscreenTickHostedService additionally produces one composed frame per iteration.
+    services.AddLauncherOffscreenTerminal();
+    if (OperatingSystem.IsWindows()) {
+        services.AddWindowsPrecisionWaiter();
+    }
+    services.AddWorldOffscreenPresentation(hostsOnDirectX: hostsOnDirectX);
     services.AddFixedStepSimulation<HeadlessWorldSimulation>(bindings: seatBindings);
 } else {
     // The recording graph (puck.recording.v1) — native capture for streaming/upload workflows, defined as data.

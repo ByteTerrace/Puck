@@ -80,7 +80,8 @@ public sealed record WorldDefinition(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldMusicRow>? Music = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldJudgeRow>? Judges = null,
     [property: JsonPropertyName("seatModes"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldSeatModeFamily>? SeatModesRaw = null,
-    [property: JsonPropertyName("probes"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldProbe>? ProbesRaw = null
+    [property: JsonPropertyName("probes"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldProbe>? ProbesRaw = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCapturesSection? Captures = null
 ) {
     /// <summary>The document schema version. A loader rejects any other value; the canonical writer always emits it.</summary>
     public const string SchemaVersion = "puck.world.def.v1";

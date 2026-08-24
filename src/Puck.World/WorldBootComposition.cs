@@ -395,6 +395,18 @@ internal static class WorldBootComposition {
         services.AddSingleton<ITextCommandHoldGate>(implementationFactory: static sp => sp.GetRequiredService<WorldConsoleWaitGate>());
         services.AddSingleton<IWorldWaitGateResolver, WorldSingleWaitGateResolver>();
         services.AddSingleton<ICommandModule, WorldWaitCommandModule>();
+
+        // The captures section's tick-scheduled arm, wired beside the wait gate at the SAME publishTick call site
+        // (HeadlessWorldSimulation/WorldSimulation compose the two delegates together). CORE — a headless boot still
+        // schedules and hashes/manifests every capture; it simply has no renderer to arm, narrated by name rather
+        // than a crash.
+        services.AddSingleton(implementationFactory: static sp => new WorldCaptureScheduler(
+            definitionSource: sp.GetRequiredService<WorldDefinitionSource>(),
+            hostSettings: sp.GetRequiredService<WorldHostSettings>(),
+            renderProbe: sp.GetService<WorldRenderProbe>(),
+            server: sp.GetRequiredService<WorldServer>()
+        ));
+        services.AddSingleton<ICommandModule, WorldCaptureCommandModule>();
         // Launcher owns the one TextCommandSource and its stdout/stderr + operator-tape result fan-out. World
         // contributes only this wait gate; AddLauncherTerminalShared composes every contributed gate into that
         // source, so adding world.wait cannot sever the launcher's administrative mirror or deferred observers.
@@ -1043,6 +1055,128 @@ internal static class WorldBootComposition {
             // before the container's reverse-creation-order sweep — ride that safe point for the binder's own GPU
             // holdings (camera feeds, jumbotron view engines), whose container-ordered disposal would otherwise land
             // after device death.
+            return new WorldRenderTeardown(
+                inner: render.Root,
+                binder
+            );
+        });
+
+        return services;
+    }
+    /// <summary>
+    /// Layers a real GPU device and the composed-frame render pipeline over the authoritative core — the world
+    /// render ALONE (no unified overlay/console-mirror/binding-bar, so no glyph atlas, HUD store, console-session
+    /// bank, wheel, pointer, cursor, or audio-render-device registration), with NO window and NO swap chain: see
+    /// <see cref="WorldOffscreenGpuActivation"/> for the per-backend device bring-up. Registered only when
+    /// <c>WorldHostSettings.Offscreen</c> is <see langword="true"/>; <c>world.screenshot</c> (core-registered) works
+    /// unchanged because it reaches the render node chain's own <c>RequestCapture</c>, never a presenter or swap
+    /// chain. Every presentation-only console module (<see cref="WorldCommandModule"/>, audio, recording, gamepads)
+    /// stays unregistered and refuses as unknown, exactly like the <c>none</c> shape; diegetic View-type screens
+    /// (the jumbotron pool <c>AddWorldPresentation</c>'s render-root factory stands up via
+    /// <c>WorldScreenBinder.ConfigureViews</c>) are a known gap this shape does not compose.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="hostsOnDirectX">Whether the resolved backend is Direct3D 12 (else Vulkan).</param>
+    /// <returns>The same service collection, for chaining.</returns>
+    public static IServiceCollection AddWorldOffscreenPresentation(this IServiceCollection services, bool hostsOnDirectX) {
+        ArgumentNullException.ThrowIfNull(argument: services);
+
+        services.AddOptions<NativeWindowOptions>().Configure<WorldHostSettings>(configureOptions: static (options, hostSettings) => {
+            options.Height = ((uint)hostSettings.Height);
+            options.Mode = NativeWindowMode.PlatformWindow;
+            options.Title = WorldApplicationDefaults.WindowTitle;
+            options.Width = ((uint)hostSettings.Width);
+        });
+
+        if (OperatingSystem.IsWindows()) {
+            services.AddWindowsHostedPresentation(hostsOnDirectX: hostsOnDirectX);
+        } else {
+            services.AddLinuxHostedPresentation();
+        }
+
+        // Resolved eagerly by the IRenderNode factory below, before anything touches the GPU — see its own remarks
+        // for the per-backend bring-up (surfaceless Direct3D 12; a never-shown window for Vulkan).
+        services.AddSingleton<WorldOffscreenGpuActivation>();
+
+        services.AddSingleton(implementationFactory: static sp => {
+            var hostSettings = sp.GetRequiredService<WorldHostSettings>();
+
+            return new OffscreenRenderOptions(
+                Height: ((uint)hostSettings.Height),
+                Width: ((uint)hostSettings.Width)
+            );
+        });
+
+        // The render probe, and the plain per-frame state a bare world render (no overlay) still composes through:
+        // per-seat viewport rects, markers, the icon table (the SDF document emitter's material palette reads it),
+        // and the SDF document intake itself. None of these touch a window or the GPU.
+        services.AddSingleton<WorldRenderProbe>();
+        services.AddSingleton<WorldSeatViewports>();
+        services.AddSingleton<MarkerStore>();
+        services.AddSingleton(implementationFactory: static sp => new WorldIconTable(definition: sp.GetRequiredService<WorldDefinition>()));
+        services.AddSingleton<WorldSdfDocumentEmitter>();
+        services.AddSingleton<ICommandModule, WorldSdfCommandModule>();
+        // world.host — the RESOLVED presentation column reports "offscreen" (see WorldHostCommandModule.DescribeHost).
+        services.AddSingleton<ICommandModule, WorldHostCommandModule>();
+
+        services.AddSingleton(implementationFactory: sp => new WorldFramePresenter(
+            frameRate: sp.GetRequiredService<FrameRateMonitor>(),
+            client: sp.GetRequiredService<WorldClient>(),
+            simulation: sp.GetRequiredService<HeadlessWorldSimulation>(),
+            settings: sp.GetRequiredService<WorldRenderSettings>(),
+            binder: sp.GetRequiredService<WorldScreenBinder>(),
+            envelope: sp.GetRequiredService<WorldRenderEnvelope>(),
+            seatBindings: sp.GetRequiredService<WorldSeatBindings>(),
+            animator: sp.GetRequiredService<WorldStampPool>(),
+            audio: sp.GetRequiredService<WorldAudioDirector>(),
+            anchor: sp.GetRequiredService<WorldPerceptionAnchor>(),
+            speech: sp.GetRequiredService<WorldSpeechClock>(),
+            overlayFacts: sp.GetRequiredService<IOverlayPredicateEvaluator>(),
+            composition: sp.GetRequiredService<WorldCompositionState>(),
+            composer: sp.GetRequiredService<WorldViewComposer>(),
+            sdfDocuments: sp.GetRequiredService<WorldSdfDocumentEmitter>(),
+            viewports: sp.GetRequiredService<WorldSeatViewports>(),
+            continuum: sp.GetRequiredService<WorldContinuum>(),
+            text: sp.GetRequiredService<WorldTextCatalog>(),
+            adjacencies: sp.GetRequiredService<IWorldAdjacencySource>(),
+            markers: sp.GetRequiredService<MarkerStore>(),
+            resolveIcon: sp.GetRequiredService<WorldIconTable>().ResolveIcon
+        ));
+
+        services.AddSingleton<IRenderNode>(implementationFactory: sp => {
+            // Brings the GPU device up before anything below asks for one.
+            _ = sp.GetRequiredService<WorldOffscreenGpuActivation>();
+
+            var hostSettings = sp.GetRequiredService<WorldHostSettings>();
+            var width = ((uint)hostSettings.Width);
+            var height = ((uint)hostSettings.Height);
+            var binder = sp.GetRequiredService<WorldScreenBinder>();
+            var viewGpuServices = new SdfViewGpuServices(
+                Gpu: sp.GetRequiredService<IGpuComputeServices>(),
+                TimingFactory: (sp.GetService(serviceType: typeof(IGpuTimingPoolFactory)) as IGpuTimingPoolFactory),
+                TimingRecorder: (sp.GetService(serviceType: typeof(IGpuTimingRecorder)) as IGpuTimingRecorder)
+            );
+            var frameSource = sp.GetRequiredService<WorldFramePresenter>();
+            // No Decorate: the composed frame is the world render alone (see this method's own remarks) — the
+            // outermost node stays SdfEngineNode itself, so world.screenshot's capture reaches it directly.
+            var render = SdfWorldRenderBuilder.Build(
+                services: viewGpuServices,
+                spec: new SdfWorldRenderSpec(FrameSource: frameSource, Height: height, Width: width) {
+                    DynamicTransformCapacity = frameSource.DynamicTransformCapacity,
+                    HostsOnDirectX = hostSettings.HostsOnDirectX,
+                    InstanceCapacity = frameSource.InstanceCapacity,
+                    ProgramWordCapacity = frameSource.ProgramWordCapacity,
+                    RayQuery = hostSettings.RayQuery,
+                    ScreenLights = binder.ScreenLights,
+                    ScreenSourceFrames = binder.ScreenSources,
+                    ViewportCapacity = PlayerRoster.MaxSlots,
+                }
+            );
+            var probe = sp.GetRequiredService<WorldRenderProbe>();
+
+            probe.Node = render.Producer;
+            probe.Render = render;
+
             return new WorldRenderTeardown(
                 inner: render.Root,
                 binder

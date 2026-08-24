@@ -33,7 +33,7 @@ internal sealed class WorldHostCommandModule(WorldServer server, WorldHostSettin
             : "display"
         );
 
-        return (((((((string)$"[world.host: document {{{{{DescribeRow(host: document)}}}}} resolved {{{{backend={WorldHostTokens.BackendToken(backend: (hostSettings.HostsOnDirectX
+        return (((((((string)$"[world.host: document {{{{{DescribeRow(host: document)}}}}} resolved {{{{presentation={PresentationToken(presentation: hostSettings.Presentation)} backend={WorldHostTokens.BackendToken(backend: (hostSettings.HostsOnDirectX
             ? WorldBackendPreference.DirectX
             : WorldBackendPreference.Vulkan))} ") +
             $"width={hostSettings.Width} height={hostSettings.Height} surfaceFormat={WorldHostTokens.SurfaceFormatToken(format: hostSettings.SurfaceFormat)} ") +
@@ -45,7 +45,7 @@ internal sealed class WorldHostCommandModule(WorldServer server, WorldHostSettin
             : "off")}}}]");
     }
     private static string DescribeRow(WorldHostDefaults host) =>
-        ((((string)$"backend={((host.BackendRow is not null)
+        ((((string)$"presentation={PresentationToken(presentation: host.Presentation)} backend={((host.BackendRow is not null)
             ? $"<row:{host.BackendRow}>"
             : WorldHostTokens.BackendToken(backend: (host.Backend ?? WorldBackendPreference.Auto)))} width={host.Width} height={host.Height} surfaceFormat={WorldHostTokens.SurfaceFormatToken(format: host.SurfaceFormat)} fullscreen={Bool(value: host.Fullscreen)} ") +
         $"presentMode={PresentModeToken(mode: host.PresentMode)} targetHertz={HertzToken(hertz: host.TargetHertz)} ") +
@@ -54,6 +54,7 @@ internal sealed class WorldHostCommandModule(WorldServer server, WorldHostSettin
     private static string Genlock(string? value) => (value ?? "(none)");
     private static string HertzToken(double hertz) => hertz.ToString(provider: CultureInfo.InvariantCulture);
     private static string PresentModeToken(PresentMode mode) => mode.ToString().ToLowerInvariant();
+    private static string PresentationToken(WorldHostPresentation presentation) => presentation.ToString().ToLowerInvariant();
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {

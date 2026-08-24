@@ -2,11 +2,9 @@ using Puck.Assets;
 
 namespace Puck.Cli.Parity;
 
-/// <summary>One frame pair's measured divergence and its verdict under the relaxed parity envelope.</summary>
-/// <param name="MeanDelta">The mean absolute channel delta in LSB units, averaged over every pixel's R, G, and B.</param>
-/// <param name="DiffFraction">The fraction of pixels with any nonzero R, G, or B delta.</param>
-/// <param name="MaxDelta">The largest single-channel delta observed, in LSB units.</param>
-/// <param name="Passed">Whether the pair sits inside the envelope.</param>
+/// <summary>The retired whole-frame mean comparator, kept solely as the discrimination foil in
+/// <c>Puck.Cli.Tests</c>: the per-tile comparator must FAIL a localized defect this envelope demonstrably
+/// accepts. Nothing in the live parity path consults it.</summary>
 internal readonly record struct ParityVerdict(
     double MeanDelta,
     double DiffFraction,
