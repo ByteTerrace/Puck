@@ -84,7 +84,7 @@ public sealed class AuthoredShapeAdmissionLawTests {
                     HashRaw: canonical.Hash
                 ),
             ],
-            PlacementsRaw = [
+            PlacementRowsRaw = [
                 new WorldPlacement(
                     Id: CreationId,
                     CreationId: CreationId,

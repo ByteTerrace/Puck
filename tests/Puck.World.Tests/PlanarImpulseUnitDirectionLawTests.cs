@@ -47,7 +47,7 @@ public sealed class PlanarImpulseUnitDirectionLawTests {
 
         return document with {
             ChannelsRaw = [.. document.Channels, dashChannel],
-            KitsRaw = [document.Kits[0] with { ActionsRaw = new Dictionary<string, ActionSpec> { ["dash"] = dashAction } }],
+            KitRowsRaw = [document.Kits[0] with { ActionsRaw = new Dictionary<string, ActionSpec> { ["dash"] = dashAction } }],
         };
     }
 }

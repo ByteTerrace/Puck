@@ -183,7 +183,7 @@ public sealed partial class WorldServer {
         }
 
         candidate = (current with {
-            PlacementsRaw = Upsert(
+            PlacementRowsRaw = Upsert(
             list: current.Placements,
             item: incoming,
             keyOf: static placement => placement.Id

@@ -42,7 +42,7 @@ public sealed class WorldLookDynamicsLawTests {
     private static WorldDefinition WithPartedCreation(WorldLookMotion motion) => Fixtures.BuildDocument() with {
         DynamicsRaw = [Chase],
         CreationsRaw = [BuildPartedCreation()],
-        LooksRaw = [new WorldLook(Name: "avatar", Source: new WorldLookSource.Creation(CreationId: "parted"), Scale: 1f, Motion: motion)],
+        LookRowsRaw = [new WorldLook(Name: "avatar", Source: new WorldLookSource.Creation(CreationId: "parted"), Scale: 1f, Motion: motion)],
     };
 
     [Fact]

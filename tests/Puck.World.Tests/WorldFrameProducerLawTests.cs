@@ -37,7 +37,7 @@ public sealed class WorldFrameProducerLawTests {
                 Fill: new WorldSequence(Name: WorldSequence.R2, Offset: 0, Step: 0f)),
         };
 
-        using var fixture = Fixtures.FreshServer(definition: document with { KitsRaw = [kit], PopulationRaw = population });
+        using var fixture = Fixtures.FreshServer(definition: document with { KitRowsRaw = [kit], PopulationRaw = population });
 
         Assert.Equal(expected: 1, actual: fixture.Server.Population.SetSimulatedCount(count: 1));
         var body = fixture.Server.Population.EntryBody(index: WorldPopulationLimits.LocalSeatCount)!;

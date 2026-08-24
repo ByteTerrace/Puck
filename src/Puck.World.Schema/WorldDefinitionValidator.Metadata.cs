@@ -949,29 +949,29 @@ public static partial class WorldDefinitionValidator {
         }
 
         if (!Enum.IsDefined(value: row.Mode)) {
-            errors.Add(item: $"population.disclosure.mode '{row.Mode}' is not defined.");
+            errors.Add(item: $"bodies.disclosure.mode '{row.Mode}' is not defined.");
 
             return;
         }
 
         if (row.Mode == WorldObserverDisclosureMode.Radius) {
             if (row.Radius is not { } radius) {
-                errors.Add(item: "population.disclosure.radius is required for mode 'radius'.");
+                errors.Add(item: "bodies.disclosure.radius is required for mode 'radius'.");
             } else {
                 RequirePositive(
                     value: radius,
-                    name: "population.disclosure.radius",
+                    name: "bodies.disclosure.radius",
                     errors: errors
                 );
             }
         } else if (row.Radius is not null) {
-            errors.Add(item: $"population.disclosure.radius must be absent for mode '{row.Mode}' — only 'radius' reads one.");
+            errors.Add(item: $"bodies.disclosure.radius must be absent for mode '{row.Mode}' — only 'radius' reads one.");
         }
     }
     private static void ValidatePlayerDefaults(WorldPlayerDefaults defaults, List<string> errors) {
         ValidateSeatLook(
             seatLook: defaults.SeatLook,
-            path: "playerDefaults.seatLook",
+            path: "seatDefaults.seatLook",
             errors: errors
         );
 
@@ -984,7 +984,7 @@ public static partial class WorldDefinitionValidator {
             // IGNORING CASE here, the same rule Server.WorldOwnedWorlds holds over the directory itself.
             for (var index = 0; (index < defaults.Identities.Count); index++) {
                 var profile = defaults.Identities[index];
-                var path = $"playerDefaults.identities[{index}]";
+                var path = $"seatDefaults.identities[{index}]";
 
                 if (profile is null) {
                     errors.Add(item: $"{path} is required.");
@@ -1009,15 +1009,15 @@ public static partial class WorldDefinitionValidator {
         }
 
         if (!IsHexColor(value: defaults.NeutralColor)) {
-            errors.Add(item: "playerDefaults.neutralColor must be #RRGGBB.");
+            errors.Add(item: "seatDefaults.neutralColor must be #RRGGBB.");
         }
 
         if (!IsHexColor(value: defaults.PickerNeutralColor)) {
-            errors.Add(item: "playerDefaults.pickerNeutralColor must be #RRGGBB.");
+            errors.Add(item: "seatDefaults.pickerNeutralColor must be #RRGGBB.");
         }
         ValidateSequence(
             sequence: defaults.ColorSequence,
-            path: "playerDefaults.colorSequence",
+            path: "seatDefaults.colorSequence",
             minIndex: 0,
             errors: errors,
             WorldSequence.Additive,
@@ -1025,32 +1025,32 @@ public static partial class WorldDefinitionValidator {
         );
         RequireUnitInterval(
             value: defaults.Saturation,
-            name: "playerDefaults.saturation",
+            name: "seatDefaults.saturation",
             errors: errors
         );
         RequireUnitInterval(
             value: defaults.Value,
-            name: "playerDefaults.value",
+            name: "seatDefaults.value",
             errors: errors
         );
         RequireUnitInterval(
             value: defaults.NoseFactor,
-            name: "playerDefaults.noseFactor",
+            name: "seatDefaults.noseFactor",
             errors: errors
         );
         RequireUnitInterval(
             value: defaults.PickerThreshold,
-            name: "playerDefaults.pickerThreshold",
+            name: "seatDefaults.pickerThreshold",
             errors: errors
         );
         RequireUnitInterval(
             value: defaults.PickerNeutralBlend,
-            name: "playerDefaults.pickerNeutralBlend",
+            name: "seatDefaults.pickerNeutralBlend",
             errors: errors
         );
 
         if (defaults.ColorSearchLimit < 1) {
-            errors.Add(item: "playerDefaults.colorSearchLimit must be positive.");
+            errors.Add(item: "seatDefaults.colorSearchLimit must be positive.");
         }
     }
     private static void ValidatePopulationVariation(WorldPopulationVariation variation, string path, int minIndex, List<string> errors) {
@@ -1091,7 +1091,7 @@ public static partial class WorldDefinitionValidator {
             (seatActivation is not { Count: var count }) ||
             (count != localSeats)
         ) {
-            errors.Add(item: $"population.seatActivation must contain exactly {localSeats} entries.");
+            errors.Add(item: $"bodies.seatActivation must contain exactly {localSeats} entries.");
 
             return;
         }
@@ -1100,7 +1100,7 @@ public static partial class WorldDefinitionValidator {
             (localSeats > 0) &&
             (seatActivation[0] != SeatActivationPolicy.Eager)
         ) {
-            errors.Add(item: "population.seatActivation[0] must be 'eager' — the session's first seat cannot start on-demand.");
+            errors.Add(item: "bodies.seatActivation[0] must be 'eager' — the session's first seat cannot start on-demand.");
         }
     }
     private static void ValidateSeatSpawns(IReadOnlyList<string> seatSpawns, HashSet<string> spawnPointIds, int localSeats, List<string> errors) {
@@ -1108,7 +1108,7 @@ public static partial class WorldDefinitionValidator {
             (seatSpawns is not { Count: var count }) ||
             (count != localSeats)
         ) {
-            errors.Add(item: $"population.seatSpawns must contain exactly {localSeats} spawn-point names.");
+            errors.Add(item: $"bodies.seatSpawns must contain exactly {localSeats} spawn-point names.");
 
             return;
         }
@@ -1118,7 +1118,7 @@ public static partial class WorldDefinitionValidator {
                 string.IsNullOrWhiteSpace(value: seatSpawns[index]) ||
                 !spawnPointIds.Contains(item: seatSpawns[index])
             ) {
-                errors.Add(item: $"population.seatSpawns[{index}] '{seatSpawns[index]}' names no spawn point.");
+                errors.Add(item: $"bodies.seatSpawns[{index}] '{seatSpawns[index]}' names no spawn point.");
             }
         }
     }

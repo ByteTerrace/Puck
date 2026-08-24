@@ -1,14 +1,4 @@
 {
-  "authoring": {
-    "authoringHeadroomPlacements": 8,
-    "authoringHeadroomScreens": 4,
-    "candidateCap": 16,
-    "candidateRadius": 32,
-    "derivedFaceScreens": 4,
-    "maxPlacementScale": 5.0,
-    "minPlacementScale": 0.2,
-    "previewDeadlineFrames": 12
-  },
   "bindingOverlays": [
     {
       "bindingBar": {
@@ -1068,6 +1058,9 @@
       "id": "null-play"
     }
   ],
+  "bodies": {
+    "localSeats": 1
+  },
   "bodyMotionPrograms": [
     {
       "kind": "Motion",
@@ -1271,280 +1264,6 @@
       "GradientDerivedUp"
     ]
   },
-  "creations": [
-    {
-      "document": {
-        "frames": [
-          {
-            "name": "blink",
-            "transforms": [
-              {
-                "id": 0,
-                "position": [
-                  0,
-                  0.5,
-                  0
-                ],
-                "rotation": [
-                  0,
-                  0,
-                  0,
-                  1
-                ],
-                "scale": [
-                  0.35,
-                  1.75,
-                  0.35
-                ]
-              },
-              {
-                "id": 1,
-                "position": [
-                  0.2,
-                  1.1,
-                  0.0
-                ],
-                "rotation": [
-                  0,
-                  0,
-                  0,
-                  1
-                ],
-                "scale": [
-                  0.14,
-                  0.14,
-                  0.14
-                ]
-              },
-              {
-                "id": 2,
-                "position": [
-                  0.2,
-                  1.1,
-                  0.0
-                ],
-                "rotation": [
-                  0,
-                  0,
-                  0,
-                  1
-                ],
-                "scale": [
-                  0.055,
-                  0.055,
-                  0.055
-                ]
-              },
-              {
-                "id": 3,
-                "position": [
-                  -0.2,
-                  1.1,
-                  0.0
-                ],
-                "rotation": [
-                  0,
-                  0,
-                  0,
-                  1
-                ],
-                "scale": [
-                  0.14,
-                  0.14,
-                  0.14
-                ]
-              },
-              {
-                "id": 4,
-                "position": [
-                  -0.2,
-                  1.1,
-                  0.0
-                ],
-                "rotation": [
-                  0,
-                  0,
-                  0,
-                  1
-                ],
-                "scale": [
-                  0.055,
-                  0.055,
-                  0.055
-                ]
-              }
-            ]
-          }
-        ],
-        "name": "pip",
-        "palette": [
-          {
-            "color": "state.colors.avatarBody"
-          },
-          {
-            "color": "state.colors.avatarMark"
-          },
-          {
-            "color": "state.colors.avatarEye"
-          },
-          {
-            "color": "state.colors.avatarPupil"
-          }
-        ],
-        "schema": "puck.creation.v1",
-        "shapes": [
-          {
-            "blend": "Union",
-            "group": 0,
-            "id": 0,
-            "material": 0,
-            "name": "pip",
-            "position": [
-              0,
-              0.5,
-              0
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              0.35,
-              1.75,
-              0.35
-            ],
-            "smooth": 0,
-            "type": "Capsule"
-          },
-          {
-            "blend": "Union",
-            "group": 0,
-            "id": 1,
-            "material": 2,
-            "name": "eyeLeft",
-            "position": [
-              0.2,
-              1.1,
-              0.42
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              0.14,
-              0.14,
-              0.14
-            ],
-            "smooth": 0,
-            "type": "Sphere"
-          },
-          {
-            "blend": "Union",
-            "group": 0,
-            "id": 2,
-            "material": 3,
-            "name": "pupilLeft",
-            "position": [
-              0.2,
-              1.1,
-              0.54
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              0.055,
-              0.055,
-              0.055
-            ],
-            "smooth": 0,
-            "type": "Sphere"
-          },
-          {
-            "blend": "Union",
-            "group": 0,
-            "id": 3,
-            "material": 2,
-            "name": "eyeRight",
-            "position": [
-              -0.2,
-              1.1,
-              0.42
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              0.14,
-              0.14,
-              0.14
-            ],
-            "smooth": 0,
-            "type": "Sphere"
-          },
-          {
-            "blend": "Union",
-            "group": 0,
-            "id": 4,
-            "material": 3,
-            "name": "pupilRight",
-            "position": [
-              -0.2,
-              1.1,
-              0.54
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              0.055,
-              0.055,
-              0.055
-            ],
-            "smooth": 0,
-            "type": "Sphere"
-          }
-        ],
-        "textRuns": [
-          {
-            "align": "center",
-            "depth": 0.05,
-            "emHeight": 0.35,
-            "material": 1,
-            "mode": "emboss",
-            "position": [
-              0,
-              0.25,
-              -1
-            ],
-            "rotation": [
-              0,
-              1,
-              0,
-              0
-            ],
-            "shapeId": 0,
-            "text": "K"
-          }
-        ]
-      },
-      "id": "pip"
-    }
-  ],
   "dynamics": [
     {
       "f": 0.9549,
@@ -1766,7 +1485,7 @@
         "source": "gamepad.touchpadLeft"
       }
     ],
-    "icons": [
+    "rows": [
       {
         "glyph": {
           "font": "jetbrains-mono-regular",
@@ -2123,237 +1842,494 @@
       }
     ]
   },
-  "kits": [
-    {
-      "actions": {
-        "airLeap": {
-          "onPress": {
-            "effects": [
-              {
-                "$type": "planarImpulse",
-                "bodyDirection": [
-                  0,
-                  0,
-                  -1
-                ],
-                "durationSeconds": 1.0,
-                "speed": 9
-              },
-              {
-                "$type": "startTimer",
-                "seconds": 1.0,
-                "state": "globalCooldown"
-              }
-            ],
-            "gate": {
-              "$type": "all",
-              "predicates": [
+  "kits": {
+    "rows": [
+      {
+        "actions": {
+          "airLeap": {
+            "onPress": {
+              "effects": [
                 {
-                  "$type": "timerElapsed",
-                  "state": "globalCooldown"
+                  "$type": "planarImpulse",
+                  "bodyDirection": [
+                    0,
+                    0,
+                    -1
+                  ],
+                  "durationSeconds": 1.0,
+                  "speed": 9
                 },
                 {
-                  "$type": "now",
-                  "fact": "Airborne"
+                  "$type": "startTimer",
+                  "seconds": 1.0,
+                  "state": "globalCooldown"
                 }
-              ]
+              ],
+              "gate": {
+                "$type": "all",
+                "predicates": [
+                  {
+                    "$type": "timerElapsed",
+                    "state": "globalCooldown"
+                  },
+                  {
+                    "$type": "now",
+                    "fact": "Airborne"
+                  }
+                ]
+              }
+            }
+          },
+          "dash": {
+            "onPress": {
+              "effects": [
+                {
+                  "$type": "planarImpulse",
+                  "bodyDirection": [
+                    0,
+                    0,
+                    -1
+                  ],
+                  "durationSeconds": 0.25,
+                  "speed": 14
+                },
+                {
+                  "$type": "startTimer",
+                  "seconds": 1.0,
+                  "state": "globalCooldown"
+                }
+              ],
+              "gate": {
+                "$type": "timerElapsed",
+                "state": "globalCooldown"
+              },
+              "latchSeconds": 0.1
+            }
+          },
+          "jump": {
+            "onPress": {
+              "effects": [
+                {
+                  "$type": "setVerticalVelocity",
+                  "velocity": 11
+                },
+                {
+                  "$type": "addState",
+                  "state": "jumpCounter",
+                  "value": 1
+                }
+              ],
+              "gate": {
+                "$type": "compareState",
+                "comparison": "Less",
+                "state": "jumpCounter",
+                "value": 2
+              },
+              "latchSeconds": 0.1
+            },
+            "onRelease": {
+              "effects": [
+                {
+                  "$type": "scaleVerticalVelocity",
+                  "factor": 0.45
+                }
+              ],
+              "gate": {
+                "$type": "now",
+                "fact": "Rising"
+              },
+              "latchSeconds": 0
+            }
+          },
+          "leap": {
+            "onPress": {
+              "effects": [
+                {
+                  "$type": "setVerticalVelocity",
+                  "velocity": 16
+                },
+                {
+                  "$type": "planarImpulse",
+                  "bodyDirection": [
+                    0,
+                    0,
+                    -1
+                  ],
+                  "durationSeconds": 1.0,
+                  "speed": 9
+                },
+                {
+                  "$type": "startTimer",
+                  "seconds": 1.0,
+                  "state": "globalCooldown"
+                }
+              ],
+              "gate": {
+                "$type": "all",
+                "predicates": [
+                  {
+                    "$type": "timerElapsed",
+                    "state": "globalCooldown"
+                  },
+                  {
+                    "$type": "recently",
+                    "fact": "Grounded",
+                    "windowSeconds": 0.09
+                  }
+                ]
+              },
+              "latchSeconds": 0.1
             }
           }
         },
-        "dash": {
-          "onPress": {
-            "effects": [
-              {
-                "$type": "planarImpulse",
-                "bodyDirection": [
-                  0,
-                  0,
-                  -1
-                ],
-                "durationSeconds": 0.25,
-                "speed": 14
-              },
-              {
-                "$type": "startTimer",
-                "seconds": 1.0,
-                "state": "globalCooldown"
-              }
-            ],
-            "gate": {
-              "$type": "timerElapsed",
-              "state": "globalCooldown"
-            },
-            "latchSeconds": 0.1
-          }
+        "bodyContact": "Solid",
+        "bodyMotionProgram": "defaultMotionProgram",
+        "collider": {
+          "$type": "capsule",
+          "endpoint": [
+            0,
+            1,
+            0
+          ],
+          "radius": 0.35
         },
-        "jump": {
-          "onPress": {
-            "effects": [
-              {
-                "$type": "setVerticalVelocity",
-                "velocity": 11
-              },
-              {
-                "$type": "addState",
-                "state": "jumpCounter",
-                "value": 1
-              }
-            ],
-            "gate": {
-              "$type": "compareState",
-              "comparison": "Less",
-              "state": "jumpCounter",
-              "value": 2
-            },
-            "latchSeconds": 0.1
-          },
-          "onRelease": {
-            "effects": [
-              {
-                "$type": "scaleVerticalVelocity",
-                "factor": 0.45
-              }
-            ],
-            "gate": {
-              "$type": "now",
-              "fact": "Rising"
-            },
-            "latchSeconds": 0
-          }
+        "motion": {
+          "$type": "grounded",
+          "facingSnap": false,
+          "fallGravity": 46,
+          "maxFallSpeed": 40,
+          "moveSpeed": 4,
+          "response": [],
+          "riseGravity": 28,
+          "sprintChannel": "run",
+          "sprintMultiplier": 1.6,
+          "turnSpeed": 2.5
         },
-        "leap": {
-          "onPress": {
-            "effects": [
-              {
-                "$type": "setVerticalVelocity",
-                "velocity": 16
-              },
-              {
-                "$type": "planarImpulse",
-                "bodyDirection": [
-                  0,
-                  0,
-                  -1
-                ],
-                "durationSeconds": 1.0,
-                "speed": 9
-              },
-              {
-                "$type": "startTimer",
-                "seconds": 1.0,
-                "state": "globalCooldown"
-              }
-            ],
-            "gate": {
-              "$type": "all",
-              "predicates": [
-                {
-                  "$type": "timerElapsed",
-                  "state": "globalCooldown"
-                },
-                {
-                  "$type": "recently",
-                  "fact": "Grounded",
-                  "windowSeconds": 0.09
-                }
-              ]
-            },
-            "latchSeconds": 0.1
-          }
-        }
-      },
-      "bodyContact": "Solid",
-      "bodyMotionProgram": "defaultMotionProgram",
-      "collider": {
-        "$type": "capsule",
-        "endpoint": [
-          0,
-          1,
-          0
-        ],
-        "radius": 0.35
-      },
-      "motion": {
-        "$type": "grounded",
-        "facingSnap": false,
-        "fallGravity": 46,
-        "maxFallSpeed": 40,
-        "moveSpeed": 4,
-        "response": [],
-        "riseGravity": 28,
-        "sprintChannel": "run",
-        "sprintMultiplier": 1.6,
-        "turnSpeed": 2.5
-      },
-      "name": "defaultKit"
-    }
-  ],
-  "lookAssignment": {
+        "name": "defaultKit"
+      }
+    ]
+  },
+  "looks": {
+    "assignment": {
+      "rows": [
+        "pip"
+      ],
+      "sequence": {
+        "name": "r1",
+        "offset": 0,
+        "step": 0
+      }
+    },
     "rows": [
-      "pip"
-    ],
-    "sequence": {
-      "name": "r1",
-      "offset": 0,
-      "step": 0
+      {
+        "motion": {
+          "cues": [
+            {
+              "frame": "blink",
+              "holdSeconds": 0.12,
+              "maxSeconds": 6.0,
+              "minSeconds": 2.0
+            }
+          ],
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "pip",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "pip"
+        }
+      }
+    ]
+  },
+  "placements": {
+    "policy": {
+      "authoringHeadroomPlacements": 8,
+      "authoringHeadroomScreens": 4,
+      "candidateCap": 16,
+      "candidateRadius": 32,
+      "derivedFaceScreens": 4,
+      "maxPlacementScale": 5.0,
+      "minPlacementScale": 0.2,
+      "previewDeadlineFrames": 12
     }
   },
-  "looks": [
+  "prototypes": [
     {
-      "motion": {
-        "cues": [
+      "document": {
+        "frames": [
           {
-            "frame": "blink",
-            "holdSeconds": 0.12,
-            "maxSeconds": 6.0,
-            "minSeconds": 2.0
+            "name": "blink",
+            "transforms": [
+              {
+                "id": 0,
+                "position": [
+                  0,
+                  0.5,
+                  0
+                ],
+                "rotation": [
+                  0,
+                  0,
+                  0,
+                  1
+                ],
+                "scale": [
+                  0.35,
+                  1.75,
+                  0.35
+                ]
+              },
+              {
+                "id": 1,
+                "position": [
+                  0.2,
+                  1.1,
+                  0.0
+                ],
+                "rotation": [
+                  0,
+                  0,
+                  0,
+                  1
+                ],
+                "scale": [
+                  0.14,
+                  0.14,
+                  0.14
+                ]
+              },
+              {
+                "id": 2,
+                "position": [
+                  0.2,
+                  1.1,
+                  0.0
+                ],
+                "rotation": [
+                  0,
+                  0,
+                  0,
+                  1
+                ],
+                "scale": [
+                  0.055,
+                  0.055,
+                  0.055
+                ]
+              },
+              {
+                "id": 3,
+                "position": [
+                  -0.2,
+                  1.1,
+                  0.0
+                ],
+                "rotation": [
+                  0,
+                  0,
+                  0,
+                  1
+                ],
+                "scale": [
+                  0.14,
+                  0.14,
+                  0.14
+                ]
+              },
+              {
+                "id": 4,
+                "position": [
+                  -0.2,
+                  1.1,
+                  0.0
+                ],
+                "rotation": [
+                  0,
+                  0,
+                  0,
+                  1
+                ],
+                "scale": [
+                  0.055,
+                  0.055,
+                  0.055
+                ]
+              }
+            ]
           }
         ],
-        "gaitAmplitude": 0,
-        "replayFrames": false,
-        "secondsPerFrame": 0
-      },
-      "name": "pip",
-      "scale": 1,
-      "source": {
-        "$type": "creation",
-        "creationId": "pip"
-      }
-    }
-  ],
-  "playerDefaults": {
-    "seatLook": {
-      "gyro": {
-        "deadZone": [
-          0.02,
-          0.02,
-          0.02
+        "name": "pip",
+        "palette": [
+          {
+            "color": "state.colors.avatarBody"
+          },
+          {
+            "color": "state.colors.avatarMark"
+          },
+          {
+            "color": "state.colors.avatarEye"
+          },
+          {
+            "color": "state.colors.avatarPupil"
+          }
         ],
-        "invertX": false,
-        "invertY": false,
-        "invertZ": false,
-        "pitch": [
-          1.0,
-          0.0,
-          0.0
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 0,
+            "material": 0,
+            "name": "pip",
+            "position": [
+              0,
+              0.5,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.35,
+              1.75,
+              0.35
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 1,
+            "material": 2,
+            "name": "eyeLeft",
+            "position": [
+              0.2,
+              1.1,
+              0.42
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.14,
+              0.14,
+              0.14
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 2,
+            "material": 3,
+            "name": "pupilLeft",
+            "position": [
+              0.2,
+              1.1,
+              0.54
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.055,
+              0.055,
+              0.055
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 3,
+            "material": 2,
+            "name": "eyeRight",
+            "position": [
+              -0.2,
+              1.1,
+              0.42
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.14,
+              0.14,
+              0.14
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 4,
+            "material": 3,
+            "name": "pupilRight",
+            "position": [
+              -0.2,
+              1.1,
+              0.54
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.055,
+              0.055,
+              0.055
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          }
         ],
-        "scale": 1.0,
-        "yaw": [
-          0.0,
-          -1.0,
-          -1.0
+        "textRuns": [
+          {
+            "align": "center",
+            "depth": 0.05,
+            "emHeight": 0.35,
+            "material": 1,
+            "mode": "emboss",
+            "position": [
+              0,
+              0.25,
+              -1
+            ],
+            "rotation": [
+              0,
+              1,
+              0,
+              0
+            ],
+            "shapeId": 0,
+            "text": "K"
+          }
         ]
       },
-      "invertPitch": false,
-      "invertYaw": false,
-      "pitchSensitivity": 0.001,
-      "stickLookRate": 2.6,
-      "yawSensitivity": 0.001
+      "id": "pip"
     }
-  },
-  "population": {
-    "localSeats": 1
-  },
+  ],
   "render": {
     "cycle": {
       "keys": [
@@ -2588,6 +2564,36 @@
         "intensity": 6
       },
       "zenith": "state.colors.duskZenith"
+    }
+  },
+  "seatDefaults": {
+    "seatCameraFeel": {
+      "gyro": {
+        "deadZone": [
+          0.02,
+          0.02,
+          0.02
+        ],
+        "invertX": false,
+        "invertY": false,
+        "invertZ": false,
+        "pitch": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "scale": 1.0,
+        "yaw": [
+          0.0,
+          -1.0,
+          -1.0
+        ]
+      },
+      "invertPitch": false,
+      "invertYaw": false,
+      "pitchSensitivity": 0.001,
+      "stickLookRate": 2.6,
+      "yawSensitivity": 0.001
     }
   },
   "simulation": {

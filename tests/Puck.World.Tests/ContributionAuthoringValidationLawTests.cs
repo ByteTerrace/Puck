@@ -75,7 +75,7 @@ public sealed class ContributionAuthoringValidationLawTests {
 
         return (document with {
             CreationsRaw = [Creation(id: SlotCreation)],
-            PlacementsRaw = [
+            PlacementRowsRaw = [
                 new WorldPlacement(
                     Id: SlotId,
                     CreationId: SlotCreation,

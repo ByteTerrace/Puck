@@ -183,7 +183,7 @@ public sealed record WorldPlacementAttach(int BodyIndex, DocumentVector3 LocalOf
 /// row shows and for how long, never its transform.</param>
 public sealed record WorldPlacement(
     string Id,
-    string CreationId,
+    [property: JsonPropertyName("prototypeId")] string CreationId,
     DocumentVector3 Position,
     float YawDegrees,
     float Scale,

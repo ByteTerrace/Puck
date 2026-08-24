@@ -161,7 +161,7 @@ public sealed class ActionEffectJudgeLawTests {
         return document with {
             ChannelsRaw = [.. document.Channels, judgeChannel],
             Judges = judgeRows,
-            KitsRaw = [document.Kits[0] with { ActionsRaw = new Dictionary<string, ActionSpec> { ["judge"] = judgeAction } }],
+            KitRowsRaw = [document.Kits[0] with { ActionsRaw = new Dictionary<string, ActionSpec> { ["judge"] = judgeAction } }],
         };
     }
     /// <summary>Builds <see cref="JudgeActionDocument"/> further, with a REAL <c>puck.music.v1</c>/<c>puck.judge.v1</c>

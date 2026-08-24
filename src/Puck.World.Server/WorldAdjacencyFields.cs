@@ -517,7 +517,7 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
                             Truncated: false
                         )
                     );
-                    var collisionDefinition = mirror.Definition with { PlacementsRaw = selection.Placements };
+                    var collisionDefinition = mirror.Definition with { PlacementRowsRaw = selection.Placements };
 
                     m_field = (WorldSolidField.TryBuild(
                         built: out var built,

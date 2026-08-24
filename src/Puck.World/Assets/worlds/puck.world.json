@@ -1,6 +1,69 @@
 {
   "basis": "puck.basis.json",
-  "creations": [
+  "documentId": "puck",
+  "placements": {
+    "rows": [
+      {
+        "id": "groundNorthEast",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "prototypeId": "groundNorthEast",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "groundSouthEast",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "prototypeId": "groundSouthEast",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "groundSouthWest",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "prototypeId": "groundSouthWest",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "groundNorthWest",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "prototypeId": "groundNorthWest",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "groundContact",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "prototypeId": "groundContact",
+        "scale": 1,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0
+      }
+    ]
+  },
+  "prototypes": [
     {
       "document": {
         "name": "groundNorthEast",
@@ -420,67 +483,6 @@
         ]
       },
       "id": "groundContact"
-    }
-  ],
-  "documentId": "puck",
-  "placements": [
-    {
-      "creationId": "groundNorthEast",
-      "id": "groundNorthEast",
-      "position": [
-        0,
-        0,
-        0
-      ],
-      "scale": 1,
-      "yawDegrees": 0
-    },
-    {
-      "creationId": "groundSouthEast",
-      "id": "groundSouthEast",
-      "position": [
-        0,
-        0,
-        0
-      ],
-      "scale": 1,
-      "yawDegrees": 0
-    },
-    {
-      "creationId": "groundSouthWest",
-      "id": "groundSouthWest",
-      "position": [
-        0,
-        0,
-        0
-      ],
-      "scale": 1,
-      "yawDegrees": 0
-    },
-    {
-      "creationId": "groundNorthWest",
-      "id": "groundNorthWest",
-      "position": [
-        0,
-        0,
-        0
-      ],
-      "scale": 1,
-      "yawDegrees": 0
-    },
-    {
-      "creationId": "groundContact",
-      "id": "groundContact",
-      "position": [
-        0,
-        0,
-        0
-      ],
-      "scale": 1,
-      "solid": {
-        "margin": 0
-      },
-      "yawDegrees": 0
     }
   ],
   "schema": "puck.world.def.v1"

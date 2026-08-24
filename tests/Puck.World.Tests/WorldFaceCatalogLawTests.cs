@@ -81,7 +81,7 @@ public sealed class WorldFaceCatalogLawTests {
 
         return Fixtures.BuildDocument() with {
             CreationsRaw = [creation],
-            PlacementsRaw = [placement],
+            PlacementRowsRaw = [placement],
             References = [new WorldReference(Name: WorldSafeName.Parse(candidate: ReferenceName), Document: "worlds/dest.world.json")],
             Destinations = [new WorldDestination(Name: WorldSafeName.Parse(candidate: DestinationName), Reference: ReferenceName, Durability: WorldDestinationDurability.Ephemeral)],
         };
@@ -318,7 +318,7 @@ public sealed class WorldFaceCatalogLawTests {
 
         return Fixtures.BuildDocument() with {
             CreationsRaw = [creation],
-            PlacementsRaw = placements,
+            PlacementRowsRaw = placements,
             AuthoringRaw = (Fixtures.StandardAuthoring with { DerivedFaceScreens = reservedSlots }),
         };
     }
@@ -344,10 +344,10 @@ public sealed class WorldFaceCatalogLawTests {
 
         placements[0] = (placements[0] with { FaceSources = [new WorldPlacementFace(Face: DoorFace, Source: new WorldScreenSource.None())] });
 
-        var catalog = WorldFaceCatalog.For(definition: (dark with { PlacementsRaw = placements }));
+        var catalog = WorldFaceCatalog.For(definition: (dark with { PlacementRowsRaw = placements }));
 
         Assert.Equal(expected: 2, actual: catalog.ClaimingFaceCount);
-        Assert.True(condition: Validates(definition: (dark with { PlacementsRaw = placements })));
+        Assert.True(condition: Validates(definition: (dark with { PlacementRowsRaw = placements })));
         Assert.Equal(expected: -1, actual: catalog.Rows[0].ScreenIndex);
         Assert.False(condition: catalog.Rows[0].SlotStarved);
     }

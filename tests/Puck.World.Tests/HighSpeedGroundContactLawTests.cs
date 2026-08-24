@@ -69,7 +69,7 @@ public sealed class HighSpeedGroundContactLawTests {
     public void DynamicDepenetrationCannotPushAStandingBodyThroughTheFloor() {
         var source = ThinFloorDocument();
         var definition = source with {
-            KitsRaw = source.Kits.Select(selector: kit => kit with { BodyContact = WorldBodyContactMode.Solid }).ToArray(),
+            KitRowsRaw = source.Kits.Select(selector: kit => kit with { BodyContact = WorldBodyContactMode.Solid }).ToArray(),
         };
         using var fixture = Fixtures.FreshServer(definition: definition);
 
@@ -196,11 +196,11 @@ public sealed class HighSpeedGroundContactLawTests {
             CollisionRaw = source.Collision with {
                 Requirements = (requireField ? [WorldContactRequirement.SmoothUnionContact] : []),
             },
-            KitsRaw = source.Kits.Select(selector: kit => kit with {
+            KitRowsRaw = source.Kits.Select(selector: kit => kit with {
                 Motion = ((WorldMotionModel.Grounded)kit.Motion) with { MaxFallSpeed = 40f },
             }).ToArray(),
             CreationsRaw = [creation],
-            PlacementsRaw = [new WorldPlacement(Id: "floor", CreationId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f))],
+            PlacementRowsRaw = [new WorldPlacement(Id: "floor", CreationId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f))],
         };
     }
 }

@@ -701,7 +701,7 @@ public sealed partial class WorldServer {
         switch (mutation) {
             case WorldMutation.UpsertKit m:
                 candidate = (current with {
-                    KitsRaw = Upsert(
+                    KitRowsRaw = Upsert(
                     list: current.Kits,
                     item: m.Kit,
                     keyOf: static kit => kit.Name
@@ -722,7 +722,7 @@ public sealed partial class WorldServer {
                     return false;
                 }
 
-                candidate = (current with { KitsRaw = kits });
+                candidate = (current with { KitRowsRaw = kits });
 
                 return true;
             case WorldMutation.SetDefaultSeatKit m:
@@ -926,7 +926,7 @@ public sealed partial class WorldServer {
                         return false;
                     }
 
-                    candidate = (current with { PlacementsRaw = placements });
+                    candidate = (current with { PlacementRowsRaw = placements });
 
                     return true;
                 }
@@ -1156,7 +1156,7 @@ public sealed partial class WorldServer {
                 return true;
             case WorldMutation.UpsertLook m:
                 candidate = (current with {
-                    LooksRaw = Upsert(
+                    LookRowsRaw = Upsert(
                     list: current.Looks,
                     item: m.Look,
                     keyOf: static look => look.Name.Value
@@ -1177,7 +1177,7 @@ public sealed partial class WorldServer {
                     return false;
                 }
 
-                candidate = (current with { LooksRaw = looks });
+                candidate = (current with { LookRowsRaw = looks });
 
                 return true;
             case WorldMutation.SetLookAssignment m:

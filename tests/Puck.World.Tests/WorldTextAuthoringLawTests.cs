@@ -177,7 +177,7 @@ public sealed class WorldTextAuthoringLawTests {
         var definition = Fixtures.BuildDocument() with {
             Text = Catalog(),
             CreationsRaw = [creation],
-            PlacementsRaw = [placement],
+            PlacementRowsRaw = [placement],
         };
 
         Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: definition, neighbours: null, reason: out var reason), userMessage: reason);
@@ -219,7 +219,7 @@ public sealed class WorldTextAuthoringLawTests {
         var definition = Fixtures.BuildDocument() with {
             Text = Catalog(),
             CreationsRaw = [creation],
-            PlacementsRaw = [new WorldPlacement(Id: "marquee", CreationId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f)],
+            PlacementRowsRaw = [new WorldPlacement(Id: "marquee", CreationId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f)],
         };
 
         Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: definition, neighbours: null, reason: out var reason), userMessage: reason);

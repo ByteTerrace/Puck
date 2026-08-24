@@ -289,15 +289,19 @@ internal static class Fixtures {
             ChannelsRaw: channels,
             TargetRegistersRaw: [],
             BodyMotionProgramsRaw: bodyMotionPrograms,
-            KitsRaw: BuildKits(seatCollider: seatCollider),
+            KitsRaw: new WorldKitsSection(
+                Assignment: new WorldRowAssignment(Sequence: new WorldSequence(Name: WorldSequence.R1, Offset: 1, Step: 0f), Rows: []),
+                Rows: BuildKits(seatCollider: seatCollider)
+            ),
             DefaultSeatKitRaw: "traveler",
-            AssignmentRaw: new WorldRowAssignment(Sequence: new WorldSequence(Name: WorldSequence.R1, Offset: 1, Step: 0f), Rows: []),
             AddonsRaw: addons,
             BindingOverlaysRaw: [],
             StorageRaw: WorldStorageDefaults.None,
             CreationsRaw: creations,
-            PlacementsRaw: placements,
-            AuthoringRaw: StandardAuthoring,
+            PlacementsRaw: new WorldPlacementsSection(
+                Policy: StandardAuthoring,
+                Rows: placements
+            ),
             SpeakersRaw: [],
             TunesRaw: [],
             PatchesRaw: [],
@@ -308,8 +312,10 @@ internal static class Fixtures {
             // census must author a views section, so the fixture carries the standard chase framing itself.
             ViewsRaw: StandardViews,
             DynamicsRaw: StandardDynamics,
-            LooksRaw: [],
-            LookAssignmentRaw: new WorldRowAssignment(Sequence: new WorldSequence(Name: WorldSequence.R1, Offset: 129, Step: 0f), Rows: []),
+            LooksRaw: new WorldLooksSection(
+                Assignment: new WorldRowAssignment(Sequence: new WorldSequence(Name: WorldSequence.R1, Offset: 129, Step: 0f), Rows: []),
+                Rows: []
+            ),
             GrantsRaw: [],
             HudRaw: new WorldHudSection(
                 Defaults: new WorldHudDefaults(Enabled: true),
@@ -560,7 +566,7 @@ internal static class Fixtures {
     public static byte[] MissingSeatLookBytes() {
         var node = JsonNode.Parse(json: Encoding.UTF8.GetString(bytes: DefaultWorldBytes()))!.AsObject();
 
-        _ = node["playerDefaults"]!.AsObject().Remove(propertyName: "seatLook");
+        _ = node["seatDefaults"]!.AsObject().Remove(propertyName: "seatCameraFeel");
 
         return node.ToJsonBytes();
     }

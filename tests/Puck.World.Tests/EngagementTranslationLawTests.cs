@@ -79,7 +79,7 @@ public sealed class EngagementTranslationLawTests {
         };
 
         return (definition with {
-            KitsRaw = [seatKit, padKit],
+            KitRowsRaw = [seatKit, padKit],
             ScreensRaw = [screen],
         });
     }

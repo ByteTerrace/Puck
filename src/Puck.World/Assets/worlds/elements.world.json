@@ -10,1032 +10,6 @@
       "r": 0
     }
   ],
-  "creations": [
-    {
-      "id": "firePit",
-      "document": {
-        "name": "firePit",
-        "palette": [
-          {
-            "color": "state.colors.fire"
-          }
-        ],
-        "schema": "puck.creation.v1",
-        "shapes": [
-          {
-            "blend": "Union",
-            "id": 0,
-            "material": 0,
-            "name": "disc",
-            "position": [
-              0,
-              0,
-              0
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              1.5,
-              0.08,
-              1.5
-            ],
-            "smooth": 0,
-            "type": "Cylinder"
-          }
-        ]
-      }
-    },
-    {
-      "id": "icePool",
-      "document": {
-        "name": "icePool",
-        "palette": [
-          {
-            "color": "state.colors.ice"
-          }
-        ],
-        "schema": "puck.creation.v1",
-        "shapes": [
-          {
-            "blend": "Union",
-            "id": 0,
-            "material": 0,
-            "name": "disc",
-            "position": [
-              0,
-              0,
-              0
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              1.5,
-              0.08,
-              1.5
-            ],
-            "smooth": 0,
-            "type": "Cylinder"
-          }
-        ]
-      }
-    },
-    {
-      "id": "pip-fire",
-      "document": {
-        "name": "pip-fire",
-        "palette": [
-          {
-            "color": "#FF5A1F"
-          },
-          {
-            "color": "#FFE08A"
-          },
-          {
-            "color": "#FFFFFF"
-          },
-          {
-            "color": "#0D0D0D"
-          }
-        ],
-        "schema": "puck.creation.v1",
-        "shapes": [
-          {
-            "blend": "Union",
-            "group": 0,
-            "id": 0,
-            "material": 0,
-            "name": "pip",
-            "position": [
-              0,
-              0.5,
-              0
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              0.35,
-              1.75,
-              0.35
-            ],
-            "smooth": 0,
-            "type": "Capsule"
-          },
-          {
-            "blend": "Union",
-            "domain": [
-              {
-                "$type": "symmetry",
-                "normal": [
-                  1,
-                  0,
-                  0
-                ]
-              }
-            ],
-            "group": 0,
-            "id": 1,
-            "material": 2,
-            "name": "eye",
-            "position": [
-              0.2,
-              1.1,
-              0.42
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              0.14,
-              0.14,
-              0.14
-            ],
-            "smooth": 0,
-            "type": "Sphere"
-          },
-          {
-            "blend": "Union",
-            "domain": [
-              {
-                "$type": "symmetry",
-                "normal": [
-                  1,
-                  0,
-                  0
-                ]
-              }
-            ],
-            "group": 0,
-            "id": 2,
-            "material": 3,
-            "name": "pupil",
-            "position": [
-              0.2,
-              1.1,
-              0.54
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              0.055,
-              0.055,
-              0.055
-            ],
-            "smooth": 0,
-            "type": "Sphere"
-          }
-        ],
-        "textRuns": [
-          {
-            "align": "center",
-            "depth": 0.05,
-            "emHeight": 0.35,
-            "material": 1,
-            "mode": "emboss",
-            "position": [
-              0,
-              0.25,
-              -1
-            ],
-            "rotation": [
-              0,
-              1,
-              0,
-              0
-            ],
-            "shapeId": 0,
-            "text": "K"
-          }
-        ]
-      }
-    },
-    {
-      "id": "pip-ice",
-      "document": {
-        "name": "pip-ice",
-        "palette": [
-          {
-            "color": "#5AC8FA"
-          },
-          {
-            "color": "#FFFFFF"
-          },
-          {
-            "color": "#FFFFFF"
-          },
-          {
-            "color": "#0D0D0D"
-          }
-        ],
-        "schema": "puck.creation.v1",
-        "shapes": [
-          {
-            "blend": "Union",
-            "group": 0,
-            "id": 0,
-            "material": 0,
-            "name": "pip",
-            "position": [
-              0,
-              0.5,
-              0
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              0.35,
-              1.75,
-              0.35
-            ],
-            "smooth": 0,
-            "type": "Capsule"
-          },
-          {
-            "blend": "Union",
-            "domain": [
-              {
-                "$type": "symmetry",
-                "normal": [
-                  1,
-                  0,
-                  0
-                ]
-              }
-            ],
-            "group": 0,
-            "id": 1,
-            "material": 2,
-            "name": "eye",
-            "position": [
-              0.2,
-              1.1,
-              0.42
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              0.14,
-              0.14,
-              0.14
-            ],
-            "smooth": 0,
-            "type": "Sphere"
-          },
-          {
-            "blend": "Union",
-            "domain": [
-              {
-                "$type": "symmetry",
-                "normal": [
-                  1,
-                  0,
-                  0
-                ]
-              }
-            ],
-            "group": 0,
-            "id": 2,
-            "material": 3,
-            "name": "pupil",
-            "position": [
-              0.2,
-              1.1,
-              0.54
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              0.055,
-              0.055,
-              0.055
-            ],
-            "smooth": 0,
-            "type": "Sphere"
-          }
-        ],
-        "textRuns": [
-          {
-            "align": "center",
-            "depth": 0.05,
-            "emHeight": 0.35,
-            "material": 1,
-            "mode": "emboss",
-            "position": [
-              0,
-              0.25,
-              -1
-            ],
-            "rotation": [
-              0,
-              1,
-              0,
-              0
-            ],
-            "shapeId": 0,
-            "text": "K"
-          }
-        ]
-      }
-    },
-    {
-      "id": "pip-dead",
-      "document": {
-        "name": "pip-dead",
-        "palette": [
-          {
-            "color": "#9AA3AC"
-          },
-          {
-            "color": "#6E7681"
-          },
-          {
-            "color": "#FFFFFF"
-          },
-          {
-            "color": "#0D0D0D"
-          }
-        ],
-        "schema": "puck.creation.v1",
-        "shapes": [
-          {
-            "blend": "Union",
-            "group": 0,
-            "id": 0,
-            "material": 0,
-            "name": "pip",
-            "position": [
-              0,
-              0.35,
-              -0.5
-            ],
-            "rotation": [
-              -0.70710678,
-              0,
-              0,
-              0.70710678
-            ],
-            "scale": [
-              0.35,
-              1.75,
-              0.35
-            ],
-            "smooth": 0,
-            "type": "Capsule"
-          },
-          {
-            "blend": "Union",
-            "domain": [
-              {
-                "$type": "symmetry",
-                "normal": [
-                  1,
-                  0,
-                  0
-                ]
-              }
-            ],
-            "group": 0,
-            "id": 1,
-            "material": 2,
-            "name": "eye",
-            "position": [
-              0.2,
-              0.77,
-              -1.1
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              0.14,
-              0.14,
-              0.14
-            ],
-            "smooth": 0,
-            "type": "Sphere"
-          },
-          {
-            "blend": "Union",
-            "domain": [
-              {
-                "$type": "symmetry",
-                "normal": [
-                  1,
-                  0,
-                  0
-                ]
-              }
-            ],
-            "group": 0,
-            "id": 2,
-            "material": 3,
-            "name": "cross-a",
-            "position": [
-              0.2,
-              0.9,
-              -1.1
-            ],
-            "rotation": [
-              0,
-              0.38268343,
-              0,
-              0.92387953
-            ],
-            "scale": [
-              0.11,
-              0.02,
-              0.02
-            ],
-            "smooth": 0,
-            "type": "Box"
-          },
-          {
-            "blend": "Union",
-            "domain": [
-              {
-                "$type": "symmetry",
-                "normal": [
-                  1,
-                  0,
-                  0
-                ]
-              }
-            ],
-            "group": 0,
-            "id": 3,
-            "material": 3,
-            "name": "cross-b",
-            "position": [
-              0.2,
-              0.9,
-              -1.1
-            ],
-            "rotation": [
-              0,
-              -0.38268343,
-              0,
-              0.92387953
-            ],
-            "scale": [
-              0.11,
-              0.02,
-              0.02
-            ],
-            "smooth": 0,
-            "type": "Box"
-          }
-        ]
-      }
-    },
-    {
-      "id": "dummy",
-      "document": {
-        "name": "dummy",
-        "palette": [
-          {
-            "color": "#C9A06A"
-          },
-          {
-            "color": "#8C6A3F"
-          },
-          {
-            "color": "#D93B2B"
-          },
-          {
-            "color": "#F2EFE6"
-          }
-        ],
-        "schema": "puck.creation.v1",
-        "shapes": [
-          {
-            "blend": "Union",
-            "id": 0,
-            "material": 0,
-            "name": "post",
-            "position": [
-              0,
-              0.8,
-              0
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              0.32,
-              0.8,
-              0.32
-            ],
-            "smooth": 0,
-            "type": "Cylinder"
-          },
-          {
-            "blend": "Union",
-            "id": 1,
-            "material": 1,
-            "name": "head",
-            "position": [
-              0,
-              1.95,
-              0
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              0.36,
-              0.36,
-              0.36
-            ],
-            "smooth": 0,
-            "type": "Sphere"
-          },
-          {
-            "blend": "Union",
-            "id": 2,
-            "material": 2,
-            "name": "ring",
-            "position": [
-              0,
-              1.1,
-              0.34
-            ],
-            "rotation": [
-              0.70710678,
-              0,
-              0,
-              0.70710678
-            ],
-            "scale": [
-              0.22,
-              0.22,
-              0.22
-            ],
-            "smooth": 0,
-            "type": "Torus"
-          },
-          {
-            "blend": "Union",
-            "id": 3,
-            "material": 3,
-            "name": "bull",
-            "position": [
-              0,
-              1.1,
-              0.34
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              0.08,
-              0.08,
-              0.08
-            ],
-            "smooth": 0,
-            "type": "Sphere"
-          },
-          {
-            "blend": "Union",
-            "id": 4,
-            "material": 1,
-            "name": "base",
-            "position": [
-              0,
-              0.05,
-              0
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              0.6,
-              0.05,
-              0.6
-            ],
-            "smooth": 0,
-            "type": "Cylinder"
-          }
-        ]
-      }
-    },
-    {
-      "id": "dummy-fire",
-      "document": {
-        "name": "dummy-fire",
-        "palette": [
-          {
-            "color": "#FF5A1F"
-          },
-          {
-            "color": "#FFE08A"
-          },
-          {
-            "color": "#D93B2B"
-          },
-          {
-            "color": "#F2EFE6"
-          }
-        ],
-        "schema": "puck.creation.v1",
-        "shapes": [
-          {
-            "blend": "Union",
-            "id": 0,
-            "material": 0,
-            "name": "post",
-            "position": [
-              0,
-              0.8,
-              0
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              0.32,
-              0.8,
-              0.32
-            ],
-            "smooth": 0,
-            "type": "Cylinder"
-          },
-          {
-            "blend": "Union",
-            "id": 1,
-            "material": 1,
-            "name": "head",
-            "position": [
-              0,
-              1.95,
-              0
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              0.36,
-              0.36,
-              0.36
-            ],
-            "smooth": 0,
-            "type": "Sphere"
-          },
-          {
-            "blend": "Union",
-            "id": 2,
-            "material": 2,
-            "name": "ring",
-            "position": [
-              0,
-              1.1,
-              0.34
-            ],
-            "rotation": [
-              0.70710678,
-              0,
-              0,
-              0.70710678
-            ],
-            "scale": [
-              0.22,
-              0.22,
-              0.22
-            ],
-            "smooth": 0,
-            "type": "Torus"
-          },
-          {
-            "blend": "Union",
-            "id": 3,
-            "material": 3,
-            "name": "bull",
-            "position": [
-              0,
-              1.1,
-              0.34
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              0.08,
-              0.08,
-              0.08
-            ],
-            "smooth": 0,
-            "type": "Sphere"
-          },
-          {
-            "blend": "Union",
-            "id": 4,
-            "material": 1,
-            "name": "base",
-            "position": [
-              0,
-              0.05,
-              0
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              0.6,
-              0.05,
-              0.6
-            ],
-            "smooth": 0,
-            "type": "Cylinder"
-          }
-        ]
-      }
-    },
-    {
-      "id": "dummy-ice",
-      "document": {
-        "name": "dummy-ice",
-        "palette": [
-          {
-            "color": "#5AC8FA"
-          },
-          {
-            "color": "#FFFFFF"
-          },
-          {
-            "color": "#D93B2B"
-          },
-          {
-            "color": "#F2EFE6"
-          }
-        ],
-        "schema": "puck.creation.v1",
-        "shapes": [
-          {
-            "blend": "Union",
-            "id": 0,
-            "material": 0,
-            "name": "post",
-            "position": [
-              0,
-              0.8,
-              0
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              0.32,
-              0.8,
-              0.32
-            ],
-            "smooth": 0,
-            "type": "Cylinder"
-          },
-          {
-            "blend": "Union",
-            "id": 1,
-            "material": 1,
-            "name": "head",
-            "position": [
-              0,
-              1.95,
-              0
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              0.36,
-              0.36,
-              0.36
-            ],
-            "smooth": 0,
-            "type": "Sphere"
-          },
-          {
-            "blend": "Union",
-            "id": 2,
-            "material": 2,
-            "name": "ring",
-            "position": [
-              0,
-              1.1,
-              0.34
-            ],
-            "rotation": [
-              0.70710678,
-              0,
-              0,
-              0.70710678
-            ],
-            "scale": [
-              0.22,
-              0.22,
-              0.22
-            ],
-            "smooth": 0,
-            "type": "Torus"
-          },
-          {
-            "blend": "Union",
-            "id": 3,
-            "material": 3,
-            "name": "bull",
-            "position": [
-              0,
-              1.1,
-              0.34
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              0.08,
-              0.08,
-              0.08
-            ],
-            "smooth": 0,
-            "type": "Sphere"
-          },
-          {
-            "blend": "Union",
-            "id": 4,
-            "material": 1,
-            "name": "base",
-            "position": [
-              0,
-              0.05,
-              0
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              0.6,
-              0.05,
-              0.6
-            ],
-            "smooth": 0,
-            "type": "Cylinder"
-          }
-        ]
-      }
-    }
-  ],
-  "placements": [
-    {
-      "id": "firePit",
-      "creationId": "firePit",
-      "position": [
-        4,
-        0,
-        0
-      ],
-      "scale": 1,
-      "yawDegrees": 0,
-      "region": {
-        "radius": 1.5
-      }
-    },
-    {
-      "id": "icePool",
-      "creationId": "icePool",
-      "position": [
-        -4,
-        0,
-        0
-      ],
-      "scale": 1,
-      "yawDegrees": 0,
-      "region": {
-        "radius": 1.5
-      }
-    },
-    {
-      "id": "dummy-2",
-      "creationId": "dummy",
-      "position": [
-        3,
-        0,
-        -4
-      ],
-      "scale": 1,
-      "yawDegrees": 0,
-      "inhabit": {
-        "count": 1,
-        "kit": "defaultKit",
-        "source": "Idle",
-        "look": "dummy",
-        "distribution": {
-          "region": {
-            "$type": "disc",
-            "radius": 0.01
-          },
-          "fill": {
-            "name": "additive",
-            "offset": 0,
-            "step": 0.618034
-          }
-        }
-      }
-    },
-    {
-      "id": "dummy-1",
-      "creationId": "dummy",
-      "position": [
-        -3,
-        0,
-        -4
-      ],
-      "scale": 1,
-      "yawDegrees": 0,
-      "inhabit": {
-        "count": 1,
-        "kit": "defaultKit",
-        "source": "Idle",
-        "look": "dummy",
-        "distribution": {
-          "region": {
-            "$type": "disc",
-            "radius": 0.01
-          },
-          "fill": {
-            "name": "additive",
-            "offset": 0,
-            "step": 0.618034
-          }
-        }
-      }
-    }
-  ],
   "state": {
     "world": [
       {
@@ -3476,101 +2450,6 @@
       }
     ]
   },
-  "looks": [
-    {
-      "name": "pip-fire",
-      "scale": 1,
-      "source": {
-        "$type": "creation",
-        "creationId": "pip-fire"
-      },
-      "motion": {
-        "gaitAmplitude": 0,
-        "replayFrames": false,
-        "secondsPerFrame": 0
-      }
-    },
-    {
-      "name": "pip-ice",
-      "scale": 1,
-      "source": {
-        "$type": "creation",
-        "creationId": "pip-ice"
-      },
-      "motion": {
-        "gaitAmplitude": 0,
-        "replayFrames": false,
-        "secondsPerFrame": 0
-      }
-    },
-    {
-      "name": "pip-dead",
-      "scale": 1,
-      "source": {
-        "$type": "creation",
-        "creationId": "pip-dead"
-      },
-      "motion": {
-        "gaitAmplitude": 0,
-        "replayFrames": false,
-        "secondsPerFrame": 0
-      }
-    },
-    {
-      "name": "dummy",
-      "scale": 1,
-      "source": {
-        "$type": "creation",
-        "creationId": "dummy"
-      },
-      "motion": {
-        "gaitAmplitude": 0,
-        "replayFrames": false,
-        "secondsPerFrame": 0
-      }
-    },
-    {
-      "name": "dummy-fire",
-      "scale": 1,
-      "source": {
-        "$type": "creation",
-        "creationId": "dummy-fire"
-      },
-      "motion": {
-        "gaitAmplitude": 0,
-        "replayFrames": false,
-        "secondsPerFrame": 0
-      }
-    },
-    {
-      "name": "dummy-ice",
-      "scale": 1,
-      "source": {
-        "$type": "creation",
-        "creationId": "dummy-ice"
-      },
-      "motion": {
-        "gaitAmplitude": 0,
-        "replayFrames": false,
-        "secondsPerFrame": 0
-      }
-    }
-  ],
-  "lookAssignment": {
-    "rows": [
-      "state.lookOf.0",
-      "state.lookOf.1",
-      "state.lookOf.2"
-    ],
-    "sequence": {
-      "name": "index",
-      "offset": 0,
-      "step": 0
-    }
-  },
-  "population": {
-    "capacity": 3
-  },
   "channels": [
     {
       "name": "attack",
@@ -4073,14 +2952,1141 @@
       }
     }
   ],
-  "kits": [
-    {
-      "name": "defaultKit",
-      "actions": {
-        "leap": null,
-        "airLeap": null,
-        "dash": null
+  "kits": {
+    "rows": [
+      {
+        "name": "defaultKit",
+        "actions": {
+          "leap": null,
+          "airLeap": null,
+          "dash": null
+        }
+      }
+    ]
+  },
+  "looks": {
+    "rows": [
+      {
+        "name": "pip-fire",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "pip-fire"
+        },
+        "motion": {
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        }
+      },
+      {
+        "name": "pip-ice",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "pip-ice"
+        },
+        "motion": {
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        }
+      },
+      {
+        "name": "pip-dead",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "pip-dead"
+        },
+        "motion": {
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        }
+      },
+      {
+        "name": "dummy",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "dummy"
+        },
+        "motion": {
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        }
+      },
+      {
+        "name": "dummy-fire",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "dummy-fire"
+        },
+        "motion": {
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        }
+      },
+      {
+        "name": "dummy-ice",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "dummy-ice"
+        },
+        "motion": {
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        }
+      }
+    ],
+    "assignment": {
+      "rows": [
+        "state.lookOf.0",
+        "state.lookOf.1",
+        "state.lookOf.2"
+      ],
+      "sequence": {
+        "name": "index",
+        "offset": 0,
+        "step": 0
       }
     }
-  ]
+  },
+  "placements": {
+    "rows": [
+      {
+        "id": "firePit",
+        "prototypeId": "firePit",
+        "position": [
+          4,
+          0,
+          0
+        ],
+        "scale": 1,
+        "yawDegrees": 0,
+        "region": {
+          "radius": 1.5
+        }
+      },
+      {
+        "id": "icePool",
+        "prototypeId": "icePool",
+        "position": [
+          -4,
+          0,
+          0
+        ],
+        "scale": 1,
+        "yawDegrees": 0,
+        "region": {
+          "radius": 1.5
+        }
+      },
+      {
+        "id": "dummy-2",
+        "prototypeId": "dummy",
+        "position": [
+          3,
+          0,
+          -4
+        ],
+        "scale": 1,
+        "yawDegrees": 0,
+        "inhabit": {
+          "count": 1,
+          "kit": "defaultKit",
+          "source": "Idle",
+          "look": "dummy",
+          "distribution": {
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            },
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.618034
+            }
+          }
+        }
+      },
+      {
+        "id": "dummy-1",
+        "prototypeId": "dummy",
+        "position": [
+          -3,
+          0,
+          -4
+        ],
+        "scale": 1,
+        "yawDegrees": 0,
+        "inhabit": {
+          "count": 1,
+          "kit": "defaultKit",
+          "source": "Idle",
+          "look": "dummy",
+          "distribution": {
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            },
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.618034
+            }
+          }
+        }
+      }
+    ]
+  },
+  "prototypes": [
+    {
+      "id": "firePit",
+      "document": {
+        "name": "firePit",
+        "palette": [
+          {
+            "color": "state.colors.fire"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "disc",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1.5,
+              0.08,
+              1.5
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          }
+        ]
+      }
+    },
+    {
+      "id": "icePool",
+      "document": {
+        "name": "icePool",
+        "palette": [
+          {
+            "color": "state.colors.ice"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "disc",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1.5,
+              0.08,
+              1.5
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pip-fire",
+      "document": {
+        "name": "pip-fire",
+        "palette": [
+          {
+            "color": "#FF5A1F"
+          },
+          {
+            "color": "#FFE08A"
+          },
+          {
+            "color": "#FFFFFF"
+          },
+          {
+            "color": "#0D0D0D"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 0,
+            "material": 0,
+            "name": "pip",
+            "position": [
+              0,
+              0.5,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.35,
+              1.75,
+              0.35
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "symmetry",
+                "normal": [
+                  1,
+                  0,
+                  0
+                ]
+              }
+            ],
+            "group": 0,
+            "id": 1,
+            "material": 2,
+            "name": "eye",
+            "position": [
+              0.2,
+              1.1,
+              0.42
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.14,
+              0.14,
+              0.14
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "symmetry",
+                "normal": [
+                  1,
+                  0,
+                  0
+                ]
+              }
+            ],
+            "group": 0,
+            "id": 2,
+            "material": 3,
+            "name": "pupil",
+            "position": [
+              0.2,
+              1.1,
+              0.54
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.055,
+              0.055,
+              0.055
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          }
+        ],
+        "textRuns": [
+          {
+            "align": "center",
+            "depth": 0.05,
+            "emHeight": 0.35,
+            "material": 1,
+            "mode": "emboss",
+            "position": [
+              0,
+              0.25,
+              -1
+            ],
+            "rotation": [
+              0,
+              1,
+              0,
+              0
+            ],
+            "shapeId": 0,
+            "text": "K"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pip-ice",
+      "document": {
+        "name": "pip-ice",
+        "palette": [
+          {
+            "color": "#5AC8FA"
+          },
+          {
+            "color": "#FFFFFF"
+          },
+          {
+            "color": "#FFFFFF"
+          },
+          {
+            "color": "#0D0D0D"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 0,
+            "material": 0,
+            "name": "pip",
+            "position": [
+              0,
+              0.5,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.35,
+              1.75,
+              0.35
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "symmetry",
+                "normal": [
+                  1,
+                  0,
+                  0
+                ]
+              }
+            ],
+            "group": 0,
+            "id": 1,
+            "material": 2,
+            "name": "eye",
+            "position": [
+              0.2,
+              1.1,
+              0.42
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.14,
+              0.14,
+              0.14
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "symmetry",
+                "normal": [
+                  1,
+                  0,
+                  0
+                ]
+              }
+            ],
+            "group": 0,
+            "id": 2,
+            "material": 3,
+            "name": "pupil",
+            "position": [
+              0.2,
+              1.1,
+              0.54
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.055,
+              0.055,
+              0.055
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          }
+        ],
+        "textRuns": [
+          {
+            "align": "center",
+            "depth": 0.05,
+            "emHeight": 0.35,
+            "material": 1,
+            "mode": "emboss",
+            "position": [
+              0,
+              0.25,
+              -1
+            ],
+            "rotation": [
+              0,
+              1,
+              0,
+              0
+            ],
+            "shapeId": 0,
+            "text": "K"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pip-dead",
+      "document": {
+        "name": "pip-dead",
+        "palette": [
+          {
+            "color": "#9AA3AC"
+          },
+          {
+            "color": "#6E7681"
+          },
+          {
+            "color": "#FFFFFF"
+          },
+          {
+            "color": "#0D0D0D"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 0,
+            "material": 0,
+            "name": "pip",
+            "position": [
+              0,
+              0.35,
+              -0.5
+            ],
+            "rotation": [
+              -0.70710678,
+              0,
+              0,
+              0.70710678
+            ],
+            "scale": [
+              0.35,
+              1.75,
+              0.35
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "symmetry",
+                "normal": [
+                  1,
+                  0,
+                  0
+                ]
+              }
+            ],
+            "group": 0,
+            "id": 1,
+            "material": 2,
+            "name": "eye",
+            "position": [
+              0.2,
+              0.77,
+              -1.1
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.14,
+              0.14,
+              0.14
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "symmetry",
+                "normal": [
+                  1,
+                  0,
+                  0
+                ]
+              }
+            ],
+            "group": 0,
+            "id": 2,
+            "material": 3,
+            "name": "cross-a",
+            "position": [
+              0.2,
+              0.9,
+              -1.1
+            ],
+            "rotation": [
+              0,
+              0.38268343,
+              0,
+              0.92387953
+            ],
+            "scale": [
+              0.11,
+              0.02,
+              0.02
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "symmetry",
+                "normal": [
+                  1,
+                  0,
+                  0
+                ]
+              }
+            ],
+            "group": 0,
+            "id": 3,
+            "material": 3,
+            "name": "cross-b",
+            "position": [
+              0.2,
+              0.9,
+              -1.1
+            ],
+            "rotation": [
+              0,
+              -0.38268343,
+              0,
+              0.92387953
+            ],
+            "scale": [
+              0.11,
+              0.02,
+              0.02
+            ],
+            "smooth": 0,
+            "type": "Box"
+          }
+        ]
+      }
+    },
+    {
+      "id": "dummy",
+      "document": {
+        "name": "dummy",
+        "palette": [
+          {
+            "color": "#C9A06A"
+          },
+          {
+            "color": "#8C6A3F"
+          },
+          {
+            "color": "#D93B2B"
+          },
+          {
+            "color": "#F2EFE6"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "post",
+            "position": [
+              0,
+              0.8,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.32,
+              0.8,
+              0.32
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          },
+          {
+            "blend": "Union",
+            "id": 1,
+            "material": 1,
+            "name": "head",
+            "position": [
+              0,
+              1.95,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.36,
+              0.36,
+              0.36
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "id": 2,
+            "material": 2,
+            "name": "ring",
+            "position": [
+              0,
+              1.1,
+              0.34
+            ],
+            "rotation": [
+              0.70710678,
+              0,
+              0,
+              0.70710678
+            ],
+            "scale": [
+              0.22,
+              0.22,
+              0.22
+            ],
+            "smooth": 0,
+            "type": "Torus"
+          },
+          {
+            "blend": "Union",
+            "id": 3,
+            "material": 3,
+            "name": "bull",
+            "position": [
+              0,
+              1.1,
+              0.34
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.08,
+              0.08,
+              0.08
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "id": 4,
+            "material": 1,
+            "name": "base",
+            "position": [
+              0,
+              0.05,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.6,
+              0.05,
+              0.6
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          }
+        ]
+      }
+    },
+    {
+      "id": "dummy-fire",
+      "document": {
+        "name": "dummy-fire",
+        "palette": [
+          {
+            "color": "#FF5A1F"
+          },
+          {
+            "color": "#FFE08A"
+          },
+          {
+            "color": "#D93B2B"
+          },
+          {
+            "color": "#F2EFE6"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "post",
+            "position": [
+              0,
+              0.8,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.32,
+              0.8,
+              0.32
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          },
+          {
+            "blend": "Union",
+            "id": 1,
+            "material": 1,
+            "name": "head",
+            "position": [
+              0,
+              1.95,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.36,
+              0.36,
+              0.36
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "id": 2,
+            "material": 2,
+            "name": "ring",
+            "position": [
+              0,
+              1.1,
+              0.34
+            ],
+            "rotation": [
+              0.70710678,
+              0,
+              0,
+              0.70710678
+            ],
+            "scale": [
+              0.22,
+              0.22,
+              0.22
+            ],
+            "smooth": 0,
+            "type": "Torus"
+          },
+          {
+            "blend": "Union",
+            "id": 3,
+            "material": 3,
+            "name": "bull",
+            "position": [
+              0,
+              1.1,
+              0.34
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.08,
+              0.08,
+              0.08
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "id": 4,
+            "material": 1,
+            "name": "base",
+            "position": [
+              0,
+              0.05,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.6,
+              0.05,
+              0.6
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          }
+        ]
+      }
+    },
+    {
+      "id": "dummy-ice",
+      "document": {
+        "name": "dummy-ice",
+        "palette": [
+          {
+            "color": "#5AC8FA"
+          },
+          {
+            "color": "#FFFFFF"
+          },
+          {
+            "color": "#D93B2B"
+          },
+          {
+            "color": "#F2EFE6"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "post",
+            "position": [
+              0,
+              0.8,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.32,
+              0.8,
+              0.32
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          },
+          {
+            "blend": "Union",
+            "id": 1,
+            "material": 1,
+            "name": "head",
+            "position": [
+              0,
+              1.95,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.36,
+              0.36,
+              0.36
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "id": 2,
+            "material": 2,
+            "name": "ring",
+            "position": [
+              0,
+              1.1,
+              0.34
+            ],
+            "rotation": [
+              0.70710678,
+              0,
+              0,
+              0.70710678
+            ],
+            "scale": [
+              0.22,
+              0.22,
+              0.22
+            ],
+            "smooth": 0,
+            "type": "Torus"
+          },
+          {
+            "blend": "Union",
+            "id": 3,
+            "material": 3,
+            "name": "bull",
+            "position": [
+              0,
+              1.1,
+              0.34
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.08,
+              0.08,
+              0.08
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "id": 4,
+            "material": 1,
+            "name": "base",
+            "position": [
+              0,
+              0.05,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.6,
+              0.05,
+              0.6
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          }
+        ]
+      }
+    }
+  ],
+  "bodies": {
+    "capacity": 3
+  }
 }

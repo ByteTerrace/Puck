@@ -81,10 +81,10 @@ public sealed class DynamicsAuthoringValidationLawTests {
     public void LookRootDynamicsDanglingReferenceRefusesWhileResolvingPasses() {
         var document = WithDynamics([Chase]);
         var dangling = document with {
-            LooksRaw = [new WorldLook(Name: "avatar", Source: new WorldLookSource.Catalog(Index: null), Scale: 1f, Motion: WorldLookMotion.Default with { Dynamics = "missing" })],
+            LookRowsRaw = [new WorldLook(Name: "avatar", Source: new WorldLookSource.Catalog(Index: null), Scale: 1f, Motion: WorldLookMotion.Default with { Dynamics = "missing" })],
         };
         var resolving = document with {
-            LooksRaw = [new WorldLook(Name: "avatar", Source: new WorldLookSource.Catalog(Index: null), Scale: 1f, Motion: WorldLookMotion.Default with { Dynamics = "chase" })],
+            LookRowsRaw = [new WorldLook(Name: "avatar", Source: new WorldLookSource.Catalog(Index: null), Scale: 1f, Motion: WorldLookMotion.Default with { Dynamics = "chase" })],
         };
 
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: dangling, neighbours: null, reason: out var deniedReason));
@@ -96,12 +96,12 @@ public sealed class DynamicsAuthoringValidationLawTests {
     public void PartDynamicsOnCatalogSourceRefusesWhileAbsentOnCatalogPasses() {
         var document = WithDynamics([Chase]);
         var denied = document with {
-            LooksRaw = [new WorldLook(Name: "avatar", Source: new WorldLookSource.Catalog(Index: null), Scale: 1f, Motion: WorldLookMotion.Default with {
+            LookRowsRaw = [new WorldLook(Name: "avatar", Source: new WorldLookSource.Catalog(Index: null), Scale: 1f, Motion: WorldLookMotion.Default with {
                 PartDynamics = new Dictionary<string, string> { ["head"] = "chase" },
             })],
         };
         var admitted = document with {
-            LooksRaw = [new WorldLook(Name: "avatar", Source: new WorldLookSource.Catalog(Index: null), Scale: 1f, Motion: WorldLookMotion.Default)],
+            LookRowsRaw = [new WorldLook(Name: "avatar", Source: new WorldLookSource.Catalog(Index: null), Scale: 1f, Motion: WorldLookMotion.Default)],
         };
 
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: denied, neighbours: null, reason: out var deniedReason));
@@ -115,8 +115,8 @@ public sealed class DynamicsAuthoringValidationLawTests {
         var kit = document.Kits[0];
         var grounded = (WorldMotionModel.Grounded)kit.Motion;
 
-        var dangling = document with { KitsRaw = [kit with { Motion = grounded with { Response = null, Dynamics = "missing" } }] };
-        var resolving = document with { KitsRaw = [kit with { Motion = grounded with { Response = null, Dynamics = "chase" } }] };
+        var dangling = document with { KitRowsRaw = [kit with { Motion = grounded with { Response = null, Dynamics = "missing" } }] };
+        var resolving = document with { KitRowsRaw = [kit with { Motion = grounded with { Response = null, Dynamics = "chase" } }] };
 
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: dangling, neighbours: null, reason: out var deniedReason));
         Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "kits[0].motion.dynamics 'missing' names no dynamics row.");

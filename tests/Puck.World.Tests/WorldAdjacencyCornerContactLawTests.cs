@@ -16,7 +16,7 @@ public sealed class WorldAdjacencyCornerContactLawTests {
         var source = Fixtures.BuildGradientUpDocument(gradientUp: false);
 
         source = source with {
-            PlacementsRaw = [source.Placements[0] with { Position = new Vector3(x: 100f, y: 0f, z: 100f) }],
+            PlacementRowsRaw = [source.Placements[0] with { Position = new Vector3(x: 100f, y: 0f, z: 100f) }],
             References = [
                 new WorldReference(WorldSafeName.Parse(candidate: "unused-east-ref"), "unused-east.world.json"),
                 new WorldReference(WorldSafeName.Parse(candidate: "unused-south-ref"), "unused-south.world.json"),
@@ -177,7 +177,7 @@ public sealed class WorldAdjacencyCornerContactLawTests {
         return source with {
             CollisionRaw = source.Collision with { Requirements = [WorldContactRequirement.SmoothUnionContact] },
             CreationsRaw = [creation],
-            PlacementsRaw = [new WorldPlacement(Id: "ground", CreationId: creation.Id, Position: new Vector3(x: 0f, y: 0f, z: floorCenterZ), YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f))],
+            PlacementRowsRaw = [new WorldPlacement(Id: "ground", CreationId: creation.Id, Position: new Vector3(x: 0f, y: 0f, z: floorCenterZ), YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f))],
             SpawnPointsRaw = [
                 new WorldSpawnPoint(Id: "seat-1", Position: new Vector3(x: 0f, y: 1f, z: spawn)),
                 new WorldSpawnPoint(Id: "seat-2", Position: new Vector3(x: 2f, y: 1f, z: spawn)),

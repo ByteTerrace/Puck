@@ -22,7 +22,7 @@ public abstract record WorldLookSource {
     /// <summary>A sculpted creation worn by the body — resolved against the world's <see cref="WorldCreation"/> rows.</summary>
     /// <param name="CreationId">The referenced <see cref="WorldCreation.Id"/>, authored literally or through a Text
     /// state cell; it must resolve at validation.</param>
-    public sealed record Creation(DocumentIdentifier CreationId) : WorldLookSource;
+    public sealed record Creation([property: System.Text.Json.Serialization.JsonPropertyName("prototypeId")] DocumentIdentifier CreationId) : WorldLookSource;
 }
 /// <summary>One cue of a creation look: a named timeline frame the body holds for <paramref name="HoldSeconds"/>
 /// when the cue fires — a blink, a twitch, a tail flick. A cue fires by itself on a semi-random interval drawn

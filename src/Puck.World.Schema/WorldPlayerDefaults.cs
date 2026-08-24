@@ -20,7 +20,7 @@ public sealed record WorldPlayerDefaults(
     float PickerThreshold = 0f,
     [property: JsonPropertyName("pickerNeutralColor"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? PickerNeutralColorRaw = null,
     float PickerNeutralBlend = 0f,
-    [property: JsonPropertyName("seatLook"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSeatLook? SeatLookRaw = null
+    [property: JsonPropertyName("seatCameraFeel"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSeatLook? SeatLookRaw = null
 ) {
     /// <summary>The neutral gray used for every color field an absent document leaves unauthored.</summary>
     private const string InertColor = "#8C8C8C";

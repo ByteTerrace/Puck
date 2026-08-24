@@ -257,7 +257,7 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
 
         document = document with {
             DynamicsRaw = [.. Fixtures.StandardDynamics, new WorldDynamicsRow(Name: "settle", Frequency: 2f, Damping: 1f, Response: 0f)],
-            KitsRaw = [kit with { Motion = grounded with { Response = null, Dynamics = "settle" } }],
+            KitRowsRaw = [kit with { Motion = grounded with { Response = null, Dynamics = "settle" } }],
         };
 
         using var fixture = Fixtures.FreshServer(definition: document);

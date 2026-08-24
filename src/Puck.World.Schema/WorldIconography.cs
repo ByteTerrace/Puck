@@ -133,7 +133,7 @@ public sealed record WorldIconBadgeRow(
 /// <param name="IconsRaw">The icon rows.</param>
 /// <param name="BadgesRaw">The badge-mapping rows.</param>
 public sealed record WorldIconographySection(
-    [property: JsonPropertyName("icons"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldIconRow>? IconsRaw = null,
+    [property: JsonPropertyName("rows"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldIconRow>? IconsRaw = null,
     [property: JsonPropertyName("badges"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldIconBadgeRow>? BadgesRaw = null
 ) {
     /// <summary>Gets the policy applied when no document in the basis chain authors an <c>icons</c> section —

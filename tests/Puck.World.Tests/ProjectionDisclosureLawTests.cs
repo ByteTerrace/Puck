@@ -67,7 +67,7 @@ public sealed class ProjectionDisclosureLawTests {
         // The control: the projection is not empty, and the disclosed sections really are in it — including
         // metadata's title/description, which cross in reduced form even though authors/tags/custom do not.
         Assert.Contains(collection: found, expected: "placements");
-        Assert.Contains(collection: found, expected: "creations");
+        Assert.Contains(collection: found, expected: "prototypes");
         Assert.Contains(collection: found, expected: "kits");
         Assert.Contains(collection: found, expected: "views");
         Assert.Contains(collection: found, expected: "hud");

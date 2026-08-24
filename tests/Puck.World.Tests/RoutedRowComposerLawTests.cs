@@ -16,7 +16,7 @@ public sealed class RoutedRowComposerLawTests {
         // Control: a placements row composes to the identical UpsertPlacement the local verb submits.
         Assert.True(condition: WorldRowCommandModule.TryComposeRoutedSet(
             error: out var composeError,
-            json: """{"id":"probe","creationId":"ball","position":[1,0,2],"yawDegrees":0,"scale":1}""",
+            json: """{"id":"probe","prototypeId":"ball","position":[1,0,2],"yawDegrees":0,"scale":1}""",
             mutation: out var composed,
             path: "placements",
             principal: WorldPrincipal.Console

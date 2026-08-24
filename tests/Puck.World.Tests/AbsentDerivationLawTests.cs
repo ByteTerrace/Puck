@@ -39,7 +39,7 @@ public sealed class AbsentDerivationLawTests {
             {
               "schema": "puck.world.def.v1",
               "documentId": "null-seat",
-              "population": { "localSeats": 1 },
+              "bodies": { "localSeats": 1 },
               {{MinimalChannelSection}},
               {{MinimalCollisionSection}},
               {{MinimalDynamicsSection}},
@@ -60,7 +60,7 @@ public sealed class AbsentDerivationLawTests {
                   ]
                 }
               ],
-              "kits": [
+              "kits": { "rows": [
                 {
                   "name": "stander",
                   "bodyMotionProgram": "traverse",
@@ -77,7 +77,7 @@ public sealed class AbsentDerivationLawTests {
                   "collider": { "$type": "sphere", "radius": 0.5 },
                   "bodyContact": "Solid"
                 }
-              ],
+              ] },
               "defaultSeatKit": "stander"
             }
             """);
@@ -125,9 +125,9 @@ public sealed class AbsentDerivationLawTests {
         "bodyMotionPrograms": [
           { "name": "p", "version": "puck.body-motion.v1", "kind": "Motion", "operations": ["ResolveYawAttitudeAndPlanarFrame", "ComputePlanarTargetVelocity", "ShapePlanarVelocity", "SnapYawToPlanarIntent", "ApplyVerticalGravity", "IntegratePlanarAndVerticalVelocity", "CommitPose"] }
         ],
-        "kits": [
+        "kits": { "rows": [
           { "name": "k", "bodyMotionProgram": "p", "motion": { "$type": "grounded", "moveSpeed": 4, "turnSpeed": 2.5, "riseGravity": 28, "fallGravity": 46, "maxFallSpeed": 40, "response": [], "sprintMultiplier": 1 } }
-        ]
+        ] }
         """;
 
     [Fact]
@@ -140,7 +140,7 @@ public sealed class AbsentDerivationLawTests {
                 { "id": "a", "position": [0, 0, 0] },
                 { "id": "b", "position": [1, 0, 0] }
               ],
-              "population": { "seatSpawns": ["a", "b"] },
+              "bodies": { "seatSpawns": ["a", "b"] },
               {{MinimalChannelSection}},
               {{MinimalCollisionSection}},
               {{MinimalKitSection}},
@@ -158,7 +158,7 @@ public sealed class AbsentDerivationLawTests {
             {
               "schema": "puck.world.def.v1",
               "documentId": "capacity-derive",
-              "population": { "localSeats": 2, "networkPlayers": 3 },
+              "bodies": { "localSeats": 2, "networkPlayers": 3 },
               {{MinimalChannelSection}},
               {{MinimalCollisionSection}},
               {{MinimalKitSection}},
@@ -179,13 +179,13 @@ public sealed class AbsentDerivationLawTests {
               "bodyMotionPrograms": [
                 { "name": "p", "version": "puck.body-motion.v1", "kind": "Motion", "operations": ["ResolveYawAttitudeAndPlanarFrame", "ComputePlanarTargetVelocity", "ShapePlanarVelocity", "SnapYawToPlanarIntent", "ApplyVerticalGravity", "IntegratePlanarAndVerticalVelocity", "CommitPose"] }
               ],
-              "kits": [
+              "kits": { "rows": [
                 {
                   "name": "solo",
                   "bodyMotionProgram": "p",
                   "motion": { "$type": "grounded", "moveSpeed": 4, "turnSpeed": 2.5, "riseGravity": 28, "fallGravity": 46, "maxFallSpeed": 40, "response": [], "sprintMultiplier": 1 }
                 }
-              ]
+              ] }
             }
             """);
 
@@ -205,7 +205,7 @@ public sealed class AbsentDerivationLawTests {
             {
               "schema": "puck.world.def.v1",
               "documentId": "channels-required",
-              "population": { "localSeats": 1 },
+              "bodies": { "localSeats": 1 },
               {{MinimalKitSection}},
               {{MinimalDynamicsSection}},
               {{MinimalViewsSection}}
@@ -226,7 +226,7 @@ public sealed class AbsentDerivationLawTests {
             {
               "schema": "puck.world.def.v1",
               "documentId": "views-required",
-              "population": { "localSeats": 1 },
+              "bodies": { "localSeats": 1 },
               {{MinimalChannelSection}},
               {{MinimalKitSection}}
             }
@@ -241,7 +241,7 @@ public sealed class AbsentDerivationLawTests {
             {
               "schema": "puck.world.def.v1",
               "documentId": "creation-hash-derive",
-              "creations": [
+              "prototypes": [
                 {
                   "id": "pip",
                   "document": {
@@ -303,7 +303,7 @@ public sealed class AbsentDerivationLawTests {
 
         Assert.Empty(collection: zeroCapacity.Kits);
 
-        var exception = Assert.Throws<InvalidDataException>(testCode: () => Parse(json: """{"schema": "puck.world.def.v1", "documentId": "kits-required", "population": {"localSeats": 1}}"""));
+        var exception = Assert.Throws<InvalidDataException>(testCode: () => Parse(json: """{"schema": "puck.world.def.v1", "documentId": "kits-required", "bodies": {"localSeats": 1}}"""));
 
         Assert.Contains(expectedSubstring: "kits", actualString: exception.Message, comparisonType: StringComparison.Ordinal);
     }

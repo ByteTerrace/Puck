@@ -97,7 +97,7 @@ public sealed class TransferAbortKitWideningLawTests {
         return Fixtures.BuildDocument() with {
             ChannelsRaw = channels,
             BodyMotionProgramsRaw = [vehicleGround, vehicleGroundAlt, wander],
-            KitsRaw = [kit],
+            KitRowsRaw = [kit],
             DefaultSeatKitRaw = "kart-test",
             StateRaw = new WorldStateSection(World: Fixtures.BuildDocument().State, Identity: [new ActionStateSlot(Name: "surgeCounter", Kind: ActionStateKind.Counter, Initial: 0f)]),
         };
@@ -170,7 +170,7 @@ public sealed class TransferAbortKitWideningLawTests {
         return Fixtures.BuildDocument() with {
             ChannelsRaw = channels,
             BodyMotionProgramsRaw = [swim, swimAlt, wander],
-            KitsRaw = [kit],
+            KitRowsRaw = [kit],
             DefaultSeatKitRaw = "diver-test",
             StateRaw = new WorldStateSection(World: Fixtures.BuildDocument().State, Identity: [new ActionStateSlot(Name: "surgeCounter", Kind: ActionStateKind.Counter, Initial: 0f)]),
             // REQUIRED: WorldDefinitionValidator refuses a Swim-model kit when the world authors no water section.
@@ -407,7 +407,7 @@ public sealed class TransferAbortKitWideningLawTests {
 
         document = document with {
             DynamicsRaw = [.. Fixtures.StandardDynamics, Settle],
-            KitsRaw = [kit with { Motion = grounded with { Response = null, Dynamics = "settle" } }],
+            KitRowsRaw = [kit with { Motion = grounded with { Response = null, Dynamics = "settle" } }],
         };
 
         using var fixture = Fixtures.FreshServer(definition: document);
@@ -456,7 +456,7 @@ public sealed class TransferAbortKitWideningLawTests {
 
         document = document with {
             DynamicsRaw = [.. Fixtures.StandardDynamics, Settle],
-            KitsRaw = [kit with { Motion = swim with { Response = null, Dynamics = "settle" } }],
+            KitRowsRaw = [kit with { Motion = swim with { Response = null, Dynamics = "settle" } }],
         };
 
         using var fixture = Fixtures.FreshServer(definition: document);

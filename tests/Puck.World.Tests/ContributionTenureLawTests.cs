@@ -71,7 +71,7 @@ public sealed class ContributionTenureLawTests {
                 Creation(id: SlotCreation),
                 Creation(id: ContributedCreation),
             ],
-            PlacementsRaw = [
+            PlacementRowsRaw = [
                 new WorldPlacement(
                     Id: SlotId,
                     CreationId: SlotCreation,
@@ -369,7 +369,7 @@ public sealed class ContributionTenureLawTests {
         var slot = document.Placements[0];
 
         return (document with {
-            PlacementsRaw = [
+            PlacementRowsRaw = [
                 (slot with {
                 Contribution = new WorldPlacementContribution(
                     Tenure: WorldContributionTenure.Endowed,

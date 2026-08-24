@@ -18,7 +18,7 @@ public sealed class BodyDynamicsLawTests {
 
         return document with {
             DynamicsRaw = [.. Fixtures.StandardDynamics, new WorldDynamicsRow(Name: dynamicsRow, Frequency: 2f, Damping: damping, Response: 0f)],
-            KitsRaw = [kit with { Motion = grounded with { Response = null, Dynamics = dynamicsRow } }],
+            KitRowsRaw = [kit with { Motion = grounded with { Response = null, Dynamics = dynamicsRow } }],
         };
     }
     private static WorldBody JoinBody(WorldFixture fixture) {

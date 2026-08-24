@@ -81,12 +81,12 @@ public sealed class ObserverDisclosureLawTests {
         Assert.False(WorldDefinitionValidator.TryValidateLocally(
             definition: (document with { PopulationRaw = (document.Population with { Disclosure = new WorldObserverDisclosure(Mode: WorldObserverDisclosureMode.Radius) }) }),
             reason: out var missingRadius));
-        Assert.Contains(expectedSubstring: "population.disclosure.radius is required", actualString: missingRadius, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(expectedSubstring: "bodies.disclosure.radius is required", actualString: missingRadius, comparisonType: StringComparison.Ordinal);
 
         Assert.False(WorldDefinitionValidator.TryValidateLocally(
             definition: (document with { PopulationRaw = (document.Population with { Disclosure = new WorldObserverDisclosure(Mode: WorldObserverDisclosureMode.All, Radius: 4f) }) }),
             reason: out var strayRadius));
-        Assert.Contains(expectedSubstring: "population.disclosure.radius must be absent", actualString: strayRadius, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(expectedSubstring: "bodies.disclosure.radius must be absent", actualString: strayRadius, comparisonType: StringComparison.Ordinal);
 
         // The control: a well-formed policy validates, so the refusals above are about the shape, not the member.
         Assert.True(WorldDefinitionValidator.TryValidateLocally(

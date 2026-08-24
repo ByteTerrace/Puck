@@ -55,7 +55,7 @@ public sealed class DynamicBodyContactLawTests {
     }
     private static WorldFixture TwoBodies(WorldBodyContactMode mode) {
         var source = Fixtures.BuildGradientUpDocument(gradientUp: false);
-        var definition = source with { KitsRaw = source.Kits.Select(selector: kit => kit with { BodyContact = mode }).ToArray() };
+        var definition = source with { KitRowsRaw = source.Kits.Select(selector: kit => kit with { BodyContact = mode }).ToArray() };
         var fixture = Fixtures.FreshServer(definition: definition);
         var left = WorldPrincipal.Seat(slot: 0);
         var right = WorldPrincipal.Seat(slot: 1);

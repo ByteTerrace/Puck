@@ -171,24 +171,24 @@ public static partial class WorldDefinitionValidator {
             value: authoring.AuthoringHeadroomScreens,
             min: 0,
             max: SdfProgramBuilder.MaxScreenSurfaces,
-            name: "authoring.authoringHeadroomScreens",
+            name: "placements.policy.authoringHeadroomScreens",
             errors: errors
         );
         RequireIntRange(
             value: authoring.AuthoringHeadroomPlacements,
             min: 0,
             max: 256,
-            name: "authoring.authoringHeadroomPlacements",
+            name: "placements.policy.authoringHeadroomPlacements",
             errors: errors
         );
         RequirePositive(
             value: authoring.MinPlacementScale,
-            name: "authoring.minPlacementScale",
+            name: "placements.policy.minPlacementScale",
             errors: errors
         );
         RequirePositive(
             value: authoring.MaxPlacementScale,
-            name: "authoring.maxPlacementScale",
+            name: "placements.policy.maxPlacementScale",
             errors: errors
         );
 
@@ -197,19 +197,19 @@ public static partial class WorldDefinitionValidator {
             float.IsFinite(f: authoring.MaxPlacementScale) &&
             (authoring.MinPlacementScale > authoring.MaxPlacementScale)
         ) {
-            errors.Add(item: $"authoring.minPlacementScale {authoring.MinPlacementScale} exceeds authoring.maxPlacementScale {authoring.MaxPlacementScale}.");
+            errors.Add(item: $"placements.policy.minPlacementScale {authoring.MinPlacementScale} exceeds authoring.maxPlacementScale {authoring.MaxPlacementScale}.");
         }
 
         RequirePositive(
             value: authoring.CandidateRadius,
-            name: "authoring.candidateRadius",
+            name: "placements.policy.candidateRadius",
             errors: errors
         );
         RequireIntRange(
             value: authoring.CandidateCap,
             min: 1,
             max: 256,
-            name: "authoring.candidateCap",
+            name: "placements.policy.candidateCap",
             errors: errors
         );
 
@@ -217,7 +217,7 @@ public static partial class WorldDefinitionValidator {
             value: authoring.PreviewDeadlineFrames,
             min: 1,
             max: 600,
-            name: "authoring.previewDeadlineFrames",
+            name: "placements.policy.previewDeadlineFrames",
             errors: errors
         );
         // The derived-face reserve: the slots boot-registered at [DerivedFaceBase, DerivedFaceBase + count). The
@@ -226,7 +226,7 @@ public static partial class WorldDefinitionValidator {
             value: authoring.DerivedFaceScreens,
             min: 0,
             max: WorldPlacementPolicy.MaxDerivedFaceScreens,
-            name: "authoring.derivedFaceScreens",
+            name: "placements.policy.derivedFaceScreens",
             errors: errors
         );
     }
@@ -321,7 +321,7 @@ public static partial class WorldDefinitionValidator {
 
         for (var index = 0; (index < creations.Count); index++) {
             var creation = creations[index];
-            var path = $"creations[{index}]";
+            var path = $"prototypes[{index}]";
 
             if (creation is null) {
                 errors.Add(item: $"{path} is required.");
@@ -616,7 +616,7 @@ public static partial class WorldDefinitionValidator {
             (kits.Count == 0) &&
             (definition.Population.Capacity > 0)
         ) {
-            errors.Add(item: $"kits requires at least one row when population.capacity ({definition.Population.Capacity}) is nonzero.");
+            errors.Add(item: $"kits requires at least one row when bodies.capacity ({definition.Population.Capacity}) is nonzero.");
 
             return kitNames;
         }
@@ -751,7 +751,7 @@ public static partial class WorldDefinitionValidator {
             errors: errors,
             rowNames: lookNames,
             rowNoun: "look",
-            section: "lookAssignment"
+            section: "looks.assignment"
         );
     }
     // The LOOK rows (PRESENTATION-ONLY): name presence/uniqueness (mirroring the kit-name rule), a source over the

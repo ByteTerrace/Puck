@@ -60,7 +60,7 @@ public sealed class CreationAuthorFrameLawTests {
         var source = Fixtures.BuildGradientUpDocument(gradientUp: false);
         var definition = source with {
             CreationsRaw = [creation],
-            PlacementsRaw = [new WorldPlacement(Id: "faced", CreationId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f))],
+            PlacementRowsRaw = [new WorldPlacement(Id: "faced", CreationId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f))],
         };
 
         Assert.True(condition: WorldSolidField.TryBuild(definition: definition, built: out var field, reason: out var reason), userMessage: reason);
@@ -99,7 +99,7 @@ public sealed class CreationAuthorFrameLawTests {
         var source = Fixtures.BuildGradientUpDocument(gradientUp: false);
         var definition = source with {
             CreationsRaw = [creation],
-            PlacementsRaw = [new WorldPlacement(Id: "cap", CreationId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f))],
+            PlacementRowsRaw = [new WorldPlacement(Id: "cap", CreationId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f))],
         };
 
         Assert.True(condition: WorldSolidField.TryBuild(definition: definition, built: out var field, reason: out var reason), userMessage: reason);
@@ -170,7 +170,7 @@ public sealed class CreationAuthorFrameLawTests {
         var source = Fixtures.BuildGradientUpDocument(gradientUp: false);
         var definition = source with {
             CreationsRaw = [creation],
-            PlacementsRaw = [new WorldPlacement(Id: "symmetric-eye", CreationId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f))],
+            PlacementRowsRaw = [new WorldPlacement(Id: "symmetric-eye", CreationId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f))],
         };
 
         Assert.True(condition: WorldSolidField.TryBuild(definition: definition, built: out var field, reason: out var reason), userMessage: reason);

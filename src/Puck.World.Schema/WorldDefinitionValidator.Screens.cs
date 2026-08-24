@@ -1018,7 +1018,7 @@ public static partial class WorldDefinitionValidator {
     private static void ValidateViews(WorldViewDefaults? views, WorldDefinition definition, int capacity, HashSet<string> cameras, ISet<string> placementIds, ISet<string> dynamicsNames, List<string> errors) {
         if (views is null) {
             if (capacity > 0) {
-                errors.Add(item: $"views is required when population.capacity ({capacity}) is nonzero; the engine declares no seat rig (author one, or name a basis document that does).");
+                errors.Add(item: $"views is required when bodies.capacity ({capacity}) is nonzero; the engine declares no seat rig (author one, or name a basis document that does).");
             }
 
             return;

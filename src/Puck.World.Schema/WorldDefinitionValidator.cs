@@ -849,7 +849,7 @@ public static partial class WorldDefinitionValidator {
             (localSeats < 0) ||
             (localSeats > WorldPopulationLimits.LocalSeatCount)
         ) {
-            errors.Add(item: $"population.localSeats {localSeats} is outside 0..{WorldPopulationLimits.LocalSeatCount} (the host's seat ceiling).");
+            errors.Add(item: $"bodies.localSeats {localSeats} is outside 0..{WorldPopulationLimits.LocalSeatCount} (the host's seat ceiling).");
         }
 
         ValidateSeatActivation(
@@ -862,7 +862,7 @@ public static partial class WorldDefinitionValidator {
             (definition.Population.Capacity < localSeats) ||
             (definition.Population.Capacity > WorldPopulationLimits.CapacityCeiling)
         ) {
-            errors.Add(item: $"population.capacity {definition.Population.Capacity} is outside {localSeats}..{WorldPopulationLimits.CapacityCeiling}.");
+            errors.Add(item: $"bodies.capacity {definition.Population.Capacity} is outside {localSeats}..{WorldPopulationLimits.CapacityCeiling}.");
         }
 
         if (definition.Population.CapacityDraw is { } capacityDraw) {
@@ -885,7 +885,7 @@ public static partial class WorldDefinitionValidator {
                 bootOnly: true,
                 domainLow: drawFloor,
                 domainHigh: WorldPopulationLimits.CapacityCeiling,
-                path: "population.capacityDraw",
+                path: "bodies.capacityDraw",
                 errors: errors
             );
         }
@@ -899,7 +899,7 @@ public static partial class WorldDefinitionValidator {
             (definition.Population.NetworkPlayers < 0) ||
             (definition.Population.NetworkPlayers > peerCapacity)
         ) {
-            errors.Add(item: $"population.networkPlayers {definition.Population.NetworkPlayers} is outside 0..{peerCapacity} for the authored capacity.");
+            errors.Add(item: $"bodies.networkPlayers {definition.Population.NetworkPlayers} is outside 0..{peerCapacity} for the authored capacity.");
         }
 
         // 0 disables the reconnect grace window (immediate teardown); the 600s ceiling mirrors world.wait's own
@@ -909,7 +909,7 @@ public static partial class WorldDefinitionValidator {
             value: definition.Population.ReconnectGraceSeconds,
             min: 0f,
             max: 600f,
-            name: "population.reconnectGraceSeconds",
+            name: "bodies.reconnectGraceSeconds",
             errors: errors
         );
 
@@ -977,7 +977,7 @@ public static partial class WorldDefinitionValidator {
         // Population distributions run after spawn points so an explicit-points region can resolve every name.
         ValidateDistribution(
             distribution: definition.Population.Distribution,
-            path: "population.distribution",
+            path: "bodies.distribution",
             spawnPointIds: spawnPointIds,
             allowDisc: true,
             allowPoints: true,
@@ -987,13 +987,13 @@ public static partial class WorldDefinitionValidator {
         );
         ValidatePopulationVariation(
             variation: definition.Population.PeerVariation,
-            path: "population.peerVariation",
+            path: "bodies.peerVariation",
             minIndex: localSeats,
             errors: errors
         );
         ValidatePopulationVariation(
             variation: definition.Population.SeatVariation,
-            path: "population.seatVariation",
+            path: "bodies.seatVariation",
             minIndex: 0,
             errors: errors
         );
@@ -1003,7 +1003,7 @@ public static partial class WorldDefinitionValidator {
         );
         ValidateSequence(
             sequence: definition.Population.PeerColors,
-            path: "population.peerColors",
+            path: "bodies.peerColors",
             minIndex: WorldPopulationLimits.LocalSeatCount,
             errors: errors,
             WorldSequence.Additive,
@@ -1225,7 +1225,7 @@ public static partial class WorldDefinitionValidator {
 
         // Only an AUTHORED section validates — absence reads the inert WorldAuthoringDefaults.Absent (zero headroom,
         // zero-width scale envelope), whose zeros are "no authoring capacity", not authored values to range-check.
-        if (definition.AuthoringRaw is { } authoredAuthoring) {
+        if (definition.PlacementsRaw?.Policy is { } authoredAuthoring) {
             ValidateAuthoring(
                 authoring: authoredAuthoring,
                 errors: errors
@@ -1237,7 +1237,7 @@ public static partial class WorldDefinitionValidator {
         // bodyless document may author none and reads the inert WorldCollision.Absent.
         if (definition.CollisionRaw is null) {
             if (definition.Population.Capacity > 0) {
-                errors.Add(item: "collision is required when the census implies a body (population.capacity > 0) — author it, or inherit a basis (e.g. standard.world.json) that does.");
+                errors.Add(item: "collision is required when the census implies a body (bodies.capacity > 0) — author it, or inherit a basis (e.g. standard.world.json) that does.");
             }
         } else {
             ValidateCollision(
@@ -1615,7 +1615,7 @@ public static partial class WorldDefinitionValidator {
             var availableHeadroom = ((SdfProgramBuilder.MaxScreenSurfaces - authoring.DerivedFaceScreens) - screenIndices.Count);
 
             if (authoring.AuthoringHeadroomScreens > availableHeadroom) {
-                errors.Add(item: $"authoring.authoringHeadroomScreens asks for {authoring.AuthoringHeadroomScreens} slot(s), but only {Math.Max(
+                errors.Add(item: $"placements.policy.authoringHeadroomScreens asks for {authoring.AuthoringHeadroomScreens} slot(s), but only {Math.Max(
                     val1: 0,
                     val2: availableHeadroom
                 )} remain after {screenIndices.Count} authored screen(s) and {authoring.DerivedFaceScreens} derived-face reservation(s).");

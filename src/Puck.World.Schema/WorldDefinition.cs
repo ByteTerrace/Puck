@@ -29,20 +29,18 @@ public sealed record WorldDefinition(
     [property: JsonPropertyName("render"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderDefaults? RenderRaw = null,
     [property: JsonPropertyName("screens"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldScreen>? ScreensRaw = null,
     [property: JsonPropertyName("cameras"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldCamera>? CamerasRaw = null,
-    [property: JsonPropertyName("population"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPopulationDefaults? PopulationRaw = null,
-    [property: JsonPropertyName("playerDefaults"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlayerDefaults? PlayerDefaultsRaw = null,
+    [property: JsonPropertyName("bodies"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPopulationDefaults? PopulationRaw = null,
+    [property: JsonPropertyName("seatDefaults"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlayerDefaults? PlayerDefaultsRaw = null,
     [property: JsonPropertyName("channels"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldChannel>? ChannelsRaw = null,
     [property: JsonPropertyName("targetRegisters"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldTargetRegister>? TargetRegistersRaw = null,
     [property: JsonPropertyName("bodyMotionPrograms"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<BodyMotionProgram>? BodyMotionProgramsRaw = null,
-    [property: JsonPropertyName("kits"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldKit>? KitsRaw = null,
+    [property: JsonPropertyName("kits"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldKitsSection? KitsRaw = null,
     [property: JsonPropertyName("defaultSeatKit"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? DefaultSeatKitRaw = null,
-    [property: JsonPropertyName("assignment"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRowAssignment? AssignmentRaw = null,
     [property: JsonPropertyName("addons"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldAddonRow>? AddonsRaw = null,
     [property: JsonPropertyName("bindingOverlays"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldBindingOverlay>? BindingOverlaysRaw = null,
     [property: JsonPropertyName("storage"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldStorageDefaults? StorageRaw = null,
-    [property: JsonPropertyName("creations"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldCreation>? CreationsRaw = null,
-    [property: JsonPropertyName("placements"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldPlacement>? PlacementsRaw = null,
-    [property: JsonPropertyName("authoring"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldAuthoringDefaults? AuthoringRaw = null,
+    [property: JsonPropertyName("prototypes"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldCreation>? CreationsRaw = null,
+    [property: JsonPropertyName("placements"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementsSection? PlacementsRaw = null,
     [property: JsonPropertyName("speakers"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldSpeaker>? SpeakersRaw = null,
     [property: JsonPropertyName("tunes"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldTune>? TunesRaw = null,
     [property: JsonPropertyName("patches"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldPatch>? PatchesRaw = null,
@@ -51,8 +49,7 @@ public sealed record WorldDefinition(
     [property: JsonPropertyName("gravity"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldGravity? GravityRaw = null,
     [property: JsonPropertyName("host"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldHostDefaults? HostRaw = null,
     [property: JsonPropertyName("views"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldViewDefaults? ViewsRaw = null,
-    [property: JsonPropertyName("looks"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldLook>? LooksRaw = null,
-    [property: JsonPropertyName("lookAssignment"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRowAssignment? LookAssignmentRaw = null,
+    [property: JsonPropertyName("looks"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldLooksSection? LooksRaw = null,
     [property: JsonPropertyName("dynamics"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldDynamicsRow>? DynamicsRaw = null,
     [property: JsonPropertyName("grants"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldGrant>? GrantsRaw = null,
     [property: JsonPropertyName("hud"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldHudSection? HudRaw = null,
@@ -96,9 +93,28 @@ public sealed record WorldDefinition(
     [JsonIgnore]
     public WorldFieldsSection? Fields => (m_fields ??= WorldFieldsSection.Compile(state: StateRaw));
     private WorldFieldsSection? m_fields;
+    /// <summary>Bridge spellings for compose sites: each writes ONE member of its dealt section, preserving the
+    /// other. The document spelling is the section object; these never serialize.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<WorldKit>? KitRowsRaw { get => KitsRaw?.Rows; init => KitsRaw = ((KitsRaw ?? new WorldKitsSection()) with { Rows = value }); }
+    /// <summary>Gets or initializes the kit assignment through the kits section (see <see cref="KitRowsRaw"/>).</summary>
+    [JsonIgnore]
+    public WorldRowAssignment? AssignmentRaw { get => KitsRaw?.Assignment; init => KitsRaw = ((KitsRaw ?? new WorldKitsSection()) with { Assignment = value }); }
+    /// <summary>Gets or initializes the look rows through the looks section (see <see cref="KitRowsRaw"/>).</summary>
+    [JsonIgnore]
+    public IReadOnlyList<WorldLook>? LookRowsRaw { get => LooksRaw?.Rows; init => LooksRaw = ((LooksRaw ?? new WorldLooksSection()) with { Rows = value }); }
+    /// <summary>Gets or initializes the look assignment through the looks section (see <see cref="KitRowsRaw"/>).</summary>
+    [JsonIgnore]
+    public WorldRowAssignment? LookAssignmentRaw { get => LooksRaw?.Assignment; init => LooksRaw = ((LooksRaw ?? new WorldLooksSection()) with { Assignment = value }); }
+    /// <summary>Gets or initializes the placement rows through the placements section (see <see cref="KitRowsRaw"/>).</summary>
+    [JsonIgnore]
+    public IReadOnlyList<WorldPlacement>? PlacementRowsRaw { get => PlacementsRaw?.Rows; init => PlacementsRaw = ((PlacementsRaw ?? new WorldPlacementsSection()) with { Rows = value }); }
+    /// <summary>Gets or initializes the placement policy through the placements section (see <see cref="KitRowsRaw"/>).</summary>
+    [JsonIgnore]
+    public WorldAuthoringDefaults? AuthoringRaw { get => PlacementsRaw?.Policy; init => PlacementsRaw = ((PlacementsRaw ?? new WorldPlacementsSection()) with { Policy = value }); }
     /// <summary>Gets the kit→entity assignment policy — ABSENT resolves to <see cref="WorldRowAssignment.Default"/>.</summary>
     [JsonIgnore]
-    public WorldRowAssignment Assignment => (AssignmentRaw ?? WorldRowAssignment.Default);
+    public WorldRowAssignment Assignment => (KitsRaw?.Assignment ?? WorldRowAssignment.Default);
     /// <summary>Gets the audio host-section defaults — ABSENT resolves to <see cref="WorldAudioDefaults.Absent"/>
     /// (silent); the standard values are authored in <c>standard.world.json</c>.</summary>
     [JsonIgnore]
@@ -106,7 +122,7 @@ public sealed record WorldDefinition(
     /// <summary>Gets the editor/authoring policy row — ABSENT resolves to <see cref="WorldAuthoringDefaults.Absent"/>
     /// (no headroom, no editing); the standard policy is authored in <c>standard.world.json</c>.</summary>
     [JsonIgnore]
-    public WorldAuthoringDefaults Authoring => (AuthoringRaw ?? WorldAuthoringDefaults.Absent);
+    public WorldAuthoringDefaults Authoring => (PlacementsRaw?.Policy ?? WorldAuthoringDefaults.Absent);
     /// <summary>Gets the basis document this file layers over, as a file path resolved against this document's own
     /// directory — the document-composition member (see <c>WorldDocumentBasis</c>). A file naming a basis is a
     /// delta: it authors only what differs, inheriting every omitted member from the (recursively composed) basis
@@ -206,16 +222,16 @@ public sealed record WorldDefinition(
     /// document's population implies a body to move: a zero-capacity census (see <see cref="Population"/>) needs no
     /// kit at all — the derived refusal <see cref="WorldDefinitionValidator"/> applies rather than a flat floor.</summary>
     [JsonIgnore]
-    public IReadOnlyList<WorldKit> Kits => (KitsRaw ?? []);
+    public IReadOnlyList<WorldKit> Kits => (KitsRaw?.Rows ?? []);
     /// <summary>Gets the look→entity assignment policy — ABSENT resolves to <see cref="WorldRowAssignment.Default"/>.</summary>
     [JsonIgnore]
-    public WorldRowAssignment LookAssignment => (LookAssignmentRaw ?? WorldRowAssignment.Default);
+    public WorldRowAssignment LookAssignment => (LooksRaw?.Assignment ?? WorldRowAssignment.Default);
     /// <summary>Gets the look rows — ABSENT resolves to none. A consumer resolving an entity's look row (or the
     /// whole table) reads the empty case through <see cref="WorldDefinitionRows.ResolveLook"/>/
     /// <see cref="WorldDefinitionRows.ResolveLookRows"/>, the one place that falls back to the implicit single
     /// catalog look (<see cref="WorldLook.Implicit"/>).</summary>
     [JsonIgnore]
-    public IReadOnlyList<WorldLook> Looks => (LooksRaw ?? []);
+    public IReadOnlyList<WorldLook> Looks => (LooksRaw?.Rows ?? []);
     /// <summary>Gets the marker rows — ABSENT resolves to none (no marker channel output).</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldMarkerRow> Markers => (MarkersRaw ?? []);
@@ -228,7 +244,7 @@ public sealed record WorldDefinition(
     public IReadOnlyList<WorldPatch> Patches => (PatchesRaw ?? []);
     /// <summary>Gets the placement instance rows — ABSENT resolves to none.</summary>
     [JsonIgnore]
-    public IReadOnlyList<WorldPlacement> Placements => (PlacementsRaw ?? []);
+    public IReadOnlyList<WorldPlacement> Placements => (PlacementsRaw?.Rows ?? []);
     /// <summary>Gets the authored player-profile seed palette and picker tuning — ABSENT resolves to
     /// <see cref="WorldPlayerDefaults.Default"/>.</summary>
     [JsonIgnore]

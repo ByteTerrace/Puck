@@ -48,7 +48,7 @@ public static partial class WorldDefinitionValidator {
             !source.IsProducer ||
             (source.ProducerName is not { } producerName)
         ) {
-            errors.Add(item: $"population.defaultPeerSource '{source}' is not a defined IntentSource.");
+            errors.Add(item: $"bodies.defaultPeerSource '{source}' is not a defined IntentSource.");
 
             return;
         }
@@ -71,7 +71,7 @@ public static partial class WorldDefinitionValidator {
                 (kit.Producers is null) ||
                 !kit.Producers.ContainsKey(key: producerName)
             ) {
-                errors.Add(item: $"population.defaultPeerSource names producer '{producerName}', but assigned kit '{kit.Name}' declares no parameters for it.");
+                errors.Add(item: $"bodies.defaultPeerSource names producer '{producerName}', but assigned kit '{kit.Name}' declares no parameters for it.");
             }
         }
     }
@@ -177,7 +177,7 @@ public static partial class WorldDefinitionValidator {
         }
 
         // The honest XOR this site can afford: WorldHostDefaults is a CLASS, so a null Backend is distinguishable
-        // from an authored one and declaring both is refused BY NAME (population.capacityDraw's struct-typed site
+        // from an authored one and declaring both is refused BY NAME (bodies.capacityDraw's struct-typed site
         // cannot do this — see its own remarks). Declaring NEITHER stays legitimate and reads as 'auto'.
         if (
             (host.Backend is not null) &&
