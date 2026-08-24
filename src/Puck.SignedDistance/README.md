@@ -97,7 +97,7 @@ every op/shape is in the supported rigid subset — it throws naming the first
 excluded one rather than silently approximating. Excluded: `TransformDynamic`
 (no per-frame transform table in this evaluator's signature), the runtime-trig
 warps (`BendX/Y/Z`, `TwistY`, `LogSphere`, `CellJitter`, `RepeatPolar`,
-`Displace`, `DomainWarp`), `WallpaperFold`, and the shapes needing runtime
+`Displace`, `DomainWarp`, `NoiseDisplace`), `WallpaperFold`, and the shapes needing runtime
 transcendentals or texture sampling (`RegularPolygon`, `Star`, `Ellipse`,
 `Glyph`), plus `SampledRegion` (its brick pool is an engine resource unavailable
 to the headless evaluator). `RoundedRectangle`, `Repeat`/`RepeatLimited`/

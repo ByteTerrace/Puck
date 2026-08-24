@@ -50,7 +50,7 @@ root-crossing dependency was the audio director, narrowed to
   place and every derivation follows together — a mirror route (capture off)
   or a screen route never swaps it. `WorldSeatContextSync.Publish` (in
   `Puck.World`) writes it every tick off the same grant-table read that
-  publishes the `engagement` context family. `player.where` echoes it
+  publishes the `engagement` context family. `body.where` echoes it
   (`anchor=body:<n>`, 0-based) for local seats.
 - `WorldGroupAnchors.cs` — resolves each group anchor's smoothed centroid and
   spread once per frame (the establishing-shot camera's live pose;
@@ -153,7 +153,7 @@ root-crossing dependency was the audio director, narrowed to
   default ⊕ world overlays ⊕ profile bindings ⊕ live session rebinds, and the
   context-derivation state machine that picks a seat's active group. Besides
   the built-in roster/engagement/layout families and a world's own AUTHORED
-  `seatModes` families (`WorldSeatModeFamily`, flipped by `player.mode`), a
+  `seatModes` families (`WorldSeatModeFamily`, flipped by `body.mode`), a
   `state:<row>` family reads the routed world's scalar value or the
   controlled body's keyed value, allowing gameplay-rule state writes to swap
   whole control groups.
@@ -164,7 +164,7 @@ root-crossing dependency was the audio director, narrowed to
   `AddonSourceVocabulary.TryResolve`) nine root `*CommandModule` classes in
   `Puck.World` forward their own declarations to, single-sourced here since
   the binding-authoring files above cannot reference those root types.
-- `PlayerAssignmentCommand.cs` — the shared `player.assign` definition and
+- `PlayerAssignmentCommand.cs` — the shared `body.assign` definition and
   outcome narration over `PlayerRoster`; the root module registers this exact
   definition and command-level laws drive it through `CommandRegistry`.
 
@@ -187,7 +187,7 @@ root-crossing dependency was the audio director, narrowed to
 ## Verifying
 
 Client behavior is verified by running the game and looking, plus the console
-read-backs that echo client state (`world.players`, `player.bindings`,
-`screen.state`, `player.mode`). See
+read-backs that echo client state (`world.players`, `body.bindings`,
+`screen.state`, `body.mode`). See
 [`../Puck.World/README.md`](../Puck.World/README.md) for the run recipe and
 console contract.

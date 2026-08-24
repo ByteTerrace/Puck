@@ -88,6 +88,24 @@ and JSON work is confined to the boundaries (load, save, and mutation
 application), and a mutation rebuilds only the changed section's derived
 state, never the whole document's.
 
+## The field lattice (`WorldFieldLattice.cs`)
+
+The live cell values of a `state.lattices` topology, and the reactions that
+evolve them — simulation state beside the population, values `FixedQ4816`,
+every reaction integer arithmetic in a fixed cell order, so one document and
+input reproduce the same fields bit for bit. `WorldServer.StepFields` runs
+after the rules (so a tag a rule wrote this tick is what an `emit`/`expose`
+reaction reads this same step) and before the snapshot (so the step's cell
+writes ride this tick's delivery), on the topology's own `stepEveryTicks`
+cadence. A reaction scalar (literal or `{"row": "name"}`) resolves through
+`ReadScalarSlot`, the SAME `WorldStateReader.TryRead` seam every other state
+read uses — a season row a rule writes and a reaction reads can never
+disagree about the value. `expose` writes land through the ordinary
+`UpsertStateCell` mutation (`WorldPrincipal.World`, journaled, undoable), never
+a bypass. Cell values are checkpointed (`WorldFieldCheckpoint`) and delivered
+as `FieldCells` deltas on the snapshot (`FieldsFull` on a primer) — never
+document rows, so nothing journals them directly.
+
 ## Simulation authority
 
 Every entry in the entity table is a simulated player advanced on the server
@@ -139,7 +157,7 @@ vertical lane carries the scalar counterpart. Both round-trip through
 other body field.
 
 A disconnected seat or peer does not drop its body on the spot — it PARKS
-(`Entry.Parked`/`ParkedUntilTick`) for `population.reconnectGraceSeconds` (converted to ticks at compile),
+(`Entry.Parked`/`ParkedUntilTick`) for `bodies.reconnectGraceSeconds` (converted to ticks at compile),
 retained pose/state and all, before `ReclaimExpiredParks` tears it down; a
 matching re-Join resumes the retained body instead of minting a fresh one.
 The park defers the BODY only: a disconnecting peer generation's grant rows are
@@ -319,7 +337,7 @@ refused as `PayloadMalformed`. The reservation leaf carries a
 `WorldIdentityProjection` instead of the traveler's owned document.
 
 `StreamProjectionAsync` attaches its sink with the world's authored
-`population.disclosure` and no observer body index, so a narrowed policy
+`bodies.disclosure` and no observer body index, so a narrowed policy
 delivers a remote observer nothing until one of its travelers lands here.
 
 A remote-admitted body is tagged `WorldPopulation.Entry.IsRemoteHuman`
@@ -383,7 +401,7 @@ the table before acting — the intent drain, command application, mutation
 application, whole-document swaps and undo, engagement, profile edits, and
 addon dispatch — and a denial is loud and data-shaped (a named
 `[world.grant denied: …]` line; the write drops). The read-back verbs are
-`world.grants`, `world.why`, and `player.channels`.
+`world.grants`, `world.why`, and `body.channels`.
 
 Peer authority is never pre-seeded by index. Each admission or census
 reactivation bumps the slot's generation, scrubs stale-generation grants and
@@ -503,7 +521,7 @@ empty. Each half reports as one stderr line grouping file names by their shared
 reason, with the path stripped out of the reason. A quarantine destination that
 is already taken takes an ordinal suffix rather than overwriting the earlier
 copy, and the seeding pass that fills an emptied catalog from
-`playerDefaults.identities` skips any id whose catalog path is occupied by a
+`seatDefaults.identities` skips any id whose catalog path is occupied by a
 file or directory, so a document left behind keeps its bytes and a stray
 directory cannot crash startup, and `identity.create` refuses an id whose catalog
 path is occupied for the same reason. `WorldOwnedWorlds.Discarded` and
@@ -566,7 +584,7 @@ mapping injective into file-name STRINGS, which is not the same as into storage
 LOCATIONS — the local catalog directory resolves names case-insensitively, while
 the cloud object namespace is case-sensitive — so one id names one location only
 under a **case-insensitive** uniqueness rule, held at every door: the document's
-authored `playerDefaults.identities` seeds (refused by
+authored `seatDefaults.identities` seeds (refused by
 `WorldDefinitionValidator`, so a case-variant pair never reaches disk),
 `identity.create`, and adoption from a pull. The directory load holds the same
 rule from the other side: a file whose name is not the one its declared id maps

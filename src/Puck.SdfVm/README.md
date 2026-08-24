@@ -60,7 +60,11 @@ the lifetime of the engine; `UploadProgram` is the single owner of every
 per-program derived buffer and mask width, called once at construction and
 again whenever a host swaps the live program. `SdfEngineNode` is the
 `Puck.Hosting.IRenderNode` adapter a generic render tree composes — it owns
-device-loss recovery and forwards `NotifyDeviceLost` to the wrapped engine.
+device-loss recovery and forwards `NotifyDeviceLost` to the wrapped engine. It
+also records the last uploaded program's word/instance count and Lipschitz
+step scale (`LiveProgramWords`/`LiveProgramInstances`/`LiveProgramStepScale`,
+against the frozen `ProgramWordCapacity`) — the live half of `Puck.World`'s
+`world.budget` cost sheet.
 `SdfWorldRenderSpec.Decorate` is where a host wraps that node: post-render
 passes are `Puck.Shaders.FullscreenPassNode`s built from `puck.shader.v1`
 manifests shipped in this project's `Assets/Shaders/Sdf/` tree

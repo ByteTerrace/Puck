@@ -100,7 +100,7 @@ row (`SprintMultiplier`/`SprintChannel`, `MoveFrame`/`FacingSnap`), the
 frame its MoveAdvance/MoveStrafe channel rows are authored in
 (`channels[].frame`, `ChannelFrame`: `World` raw, `Camera` camera-relative and
 facing its travel, `Heading` body-relative with `Turn` steering — the stick's
-`player.move` is camera-framed by its own definition, so keyboard-in-heading
+`body.move` is camera-framed by its own definition, so keyboard-in-heading
 beside stick-in-camera is one document), and the seat rig's own `dynamics` op
 (a named `dynamics` row shaping the boom ease). The motion-model union's second arm is
 `WorldMotionModel.Vehicle` — anisotropic body-frame drive (longitudinal
@@ -256,12 +256,12 @@ from published engine state — on the `(family, state)` pair, a later layer
 overriding in place and new keys appending). The engine names no group: it
 publishes facts (`roster`, `engagement`, `layout`) and the document's `contexts` rows say which
 group each selects; a seat with no matching row resolves in the first row's
-group, and `player.bind` lands on the seat's active group's resting page.
+group, and `body.bind` lands on the seat's active group's resting page.
 The merged document compiles once per change through the binding stack in
 `Puck.Commands` (`BindingProfile.Compile` — deliberately public and shared,
 never copied here), and there is exactly one consumer of the compiled result,
 so no second authoring grammar or dispatch path exists. The live `help` text
-of `player.bind` and `player.bindings` documents the console surface.
+of `body.bind` and `body.bindings` documents the console surface.
 
 ## The HUD document
 
@@ -414,6 +414,54 @@ and an advance row it carries reads FROZEN at its stored base; folding them on
 is a design decision about what identity state means over time, not a
 consolidation.
 
+## `state.lattices` — fields folded into state
+
+A lattice is not a separate section: `state.lattices` (`WorldStateLatticeTopology`
+— name, origin, `cellSize`, `width`×`depth`×`layers`, `stepEveryTicks`,
+`reactions`) plus a `lattice` trait on ordinary `fixed`-kind `state.world` rows
+(`WorldStateLatticeTrait` — `topology`, `initial`/`min`/`max`, optional
+`heightScale`/`color`, `paint`) is the whole spelling.
+`WorldFieldsSection.Compile(state)` assembles the runtime composite
+(`WorldDefinition.Fields`, cached, never an authored member); `ToStateSection`
+is its inverse, for the projection reconstruction that must hand a client-side
+definition the same lattice through the identical state section the compile
+reads. A cell write against a lattice row (`world.state.cell.set`) refuses
+through whole-document revalidation — a lattice row's cells are simulation
+state, never authored cells.
+
+**Paint** (`WorldLatticeFill`, `$type`-discriminated) seeds a row before its
+first step: `rect` (a world-space box takes one value), `noise` (fixed-point
+hash-lattice fBm over the cell index, thresholded into smooth patches),
+`scatter` (one jittered disc per `spacing`-cell block, integer-hash offset).
+Every decision is integer-hash + `FixedQ4816` arithmetic, so a fill is
+bit-identical on every machine and backend; every fill's own `Seed` folds with
+`generation.worldSeed`, so the world's one reroll lever moves the terrain.
+
+**Reactions** (`WorldReaction`, `$type`-discriminated, applied in document
+order every `stepEveryTicks`): `diffuse` (each cell moves a fraction toward its
+face-neighbour mean), `decay` (`v -= v·rate`), `transform` (where every `when`
+condition holds at a cell, apply every `then` write — ignition, melting,
+evaporation, and freezing are rows of this shape), `emit` (every active body
+tagged nonzero in a keyed row deposits into the field cell it stands in), and
+`expose` (writes 1/0 into a keyed row per body by a field test at the body's
+cell — the bridge to body-level chemistry). A reaction scalar
+(`WorldLatticeScalar`) is a JSON number or `{"row": "name"}` naming a scalar
+`fixed`-kind state row's slot, read fresh every step — a season or
+weather-intensity row modulates chemistry live with no new reaction kind; an
+unwritten referenced row reads `0`, so a row-gated reaction is inert until
+something writes it. A row-driven `diffuse`/`decay` rate clamps to `[0, 1]`.
+
+A row with `heightScale` IS geometry: its value raises a solid column above the
+lattice origin (unioned with the authored solids for contact) that the
+renderer shows as a CPU-baked distance brick, coloured by `color`. Capacity
+(`WorldFieldCapacity`): `MaxCells` 262,144 (width × depth × layers, so a full
+eight-row primer fits the federation wire's 32 MiB frame), `MaxFields` 8,
+`MaxExtent` 1024 per axis, `MaxLayers` 128, `MaxSurfaceCells` 126 (a
+height-bearing row's XZ footprint, and the cross-layer sum where several
+layers raise), `MaxReactions` 64, `MaxTransformTerms` 64, `MaxPaint` 256. Read
+back with `world.fields`; the per-step cost (cell count × reaction count ×
+cadence) folds into `world.budget`.
+
 ## Authored randomness: SOURCE x SITE x MOMENT
 
 Everything random in a document is one primitive with three parts, and they are
@@ -443,8 +491,11 @@ other.
 
 **The SITE facet** (`WorldDraw`) declares that a value is drawn. It carries
 exactly one of `source` (naming a declared row) or `generator` (an inline
-source), plus `timing`. Three sites exist today: a `WorldStateRow.Draw`,
-`WorldPopulationDefaults.CapacityDraw`, and `WorldHostDefaults.BackendDraw`. The
+source), plus `timing`. **One site type exists: `WorldStateRow.Draw`** — the
+draw facet's single home. `bodies.capacityRow`/`host.backendRow` are plain
+strings naming a state row, not sites of their own: they READ that row's
+already-resolved slot, after row first-fills, rather than drawing anything
+directly (see "Two boot-time reads, one site rule" below). The
 CURSOR and the dealt DECKS live on the SITE (`WorldStateRow.DrawCursor`/
 `DrawDecks`), never on the source — which is exactly what lets two sites
 reference one table and draw INDEPENDENT sequences. That independence is what
@@ -483,25 +534,32 @@ every tick costs the same at cursor 1,000,000 as at cursor 0. The trade is
 honest and stated: the uniform map is uniform to within `n/2^32`, exactly zero
 when `n` divides `2^32`, rather than exactly uniform.
 
-**Two site classes, two settle rules.** A BOOT-ONLY site is a document field read
-once at composition: `WorldDrawBootResolver` (in `Puck.World`) draws it, writes
-the settled value into the ordinary literal field, CLEARS the facet, and NARRATES
-the settlement on stderr — the narration is load-bearing, because settling erases
-the only evidence the value was random. A STATE site keeps its facet and cursor,
-fills ONLY while the row carries no cell yet (an authored `value` is therefore a
-deliberate override), and resumes on reload rather than re-rolling a value the
-player already saw. `host.backendDraw` draws its backend BY NAME from a weighted
-TEXT source over the backend tokens, parsed through `WorldHostTokens.ParseBackend`
-at settle — never an unnamed ordinal, which would silently re-point itself the
-day an enum member is inserted. It is XOR-by-presence against `host.backend`
-(`WorldHostDefaults` is a class, so presence is honestly observable);
-`population.capacityDraw` cannot be, because `WorldPopulationDefaults` is a
-STRUCT and an authored `capacity: 128` is indistinguishable from the C# default —
-there the draw simply wins, a stated limitation rather than a silent guess.
+**One site type, never cleared.** Every draw site is a `WorldStateRow.Draw`
+facet — the draw facet's single home. `WorldDrawBootResolver` (in `Puck.World`)
+fills a row's slot only while it carries no cell yet (first fill: process boot,
+or a fresh `world.instance.start`), keeps the facet and cursor, and resumes on
+reload rather than re-rolling a value the player already saw; nothing settles
+into a bare literal and nothing is cleared. `bodies.capacityRow`/
+`host.backendRow` are boot-time READS layered over this, resolved AFTER every
+row's first fill so a boot-drawn row is readable the same boot it draws:
+`capacityRow` names a scalar `int` row, `backendRow` a scalar `text` row
+(parsed through `WorldHostTokens.ParseBackend`, refusing a token naming no
+backend — never an unnamed ordinal, which would silently re-point itself the
+day an enum member is inserted). Each reads the row's slot into the ordinary
+literal field (`bodies.capacity`/`host.backend`) and narrates the read on
+stderr (`[world.draw: settled bodies.capacity instance=… -> …]`), but the ROW
+stays the persisted evidence — its cursor and value survive in `world.state`,
+and every fresh load re-reads it. `host.backendRow` is XOR-by-presence against
+`host.backend` (`WorldHostDefaults` is a class, so a null `Backend` is
+honestly distinguishable from an authored one, and declaring both refuses by
+name); `bodies.capacityRow` beside a literal `capacity` is legitimate instead
+— `WorldPopulationDefaults` is a struct, so the row is simply the source of
+truth and overwrites the literal on every fresh load, nothing shadowed
+silently.
 
 **Draw domains are narrowed STATICALLY**, against the site's own admissible range
 (a state row's `min`/`max`/`nonNegative`, the census coherence sum for
-`population.capacity`, every reachable token for `host.backend`). Without that, a
+`bodies.capacity`, every reachable token for `host.backend`). Without that, a
 draw the validator admits could produce a value the SAME validator refuses on the
 resolved document — so whether the world boots would depend on what it rolled, a
 refusal moving with the world seed and the instance identity. Refusing the
@@ -630,7 +688,7 @@ colors and every `render.cycle` key's, a screen text source's
 names no declared text cell, or one whose text is not a hex color; the
 `CreationCanonicalizer` admits only the binding's syntax (a creation on its own
 has no world to resolve against — the world validator resolves it at the
-placement). Identity, profile, and `playerDefaults` neutral colors stay literal:
+placement). Identity, profile, and `seatDefaults` neutral colors stay literal:
 they persist per identity and travel between worlds. A bound color is live —
 `world.state.cell.set colors sage #C0392B` re-registers palettes and lighting on
 the delivery it composes.
@@ -726,7 +784,7 @@ this is a federation seam — unrelated to machine cable linking, which is the
 exact per-tick value settled from that seat's drained `CommandSnapshot`,
 riding the channel's own native fixed-point domain unchanged, so `1` already
 means "fully pressed/1.0" with no rescale; 0 for a seat outside
-`population.localSeats` or one no local seat currently occupies) —
+`bodies.localSeats` or one no local seat currently occupies) —
 folding time, population, occupancy, machine memory, aggregates,
 reconnect-park state, federation liveness, and a local seat's own channel
 value into the string channel `State` already carries rather than a fact enum
@@ -883,7 +941,7 @@ plain `Attested` outcome, which proves an ordinary two-document adjacency only.
 
 `WorldIdentityProjection` (`WorldIdentity.cs`) is what an identity discloses
 when it walks into another authority: id, name, colour, and the two motion
-rates. `WorldObserverDisclosure` (`population.disclosure`) is the per-observer
+rates. `WorldObserverDisclosure` (`bodies.disclosure`) is the per-observer
 snapshot policy — the record lives here (document data); the evaluation over a
 live `EntitySnapshot` (`WorldObserverDisclosureEvaluation.Discloses`) lives in
 `Puck.World.Protocol`, since it operates on the wire snapshot shape.
