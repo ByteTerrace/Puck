@@ -54,6 +54,7 @@
         <Project Path="tests/Puck.Assets.Tests/Puck.Assets.Tests.csproj" />
         <Project Path="tests/Puck.Attestation.Tests/Puck.Attestation.Tests.csproj" />
         <Project Path="tests/Puck.Audio.Tests/Puck.Audio.Tests.csproj" />
+        <Project Path="tests/Puck.Cli.Tests/Puck.Cli.Tests.csproj" />
         <Project Path="tests/Puck.Commands.Tests/Puck.Commands.Tests.csproj" />
         <Project Path="tests/Puck.GamingBricks.Tests/Puck.GamingBricks.Tests.csproj" />
         <Project Path="tests/Puck.Hosting.Tests/Puck.Hosting.Tests.csproj" />
