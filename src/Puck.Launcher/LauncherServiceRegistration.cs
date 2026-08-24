@@ -342,6 +342,21 @@ public static class LauncherServiceRegistration {
 
         return services;
     }
+    /// <summary>The offscreen twin of <see cref="AddLauncherTerminal"/>: the SAME command pump and terminal baton, but
+    /// <see cref="OffscreenTickHostedService"/> paces the fixed step AND produces one composed frame per iteration —
+    /// no <see cref="Puck.Abstractions.Presentation.ISurfacePresenter"/>, no platform windowing registered here. The
+    /// composition root supplies the GPU backend, the root <see cref="IRenderNode"/>, and an
+    /// <see cref="OffscreenRenderOptions"/> registration; it calls this INSTEAD OF <see cref="AddLauncherTerminal"/>
+    /// or <see cref="AddLauncherHeadlessTerminal"/> (never more than one) when its boot shape composes a GPU device
+    /// with no window.</summary>
+    /// <param name="services">The service collection.</param>
+    public static IServiceCollection AddLauncherOffscreenTerminal(this IServiceCollection services) {
+        AddLauncherTerminalShared(services: services);
+        services.AddHostedService<OffscreenTickHostedService>();
+        AddStandardInputReader(services: services);
+
+        return services;
+    }
     /// <summary>The backend-neutral terminal: the terminal-control <em>baton</em>, the command pump, and the window
     /// run loop. It carries no graphics backend AND no platform windowing — the run loop drives an
     /// <see cref="ISurfacePresenter"/>, whichever root <see cref="IRenderNode"/> the developer registers, and the

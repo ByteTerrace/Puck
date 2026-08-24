@@ -52,8 +52,12 @@ internal sealed record WorldHostSettings(
     string? Listen
 ) {
     /// <summary>Whether this boot composes the authoritative core alone — no window, no GPU device, no swapchain, no
-    /// audio device. The single predicate <c>Program.cs</c> branches boot-shape registration on.</summary>
+    /// audio device. One of the three predicates <c>Program.cs</c> branches boot-shape registration on.</summary>
     public bool Headless => (Presentation == WorldHostPresentation.None);
+    /// <summary>Whether this boot composes the authoritative core plus a GPU device and the composed-frame render
+    /// pipeline with no window and no swapchain. One of the three predicates <c>Program.cs</c> branches boot-shape
+    /// registration on.</summary>
+    public bool Offscreen => (Presentation == WorldHostPresentation.Offscreen);
     /// <summary>The launcher present target: the boot Hz, or <see langword="null"/> for automatic display pacing (the
     /// <c>0</c>-means-automatic convention <see cref="Puck.Launcher.PresentPacingControl"/> uses).</summary>
     public double? TargetRenderRate => ((TargetHertz > 0.0)

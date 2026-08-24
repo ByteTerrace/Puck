@@ -309,6 +309,16 @@ if (hostSettings.Headless) {
         services.AddWindowsPrecisionWaiter();
     }
     services.AddFixedStepSimulation<HeadlessWorldSimulation>(bindings: seatBindings);
+} else if (hostSettings.Offscreen) {
+    // A real GPU device and the composed-frame render pipeline, with NO window and NO swap chain — see
+    // WorldBootComposition.AddWorldOffscreenPresentation. The server steps exactly like the headless shape
+    // (HeadlessWorldSimulation); OffscreenTickHostedService additionally produces one composed frame per iteration.
+    services.AddLauncherOffscreenTerminal();
+    if (OperatingSystem.IsWindows()) {
+        services.AddWindowsPrecisionWaiter();
+    }
+    services.AddWorldOffscreenPresentation(hostsOnDirectX: hostsOnDirectX);
+    services.AddFixedStepSimulation<HeadlessWorldSimulation>(bindings: seatBindings);
 } else {
     // The recording graph (puck.recording.v1) — native capture for streaming/upload workflows, defined as data.
     // PRESENTATION-ONLY (AddWorldPresentation registers the encoder ladder/capture controller/verb module), but the

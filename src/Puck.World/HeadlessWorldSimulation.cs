@@ -1,5 +1,6 @@
 using Puck.Commands;
 using Puck.Hosting;
+using Puck.World.Client;
 using Puck.World.Server;
 
 namespace Puck.World;
@@ -9,9 +10,11 @@ namespace Puck.World;
 /// the same seat/authority input lifecycle as the presented host, but without screens or the editor session. It shares
 /// <see cref="WorldServerStepShell"/> with the windowed <see cref="WorldSimulation"/> so tape/wait-gate semantics can
 /// never fork by boot shape — the same server-side step, driven by the same
-/// <c>Puck.Launcher.FixedStepPump</c> (snapshot → apply → step, in that exact order) either shape uses.
+/// <c>Puck.Launcher.FixedStepPump</c> (snapshot → apply → step, in that exact order) either shape uses. Also serves as
+/// the offscreen shape's (<c>host.presentation: offscreen</c>) <see cref="IWorldSimulationClock"/> — offscreen steps
+/// the server exactly like <c>none</c> and drives the frame producer separately, off the same fixed-step pump.
 /// </summary>
-internal sealed class HeadlessWorldSimulation(WorldServer server, WorldReplayTape replayTape, WorldConsoleWaitGate waitGate, WorldTcpHost tcpHost, WorldInstanceHost instances) : IFixedStepSimulation {
+internal sealed class HeadlessWorldSimulation(WorldServer server, WorldReplayTape replayTape, WorldConsoleWaitGate waitGate, WorldTcpHost tcpHost, WorldInstanceHost instances) : IFixedStepSimulation, IWorldSimulationClock {
     private readonly WorldServer m_server = server;
     private readonly WorldReplayTape m_replayTape = replayTape;
     private readonly WorldConsoleWaitGate m_waitGate = waitGate;

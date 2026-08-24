@@ -144,10 +144,12 @@ public sealed record WorldSimulationDefaults(
 );
 /// <summary>
 /// How the world boots its presentation shell — the closed vocabulary <see cref="WorldHostDefaults.Presentation"/> and
-/// the <c>--headless</c> CLI reflection resolve to (see <c>Puck.World.WorldHostSettings.Headless</c>). Deciding this
-/// before any other registration is the boot-shape split's own precondition: <see cref="None"/> composes
-/// <c>AddWorldAuthoritativeCore</c> alone (no GPU device, no swapchain, no window), <see cref="Windowed"/> composes it
-/// plus <c>AddWorldPresentation</c>.
+/// the <c>--headless</c> CLI reflection resolve to (see <c>Puck.World.WorldHostSettings.Headless</c>/<c>.Offscreen</c>).
+/// Deciding this before any other registration is the boot-shape split's own precondition: <see cref="None"/> composes
+/// <c>AddWorldAuthoritativeCore</c> alone (no GPU device, no swapchain, no window), <see cref="Offscreen"/> composes it
+/// plus a real GPU device and the composed-frame render pipeline with NO window and NO swapchain (so
+/// <c>world.screenshot</c> works), and <see cref="Windowed"/> composes it plus <c>AddWorldPresentation</c> (a native
+/// window and swapchain).
 /// </summary>
 [JsonConverter(typeof(StrictEnumConverter<WorldHostPresentation>))]
 public enum WorldHostPresentation : byte {
@@ -159,6 +161,15 @@ public enum WorldHostPresentation : byte {
     /// <c>.screenshot</c>, <c>screen.*</c>, audio, editor) refuses as unknown — the honest reflection of the composed
     /// set, not a special-cased denial.</summary>
     None,
+
+    /// <summary>Boot the authoritative server plus a real GPU device and the composed-frame render pipeline (the
+    /// world render — no unified overlay/console-mirror/binding-bar, no audio device, no gamepad/pointer input), with
+    /// NO window and NO swapchain ever created: <c>world.screenshot</c> writes real PNGs of the composed world, and
+    /// every other presentation-only console verb (audio, HUD levers, recording, gamepads) still refuses as unknown.
+    /// See <c>Puck.World.WorldBootComposition.AddWorldOffscreenPresentation</c> for the exact composition and the
+    /// per-backend device bring-up (Direct3D 12 is genuinely surfaceless; Vulkan uses a never-shown native window
+    /// solely to obtain the device — see its remarks for why).</summary>
+    Offscreen,
 }
 /// <summary>
 /// The world's host defaults — how the world asks to be presented, independent of what it contains. presentation-only

@@ -101,6 +101,32 @@ honest failure rather than refusing as unknown.
 `WorldBootComposition.cs` is the split: `AddWorldAuthoritativeCore` registers
 in EVERY shape, `AddWorldPresentation` only when a window is composed.
 
+**Offscreen.** The document's `host.presentation: offscreen` boots a real GPU
+device and the composed-frame render pipeline (the world render alone — no
+unified overlay/console-mirror/binding-bar, no audio device, no gamepad or
+pointer input) with NO window and NO swap chain ever created, so
+`world.screenshot` writes real PNGs of the composed world with nothing on
+screen. There is no `--offscreen` CLI flag; author it in the world document:
+
+```json
+"host": { "presentation": "offscreen", "width": 640, "height": 480 }
+```
+
+Direct3D 12 is genuinely surfaceless (the device activates on its first GPU
+call, exactly like `Puck.Post`'s retired `PostDirectXDevice` — see
+`experimental/Puck.Post/PostDirectXDevice.cs`); Vulkan's device bring-up in
+this codebase is fused to a real native surface, so this shape stands up a
+native window through the SAME path the windowed shape uses but never shows
+it and never builds a swap chain against it — see
+`WorldOffscreenGpuActivation`'s remarks for the exact obstacle. Diegetic
+View-type screens (the jumbotron pool the windowed render-root factory stands
+up via `WorldScreenBinder.ConfigureViews`) are a known gap this shape does not
+compose. `WorldBootComposition.AddWorldOffscreenPresentation` and
+`Puck.Launcher.OffscreenTickHostedService` (which produces one composed frame
+per host-loop iteration, paced by the fixed-step pump rather than vsync) are
+the seams; the server steps exactly like `host.presentation: none`
+(`HeadlessWorldSimulation`).
+
 ## Seat controls and camera authoring
 
 Nexus seats use standard third-person action semantics: left stick moves in the
