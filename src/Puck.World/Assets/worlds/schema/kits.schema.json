@@ -616,13 +616,13 @@
                   "$type": {
                     "const": "fromCreation"
                   },
-                  "creationId": {
+                  "prototypeId": {
                     "description": "The referenced Id.",
                     "type": "string"
                   }
                 },
                 "required": [
-                  "creationId"
+                  "prototypeId"
                 ],
                 "additionalProperties": false
               }

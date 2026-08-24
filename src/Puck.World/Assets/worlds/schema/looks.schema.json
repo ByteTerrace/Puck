@@ -29,7 +29,7 @@
             ],
             "anyOf": [
               {
-                "description": "The procedural humanoid catalog (WorldAvatarCatalog) \u2014 one look source among others.",
+                "description": "The procedural humanoid catalog (WorldRigCatalog) \u2014 one look source among others.",
                 "properties": {
                   "$type": {
                     "const": "catalog"
@@ -48,7 +48,7 @@
                 "additionalProperties": false
               },
               {
-                "description": "A sculpted creation worn by the body \u2014 resolved against the world\u0027s WorldCreation rows.",
+                "description": "A sculpted creation worn by the body \u2014 resolved against the world\u0027s WorldPrototype rows.",
                 "properties": {
                   "$type": {
                     "const": "creation"
