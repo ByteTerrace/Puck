@@ -2308,6 +2308,64 @@
                         "weight"
                       ],
                       "additionalProperties": false
+                    },
+                    {
+                      "description": "Evaluates exactly one of several other named programs, chosen by a live key \u2014 the state-driven counterpart of Blend\u0027s two-way continuous mix: a rule-advanced integer row selects a whole framing outright rather than easing toward one, so a document can drive which of N stations a single camera program shows without a per-frame console override. The winning program\u0027s eye, target, field of view, and dynamics response pass through unchanged (no lerp). At most one per program; refused when it would create a reference cycle.",
+                      "properties": {
+                        "$type": {
+                          "const": "select"
+                        },
+                        "key": {
+                          "description": "The selecting value \u2014 a literal, or (the intended use) a state.\u003Crow\u003E[.\u003Ckey\u003E] binding \u2014 rounded to the nearest whole number and matched against Cases.",
+                          "type": [
+                            "number",
+                            "string"
+                          ]
+                        },
+                        "cases": {
+                          "description": "The candidate programs, keyed by Value. At most one case per value.",
+                          "type": "array",
+                          "items": {
+                            "description": "One Select candidate: the program named by Program wins when the op\u0027s key rounds to Value.",
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "properties": {
+                              "value": {
+                                "description": "The matching key value.",
+                                "type": "integer"
+                              },
+                              "program": {
+                                "description": "The candidate program\u0027s name \u2014 the same blend namespace Blend resolves against (every cameras[].rig, plus views.seatRig/views.cameraRig).",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "program"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "default": {
+                          "description": "The program resolved when no case\u0027s value matches Key.",
+                          "type": "string"
+                        },
+                        "opcode": {
+                          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "cases",
+                        "default"
+                      ],
+                      "additionalProperties": false
                     }
                   ]
                 }
@@ -2563,6 +2621,42 @@
                 },
                 "required": [
                   "row"
+                ],
+                "additionalProperties": false
+              },
+              "selectOp": {
+                "description": "Gets the program\u0027s Select op, or null.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "key": {
+                    "description": "The selecting value \u2014 a literal, or (the intended use) a state.\u003Crow\u003E[.\u003Ckey\u003E] binding \u2014 rounded to the nearest whole number and matched against Cases.",
+                    "type": [
+                      "number",
+                      "string"
+                    ]
+                  },
+                  "cases": {
+                    "$ref": "#/properties/cameras/items/properties/rig/properties/operations/items/anyOf/8/properties/cases"
+                  },
+                  "default": {
+                    "description": "The program resolved when no case\u0027s value matches Key.",
+                    "type": "string"
+                  },
+                  "opcode": {
+                    "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "key",
+                  "cases",
+                  "default"
                 ],
                 "additionalProperties": false
               }
@@ -7792,6 +7886,9 @@
             },
             "dynamicsOp": {
               "$ref": "#/properties/cameras/items/properties/rig/properties/dynamicsOp"
+            },
+            "selectOp": {
+              "$ref": "#/properties/cameras/items/properties/rig/properties/selectOp"
             }
           },
           "required": [
@@ -7892,6 +7989,9 @@
             },
             "dynamicsOp": {
               "$ref": "#/properties/cameras/items/properties/rig/properties/dynamicsOp"
+            },
+            "selectOp": {
+              "$ref": "#/properties/cameras/items/properties/rig/properties/selectOp"
             }
           },
           "required": [

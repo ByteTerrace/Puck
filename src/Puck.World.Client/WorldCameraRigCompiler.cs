@@ -261,6 +261,44 @@ public static class WorldCameraRigCompiler {
                         }
 
                         break;
+                    case WorldCameraProgramOp.Select selectOp:
+                        // Same conservative rule as Blend: a document a live mutation left mid-transition can only
+                        // transiently miss a resolved name (the validator refuses one dangling at author time), and
+                        // dropping the whole op there beats resolving into a pose nothing authored.
+                        if (ResolveProgram(name: selectOp.Default) is not { } defaultProgram) {
+                            break;
+                        }
+
+                        var cases = new List<SdfCameraSelectCase>(capacity: selectOp.Cases.Count);
+                        var everyCaseResolved = true;
+
+                        foreach (var candidate in selectOp.Cases) {
+                            if (ResolveProgram(name: candidate.Program) is not { } caseProgram) {
+                                everyCaseResolved = false;
+
+                                break;
+                            }
+
+                            cases.Add(item: new SdfCameraSelectCase(
+                                Program: Translate(program: caseProgram),
+                                Value: candidate.Value
+                            ));
+                        }
+
+                        if (!everyCaseResolved) {
+                            break;
+                        }
+
+                        operations.Add(item: new SdfCameraOp.Select(
+                            Cases: cases,
+                            DefaultProgram: Translate(program: defaultProgram),
+                            Key: Scalar(
+                                fallback: 0f,
+                                scalar: selectOp.Key
+                            )
+                        ));
+
+                        break;
                 }
             }
 

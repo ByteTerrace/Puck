@@ -13,7 +13,7 @@ namespace Puck.World;
 /// protocol traffic → every body, INCLUDING every booted screen machine (<c>Server.WorldMachineHost.Advance</c>)
 /// → the tick's snapshot, delivered to the client synchronously), then
 /// the client-side post-step (the per-tick analog clear).</summary>
-internal sealed class WorldSimulation(WorldServer server, WorldClient client, WorldAddonRuntime addons, WorldSeatBindings seatBindings, WorldSeatAuthorityRouter seatRouter, WorldReplayTape replayTape, WorldConsoleWaitGate waitGate, WorldTcpHost tcpHost, WorldPerceptionAnchor anchor, WorldInstanceHost instances, WorldViewComposer composer) : IFixedStepSimulation, IWorldSimulationClock {
+internal sealed class WorldSimulation(WorldServer server, WorldClient client, WorldAddonRuntime addons, WorldSeatBindings seatBindings, WorldSeatAuthorityRouter seatRouter, WorldReplayTape replayTape, WorldConsoleWaitGate waitGate, WorldCaptureScheduler captureScheduler, WorldTcpHost tcpHost, WorldPerceptionAnchor anchor, WorldInstanceHost instances, WorldViewComposer composer) : IFixedStepSimulation, IWorldSimulationClock {
     private const ulong TimingReportInterval = 60UL;
 
     private ulong m_timingSamples;
@@ -25,6 +25,7 @@ internal sealed class WorldSimulation(WorldServer server, WorldClient client, Wo
     private readonly WorldSeatAuthorityRouter m_seatRouter = seatRouter;
     private readonly WorldReplayTape m_replayTape = replayTape;
     private readonly WorldConsoleWaitGate m_waitGate = waitGate;
+    private readonly WorldCaptureScheduler m_captureScheduler = captureScheduler;
     private readonly WorldTcpHost m_tcpHost = tcpHost;
     private readonly WorldPerceptionAnchor m_anchor = anchor;
     private readonly WorldInstanceHost m_instances = instances;
@@ -151,7 +152,7 @@ internal sealed class WorldSimulation(WorldServer server, WorldClient client, Wo
 
             stepTick = WorldServerStepShell.Step(
                 context: in bootContext,
-                publishTick: m_waitGate.PublishTick,
+                publishTick: (((Action<ulong>)m_waitGate.PublishTick) + m_captureScheduler.PublishTick),
                 server: m_server,
                 tape: m_replayTape,
                 tcpHost: m_tcpHost

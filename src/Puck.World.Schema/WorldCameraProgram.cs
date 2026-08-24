@@ -50,6 +50,7 @@ public abstract record WorldCameraSubject {
 [System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraProgramOp.ClampPitch), typeDiscriminator: "clampPitch")]
 [System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraProgramOp.Fov), typeDiscriminator: "fov")]
 [System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraProgramOp.Blend), typeDiscriminator: "blend")]
+[System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraProgramOp.Select), typeDiscriminator: "select")]
 [System.Text.Json.Serialization.JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record WorldCameraProgramOp {
     private WorldCameraProgramOp() {
@@ -66,6 +67,7 @@ public abstract record WorldCameraProgramOp {
         LookAt => "lookAt",
         Offset => "offset",
         Orbit => "orbit",
+        Select => "select",
         _ => "unknown",
     });
 
@@ -127,7 +129,26 @@ public abstract record WorldCameraProgramOp {
     /// <param name="B">The program resolved at <paramref name="Weight"/> 1.</param>
     /// <param name="Weight">The blend weight in <c>[0, 1]</c> — a literal, or a state binding.</param>
     public sealed record Blend(string A, string B, BindableScalar Weight) : WorldCameraProgramOp;
+    /// <summary>Evaluates exactly one of several other named programs, chosen by a live key — the state-driven
+    /// counterpart of <see cref="Blend"/>'s two-way continuous mix: a rule-advanced integer row selects a whole
+    /// framing outright rather than easing toward one, so a document can drive which of N stations a single camera
+    /// program shows without a per-frame console override. The winning program's eye, target, field of view, and
+    /// dynamics response pass through unchanged (no lerp). At most one per program; refused when it would create a
+    /// reference cycle.</summary>
+    /// <param name="Key">The selecting value — a literal, or (the intended use) a
+    /// <c>state.&lt;row&gt;[.&lt;key&gt;]</c> binding — rounded to the nearest whole number and matched against
+    /// <paramref name="Cases"/>.</param>
+    /// <param name="Cases">The candidate programs, keyed by <see cref="WorldCameraSelectCase.Value"/>. At most one
+    /// case per value.</param>
+    /// <param name="Default">The program resolved when no case's value matches <paramref name="Key"/>.</param>
+    public sealed record Select(BindableScalar Key, IReadOnlyList<WorldCameraSelectCase> Cases, string Default) : WorldCameraProgramOp;
 }
+/// <summary>One <see cref="WorldCameraProgramOp.Select"/> candidate: the program named by <see cref="Program"/> wins
+/// when the op's key rounds to <see cref="Value"/>.</summary>
+/// <param name="Value">The matching key value.</param>
+/// <param name="Program">The candidate program's name — the same blend namespace <see cref="WorldCameraProgramOp.Blend"/>
+/// resolves against (every <c>cameras[].rig</c>, plus <c>views.seatRig</c>/<c>views.cameraRig</c>).</param>
+public sealed record WorldCameraSelectCase(long Value, string Program);
 /// <summary>An authored camera program — the ordered op list a rig resolves through every frame.</summary>
 /// <param name="Name">The stable name a <see cref="WorldCameraProgramOp.Blend"/> op selects this program by.</param>
 /// <param name="Version">The instruction-set version.</param>
@@ -155,6 +176,8 @@ public sealed record WorldCameraProgram(string Name, string Version, IReadOnlyLi
     public WorldCameraProgramOp.Orbit? OrbitOp => FirstOrDefault<WorldCameraProgramOp.Orbit>();
     /// <summary>Gets the program's <see cref="WorldCameraProgramOp.Dynamics"/> op, or <see langword="null"/>.</summary>
     public WorldCameraProgramOp.Dynamics? DynamicsOp => FirstOrDefault<WorldCameraProgramOp.Dynamics>();
+    /// <summary>Gets the program's <see cref="WorldCameraProgramOp.Select"/> op, or <see langword="null"/>.</summary>
+    public WorldCameraProgramOp.Select? SelectOp => FirstOrDefault<WorldCameraProgramOp.Select>();
 
     private TOp? FirstOrDefault<TOp>() where TOp : WorldCameraProgramOp {
         var operations = Operations;

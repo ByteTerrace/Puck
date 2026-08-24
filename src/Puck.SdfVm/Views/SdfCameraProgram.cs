@@ -121,7 +121,20 @@ public abstract record SdfCameraOp {
     /// <param name="ProgramB">The set index resolved at <paramref name="Weight"/> 1.</param>
     /// <param name="Weight">The blend weight, clamped to <c>[0, 1]</c>.</param>
     public sealed record Blend(int ProgramA, int ProgramB, SdfCameraScalar Weight) : SdfCameraOp;
+    /// <summary>Evaluates exactly one of several other programs of the same <see cref="SdfCameraProgramSet"/>, chosen
+    /// by rounding <paramref name="Key"/> to the nearest whole number and matching it against
+    /// <paramref name="Cases"/> — the discrete counterpart of <see cref="Blend"/>: the winning program's resolved
+    /// pose passes through unchanged, no lerp.</summary>
+    /// <param name="Key">The selecting value.</param>
+    /// <param name="Cases">The candidate set index per matching key value, in authored order — the first match
+    /// wins.</param>
+    /// <param name="DefaultProgram">The set index resolved when no case matches.</param>
+    public sealed record Select(SdfCameraScalar Key, IReadOnlyList<SdfCameraSelectCase> Cases, int DefaultProgram) : SdfCameraOp;
 }
+/// <summary>One <see cref="SdfCameraOp.Select"/> candidate.</summary>
+/// <param name="Value">The matching key value.</param>
+/// <param name="Program">The candidate's set index.</param>
+public readonly record struct SdfCameraSelectCase(long Value, int Program);
 /// <summary>One compiled camera program — the ordered op list a rig resolves through every frame.</summary>
 /// <param name="Name">The program's name, carried for diagnostics only (a <see cref="SdfCameraOp.Blend"/> selects by
 /// INDEX — name resolution belongs to whatever authoring vocabulary compiled this set).</param>
@@ -406,6 +419,38 @@ public static class SdfCameraProgramEvaluator {
                         value1: resolvedA.Target,
                         value2: resolvedB.Target
                     );
+                    haveTarget = true;
+
+                    break;
+                case SdfCameraOp.Select select:
+                    if (depth >= SdfCameraProgramSet.MaxBlendDepth) {
+                        break;
+                    }
+
+                    var key = ((long)MathF.Round(x: select.Key.Resolve(scalars: scalars)));
+                    var chosen = select.DefaultProgram;
+                    var cases = select.Cases;
+
+                    for (var caseIndex = 0; (caseIndex < cases.Count); caseIndex++) {
+                        if (cases[caseIndex].Value == key) {
+                            chosen = cases[caseIndex].Program;
+
+                            break;
+                        }
+                    }
+
+                    var resolvedSelect = Evaluate(
+                        depth: (depth + 1),
+                        frame: in frame,
+                        programIndex: chosen,
+                        programs: programs,
+                        reference: in reference
+                    );
+
+                    eye = resolvedSelect.Eye;
+                    target = resolvedSelect.Target;
+                    fov = resolvedSelect.FovRadians;
+                    dynamics = resolvedSelect.Dynamics;
                     haveTarget = true;
 
                     break;

@@ -395,6 +395,18 @@ internal static class WorldBootComposition {
         services.AddSingleton<ITextCommandHoldGate>(implementationFactory: static sp => sp.GetRequiredService<WorldConsoleWaitGate>());
         services.AddSingleton<IWorldWaitGateResolver, WorldSingleWaitGateResolver>();
         services.AddSingleton<ICommandModule, WorldWaitCommandModule>();
+
+        // The captures section's tick-scheduled arm, wired beside the wait gate at the SAME publishTick call site
+        // (HeadlessWorldSimulation/WorldSimulation compose the two delegates together). CORE — a headless boot still
+        // schedules and hashes/manifests every capture; it simply has no renderer to arm, narrated by name rather
+        // than a crash.
+        services.AddSingleton(implementationFactory: static sp => new WorldCaptureScheduler(
+            definitionSource: sp.GetRequiredService<WorldDefinitionSource>(),
+            hostSettings: sp.GetRequiredService<WorldHostSettings>(),
+            renderProbe: sp.GetService<WorldRenderProbe>(),
+            server: sp.GetRequiredService<WorldServer>()
+        ));
+        services.AddSingleton<ICommandModule, WorldCaptureCommandModule>();
         // Launcher owns the one TextCommandSource and its stdout/stderr + operator-tape result fan-out. World
         // contributes only this wait gate; AddLauncherTerminalShared composes every contributed gate into that
         // source, so adding world.wait cannot sever the launcher's administrative mirror or deferred observers.

@@ -176,6 +176,9 @@
     "probes": {
       "$ref": "./schema/probes.schema.json"
     },
+    "captures": {
+      "$ref": "./schema/captures.schema.json"
+    },
     "basis": {
       "$ref": "./schema/basis.schema.json"
     },

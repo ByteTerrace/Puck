@@ -108,6 +108,10 @@
         "dynamicsOp": {
           "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpDynamicsNullable",
           "description": "Gets the program\u0027s Dynamics op, or null."
+        },
+        "selectOp": {
+          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpSelectNullable",
+          "description": "Gets the program\u0027s Select op, or null."
         }
       },
       "required": [
