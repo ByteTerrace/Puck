@@ -87,3 +87,4 @@ forged-avatars/
 # (plan §8). Machine-specific measurements, never a committed artifact.
 bench-reports/
 Web.Functions/
+.tmp
