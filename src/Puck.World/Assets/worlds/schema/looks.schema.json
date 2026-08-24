@@ -1,159 +1,175 @@
 {
   "type": [
-    "array",
+    "object",
     "null"
   ],
-  "items": {
-    "description": "One look row \u2014 the appearance peer of WorldKit\u0027s way of moving. Every appearance a world offers is a row of this data, never a renderer branch; world.looks prints these names.",
-    "type": [
-      "object",
-      "null"
-    ],
-    "properties": {
-      "name": {
-        "description": "The look\u0027s stable kebab-case name, authored literally or through a Text state cell; it is unique within the definition and assignable by the look table.",
-        "type": "string"
-      },
-      "source": {
-        "description": "Where the appearance resolves from (a catalog rig or a creation).",
-        "type": "object",
-        "required": [
-          "$type"
+  "properties": {
+    "rows": {
+      "description": "The declared looks, in order.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "One look row \u2014 the appearance peer of WorldKit\u0027s way of moving. Every appearance a world offers is a row of this data, never a renderer branch; world.looks prints these names.",
+        "type": [
+          "object",
+          "null"
         ],
-        "anyOf": [
-          {
-            "description": "The procedural humanoid catalog (WorldAvatarCatalog) \u2014 one look source among others.",
-            "properties": {
-              "$type": {
-                "const": "catalog"
-              },
-              "index": {
-                "description": "The procedural renderer catalog rig to pin, or null for the occupant-owned pick. A fresh occupant seeds that pick from its first local slot and carries it across authority transfers, so ordinary admission does not restyle it.",
-                "type": [
-                  "integer",
-                  "null"
-                ]
-              }
-            },
-            "required": [
-              "index"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "description": "A sculpted creation worn by the body \u2014 resolved against the world\u0027s WorldCreation rows.",
-            "properties": {
-              "$type": {
-                "const": "creation"
-              },
-              "creationId": {
-                "description": "The referenced Id, authored literally or through a Text state cell; it must resolve at validation.",
-                "type": "string"
-              }
-            },
-            "required": [
-              "creationId"
-            ],
-            "additionalProperties": false
-          }
-        ]
-      },
-      "scale": {
-        "description": "The uniform render scale. Appearance only \u2014 it does not resize the body\u0027s motion tuning or its collision volume.",
-        "type": "number"
-      },
-      "motion": {
-        "description": "How the look animates with the body (see WorldLookMotion).",
-        "type": "object",
         "properties": {
-          "gaitAmplitude": {
-            "description": "The catalog rig\u0027s limb-swing scale (1 = the pre-look default; 0 stills the gait).",
-            "type": "number"
+          "name": {
+            "description": "The look\u0027s stable kebab-case name, authored literally or through a Text state cell; it is unique within the definition and assignable by the look table.",
+            "type": "string"
           },
-          "replayFrames": {
-            "description": "Whether a creation look replays its authored timeline on the render clock.",
-            "type": "boolean"
-          },
-          "secondsPerFrame": {
-            "description": "The creation timeline cadence when ReplayFrames is set.",
-            "type": "number"
-          },
-          "cues": {
-            "description": "The creation look\u0027s cues (see WorldLookCue); a firing cue\u0027s frame overrides the replay cursor for its hold.",
-            "type": [
-              "array",
-              "null"
+          "source": {
+            "description": "Where the appearance resolves from (a catalog rig or a creation).",
+            "type": "object",
+            "required": [
+              "$type"
             ],
-            "items": {
-              "description": "One cue of a creation look: a named timeline frame the body holds for HoldSeconds when the cue fires \u2014 a blink, a twitch, a tail flick. A cue fires by itself on a semi-random interval drawn uniformly from MinSeconds..MaxSeconds (a deterministic presentation draw seeded by the body, never simulation state), and fires on demand through the stamp pool\u0027s TriggerCue door, which is how a face probe reading the player\u0027s own camera blinks the avatar in sync; a triggered cue re-arms the interval, so a driven cue never double-fires with the self schedule. Both interval bounds absent is a cue that fires only on demand.",
-              "type": [
-                "object",
-                "null"
-              ],
-              "properties": {
-                "frame": {
-                  "description": "The creation timeline frame\u0027s name.",
-                  "type": "string"
+            "anyOf": [
+              {
+                "description": "The procedural humanoid catalog (WorldAvatarCatalog) \u2014 one look source among others.",
+                "properties": {
+                  "$type": {
+                    "const": "catalog"
+                  },
+                  "index": {
+                    "description": "The procedural renderer catalog rig to pin, or null for the occupant-owned pick. A fresh occupant seeds that pick from its first local slot and carries it across authority transfers, so ordinary admission does not restyle it.",
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  }
                 },
-                "holdSeconds": {
-                  "description": "How long the frame holds, seconds.",
-                  "type": "number"
-                },
-                "minSeconds": {
-                  "description": "The shortest rest between self-fires, seconds, or null with MaxSeconds for a cue that never self-fires.",
-                  "type": [
-                    "number",
-                    "null"
-                  ],
-                  "default": null
-                },
-                "maxSeconds": {
-                  "description": "The longest rest between self-fires, seconds.",
-                  "type": [
-                    "number",
-                    "null"
-                  ],
-                  "default": null
-                }
+                "required": [
+                  "index"
+                ],
+                "additionalProperties": false
               },
-              "required": [
-                "frame",
-                "holdSeconds"
-              ],
-              "additionalProperties": false
-            }
-          },
-          "dynamics": {
-            "description": "The dynamics row a second-order follower drives the stamped ROOT through \u2014 the client\u0027s interpolated body pose is the target, the follower\u0027s output is what renders. null (the default) is today\u0027s behavior: the root follows the interpolated pose exactly, no lag.",
-            "type": [
-              "string",
-              "null"
+              {
+                "description": "A sculpted creation worn by the body \u2014 resolved against the world\u0027s WorldCreation rows.",
+                "properties": {
+                  "$type": {
+                    "const": "creation"
+                  },
+                  "prototypeId": {
+                    "description": "The referenced Id, authored literally or through a Text state cell; it must resolve at validation.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "prototypeId"
+                ],
+                "additionalProperties": false
+              }
             ]
           },
-          "partDynamics": {
-            "description": "A creation part id to dynamics row map \u2014 each named part follows the root\u0027s own resolved transform with its own personality, layered ON TOP of Dynamics. Legitimate only on a creation source (a catalog rig exports no parts); each key must name a part the creation\u0027s own part table declares.",
-            "type": [
-              "object",
-              "null"
-            ],
-            "additionalProperties": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
+          "scale": {
+            "description": "The uniform render scale. Appearance only \u2014 it does not resize the body\u0027s motion tuning or its collision volume.",
+            "type": "number"
+          },
+          "motion": {
+            "description": "How the look animates with the body (see WorldLookMotion).",
+            "type": "object",
+            "properties": {
+              "gaitAmplitude": {
+                "description": "The catalog rig\u0027s limb-swing scale (1 = the pre-look default; 0 stills the gait).",
+                "type": "number"
+              },
+              "replayFrames": {
+                "description": "Whether a creation look replays its authored timeline on the render clock.",
+                "type": "boolean"
+              },
+              "secondsPerFrame": {
+                "description": "The creation timeline cadence when ReplayFrames is set.",
+                "type": "number"
+              },
+              "cues": {
+                "description": "The creation look\u0027s cues (see WorldLookCue); a firing cue\u0027s frame overrides the replay cursor for its hold.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "description": "One cue of a creation look: a named timeline frame the body holds for HoldSeconds when the cue fires \u2014 a blink, a twitch, a tail flick. A cue fires by itself on a semi-random interval drawn uniformly from MinSeconds..MaxSeconds (a deterministic presentation draw seeded by the body, never simulation state), and fires on demand through the stamp pool\u0027s TriggerCue door, which is how a face probe reading the player\u0027s own camera blinks the avatar in sync; a triggered cue re-arms the interval, so a driven cue never double-fires with the self schedule. Both interval bounds absent is a cue that fires only on demand.",
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "frame": {
+                      "description": "The creation timeline frame\u0027s name.",
+                      "type": "string"
+                    },
+                    "holdSeconds": {
+                      "description": "How long the frame holds, seconds.",
+                      "type": "number"
+                    },
+                    "minSeconds": {
+                      "description": "The shortest rest between self-fires, seconds, or null with MaxSeconds for a cue that never self-fires.",
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "maxSeconds": {
+                      "description": "The longest rest between self-fires, seconds.",
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    }
+                  },
+                  "required": [
+                    "frame",
+                    "holdSeconds"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "dynamics": {
+                "description": "The dynamics row a second-order follower drives the stamped ROOT through \u2014 the client\u0027s interpolated body pose is the target, the follower\u0027s output is what renders. null (the default) is today\u0027s behavior: the root follows the interpolated pose exactly, no lag.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "partDynamics": {
+                "description": "A creation part id to dynamics row map \u2014 each named part follows the root\u0027s own resolved transform with its own personality, layered ON TOP of Dynamics. Legitimate only on a creation source (a catalog rig exports no parts); each key must name a part the creation\u0027s own part table declares.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "additionalProperties": false
           }
         },
+        "required": [
+          "name",
+          "source",
+          "scale",
+          "motion"
+        ],
         "additionalProperties": false
-      }
+      },
+      "default": null
     },
-    "required": [
-      "name",
-      "source",
-      "scale",
-      "motion"
-    ],
-    "additionalProperties": false
+    "assignment": {
+      "$ref": "./common.schema.json#/$defs/WorldRowAssignment",
+      "description": "The look\u2192entity assignment policy \u2014 ABSENT resolves to Default.",
+      "default": null
+    }
   },
+  "additionalProperties": false,
   "default": null
 }

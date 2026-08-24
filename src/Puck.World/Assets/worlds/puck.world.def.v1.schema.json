@@ -23,11 +23,11 @@
     "cameras": {
       "$ref": "./schema/cameras.schema.json"
     },
-    "population": {
-      "$ref": "./schema/population.schema.json"
+    "bodies": {
+      "$ref": "./schema/bodies.schema.json"
     },
-    "playerDefaults": {
-      "$ref": "./schema/playerDefaults.schema.json"
+    "seatDefaults": {
+      "$ref": "./schema/seatDefaults.schema.json"
     },
     "channels": {
       "$ref": "./schema/channels.schema.json"
@@ -44,9 +44,6 @@
     "defaultSeatKit": {
       "$ref": "./schema/defaultSeatKit.schema.json"
     },
-    "assignment": {
-      "$ref": "./schema/assignment.schema.json"
-    },
     "addons": {
       "$ref": "./schema/addons.schema.json"
     },
@@ -56,14 +53,11 @@
     "storage": {
       "$ref": "./schema/storage.schema.json"
     },
-    "creations": {
-      "$ref": "./schema/creations.schema.json"
+    "prototypes": {
+      "$ref": "./schema/prototypes.schema.json"
     },
     "placements": {
       "$ref": "./schema/placements.schema.json"
-    },
-    "authoring": {
-      "$ref": "./schema/authoring.schema.json"
     },
     "speakers": {
       "$ref": "./schema/speakers.schema.json"
@@ -91,9 +85,6 @@
     },
     "looks": {
       "$ref": "./schema/looks.schema.json"
-    },
-    "lookAssignment": {
-      "$ref": "./schema/lookAssignment.schema.json"
     },
     "dynamics": {
       "$ref": "./schema/dynamics.schema.json"
@@ -142,9 +133,6 @@
     },
     "water": {
       "$ref": "./schema/water.schema.json"
-    },
-    "fields": {
-      "$ref": "./schema/fields.schema.json"
     },
     "references": {
       "$ref": "./schema/references.schema.json"

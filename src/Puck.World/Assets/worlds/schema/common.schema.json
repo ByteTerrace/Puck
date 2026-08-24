@@ -2215,6 +2215,93 @@
       ],
       "additionalProperties": false
     },
+    "WorldDistributionRegionNoise": {
+      "description": "Deterministic hash-lattice fBm patch admission over a placement-local grid, centered on the placement \u2014 one instance at the center of every admitted cell. The placement twin of Noise: same fixed-point fBm, same seed fold against generation.worldSeed, same threshold semantics; here admission stamps a creation copy instead of writing a field value.",
+      "properties": {
+        "$type": {
+          "const": "noise"
+        },
+        "cellSize": {
+          "description": "The local grid\u0027s cubic cell edge, world units.",
+          "type": "number"
+        },
+        "width": {
+          "description": "Cells along the placement\u0027s local \u002BX.",
+          "type": "integer"
+        },
+        "depth": {
+          "description": "Cells along the placement\u0027s local \u002BZ.",
+          "type": "integer"
+        },
+        "frequency": {
+          "description": "Noise-cell edge in lattice cells (see Frequency). At least 1.",
+          "type": "integer"
+        },
+        "threshold": {
+          "description": "The patch admission level in [0, 1); higher = sparser patches.",
+          "type": "number",
+          "default": 0.5
+        },
+        "octaves": {
+          "description": "Octave count, 1..4.",
+          "type": "integer",
+          "default": 3
+        },
+        "seed": {
+          "description": "The hash seed, folded with the world seed.",
+          "type": "integer",
+          "default": 0
+        }
+      },
+      "required": [
+        "cellSize",
+        "width",
+        "depth",
+        "frequency"
+      ],
+      "additionalProperties": false
+    },
+    "WorldDistributionRegionScatter": {
+      "description": "One jittered instance per Spacing-cell block over a placement-local grid, centered on the placement. The placement twin of Scatter: same integer PCG3D block jitter, same seed fold \u2014 every block materializes exactly the one jittered point (never a filled neighborhood), so the instance count is exact and seed-independent: ceil(Width/Spacing) x ceil(Depth/Spacing).",
+      "properties": {
+        "$type": {
+          "const": "scatter"
+        },
+        "cellSize": {
+          "description": "The local grid\u0027s cubic cell edge, world units.",
+          "type": "number"
+        },
+        "width": {
+          "description": "Cells along the placement\u0027s local \u002BX.",
+          "type": "integer"
+        },
+        "depth": {
+          "description": "Cells along the placement\u0027s local \u002BZ.",
+          "type": "integer"
+        },
+        "spacing": {
+          "description": "The scatter block edge in cells (at least 2).",
+          "type": "integer"
+        },
+        "radius": {
+          "description": "The jitter inset in cells (at least 1; at most spacing/2 \u2014 a point never leaves its block, mirroring Radius\u0027s own bound).",
+          "type": "integer",
+          "default": 1
+        },
+        "seed": {
+          "description": "The hash seed, folded with the world seed.",
+          "type": "integer",
+          "default": 0
+        }
+      },
+      "required": [
+        "cellSize",
+        "width",
+        "depth",
+        "spacing"
+      ],
+      "additionalProperties": false
+    },
     "WorldDistributionRegion": {
       "description": "A closed spatial region vocabulary consumed by WorldDistribution.",
       "type": "object",
@@ -2230,6 +2317,12 @@
         },
         {
           "$ref": "#/$defs/WorldDistributionRegionLattice"
+        },
+        {
+          "$ref": "#/$defs/WorldDistributionRegionNoise"
+        },
+        {
+          "$ref": "#/$defs/WorldDistributionRegionScatter"
         }
       ]
     },
@@ -2331,209 +2424,6 @@
         "offset",
         "step"
       ],
-      "additionalProperties": false
-    },
-    "WorldGeneratorSource": {
-      "description": "The closed vocabulary of a WorldGenerator\u0027s draw shape \u2014 which of its fields are read, and what one emission produces: a Markov text walk, a deck deal, a uniform range, a weighted numeric table, and a raw stream draw are sources of one family, never parallel primitives with their own seeding, cursoring, and refusal stories.",
-      "enum": [
-        "Markov",
-        "UniformRange",
-        "WeightedNumeric",
-        "StreamDraw"
-      ]
-    },
-    "WorldGeneratorAlternative": {
-      "description": "One weighted alternative of a WorldGeneratorContext: the token it emits, its relative weight, and the context the walk moves into after it is picked. The authored Next is what makes this a real Markov process rather than a bag of independent draws \u2014 the context key is the process state, so an author folds exactly as much history into it as the chain needs.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "token": {
-          "description": "The opaque game-authored token this alternative emits. The engine never interprets it; it is space-joined with the emission\u0027s other tokens and written into the target text cell. Bounded by MaxTokenLength.",
-          "type": "string"
-        },
-        "weight": {
-          "description": "The alternative\u0027s positive relative weight. At least one alternative in a context must carry a non-zero weight.",
-          "type": "integer"
-        },
-        "next": {
-          "description": "The context the walk moves into after this alternative is picked. Must name a declared Key; naming a context that declares NO alternatives ends the emission (a terminal is a context with nothing to say, never a reserved token spelling).",
-          "type": "string"
-        }
-      },
-      "required": [
-        "token",
-        "weight",
-        "next"
-      ],
-      "additionalProperties": false
-    },
-    "WorldGeneratorContext": {
-      "description": "One named context of a WorldGenerator \u2014 the state the walk may be sitting in and the weighted alternatives it may pick while there. A context declaring NO alternatives is TERMINAL: reaching it ends the emission.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "key": {
-          "description": "The stable context key, unique within the generator.",
-          "type": "string"
-        },
-        "alternatives": {
-          "description": "The weighted alternatives out of this context, or empty for a terminal context.",
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "$ref": "#/$defs/WorldGeneratorAlternative"
-          },
-          "default": null
-        }
-      },
-      "required": [
-        "key"
-      ],
-      "additionalProperties": false
-    },
-    "WorldGeneratorContextList": {
-      "type": [
-        "array",
-        "null"
-      ],
-      "items": {
-        "$ref": "#/$defs/WorldGeneratorContext"
-      }
-    },
-    "WorldGeneratorMode": {
-      "description": "How a WorldGenerator context\u0027s alternatives are consumed \u2014 the deck vocabulary. Authored, never inferred: exhaustion behaviour is a declaration, not a fallback the engine picks.",
-      "enum": [
-        "WithReplacement",
-        "WithoutReplacement",
-        "ReshuffleOnExhaustion"
-      ]
-    },
-    "WorldGeneratorWeightedNumeric": {
-      "description": "One numeric outcome of a WeightedNumeric source: the raw value it writes and its relative weight \u2014 the numeric twin of WorldGeneratorAlternative, minus Token (nothing to join into text) and Next (a numeric draw is one terminal pick, never a walk).",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "value": {
-          "description": "The raw value this outcome writes on selection (a plain integer for Int, raw FixedQ4816 bits for Fixed).",
-          "type": "integer"
-        },
-        "weight": {
-          "description": "The outcome\u0027s relative weight, fed straight to Puck.Maths.WeightedSampler\u0027s exact ulong overload. At least one outcome must carry a non-zero weight.",
-          "type": "integer"
-        }
-      },
-      "required": [
-        "value",
-        "weight"
-      ],
-      "additionalProperties": false
-    },
-    "WorldGeneratorWeightedNumericList": {
-      "type": [
-        "array",
-        "null"
-      ],
-      "items": {
-        "$ref": "#/$defs/WorldGeneratorWeightedNumeric"
-      }
-    },
-    "WorldGenerator": {
-      "description": "An authored stochastic source \u2014 the vocabulary for every randomness declaration in the document: a name generator, a dialogue line, a loot roll, a flat weighted draw, a card deal, a random census, and a drawn host backend all reduce to a source of this family, sampled at an authored moment into an authored site (see WorldDraw).",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "source": {
-          "$ref": "#/$defs/WorldGeneratorSource",
-          "description": "Which draw shape this source fires.",
-          "default": "Markov"
-        },
-        "start": {
-          "description": "Markov only: the context every emission begins from. Must name a declared context.",
-          "default": null,
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "bound": {
-          "description": "Markov only: the maximum tokens one emission may draw before refusing by name, 1..MaxEmissionBound. Left at DefaultBound by a numeric source.",
-          "type": "integer",
-          "default": 1
-        },
-        "contexts": {
-          "$ref": "#/$defs/WorldGeneratorContextList",
-          "description": "Markov only: the declared contexts, at least one, uniquely keyed.",
-          "default": null
-        },
-        "mode": {
-          "$ref": "#/$defs/WorldGeneratorMode",
-          "description": "Markov only: how alternatives are consumed (see WorldGeneratorMode).",
-          "default": "WithReplacement"
-        },
-        "rangeMin": {
-          "description": "UniformRange only: the closed range\u0027s inclusive lower bound \u2014 both bounds present or neither. Raw-encoded per the destination site\u0027s CellKind (raw FixedQ4816 bits for a fixed site) \u2014 unlike a site row\u0027s own min/max, which a fixed row authors as decimal text, since a source is not bound to one site and cannot know the kind it will write.",
-          "type": [
-            "integer",
-            "null"
-          ],
-          "default": null
-        },
-        "rangeMax": {
-          "description": "UniformRange only: the inclusive upper bound, same encoding as RangeMin.",
-          "type": [
-            "integer",
-            "null"
-          ],
-          "default": null
-        },
-        "weighted": {
-          "$ref": "#/$defs/WorldGeneratorWeightedNumericList",
-          "description": "WeightedNumeric only: the weighted numeric outcomes, at least one, at least one carrying a non-zero weight.",
-          "default": null
-        }
-      },
-      "additionalProperties": false
-    },
-    "WorldDraw": {
-      "description": "The AUTHORED-RANDOMNESS facet: the declaration that a SITE\u0027s value is DRAWN rather than literal. One facet, one source family, one engine \u2014 an NPC-bark text site, a loot cell, a random census, and a drawn host backend are the SAME mechanism pointed at different sites.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "source": {
-          "description": "The declared source to draw from, by name \u2014 or null when Generator inlines one.",
-          "default": null,
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "generator": {
-          "$ref": "#/$defs/WorldGenerator",
-          "description": "An inline anonymous source \u2014 or null when Source names a declared one.",
-          "default": null
-        },
-        "timing": {
-          "description": "When this site draws and whether it may be redrawn (see WorldDrawTiming).",
-          "enum": [
-            "Boot",
-            "TickPeriod",
-            "Event"
-          ],
-          "default": "Boot"
-        }
-      },
       "additionalProperties": false
     },
     "ActionFact": {
@@ -3639,7 +3529,7 @@
           "description": "The row\u0027s stable string id (its mutation address).",
           "type": "string"
         },
-        "creationId": {
+        "prototypeId": {
           "description": "The referenced Id (must resolve; removal of a referenced creation rejects loudly).",
           "type": "string"
         },
@@ -3656,7 +3546,7 @@
         },
         "distribution": {
           "$ref": "#/$defs/WorldDistribution",
-          "description": "The placement distribution, or null for a single copy. Static placements currently accept a lattice region with a none fill. Refused together with Attach.",
+          "description": "The placement distribution, or null for a single copy. Static placements accept a Lattice, Noise, or Scatter region, each with a none fill \u2014 Lattice materializes a regular two-axis grid (PatternFor); Noise and Scatter materialize a deterministic hash-sampled instance set instead (SampledFixedOffsetsFor), the placement twin of the field lattice\u0027s own Noise/Scatter fills. Refused together with Attach.",
           "default": null
         },
         "mirror": {
@@ -3702,7 +3592,7 @@
       },
       "required": [
         "id",
-        "creationId",
+        "prototypeId",
         "position",
         "yawDegrees",
         "scale"

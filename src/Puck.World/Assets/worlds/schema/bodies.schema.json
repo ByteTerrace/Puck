@@ -60,8 +60,11 @@
     "reconnectGraceSeconds": {
       "type": "number"
     },
-    "capacityDraw": {
-      "$ref": "./common.schema.json#/$defs/WorldDraw"
+    "capacityRow": {
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "disclosure": {
       "type": [

@@ -80,7 +80,7 @@
       "type": "number",
       "default": 0
     },
-    "seatLook": {
+    "seatCameraFeel": {
       "type": [
         "object",
         "null"

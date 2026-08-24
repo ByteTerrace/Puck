@@ -33,6 +33,251 @@
         "$ref": "./common.schema.json#/$defs/ActionStateSlot"
       },
       "default": null
+    },
+    "lattices": {
+      "description": "The lattice topologies the section\u0027s lattice-shaped rows lie over (see WorldStateLatticeTopology).",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "One state.lattices topology -- the footprint, cadence, and reactions every lattice-shaped state row referencing it shares. Exactly one topology may be declared today (the wire frame and checkpoint key off a single lattice); the list spelling is the growth seam, not a live capacity.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "description": "The topology\u0027s name -- what a row\u0027s lattice.topology references.",
+            "type": "string"
+          },
+          "origin": {
+            "description": "The minimum corner, world units."
+          },
+          "cellSize": {
+            "description": "The cubic cell edge, world units.",
+            "type": "number"
+          },
+          "width": {
+            "description": "Cells along \u002BX.",
+            "type": "integer"
+          },
+          "depth": {
+            "description": "Cells along \u002BZ.",
+            "type": "integer"
+          },
+          "layers": {
+            "description": "Cells along \u002BY -- 1 is a ground lattice.",
+            "type": "integer",
+            "default": 1
+          },
+          "stepEveryTicks": {
+            "description": "Simulation ticks between reaction steps.",
+            "type": "integer",
+            "default": 8
+          },
+          "reactions": {
+            "description": "The per-step reactions over this topology\u0027s rows, applied in document order.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "description": "One reaction \u2014 a local rule every cell (or every tagged body) applies each lattice step. Reactions run in document order; Diffuse reads the previous step\u0027s values for the whole field, every other kind reads and writes cells in place, row-major.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "required": [
+                "$type"
+              ],
+              "anyOf": [
+                {
+                  "description": "Moves each cell a fraction of the way toward the mean of its face neighbours (four on a ground lattice, six in a volume).",
+                  "properties": {
+                    "$type": {
+                      "const": "diffuse"
+                    },
+                    "field": {
+                      "description": "The field diffused.",
+                      "type": "string"
+                    },
+                    "rate": {
+                      "description": "The fraction per step, in [0, 1]."
+                    }
+                  },
+                  "required": [
+                    "field",
+                    "rate"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "description": "Scales each cell toward zero: v -= v\u00B7rate.",
+                  "properties": {
+                    "$type": {
+                      "const": "decay"
+                    },
+                    "field": {
+                      "description": "The field decayed.",
+                      "type": "string"
+                    },
+                    "rate": {
+                      "description": "The fraction per step, in [0, 1]."
+                    }
+                  },
+                  "required": [
+                    "field",
+                    "rate"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "description": "Where every condition holds at a cell, applies every write at that cell \u2014 ignition, melting, evaporation, freezing are rows of this shape.",
+                  "properties": {
+                    "$type": {
+                      "const": "transform"
+                    },
+                    "when": {
+                      "description": "The conditions, all of which must hold.",
+                      "type": "array",
+                      "items": {
+                        "description": "One per-cell condition of a Transform.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "field": {
+                            "description": "The field read at the cell.",
+                            "type": "string"
+                          },
+                          "comparison": {
+                            "$ref": "./common.schema.json#/$defs/ActionStateComparison",
+                            "description": "The comparison."
+                          },
+                          "value": {
+                            "description": "The scalar compared against (literal or state-row reference)."
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "comparison",
+                          "value"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "then": {
+                      "description": "The writes, applied in order.",
+                      "type": "array",
+                      "items": {
+                        "description": "One per-cell write of a Transform.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "field": {
+                            "description": "The field written at the cell.",
+                            "type": "string"
+                          },
+                          "op": {
+                            "description": "Set or add.",
+                            "enum": [
+                              "Set",
+                              "Add"
+                            ]
+                          },
+                          "value": {
+                            "description": "The constant written or added; the result clamps to the field\u0027s range."
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "op",
+                          "value"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "when",
+                    "then"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "description": "Every active body whose cell in the keyed state row Tag reads nonzero adds Amount to Field at the cell it occupies \u2014 a burning body is a heat source.",
+                  "properties": {
+                    "$type": {
+                      "const": "emit"
+                    },
+                    "tag": {
+                      "description": "The keyed int state row whose nonzero cells name the emitting bodies.",
+                      "type": "string"
+                    },
+                    "field": {
+                      "description": "The field deposited into.",
+                      "type": "string"
+                    },
+                    "amount": {
+                      "description": "The amount per step; the cell clamps to the field\u0027s range."
+                    }
+                  },
+                  "required": [
+                    "tag",
+                    "field",
+                    "amount"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "description": "Writes 1 or 0 into Row\u0027s cell for every active body, by whether Field at the body\u0027s cell satisfies the comparison \u2014 a body standing in a burning cell becomes tagged, and body-level chemistry takes it from there.",
+                  "properties": {
+                    "$type": {
+                      "const": "expose"
+                    },
+                    "field": {
+                      "description": "The field sampled at the body.",
+                      "type": "string"
+                    },
+                    "comparison": {
+                      "$ref": "./common.schema.json#/$defs/ActionStateComparison",
+                      "description": "The comparison."
+                    },
+                    "value": {
+                      "description": "The constant compared against."
+                    },
+                    "row": {
+                      "description": "The keyed int state row written, keyed by body index.",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "field",
+                    "comparison",
+                    "value",
+                    "row"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "default": null
+          }
+        },
+        "required": [
+          "name",
+          "origin",
+          "cellSize",
+          "width",
+          "depth"
+        ],
+        "additionalProperties": false
+      },
+      "default": null
     }
   },
   "additionalProperties": false,
