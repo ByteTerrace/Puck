@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
+using Puck.SdfVm.Views;
 
 namespace Puck.World.Client;
 
@@ -104,14 +105,7 @@ public sealed class WorldGroupAnchors {
             return (state.Centroid, state.Spread);
         }
 
-        // Frame-rate-independent exponential ease: a = 1 - e^(-rate * dt).
-        var alpha = (1f - MathF.Exp(x: (-MathF.Max(
-            x: group.SmoothRate,
-            y: 0f
-        ) * MathF.Max(
-            x: deltaSeconds,
-            y: 0f
-        ))));
+        var alpha = FirstOrderLag.Alpha(rate: group.SmoothRate, deltaSeconds: deltaSeconds);
 
         state.Centroid = Vector3.Lerp(
             amount: alpha,

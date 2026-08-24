@@ -54,6 +54,84 @@ public sealed partial class SdfProgramBuilder {
             op: SdfOp.Displace
         );
     }
+    /// <summary>Adds bounded hash-lattice fBm value noise to the field accumulated so far — irregular relief (terrain
+    /// crags, bark, rock) where <see cref="Displace"/>'s periodic sine product reads as corrugation. A field op (like
+    /// <see cref="Onion"/>/<see cref="Dilate"/>/<see cref="Displace"/>): order it after the shapes it should displace.
+    /// The per-corner hash is integer-only PCG3D (bit-identical across both backends); the blend is deterministic
+    /// float mul/add (±1 LSB). Not 1-Lipschitz — <c>AnalyzeLipschitz</c> bakes
+    /// <c>1 + |amplitude|·frequency·(15/4)·√3·Σ(gain·lacunarity)ᵏ/Σgainᵏ</c> as a conservative step clamp; keep the
+    /// <c>amplitude·frequency·lacunarity^octaves</c> budget moderate or the march crawls. The octave sum is host-
+    /// normalized to <c>[-1, 1]</c>, so the outward surface reach is at most <c>|amplitude|</c>. KEEP IN SYNC with
+    /// SDF_OP_NOISE_DISPLACE in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// <param name="frequency">Base lattice frequency (cells per world unit; the sign is absorbed downstream).</param>
+    /// <param name="amplitude">Peak displacement added to the field (world units; 0 = an exact identity).</param>
+    /// <param name="octaves">Octave count, 1..<see cref="MaxNoiseOctaves"/>.</param>
+    /// <param name="gain">Per-octave amplitude factor (finite, &gt; 0).</param>
+    /// <param name="lacunarity">Per-octave frequency factor (finite, &gt; 0).</param>
+    /// <param name="seed">Hash seed folded into every lattice corner.</param>
+    /// <exception cref="ArgumentOutOfRangeException">A parameter is not finite or positive where required.</exception>
+    /// <exception cref="ArgumentException"><paramref name="octaves"/> is outside 1..<see cref="MaxNoiseOctaves"/>.</exception>
+    public SdfProgramBuilder NoiseDisplace(float frequency, float amplitude, int octaves = 4, float gain = 0.5f, float lacunarity = 2.0f, uint seed = 0u) {
+        RequireFinite(
+            value: frequency,
+            paramName: nameof(frequency),
+            subject: "A noise frequency"
+        );
+        RequireFinite(
+            value: amplitude,
+            paramName: nameof(amplitude),
+            subject: "A noise amplitude"
+        );
+        RequirePositive(
+            value: gain,
+            paramName: nameof(gain),
+            subject: "A noise gain"
+        );
+        RequirePositive(
+            value: lacunarity,
+            paramName: nameof(lacunarity),
+            subject: "A noise lacunarity"
+        );
+
+        if ((octaves < 1) || (octaves > MaxNoiseOctaves)) {
+            throw new ArgumentException(
+                message: $"NoiseDisplace octaves must be in 1..{MaxNoiseOctaves}; got {octaves}.",
+                paramName: nameof(octaves)
+            );
+        }
+
+        // HOST-BAKED normalization: the shader multiplies the octave sum by 1/Σ gainᵏ so the summed noise stays in
+        // [-1, 1] before amplitude — the invariant every bound channel (Lipschitz clamp, scoped reach, cull margin)
+        // reads |amplitude| against.
+        var gainSum = 0.0f;
+        var gainPower = 1.0f;
+
+        for (var octave = 0; (octave < octaves); octave++) {
+            gainSum += gainPower;
+            gainPower *= gain;
+        }
+
+        m_instructions.Add(item: new SdfInstruction(
+            Blend: ((uint)octaves),
+            Data0: new Vector4(
+                x: frequency,
+                y: amplitude,
+                z: gain,
+                w: lacunarity
+            ),
+            Data1: new Vector4(
+                x: (1.0f / gainSum),
+                y: 0.0f,
+                z: 0.0f,
+                w: 0.0f
+            ),
+            Material: 0,
+            Op: SdfOp.NoiseDisplace,
+            Shape: seed
+        ));
+
+        return this;
+    }
     /// <summary>Shells the entire field accumulated so far into a hollow skin of the given thickness — a field op:
     /// order it after everything it should shell.</summary>
     /// <param name="thickness">The shell half-thickness.</param>

@@ -164,4 +164,20 @@ public enum SdfRefusal {
     /// envelope's instance ceiling. See <see cref="Puck.World.Client.WorldSdfDocumentEmitter.Load"/>.</summary>
     [Refusal(door: "sdf.decode", condition: "the document, composed with the live world scene, would exceed the probed instance envelope", kind: RefusalKind.Verdict)]
     ComposedInstancesExceeded,
+
+    /// <summary>A field op (<c>noiseDisplace</c>) sits outside a <c>push</c>/<c>pop</c> pair. A field op reads the
+    /// running accumulator, so unscoped it would displace every shape the composed world program accumulated before
+    /// this document — the scope keeps its effect on the document's own field.</summary>
+    [Refusal(door: "sdf.decode", condition: "a field op ('noiseDisplace') sits outside a 'push'/'pop' pair", kind: RefusalKind.Verdict)]
+    FieldOpNotScoped,
+
+    /// <summary>A <c>cellJitter</c> op's <c>flavor</c> is not one of <c>white</c>, <c>blue</c>, <c>gaussian</c>.</summary>
+    [Refusal(door: "sdf.decode", condition: "a 'cellJitter' op's 'flavor' is not one of white, blue, gaussian", kind: RefusalKind.ProtocolFault)]
+    UnknownNoiseFlavorName,
+
+    /// <summary>The document decodes and every op replays, but packing the WHOLE program is refused — a
+    /// program-level builder invariant (e.g. an uncontainable cellJitter prototype collapsing the step scale) that
+    /// no single op carries alone.</summary>
+    [Refusal(door: "sdf.decode", condition: "packing the whole replayed program is refused by a program-level builder invariant", kind: RefusalKind.Verdict)]
+    BuilderRejectedProgram,
 }

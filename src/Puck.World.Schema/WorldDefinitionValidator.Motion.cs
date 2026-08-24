@@ -161,10 +161,13 @@ public static partial class WorldDefinitionValidator {
                                 name: $"{path}.target.range",
                                 errors: errors
                             );
-                            ValidateHalfAngle(
+                            RequireRange(
                                 value: sensed.HalfAngleDegrees,
+                                min: 0f,
+                                max: 180f,
                                 name: $"{path}.target.halfAngleDegrees",
-                                errors: errors
+                                errors: errors,
+                                minExclusive: true
                             );
                             break;
                         case BodyTargetSource.Designated designated when (string.IsNullOrWhiteSpace(value: designated.Register) || !targetRegisterNames.Contains(item: designated.Register)):
@@ -275,15 +278,6 @@ public static partial class WorldDefinitionValidator {
                 path: $"{path}.moveSpeedEnvelope",
                 errors: errors
             );
-        }
-    }
-    private static void ValidateHalfAngle(float value, string name, List<string> errors) {
-        if (
-            !float.IsFinite(f: value) ||
-            (value <= 0f) ||
-            (value > 180f)
-        ) {
-            errors.Add(item: $"{name} {value} must be finite and within (0, 180].");
         }
     }
     // The world motion defaults: positive speeds and correction smoothing distance.
@@ -595,12 +589,19 @@ public static partial class WorldDefinitionValidator {
             );
         }
 
-        if (hasDynamics) {
-            if (!dynamicsNames.Contains(item: dynamics!)) {
-                errors.Add(item: $"{path}.dynamics '{dynamics}' names no dynamics row.");
-            } else if (simulationRateHz <= 0) {
-                errors.Add(item: $"{path}.dynamics '{dynamics}' cannot compile — the world authors no simulation rate (simulation.rateHz), and a follower's coefficients are bound to one step size.");
-            }
+        if (
+            hasDynamics &&
+            RequireDeclared(
+            value: dynamics,
+            declaredSet: dynamicsNames,
+            path: path,
+            field: "dynamics",
+            rowNoun: "dynamics",
+            errors: errors
+        ) &&
+            (simulationRateHz <= 0)
+        ) {
+            errors.Add(item: $"{path}.dynamics '{dynamics}' cannot compile — the world authors no simulation rate (simulation.rateHz), and a follower's coefficients are bound to one step size.");
         }
     }
     // A velocity-response table (SIM-AFFECTING): each row's engage/release rates must be positive (a zero rate never

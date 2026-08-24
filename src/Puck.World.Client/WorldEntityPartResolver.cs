@@ -6,12 +6,6 @@ namespace Puck.World.Client;
 
 /// <summary>Resolves entity-part anchors through the part table published by the entity's active compiled look.</summary>
 public static class WorldEntityPartResolver {
-    private static int CatalogRig(WorldLook look) =>
-        ((look.Source is WorldLookSource.Catalog { Index: { } pinned })
-            ? pinned
-            : -1
-        );
-
     /// <summary>Resolves the current authored pose when no packed transform buffer is available.</summary>
     public static bool TryAuthoredPose(WorldClient client, WorldStampPool stamps, int entityIndex, string partId, out SdfAnchor pose) {
         ArgumentNullException.ThrowIfNull(client);
@@ -37,7 +31,10 @@ public static class WorldEntityPartResolver {
         if (!WorldAvatarCatalog.TryPartOffset(
             avatar: entityIndex,
             partId: partId,
-            rig: CatalogRig(look: look),
+            rig: WorldAvatarCatalog.RigFor(
+                look: look,
+                catalogRig: client.CatalogRig(index: entityIndex)
+            ),
             scale: look.Scale,
             offset: out var offset
         )) {
@@ -83,7 +80,10 @@ public static class WorldEntityPartResolver {
         return WorldAvatarCatalog.TryPartPose(
             avatar: entityIndex,
             partId: partId,
-            rig: CatalogRig(look: look),
+            rig: WorldAvatarCatalog.RigFor(
+                look: look,
+                catalogRig: client.CatalogRig(index: entityIndex)
+            ),
             transforms: transforms,
             pose: out pose
         );
@@ -101,27 +101,12 @@ public static class WorldEntityPartResolver {
         }
 
         if (stamps.HasBodyRegistration(bodyIndex: entityIndex)) {
-            if (
-                !stamps.TryBodyPartTransformSlot(
+            return stamps.TryBodyPartPose(
                 bodyIndex: entityIndex,
                 partId: partId,
-                transformSlot: out var stampSlot
-            ) ||
-                (((uint)stampSlot) >= ((uint)transforms.Count))
-            ) {
-                pose = default;
-
-                return false;
-            }
-
-            var stampTransform = transforms[stampSlot];
-
-            pose = new SdfAnchor(
-                Position: stampTransform.Position,
-                Orientation: stampTransform.Orientation
+                pose: out pose,
+                transforms: transforms
             );
-
-            return true;
         }
 
         var look = client.Look(index: entityIndex);
@@ -129,7 +114,10 @@ public static class WorldEntityPartResolver {
         return WorldAvatarCatalog.TryPartPose(
             avatar: entityIndex,
             partId: partId,
-            rig: CatalogRig(look: look),
+            rig: WorldAvatarCatalog.RigFor(
+                look: look,
+                catalogRig: client.CatalogRig(index: entityIndex)
+            ),
             transforms: transforms,
             pose: out pose
         );

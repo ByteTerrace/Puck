@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.Overlays;
 
 namespace Puck.World.Client;
@@ -8,7 +9,8 @@ namespace Puck.World.Client;
 /// <c>Puck.World.Schema</c> to <c>Puck.Overlays</c> as constructor data.</summary>
 public static class WorldOverlayCapacity {
     /// <summary>Creates the overlay capacity from the document contract's constants: <see cref="WorldPopulationLimits.LocalSeatCount"/>
-    /// seats, the <see cref="WorldHudCapacity"/> ceilings at both scopes, and <see cref="WorldMarkerCapacity.MaxChipsPerSeat"/>.</summary>
+    /// seats, the <see cref="WorldHudCapacity"/> ceilings at both scopes, <see cref="WorldMarkerCapacity.MaxChipsPerSeat"/>,
+    /// and the binding substrate's <see cref="BindingWheelDefinition"/> ring/sector bounds.</summary>
     /// <returns>The capacity the composition root hands the overlay.</returns>
     public static OverlayCapacity FromSchema() =>
         new(
@@ -20,6 +22,8 @@ public static class WorldOverlayCapacity {
             HudPanels: WorldHudCapacity.MaxWorldPanels,
             HudSeatPanelsPerSeat: WorldHudCapacity.MaxSeatPanels,
             MarkerMaxChipsPerSeat: WorldMarkerCapacity.MaxChipsPerSeat,
-            Seats: WorldPopulationLimits.LocalSeatCount
+            Seats: WorldPopulationLimits.LocalSeatCount,
+            WheelMaxRings: BindingWheelDefinition.MaxRings,
+            WheelMaxSectorsPerRing: BindingWheelDefinition.MaxSectorsPerRing
         );
 }

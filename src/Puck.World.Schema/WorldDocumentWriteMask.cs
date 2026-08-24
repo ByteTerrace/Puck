@@ -1,5 +1,3 @@
-using System.Text;
-
 namespace Puck.World.Protocol;
 
 /// <summary>The operation a foreign document asks an owning document to apply to one durable slot.</summary>
@@ -33,29 +31,18 @@ public readonly record struct DocumentWriteMask(ulong Bits) {
     /// <summary>Determines whether <paramref name="kind"/> is admitted.</summary>
     /// <param name="kind">The operation.</param>
     /// <returns><see langword="true"/> when the operation's bit is set.</returns>
-    public bool Contains(WorldDocumentWriteKind kind) => ((Bits & (1UL << ((int)kind))) != 0UL);
+    public bool Contains(WorldDocumentWriteKind kind) => ClosedBitset.Contains(
+        bits: Bits,
+        ordinal: (int)kind
+    );
     /// <summary>Describes the admitted operations by NAME, comma-separated (<c>Set,Add</c>) — the spelling
     /// <c>world.grant</c>'s own <c>writes:&lt;name,…&gt;</c> token takes. An empty mask reads
     /// <c>&lt;none&gt;</c>.</summary>
     /// <returns>The comma-separated operation names.</returns>
-    public string Describe() {
-        var builder = new StringBuilder();
-
-        foreach (var kind in Enum.GetValues<WorldDocumentWriteKind>()) {
-            if (!Contains(kind: kind)) {
-                continue;
-            }
-
-            _ = builder.Append(value: ((builder.Length == 0)
-                ? string.Empty
-                : ",")).Append(value: kind.ToString());
-        }
-
-        return ((builder.Length == 0)
-            ? "<none>"
-            : builder.ToString()
-        );
-    }
+    public string Describe() => ClosedBitset<WorldDocumentWriteKind>.Describe(
+        bits: Bits,
+        emptyToken: "<none>"
+    );
     /// <summary>Returns the intersection with <paramref name="other"/> — the operations BOTH masks admit.</summary>
     /// <param name="other">The mask to intersect with.</param>
     /// <returns>The intersection.</returns>
@@ -67,37 +54,24 @@ public readonly record struct DocumentWriteMask(ulong Bits) {
     /// <param name="unknown">The first unrecognized name, on failure.</param>
     /// <returns><see langword="true"/> when every name resolved.</returns>
     public static bool TryParse(string? text, out DocumentWriteMask mask, out string unknown) {
-        mask = Empty;
-        unknown = string.Empty;
+        var parsed = ClosedBitset<WorldDocumentWriteKind>.TryParse(
+            bits: out var bits,
+            text: text,
+            unknown: out unknown
+        );
 
-        if (string.IsNullOrEmpty(value: text)) {
-            return false;
-        }
+        mask = (parsed
+            ? new DocumentWriteMask(Bits: bits)
+            : Empty
+        );
 
-        foreach (var name in text.Split(
-            options: StringSplitOptions.None,
-            separator: ','
-        )) {
-            if (
-                !Enum.TryParse<WorldDocumentWriteKind>(
-                ignoreCase: true,
-                result: out var kind,
-                value: name
-            ) ||
-                !Enum.IsDefined(value: kind)
-            ) {
-                unknown = name;
-
-                return false;
-            }
-
-            mask = mask.With(kind: kind);
-        }
-
-        return true;
+        return parsed;
     }
     /// <summary>Returns the mask with <paramref name="kind"/> additionally admitted.</summary>
     /// <param name="kind">The operation to add.</param>
     /// <returns>The widened mask.</returns>
-    public DocumentWriteMask With(WorldDocumentWriteKind kind) => new(Bits: Bits | (1UL << ((int)kind)));
+    public DocumentWriteMask With(WorldDocumentWriteKind kind) => new(Bits: ClosedBitset.With(
+        bits: Bits,
+        ordinal: (int)kind
+    ));
 }

@@ -121,9 +121,10 @@ internal sealed class WorldStorageCommandModule(WorldOwnedWorlds profiles, IPlay
     }
     // The last push's ACTUAL outcome, distinguishing a transport failure from a precondition failure — a status
     // line must never assert the opposite of what the verb beside it just printed.
-    private static string Word(WorldSyncWriteOutcome outcome) => outcome switch {
-        WorldSyncWriteOutcome.PreconditionFailed => "precondition-failed",
-        WorldSyncWriteOutcome.Failed => "failed",
+    private static string Word(WorldAuthorityStoreOutcomeKind outcome) => outcome switch {
+        WorldAuthorityStoreOutcomeKind.PreconditionFailed => "precondition-failed",
+        WorldAuthorityStoreOutcomeKind.AlreadyExists => "already-exists",
+        WorldAuthorityStoreOutcomeKind.Failed => "failed",
         _ => "ok",
     };
 

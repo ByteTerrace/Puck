@@ -1,4 +1,3 @@
-using System.Buffers.Binary;
 using System.Text;
 using Puck.Networking;
 using Puck.World.Protocol;
@@ -63,52 +62,10 @@ public static class WorldTcpWireFormat {
 
     /// <summary>Decodes a whole downstream body as raw UTF-8 text — the shape <see cref="EncodeText"/> writes for
     /// <see cref="DownstreamKind.HelloRefused"/> and <see cref="DownstreamKind.Refusal"/>: a single text field with
-    /// no internal length prefix, since the outer frame's own u32 length already delimits it. Distinct from
-    /// <see cref="ReadLengthPrefixedString"/>, which decodes one length-prefixed field inside a body that packs
-    /// several (Session's <c>[u8][i32][u16 len][text]</c>, Query's <c>[u8][u16 len][text]</c>) — reading a
-    /// single-field body with that method misreads the text's own first two bytes as a length header.</summary>
+    /// no internal length prefix, since the outer frame's own u32 length already delimits it.</summary>
     /// <param name="body">The whole downstream body.</param>
     /// <returns>The decoded string.</returns>
     public static string DecodeText(ReadOnlySpan<byte> body) => Encoding.UTF8.GetString(bytes: body);
-    /// <summary>Decodes a <c>[u16 len][utf8 bytes]</c> string at <paramref name="offset"/>, advancing it past the field.
-    /// Bounds-checked against <paramref name="body"/>'s own length: a peer that declares a length running past the
-    /// end of the body never throws past this reader — it reports <paramref name="ok"/> <see langword="false"/>
-    /// instead, so the caller reports a named refusal rather than an escaping exception. See this type's remarks on
-    /// <see cref="DecodeText"/> for the body shapes this reads inside.</summary>
-    /// <param name="body">The frame body.</param>
-    /// <param name="offset">The read cursor, advanced past the decoded field on success; past the end of
-    /// <paramref name="body"/> on failure.</param>
-    /// <param name="ok">Whether the field's length prefix and bytes both fit inside <paramref name="body"/>.</param>
-    /// <returns>The decoded string on success; empty when <paramref name="ok"/> is <see langword="false"/>.</returns>
-    public static string ReadLengthPrefixedString(ReadOnlySpan<byte> body, ref int offset, out bool ok) {
-        if ((offset + sizeof(ushort)) > body.Length) {
-            offset = body.Length;
-            ok = false;
-
-            return string.Empty;
-        }
-
-        var length = BinaryPrimitives.ReadUInt16LittleEndian(source: body[offset..]);
-
-        offset += sizeof(ushort);
-
-        if ((offset + length) > body.Length) {
-            offset = body.Length;
-            ok = false;
-
-            return string.Empty;
-        }
-
-        var text = Encoding.UTF8.GetString(bytes: body.Slice(
-            length: length,
-            start: offset
-        ));
-
-        offset += length;
-        ok = true;
-
-        return text;
-    }
     /// <summary>Reads one downstream frame — the client's one reader for both the Hello verdict and every completion.</summary>
     /// <param name="stream">The connection stream.</param>
     /// <param name="ct">Cancellation.</param>
@@ -134,23 +91,14 @@ public static class WorldTcpWireFormat {
     }
     /// <summary>Writes a downstream Hello-accepted verdict.</summary>
     public static Task WriteHelloAcceptedAsync(Stream stream, int peerIndex, int generation, int connectionId, CancellationToken ct) {
-        var body = new byte[(3 * sizeof(int))];
+        var writer = new WireWriter(capacity: (3 * sizeof(int)));
 
-        BinaryPrimitives.WriteInt32LittleEndian(
-            destination: body,
-            value: peerIndex
-        );
-        BinaryPrimitives.WriteInt32LittleEndian(
-            destination: body.AsSpan(start: sizeof(int)),
-            value: generation
-        );
-        BinaryPrimitives.WriteInt32LittleEndian(
-            destination: body.AsSpan(start: (2 * sizeof(int))),
-            value: connectionId
-        );
+        writer.WriteInt32(value: peerIndex);
+        writer.WriteInt32(value: generation);
+        writer.WriteInt32(value: connectionId);
 
         return WriteDownstreamAsync(
-            body: body,
+            body: writer.ToArray(),
             ct: ct,
             kind: DownstreamKind.HelloAccepted,
             stream: stream
@@ -199,45 +147,30 @@ public static class WorldTcpWireFormat {
                     stream: stream
                 );
             case WorldSubmissionResult.Session session: {
-                    // Tightly packed: [u8 Accepted][i32 AssignedIndex][u16 reasonLen][reason utf8].
-                    var reasonBytes = Encoding.UTF8.GetBytes(s: session.Reply.Reason);
-                    var body = new byte[(((sizeof(byte) + sizeof(int)) + sizeof(ushort)) + reasonBytes.Length)];
+                    // [u8 Accepted][i32 AssignedIndex][u16 reasonLen][reason utf8] — WireWriter.WriteBoolean/
+                    // WriteInt32/WriteString lay out exactly this shape.
+                    var writer = new WireWriter();
 
-                    body[0] = ((byte)(session.Reply.Accepted
-                        ? 1
-                        : 0));
-                    BinaryPrimitives.WriteInt32LittleEndian(
-                        destination: body.AsSpan(start: sizeof(byte)),
-                        value: session.Reply.AssignedIndex
-                    );
-                    BinaryPrimitives.WriteUInt16LittleEndian(
-                        destination: body.AsSpan(start: (sizeof(byte) + sizeof(int))),
-                        value: checked((ushort)reasonBytes.Length)
-                    );
-                    reasonBytes.CopyTo(destination: body.AsSpan(start: ((sizeof(byte) + sizeof(int)) + sizeof(ushort))));
+                    writer.WriteBoolean(value: session.Reply.Accepted);
+                    writer.WriteInt32(value: session.Reply.AssignedIndex);
+                    writer.WriteString(value: session.Reply.Reason);
 
                     return WriteDownstreamAsync(
-                        body: body,
+                        body: writer.ToArray(),
                         ct: ct,
                         kind: DownstreamKind.Session,
                         stream: stream
                     );
                 }
             case WorldSubmissionResult.Query query: {
-                    var textBytes = Encoding.UTF8.GetBytes(s: query.Answer.Text);
-                    var body = new byte[((sizeof(byte) + sizeof(ushort)) + textBytes.Length)];
+                    // [u8 Refused][u16 textLen][text utf8].
+                    var writer = new WireWriter();
 
-                    body[0] = ((byte)(query.Answer.Refused
-                        ? 1
-                        : 0));
-                    BinaryPrimitives.WriteUInt16LittleEndian(
-                        destination: body.AsSpan(start: sizeof(byte)),
-                        value: checked((ushort)textBytes.Length)
-                    );
-                    textBytes.CopyTo(destination: body.AsSpan(start: (sizeof(byte) + sizeof(ushort))));
+                    writer.WriteBoolean(value: query.Answer.Refused);
+                    writer.WriteString(value: query.Answer.Text);
 
                     return WriteDownstreamAsync(
-                        body: body,
+                        body: writer.ToArray(),
                         ct: ct,
                         kind: DownstreamKind.Query,
                         stream: stream
@@ -250,6 +183,79 @@ public static class WorldTcpWireFormat {
                     body: EncodeText(text: $"no downstream encoding for {result.GetType().Name}"),
                     ct: ct
                 );
+        }
+    }
+    /// <summary>Decodes a <paramref name="kind"/>/<paramref name="body"/> pair from <see cref="TryReadDownstreamAsync"/>
+    /// back into its typed <see cref="WorldSubmissionResult"/> — the read-side twin of <see cref="WriteResultAsync"/>,
+    /// shared by every consumer that turns a peer's completion frame into a result rather than re-deriving the field
+    /// offsets per call site.</summary>
+    /// <param name="kind">The downstream kind.</param>
+    /// <param name="body">The frame body.</param>
+    /// <param name="result">The decoded result on success.</param>
+    /// <param name="reason">The refusal text — the peer's own refusal narration for <see cref="DownstreamKind.Refusal"/>,
+    /// a truncation detail for a malformed <see cref="DownstreamKind.Session"/>/<see cref="DownstreamKind.Query"/> body,
+    /// or empty on success.</param>
+    /// <returns><see langword="true"/> when <paramref name="result"/> decoded.</returns>
+    public static bool TryReadResult(DownstreamKind kind, ReadOnlySpan<byte> body, out WorldSubmissionResult? result, out string reason) {
+        switch (kind) {
+            case DownstreamKind.Ack:
+                result = WorldSubmissionResult.Ack.Instance;
+                reason = string.Empty;
+
+                return true;
+            case DownstreamKind.Session: {
+                    var reader = new WireReader(bytes: body);
+                    var accepted = reader.ReadBoolean();
+                    var assignedIndex = reader.ReadInt32();
+                    var sessionReason = reader.ReadString(field: "session completion reason");
+
+                    if (!reader.TryFinish(failure: out _)) {
+                        result = null;
+                        reason = "remote authority returned a truncated session completion";
+
+                        return false;
+                    }
+
+                    result = new WorldSubmissionResult.Session(Reply: new SessionReply(
+                        Accepted: accepted,
+                        AssignedIndex: assignedIndex,
+                        RosterEcho: string.Empty,
+                        Reason: sessionReason
+                    ));
+                    reason = string.Empty;
+
+                    return true;
+                }
+            case DownstreamKind.Query: {
+                    var reader = new WireReader(bytes: body);
+                    var refused = reader.ReadBoolean();
+                    var text = reader.ReadString(field: "query completion text");
+
+                    if (!reader.TryFinish(failure: out _)) {
+                        result = null;
+                        reason = "remote authority returned a truncated query completion";
+
+                        return false;
+                    }
+
+                    result = new WorldSubmissionResult.Query(Answer: new QueryAnswer(
+                        Text: text,
+                        Refused: refused
+                    ));
+                    reason = string.Empty;
+
+                    return true;
+                }
+            case DownstreamKind.Refusal:
+                result = null;
+                reason = DecodeText(body: body);
+
+                return false;
+            default:
+                result = null;
+                reason = $"no downstream decoding for {kind}";
+
+                return false;
         }
     }
 }

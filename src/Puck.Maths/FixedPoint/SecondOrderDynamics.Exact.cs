@@ -23,10 +23,6 @@ internal static class SecondOrderExactMath {
 
     private static readonly BigInteger GuardOne = (BigInteger.One << GuardFractionBitCount);
 
-    /// <summary>Returns the nearest integer to <c>√value</c> for a non-negative <paramref name="value"/>.</summary>
-    internal static BigInteger NearestSquareRoot(BigInteger value) =>
-        ((BigIntegerFunctions.SquareRoot(value: (4 * value)) + 1) / 2);
-
     /// <summary>Compiles the four Q32 propagator entries for one fixed step width from a branch's derived Q32
     /// constants, via the exact matched Z-transform matrix exponential.</summary>
     internal static (long A11Raw, long A12Raw, long A21Raw, long A22Raw) CompilePropagator(
@@ -172,11 +168,15 @@ internal static class SecondOrderExactMath {
         return (sinSum, cosSum);
     }
 
-    // round(numerator / denominator · 2^GuardFractionBitCount) for a non-negative rational, ties rounded up — an
+    // round(numerator / denominator · 2^GuardFractionBitCount) for a non-negative rational, ties to even — an
     // internal working-precision approximation whose own error is many bits below what the caller's single final
-    // Q32 rounding can observe.
+    // Q32 rounding can observe (unobservable at G=128: the tie rule below this scale cannot reach a Q32 result).
     private static BigInteger RoundToGuardScale(BigInteger numerator, BigInteger denominator) =>
-        ((((numerator << GuardFractionBitCount) * 2) + denominator) / (denominator * 2));
+        FixedPointRounding.RoundRational(
+            denominator: denominator,
+            fractionBitCount: GuardFractionBitCount,
+            numerator: numerator
+        );
 
     private static long RoundQ32(Rational value) {
         if (!FixedPointRounding.TryRoundRational(
@@ -193,32 +193,37 @@ internal static class SecondOrderExactMath {
 
     private static Rational FromRaw(BigInteger raw, int fractionBitCount) =>
         new(Numerator: raw, Denominator: (BigInteger.One << fractionBitCount));
+}
 
-    // An exact rational used only inside this compile-time derivation — never narrowed until the one closing
-    // RoundQ32 call.
-    private readonly record struct Rational(BigInteger Numerator, BigInteger Denominator) {
-        internal static readonly Rational One = new(Numerator: BigInteger.One, Denominator: BigInteger.One);
-        internal static readonly Rational Two = new(Numerator: (2 * BigInteger.One), Denominator: BigInteger.One);
+/// <summary>An exact rational over <see cref="BigInteger"/> — never narrowed until a caller's own closing rounding.
+/// Every BigInteger-exact authoring/compile-time derivation in this library, and <c>Puck.Physics</c>'s soft-constraint
+/// chain, forms its intermediates in this type.</summary>
+/// <param name="Numerator">The exact numerator.</param>
+/// <param name="Denominator">The exact denominator.</param>
+public readonly record struct Rational(BigInteger Numerator, BigInteger Denominator) {
+    /// <summary>Gets the rational <c>1</c>.</summary>
+    public static Rational One { get; } = new(Numerator: BigInteger.One, Denominator: BigInteger.One);
+    /// <summary>Gets the rational <c>2</c>.</summary>
+    public static Rational Two { get; } = new(Numerator: (2 * BigInteger.One), Denominator: BigInteger.One);
 
-        public static Rational operator +(Rational left, Rational right) => new(
-            Numerator: ((left.Numerator * right.Denominator) + (right.Numerator * left.Denominator)),
-            Denominator: (left.Denominator * right.Denominator)
-        );
-        public static Rational operator -(Rational left, Rational right) => new(
-            Numerator: ((left.Numerator * right.Denominator) - (right.Numerator * left.Denominator)),
-            Denominator: (left.Denominator * right.Denominator)
-        );
-        public static Rational operator -(Rational value) => new(
-            Numerator: -value.Numerator,
-            Denominator: value.Denominator
-        );
-        public static Rational operator *(Rational left, Rational right) => new(
-            Numerator: (left.Numerator * right.Numerator),
-            Denominator: (left.Denominator * right.Denominator)
-        );
-        public static Rational operator /(Rational left, Rational right) => new(
-            Numerator: (left.Numerator * right.Denominator),
-            Denominator: (left.Denominator * right.Numerator)
-        );
-    }
+    public static Rational operator +(Rational left, Rational right) => new(
+        Numerator: ((left.Numerator * right.Denominator) + (right.Numerator * left.Denominator)),
+        Denominator: (left.Denominator * right.Denominator)
+    );
+    public static Rational operator -(Rational left, Rational right) => new(
+        Numerator: ((left.Numerator * right.Denominator) - (right.Numerator * left.Denominator)),
+        Denominator: (left.Denominator * right.Denominator)
+    );
+    public static Rational operator -(Rational value) => new(
+        Numerator: -value.Numerator,
+        Denominator: value.Denominator
+    );
+    public static Rational operator *(Rational left, Rational right) => new(
+        Numerator: (left.Numerator * right.Numerator),
+        Denominator: (left.Denominator * right.Denominator)
+    );
+    public static Rational operator /(Rational left, Rational right) => new(
+        Numerator: (left.Numerator * right.Denominator),
+        Denominator: (left.Denominator * right.Numerator)
+    );
 }

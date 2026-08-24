@@ -107,12 +107,8 @@ public sealed partial class WorldPopulation {
             : null
         );
         m_seatKit = ResolveKit(name: definition.DefaultSeatKit);
-        // The LOOK table: the authored rows, or the implicit single catalog look when the author declared none — so an
-        // empty `looks` section is the pre-arc runtime exactly, with no branch special-casing the absence.
-        m_lookRows = ((definition.Looks.Count > 0)
-            ? definition.Looks
-            : [WorldLook.Implicit]
-        );
+        // The LOOK table: the authored rows, or the implicit single catalog look when the author declared none.
+        m_lookRows = WorldDefinitionRows.ResolveLookRows(looks: definition.Looks);
         // The compiled population distribution — read ONLY by SeedSimulated (never the authored floats). The validator has already
         // resolved every named spawn point, so Compile's lookups always hit.
         m_distribution = FixedWorldDistribution.Compile(

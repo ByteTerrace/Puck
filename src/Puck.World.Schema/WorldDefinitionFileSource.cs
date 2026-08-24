@@ -141,63 +141,22 @@ public static class WorldDefinitionFileSource {
         }
 
         try {
-            if (!WorldJsonPayload.TryParse(
+            if (!TryParseComposed(
+                definition: out var parsed,
                 json: json,
-                info: WorldJsonContext.Default.WorldDefinition,
-                value: out var parsed,
-                error: out var parseError
+                neighbours: neighbours,
+                reason: out reason,
+                sourceName: path,
+                validateAdjacencyClaims: validateAdjacencyClaims
             )) {
-                reason = $"{path} is not a valid {WorldDefinition.SchemaVersion} document: {parseError}";
-
                 return false;
             }
 
-            if (!string.Equals(
-                a: parsed.Schema,
-                b: WorldDefinition.SchemaVersion,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                reason = $"{path} is not a valid {WorldDefinition.SchemaVersion} document: schema '{(parsed.Schema ?? "(absent)")}' is not {WorldDefinition.SchemaVersion}";
-
-                return false;
-            }
-
-            parsed = WorldDefinitionMigrations.Apply(definition: parsed);
-
-            // The validation class answers under its own wording, never the strict parse's. A validation refusal can
-            // rest on facts outside this file — an adjacency claim resolved through `neighbours` against documents
-            // this caller may itself be about to move — so it is retryable in a way "these bytes are not a
-            // puck.world.def.v1 document" never is, and a caller classifying on the reason must be able to tell them
-            // apart.
-            string? refusal = null;
-
-            try {
-                if (validateAdjacencyClaims) {
-                    WorldDefinitionValidator.Validate(
-                        definition: parsed,
-                        neighbours: neighbours
-                    );
-                } else if (!WorldDefinitionValidator.TryValidateLocally(
-                    definition: parsed,
-                    reason: out var localReason
-                )) {
-                    refusal = localReason;
-                }
-            } catch (Exception exception) {
-                refusal = exception.Message;
-            }
-
-            if (refusal is not null) {
-                reason = $"{path} document validation refused: {refusal.ReplaceLineEndings(replacementText: " ")}";
-
-                return false;
-            }
             definition = parsed;
             contentHash = ((chain.Count == 1)
                 ? ComputeContentHash(content: bytes)
                 : ComputeChainContentHash(chain: chain)
             );
-            reason = "";
 
             return true;
         } catch (Exception exception) {
@@ -205,6 +164,74 @@ public static class WorldDefinitionFileSource {
 
             return false;
         }
+    }
+    /// <summary>Parses, migrates, and validates an already-decoded, already-composed document string — the shared
+    /// middle of every load path once its own bytes/basis handling has produced flat JSON: a directory load
+    /// (composed above) and a bytes-only load with no directory to resolve a chain against
+    /// (<see cref="WorldDefinitionLoader.TryLoad(ReadOnlyMemory{byte},string,out WorldDefinition?,out string,string,IWorldNeighbourResolver?)"/>,
+    /// which refuses a <c>basis</c> member outright rather than composing one). The validation class answers under
+    /// its own wording, never the strict parse's: a validation refusal can rest on facts outside this call — an
+    /// adjacency claim resolved through <paramref name="neighbours"/> against documents this caller may itself be
+    /// about to move — so it is retryable in a way "these bytes are not a puck.world.def.v1 document" never is, and
+    /// a caller classifying on <paramref name="reason"/> must be able to tell them apart (see <see cref="TryLoad"/>'s
+    /// own remarks for the exact classified prefixes).</summary>
+    /// <param name="json">The already-decoded, already-composed document JSON.</param>
+    /// <param name="sourceName">The document's source name, echoed in every refusal.</param>
+    /// <param name="neighbours">The injected neighbour resolver a cross-document adjacency proof reads.</param>
+    /// <param name="validateAdjacencyClaims">Whether to prove cross-document adjacency claims
+    /// (<see cref="WorldDefinitionValidator.TryValidate"/>) or validate only document-local facts
+    /// (<see cref="WorldDefinitionValidator.TryValidateLocally"/>).</param>
+    /// <param name="definition">The parsed, migrated, validated definition on success; <see langword="null"/> on failure.</param>
+    /// <param name="reason">The one-line failure reason, or empty on success.</param>
+    /// <returns><see langword="true"/> when the document parsed, migrated, and validated.</returns>
+    public static bool TryParseComposed(string json, string sourceName, IWorldNeighbourResolver? neighbours, bool validateAdjacencyClaims, out WorldDefinition? definition, out string reason) {
+        definition = null;
+
+        if (!WorldJsonPayload.TryParse(
+            json: json,
+            info: WorldJsonContext.Default.WorldDefinition,
+            value: out var parsed,
+            error: out var parseError
+        )) {
+            reason = $"{sourceName} is not a valid {WorldDefinition.SchemaVersion} document: {parseError}";
+
+            return false;
+        }
+
+        if (!string.Equals(
+            a: parsed.Schema,
+            b: WorldDefinition.SchemaVersion,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            reason = $"{sourceName} is not a valid {WorldDefinition.SchemaVersion} document: schema '{(parsed.Schema ?? "(absent)")}' is not {WorldDefinition.SchemaVersion}";
+
+            return false;
+        }
+
+        parsed = WorldDefinitionMigrations.Apply(definition: parsed);
+
+        var validated = (validateAdjacencyClaims
+            ? WorldDefinitionValidator.TryValidate(
+            definition: parsed,
+            neighbours: neighbours,
+            reason: out var refusal
+        )
+            : WorldDefinitionValidator.TryValidateLocally(
+            definition: parsed,
+            reason: out refusal
+        )
+        );
+
+        if (!validated) {
+            reason = $"{sourceName} document validation refused: {refusal.ReplaceLineEndings(replacementText: " ")}";
+
+            return false;
+        }
+
+        definition = parsed;
+        reason = "";
+
+        return true;
     }
     private static bool TryResolveBasisPath(JsonNode? basisNode, string referrerPath, out string? basisPath, out string reason) {
         basisPath = null;

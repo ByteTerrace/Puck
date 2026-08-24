@@ -17,14 +17,14 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
 
     /// <summary>The active-ring label's character clamp — <see cref="MaxSectorLabelChars"/>' hub-label twin.</summary>
     public const int MaxRingLabelChars = 16;
-    /// <summary>The most rings a published seat may carry — mirrors the binding substrate's wheel bound (the
-    /// authored document is validated against its own <c>BindingWheelDefinition.MaxRings</c>; this is the
-    /// render-side backstop the reservation is sized from).</summary>
+    /// <summary>The most rings a published seat may carry — the render-side backstop against the host's declared
+    /// <see cref="OverlayCapacity.WheelMaxRings"/>, which the channel's own reservation is sized from.</summary>
     public const int MaxRings = 3;
     /// <summary>The sector-label character clamp — the ONE source <see cref="OverlayChannelLeases"/> reads for this
     /// channel's per-sector text reservation; every sector <c>WriteText</c> call clamps to it.</summary>
     public const int MaxSectorLabelChars = 12;
-    /// <summary>The most sectors a published ring may carry — <see cref="MaxRings"/>' per-ring twin.</summary>
+    /// <summary>The most sectors a published ring may carry — <see cref="MaxRings"/>' per-ring twin, and the
+    /// render-side backstop against <see cref="OverlayCapacity.WheelMaxSectorsPerRing"/>.</summary>
     public const int MaxSectorsPerRing = 8;
     /// <summary>The half-width, px, trimmed off each angular edge of a piece so neighbours read as separate pieces.</summary>
     public const float SectorGapPx = 2f;

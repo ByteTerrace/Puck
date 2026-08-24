@@ -32,7 +32,7 @@ It intentionally omits implementation chronology and review provenance.
 | Closed-form copy counts before a domain fold expands | Required; an authored chain past the copy budget is refused in O(1) memory | [LOD and bounds](lod-and-bounds.md) |
 | Coverage AA | Shipped footprint-aware path | [Antialiasing](antialiasing-and-filtering.md) |
 | Ray-differential CRT filtering | Open when minification is visible | [Antialiasing](antialiasing-and-filtering.md) |
-| Bound-preserving procedural noise | Open; requires integer hash and derivative bound | [Lipschitz correctness](lipschitz-and-field-correctness.md) |
+| Bound-preserving procedural noise | Shipped as `NoiseDisplace` (integer-hash lattice fBm, quintic-slope derivative bound folded into the step clamp) | [Lipschitz correctness](lipschitz-and-field-correctness.md) |
 | Sampled carve bricks | Shipped as an invalidatable render cache, not a core representation | [LOD and bounds](lod-and-bounds.md) |
 | Global voxel or clipmap representation | Not a current fit; requires a distinct content-source boundary | [Conditional techniques](negative-results-and-rejections.md) |
 | MTSDF alpha for marchable glyphs | Preferred field channel | [Text and glyphs](text-and-glyphs.md) |

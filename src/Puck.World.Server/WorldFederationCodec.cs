@@ -318,12 +318,6 @@ public static class WorldFederationCodec {
             heading
         );
     }
-    private static WorldEntityAddress ReadEntityAddress(ref WireReader reader) =>
-        new(
-            Authority: reader.ReadRequiredString(field: "entity address authority"),
-            Index: reader.ReadInt32(),
-            Generation: reader.ReadInt32()
-        );
     private static IntentSource ReadIntentSource(ref WireReader reader) {
         var tag = reader.ReadByte();
 
@@ -343,11 +337,6 @@ public static class WorldFederationCodec {
                 return IntentSource.Idle;
         }
     }
-    private static WorldMobilityIdentity ReadMobility(ref WireReader reader) =>
-        new(
-            Incarnation: ReadEntityAddress(reader: ref reader),
-            Epoch: reader.ReadUInt64()
-        );
     private static bool TryDeserializeDefinition(byte[] bytes, string field, out WorldDefinition? definition, out WireFailure failure) {
         try {
             definition = WorldDefinitionSerialization.Deserialize(utf8Json: bytes);
@@ -370,7 +359,7 @@ public static class WorldFederationCodec {
         member = default;
 
         var preferred = reader.ReadInt32();
-        var mobility = ReadMobility(reader: ref reader);
+        var mobility = WorldWireLeaves.ReadMobility(reader: ref reader);
 
         if (
             !reader.Failed &&
@@ -467,11 +456,6 @@ public static class WorldFederationCodec {
             writer.WriteByte(value: continuum.BoundaryEvents);
         }
     }
-    private static void WriteEntityAddress(WireWriter writer, WorldEntityAddress value) {
-        writer.WriteString(value: value.Authority);
-        writer.WriteInt32(value: value.Index);
-        writer.WriteInt32(value: value.Generation);
-    }
     private static void WriteIntentSource(WireWriter writer, IntentSource source) {
         if (source.IsLive) {
             writer.WriteByte(value: 0);
@@ -487,14 +471,6 @@ public static class WorldFederationCodec {
             throw new InvalidOperationException(message: $"intent source '{source}' is not defined");
         }
     }
-    private static void WriteMobility(WireWriter writer, in WorldMobilityIdentity value) {
-        WriteEntityAddress(
-            writer: writer,
-            value: value.Incarnation
-        );
-        writer.WriteUInt64(value: value.Epoch);
-    }
-
     /// <summary>Encodes the challenge proof sent before every federation operation. Carries no claimed source
     /// namespace — the door derives that from the verified proof itself (<see cref="WorldAttestedAuthenticator"/>),
     /// never from anything the wire asserts.</summary>
@@ -583,8 +559,8 @@ public static class WorldFederationCodec {
         var writer = new WireWriter(capacity: 1024);
 
         writer.WriteString(value: sourceAuthority);
-        WriteMobility(
-            value: in mobility,
+        WorldWireLeaves.WriteMobility(
+            mobility: mobility,
             writer: writer
         );
         writer.WriteUInt64(value: submission.Tick);
@@ -635,8 +611,8 @@ public static class WorldFederationCodec {
                 throw new InvalidOperationException(message: "federated reservation traveler has no mobility identity");
             }
 
-            WriteMobility(
-                value: in mobility,
+            WorldWireLeaves.WriteMobility(
+                mobility: mobility,
                 writer: writer
             );
             WriteIntentSource(
@@ -703,9 +679,9 @@ public static class WorldFederationCodec {
         var writer = new WireWriter(capacity: 4096);
 
         writer.WriteString(value: route.Endpoint);
-        WriteEntityAddress(
+        WorldWireLeaves.WriteEntityAddress(
             writer: writer,
-            value: route.Entity
+            address: route.Entity
         );
         writer.WriteUInt64(value: route.Tick);
         writer.WriteFixedVector(value: route.Position);
@@ -732,8 +708,8 @@ public static class WorldFederationCodec {
         var writer = new WireWriter();
 
         writer.WriteString(value: sourceAuthority);
-        WriteMobility(
-            value: in mobility,
+        WorldWireLeaves.WriteMobility(
+            mobility: mobility,
             writer: writer
         );
 
@@ -787,8 +763,8 @@ public static class WorldFederationCodec {
         var writer = new WireWriter(capacity: (frame.Length + 256));
 
         writer.WriteString(value: sourceAuthority);
-        WriteMobility(
-            value: in mobility,
+        WorldWireLeaves.WriteMobility(
+            mobility: mobility,
             writer: writer
         );
         writer.WriteBytes(value: frame);
@@ -1096,7 +1072,7 @@ public static class WorldFederationCodec {
         var reader = new WireReader(bytes: body);
 
         sourceAuthority = reader.ReadRequiredString(field: "intent source authority");
-        mobility = ReadMobility(reader: ref reader);
+        mobility = WorldWireLeaves.ReadMobility(reader: ref reader);
 
         var tick = reader.ReadUInt64();
         var measured = reader.ReadInt32();
@@ -1281,7 +1257,7 @@ public static class WorldFederationCodec {
         route = default;
 
         var endpoint = reader.ReadRequiredString(field: "route endpoint");
-        var entity = ReadEntityAddress(reader: ref reader);
+        var entity = WorldWireLeaves.ReadEntityAddress(reader: ref reader);
         var tick = reader.ReadUInt64();
         var position = reader.ReadFixedVector();
         var orientation = reader.ReadFixedQuaternion();
@@ -1365,7 +1341,7 @@ public static class WorldFederationCodec {
         var reader = new WireReader(bytes: body);
 
         sourceAuthority = reader.ReadRequiredString(field: "route credential source authority");
-        mobility = ReadMobility(reader: ref reader);
+        mobility = WorldWireLeaves.ReadMobility(reader: ref reader);
 
         return Finish(
             failure: out failure,
@@ -1465,7 +1441,7 @@ public static class WorldFederationCodec {
         var reader = new WireReader(bytes: body);
 
         sourceAuthority = reader.ReadRequiredString(field: "submission source authority");
-        mobility = ReadMobility(reader: ref reader);
+        mobility = WorldWireLeaves.ReadMobility(reader: ref reader);
         frame = reader.ReadRest(
             field: "submission frame",
             maxBytes: WorldTcpWireFormat.MaxUpstreamFrameBytes

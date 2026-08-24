@@ -13,8 +13,8 @@ namespace Puck.World;
 /// binding-bar policy's authored slot set against EVERY authored bank's own named page for the connected controller
 /// family — chips lit from the router's carried PHYSICAL button state, the same fact reused across every bank
 /// showing that button's slot (<see cref="BindingBarSeatComposer.IsPhysicallyPressed"/>) — scopes it into that
-/// seat's split-screen viewport rect
-/// (<see cref="WorldFramePresenter.LayoutRegion(int, int)"/>), and publishes one
+/// seat's published viewport rect (<see cref="WorldSeatViewports.Seat(int)"/>, the exact region
+/// <c>WorldFramePresenter</c> resolved this frame, authored layout included), and publishes one
 /// <see cref="OverlayBindingBarFrame"/>. Zero steady-state allocation: the per-seat arrays and
 /// pressed probes are preallocated and reused, and the hint lines are re-formatted only when their source facts move
 /// (a page/group flip) — safe because the feed and the overlay reader run on the
@@ -58,6 +58,7 @@ internal sealed class WorldOverlayFeed {
     private readonly OverlayBindingSeat[] m_seats;
     private readonly OverlayBindingSlot[][] m_slots;
     private readonly BindingBarStore m_store;
+    private readonly WorldSeatViewports m_viewports;
 
     /// <summary>Initializes a new instance of the <see cref="WorldOverlayFeed"/> class.</summary>
     /// <param name="roster">The participant roster (which seats are joined).</param>
@@ -68,15 +69,18 @@ internal sealed class WorldOverlayFeed {
     /// <param name="gamepads">The gamepad manager for family-resolved badge glyphs, or <see langword="null"/>
     /// (a non-Windows host) — the bar then themes for the unknown family.</param>
     /// <param name="icons">The boot document's resolved icon table (badges and bound-action icons alike).</param>
+    /// <param name="viewports">Each seat's published viewport for the frame just dressed.</param>
     /// <exception cref="ArgumentNullException">A required argument is <see langword="null"/>.</exception>
-    public WorldOverlayFeed(PlayerRoster roster, WorldSeatBindings bindings, WorldBindingBarControl bindingBar, InputRouter router, BindingBarStore store, GamepadManager? gamepads, WorldIconTable icons) {
+    public WorldOverlayFeed(PlayerRoster roster, WorldSeatBindings bindings, WorldBindingBarControl bindingBar, InputRouter router, BindingBarStore store, GamepadManager? gamepads, WorldIconTable icons, WorldSeatViewports viewports) {
         ArgumentNullException.ThrowIfNull(argument: bindings);
         ArgumentNullException.ThrowIfNull(argument: bindingBar);
         ArgumentNullException.ThrowIfNull(argument: icons);
         ArgumentNullException.ThrowIfNull(argument: roster);
         ArgumentNullException.ThrowIfNull(argument: router);
         ArgumentNullException.ThrowIfNull(argument: store);
+        ArgumentNullException.ThrowIfNull(argument: viewports);
 
+        m_viewports = viewports;
         m_bindings = bindings;
         m_bindingBar = bindingBar;
         m_gamepads = gamepads;
@@ -376,10 +380,7 @@ internal sealed class WorldOverlayFeed {
                 )
                 : 0
             );
-            var viewport = WorldFramePresenter.LayoutRegion(
-                count: joined,
-                index: viewIndex
-            );
+            var viewport = m_viewports.Seat(slot: slot).Region;
             var authoredLayout = liveLayout;
 
             m_seats[viewIndex] = new OverlayBindingSeat(

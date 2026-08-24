@@ -31,7 +31,11 @@ public sealed partial class WorldServer {
 
             if (!drive.IsAllowed) {
                 return Refuse(
-                    $"{principal.Describe()} cannot drive {sourceSubject.Describe()} ({drive.DescribeDenial()})",
+                    drive.DescribeRefusal(
+                        actor: principal,
+                        subject: sourceSubject.Describe(),
+                        verb: "drive"
+                    ),
                     denied: true
                 );
             }
@@ -127,7 +131,11 @@ public sealed partial class WorldServer {
 
             if (!observe.IsAllowed) {
                 return Refuse(
-                    $"{principal.Describe()} cannot observe {targetSubject.Describe()} ({observe.DescribeDenial()})",
+                    observe.DescribeRefusal(
+                        actor: principal,
+                        subject: targetSubject.Describe(),
+                        verb: "observe"
+                    ),
                     denied: true
                 );
             }
@@ -407,17 +415,12 @@ public sealed partial class WorldServer {
             deniedSection: out var deniedSection,
             principal: principal
         )) {
-            var denial = $"{principal.Describe()} cannot mutate every section (section:{deniedSection.ToString().ToLowerInvariant()} — {deniedVerdict.DescribeDenial()}) — {verb} dropped";
-
-            Console.Error.WriteLine(value: $"[world.grant denied: {denial}]");
-            EchoTap?.Invoke(obj: new WorldEditEcho(
-                Message: denial,
-                Rejected: true,
-                Kind: WorldEditEchoKind.Rebuild,
-                Denied: true,
-                ConnectionId: connectionId,
-                CorrelationId: correlationId
-            ));
+            DenyGrantTable(
+                denial: $"{principal.Describe()} cannot mutate every section (section:{deniedSection.ToString().ToLowerInvariant()} — {deniedVerdict.DescribeDenial()}) — {verb} dropped",
+                connectionId: connectionId,
+                correlationId: correlationId,
+                echoKind: WorldEditEchoKind.Rebuild
+            );
 
             return false;
         }
@@ -774,15 +777,19 @@ public sealed partial class WorldServer {
             FieldsFull: fieldsFull
         );
     }
-    // The ONE grant-table DENIAL emission — the loud stderr line plus the submitter-routed denied echo. Grant's
-    // administration and co-drive-consent refusals and Revoke's administration refusal differ only in what they say,
-    // never in how it is reported, so the echo's shape (GrantTable, Rejected, Denied) is decided once.
-    private void DenyGrantTable(string denial, int connectionId, long correlationId) {
+    // The ONE grant-table DENIAL emission — the loud stderr line plus the submitter-routed denied echo (Rejected,
+    // Denied). Grant's administration and co-drive-consent refusals, Revoke's administration refusal, a lever write
+    // lacking its section's Mutate hold, world.undo lacking every section's Mutate hold, and a rebuild lacking every
+    // section's Mutate hold all differ only in what they say and which verb's echo kind names the denied operation —
+    // never in how the denial is reported. echoKind defaults to GrantTable (a direct grant/revoke denial); a caller
+    // reporting a DIFFERENT verb's authority denial (Mutation, Rebuild) names that verb's own kind instead, so the
+    // echo still routes to the operation the caller actually attempted.
+    private void DenyGrantTable(string denial, int connectionId, long correlationId, WorldEditEchoKind echoKind = WorldEditEchoKind.GrantTable) {
         Console.Error.WriteLine(value: $"[world.grant denied: {denial}]");
         EchoTap?.Invoke(obj: new WorldEditEcho(
             Message: denial,
             Rejected: true,
-            Kind: WorldEditEchoKind.GrantTable,
+            Kind: echoKind,
             Denied: true,
             ConnectionId: connectionId,
             CorrelationId: correlationId
@@ -1470,7 +1477,12 @@ public sealed partial class WorldServer {
         );
 
         if (!verdict.IsAllowed) {
-            var denial = $"{command.Principal.Describe()} cannot drive body:{command.EntityIndex} ({verdict.DescribeDenial()}) — {command.GetType().Name} dropped";
+            var denial = verdict.DescribeRefusal(
+                actor: command.Principal,
+                dropped: $"{command.GetType().Name} dropped",
+                subject: $"body:{command.EntityIndex}",
+                verb: "drive"
+            );
 
             Console.Error.WriteLine(value: $"[world.grant denied: {denial}]");
             EchoTap?.Invoke(obj: new WorldEditEcho(
@@ -1680,7 +1692,12 @@ public sealed partial class WorldServer {
             capability: WorldCapability.Control,
             subject: GrantSubject.Composition
         ) is { IsAllowed: false } verdict) {
-            var denial = $"{principal.Describe()} cannot control composition ({verdict.DescribeDenial()}) — {composition.GetType().Name} dropped";
+            var denial = verdict.DescribeRefusal(
+                actor: principal,
+                dropped: $"{composition.GetType().Name} dropped",
+                subject: "composition",
+                verb: "control"
+            );
 
             Console.Error.WriteLine(value: $"[world.grant denied: {denial}]");
             EchoTap?.Invoke(obj: new WorldEditEcho(

@@ -489,6 +489,18 @@ public static class WorldAvatarCatalog {
     public static ulong IdentityHash(int avatar) => IdentityHashes[avatar];
     /// <summary>Returns the exact authored instruction count for an avatar.</summary>
     public static int InstructionCount(int avatar) => (Ranges[avatar].Count * InstructionsPerLeaf);
+    /// <summary>Resolves the catalog rig a look's geometry sources from: an authored <c>Catalog(Index)</c> pin, or
+    /// <paramref name="catalogRig"/> for an unpinned catalog look or a Creation look (the occupant-owned carried rig
+    /// — the same fallback <c>rig = -1</c> takes on <see cref="PackTransforms"/>/<see cref="TryPartOffset"/>/
+    /// <see cref="TryPartPose(int, string, int, System.ReadOnlySpan{DynamicTransform}, out SdfAnchor)"/>). The ONE
+    /// selector every consumer of a look's rig — emission and part-anchor resolution alike — must call, so a body's
+    /// rendered geometry and its part anchors never disagree about which rig it carries.</summary>
+    /// <param name="look">The entity's resolved look.</param>
+    /// <param name="catalogRig">The entity's own carried catalog rig — the fallback for an unpinned look.</param>
+    public static int RigFor(WorldLook look, byte catalogRig) => ((look.Source is WorldLookSource.Catalog { Index: { } pinned })
+        ? pinned
+        : catalogRig
+    );
     /// <summary>Packs one avatar's root pose plus movement-driven gait into its frozen leaf slots. A pinned rig sources
     /// the leaf poses (clamped to the entity's own slot range) and the look's uniform scale multiplies the anchor
     /// offsets — rig = avatar, scale = 1 reproduce the pre-look behaviour.</summary>

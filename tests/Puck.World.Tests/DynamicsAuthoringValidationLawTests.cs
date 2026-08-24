@@ -14,7 +14,7 @@ public sealed class DynamicsAuthoringValidationLawTests {
         var admitted = WithDynamics([Chase]);
 
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: denied, neighbours: null, reason: out var deniedReason));
-        Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "dynamics[0].f must be finite and positive.");
+        Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "dynamics[0].f 0 must be finite and within (0, 100].");
         Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: admitted, neighbours: null, reason: out var controlReason), userMessage: controlReason);
     }
 
@@ -25,7 +25,7 @@ public sealed class DynamicsAuthoringValidationLawTests {
 
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: denied, neighbours: null, reason: out var deniedReason));
         Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "dynamics[0].f 101");
-        Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "exceeds the 100 Hz ceiling.");
+        Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "must be finite and within (0, 100].");
         Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: admitted, neighbours: null, reason: out var controlReason), userMessage: controlReason);
     }
 
@@ -35,7 +35,7 @@ public sealed class DynamicsAuthoringValidationLawTests {
         var admitted = WithDynamics([Chase with { Damping = 0f }]);
 
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: denied, neighbours: null, reason: out var deniedReason));
-        Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "dynamics[0].zeta must be finite and non-negative.");
+        Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "dynamics[0].zeta -0.1 must be finite and within [0, 16].");
         Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: admitted, neighbours: null, reason: out var controlReason), userMessage: controlReason);
     }
 
@@ -45,7 +45,7 @@ public sealed class DynamicsAuthoringValidationLawTests {
         var admitted = WithDynamics([Chase with { Damping = 16f }]);
 
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: denied, neighbours: null, reason: out var deniedReason));
-        Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "exceeds the 16 ceiling.");
+        Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "dynamics[0].zeta 16.5 must be finite and within [0, 16].");
         Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: admitted, neighbours: null, reason: out var controlReason), userMessage: controlReason);
     }
 
@@ -55,7 +55,7 @@ public sealed class DynamicsAuthoringValidationLawTests {
         var admitted = WithDynamics([Chase with { Response = 4f }]);
 
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: denied, neighbours: null, reason: out var deniedReason));
-        Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "is outside -4..4.");
+        Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "dynamics[0].r 4.1 must be finite and within [-4, 4].");
         Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: admitted, neighbours: null, reason: out var controlReason), userMessage: controlReason);
     }
 
@@ -65,7 +65,7 @@ public sealed class DynamicsAuthoringValidationLawTests {
         var admitted = WithDynamics([Chase, Chase with { Name = "probe" }]);
 
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: denied, neighbours: null, reason: out var deniedReason));
-        Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "duplicates the name 'chase'.");
+        Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "dynamics[1] 'chase' is duplicated.");
         Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: admitted, neighbours: null, reason: out var controlReason), userMessage: controlReason);
     }
 
@@ -74,7 +74,7 @@ public sealed class DynamicsAuthoringValidationLawTests {
         var denied = WithDynamics([Chase with { Name = "" }]);
 
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: denied, neighbours: null, reason: out var deniedReason));
-        Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "dynamics[0] requires a name.");
+        Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "dynamics[0] is required.");
     }
 
     [Fact]

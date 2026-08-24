@@ -218,10 +218,12 @@ public static class WorldCameraRigCompiler {
                             dynamics: definition.Dynamics,
                             name: dynamicsOp.Row
                         ) is { } row) {
+                            var parameters = row.Parameters;
+
                             operations.Add(item: new SdfCameraOp.Dynamics(Value: new SdfCameraDynamics(
-                                Frequency: row.Frequency,
-                                Damping: row.Damping,
-                                Response: row.Response
+                                Frequency: parameters.Frequency,
+                                Damping: parameters.Damping,
+                                Response: parameters.Response
                             )));
                         }
 

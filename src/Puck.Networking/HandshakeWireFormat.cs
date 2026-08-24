@@ -18,6 +18,9 @@ public static class HandshakeWireFormat {
     /// claim attestation (small P-256 payloads), while still refusing an absurd length before allocating for it.</summary>
     public const int MaxHelloIdentityBytes = (64 * 1024);
 
+    // Same [u32 len][bytes] shape as WireReader.ReadBlock/WireWriter.WriteBlock, kept as private byte[]/ref-offset
+    // helpers rather than routed through those ref-struct readers/writers: each chain entry needs only a bounds-
+    // checked slice out of the already-buffered HelloIdentity body, not a second stateful reader over it.
     private static bool TryReadLengthPrefixedFrom(byte[] bytes, ref int offset, out byte[] value) {
         value = [];
 
@@ -95,37 +98,27 @@ public static class HandshakeWireFormat {
     public static async Task<HelloIdentityReadResult> TryReadHelloIdentityAsync(Stream stream, CancellationToken ct) {
         ArgumentNullException.ThrowIfNull(argument: stream);
 
-        var prefix = new byte[sizeof(uint)];
-
-        if (!await TryReadExactAsync(
-            buffer: prefix,
-            ct: ct,
-            stream: stream
-        ).ConfigureAwait(continueOnCapturedContext: false)) {
-            return HelloIdentityReadResult.Eof.Instance;
-        }
-
-        var following = BinaryPrimitives.ReadUInt32LittleEndian(source: prefix);
-
-        if (following > ((uint)Math.Max(
+        var cap = ((uint)Math.Max(
             val1: 0,
             val2: (MaxHelloIdentityBytes - sizeof(uint))
-        ))) {
-            return new HelloIdentityReadResult.Malformed(Reason: "the declared frame length exceeds the HelloIdentity frame cap");
+        ));
+        var (outcome, following, body) = await WireFrame.TryReadPrefixedBodyAsync(
+            cap: cap,
+            ct: ct,
+            stream: stream
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        switch (outcome) {
+            case WireFrame.PrefixedBodyOutcome.PrefixEof:
+                return HelloIdentityReadResult.Eof.Instance;
+            case WireFrame.PrefixedBodyOutcome.OverCap:
+                return new HelloIdentityReadResult.Malformed(Reason: "the declared frame length exceeds the HelloIdentity frame cap");
+            case WireFrame.PrefixedBodyOutcome.BodyEof:
+                return new HelloIdentityReadResult.Malformed(Reason: "the connection closed before the declared frame's body completed");
         }
 
         if (following == 0) {
             return new HelloIdentityReadResult.Malformed(Reason: "the frame carries no chain-count byte");
-        }
-
-        var body = new byte[following];
-
-        if (!await TryReadExactAsync(
-            buffer: body,
-            ct: ct,
-            stream: stream
-        ).ConfigureAwait(continueOnCapturedContext: false)) {
-            return new HelloIdentityReadResult.Malformed(Reason: "the connection closed before the declared frame's body completed");
         }
 
         var offset = 0;
@@ -175,42 +168,32 @@ public static class HandshakeWireFormat {
     /// <param name="ct">Cancellation.</param>
     /// <returns>The whole frame buffer, or <see langword="null"/> on a clean/abrupt disconnect or an oversized length.</returns>
     public static async Task<byte[]?> TryReadLengthPrefixedFrameAsync(Stream stream, int maxTotalBytes, CancellationToken ct) {
-        var prefix = new byte[sizeof(uint)];
-
-        if (!await TryReadExactAsync(
-            buffer: prefix,
-            ct: ct,
-            stream: stream
-        ).ConfigureAwait(continueOnCapturedContext: false)) {
-            return null;
-        }
-
-        var following = BinaryPrimitives.ReadUInt32LittleEndian(source: prefix);
-
-        if (following > ((uint)Math.Max(
+        var cap = ((uint)Math.Max(
             val1: 0,
             val2: (maxTotalBytes - sizeof(uint))
-        ))) {
+        ));
+        var (outcome, following, body) = await WireFrame.TryReadPrefixedBodyAsync(
+            cap: cap,
+            ct: ct,
+            stream: stream
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        if (outcome != WireFrame.PrefixedBodyOutcome.Ok) {
             return null;
         }
 
+        // Unlike WireFrame.ReadAsync/TryReadHelloIdentityAsync, this reader's own contract keeps the length prefix
+        // IN the returned buffer (a caller decoding it as one already-framed blob) — re-encode it rather than
+        // threading a second buffer shape through the shared read head for one caller.
         var whole = new byte[checked((sizeof(uint) + ((int)following)))];
 
-        prefix.CopyTo(
-            array: whole,
-            index: 0
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            destination: whole,
+            value: following
         );
-
-        if (
-            (following > 0) &&
-            !await TryReadExactAsync(
-            stream: stream,
-            buffer: whole.AsMemory(start: sizeof(uint)),
-            ct: ct
-        ).ConfigureAwait(continueOnCapturedContext: false)
-        ) {
-            return null;
-        }
+        body.CopyTo(
+            destination: whole.AsSpan(start: sizeof(uint))
+        );
 
         return whole;
     }

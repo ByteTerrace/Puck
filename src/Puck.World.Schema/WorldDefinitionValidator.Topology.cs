@@ -351,21 +351,21 @@ public static partial class WorldDefinitionValidator {
         var minDuration = market.MinDurationSeconds;
         var maxDuration = market.MaxDurationSeconds;
 
-        if (
-            !float.IsFinite(f: minDuration) ||
-            (minDuration < WorldMarketCapacity.MinDurationFloorSeconds) ||
-            (minDuration > WorldMarketCapacity.MaxDurationCeilingSeconds)
-        ) {
-            errors.Add(item: $"market.minDurationSeconds {minDuration} is outside {WorldMarketCapacity.MinDurationFloorSeconds}..{WorldMarketCapacity.MaxDurationCeilingSeconds}.");
-        }
+        RequireRange(
+            value: minDuration,
+            min: WorldMarketCapacity.MinDurationFloorSeconds,
+            max: WorldMarketCapacity.MaxDurationCeilingSeconds,
+            name: "market.minDurationSeconds",
+            errors: errors
+        );
 
-        if (
-            !float.IsFinite(f: maxDuration) ||
-            (maxDuration < WorldMarketCapacity.MinDurationFloorSeconds) ||
-            (maxDuration > WorldMarketCapacity.MaxDurationCeilingSeconds)
-        ) {
-            errors.Add(item: $"market.maxDurationSeconds {maxDuration} is outside {WorldMarketCapacity.MinDurationFloorSeconds}..{WorldMarketCapacity.MaxDurationCeilingSeconds}.");
-        }
+        RequireRange(
+            value: maxDuration,
+            min: WorldMarketCapacity.MinDurationFloorSeconds,
+            max: WorldMarketCapacity.MaxDurationCeilingSeconds,
+            name: "market.maxDurationSeconds",
+            errors: errors
+        );
 
         if (
             float.IsFinite(f: minDuration) &&
@@ -377,13 +377,13 @@ public static partial class WorldDefinitionValidator {
 
         var retention = market.RetentionSeconds;
 
-        if (
-            !float.IsFinite(f: retention) ||
-            (retention < WorldMarketCapacity.MinRetentionSeconds) ||
-            (retention > WorldMarketCapacity.MaxRetentionSeconds)
-        ) {
-            errors.Add(item: $"market.retentionSeconds {retention} is outside {WorldMarketCapacity.MinRetentionSeconds}..{WorldMarketCapacity.MaxRetentionSeconds}.");
-        }
+        RequireRange(
+            value: retention,
+            min: WorldMarketCapacity.MinRetentionSeconds,
+            max: WorldMarketCapacity.MaxRetentionSeconds,
+            name: "market.retentionSeconds",
+            errors: errors
+        );
 
         if (market.Formats is { } formats) {
             var seenFormats = new HashSet<WorldMarketFormat>();
@@ -406,12 +406,19 @@ public static partial class WorldDefinitionValidator {
                 var tier = tiers[index];
                 var path = $"market.admissionTiers[{index}]";
 
-                if (string.IsNullOrWhiteSpace(value: tier.Name)) {
-                    errors.Add(item: $"{path}.name is required.");
-                } else if (tier.Name.Length > WorldStateCapacity.MaxTextValueLength) {
+                if (
+                    !string.IsNullOrWhiteSpace(value: tier.Name) &&
+                    (tier.Name.Length > WorldStateCapacity.MaxTextValueLength)
+                ) {
                     errors.Add(item: $"{path}.name length {tier.Name.Length} exceeds the maximum of {WorldStateCapacity.MaxTextValueLength}.");
-                } else if (!seenTierNames.Add(item: tier.Name)) {
-                    errors.Add(item: $"{path}.name '{tier.Name}' is duplicated.");
+                } else {
+                    RequireUniqueName(
+                        value: tier.Name,
+                        seen: seenTierNames,
+                        path: path,
+                        field: "name",
+                        errors: errors
+                    );
                 }
             }
         }
@@ -936,15 +943,11 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
-        void RequireRate(float rate, string path) {
-            if (
-                !float.IsFinite(f: rate) ||
-                (rate < 0f) ||
-                (rate > 1f)
-            ) {
-                errors.Add(item: $"{path} must be in 0..1 (was {rate}).");
-            }
-        }
+        void RequireRate(float rate, string path) => RequireUnitInterval(
+            value: rate,
+            name: path,
+            errors: errors
+        );
 
         void RequireKeyedIntRow(string? row, string path) {
             if (

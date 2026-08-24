@@ -614,6 +614,64 @@ public static class WireFrame {
     /// <summary>The fixed prefix size (length prefix plus kind byte).</summary>
     public const int PrefixBytes = FrameCodec.PrefixBytes;
 
+    /// <summary><see cref="TryReadPrefixedBodyAsync"/>'s outcome — which head step the read stopped at, so each
+    /// caller can spell out its own refusal wording (or, for <see cref="PrefixEof"/>, a silent close) from a stable
+    /// discriminant rather than re-deriving it from <c>Following</c>/body-length arithmetic.</summary>
+    public enum PrefixedBodyOutcome {
+        /// <summary>The prefix and following bytes both arrived; <c>Following</c>/<c>Body</c> are populated.</summary>
+        Ok,
+        /// <summary>The peer disconnected before the 4-byte length prefix completed — a clean close, never a
+        /// mid-frame truncation.</summary>
+        PrefixEof,
+        /// <summary>The declared length exceeds the caller's cap; <c>Following</c> carries the declared value.</summary>
+        OverCap,
+        /// <summary>The peer disconnected after declaring a length but before the following bytes completed.</summary>
+        BodyEof,
+    }
+    /// <summary>Reads the <c>[u32 following-length][following bytes]</c> head shared by every stream reader on this
+    /// grammar: an exact little-endian length prefix, an over-cap refusal before the following bytes are ever
+    /// allocated, then exactly <c>Following</c> more bytes (skipped when it is zero). What counts as an EOF-before-
+    /// any-frame vs. a truncated frame, what the cap itself is, and what a zero length or an over-cap length means to
+    /// the caller are read-head-adjacent but caller-specific policy — this reads only the length and the bytes it
+    /// declares.</summary>
+    /// <param name="stream">The connection stream.</param>
+    /// <param name="cap">The hard cap on the declared length, already reduced for any prefix bytes the caller does
+    /// not count against it.</param>
+    /// <param name="ct">Cancellation.</param>
+    /// <returns>The outcome, the declared length (valid whenever the outcome is not <see cref="PrefixedBodyOutcome.PrefixEof"/>),
+    /// and the following bytes (populated only on <see cref="PrefixedBodyOutcome.Ok"/>).</returns>
+    public static async Task<(PrefixedBodyOutcome Outcome, uint Following, byte[] Body)> TryReadPrefixedBodyAsync(Stream stream, uint cap, CancellationToken ct) {
+        var prefix = new byte[sizeof(uint)];
+
+        if (!await HandshakeWireFormat.TryReadExactAsync(
+            buffer: prefix,
+            ct: ct,
+            stream: stream
+        ).ConfigureAwait(continueOnCapturedContext: false)) {
+            return (PrefixedBodyOutcome.PrefixEof, 0, []);
+        }
+
+        var following = BinaryPrimitives.ReadUInt32LittleEndian(source: prefix);
+
+        if (following > cap) {
+            return (PrefixedBodyOutcome.OverCap, following, []);
+        }
+
+        var body = new byte[following];
+
+        if (
+            (following > 0) &&
+            !await HandshakeWireFormat.TryReadExactAsync(
+            buffer: body,
+            ct: ct,
+            stream: stream
+        ).ConfigureAwait(continueOnCapturedContext: false)
+        ) {
+            return (PrefixedBodyOutcome.BodyEof, following, []);
+        }
+
+        return (PrefixedBodyOutcome.Ok, following, body);
+    }
     /// <summary>Reads exactly one frame.</summary>
     /// <param name="stream">The connection stream.</param>
     /// <param name="maxFrameBytes">The hard cap on prefix plus body bytes.</param>
@@ -623,45 +681,38 @@ public static class WireFrame {
     public static async Task<WireFrameRead> ReadAsync(Stream stream, int maxFrameBytes, CancellationToken ct) {
         ArgumentNullException.ThrowIfNull(argument: stream);
 
-        var prefix = new byte[sizeof(uint)];
-
-        if (!await HandshakeWireFormat.TryReadExactAsync(
-            buffer: prefix,
-            ct: ct,
-            stream: stream
-        ).ConfigureAwait(continueOnCapturedContext: false)) {
-            return WireFrameRead.Refused(
-                detail: "the peer closed before a frame prefix arrived",
-                refusal: WireRefusal.ConnectionClosed
-            );
-        }
-
-        var following = BinaryPrimitives.ReadUInt32LittleEndian(source: prefix);
         var cap = ((uint)Math.Max(
             val1: 0,
             val2: (maxFrameBytes - sizeof(uint))
         ));
+        var (outcome, following, frame) = await TryReadPrefixedBodyAsync(
+            cap: cap,
+            ct: ct,
+            stream: stream
+        ).ConfigureAwait(continueOnCapturedContext: false);
 
-        if (
-            (following < sizeof(byte)) ||
-            (following > cap)
-        ) {
+        switch (outcome) {
+            case PrefixedBodyOutcome.PrefixEof:
+                return WireFrameRead.Refused(
+                    detail: "the peer closed before a frame prefix arrived",
+                    refusal: WireRefusal.ConnectionClosed
+                );
+            case PrefixedBodyOutcome.OverCap:
+                return WireFrameRead.Refused(
+                    detail: $"prefix declares {following} following bytes; the admitted range is 1..{cap}",
+                    refusal: WireRefusal.FrameLengthInvalid
+                );
+            case PrefixedBodyOutcome.BodyEof:
+                return WireFrameRead.Refused(
+                    detail: $"the peer closed inside a {following}-byte frame",
+                    refusal: WireRefusal.ConnectionClosed
+                );
+        }
+
+        if (following < sizeof(byte)) {
             return WireFrameRead.Refused(
                 detail: $"prefix declares {following} following bytes; the admitted range is 1..{cap}",
                 refusal: WireRefusal.FrameLengthInvalid
-            );
-        }
-
-        var frame = new byte[following];
-
-        if (!await HandshakeWireFormat.TryReadExactAsync(
-            buffer: frame,
-            ct: ct,
-            stream: stream
-        ).ConfigureAwait(continueOnCapturedContext: false)) {
-            return WireFrameRead.Refused(
-                detail: $"the peer closed inside a {following}-byte frame",
-                refusal: WireRefusal.ConnectionClosed
             );
         }
 

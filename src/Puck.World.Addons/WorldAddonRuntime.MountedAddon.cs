@@ -51,6 +51,20 @@ public sealed partial class WorldAddonRuntime {
         /// the last observed value.</summary>
         public readonly record struct WatchState(bool Initialized, long Value);
 
+        /// <summary>One capability's per-mount dispatch-budget host-line latches, keyed by capability (<c>Observe</c>/
+        /// <c>Drive</c>/<c>Mutate</c> below) so an exhaustion or missing-budget line on one capability can never
+        /// starve another's. Mutable fields, not properties — <c>TryChargeDispatch</c> takes them by
+        /// <see langword="ref"/>. <see cref="ExhaustedReported"/> is EDGE-TRIGGERED per exhaustion episode (each
+        /// capability's own drain point resets it the tick nothing exhausted); <see cref="MissingBudgetReported"/> is
+        /// a once-per-episode latch with no reset — a missing budget is an authority-table inconsistency, not a
+        /// recurring condition worth re-announcing every tick it persists.</summary>
+        public struct DispatchLatches {
+            /// <summary>Whether the per-tick dispatch budget's exhaustion has already been reported this episode.</summary>
+            public bool ExhaustedReported;
+            /// <summary>Whether this principal's missing-budget authority-table inconsistency has already been reported.</summary>
+            public bool MissingBudgetReported;
+        }
+
         /// <summary>Gets the body each staged act resolved to, by act index, or <see cref="NoBody"/>.</summary>
         public int[] ActBody { get; }
         public int AnswerCount { get; set; }
@@ -73,19 +87,18 @@ public sealed partial class WorldAddonRuntime {
         // Latches the once-per-episode QuotaExhausted host line separately from every other Reported flag above —
         // this one names a per-row budget and its offending subject, which none of the shared-latch discrepancy
         // lines do, so it earns its own gate rather than silently sharing (and starving) DiscrepancyReported's.
-        public bool DispatchBudgetExhaustedReported { get; set; }
+        public DispatchLatches Observe;
         /// <summary>Gets this tick's per-body Observe query dispatch count, indexed by body index — the meter
         /// <see cref="WorldGrants.TryGetBudget"/>'s per-row budget is charged against. Cleared once per tick in
         /// <c>StageBatch</c>, the same sweep that resets <see cref="AnswerCount"/>.</summary>
         public int[] DispatchCounts { get; }
-        // The Drive twins of DispatchBudgetExhaustedReported/MissingBudgetReported, beside them for the same reason
-        // (a shared latch with the Observe pair would let one capability's line starve the other's).
-        public bool DriveDispatchBudgetExhaustedReported { get; set; }
+        // The Drive twin of Observe, beside it for the same reason (a shared latch across capabilities would let one
+        // capability's line starve the other's).
+        public DispatchLatches Drive;
         /// <summary>Gets this tick's per-body Drive act dispatch count, indexed by body index — the Drive twin of
         /// <see cref="DispatchCounts"/>. Cleared once per tick in <c>FoldActs</c>, since pump point 2 runs before
         /// <c>StageBatch</c>'s own reset.</summary>
         public int[] DriveDispatchCounts { get; }
-        public bool DriveMissingBudgetReported { get; set; }
         /// <summary>Gets the world-event and memory-watch cells delivered across this mount's lifetime; diagnostic only.</summary>
         public ulong EventCellsDelivered { get; set; }
         /// <summary>Gets this tick's event-cell charge count by Observe subject. Cleared once per tick in
@@ -129,18 +142,13 @@ public sealed partial class WorldAddonRuntime {
         /// <summary>Gets the row's machine-memory watch declarations (the fifth event family — addon-scoped, unlike the
         /// other four; see <see cref="WorldEventFeed"/>'s own remarks). Null/empty means none.</summary>
         public IReadOnlyList<WorldAddonMemoryWatch>? MemoryWatches { get; }
-        // Mirrors DispatchBudgetExhaustedReported for the SAME reason, beside it: the missing-budget host line in
-        // ResolveQueries names a per-row subject too, so it gets its own latch rather than sharing (and risking
-        // starvation from) DiscrepancyReported's.
-        public bool MissingBudgetReported { get; set; }
         public bool MutateByteBudgetExhaustedReported { get; set; }
         /// <summary>Gets this tick's running mutation-payload byte total for this addon, metered against
         /// <see cref="AddonAbi.MaxMutationBytesPerTickPerAddon"/>.</summary>
         public int MutateBytesThisTick { get; set; }
-        // The Mutate twins of DispatchBudgetExhaustedReported/MissingBudgetReported, beside them for the identical
-        // reason (a shared latch across capabilities would let one starve another's line).
-        public bool MutateDispatchBudgetExhaustedReported { get; set; }
-        public bool MutateMissingBudgetReported { get; set; }
+        // The Mutate twin of Observe/Drive, beside them for the identical reason (a shared latch across capabilities
+        // would let one starve another's line).
+        public DispatchLatches Mutate;
         /// <summary>Gets the host-owned scratch buffer stage 5's pointer-safety copy reads a <c>SubmitMutation</c>
         /// payload into, reused every act and every tick.</summary>
         public byte[] MutationPayloadBuffer { get; }

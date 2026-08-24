@@ -4,16 +4,31 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public static partial class WorldAuthorityCheckpointCodec {
-    private static void WriteCapability(WireWriter writer, WorldCapability capability) => writer.WriteByte(value: ((byte)capability));
+    private static void WriteCapability(WireWriter writer, WorldCapability capability) {
+        if (!WorldWireTags.TryToWire(
+            value: capability,
+            wire: out var wire
+        )) {
+            throw new InvalidOperationException(message: $"{nameof(WorldCapability)}.{capability} has no wire value");
+        }
+        writer.WriteByte(value: wire);
+    }
     private static WorldCapability ReadCapability(ref WireReader reader) {
-        var capability = ((WorldCapability)reader.ReadByte());
+        var wire = reader.ReadByte();
+        var valid = WorldWireTags.TryFromWire(
+            value: out WorldCapability capability,
+            wire: wire
+        );
 
         if (
             !reader.Failed &&
-            !Enum.IsDefined(value: capability)
+            !valid
         ) {
             reader.Fail(
-                detail: $"{nameof(WorldCapability)} wire value {((byte)capability)} is not declared",
+                detail: (WorldWireTags.IsRetiredCapabilityWire(wire: wire)
+                    ? $"{nameof(WorldCapability)} wire value {wire} is retired"
+                    : $"{nameof(WorldCapability)} wire value {wire} is not declared"
+                ),
                 refusal: WireRefusal.EnumValueUnknown
             );
         }

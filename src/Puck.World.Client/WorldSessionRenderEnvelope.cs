@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.SdfVm;
 using Puck.SignedDistance;
 using Puck.World.Server;
 
@@ -17,51 +18,34 @@ internal static class WorldSessionRenderEnvelope {
             derivedFaceBase: WorldCreationFacets.DerivedFaceBase,
             derivedFaceScreens: candidate.Authoring.DerivedFaceScreens
         );
+
+        WorldStaticSceneEmit.Emit(
+            builder: builder,
+            derivedFaces: facets.Faces,
+            screens: candidate.Screens
+        );
+
         var used = new HashSet<int>();
 
         foreach (var screen in candidate.Screens) {
             _ = used.Add(item: screen.Index);
-            WorldScreenStamper.Emit(
-                builder: builder,
-                screen: screen
-            );
         }
 
         foreach (var face in facets.Faces) {
             _ = used.Add(item: face.Index);
-            WorldScreenStamper.Emit(
-                builder: builder,
-                screen: face
-            );
         }
 
-        var reserved = 0;
-
-        for (var index = 0; ((index < SdfProgramBuilder.MaxScreenSurfaces) && (reserved < candidate.Authoring.AuthoringHeadroomScreens)); index++) {
-            if (!used.Add(item: index)) {
-                continue;
-            }
-
+        foreach (var screen in WorldScreenHeadroom.Reserve(
+            authoredCount: candidate.Screens.Count,
+            derivedFaceBase: WorldCreationFacets.DerivedFaceBase,
+            derivedFaceScreens: candidate.Authoring.DerivedFaceScreens,
+            headroomCount: candidate.Authoring.AuthoringHeadroomScreens,
+            usedIndices: used
+        )) {
             WorldScreenStamper.Emit(
                 builder: builder,
-                screen: new WorldScreen(
-                    Index: index,
-                    Origin: new Vector3(
-                        x: 0f,
-                        y: -1000f,
-                        z: 0f
-                    ),
-                    Right: Vector3.UnitX,
-                    Up: Vector3.UnitY,
-                    HalfWidth: 0.01f,
-                    HalfHeight: 0.01f,
-                    HalfDepth: 0.01f,
-                    Round: 0f,
-                    Source: new WorldScreenSource.None(),
-                    Route: WorldScreenRoute.Passive
-                )
+                screen: screen
             );
-            reserved++;
         }
     }
 
@@ -117,26 +101,22 @@ internal static class WorldSessionRenderEnvelope {
         ArgumentNullException.ThrowIfNull(argument: candidate);
         ArgumentNullException.ThrowIfNull(argument: bodyColor);
 
-        var builder = new SdfProgramBuilder();
-
-        EmitProbe(
-            bodyColor: bodyColor,
-            builder: builder,
-            candidate: candidate,
-            includeScreens: includeScreens,
-            slotBase: 0
-        );
-
-        if (includeAdjacencies) {
-            WorldPlacementStamper.EmitProbe(
+        return SdfProgramMeasure.Measure(emit: builder => {
+            EmitProbe(
+                bodyColor: bodyColor,
                 builder: builder,
-                reservedCount: (WorldAdjacencyBands.ProjectionCapacity(definition: candidate) * WorldAdjacencyGeometry.MaximumPlacementsPerBand)
+                candidate: candidate,
+                includeScreens: includeScreens,
+                slotBase: 0
             );
-        }
 
-        var measured = builder.Build();
-
-        return (Words: measured.Words.Length, Instances: measured.Instances.Count);
+            if (includeAdjacencies) {
+                WorldPlacementStamper.EmitProbe(
+                    builder: builder,
+                    reservedCount: (WorldAdjacencyBands.ProjectionCapacity(definition: candidate) * WorldAdjacencyGeometry.MaximumPlacementsPerBand)
+                );
+            }
+        });
     }
 }
 

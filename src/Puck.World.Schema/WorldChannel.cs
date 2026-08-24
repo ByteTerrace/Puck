@@ -101,7 +101,7 @@ public sealed class WorldChannelTable {
     public static readonly FixedQ4816 DefaultBinaryThreshold = (FixedQ4816.One / FixedQ4816.FromInteger(value: 2L));
     /// <summary>Gets the empty table — every world/kit compile call site that has not been threaded a real one yet falls
     /// back to this rather than null-checking.</summary>
-    public static WorldChannelTable Empty { get; } = new WorldChannelTable(ordinalByName: new Dictionary<string, int>(comparer: StringComparer.Ordinal));
+    public static WorldChannelTable Empty { get; } = new WorldChannelTable(ordinals: OrdinalTable.Empty);
 
     private readonly ChannelShape[] m_shapes = new ChannelShape[ChannelLimits.MaxChannels];
     private readonly ChannelFrame[] m_frames = new ChannelFrame[ChannelLimits.MaxChannels];
@@ -109,14 +109,15 @@ public sealed class WorldChannelTable {
     private readonly bool[] m_declared = new bool[ChannelLimits.MaxChannels];
     private readonly bool[] m_roles = new bool[ChannelLimits.MaxChannels];
     private readonly int[] m_roleOrdinals = new int[Enum.GetValues<ChannelRole>().Length];
-    // The reverse of m_ordinalByName — an ordinal's declared name, for a read-back that must name a channel rather
-    // than just its ordinal (player.channels). Null past ChannelCount/at an undeclared ordinal.
+    // The reverse of m_ordinals — an ordinal's declared name, for a read-back that must name a channel rather
+    // than just its ordinal (player.channels). Null past ChannelCount/at an undeclared ordinal — unlike m_ordinals,
+    // sized to MaxChannels so any in-range ordinal indexes safely without a bounds check of its own.
     private readonly string?[] m_names = new string?[ChannelLimits.MaxChannels];
 
-    private readonly Dictionary<string, int> m_ordinalByName;
+    private readonly OrdinalTable m_ordinals;
 
-    private WorldChannelTable(Dictionary<string, int> ordinalByName) {
-        m_ordinalByName = ordinalByName;
+    private WorldChannelTable(OrdinalTable ordinals) {
+        m_ordinals = ordinals;
         Array.Fill(
             array: m_roleOrdinals,
             value: -1
@@ -152,15 +153,16 @@ public sealed class WorldChannelTable {
     /// <summary>Compiles a world's declared channel table.</summary>
     /// <param name="channels">The world document's declared channel rows, already validated.</param>
     public static WorldChannelTable Compile(IReadOnlyList<WorldChannel> channels) {
-        var ordinalByName = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
-        var table = new WorldChannelTable(ordinalByName: ordinalByName) {
+        var table = new WorldChannelTable(ordinals: OrdinalTable.Build(
+            names: channels.Select(selector: static channel => channel.Name).ToArray(),
+            comparer: StringComparer.Ordinal
+        )) {
             ChannelCount = channels.Count,
         };
 
         for (var ordinal = 0; (ordinal < channels.Count); ordinal++) {
             var channel = channels[ordinal];
 
-            ordinalByName[channel.Name] = ordinal;
             table.m_shapes[ordinal] = channel.Shape;
             table.m_frames[ordinal] = channel.Frame;
             table.m_declared[ordinal] = true;
@@ -237,9 +239,9 @@ public sealed class WorldChannelTable {
     /// <summary>Returns the binary crossing threshold at this ordinal (meaningful only for a <see cref="ChannelShape.Binary"/> channel).</summary>
     public FixedQ4816 Threshold(int ordinal) => m_thresholds[ordinal];
     /// <summary>Resolves a declared channel name to its ordinal.</summary>
-    public bool TryGetOrdinal(string name, out int ordinal) => m_ordinalByName.TryGetValue(
-        key: name,
-        value: out ordinal
+    public bool TryGetOrdinal(string name, out int ordinal) => m_ordinals.TryGetOrdinal(
+        name: name,
+        ordinal: out ordinal
     );
     /// <summary>Resolves a binding channel reference to its authored ordinal. <see cref="ChannelRef"/> carries only
     /// the declared-name arm; see <c>ChannelRef.cs</c>'s remarks.</summary>

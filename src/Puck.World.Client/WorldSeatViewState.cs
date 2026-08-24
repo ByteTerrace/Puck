@@ -158,7 +158,7 @@ public sealed class WorldSeatViewState {
     /// <param name="rate">The exponential closing rate per second.</param>
     /// <param name="deltaSeconds">The step.</param>
     public void Follow(float targetYaw, float rate, float deltaSeconds) {
-        var fraction = (1f - MathF.Exp(x: (-rate * deltaSeconds)));
+        var fraction = FirstOrderLag.Alpha(rate: rate, deltaSeconds: deltaSeconds);
 
         lock (m_gate) {
             var current = Wrap(radians: m_yaw);

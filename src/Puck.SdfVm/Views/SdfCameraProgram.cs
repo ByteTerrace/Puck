@@ -499,6 +499,9 @@ public sealed class SdfCameraProgramRig : ISdfCameraRig {
 /// delayed subject trajectory that disagrees with the rendered one.</remarks>
 public sealed class SdfCameraBoomFollower {
     private SecondOrderFollower3 m_follower;
+    private SdfCameraDynamics m_cachedDynamics;
+    private SecondOrderResponse m_cachedResponse;
+    private bool m_hasCachedResponse;
 
     /// <summary>Gets the eased boom — the eye's offset from the target.</summary>
     public Vector3 Boom => m_follower.Value;
@@ -514,21 +517,30 @@ public sealed class SdfCameraBoomFollower {
     /// <param name="deltaSeconds">The frame step.</param>
     /// <param name="eye">The resolved eye, eased in place.</param>
     /// <param name="target">The resolved target, read but never moved.</param>
+    /// <remarks>The derived response is cached against the authored (f, ζ, r) triple — an <see cref="SdfCameraOp.Blend"/>
+    /// program can change it frame to frame, so the cache is checked, not assumed stable, but a steady triple across
+    /// frames (the common case) re-derives nothing.</remarks>
     public void Apply(in SdfCameraDynamics dynamics, float deltaSeconds, ref Vector3 eye, ref Vector3 target) {
         if (!dynamics.IsLive) {
             m_follower.Reseed();
+            m_hasCachedResponse = false;
 
             return;
         }
 
-        var response = SecondOrderResponse.Create(
-            dampingRatio: dynamics.Damping,
-            frequencyHz: dynamics.Frequency,
-            initialResponse: dynamics.Response
-        );
+        if (!m_hasCachedResponse || (m_cachedDynamics != dynamics)) {
+            m_cachedResponse = SecondOrderResponse.Create(
+                dampingRatio: dynamics.Damping,
+                frequencyHz: dynamics.Frequency,
+                initialResponse: dynamics.Response
+            );
+            m_cachedDynamics = dynamics;
+            m_hasCachedResponse = true;
+        }
+
         var boom = m_follower.Step(
             deltaSeconds: deltaSeconds,
-            response: in response,
+            response: in m_cachedResponse,
             target: (eye - target)
         );
 

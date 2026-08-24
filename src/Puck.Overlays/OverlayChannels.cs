@@ -85,6 +85,11 @@ public readonly record struct OverlayChannelUsage(
 /// <param name="MarkerMaxChipsPerSeat">The most projected marker chips one seat draws — the same ceiling the
 /// marker feed culls to (nearest the camera) and <see cref="MarkerWriter"/> refuses past, so the channel's
 /// reservation and the render-side cull never disagree.</param>
+/// <param name="WheelMaxRings">The most concentric rings one seat's radial action menu presents — mirrors the
+/// binding substrate's wheel bound, so the channel's reservation and <see cref="WheelWriter"/>'s render-side
+/// backstop never disagree.</param>
+/// <param name="WheelMaxSectorsPerRing">The most sector pieces one wheel ring presents — <see cref="WheelMaxRings"/>'
+/// per-ring twin.</param>
 public readonly record struct OverlayCapacity(
     int Seats,
     int HudPanels,
@@ -94,7 +99,9 @@ public readonly record struct OverlayCapacity(
     int BindingBarMaxBanks,
     int BindingBarMaxSlotsPerBank,
     int BindingBarMaxModifiers,
-    int MarkerMaxChipsPerSeat
+    int MarkerMaxChipsPerSeat,
+    int WheelMaxRings,
+    int WheelMaxSectorsPerRing
 );
 /// <summary>
 /// The lease table: every channel's reservation, each sized at the writer's measured maximum — the largest record
@@ -152,11 +159,10 @@ public sealed class OverlayChannelLeases {
     private const int ToastTextWords = (ToastLabelChars + (ToastWriter.MaxMessageChars * ToastWriter.MaxMessageLines));
     // Wheel, per PRESENTED seat (open or lingering through its outcome fade) — the hub disc, every ring's sector
     // pieces each with its icon chip OR text fallback (two elements per sector at most), and the hub's two text
-    // lines (hovered/outcome sector, active ring), all inside the
-    // seat's one clip scope. Every count and clamp reads the writer's own declared caps (the CursorWriter
-    // discipline), so a cap change moves the reservation with it. No panel.
-    private const int WheelElementsPerSeat = (1 + ((WheelWriter.MaxRings * WheelWriter.MaxSectorsPerRing) * 2) + 2);
-    private const int WheelTextWordsPerSeat = ((((WheelWriter.MaxRings * WheelWriter.MaxSectorsPerRing) + 1) * WheelWriter.MaxSectorLabelChars) + WheelWriter.MaxRingLabelChars);
+    // lines (hovered/outcome sector, active ring), all inside the seat's one clip scope. No panel. The ring/sector
+    // counts are schema-derived (OverlayCapacity.WheelMaxRings/WheelMaxSectorsPerRing, the MarkerMaxChipsPerSeat
+    // pattern), never a writer-baked constant; the per-sector/ring label clamps still read the writer's own caps
+    // (the CursorWriter discipline), so a clamp change moves the reservation with it.
 
     /// <summary>The number of declared channels.</summary>
     public const int Count = 7;
@@ -181,6 +187,8 @@ public sealed class OverlayChannelLeases {
         RequireNonNegative(count: capacity.BindingBarMaxSlotsPerBank, name: nameof(OverlayCapacity.BindingBarMaxSlotsPerBank));
         RequireNonNegative(count: capacity.BindingBarMaxModifiers, name: nameof(OverlayCapacity.BindingBarMaxModifiers));
         RequireNonNegative(count: capacity.MarkerMaxChipsPerSeat, name: nameof(OverlayCapacity.MarkerMaxChipsPerSeat));
+        RequireNonNegative(count: capacity.WheelMaxRings, name: nameof(OverlayCapacity.WheelMaxRings));
+        RequireNonNegative(count: capacity.WheelMaxSectorsPerRing, name: nameof(OverlayCapacity.WheelMaxSectorsPerRing));
 
         // The public host counts are ints, but their products are not allowed to wrap before the backstop check.
         // UInt128 covers the largest possible product here (three non-negative Int32 counts times a small writer
@@ -196,6 +204,9 @@ public sealed class OverlayChannelLeases {
         // one clip scope. No text, no panel. Schema-derived (OverlayCapacity.MarkerMaxChipsPerSeat), never a
         // writer-baked constant.
         var markerElementsPerSeat = ((UInt128)(uint)capacity.MarkerMaxChipsPerSeat * 2);
+        var wheelSectorsPerSeat = ((UInt128)(uint)capacity.WheelMaxRings * (uint)capacity.WheelMaxSectorsPerRing);
+        var wheelElementsPerSeat = ((1 + (wheelSectorsPerSeat * 2)) + 2);
+        var wheelTextWordsPerSeat = (((wheelSectorsPerSeat + 1) * WheelWriter.MaxSectorLabelChars) + WheelWriter.MaxRingLabelChars);
 
         Capacity = capacity;
         (UInt128 Clips, UInt128 Elements, UInt128 Panels, UInt128 TextWords)[] wideReservations = [
@@ -205,7 +216,7 @@ public sealed class OverlayChannelLeases {
             (0, ToastElements, 1, ToastTextWords),
             (hudPanels, ((hudWorldElements + hudSeatElements) * HudElementCost), hudPanels, ((hudWorldElements + hudSeatElements) * HudTextWordCost)),
             (seats, ((UInt128)CursorElementsPerSeat * seats), 0, ((UInt128)CursorTextWordsPerSeat * seats)),
-            (seats, ((UInt128)WheelElementsPerSeat * seats), 0, ((UInt128)WheelTextWordsPerSeat * seats)),
+            (seats, (wheelElementsPerSeat * seats), 0, (wheelTextWordsPerSeat * seats)),
         ];
 
         UInt128 totalClips = 0;

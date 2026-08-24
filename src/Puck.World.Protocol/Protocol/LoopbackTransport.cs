@@ -174,79 +174,90 @@ public sealed class LoopbackTransport : IServerLink {
             ));
         }
     }
+    // The one abstract member every fire-and-forget Submit* interface default forwards to — a switch over the
+    // payload's own leaf type recovers the per-kind tap dispatch SubmitTapped's generic signature needs (the payload
+    // arriving here is already the leaf IServerLink's own default methods constructed, so the type test always
+    // matches its case). Rebuild and Lever carry no capture point at all (not replay-relevant simulation input).
+    // ScreenOp's replay-relevant content hash (Insert only) is not knowable until the server reads the named path,
+    // which may only happen at apply time, so WorldServer.ScreenOpTap (fired from inside its own apply method) is
+    // the tape's capture point instead. Mutation is likewise tapped at the server's own envelope dispatch
+    // (WorldServer.MutationTap), the one ingress the loopback, an admitted socket peer, and a forwarded traveller's
+    // submission all share.
     /// <inheritdoc/>
-    public void SubmitCommand(WorldCommand command) {
-        if (
-            TryNextEnvelope(
-            principal: command.Principal,
-            payload: new WorldSubmissionPayload.Command(Value: command),
-            envelope: out var envelope
-        ) &&
-            (envelope.Payload is WorldSubmissionPayload.Command canonical)
-        ) {
-            CommandTap?.Invoke(obj: canonical.Value);
-            m_server.Submit(envelope: envelope);
+    public void SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal) {
+        switch (payload) {
+            // CommandTap is single-arg (Action<WorldCommand>, no principal), unlike the two-arg taps below —
+            // inlined rather than forced through SubmitTapped's Action<TValue, WorldPrincipal> shape.
+            case WorldSubmissionPayload.Command command:
+                if (
+                    TryNextEnvelope(
+                    principal: principal,
+                    payload: command,
+                    envelope: out var commandEnvelope
+                ) &&
+                    (commandEnvelope.Payload is WorldSubmissionPayload.Command canonicalCommand)
+                ) {
+                    CommandTap?.Invoke(obj: canonicalCommand.Value);
+                    m_server.Submit(envelope: commandEnvelope);
+                }
+                return;
+            case WorldSubmissionPayload.Composition composition:
+                SubmitTapped<WorldSubmissionPayload.Composition, WorldComposition>(
+                    payload: composition,
+                    principal: principal,
+                    selectValue: static p => p.Value,
+                    tap: CompositionTap
+                );
+                return;
+            case WorldSubmissionPayload.Designation designation:
+                SubmitTapped<WorldSubmissionPayload.Designation, WorldDesignation>(
+                    payload: designation,
+                    principal: principal,
+                    selectValue: static p => p.Value,
+                    tap: DesignationTap
+                );
+                return;
+            // The tap fires before the envelope reaches the server, which is where WorldGrants.Conflicts actually
+            // rules — so the tape records the submitted grant, including one the door goes on to refuse. That is
+            // deliberate: replay re-applies a Grant entry through this identical door (WorldReplaySnapshot.Replay
+            // calls server.Grant, never a bypass), so a refusal on tape reproduces as the identical refusal on
+            // replay rather than silently vanishing or silently becoming accepted.
+            case WorldSubmissionPayload.Grant grant:
+                SubmitTapped<WorldSubmissionPayload.Grant, WorldGrant>(
+                    payload: grant,
+                    principal: principal,
+                    selectValue: static p => p.Value,
+                    tap: GrantTap
+                );
+                return;
+            case WorldSubmissionPayload.Revoke revoke:
+                SubmitTapped<WorldSubmissionPayload.Revoke, WorldGrant>(
+                    payload: revoke,
+                    principal: principal,
+                    selectValue: static p => p.Value,
+                    tap: RevokeTap
+                );
+                return;
+            case WorldSubmissionPayload.Undo undo:
+                SubmitTapped<WorldSubmissionPayload.Undo, int>(
+                    payload: undo,
+                    principal: principal,
+                    selectValue: static p => p.Count,
+                    tap: UndoTap
+                );
+                return;
+            default:
+                Submit(
+                    principal: principal,
+                    payload: payload
+                );
+                return;
         }
     }
-    /// <inheritdoc/>
-    public void SubmitComposition(WorldComposition composition, WorldPrincipal principal) =>
-        SubmitTapped(
-            payload: new WorldSubmissionPayload.Composition(Value: composition),
-            principal: principal,
-            selectValue: static payload => payload.Value,
-            tap: CompositionTap
-        );
-    /// <inheritdoc/>
-    public void SubmitDesignation(WorldDesignation designation, WorldPrincipal principal) =>
-        SubmitTapped(
-            payload: new WorldSubmissionPayload.Designation(Value: designation),
-            principal: principal,
-            selectValue: static payload => payload.Value,
-            tap: DesignationTap
-        );
-    // The tap fires before the envelope reaches the server, which is where WorldGrants.Conflicts actually rules —
-    // so the tape records the submitted grant, including one the door goes on to refuse. That is deliberate:
-    // replay re-applies a Grant entry through this identical door (WorldReplaySnapshot.Replay calls
-    // server.Grant, never a bypass), so a refusal on tape reproduces as the identical refusal on replay rather
-    // than silently vanishing or silently becoming accepted.
-    /// <inheritdoc/>
-    public void SubmitGrant(WorldGrant grant, WorldPrincipal actor) =>
-        SubmitTapped(
-            payload: new WorldSubmissionPayload.Grant(Value: grant),
-            principal: actor,
-            selectValue: static payload => payload.Value,
-            tap: GrantTap
-        );
     /// <inheritdoc/>
     public void SubmitIntent(in IntentSubmission submission) {
         IntentTap?.Invoke(obj: submission);
         m_server.EnqueueIntent(submission: in submission);
-    }
-    /// <inheritdoc/>
-    public void SubmitRebuild(WorldRebuildRequest request, WorldPrincipal principal) {
-        Submit(
-            principal: principal,
-            payload: new WorldSubmissionPayload.Rebuild(Value: request)
-        );
-    }
-    /// <inheritdoc/>
-    public void SubmitRevoke(WorldGrant grant, WorldPrincipal actor) =>
-        SubmitTapped(
-            payload: new WorldSubmissionPayload.Revoke(Value: grant),
-            principal: actor,
-            selectValue: static payload => payload.Value,
-            tap: RevokeTap
-        );
-    /// <inheritdoc/>
-    public void SubmitScreenOp(WorldScreenOp op, WorldPrincipal principal) {
-        // No transport-level tap here — unlike Grant/Revoke, a screen op's replay-relevant content
-        // hash (Insert only) is not knowable until the server reads the named path, which may only happen at apply
-        // time. WorldServer.ScreenOpTap (fired from inside its own apply method, mirroring RebuildTap) is the tape's
-        // capture point instead — see WorldServer.ApplyRebuild's own remarks for why this is the same shape.
-        Submit(
-            principal: principal,
-            payload: new WorldSubmissionPayload.ScreenOp(Value: op)
-        );
     }
     /// <inheritdoc/>
     public void SubmitSession(SessionRequest request, Action<SessionReply> completion) {
@@ -274,28 +285,4 @@ public sealed class LoopbackTransport : IServerLink {
             ));
         }
     }
-    /// <inheritdoc/>
-    public void SubmitSessionLever(WorldSessionLever lever, WorldPrincipal principal) {
-        Submit(
-            principal: principal,
-            payload: new WorldSubmissionPayload.Lever(Value: lever)
-        );
-    }
-    /// <inheritdoc/>
-    public void SubmitUndo(int count, WorldPrincipal principal) =>
-        SubmitTapped(
-            payload: new WorldSubmissionPayload.Undo(Count: count),
-            principal: principal,
-            selectValue: static payload => payload.Count,
-            tap: UndoTap
-        );
-    /// <inheritdoc/>
-    /// <remarks>Untapped here deliberately: a mutation is taped at the server's own envelope dispatch
-    /// (<c>WorldServer.MutationTap</c>), the one ingress the loopback, an admitted socket peer, and a forwarded
-    /// traveller's submission all share.</remarks>
-    public void SubmitWorldMutation(WorldMutation mutation) =>
-        Submit(
-            payload: new WorldSubmissionPayload.Mutation(Value: mutation),
-            principal: mutation.Principal
-        );
 }

@@ -14,7 +14,7 @@ namespace Puck.SignedDistance.Queries;
 //
 // THE EXCLUDED-OPS RULE (asserted once at construction, never per query): this evaluator is WARP-FREE — it rejects
 // any program containing an op that needs runtime trigonometry not implemented in fixed point (BendX/BendY/BendZ/
-// TwistY/LogSphere/CellJitter/RepeatPolar/Displace/DomainWarp), the one op needing a per-frame dynamic-transform
+// TwistY/LogSphere/CellJitter/RepeatPolar/Displace/DomainWarp/NoiseDisplace), the one op needing a per-frame dynamic-transform
 // buffer this evaluator's signature has no seam for (TransformDynamic — see the constructor's remarks), and
 // WallpaperFold, whose 17-group parity-keyed cell logic has no fixed-point implementation. It also rejects a
 // NON-UNIFORM Scale: the renderer's min-axis correction is deliberately a safe sphere-tracing lower bound, not

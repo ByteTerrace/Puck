@@ -329,11 +329,13 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            if (string.IsNullOrWhiteSpace(value: creation.Id)) {
-                errors.Add(item: $"{path}.id is required.");
-            } else if (!ids.Add(item: creation.Id)) {
-                errors.Add(item: $"{path}.id '{creation.Id}' is duplicated.");
-            }
+            RequireUniqueName(
+                value: creation.Id,
+                seen: ids,
+                path: path,
+                field: "id",
+                errors: errors
+            );
 
             if (creation.Document is null) {
                 errors.Add(item: $"{path}.doc is required.");
@@ -415,10 +417,14 @@ public static partial class WorldDefinitionValidator {
         return ids;
     }
     // The per-instance face overrides: each names a declared creation face, no duplicate face names.
-    private static void ValidateFaceSources(WorldDefinition definition, IReadOnlyList<WorldPlacementFace>? faceSources, WorldPlacement placement, IReadOnlyList<WorldCreation> creations, WorldFaceCatalog faces, HashSet<string> destinationNames, HashSet<string> fontNames, bool hasTextCatalog, string path, List<string> errors) {
+    private static void ValidateFaceSources(WorldDefinition definition, IReadOnlyList<WorldPlacementFace>? faceSources, WorldPlacement placement, IReadOnlyList<WorldCreation> creations, WorldFaceCatalog faces, ValidationScope scope, string path, List<string> errors) {
         if (faceSources is not { Count: > 0 } sources) {
             return;
         }
+
+        var destinationNames = scope.DestinationNames;
+        var fontNames = scope.FontNames;
+        var hasTextCatalog = scope.HasTextCatalog;
 
         var creation = WorldDefinitionRows.FindCreation(
             creations: creations,
@@ -598,11 +604,9 @@ public static partial class WorldDefinitionValidator {
     }
     // The kit rows (SIM-AFFECTING): name presence/uniqueness, one motion program, producer parameters, actions, and
     // the machine-pad map.
-    private static HashSet<string> ValidateKits(WorldDefinition definition, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, ISet<string> allChannelNames, ISet<string> compositionChannelNames, ISet<string> dynamicsNames, IReadOnlyDictionary<string, WorldStateRow> stateRows, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, List<string> errors) {
+    private static HashSet<string> ValidateKits(WorldDefinition definition, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, ISet<string> allChannelNames, ISet<string> compositionChannelNames, ISet<string> dynamicsNames, HashSet<string> targetRegisterNames, HashSet<string> judgeRowNames, IReadOnlyDictionary<string, WorldStateRow> stateRows, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, List<string> errors) {
         var kitNames = new HashSet<string>(comparer: StringComparer.Ordinal);
         var programRows = BodyMotionProgramRows(programs: definition.BodyMotionPrograms);
-        var targetRegisterNames = definition.TargetRegisters.Select(selector: register => register.Name).ToHashSet(comparer: StringComparer.Ordinal);
-        var judgeRowNames = (definition.Judges ?? []).Select(selector: row => row.Name).ToHashSet(comparer: StringComparer.Ordinal);
 
         var kits = definition.Kits;
 
@@ -627,11 +631,13 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            if (string.IsNullOrWhiteSpace(value: kit.Name)) {
-                errors.Add(item: $"{path} requires a name.");
-            } else if (!kitNames.Add(item: kit.Name)) {
-                errors.Add(item: $"{path} duplicates the name '{kit.Name}'.");
-            }
+            RequireUniqueName(
+                value: kit.Name,
+                seen: kitNames,
+                path: path,
+                field: "",
+                errors: errors
+            );
 
             // Resolved only when the program name is defined AND Motion-kind — ValidateMotionModel's coherence check
             // needs a real program to walk; a bad bodyMotionProgram is already refused above, so it skips coherence
@@ -766,11 +772,13 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            if (string.IsNullOrWhiteSpace(value: look.Name)) {
-                errors.Add(item: $"{path} requires a name.");
-            } else if (!names.Add(item: look.Name)) {
-                errors.Add(item: $"{path} duplicates the name '{look.Name}'.");
-            }
+            RequireUniqueName(
+                value: look.Name,
+                seen: names,
+                path: path,
+                field: "",
+                errors: errors
+            );
 
             var isCatalog = false;
             WorldCreation? resolvedCreation = null;
@@ -889,8 +897,15 @@ public static partial class WorldDefinitionValidator {
             if (look.Motion.Dynamics is { } lookDynamics) {
                 if (lookDynamics.Length == 0) {
                     errors.Add(item: $"{path}.motion.dynamics is empty — name a dynamics row or omit it.");
-                } else if (!dynamicsNames.Contains(item: lookDynamics)) {
-                    errors.Add(item: $"{path}.motion.dynamics '{lookDynamics}' names no dynamics row.");
+                } else {
+                    RequireDeclared(
+                        value: lookDynamics,
+                        declaredSet: dynamicsNames,
+                        path: path,
+                        field: "motion.dynamics",
+                        rowNoun: "dynamics",
+                        errors: errors
+                    );
                 }
             }
 
@@ -914,12 +929,14 @@ public static partial class WorldDefinitionValidator {
                         errors.Add(item: $"{path}.motion.partDynamics['{partId}'] names no part of creation '{partCreation.Id}'.");
                     }
 
-                    if (
-                        string.IsNullOrWhiteSpace(value: partRow) ||
-                        !dynamicsNames.Contains(item: partRow)
-                    ) {
-                        errors.Add(item: $"{path}.motion.partDynamics['{partId}'] '{partRow}' names no dynamics row.");
-                    }
+                    RequireDeclared(
+                        value: partRow,
+                        declaredSet: dynamicsNames,
+                        path: $"{path}.motion.partDynamics['{partId}']",
+                        field: "",
+                        rowNoun: "dynamics",
+                        errors: errors
+                    );
                 }
             }
         }
@@ -930,7 +947,14 @@ public static partial class WorldDefinitionValidator {
     // scale envelope, the lattice distribution's positive counts and finite steps, the mirror plane, and the animated-row
     // constraints (static-only facets; the reserved replay-pool ceiling, word-exact). Returns the resolved id set for
     // the anchor-union gate (a WorldAnchor.Placement resolves against it).
-    private static HashSet<string> ValidatePlacements(IReadOnlyList<WorldPlacement> placements, WorldDefinition definition, HashSet<string> creationIds, HashSet<string> lookNames, HashSet<string> kitNames, WorldAuthoringDefaults authoring, HashSet<string> patchIds, bool requiresField, HashSet<string> destinationNames, HashSet<string> fontNames, bool hasTextCatalog, List<string> errors) {
+    private static HashSet<string> ValidatePlacements(IReadOnlyList<WorldPlacement> placements, WorldDefinition definition, WorldAuthoringDefaults authoring, bool requiresField, ValidationScope scope, List<string> errors) {
+        var creationIds = scope.CreationIds;
+        var lookNames = scope.LookNames;
+        var kitNames = scope.KitNames;
+        var patchIds = scope.PatchIds;
+        var destinationNames = scope.DestinationNames;
+        var fontNames = scope.FontNames;
+        var hasTextCatalog = scope.HasTextCatalog;
         var ids = new HashSet<string>(comparer: StringComparer.Ordinal);
         var creations = definition.Creations;
 
@@ -964,18 +988,22 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            if (string.IsNullOrWhiteSpace(value: placement.Id)) {
-                errors.Add(item: $"{path}.id is required.");
-            } else if (!ids.Add(item: placement.Id)) {
-                errors.Add(item: $"{path}.id '{placement.Id}' is duplicated.");
-            }
+            RequireUniqueName(
+                value: placement.Id,
+                seen: ids,
+                path: path,
+                field: "id",
+                errors: errors
+            );
 
-            if (
-                string.IsNullOrWhiteSpace(value: placement.CreationId) ||
-                !creationIds.Contains(item: placement.CreationId)
-            ) {
-                errors.Add(item: $"{path}.creationId '{placement.CreationId}' names no creation row.");
-            }
+            RequireDeclared(
+                value: placement.CreationId,
+                declaredSet: creationIds,
+                path: path,
+                field: "creationId",
+                rowNoun: "creation",
+                errors: errors
+            );
 
             if (!IsFinite(value: placement.Position)) {
                 errors.Add(item: $"{path}.position must contain finite coordinates.");
@@ -1178,9 +1206,7 @@ public static partial class WorldDefinitionValidator {
                 placement: placement,
                 creations: creations,
                 faces: faces,
-                destinationNames: destinationNames,
-                fontNames: fontNames,
-                hasTextCatalog: hasTextCatalog,
+                scope: scope,
                 path: $"{path}.faceSources",
                 errors: errors
             );
@@ -1341,9 +1367,14 @@ public static partial class WorldDefinitionValidator {
         );
 
         for (var index = 0; (index < assignment.Rows.Count); index++) {
-            if (!rowNames.Contains(item: assignment.Rows[index])) {
-                errors.Add(item: $"{section}.rows[{index}] '{assignment.Rows[index]}' names no {rowNoun} row.");
-            }
+            RequireDeclared(
+                value: assignment.Rows[index],
+                declaredSet: rowNames,
+                path: $"{section}.rows[{index}]",
+                field: "",
+                rowNoun: rowNoun,
+                errors: errors
+            );
         }
     }
     // Document-wide: the simultaneous-window ceiling is OffscreenRenderBudget.PerProducedFrame (the presentation budget
@@ -1400,11 +1431,13 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            if (string.IsNullOrWhiteSpace(value: font.Name)) {
-                errors.Add(item: $"{path}.name is required.");
-            } else if (!names.Add(item: font.Name)) {
-                errors.Add(item: $"{path}.name '{font.Name}' is duplicated.");
-            }
+            RequireUniqueName(
+                value: font.Name,
+                seen: names,
+                path: path,
+                field: "name",
+                errors: errors
+            );
 
             if (string.IsNullOrWhiteSpace(value: font.Source)) {
                 errors.Add(item: $"{path}.source is required.");

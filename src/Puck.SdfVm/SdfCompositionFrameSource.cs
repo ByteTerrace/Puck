@@ -138,15 +138,19 @@ public sealed class SdfCompositionFrameSource : ISdfFrameSource {
         WorstCaseDynamicTransformCapacity = m_transforms.Length;
     }
 
-    /// <summary>Gets or sets where a hidden/unused dynamic-transform slot parks this frame (<see cref="SdfEmitContext.ParkPosition"/>)
-    /// — settable so a host can move it to sit well outside its own world's camera/tile-cull reach (the default,
-    /// <c>(0, -1000, 0)</c>, is a generic "far below anything" fallback). Changing this does not rebuild the program
-    /// (it only affects <see cref="ISdfSceneEmitter.PackDynamicTransforms"/>, called every frame regardless).</summary>
-    public Vector3 ParkPosition { get; set; } = new(
+    /// <summary>Gets the generic "far below anything" fallback park position — a host that needs a matching literal
+    /// outside a live <see cref="SdfEmitContext"/> (a construction-time capacity probe, say) reads this rather than
+    /// carrying its own copy.</summary>
+    public static readonly Vector3 DefaultParkPosition = new(
         x: 0f,
         y: -1000f,
         z: 0f
     );
+    /// <summary>Gets or sets where a hidden/unused dynamic-transform slot parks this frame (<see cref="SdfEmitContext.ParkPosition"/>)
+    /// — settable so a host can move it to sit well outside its own world's camera/tile-cull reach. Changing this does
+    /// not rebuild the program (it only affects <see cref="ISdfSceneEmitter.PackDynamicTransforms"/>, called every
+    /// frame regardless).</summary>
+    public Vector3 ParkPosition { get; set; } = DefaultParkPosition;
     /// <summary>Gets the dynamic-transform slot floor the render assembly must reserve — the sum of every registered
     /// emitter's <see cref="ISdfSceneEmitter.DynamicSlotCount"/>.</summary>
     public int WorstCaseDynamicTransformCapacity { get; }

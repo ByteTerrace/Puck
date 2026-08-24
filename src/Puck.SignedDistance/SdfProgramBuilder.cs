@@ -22,6 +22,10 @@ public sealed partial class SdfProgramBuilder {
     /// indexed array and giving push/pop real push/pop-by-depth stack semantics in the shader first, then bumping the
     /// <c>#define</c> and this constant. KEEP IN SYNC with SDF_MAX_FIELD_SCOPE_DEPTH in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
     public const int MaxFieldScopeDepth = 1;
+    /// <summary>The most octaves one <see cref="NoiseDisplace"/> may declare. The interpreter loops the count at
+    /// runtime (Blend lane), so this bounds the per-sample hash cost (8 corner hashes per octave) and the
+    /// <c>lacunarity^octaves</c> term inside the Lipschitz step clamp.</summary>
+    public const int MaxNoiseOctaves = 8;
     // The largest |dot(unitRight, unitUp)| RequireOrthogonalBasis accepts: a cosine, so it reads as ~0.057 degrees.
     private const float BasisSkewTolerance = 1.0e-3f;
 

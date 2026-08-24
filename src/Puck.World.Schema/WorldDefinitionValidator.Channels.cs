@@ -40,13 +40,11 @@ public static partial class WorldDefinitionValidator {
             stateRows: stateRows
         );
 
-        if (
-            !float.IsFinite(f: authoring.MultiSeatAlpha) ||
-            (authoring.MultiSeatAlpha < 0f) ||
-            (authoring.MultiSeatAlpha > 1f)
-        ) {
-            errors.Add(item: $"{path}.multiSeatAlpha {authoring.MultiSeatAlpha} is outside 0..1.");
-        }
+        RequireUnitInterval(
+            value: authoring.MultiSeatAlpha,
+            name: $"{path}.multiSeatAlpha",
+            errors: errors
+        );
 
         if (authoring.SlotSet is null) {
             errors.Add(item: $"{path}.slotSet is required.");
@@ -61,11 +59,14 @@ public static partial class WorldDefinitionValidator {
                 var source = authoring.SlotSet[index];
                 var slotPath = $"{path}.slotSet[{index}]";
 
-                if (string.IsNullOrWhiteSpace(value: source)) {
-                    errors.Add(item: $"{slotPath} is required.");
-                } else if (!seenSources.Add(item: source)) {
-                    errors.Add(item: $"{slotPath} '{source}' is duplicated.");
-                } else if (
+                if (
+                    RequireUniqueName(
+                    value: source,
+                    seen: seenSources,
+                    path: slotPath,
+                    field: "",
+                    errors: errors
+                ) &&
                     (InputSourceVocabularyHook.IsKnownSourceId is { } isKnown) &&
                     !isKnown(source)
                 ) {
@@ -82,11 +83,16 @@ public static partial class WorldDefinitionValidator {
                 var placement = slots[index];
                 var slotPath = $"{slotsPath}[{index}]";
 
-                if (placement is null || string.IsNullOrWhiteSpace(value: placement.Source)) {
-                    errors.Add(item: $"{slotPath}.source is required.");
-                } else if (!placed.Add(item: placement.Source)) {
-                    errors.Add(item: $"{slotPath}.source '{placement.Source}' is placed twice.");
-                } else if (!slotSet.Contains(item: placement.Source)) {
+                if (
+                    RequireUniqueName(
+                    value: placement?.Source,
+                    seen: placed,
+                    path: slotPath,
+                    field: "source",
+                    errors: errors
+                ) &&
+                    !slotSet.Contains(item: placement!.Source)
+                ) {
                     errors.Add(item: $"{slotPath}.source '{placement.Source}' is not in {path}.slotSet — a placement names a control the bar shows.");
                 }
 
@@ -105,9 +111,11 @@ public static partial class WorldDefinitionValidator {
         }
 
         void ValidateAnchor(WorldBindingBarAnchor anchor, string anchorPath) {
-            if (!float.IsFinite(f: anchor.Inset) || (anchor.Inset < 0f)) {
-                errors.Add(item: $"{anchorPath}.inset {anchor.Inset} must be a non-negative number of button pitches.");
-            }
+            RequireNonNegative(
+                value: anchor.Inset,
+                name: $"{anchorPath}.inset",
+                errors: errors
+            );
         }
 
         void ValidateLayout(WorldBindingBarLayout layout, string layoutPath) {
@@ -268,29 +276,30 @@ public static partial class WorldDefinitionValidator {
                     continue;
                 }
 
-                if (string.IsNullOrWhiteSpace(value: bank.Id)) {
-                    errors.Add(item: $"{bankPath}.id is required.");
-                } else if (!seenBanks.Add(item: bank.Id)) {
-                    errors.Add(item: $"{bankPath}.id '{bank.Id}' is duplicated.");
-                }
+                RequireUniqueName(
+                    value: bank.Id,
+                    seen: seenBanks,
+                    path: bankPath,
+                    field: "id",
+                    errors: errors
+                );
 
                 if (string.IsNullOrWhiteSpace(value: bank.PageId)) {
                     errors.Add(item: $"{bankPath}.pageId is required.");
                 }
 
-                if (
-                    !float.IsFinite(f: bank.Alpha) ||
-                    (bank.Alpha < 0f) ||
-                    (bank.Alpha > 1f)
-                ) {
-                    errors.Add(item: $"{bankPath}.alpha {bank.Alpha} is outside 0..1.");
-                }
+                RequireUnitInterval(
+                    value: bank.Alpha,
+                    name: $"{bankPath}.alpha",
+                    errors: errors
+                );
 
-                if (
-                    (bank.ActiveAlpha is { } activeAlpha) &&
-                    (!float.IsFinite(f: activeAlpha) || (activeAlpha < 0f) || (activeAlpha > 1f))
-                ) {
-                    errors.Add(item: $"{bankPath}.activeAlpha {activeAlpha} is outside 0..1.");
+                if (bank.ActiveAlpha is { } activeAlpha) {
+                    RequireUnitInterval(
+                        value: activeAlpha,
+                        name: $"{bankPath}.activeAlpha",
+                        errors: errors
+                    );
                 }
             }
         }
@@ -402,25 +411,32 @@ public static partial class WorldDefinitionValidator {
     // scale and ignores anything else). Absence (a null preferences block, or a null field within it) defers to the
     // world-authored policy and is never a refusal.
     private static void ValidateBindingBarPreferences(BindingBarPreferences? preferences, string path, List<string> errors) {
-        if (
-            (preferences?.Scale is { } scale) &&
-            (!float.IsFinite(f: scale) || (scale <= 0f))
-        ) {
-            errors.Add(item: $"{path}.scale {scale} must be a finite positive number.");
+        if (preferences?.Scale is { } scale) {
+            RequirePositive(
+                value: scale,
+                name: $"{path}.scale",
+                errors: errors
+            );
         }
 
-        if (
-            (preferences?.ContrastBoost is { } contrastBoost) &&
-            (!float.IsFinite(f: contrastBoost) || (contrastBoost < 1f) || (contrastBoost > 2f))
-        ) {
-            errors.Add(item: $"{path}.contrastBoost {contrastBoost} must be a finite number in [1, 2].");
+        if (preferences?.ContrastBoost is { } contrastBoost) {
+            RequireRange(
+                value: contrastBoost,
+                min: 1f,
+                max: 2f,
+                name: $"{path}.contrastBoost",
+                errors: errors
+            );
         }
 
-        if (
-            (preferences?.UiScale is { } uiScale) &&
-            (!float.IsFinite(f: uiScale) || (uiScale < 0.5f) || (uiScale > 2f))
-        ) {
-            errors.Add(item: $"{path}.uiScale {uiScale} must be a finite number in [0.5, 2].");
+        if (preferences?.UiScale is { } uiScale) {
+            RequireRange(
+                value: uiScale,
+                min: 0.5f,
+                max: 2f,
+                name: $"{path}.uiScale",
+                errors: errors
+            );
         }
     }
     // The bank PageId existence check — run AFTER the composed profile compiles successfully (a bank's page
@@ -473,11 +489,13 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            if (string.IsNullOrWhiteSpace(value: overlay.Id)) {
-                errors.Add(item: $"{path}.id is required.");
-            } else if (!ids.Add(item: overlay.Id)) {
-                errors.Add(item: $"{path}.id '{overlay.Id}' is duplicated.");
-            }
+            RequireUniqueName(
+                value: overlay.Id,
+                seen: ids,
+                path: path,
+                field: "id",
+                errors: errors
+            );
 
             if (overlay.Document is null) {
                 errors.Add(item: $"{path}.document is required.");
@@ -581,11 +599,13 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            if (string.IsNullOrWhiteSpace(value: channel.Name)) {
-                errors.Add(item: $"{path} requires a non-empty name.");
-            } else if (!names.Add(item: channel.Name)) {
-                errors.Add(item: $"{path} duplicates the name '{channel.Name}'.");
-            }
+            RequireUniqueName(
+                value: channel.Name,
+                seen: names,
+                path: path,
+                field: "",
+                errors: errors
+            );
 
             if (!Enum.IsDefined(value: channel.Shape)) {
                 errors.Add(item: $"{path}.shape '{channel.Shape}' is not a defined ChannelShape.");
@@ -805,20 +825,25 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path} is required.");
                 continue;
             }
-            if (string.IsNullOrWhiteSpace(value: register.Name)) {
-                errors.Add(item: $"{path}.name is required.");
-            } else if (!names.Add(item: register.Name)) {
-                errors.Add(item: $"{path}.name '{register.Name}' is duplicated.");
-            }
+            RequireUniqueName(
+                value: register.Name,
+                seen: names,
+                path: path,
+                field: "name",
+                errors: errors
+            );
             RequirePositive(
                 value: register.MaximumRange,
                 name: $"{path}.maximumRange",
                 errors: errors
             );
-            ValidateHalfAngle(
+            RequireRange(
                 value: register.MaximumHalfAngleDegrees,
+                min: 0f,
+                max: 180f,
                 name: $"{path}.maximumHalfAngleDegrees",
-                errors: errors
+                errors: errors,
+                minExclusive: true
             );
         }
 

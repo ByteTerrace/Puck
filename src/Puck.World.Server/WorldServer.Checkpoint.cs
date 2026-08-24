@@ -18,17 +18,12 @@ public sealed partial class WorldServer {
             deniedSection: out var undoSection,
             principal: principal
         )) {
-            var denial = $"{principal.Describe()} cannot mutate every section (section:{undoSection.ToString().ToLowerInvariant()} — {undoVerdict.DescribeDenial()}) — world.undo dropped";
-
-            Console.Error.WriteLine(value: $"[world.grant denied: {denial}]");
-            EchoTap?.Invoke(obj: new WorldEditEcho(
-                Message: denial,
-                Rejected: true,
-                Kind: WorldEditEchoKind.Mutation,
-                Denied: true,
-                ConnectionId: connectionId,
-                CorrelationId: correlationId
-            ));
+            DenyGrantTable(
+                denial: $"{principal.Describe()} cannot mutate every section (section:{undoSection.ToString().ToLowerInvariant()} — {undoVerdict.DescribeDenial()}) — world.undo dropped",
+                connectionId: connectionId,
+                correlationId: correlationId,
+                echoKind: WorldEditEchoKind.Mutation
+            );
 
             return false;
         }

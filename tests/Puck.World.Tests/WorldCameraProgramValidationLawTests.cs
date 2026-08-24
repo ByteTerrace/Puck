@@ -177,13 +177,13 @@ public sealed class WorldCameraProgramValidationLawTests {
     public void AnInvertedClampPitchBandIsRefusedByName() => Refuses(
         control: Program("probe-rig", new WorldCameraProgramOp.ClampPitch(MinPitch: -1f, MaxPitch: 1f), Fov()),
         denied: Program("probe-rig", new WorldCameraProgramOp.ClampPitch(MinPitch: 1f, MaxPitch: -1f), Fov()),
-        expected: "finite minPitch strictly less than maxPitch"
+        expected: "minPitch must be strictly less than maxPitch"
     );
     [Fact]
     public void ANonPositiveOrbitDistanceIsRefusedByName() => Refuses(
         control: Program("probe-rig", new WorldCameraProgramOp.Orbit(Distance: 4f, Yaw: new BindableScalar(literal: 0f), Pitch: new BindableScalar(literal: 0f)), Fov()),
         denied: Program("probe-rig", new WorldCameraProgramOp.Orbit(Distance: 0f, Yaw: new BindableScalar(literal: 0f), Pitch: new BindableScalar(literal: 0f)), Fov()),
-        expected: ".distance must be positive and finite"
+        expected: ".distance must be finite and positive"
     );
     [Fact]
     public void ANegativeFocusDistanceIsRefusedByName() => Refuses(

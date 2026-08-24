@@ -121,7 +121,11 @@ public sealed partial class WorldServer {
 
         if (!verdict.IsAllowed) {
             return new QueryAnswer(
-                Text: $"[query refused: {principal.Describe()} cannot observe {subject.Describe()} ({verdict.DescribeDenial()})]",
+                Text: $"[query refused: {verdict.DescribeRefusal(
+                    actor: principal,
+                    subject: subject.Describe(),
+                    verb: "observe"
+                )}]",
                 Refused: true
             );
         }

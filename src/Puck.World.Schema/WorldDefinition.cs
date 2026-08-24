@@ -15,7 +15,14 @@ namespace Puck.World;
 /// suffix and the section's true JSON key (<c>[property: JsonPropertyName]</c>); the resolved, non-nullable property of
 /// the section's plain name (declared in the body below) is what every consumer reads, and states the section's ABSENT
 /// semantics on its own summary. <c>with</c>-expressions that replace a live section (the mutation-compose pipeline)
-/// target the "Raw" parameter name.</remarks>
+/// target the "Raw" parameter name.
+/// <para>The named static instance a resolved section/table type carries states which shape it is: <c>Absent</c> is a
+/// section's own "the author declared nothing" resolution, semantically inert (off, zeroed, no presentation).
+/// <c>Empty</c> is the identity element on a compiled table, mask, or collection type (zero rows, zero bits) — the
+/// composition seed a builder starts folding into, not a section's resolved-absence value. <c>Default</c> is a
+/// chosen, non-inert baseline for a section that has no "off" state of its own (a tuning row, a distribution). A
+/// section whose own closed vocabulary already reserves a named "none" member (<see cref="WorldStorageDefaults.None"/>)
+/// uses that member directly rather than one of the three generic names.</para></remarks>
 public sealed record WorldDefinition(
     [property: JsonPropertyName("motion"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldMotionDefaults? MotionRaw = null,
     [property: JsonPropertyName("spawnPoints"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldSpawnPoint>? SpawnPointsRaw = null,
@@ -198,8 +205,10 @@ public sealed record WorldDefinition(
     /// <summary>Gets the look→entity assignment policy — ABSENT resolves to <see cref="WorldRowAssignment.Default"/>.</summary>
     [JsonIgnore]
     public WorldRowAssignment LookAssignment => (LookAssignmentRaw ?? WorldRowAssignment.Default);
-    /// <summary>Gets the look rows — ABSENT resolves to none, which resolves every entity to the implicit single
-    /// catalog look (<see cref="WorldLook.Implicit"/>) — no branch special-cases "the author authored none".</summary>
+    /// <summary>Gets the look rows — ABSENT resolves to none. A consumer resolving an entity's look row (or the
+    /// whole table) reads the empty case through <see cref="WorldDefinitionRows.ResolveLook"/>/
+    /// <see cref="WorldDefinitionRows.ResolveLookRows"/>, the one place that falls back to the implicit single
+    /// catalog look (<see cref="WorldLook.Implicit"/>).</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldLook> Looks => (LooksRaw ?? []);
     /// <summary>Gets the marker rows — ABSENT resolves to none (no marker channel output).</summary>

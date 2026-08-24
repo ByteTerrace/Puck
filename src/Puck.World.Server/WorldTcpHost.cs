@@ -166,6 +166,27 @@ public sealed class WorldTcpHost : IDisposable {
             ? verdict.Tier
             : WorldDisclosureTier.Presentation
         );
+    // The one decode step both submission ingress paths share (the interactive frame loop and a federated peer's
+    // forwarded submission, once unwrapped): a live payload, or a named WorldCodecFailure — each caller writes its
+    // own dialect's refusal frame from it.
+    private static bool TryDecodeSubmissionFrame(ReadOnlySpan<byte> frame, out WorldSubmissionPayload payload, out WorldCodecFailure failure) {
+        if (
+            !Puck.World.Protocol.WorldFrameCodec.TryDecode(
+            failure: out failure,
+            frame: frame,
+            payload: out var decoded
+        ) ||
+            (decoded is null)
+        ) {
+            payload = null!;
+
+            return false;
+        }
+
+        payload = decoded;
+
+        return true;
+    }
     private async Task FrameLoopAsync(Connection connection, CancellationToken ct) {
         while (!ct.IsCancellationRequested) {
             byte[]? frame;
@@ -184,17 +205,14 @@ public sealed class WorldTcpHost : IDisposable {
                 return;
             }
 
-            if (
-                !Puck.World.Protocol.WorldFrameCodec.TryDecode(
-                failure: out var failure,
+            if (!TryDecodeSubmissionFrame(
                 frame: frame,
+                failure: out var failure,
                 payload: out var payload
-            ) ||
-                (payload is null)
-            ) {
+            )) {
                 await WorldTcpWireFormat.WriteRefusalAsync(
                     stream: connection.Stream,
-                    reason: $"{failure.Refusal}: {failure.Detail}",
+                    reason: $"{failure}",
                     ct: ct
                 ).ConfigureAwait(continueOnCapturedContext: false);
 
@@ -1026,14 +1044,11 @@ public sealed class WorldTcpHost : IDisposable {
             return true;
         }
 
-        if (
-            !Puck.World.Protocol.WorldFrameCodec.TryDecode(
-            failure: out var codecFailure,
+        if (!TryDecodeSubmissionFrame(
             frame: submittedFrame,
+            failure: out var codecFailure,
             payload: out var payload
-        ) ||
-            (payload is null)
-        ) {
+        )) {
             await WriteFederationRefusal(
                 ct: ct,
                 detail: $"submission frame — {codecFailure}",

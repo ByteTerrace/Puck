@@ -45,11 +45,6 @@ public sealed class WorldStampPool {
     // its own tile boundary.
     private const float InstanceRadiusUnitScale = 0.9f;
 
-    private static readonly Vector3 HiddenPosition = new(
-        x: 0f,
-        y: -1000f,
-        z: 0f
-    );
     private readonly Registration?[] m_pool = new Registration?[WorldPlacementPolicy.MaxStampRegistrations];
     private int m_packedSlotBase = -1;
     // Latched by Tick, consumed once by the next PackTransforms — the frame delta the pool's root/part followers
@@ -604,22 +599,11 @@ public sealed class WorldStampPool {
     // every Reconcile (both the same-content-edit branch and right after a fresh RegisterBody), so a live dynamics-
     // row retune takes effect on the same rebuild while every follower's Value/Velocity/Seeded state survives.
     private static void ApplyMotion(Registration live, WorldLookMotion motion, IReadOnlyList<WorldDynamicsRow> dynamics) {
-        if (
-            (motion.Dynamics is { } rootRowName) &&
-            (WorldDefinitionRows.FindDynamics(
-            dynamics: dynamics,
-            name: rootRowName
-        ) is { } rootRow)
-        ) {
-            live.HasRootDynamics = true;
-            live.RootResponse = SecondOrderResponse.Create(
-                frequencyHz: rootRow.Frequency,
-                dampingRatio: rootRow.Damping,
-                initialResponse: rootRow.Response
-            );
-        } else {
-            live.HasRootDynamics = false;
-        }
+        live.HasRootDynamics = WorldDynamicsResponse.TryResolveResponse(
+            name: motion.Dynamics,
+            response: out live.RootResponse,
+            rows: dynamics
+        );
 
         Array.Clear(array: live.PartFollows);
 
@@ -634,50 +618,30 @@ public sealed class WorldStampPool {
                 transformSlot: out var shapeSlot
             ) ||
                 (((uint)shapeSlot) >= ((uint)WorldPlacementPolicy.MaxAnimatedStampShapes)) ||
-                (WorldDefinitionRows.FindDynamics(
-                dynamics: dynamics,
-                name: rowName
-            ) is not { } row)
+                !WorldDynamicsResponse.TryResolveResponse(
+                name: rowName,
+                response: out var response,
+                rows: dynamics
+            )
             ) {
                 continue;
             }
 
             live.PartFollows[shapeSlot] = true;
-            live.PartResponse[shapeSlot] = SecondOrderResponse.Create(
-                frequencyHz: row.Frequency,
-                dampingRatio: row.Damping,
-                initialResponse: row.Response
-            );
+            live.PartResponse[shapeSlot] = response;
         }
     }
     // Steps a body-rooted registration's root followers once (position and, hemisphere-matched, orientation) and
     // latches the result into FollowedPosition/FollowedOrientation for every other reader this frame.
     private static void StepRootFollower(Registration live, float deltaSeconds, Vector3 targetPosition, Quaternion targetRotation) {
-        var response = live.RootResponse;
-        var position = live.RootPositionFollower.Step(
-            response: in response,
+        (live.FollowedPosition, live.FollowedOrientation) = SecondOrderPoseFollower.StepPose(
+            position: ref live.RootPositionFollower,
+            orientation: ref live.RootOrientationFollower,
+            response: in live.RootResponse,
             deltaSeconds: deltaSeconds,
-            target: targetPosition
+            targetPosition: targetPosition,
+            targetOrientation: targetRotation
         );
-        var targetVector = new Vector4(targetRotation.X, targetRotation.Y, targetRotation.Z, targetRotation.W);
-
-        if (
-            live.RootOrientationFollower.Seeded &&
-            (Vector4.Dot(live.RootOrientationFollower.PreviousTarget, targetVector) < 0f)
-        ) {
-            targetVector = -targetVector;
-        }
-
-        var followedVector = live.RootOrientationFollower.Step(
-            response: in response,
-            deltaSeconds: deltaSeconds,
-            target: targetVector
-        );
-
-        live.FollowedPosition = position;
-        live.FollowedOrientation = ((followedVector.LengthSquared() > 1e-12f)
-            ? Quaternion.Normalize(value: new Quaternion(followedVector.X, followedVector.Y, followedVector.Z, followedVector.W))
-            : targetRotation);
     }
     // Steps one part's position follower once, in place, and returns the eased world position.
     private static Vector3 StepPartFollower(Registration live, int shapeSlot, float deltaSeconds, Vector3 target) => live.PartFollower[shapeSlot].Step(
@@ -868,7 +832,9 @@ public sealed class WorldStampPool {
     /// <param name="client">The client whose interpolated body poses root the body-rooted and attached stamps.</param>
     /// <param name="slotBase">The pool's first dynamic-transform slot in <paramref name="transforms"/>, supplied by the
     /// emitter that owns the pool (see <see cref="Emit"/>).</param>
-    public void PackTransforms(Span<DynamicTransform> transforms, WorldClient client, int slotBase) {
+    /// <param name="parkPosition">Where an unused slot — or an attached row whose target body is not live this
+    /// frame — parks, hidden below the floor (<see cref="SdfEmitContext.ParkPosition"/>).</param>
+    public void PackTransforms(Span<DynamicTransform> transforms, WorldClient client, int slotBase, Vector3 parkPosition) {
         m_packedSlotBase = slotBase;
 
         var deltaSeconds = m_pendingDeltaSeconds;
@@ -896,7 +862,7 @@ public sealed class WorldStampPool {
             if (live is null) {
                 var hidden = new DynamicTransform(
                     Orientation: Quaternion.Identity,
-                    Position: HiddenPosition
+                    Position: parkPosition
                 );
 
                 for (var slot = rootSlot; (slot < (rootSlot + SlotsPerPlacement)); slot++) {
@@ -958,7 +924,7 @@ public sealed class WorldStampPool {
                 if (shapeIndex >= shapes.Count) {
                     transforms[slot] = new DynamicTransform(
                         Orientation: Quaternion.Identity,
-                        Position: HiddenPosition
+                        Position: parkPosition
                     );
 
                     continue;
@@ -1005,88 +971,89 @@ public sealed class WorldStampPool {
     /// followers against its look's <see cref="WorldLookMotion.Dynamics"/>/<see cref="WorldLookMotion.PartDynamics"/>.</param>
     /// <param name="bodyStamps">The resolved body-rooted stamps (inhabitants + crowd creation-looks) this frame.</param>
     public void Reconcile(IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldCreation> creations, IReadOnlyList<WorldDynamicsRow> dynamics, IReadOnlyList<BodyStamp> bodyStamps) {
+        // Diff-by-stable-key, shared by both root kinds a slot can hold (KeyedReconciler.Reconcile): the entry's
+        // current row resolves the fate — gone releases the slot, changed content releases+recreates, otherwise the
+        // entry updates in place (clock preserved, and the refreshed Row/Creation carries any edited offset).
+        BodyStamp? TryFindBodyStamp(Registration entry) => FindBodyStamp(
+            bodyIndex: entry.BodyIndex!.Value,
+            bodyStamps: bodyStamps
+        );
+        (WorldPlacement Row, WorldCreation Creation)? TryFindPoolRootedRow(Registration entry) {
+            if (
+                (WorldDefinitionRows.FindPlacement(
+                placements: placements,
+                id: entry.Row!.Id
+            ) is not { } presentRow) ||
+                (WorldDefinitionRows.FindCreation(
+                creations: creations,
+                id: presentRow.CreationId
+            ) is not { } presentCreation) ||
+                !PoolRooted(
+                creation: presentCreation,
+                row: presentRow
+            )
+            ) {
+                return null;
+            }
+
+            return (presentRow, presentCreation);
+        }
+
         // Pass 1 — retire: a registration whose backing row/stamp vanished, went static (lost its frames or its attach
-        // facet), or changed creation content releases its slot here; a same-content edit updates in place (clock
-        // preserved, and the refreshed Row carries any edited offset).
+        // facet), or changed creation content releases its slot here; a same-content edit updates in place.
         for (var index = 0; (index < m_pool.Length); index++) {
             if (m_pool[index] is not { } live) {
                 continue;
             }
 
-            if (live.BodyIndex is { } bodyIndex) {
-                var stamp = FindBodyStamp(
-                    bodyIndex: bodyIndex,
-                    bodyStamps: bodyStamps
-                );
+            m_pool[index] = ((live.BodyIndex is not null)
+                ? KeyedReconciler.Reconcile(
+                    live: live,
+                    tryFindRow: TryFindBodyStamp,
+                    isRecreateRequired: static (entry, stamp) => !string.Equals(
+                        a: stamp.Creation.Hash,
+                        b: entry.Creation.Hash,
+                        comparisonType: StringComparison.Ordinal
+                    ),
+                    recreate: stamp => {
+                        var fresh = RegisterBody(stamp: stamp);
 
-                if (stamp is not { } present) {
-                    m_pool[index] = null;
-                } else if (!string.Equals(
-                    a: present.Creation.Hash,
-                    b: live.Creation.Hash,
-                    comparisonType: StringComparison.Ordinal
-                )) {
-                    var fresh = RegisterBody(stamp: present);
+                        ApplyMotion(
+                            live: fresh,
+                            motion: stamp.Motion,
+                            dynamics: dynamics
+                        );
 
-                    m_pool[index] = fresh;
-                    ApplyMotion(
-                        live: fresh,
-                        motion: present.Motion,
-                        dynamics: dynamics
-                    );
-                } else {
-                    live.Creation = present.Creation;
-                    live.Scale = present.Scale;
-                    ApplyMotion(
-                        live: live,
-                        motion: present.Motion,
-                        dynamics: dynamics
-                    );
-                }
-
-                continue;
-            }
-
-            var row = WorldDefinitionRows.FindPlacement(
-                placements: placements,
-                id: live.Row!.Id
-            );
-            var creation = ((row is { } presentRow)
-                ? WorldDefinitionRows.FindCreation(
-                    creations: creations,
-                    id: presentRow.CreationId
+                        return fresh;
+                    },
+                    update: (entry, stamp) => {
+                        entry.Creation = stamp.Creation;
+                        entry.Scale = stamp.Scale;
+                        ApplyMotion(
+                            live: entry,
+                            motion: stamp.Motion,
+                            dynamics: dynamics
+                        );
+                    }
                 )
-                : null
+                : KeyedReconciler.Reconcile(
+                    live: live,
+                    tryFindRow: TryFindPoolRootedRow,
+                    isRecreateRequired: static (entry, found) => !string.Equals(
+                        a: found.Creation.Hash,
+                        b: entry.Creation.Hash,
+                        comparisonType: StringComparison.Ordinal
+                    ),
+                    recreate: static found => RegisterRow(
+                        creation: found.Creation,
+                        row: found.Row
+                    ),
+                    update: static (entry, found) => {
+                        entry.Row = found.Row;
+                        entry.Creation = found.Creation;
+                    }
+                )
             );
-
-            if (
-                (row is null) ||
-                (creation is null) ||
-                !PoolRooted(
-                creation: creation,
-                row: row
-            )
-            ) {
-                m_pool[index] = null;
-
-                continue;
-            }
-
-            if (!string.Equals(
-                a: creation.Hash,
-                b: live.Creation.Hash,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                m_pool[index] = RegisterRow(
-                    creation: creation,
-                    row: row
-                );
-
-                continue;
-            }
-
-            live.Row = row;
-            live.Creation = creation;
         }
 
         // Pass 2 — admit new row-rooted (animated or attached) rows into free slots (the validator holds the ceiling; a
@@ -1269,6 +1236,37 @@ public sealed class WorldStampPool {
             transformSlot: out var transformSlot
         ) ||
             (((uint)transformSlot) >= ((uint)transforms.Length))
+        ) {
+            pose = default;
+
+            return false;
+        }
+
+        var transform = transforms[transformSlot];
+
+        pose = new SdfAnchor(
+            Position: transform.Position,
+            Orientation: transform.Orientation
+        );
+
+        return true;
+    }
+    /// <summary>Resolves a body-rooted creation look's authored part pose from a list-backed packed transform buffer.</summary>
+    /// <param name="bodyIndex">The population entity index.</param>
+    /// <param name="partId">The ordinal, case-sensitive authored part identifier.</param>
+    /// <param name="transforms">The current composed transform buffer.</param>
+    /// <param name="pose">The live part pose, or default when unresolved.</param>
+    /// <returns><see langword="true"/> when the live creation look publishes a packed part pose.</returns>
+    public bool TryBodyPartPose(int bodyIndex, string partId, IReadOnlyList<DynamicTransform> transforms, out SdfAnchor pose) {
+        ArgumentNullException.ThrowIfNull(argument: transforms);
+
+        if (
+            !TryBodyPartTransformSlot(
+            bodyIndex: bodyIndex,
+            partId: partId,
+            transformSlot: out var transformSlot
+        ) ||
+            (((uint)transformSlot) >= ((uint)transforms.Count))
         ) {
             pose = default;
 

@@ -1037,6 +1037,36 @@ public readonly partial record struct FixedQ4816(long Value)
             val1: x.Value,
             val2: y.Value
         ));
+    /// <summary>Moves a value toward a target by no more than a non-negative distance.</summary>
+    /// <param name="current">The current value.</param>
+    /// <param name="target">The target value.</param>
+    /// <param name="maxDelta">The greatest distance to move.</param>
+    /// <returns><paramref name="target"/> when it is within range; otherwise, the point <paramref name="maxDelta"/> toward it.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="maxDelta"/> is negative.</exception>
+    public static FixedQ4816 MoveToward(FixedQ4816 current, FixedQ4816 target, FixedQ4816 maxDelta) {
+        // The parameter name is passed explicitly: the throw helper's caller-argument expression would otherwise report
+        // the literal string "maxDelta.Value", a property expression rather than a parameter of this method.
+        ArgumentOutOfRangeException.ThrowIfNegative(
+            value: maxDelta.Value,
+            paramName: nameof(maxDelta)
+        );
+
+        var delta = (target - current);
+
+        return ((Abs(value: delta) <= maxDelta)
+            ? target
+            : (current + ((delta > Zero) ? maxDelta : -maxDelta))
+        );
+    }
+    /// <summary>Returns the exact angular frequency <c>ω = 2π·frequencyHz</c> as a rational pair, unscaled — no
+    /// additional fixed-point scale embedded beyond <paramref name="frequencyHz"/>'s own.</summary>
+    /// <param name="frequencyHz">The natural frequency, in Hz.</param>
+    /// <returns>The exact rational <c>ω</c>, as (Numerator, Denominator), formed from <see cref="PiQ61"/> the same
+    /// way every <c>ω = 2πf</c> derivation in this library and in <c>Puck.Physics</c> forms it.</returns>
+    public static (BigInteger Numerator, BigInteger Denominator) AngularFrequency(FixedQ4816 frequencyHz) => (
+        Numerator: ((2 * ((BigInteger)PiQ61)) * frequencyHz.Value),
+        Denominator: (BigInteger.One << (PiQ61FractionBitCount + FractionBitCount))
+    );
     /// <summary>Rounds <paramref name="value"/> to the nearest integral value, with ties rounded to the nearest even integer.</summary>
     /// <param name="value">The value to round.</param>
     /// <returns><paramref name="value"/> rounded to a whole number using banker's rounding.</returns>

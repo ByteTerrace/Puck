@@ -6268,6 +6268,13 @@
       ]
     },
     {
+      "Id": "Puck.Maths.FixedQ4816.AngularFrequency(Puck.Maths.FixedQ4816)",
+      "State": "covered",
+      "CoveredBy": [
+        "algebra.angular-frequency-exact-and-vs-double"
+      ]
+    },
+    {
       "Id": "Puck.Maths.FixedQ4816.Atan2(Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816)",
       "State": "covered",
       "CoveredBy": [
@@ -6575,6 +6582,13 @@
       "State": "covered",
       "CoveredBy": [
         "scalar.grid-and-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ4816.MoveToward(Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816)",
+      "State": "covered",
+      "CoveredBy": [
+        "scalar.move-toward-boundaries-and-segment"
       ]
     },
     {
@@ -16996,6 +17010,76 @@
       "State": "covered",
       "CoveredBy": [
         "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Rational..ctor(System.Numerics.BigInteger,System.Numerics.BigInteger)",
+      "State": "covered",
+      "CoveredBy": [
+        "algebra.rational-field-axioms"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Rational.Denominator",
+      "State": "covered",
+      "CoveredBy": [
+        "algebra.rational-field-axioms"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Rational.Numerator",
+      "State": "covered",
+      "CoveredBy": [
+        "algebra.rational-field-axioms"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Rational.One",
+      "State": "covered",
+      "CoveredBy": [
+        "algebra.rational-field-axioms"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Rational.Two",
+      "State": "covered",
+      "CoveredBy": [
+        "algebra.rational-field-axioms"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Rational.op_Addition(Puck.Maths.Rational,Puck.Maths.Rational)",
+      "State": "covered",
+      "CoveredBy": [
+        "algebra.rational-field-axioms"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Rational.op_Division(Puck.Maths.Rational,Puck.Maths.Rational)",
+      "State": "covered",
+      "CoveredBy": [
+        "algebra.rational-field-axioms"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Rational.op_Multiply(Puck.Maths.Rational,Puck.Maths.Rational)",
+      "State": "covered",
+      "CoveredBy": [
+        "algebra.rational-field-axioms"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Rational.op_Subtraction(Puck.Maths.Rational,Puck.Maths.Rational)",
+      "State": "covered",
+      "CoveredBy": [
+        "algebra.rational-field-axioms"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Rational.op_UnaryNegation(Puck.Maths.Rational)",
+      "State": "covered",
+      "CoveredBy": [
+        "algebra.rational-field-axioms"
       ]
     },
     {

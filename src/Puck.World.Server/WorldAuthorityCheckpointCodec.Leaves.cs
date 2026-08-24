@@ -116,20 +116,30 @@ public static partial class WorldAuthorityCheckpointCodec {
     // ---- shared leaf types ----
 
     private static void WritePrincipal(WireWriter writer, WorldPrincipal principal) {
-        writer.WriteByte(value: ((byte)principal.Kind));
+        if (!WorldWireTags.TryToWire(
+            value: principal.Kind,
+            wire: out var kindWire
+        )) {
+            throw new InvalidOperationException(message: $"{nameof(PrincipalKind)}.{principal.Kind} has no live wire value");
+        }
+        writer.WriteByte(value: kindWire);
         writer.WriteInt32(value: principal.Index);
         writer.WriteInt32(value: principal.Generation);
         writer.WriteNullableString(value: principal.Name);
     }
     private static WorldPrincipal ReadPrincipal(ref WireReader reader) {
-        var kind = ((PrincipalKind)reader.ReadByte());
+        var kindWire = reader.ReadByte();
+        var kindValid = WorldWireTags.TryFromWire(
+            value: out PrincipalKind kind,
+            wire: kindWire
+        );
 
         if (
             !reader.Failed &&
-            !Enum.IsDefined(value: kind)
+            !kindValid
         ) {
             reader.Fail(
-                detail: $"{nameof(PrincipalKind)} wire value {((byte)kind)} is not declared",
+                detail: $"{nameof(PrincipalKind)} wire value {kindWire} is not declared",
                 refusal: WireRefusal.EnumValueUnknown
             );
         }
@@ -149,19 +159,29 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
     }
     private static void WriteSubject(WireWriter writer, GrantSubject subject) {
-        writer.WriteByte(value: ((byte)subject.Kind));
+        if (!WorldWireTags.TryToWire(
+            value: subject.Kind,
+            wire: out var kindWire
+        )) {
+            throw new InvalidOperationException(message: $"{nameof(GrantSubjectKind)}.{subject.Kind} has no wire value");
+        }
+        writer.WriteByte(value: kindWire);
         writer.WriteInt32(value: subject.Value);
         writer.WriteNullableString(value: subject.Id);
     }
     private static GrantSubject ReadSubject(ref WireReader reader) {
-        var kind = ((GrantSubjectKind)reader.ReadByte());
+        var kindWire = reader.ReadByte();
+        var kindValid = WorldWireTags.TryFromWire(
+            value: out GrantSubjectKind kind,
+            wire: kindWire
+        );
 
         if (
             !reader.Failed &&
-            !Enum.IsDefined(value: kind)
+            !kindValid
         ) {
             reader.Fail(
-                detail: $"{nameof(GrantSubjectKind)} wire value {((byte)kind)} is not declared",
+                detail: $"{nameof(GrantSubjectKind)} wire value {kindWire} is not declared",
                 refusal: WireRefusal.EnumValueUnknown
             );
         }
@@ -178,30 +198,6 @@ public static partial class WorldAuthorityCheckpointCodec {
             Value: value
         );
     }
-    private static void WriteEntityAddress(WireWriter writer, WorldEntityAddress address) {
-        writer.WriteString(value: address.Authority);
-        writer.WriteInt32(value: address.Index);
-        writer.WriteInt32(value: address.Generation);
-    }
-    private static WorldEntityAddress ReadEntityAddress(ref WireReader reader) => new(
-        Authority: reader.ReadString(
-            field: "entity address authority",
-            maxBytes: MaxStringBytes
-        ),
-        Index: reader.ReadInt32(),
-        Generation: reader.ReadInt32()
-    );
-    private static void WriteMobility(WireWriter writer, WorldMobilityIdentity mobility) {
-        WriteEntityAddress(
-            writer: writer,
-            address: mobility.Incarnation
-        );
-        writer.WriteUInt64(value: mobility.Epoch);
-    }
-    private static WorldMobilityIdentity ReadMobility(ref WireReader reader) => new(
-        Incarnation: ReadEntityAddress(reader: ref reader),
-        Epoch: reader.ReadUInt64()
-    );
     private static void WriteIdentityProjection(WireWriter writer, WorldIdentityProjection projection) {
         writer.WriteString(value: projection.Id);
         writer.WriteString(value: projection.Name);
@@ -356,7 +352,10 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
     }
     private static void WriteAdmissionGrant(WireWriter writer, WorldAdmissionGrant grant) {
-        writer.WriteByte(value: ((byte)grant.Capability));
+        WriteCapability(
+            capability: grant.Capability,
+            writer: writer
+        );
         WriteOptional(
             writer: writer,
             value: grant.Subject,
@@ -383,18 +382,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
     }
     private static WorldAdmissionGrant ReadAdmissionGrant(ref WireReader reader) {
-        var capability = ((WorldCapability)reader.ReadByte());
-
-        if (
-            !reader.Failed &&
-            !Enum.IsDefined(value: capability)
-        ) {
-            reader.Fail(
-                detail: $"{nameof(WorldCapability)} wire value {((byte)capability)} is not declared",
-                refusal: WireRefusal.EnumValueUnknown
-            );
-        }
-
+        var capability = ReadCapability(reader: ref reader);
         var subject = ReadOptional(
             reader: ref reader,
             readValue: static (ref WireReader r) => ReadSubject(reader: ref r)

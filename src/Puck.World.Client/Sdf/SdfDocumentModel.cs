@@ -34,6 +34,9 @@ public sealed class SdfDocumentException(SdfRefusal reason, string message) : Ex
 /// time (the document has no spelling for an absolute id; see <see cref="SdfProgramBuilder.BeginMaterialScope"/>).</param>
 /// <param name="Blend">The compose blend (shape and <see cref="SdfDocumentOpKind.Push"/> kinds).</param>
 /// <param name="Smooth">The blend/compose smooth radius (shape and <see cref="SdfDocumentOpKind.Push"/> kinds).</param>
+/// <param name="Integer0">A small integral argument — <see cref="SdfDocumentOpKind.NoiseDisplace"/>'s octave
+/// count.</param>
+/// <param name="Seed">A hash seed — <see cref="SdfDocumentOpKind.NoiseDisplace"/>'s lattice seed.</param>
 public sealed record SdfDocumentOp(
     int Index,
     SdfDocumentOpKind Kind,
@@ -42,7 +45,9 @@ public sealed record SdfDocumentOp(
     float Scalar1 = 0f,
     int Material = 0,
     SdfBlendOp Blend = SdfBlendOp.Union,
-    float Smooth = 0f
+    float Smooth = 0f,
+    int Integer0 = 0,
+    uint Seed = 0u
 );
 /// <summary>The <c>puck.sdf.v1</c> op vocabulary this prototype decoder covers — see the front door's report for the
 /// full skipped-op list (glyph/text, the positional-recolor folds, screens, instances, sampled regions, and every
@@ -75,6 +80,19 @@ public enum SdfDocumentOpKind {
     Torus,
     /// <summary><see cref="SdfProgramBuilder.Plane"/>.</summary>
     Plane,
+    /// <summary><see cref="SdfProgramBuilder.NoiseDisplace"/> — <see cref="SdfDocumentOp.Scalar0"/> is the frequency,
+    /// <see cref="SdfDocumentOp.Scalar1"/> the amplitude, <see cref="SdfDocumentOp.Vector0"/>.X/.Y the gain/lacunarity,
+    /// <see cref="SdfDocumentOp.Integer0"/> the octave count, <see cref="SdfDocumentOp.Seed"/> the hash seed. A field
+    /// op over the running accumulator, so the decoder refuses it outside a push/pop pair — unscoped it would displace
+    /// every shape the composed world program accumulated before this document.</summary>
+    NoiseDisplace,
+    /// <summary><see cref="SdfProgramBuilder.CellJitter"/>, geometric-only (no material variants) - the scatter fold:
+    /// <see cref="SdfDocumentOp.Vector0"/> is the cell spacing, <see cref="SdfDocumentOp.Scalar0"/> the jitter,
+    /// <see cref="SdfDocumentOp.Scalar1"/> the tumble, <see cref="SdfDocumentOp.Integer0"/> the
+    /// <see cref="SdfNoiseFlavor"/>, <see cref="SdfDocumentOp.Seed"/> the hash seed. A point op: it folds the
+    /// document's own subsequent chain until a <c>reset</c>, and tiles space infinitely per axis - clip scattered
+    /// content with an intersection shape inside a push/pop scope.</summary>
+    CellJitter,
 }
 /// <summary>A fully decoded, dry-validated <c>puck.sdf.v1</c> document — the immutable, replayable result of
 /// <see cref="SdfDocumentDecoder.Decode"/>. Replaying the same program twice against a fresh builder in a fresh

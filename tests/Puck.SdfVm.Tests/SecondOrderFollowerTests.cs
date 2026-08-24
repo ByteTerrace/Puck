@@ -197,4 +197,77 @@ public sealed class SecondOrderFollowerTests {
         Assert.Equal(target, value);
         Assert.Equal(Vector3.Zero, follower.Velocity);
     }
+
+    [Fact]
+    public void StepPoseFirstCallSnapsToTheTargetUnseeded() {
+        var response = SecondOrderResponse.Create(frequencyHz: 2f, dampingRatio: 1f, initialResponse: 0f);
+        var position = new SecondOrderFollower3();
+        var orientation = new SecondOrderFollower4();
+        var target = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: 0.4f);
+
+        var (steppedPosition, steppedOrientation) = SecondOrderPoseFollower.StepPose(
+            position: ref position,
+            orientation: ref orientation,
+            response: in response,
+            deltaSeconds: StepSeconds,
+            targetPosition: new Vector3(x: 3f, y: -1f, z: 2f),
+            targetOrientation: target
+        );
+
+        Assert.Equal(new Vector3(x: 3f, y: -1f, z: 2f), steppedPosition);
+        Assert.Equal(target, steppedOrientation);
+    }
+
+    [Fact]
+    public void StepPoseHemisphereMatchesASignNegatedTargetAgainstItsPreviousTarget() {
+        var response = SecondOrderResponse.Create(frequencyHz: 2f, dampingRatio: 0.5f, initialResponse: 0f);
+        var start = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: 0f);
+        var wanted = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: 0.2f);
+        var negatedWanted = new Quaternion(-wanted.X, -wanted.Y, -wanted.Z, -wanted.W); // same rotation, opposite sign
+
+        // A follower fed the sign-negated (but rotationally identical) target every other step.
+        var flippedPosition = new SecondOrderFollower3();
+        var flippedOrientation = new SecondOrderFollower4();
+
+        flippedPosition.Seed(target: Vector3.Zero);
+        flippedOrientation.Seed(target: new Vector4(start.X, start.Y, start.Z, start.W));
+
+        // A reference follower fed the SAME (unnegated) target every step.
+        var referencePosition = new SecondOrderFollower3();
+        var referenceOrientation = new SecondOrderFollower4();
+
+        referencePosition.Seed(target: Vector3.Zero);
+        referenceOrientation.Seed(target: new Vector4(start.X, start.Y, start.Z, start.W));
+
+        Quaternion flippedResult = default;
+        Quaternion referenceResult = default;
+
+        for (var step = 0; (step < 6); ++step) {
+            var thisStepTarget = ((step % 2) == 0) ? wanted : negatedWanted;
+
+            (_, flippedResult) = SecondOrderPoseFollower.StepPose(
+                position: ref flippedPosition,
+                orientation: ref flippedOrientation,
+                response: in response,
+                deltaSeconds: StepSeconds,
+                targetPosition: Vector3.Zero,
+                targetOrientation: thisStepTarget
+            );
+            (_, referenceResult) = SecondOrderPoseFollower.StepPose(
+                position: ref referencePosition,
+                orientation: ref referenceOrientation,
+                response: in response,
+                deltaSeconds: StepSeconds,
+                targetPosition: Vector3.Zero,
+                targetOrientation: wanted
+            );
+        }
+
+        // Hemisphere matching means the sign-negated target never made the follower ease the long way around, so
+        // both followers land in the same orientation to within float rounding of the underlying arithmetic.
+        Assert.True(MathF.Abs(flippedResult.X - referenceResult.X) < 1e-5f);
+        Assert.True(MathF.Abs(flippedResult.Y - referenceResult.Y) < 1e-5f);
+        Assert.True(MathF.Abs(flippedResult.Z - referenceResult.Z) < 1e-5f);
+        Assert.True(MathF.Abs(flippedResult.W - referenceResult.W) < 1e-5f);
+    }
 }

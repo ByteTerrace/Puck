@@ -443,20 +443,10 @@ public sealed class WorldSessionMirror : IClientSink {
     /// table instead.</summary>
     /// <param name="index">The 0-based entity index.</param>
     /// <returns>The entity's look row.</returns>
-    public WorldLook Look(int index) {
-        var rows = m_definition.Looks;
-
-        if (rows.Count == 0) {
-            return WorldLook.Implicit;
-        }
-
-        var lookIndex = m_look[index];
-
-        return ((lookIndex < rows.Count)
-            ? rows[lookIndex]
-            : WorldLook.Implicit
-        );
-    }
+    public WorldLook Look(int index) => WorldDefinitionRows.ResolveLook(
+        rows: m_definition.Looks,
+        index: m_look[index]
+    );
     /// <summary>The entity's previous-tick render attitude (one interpolation endpoint).</summary>
     /// <param name="index">The 0-based entity index.</param>
     public Quaternion PreviousOrientation(int index) => m_previousOrientation[index];

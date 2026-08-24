@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
+using Puck.Assets.Documents;
 
 namespace Puck.World;
 
@@ -37,25 +38,14 @@ public readonly record struct WorldScreenResolution(int Width, int Height);
 /// type's own declaration (a struct this project owns, unlike <see cref="System.Numerics.Vector3"/>) rather than a
 /// central source-gen registration.</summary>
 public sealed class WorldScreenResolutionJsonConverter : JsonConverter<WorldScreenResolution> {
-    private static int ReadComponent(ref Utf8JsonReader reader) {
-        if (
-            !reader.Read() ||
-            (reader.TokenType != JsonTokenType.Number)
-        ) {
-            throw new JsonException(message: "a resolution element must be an integer.");
-        }
-
-        return reader.GetInt32();
-    }
-
     /// <inheritdoc/>
     public override WorldScreenResolution Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
         if (reader.TokenType != JsonTokenType.StartArray) {
             throw new JsonException(message: "a resolution must be a two-element [width, height] array.");
         }
 
-        var width = ReadComponent(reader: ref reader);
-        var height = ReadComponent(reader: ref reader);
+        var width = JsonComponentReader.ReadInt(reader: ref reader, notNumberMessage: "a resolution element must be an integer.");
+        var height = JsonComponentReader.ReadInt(reader: ref reader, notNumberMessage: "a resolution element must be an integer.");
 
         if (
             !reader.Read() ||

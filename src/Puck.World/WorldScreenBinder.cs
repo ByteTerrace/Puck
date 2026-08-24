@@ -650,7 +650,9 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     /// at boot (<see cref="m_bootScreenIndices"/>) always gets its slot/provider entries recreated on re-declaration
     /// after a removal — the render engine's frozen key list still names it, so this is safe. A genuinely new
     /// index (never in the boot set) still cannot bind live — its slab renders the
-    /// procedural fallback until the next boot, since the render engine's provider key set cannot grow.</summary>
+    /// procedural fallback until the next boot, since the render engine's provider key set cannot grow.
+    /// Not migrated onto <c>Puck.World.Client.KeyedReconciler</c> — the removal, source-change, and boot-index
+    /// re-declaration passes interleave lifetime rules the generic shape cannot express.</summary>
     /// <param name="screens">The mutated screen list (the live definition's screens).</param>
     public void ReconcileScreens(IReadOnlyList<WorldScreen> screens) {
         if (m_disposed) {

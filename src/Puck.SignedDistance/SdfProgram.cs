@@ -787,6 +787,12 @@ public sealed partial class SdfProgram {
                         chainTranslateReach += (1.7320508f * MathF.Abs(x: instruction.Data0.W));
                         break;
                     }
+                case SdfOp.NoiseDisplace: {
+                        // The fBm value-noise relief's gradient is bounded reach-independently (see NoiseDisplaceLipschitz),
+                        // so it multiplies the whole chain like Displace's factor. A FIELD op, so it adds no reach.
+                        chainDisplaceWarpProduct *= NoiseDisplaceLipschitz(instruction: instruction);
+                        break;
+                    }
                 default: {
                         // ResetPoint/Rotate/Scale/TransformDynamic/SymmetryPlane/Repeat/RepeatLimited/WallpaperFold/RepeatPolar/
                         // Elongate/Onion/Dilate/PushField/PopField: factor 1 (isometry, non-expansive projection, field op,
@@ -954,7 +960,7 @@ public sealed partial class SdfProgram {
                     }
                 default: {
                         // Scale (distance rescale), Repeat/RepeatLimited/SymmetryPlane/WallpaperFold/CellJitter/RepeatPolar
-                        // (space folding), Twist/Bend/Elongate/DomainWarp (non-isometries), Onion/Dilate/Displace (field ops a skip must never jump over):
+                        // (space folding), Twist/Bend/Elongate/DomainWarp (non-isometries), Onion/Dilate/Displace/NoiseDisplace (field ops a skip must never jump over):
                         // no world-space sphere is sound past this point, and the segment cannot be skipped whole.
                         chainBoundable = false;
                         segmentEligible = false;
@@ -1147,8 +1153,22 @@ public sealed partial class SdfProgram {
 
         var halfSpacing = (0.5f * minSpacing);
         var halfJitter = (0.5f * amplitude);
+        var rawMargin = ((halfSpacing - halfJitter) - shapeReach);
+
+        // REFUSE the uncontainable prototype instead of clamping: with margin <= 0 the in-cell rule
+        // (jitter/2 + prototype reach <= min(spacing)/2) is violated, the folded field is already unsound at cell
+        // walls, and the clamped factor collapses stepScale toward ~1e-5 - every map() then returns ~0 and the whole
+        // composed world immediate-accepts as one solid blob. The builder's CellJitter() can validate only the jitter
+        // half (the prototype is emitted later); THIS is the first point that sees both, so this is the door.
+        if (rawMargin <= 0.0f) {
+            throw new ArgumentException(
+                message: $"A CellJitter chain's jittered prototype cannot be contained: jitter/2 ({halfJitter}) + prototype reach ({shapeReach}) exceeds min(spacing)/2 ({halfSpacing}). Shrink the prototype, reduce the jitter, or widen the spacing - packing this program would collapse its step scale and render the whole field as an immediate-accept solid.",
+                paramName: "instructions"
+            );
+        }
+
         var margin = MathF.Max(
-            x: ((halfSpacing - halfJitter) - shapeReach),
+            x: rawMargin,
             y: CellJitterMinMargin
         );
         var fieldReach = (halfSpacing + halfJitter);
@@ -1172,7 +1192,7 @@ public sealed partial class SdfProgram {
     // finite world-space bound). Computed ONCE so PackInstances and SdfInstanceGrid pack from the SAME radius — a
     // divergence would desync the beam's grid cull from the bound it tests. Also runs the parked-unmaskable validation:
     // an unbounded Plane or an op that reads the running accumulator (an intersection-family blend or an
-    // Onion/Dilate/Displace field op) cannot be parked, because a parked slot asserts "contributes nothing", which
+    // Onion/Dilate/Displace/NoiseDisplace field op) cannot be parked, because a parked slot asserts "contributes nothing", which
     // such an instruction violates outside every finite bound. See MaxSmoothBlendRadius / MaxScopedFieldReach /
     // HasUnmaskableInfluence for the margin/gate derivations.
     private SdfInstanceGridInput[] ClassifyInstances() {
@@ -1190,7 +1210,7 @@ public sealed partial class SdfProgram {
                 !instance.Active
             ) {
                 throw new ArgumentException(
-                    message: $"Instance {index} is PARKED but carries unbounded influence (a Plane, an Intersection/SmoothIntersection/ChamferIntersection blend, or an Onion/Dilate/Displace field op). A parked slot must contribute nothing to the field, but this instruction changes it outside every finite instance bound. Emit the instance active, or use a bounded shape with a union/subtraction-family blend and no field op.",
+                    message: $"Instance {index} is PARKED but carries unbounded influence (a Plane, an Intersection/SmoothIntersection/ChamferIntersection blend, or an Onion/Dilate/Displace/NoiseDisplace field op). A parked slot must contribute nothing to the field, but this instruction changes it outside every finite instance bound. Emit the instance active, or use a bounded shape with a union/subtraction-family blend and no field op.",
                     paramName: "instances"
                 );
             }
@@ -1299,6 +1319,39 @@ public sealed partial class SdfProgram {
     // isotropic frequency and buys nothing but march steps. Reach-INDEPENDENT (a global bound on the sin basis, unlike
     // twist/bend which grow with reach), so it multiplies the whole chain like exp(w/2). amp == 0 yields 1.0f exactly,
     // so a displace/warp-free program stays byte-identical.
+    // The metric-stretch step factor for a NoiseDisplace fBm field (Data0 = frequency, amplitude, gain, lacunarity;
+    // Data1.x = host-baked 1/Σ gainᵏ; Blend = octave count). One octave of quintic-blended trilinear value noise over
+    // corner values remapped to [-1, 1] has per-axis slope bounded by u'max·span = (15/8)·2 = 15/4 per unit cell, so
+    // its world-space gradient norm is bounded by frequency·(15/4)·√3 (axes combined Euclidean — conservative, the
+    // per-axis bounds are not simultaneously tight). Octave k scales by gainᵏ·lacunarityᵏ, and the host normalization
+    // divides the amplitude side by Σ gainᵏ, so the total is
+    //   L = |amplitude|·frequency·(15/4)·√3·Σ (gain·lacunarity)ᵏ / Σ gainᵏ.
+    // Reach-INDEPENDENT (a global bound on the lattice basis), so it multiplies the whole chain like Displace's
+    // factor. amplitude == 0 yields 1.0f exactly, so a noise-free program stays byte-identical.
+    private static float NoiseDisplaceLipschitz(SdfInstruction instruction) {
+        var amplitude = MathF.Abs(x: instruction.Data0.Y);
+
+        if (amplitude == 0.0f) {
+            return 1.0f;
+        }
+
+        var frequency = MathF.Abs(x: instruction.Data0.X);
+        var gain = MathF.Abs(x: instruction.Data0.Z);
+        var lacunarity = MathF.Abs(x: instruction.Data0.W);
+        var octaves = ((int)instruction.Blend);
+        var gradientSum = 0.0f;
+        var termPower = 1.0f;
+
+        for (var octave = 0; (octave < octaves); octave++) {
+            gradientSum += termPower;
+            termPower *= (gain * lacunarity);
+        }
+
+        // (15/4)·√3 — the quintic-blend slope bound over the [-1, 1] corner span, per the derivation above.
+        const float NoiseGradientBound = 6.49519053f;
+
+        return (1.0f + (((amplitude * instruction.Data1.X) * frequency) * (NoiseGradientBound * gradientSum)));
+    }
     private static float DisplaceWarpLipschitz(SdfInstruction instruction) {
         var amplitude = MathF.Abs(x: instruction.Data0.W);
         var frequency = MathF.Max(
@@ -1493,13 +1546,15 @@ public sealed partial class SdfProgram {
             if (
                 (instruction.Op == SdfOp.Onion) ||
                 (instruction.Op == SdfOp.Dilate) ||
-                (instruction.Op == SdfOp.Displace)
+                (instruction.Op == SdfOp.Displace) ||
+                (instruction.Op == SdfOp.NoiseDisplace)
             ) {
                 return true;
             }
 
             // The Blend lane only carries an SdfBlendOp on a ShapeBlend instruction; the fold ops reuse it (CellJitter's
-            // noise flavor, RepeatPolar's mirror flag, WallpaperFold's plane), so it must be read under this guard.
+            // noise flavor, RepeatPolar's mirror flag, WallpaperFold's plane, NoiseDisplace's octave count), so it must
+            // be read under this guard.
             if (instruction.Op != SdfOp.ShapeBlend) {
                 continue;
             }
@@ -1520,7 +1575,7 @@ public sealed partial class SdfProgram {
     /// occluder set. True iff the instance contains at least one shape and every shape compose is a subtraction-family
     /// blend (<see cref="SdfBlendOp.Subtraction"/> / <see cref="SdfBlendOp.SmoothSubtraction"/> /
     /// <see cref="SdfBlendOp.ChamferSubtraction"/>) — subtraction only removes material — and the instance carries no
-    /// accumulator-growing field op (<see cref="SdfOp.Onion"/> / <see cref="SdfOp.Dilate"/> / <see cref="SdfOp.Displace"/>)
+    /// accumulator-growing field op (<see cref="SdfOp.Onion"/> / <see cref="SdfOp.Dilate"/> / <see cref="SdfOp.Displace"/> / <see cref="SdfOp.NoiseDisplace"/>)
     /// nor a field scope (<see cref="SdfOp.PushField"/> / <see cref="SdfOp.PopField"/>), either of which could add
     /// solidity and make the omission a light-leak. Anything else classifies as a normal occluder (today's behavior), so
     /// the flag is conservative by default — it is set only for instances provably safe to skip.</summary>
@@ -1539,6 +1594,7 @@ public sealed partial class SdfProgram {
                 (instruction.Op == SdfOp.Onion) ||
                 (instruction.Op == SdfOp.Dilate) ||
                 (instruction.Op == SdfOp.Displace) ||
+                (instruction.Op == SdfOp.NoiseDisplace) ||
                 (instruction.Op == SdfOp.PushField) ||
                 (instruction.Op == SdfOp.PopField)
             ) {
@@ -1588,7 +1644,7 @@ public sealed partial class SdfProgram {
         return MathF.Exp(x: (0.5f * MathF.Abs(x: instruction.Data0.X)));
     }
     /// <summary>Returns the outward surface reach an instance's scoped field ops (an <see cref="SdfOp.Onion"/>/
-    /// <see cref="SdfOp.Dilate"/>/<see cref="SdfOp.Displace"/> between a balanced <see cref="SdfOp.PushField"/>/
+    /// <see cref="SdfOp.Dilate"/>/<see cref="SdfOp.Displace"/>/<see cref="SdfOp.NoiseDisplace"/> between a balanced <see cref="SdfOp.PushField"/>/
     /// <see cref="SdfOp.PopField"/>) add on top of its authored geometry bound — the cull-margin twin of
     /// <see cref="MaxSmoothBlendRadius"/> for the scoped-accumulator payoff. A scoped field op is maskable
     /// (<see cref="HasUnmaskableInfluence"/> only trips on an unbounded shape, an unscoped field op, or an
@@ -1603,6 +1659,8 @@ public sealed partial class SdfProgram {
     /// <c>|r|</c> (<c>Data0.x</c>).</description></item>
     /// <item><description><c>Displace(a)</c> — <c>d + a·sin·sin·sin</c>: the relief pushes the surface out by at most
     /// <c>|a|</c> (the basis bottoms at −1), so reach grows by <c>|a|</c> (<c>Data0.w</c>).</description></item>
+    /// <item><description><c>NoiseDisplace(a)</c> — <c>d + a·fbm</c> with the octave sum host-normalized to
+    /// <c>[-1, 1]</c>: reach grows by <c>|a|</c> (<c>Data0.y</c>).</description></item>
     /// </list>
     /// Field ops compound within one scope (an Onion then a Dilate grows the surface by <c>t</c> then <c>r</c>), so they
     /// sum inside a scope; the instance margin is the largest such per-scope sum (nesting is capped at depth 1, and
@@ -1650,6 +1708,7 @@ public sealed partial class SdfProgram {
                 SdfOp.Onion => MathF.Abs(x: instruction.Data0.X),
                 SdfOp.Dilate => MathF.Abs(x: instruction.Data0.X),
                 SdfOp.Displace => MathF.Abs(x: instruction.Data0.W),
+                SdfOp.NoiseDisplace => MathF.Abs(x: instruction.Data0.Y),
                 _ => 0.0f,
             };
         }

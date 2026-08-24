@@ -131,7 +131,9 @@ public sealed class OverlayFrameCrossFadeLawTests {
                 BindingBarMaxBanks: 0,
                 BindingBarMaxSlotsPerBank: 0,
                 BindingBarMaxModifiers: 0,
-                MarkerMaxChipsPerSeat: 0
+                MarkerMaxChipsPerSeat: 0,
+                WheelMaxRings: 0,
+                WheelMaxSectorsPerRing: 0
             )
         ),
         theme: OverlayThemeValues.Zero,

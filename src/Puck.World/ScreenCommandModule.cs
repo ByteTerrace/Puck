@@ -11,7 +11,7 @@ namespace Puck.World;
 /// The diegetic screens' console surface — the wire verbs that boot, eject, and inspect the deterministic machines
 /// behind the world's screens. <c>screen.insert</c>/<c>.eject</c>/<c>.select</c>/<c>.options</c>/<c>.link</c>/
 /// <c>.unlink</c> submit a <see cref="WorldScreenOp"/> through the ordered submission domain
-/// (<see cref="IServerLink.SubmitScreenOp"/>) — <see cref="Server.WorldMachineHost"/> applies it synchronously and
+/// (<see cref="ServerLinkSubmissions.SubmitScreenOp"/>) — <see cref="Server.WorldMachineHost"/> applies it synchronously and
 /// authoritatively, so an agent scripts a cabinet over the pipe with no
 /// restart and the op reproduces on replay; <c>screen.source &lt;index&gt; &lt;kind&gt; [args…]</c> (kind: camera | probe |
 /// capture | desktop | qr | view — absorbing the five former per-kind verbs into one dispatcher) stays genuinely

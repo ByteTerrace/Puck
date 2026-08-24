@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using Puck.Abstractions.Documents;
 
 namespace Puck.Shaders;
 
@@ -199,7 +200,7 @@ public sealed partial record ProbeKindManifest(
         var socketNames = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         foreach (var input in manifest.Inputs) {
-            if (!IsValidSocketName(name: input.Name)) {
+            if (!SocketIdentifierGrammar.IsValid(value: input.Name)) {
                 throw new InvalidDataException(message: $"'{manifest.Name}' manifest declares a socket named '{input.Name}'; a socket name is letters, digits, or '-', starting with a letter.");
             }
             if (!socketNames.Add(item: input.Name)) {
@@ -367,19 +368,6 @@ public sealed partial record ProbeKindManifest(
     }
 
     private static string Format(double value) => value.ToString(provider: CultureInfo.InvariantCulture);
-    private static bool IsValidSocketName(string name) {
-        if (string.IsNullOrEmpty(value: name) || !char.IsAsciiLetter(c: name[0])) {
-            return false;
-        }
-
-        foreach (var character in name) {
-            if (!char.IsAsciiLetterOrDigit(c: character) && (character != '-')) {
-                return false;
-            }
-        }
-
-        return true;
-    }
 }
 
 /// <summary>The source-generated (AOT/trim-safe) serialization context for <see cref="ProbeKindManifest"/>.</summary>

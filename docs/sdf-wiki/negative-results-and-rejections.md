@@ -96,7 +96,10 @@ penalty. The deterministic exact Euclidean distance transform used by
 
 Noise without a range and derivative bound cannot produce a safe step scale or
 instance bound. Procedural detail is acceptable only when its hash,
-amplitude, derivative, and deterministic replay behavior are explicit.
+amplitude, derivative, and deterministic replay behavior are explicit —
+`NoiseDisplace` is the admitted form (see
+[Lipschitz correctness](lipschitz-and-field-correctness.md)); this rejection
+continues to bar any unbounded basis.
 
 ## Backend-specific scheduling or shader features
 

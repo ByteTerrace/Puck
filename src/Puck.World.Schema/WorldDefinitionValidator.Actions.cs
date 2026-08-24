@@ -329,11 +329,14 @@ public static partial class WorldDefinitionValidator {
                 );
                 break;
             case ActionEffect.Designate designate:
-                if (string.IsNullOrWhiteSpace(value: designate.Register)) {
-                    errors.Add(item: $"{path}.register must be non-empty.");
-                } else if (!targetRegisterNames.Contains(item: designate.Register)) {
-                    errors.Add(item: $"{path}.register '{designate.Register}' names no target register.");
-                }
+                RequireDeclared(
+                    value: designate.Register,
+                    declaredSet: targetRegisterNames,
+                    path: path,
+                    field: "register",
+                    rowNoun: "target register",
+                    errors: errors
+                );
                 if (designate.Target != ActionTarget.AffectingSubject) {
                     errors.Add(item: $"{path}.target must be AffectingSubject.");
                 }
@@ -350,11 +353,14 @@ public static partial class WorldDefinitionValidator {
                 );
                 break;
             case ActionEffect.Judge judge:
-                if (string.IsNullOrWhiteSpace(value: judge.JudgeRef)) {
-                    errors.Add(item: $"{path}.judgeRef must be non-empty.");
-                } else if (!judgeRowNames.Contains(item: judge.JudgeRef)) {
-                    errors.Add(item: $"{path}.judgeRef '{judge.JudgeRef}' names no declared judge row.");
-                }
+                RequireDeclared(
+                    value: judge.JudgeRef,
+                    declaredSet: judgeRowNames,
+                    path: path,
+                    field: "judgeRef",
+                    rowNoun: "declared judge",
+                    errors: errors
+                );
                 break;
             // upsertHudPanel/removeHudPanel/upsertPlacement/removePlacement author WORLD document rows, and save
             // performs WORLD-scope engine I/O — a per-body action has none of either, so all five are refused BY NAME
@@ -474,12 +480,11 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{path}.fact '{recently.Fact}' is not a defined ActionFact.");
                 }
 
-                if (
-                    !float.IsFinite(f: recently.WindowSeconds) ||
-                    (recently.WindowSeconds <= 0f)
-                ) {
-                    errors.Add(item: $"{path}.windowSeconds must be finite and greater than 0.");
-                }
+                RequirePositive(
+                    value: recently.WindowSeconds,
+                    name: $"{path}.windowSeconds",
+                    errors: errors
+                );
 
                 break;
             case ActionPredicate.All all:
@@ -521,12 +526,11 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{path}.fact '{recently.Fact}' is not a defined ActionFact.");
                 }
 
-                if (
-                    !float.IsFinite(f: recently.WindowSeconds) ||
-                    (recently.WindowSeconds <= 0f)
-                ) {
-                    errors.Add(item: $"{path}.windowSeconds must be finite and greater than 0.");
-                }
+                RequirePositive(
+                    value: recently.WindowSeconds,
+                    name: $"{path}.windowSeconds",
+                    errors: errors
+                );
 
                 break;
             case ActionPredicate.CompareState compare:

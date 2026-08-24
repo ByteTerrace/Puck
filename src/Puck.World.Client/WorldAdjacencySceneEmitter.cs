@@ -281,17 +281,20 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
                 continue;
             }
 
-            var look = neighbour.Look(index: index);
-            var color = neighbour.BodyColor(index: index);
-
-            m_emittedRigs[appearanceIndex] = LookRig(
-                look: look,
-                catalogRig: neighbour.CatalogRig(index: index)
+            WorldMirroredAvatarBand.EmitPalette(
+                accentMaterials: accentMaterials,
+                bodyColor: neighbour.BodyColor(index: index),
+                bodyMaterials: bodyMaterials,
+                builder: builder,
+                catalogRig: neighbour.CatalogRig(index: index),
+                emittedGaitAmplitudes: m_emittedGaitAmplitudes,
+                emittedRigs: m_emittedRigs,
+                emittedScales: m_emittedScales,
+                identityIndex: appearanceIndex,
+                look: neighbour.Look(index: index),
+                materialIndex: index,
+                noseFactor: noseFactor
             );
-            m_emittedScales[appearanceIndex] = look.Scale;
-            m_emittedGaitAmplitudes[appearanceIndex] = look.Motion.GaitAmplitude;
-            bodyMaterials[index] = builder.AddMaterial(material: new SdfMaterial(Albedo: color));
-            accentMaterials[index] = builder.AddMaterial(material: new SdfMaterial(Albedo: (color * noseFactor)));
         }
 
         WorldAvatarCatalog.Emit(
@@ -354,10 +357,6 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
 
         return truncated;
     }
-    private static int LookRig(WorldLook look, byte catalogRig) => ((look.Source is WorldLookSource.Catalog { Index: { } pinned })
-        ? pinned
-        : catalogRig
-    );
     // Maps a neighbour placement's authored transform into the SOURCE side's own coordinates through the EXACT SAME
     // isometry Server.WorldPortalArrivalMath uses for a crossing traveler's arrival, anchored at the two faces' own
     // frames (never a crossing's swept seam — this maps arbitrary geometry, not one traveler's own crossing point).
@@ -472,28 +471,15 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
                     quaternion2: neighbour.CurrentOrientation(index: entity),
                     amount: alpha
                 );
-                var address = neighbour.EntityAddress(index: entity);
+                WorldMirroredAvatarBand.AdvanceGait(
+                    address: neighbour.EntityAddress(index: entity),
+                    gaitPhase: ref m_gaitPhases[motionIndex],
+                    lastAddress: ref m_motionAddresses[motionIndex],
+                    lastPosition: ref m_previousRenderPositions[motionIndex],
+                    position: position,
+                    seeded: ref m_motionSeeded[motionIndex]
+                );
 
-                if (
-                    m_motionSeeded[motionIndex] &&
-                    (m_motionAddresses[motionIndex] == address)
-                ) {
-                    var travelled = MathF.Min(
-                        x: Vector3.Distance(
-                            value1: position,
-                            value2: m_previousRenderPositions[motionIndex]
-                        ),
-                        y: 0.25f
-                    );
-
-                    m_gaitPhases[motionIndex] += (travelled * 8.0f);
-                } else {
-                    m_motionSeeded[motionIndex] = true;
-                    m_gaitPhases[motionIndex] = 0f;
-                    m_motionAddresses[motionIndex] = address;
-                }
-
-                m_previousRenderPositions[motionIndex] = position;
                 var mapped = MapPoseIntoSource(
                     position: position,
                     orientation: orientation,

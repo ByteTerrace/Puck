@@ -18,6 +18,7 @@ public sealed class WorldFieldLattice {
     private readonly WorldFieldsSection m_document;
     private readonly FixedQ4816[] m_heightScale;
     private readonly int m_layers;
+    private readonly FixedQ4816 m_bodyCouplingCeiling;
     private readonly FixedQ4816[] m_max;
     private readonly FixedQ4816[] m_min;
     private readonly string[] m_names;
@@ -88,7 +89,18 @@ public sealed class WorldFieldLattice {
                 array: m_values[field],
                 value: initial
             );
+
+            // DERIVED, never authored: the tallest surface any height-bearing field can raise. A body standing ON
+            // that surface still sits above the top voxel row, so the Emit/Expose body coupling must reach it —
+            // see TryBodyCellOf.
+            var surfaceReach = (m_heightScale[field] * m_max[field]);
+
+            if (surfaceReach > m_bodyCouplingCeiling) {
+                m_bodyCouplingCeiling = surfaceReach;
+            }
         }
+
+        m_bodyCouplingCeiling += (m_cellSize * FixedQ4816.FromInteger(value: m_layers));
 
         foreach (var paint in (document.Paint ?? [])) {
             var field = FieldIndex(name: paint.Field);
@@ -299,6 +311,55 @@ public sealed class WorldFieldLattice {
 
         m_revision++;
     }
+    /// <summary>Resolves the cell a BODY couples to for the <see cref="WorldReaction.Emit"/>/
+    /// <see cref="WorldReaction.Expose"/> reactions: the column under the body, with Y admitted up to the lattice's
+    /// derived coupling ceiling (the volume's top plus the tallest surface any height-bearing field can raise) and
+    /// clamped onto the top layer. A bare <see cref="TryCellOf"/> requires the position INSIDE the voxel volume, which
+    /// no body standing ON a one-layer ground lattice ever is — its feet rest on the raised surface, above the half-
+    /// unit slab — so body-coupled reactions would never fire on the documented ground-lattice shape.</summary>
+    /// <param name="position">The body's world position.</param>
+    /// <param name="cell">The cell index.</param>
+    /// <returns><see langword="true"/> when the body stands over the lattice within the coupling ceiling.</returns>
+    public bool TryBodyCellOf(in FixedVector3 position, out int cell) {
+        cell = -1;
+
+        var localX = (((Int128)position.X.Value) - m_origin.X.Value);
+        var localY = (((Int128)position.Y.Value) - m_origin.Y.Value);
+        var localZ = (((Int128)position.Z.Value) - m_origin.Z.Value);
+
+        if (
+            (localX < Int128.Zero) ||
+            (localY < Int128.Zero) ||
+            (localZ < Int128.Zero) ||
+            (localY > m_bodyCouplingCeiling.Value)
+        ) {
+            return false;
+        }
+
+        var x = (localX / m_cellSize.Value);
+        var z = (localZ / m_cellSize.Value);
+
+        if (
+            (x >= m_width) ||
+            (z >= m_depth)
+        ) {
+            return false;
+        }
+
+        var y = (localY / m_cellSize.Value);
+
+        if (y >= m_layers) {
+            y = (m_layers - 1);
+        }
+
+        cell = CellIndex(
+            x: ((int)x),
+            y: ((int)y),
+            z: ((int)z)
+        );
+
+        return true;
+    }
     /// <summary>Resolves the cell a world position falls in, or <see langword="false"/> when it lies outside the
     /// lattice.</summary>
     /// <param name="position">The world position.</param>
@@ -414,7 +475,7 @@ public sealed class WorldFieldLattice {
                         if (
                             (bodyPosition(arg: body) is not { } position) ||
                             (readTag(arg1: reaction.Row!, arg2: body) == 0L) ||
-                            !TryCellOf(
+                            !TryBodyCellOf(
                             position: in position,
                             cell: out var cell
                         )
@@ -440,7 +501,7 @@ public sealed class WorldFieldLattice {
                             continue;
                         }
 
-                        var exposed = (TryCellOf(
+                        var exposed = (TryBodyCellOf(
                             position: in position,
                             cell: out var cell
                         ) && Holds(

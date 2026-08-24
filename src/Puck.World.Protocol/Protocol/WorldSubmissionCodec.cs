@@ -78,32 +78,35 @@ public readonly record struct WorldCodecFailure(WorldCodecRefusal Refusal, strin
 public static class WorldSubmissionCodec {
     private static readonly JsonSerializerOptions Json = CreateJsonOptions();
 
-    private static WorldCapability CapabilityFromWire(byte value) => value switch {
-        0 => WorldCapability.Drive,
-        1 => WorldCapability.Observe,
-        2 => throw new LeafCodecException(failure: Fail(
-        WorldCodecRefusal.EnumValueUnknown,
-        $"{nameof(WorldCapability)} wire value 2 is retired"
-    )),
-        3 => WorldCapability.Control,
-        4 => WorldCapability.Mutate,
-        5 => WorldCapability.Edit,
-        _ => throw new LeafCodecException(failure: Fail(
-        WorldCodecRefusal.EnumValueUnknown,
-        $"{nameof(WorldCapability)} wire value {value} is not declared"
-    )),
-    };
-    private static byte CapabilityToWire(WorldCapability value) => value switch {
-        WorldCapability.Drive => 0,
-        WorldCapability.Observe => 1,
-        WorldCapability.Control => 3,
-        WorldCapability.Mutate => 4,
-        WorldCapability.Edit => 5,
-        _ => throw new LeafCodecException(failure: Fail(
-        WorldCodecRefusal.EnumValueUnknown,
-        $"{nameof(WorldCapability)}.{value} has no wire value"
-    )),
-    };
+    // The pinned mapping itself lives in WorldWireTags (Puck.World.Schema, beside the enums) — this wrapper keeps this
+    // codec's own exception-based refusal shape (WorldCodecFailure) and its distinct "retired" wording.
+    private static WorldCapability CapabilityFromWire(byte value) {
+        if (WorldWireTags.TryFromWire(
+            value: out WorldCapability capability,
+            wire: value
+        )) {
+            return capability;
+        }
+        throw new LeafCodecException(failure: Fail(
+            WorldCodecRefusal.EnumValueUnknown,
+            (WorldWireTags.IsRetiredCapabilityWire(wire: value)
+                ? $"{nameof(WorldCapability)} wire value {value} is retired"
+                : $"{nameof(WorldCapability)} wire value {value} is not declared"
+            )
+        ));
+    }
+    private static byte CapabilityToWire(WorldCapability value) {
+        if (WorldWireTags.TryToWire(
+            value: value,
+            wire: out var wire
+        )) {
+            return wire;
+        }
+        throw new LeafCodecException(failure: Fail(
+            WorldCodecRefusal.EnumValueUnknown,
+            $"{nameof(WorldCapability)}.{value} has no wire value"
+        ));
+    }
     private static byte CompositionKind(WorldComposition value) => value switch {
         WorldComposition.SetActiveLayout => 0,
         WorldComposition.SelectCamera => 1,
@@ -380,17 +383,17 @@ public static class WorldSubmissionCodec {
         : null
     );
     private static WorldPrincipal ReadPrincipal(BinaryReader reader) {
-        var kind = reader.ReadByte() switch {
-            0 => PrincipalKind.Seat,
-            1 => PrincipalKind.Console,
-            2 => PrincipalKind.Addon,
-            3 => PrincipalKind.Peer,
-            4 => PrincipalKind.Group,
-            var wire => throw new LeafCodecException(failure: Fail(
-            WorldCodecRefusal.EnumValueUnknown,
-            $"{nameof(PrincipalKind)} wire value {wire} is not declared"
-        )),
-        };
+        var wireKind = reader.ReadByte();
+
+        if (!WorldWireTags.TryFromWire(
+            value: out PrincipalKind kind,
+            wire: wireKind
+        )) {
+            throw new LeafCodecException(failure: Fail(
+                WorldCodecRefusal.EnumValueUnknown,
+                $"{nameof(PrincipalKind)} wire value {wireKind} is not declared"
+            ));
+        }
         var principal = new WorldPrincipal(
             Kind: kind,
             Index: reader.ReadInt32(),
@@ -539,12 +542,15 @@ public static class WorldSubmissionCodec {
         );
     }
     private static WorldSection ReadSection(BinaryReader reader) {
-        var value = ((WorldSection)reader.ReadByte());
+        var wire = reader.ReadByte();
 
-        if (!Enum.IsDefined(value: value)) {
+        if (!WorldWireTags.TryFromWire(
+            value: out WorldSection value,
+            wire: wire
+        )) {
             throw new LeafCodecException(failure: Fail(
                 WorldCodecRefusal.EnumValueUnknown,
-                $"{nameof(WorldSection)} wire value {((byte)value)} is not declared"
+                $"{nameof(WorldSection)} wire value {wire} is not declared"
             ));
         }
         return value;
@@ -562,23 +568,17 @@ public static class WorldSubmissionCodec {
         var mode => throw UnknownEnum(value: mode),
     };
     private static GrantSubject ReadSubject(BinaryReader reader) {
-        var kind = reader.ReadByte() switch {
-            0 => GrantSubjectKind.All,
-            1 => GrantSubjectKind.Body,
-            2 => GrantSubjectKind.Screen,
-            3 => GrantSubjectKind.Section,
-            4 => GrantSubjectKind.Composition,
-            5 => GrantSubjectKind.State,
-            6 => GrantSubjectKind.Region,
-            7 => GrantSubjectKind.Seat,
-            9 => GrantSubjectKind.Creation,
-            10 => GrantSubjectKind.Placement,
-            11 => GrantSubjectKind.Adjacency,
-            var wire => throw new LeafCodecException(failure: Fail(
-            WorldCodecRefusal.EnumValueUnknown,
-            $"{nameof(GrantSubjectKind)} wire value {wire} is not declared"
-        )),
-        };
+        var wireKind = reader.ReadByte();
+
+        if (!WorldWireTags.TryFromWire(
+            value: out GrantSubjectKind kind,
+            wire: wireKind
+        )) {
+            throw new LeafCodecException(failure: Fail(
+                WorldCodecRefusal.EnumValueUnknown,
+                $"{nameof(GrantSubjectKind)} wire value {wireKind} is not declared"
+            ));
+        }
         var value = ((kind == GrantSubjectKind.Section)
             ? (int)ReadSection(reader: reader)
             : reader.ReadInt32()
@@ -1108,28 +1108,26 @@ public static class WorldSubmissionCodec {
         )) {
             throw new LeafCodecException(failure: failure);
         }
-        writer.Write(value: principal.Kind switch {
-            PrincipalKind.Seat => ((byte)0),
-            PrincipalKind.Console => ((byte)1),
-            PrincipalKind.Addon => ((byte)2),
-            PrincipalKind.Peer => ((byte)3),
-            // Group DOES carry a live wire value (4) — unlike Document/World below, a group IS a legitimate grant
-            // TARGET on the runtime leaf: world.grant group:<id> ... round-trips through this identical loopback
-            // codec path even for a local submission (there is no separate loopback shortcut). A group never
-            // ACTS, so this value is only ever reached as WorldGrant.Principal, never as an envelope's own actor.
-            PrincipalKind.Group => ((byte)4),
-            // PrincipalKind.Document has no wire value HERE, deliberately: this writer serves the LIVE runtime leaves
-            // (an envelope's acting principal, a world.grant/world.revoke row), and a document principal means nothing
-            // in the live grant table — the cross-document write-back channel reads its grants off the owner's
-            // DOCUMENT (Server.WorldOwnedWorlds.Decide), never off the runtime table, so a live row for one would be
-            // accepted-and-inert. The capability it names is authored with world.grant.set, which edits the document's
-            // own Grants section through the ordered domain and the journal; that path is JSON-encoded and admits a
-            // document principal on the row it authors.
-            _ => throw new LeafCodecException(failure: Fail(
-            WorldCodecRefusal.EnumValueUnknown,
-            $"{nameof(PrincipalKind)}.{principal.Kind} has no LIVE wire value — a {principal.Describe()} row is authored with world.grant.set (the document's Grants section, read by the cross-document write-back channel), never granted into the runtime table where nothing would read it"
-        )),
-        });
+        // PrincipalKind.Document has no wire value HERE, deliberately: this writer serves the LIVE runtime leaves
+        // (an envelope's acting principal, a world.grant/world.revoke row), and a document principal means nothing
+        // in the live grant table — the cross-document write-back channel reads its grants off the owner's
+        // DOCUMENT (Server.WorldOwnedWorlds.Decide), never off the runtime table, so a live row for one would be
+        // accepted-and-inert. The capability it names is authored with world.grant.set, which edits the document's
+        // own Grants section through the ordered domain and the journal; that path is JSON-encoded and admits a
+        // document principal on the row it authors. Group DOES carry a live wire value — unlike Document/World, a
+        // group IS a legitimate grant TARGET on the runtime leaf: world.grant group:<id> ... round-trips through
+        // this identical loopback codec path even for a local submission. A group never ACTS, so this value is
+        // only ever reached as WorldGrant.Principal, never as an envelope's own actor.
+        if (!WorldWireTags.TryToWire(
+            value: principal.Kind,
+            wire: out var kindWire
+        )) {
+            throw new LeafCodecException(failure: Fail(
+                WorldCodecRefusal.EnumValueUnknown,
+                $"{nameof(PrincipalKind)}.{principal.Kind} has no LIVE wire value — a {principal.Describe()} row is authored with world.grant.set (the document's Grants section, read by the cross-document write-back channel), never granted into the runtime table where nothing would read it"
+            ));
+        }
+        writer.Write(value: kindWire);
         writer.Write(value: principal.Index);
         writer.Write(value: principal.Generation);
         WriteNullableString(
@@ -1276,13 +1274,16 @@ public static class WorldSubmissionCodec {
         }
     }
     private static void WriteSection(BinaryWriter writer, WorldSection value) {
-        if (!Enum.IsDefined(value: value)) {
+        if (!WorldWireTags.TryToWire(
+            value: value,
+            wire: out var wire
+        )) {
             throw new LeafCodecException(failure: Fail(
                 WorldCodecRefusal.EnumValueUnknown,
                 $"{nameof(WorldSection)} value {((int)value)} is not declared"
             ));
         }
-        writer.Write(value: ((byte)value));
+        writer.Write(value: wire);
     }
     private static void WriteSnapPose(BinaryWriter writer, WorldCommand.SnapPose value) {
         writer.Write(value: SnapPoseModeToWire(value: value.Mode));
@@ -1298,23 +1299,16 @@ public static class WorldSubmissionCodec {
     }
     // Wire value 8 (formerly GrantSubjectKind.Table) is retired per the convention above — never reassign it.
     private static void WriteSubject(BinaryWriter writer, GrantSubject subject) {
-        writer.Write(value: subject.Kind switch {
-            GrantSubjectKind.All => ((byte)0),
-            GrantSubjectKind.Body => ((byte)1),
-            GrantSubjectKind.Screen => ((byte)2),
-            GrantSubjectKind.Section => ((byte)3),
-            GrantSubjectKind.Composition => ((byte)4),
-            GrantSubjectKind.State => ((byte)5),
-            GrantSubjectKind.Region => ((byte)6),
-            GrantSubjectKind.Seat => ((byte)7),
-            GrantSubjectKind.Creation => ((byte)9),
-            GrantSubjectKind.Placement => ((byte)10),
-            GrantSubjectKind.Adjacency => ((byte)11),
-            _ => throw new LeafCodecException(failure: Fail(
-            WorldCodecRefusal.EnumValueUnknown,
-            $"{nameof(GrantSubjectKind)}.{subject.Kind} has no wire value"
-        )),
-        });
+        if (!WorldWireTags.TryToWire(
+            value: subject.Kind,
+            wire: out var kindWire
+        )) {
+            throw new LeafCodecException(failure: Fail(
+                WorldCodecRefusal.EnumValueUnknown,
+                $"{nameof(GrantSubjectKind)}.{subject.Kind} has no wire value"
+            ));
+        }
+        writer.Write(value: kindWire);
         if (subject.Kind == GrantSubjectKind.Section) {
             WriteSection(
                 value: ((WorldSection)subject.Value),

@@ -1,5 +1,4 @@
 using Puck.Networking;
-using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
@@ -33,7 +32,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         WriteOptional(
             writer: writer,
             value: entry.Mobility,
-            writeValue: WriteMobility
+            writeValue: WorldWireLeaves.WriteMobility
         );
         writer.WriteInt32(value: entry.MobilityGeneration);
         writer.WriteBoolean(value: entry.Parked);
@@ -54,7 +53,10 @@ public static partial class WorldAuthorityCheckpointCodec {
             writer: writer,
             items: entry.AdmissionRevokedKeys,
             writeItem: static (w, row) => {
-                w.WriteByte(value: ((byte)row.Capability));
+                WriteCapability(
+                    capability: row.Capability,
+                    writer: w
+                );
                 WriteSubject(
                     subject: row.Subject,
                     writer: w
@@ -100,7 +102,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         var isRemoteHuman = reader.ReadBoolean();
         var mobility = ReadOptional(
             reader: ref reader,
-            readValue: static (ref WireReader r) => ReadMobility(reader: ref r)
+            readValue: static (ref WireReader r) => WorldWireLeaves.ReadMobility(reader: ref r)
         );
         var mobilityGeneration = reader.ReadInt32();
         var parked = reader.ReadBoolean();
@@ -123,18 +125,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             reader: ref reader,
             field: "population entry admission revoked keys",
             readItem: static (ref WireReader r) => {
-                var capability = ((WorldCapability)r.ReadByte());
-
-                if (
-                    !r.Failed &&
-                    !Enum.IsDefined(value: capability)
-                ) {
-                    r.Fail(
-                        detail: $"{nameof(WorldCapability)} wire value {((byte)capability)} is not declared",
-                        refusal: WireRefusal.EnumValueUnknown
-                    );
-                }
-
+                var capability = ReadCapability(reader: ref r);
                 var subject = ReadSubject(reader: ref r);
 
                 return (capability, subject);

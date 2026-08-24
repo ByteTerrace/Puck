@@ -22,12 +22,13 @@ namespace Puck.World;
 /// cross-fades on the presentation clock for the element's <c>fadeSeconds</c>, both keys staying active until the
 /// fade completes. Fade state lives per (panel, element, seat) inside the build, so a steady frame allocates nothing.
 /// </summary>
-internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudStore store, WorldOverlayFacts facts, WorldOverlayFrameSources frameSources) {
+internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudStore store, WorldOverlayFacts facts, WorldOverlayFrameSources frameSources, WorldSeatViewports viewports) {
     private readonly WorldClient m_client = client;
     private readonly WorldOverlayFacts m_facts = facts;
     private readonly WorldOverlayFrameSources m_frameSources = frameSources;
     private readonly PlayerRoster m_roster = roster;
     private readonly HudStore m_store = store;
+    private readonly WorldSeatViewports m_viewports = viewports;
     private readonly OverlayHudSeatPanel[] m_seatPanels = new OverlayHudSeatPanel[PlayerRoster.MaxSlots];
     // Per-seat structure memo: the document row a seat's panel was last built FROM, and the build. An identity
     // edit publishes a new WorldHudPanel instance, so reference identity is an exact staleness test — the cheap
@@ -183,14 +184,12 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
         m_seatSources[slot] = null;
         m_seatBuilds[slot] = null;
     }
-    // Walks the joined roster in view order (the SAME order WorldOverlayFeed lays seats out in — LayoutRegion is a
-    // pure function of (count, view index), so calling it here with identical arguments reproduces the exact rect a
-    // seat's binding bar/editor HUD already renders in, with no cross-feed dependency), publishing one entry per
-    // seat that is BOTH joined and has authored a player-scope panel. Reuses the preallocated array, and rebuilds a
-    // seat's panel only when its document row is a different instance — zero steady-state allocation.
+    // Walks the joined roster (publishing one entry per seat that is BOTH joined and has authored a player-scope
+    // panel), scoping each seat's panel into the SAME published viewport WorldOverlayFeed's binding bar renders in
+    // — the authored-layout-aware rect WorldFramePresenter resolved for this seat this frame, not the builtin
+    // ladder. Reuses the preallocated array, and rebuilds a seat's panel only when its document row is a different
+    // instance — zero steady-state allocation.
     private int BuildSeatPanels(double nowSeconds) {
-        var joined = m_roster.Count;
-        var viewIndex = 0;
         var count = 0;
 
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
@@ -200,7 +199,6 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
                 continue;
             }
 
-            var localViewIndex = viewIndex++;
             var panel = m_roster.ProfileAt(slot: slot)?.Hud;
 
             if (panel is null) {
@@ -209,10 +207,7 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
                 continue;
             }
 
-            var viewport = WorldFramePresenter.LayoutRegion(
-                count: joined,
-                index: localViewIndex
-            );
+            var viewport = m_viewports.Seat(slot: slot).Region;
 
             if (!ReferenceEquals(
                 objA: m_seatSources[slot],

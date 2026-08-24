@@ -31,8 +31,14 @@ public static partial class WorldDefinitionValidator {
                 comparisonType: StringComparison.Ordinal
             )) {
                 errors.Add(item: $"{path}.name '{family.Name}' starts with the reserved '{WorldStateBindingContext.FamilyPrefix}' prefix.");
-            } else if (!familyNames.Add(item: family.Name)) {
-                errors.Add(item: $"{path}.name '{family.Name}' is duplicated.");
+            } else {
+                RequireUniqueName(
+                    value: family.Name,
+                    seen: familyNames,
+                    path: path,
+                    field: "name",
+                    errors: errors
+                );
             }
 
             if (family.States.Count == 0) {
@@ -53,11 +59,13 @@ public static partial class WorldDefinitionValidator {
                     continue;
                 }
 
-                if (string.IsNullOrWhiteSpace(value: state.Name)) {
-                    errors.Add(item: $"{statePath}.name is required.");
-                } else if (!stateNames.Add(item: state.Name)) {
-                    errors.Add(item: $"{statePath}.name '{state.Name}' is duplicated within {path}.");
-                }
+                RequireUniqueName(
+                    value: state.Name,
+                    seen: stateNames,
+                    path: statePath,
+                    field: "name",
+                    errors: errors
+                );
 
                 if (state.Target is null) {
                     continue;

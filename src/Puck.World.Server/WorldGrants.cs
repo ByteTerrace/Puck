@@ -1026,42 +1026,42 @@ public sealed class WorldGrants : IWorldGrantsView {
 
         // Group-expansion fallback: does a group `principal` is currently a member of hold this (capability,
         // subject)? Read fresh from m_groupMembership each call, so a departed member's hold evaporates immediately.
-        if (m_groupMembership.TryGetValue(
-            key: principal,
-            value: out var memberOf
+        if (TryGroupExpansion(
+            capability: capability,
+            groups: m_groupMembership,
+            principal: principal,
+            rule: GrantRule.GroupHold,
+            subject: subject,
+            verdict: out var membershipVerdict
         )) {
-            foreach (var groupId in memberOf) {
-                var groupPrincipal = WorldPrincipal.Group(id: groupId);
-
-                if (
-                    !m_byPrincipal.TryGetValue(
-                    key: groupPrincipal,
-                    value: out var groupGrants
-                ) ||
-                    (groupGrants.For(capability: capability) is not { } groupSubjects)
-                ) {
-                    continue;
-                }
-
-                if (
-                    groupSubjects.Contains(item: subject) ||
-                    groupSubjects.Contains(item: GrantSubject.All)
-                ) {
-                    return new GrantVerdict(
-                        Rule: GrantRule.GroupHold,
-                        Group: groupId
-                    );
-                }
-            }
+            return membershipVerdict;
         }
 
         // Ownership-expansion fallback: does a group `principal` currently owns (direct or transitive, resolved at
         // sync time into m_ownedGroups) hold this (capability, subject)? Read fresh, same as the membership fallback.
-        if (m_ownedGroups.TryGetValue(
-            key: principal,
-            value: out var ownedOf
+        if (TryGroupExpansion(
+            capability: capability,
+            groups: m_ownedGroups,
+            principal: principal,
+            rule: GrantRule.OwnershipHold,
+            subject: subject,
+            verdict: out var ownershipVerdict
         )) {
-            foreach (var groupId in ownedOf) {
+            return ownershipVerdict;
+        }
+
+        return new GrantVerdict(Rule: GrantRule.NoHold);
+    }
+    // The shared body of the group-membership and group-ownership expansion fallbacks above: does any group listed
+    // for `principal` in `groups` hold (capability, subject) or its All wildcard, itself resolved fresh through
+    // m_byPrincipal on every call (never cached). `rule` names which fallback is calling, so the returned verdict
+    // still distinguishes GroupHold from OwnershipHold.
+    private bool TryGroupExpansion(Dictionary<WorldPrincipal, List<string>> groups, WorldPrincipal principal, WorldCapability capability, GrantSubject subject, GrantRule rule, out GrantVerdict verdict) {
+        if (groups.TryGetValue(
+            key: principal,
+            value: out var groupIds
+        )) {
+            foreach (var groupId in groupIds) {
                 var groupPrincipal = WorldPrincipal.Group(id: groupId);
 
                 if (
@@ -1078,15 +1078,19 @@ public sealed class WorldGrants : IWorldGrantsView {
                     groupSubjects.Contains(item: subject) ||
                     groupSubjects.Contains(item: GrantSubject.All)
                 ) {
-                    return new GrantVerdict(
-                        Rule: GrantRule.OwnershipHold,
+                    verdict = new GrantVerdict(
+                        Rule: rule,
                         Group: groupId
                     );
+
+                    return true;
                 }
             }
         }
 
-        return new GrantVerdict(Rule: GrantRule.NoHold);
+        verdict = default;
+
+        return false;
     }
     /// <inheritdoc/>
     public bool AllowsAllSections(WorldPrincipal principal, WorldCapability capability, out WorldSection deniedSection, out GrantVerdict denial) {

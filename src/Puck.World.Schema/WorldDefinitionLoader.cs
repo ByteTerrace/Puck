@@ -119,41 +119,19 @@ public static class WorldDefinitionLoader {
             return false;
         }
 
-        if (!WorldJsonPayload.TryParse(
+        if (!WorldDefinitionFileSource.TryParseComposed(
+            definition: out var parsed,
             json: json,
-            info: WorldJsonContext.Default.WorldDefinition,
-            value: out var parsed,
-            error: out var parseError
-        )) {
-            reason = $"{sourceName} is not a valid {WorldDefinition.SchemaVersion} document: {parseError}";
-
-            return false;
-        }
-
-        if (!string.Equals(
-            a: parsed.Schema,
-            b: WorldDefinition.SchemaVersion,
-            comparisonType: StringComparison.Ordinal
-        )) {
-            reason = $"{sourceName} is not a valid {WorldDefinition.SchemaVersion} document: schema '{(parsed.Schema ?? "(absent)")}' is not {WorldDefinition.SchemaVersion}";
-
-            return false;
-        }
-
-        parsed = WorldDefinitionMigrations.Apply(definition: parsed);
-
-        if (!WorldDefinitionValidator.TryValidate(
-            definition: parsed,
             neighbours: neighbours,
-            reason: out var validateReason
+            reason: out reason,
+            sourceName: sourceName,
+            validateAdjacencyClaims: true
         )) {
-            reason = $"{sourceName} is not a valid {WorldDefinition.SchemaVersion} document: {validateReason}";
-
             return false;
         }
 
         return TryResolveDrawsAndRevalidate(
-            definition: parsed,
+            definition: parsed!,
             instanceIdentity: instanceIdentity,
             neighbours: neighbours,
             resolved: out definition,

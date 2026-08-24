@@ -29,56 +29,39 @@ public sealed record WorldTargetRegister(
 );
 /// <summary>The compiled target-register name and Drive-reach ordinal tables.</summary>
 public sealed class WorldTargetRegisterTable {
-    private readonly Dictionary<string, int> m_indexByName;
-    private readonly string[] m_names;
+    private readonly OrdinalTable m_table;
 
-    private WorldTargetRegisterTable(Dictionary<string, int> indexByName, string[] names, int reachBase) {
-        m_indexByName = indexByName;
-        m_names = names;
+    private WorldTargetRegisterTable(OrdinalTable table, int reachBase) {
+        m_table = table;
         ReachBase = reachBase;
     }
 
     /// <summary>Gets the number of authored registers.</summary>
-    public int Count => m_names.Length;
+    public int Count => m_table.Count;
     /// <summary>Gets an empty target-register table.</summary>
     public static WorldTargetRegisterTable Empty { get; } = new(
-        indexByName: new Dictionary<string, int>(comparer: StringComparer.Ordinal),
-        names: [],
+        table: OrdinalTable.Empty,
         reachBase: 0
     );
     /// <summary>Gets the first target-register bit in a Drive row's shared reach mask.</summary>
     public int ReachBase { get; }
 
     /// <summary>Compiles target registers after the world's channel ordinal range.</summary>
-    public static WorldTargetRegisterTable Compile(IReadOnlyList<WorldTargetRegister> registers, int channelCount) {
-        var names = new string[registers.Count];
-        var indexByName = new Dictionary<string, int>(
-            capacity: registers.Count,
+    public static WorldTargetRegisterTable Compile(IReadOnlyList<WorldTargetRegister> registers, int channelCount) => new(
+        table: OrdinalTable.Build(
+            names: registers.Select(selector: static register => register.Name).ToArray(),
             comparer: StringComparer.Ordinal
-        );
-
-        for (var index = 0; (index < registers.Count); index++) {
-            names[index] = registers[index].Name;
-            indexByName.Add(
-                key: registers[index].Name,
-                value: index
-            );
-        }
-
-        return new WorldTargetRegisterTable(
-            indexByName: indexByName,
-            names: names,
-            reachBase: channelCount
-        );
-    }
+        ),
+        reachBase: channelCount
+    );
     /// <summary>Gets a register's authored name.</summary>
-    public string Name(int index) => m_names[index];
+    public string Name(int index) => m_table.Name(ordinal: index);
     /// <summary>Gets the Drive-reach ordinal for a compact register index.</summary>
     public int ReachOrdinal(int index) => (ReachBase + index);
     /// <summary>Resolves a register name to its compact storage index.</summary>
-    public bool TryGetIndex(string name, out int index) => m_indexByName.TryGetValue(
-        key: name,
-        value: out index
+    public bool TryGetIndex(string name, out int index) => m_table.TryGetOrdinal(
+        name: name,
+        ordinal: out index
     );
 }
 /// <summary>The fixed-point target source a producer executes.</summary>

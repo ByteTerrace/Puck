@@ -3,10 +3,12 @@ using System.Globalization;
 namespace Puck.Maths.Tests;
 
 /// <summary>
-/// Claims for two members the ratchet found classified nowhere: <see cref="FixedVector3.MoveToward"/>, whose statement
-/// is a set of exact boundary identities plus bounded interpolation, and the two
-/// <see cref="FixedQ4816RustPort"/> emitters, whose statement is purity and live transcription rather than the ported
-/// algorithm's agreement with its host. <see cref="LawRegistry"/> invokes each claim below as a Default-tier law.
+/// Claims for members the ratchet found classified nowhere: <see cref="FixedVector3.MoveToward"/>, whose statement
+/// is a set of exact boundary identities plus bounded interpolation; its scalar twin <see cref="FixedQ4816.MoveToward"/>,
+/// whose interpolation identities are EXACT rather than tolerance-bounded because a scalar step has no divide or
+/// normalize in its path; and the two <see cref="FixedQ4816RustPort"/> emitters, whose statement is purity and live
+/// transcription rather than the ported algorithm's agreement with its host. <see cref="LawRegistry"/> invokes each
+/// claim below as a Default-tier law.
 /// </summary>
 internal static class MoveTowardAndEmitterClaims {
     /// <summary>The endpoints the move sweep runs between — axis-aligned, diagonal, negative and mixed, plus a pair
@@ -119,6 +121,85 @@ internal static class MoveTowardAndEmitterClaims {
                         provider: CultureInfo.InvariantCulture,
                         handler: $"a step of {step} from {current} toward {target} left the segment; the cross product's length is {strayed}, past the tolerance {crossTolerance}"
                     );
+                }
+            }
+        }
+
+        return null;
+    }
+    /// <summary>The scalar segments the scalar move sweep runs between.</summary>
+    private static readonly (long Current, long Target)[] ScalarSegments = [
+        (0, 10), (0, -10), (-5, 5), (100, -100), (2, 3), (-2, -3), (7, 7),
+    ];
+
+    /// <summary>Proves <see cref="FixedQ4816.MoveToward"/>'s boundary identities EXACTLY — the same shape as
+    /// <see cref="MoveTowardSurface"/>, but with EXACT rather than tolerance-bounded intermediate identities: a
+    /// scalar step is a plain add/subtract with no divide or normalize in its path, so <c>Abs(moved − current)</c>
+    /// must equal the step and <c>Abs(target − moved) + step</c> must equal the separation to the bit. The direction
+    /// leg cross-checks against <see cref="FixedQ4816.Sign"/> — a different code path than the implementation's own
+    /// comparison — so a transposed operand or a negated step reddens it independently of the distance identities.</summary>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? ScalarMoveTowardSurface() {
+        try {
+            _ = FixedQ4816.MoveToward(current: FixedQ4816.Zero, target: FixedQ4816.One, maxDelta: FixedQ4816.FromRawBits(value: -1));
+
+            return "MoveToward accepted a negative maxDelta";
+        } catch (ArgumentOutOfRangeException refusal) {
+            if ("maxDelta" != refusal.ParamName) {
+                return $"MoveToward's negative-step refusal names '{refusal.ParamName}' rather than 'maxDelta'";
+            }
+        }
+
+        foreach (var (currentRaw, targetRaw) in ScalarSegments) {
+            var current = FixedQ4816.FromInteger(value: currentRaw);
+            var target = FixedQ4816.FromInteger(value: targetRaw);
+            var separation = FixedQ4816.Abs(value: (target - current));
+
+            if (current != FixedQ4816.MoveToward(current: current, maxDelta: separation, target: current)) {
+                return $"MoveToward from {current} to itself did not answer that point";
+            }
+
+            var held = FixedQ4816.MoveToward(current: current, target: target, maxDelta: FixedQ4816.Zero);
+
+            if (held != current) {
+                return $"a zero step from {current} toward {target} moved to {held}";
+            }
+
+            foreach (var reach in new[] { separation, (separation + FixedQ4816.One), FixedQ4816.FromInteger(value: 1000) }) {
+                if (reach < separation) { continue; }
+
+                var landed = FixedQ4816.MoveToward(current: current, maxDelta: reach, target: target);
+
+                if (landed != target) {
+                    return $"a step of {reach} from {current} toward {target} (separated by {separation}) landed on {landed} rather than the target";
+                }
+            }
+
+            foreach (var (numerator, denominator) in StepFractions) {
+                var step = ((separation * FixedQ4816.FromInteger(value: numerator)) / FixedQ4816.FromInteger(value: denominator));
+
+                if ((step <= FixedQ4816.Zero) || (step >= separation)) { continue; }
+
+                var moved = FixedQ4816.MoveToward(current: current, maxDelta: step, target: target);
+                var travelled = FixedQ4816.Abs(value: (moved - current));
+
+                if (travelled != step) {
+                    return $"a step of {step} from {current} toward {target} travelled {travelled} rather than the step exactly";
+                }
+
+                var remaining = FixedQ4816.Abs(value: (target - moved));
+
+                if ((remaining + step) != separation) {
+                    return $"a step of {step} from {current} toward {target} left {remaining} to go; remaining+step is {remaining + step} rather than the separation {separation}";
+                }
+
+                if (target != current) {
+                    var expectedDirection = FixedQ4816.Sign(value: (target - current));
+                    var actualDirection = FixedQ4816.Sign(value: (moved - current));
+
+                    if (actualDirection != expectedDirection) {
+                        return $"a step of {step} from {current} toward {target} moved in the wrong direction (sign {actualDirection} vs {expectedDirection})";
+                    }
                 }
             }
         }

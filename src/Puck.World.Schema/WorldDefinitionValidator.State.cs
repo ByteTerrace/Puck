@@ -36,9 +36,11 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path}.advance.rateDenominator {advance.RateDenominator} must be positive.");
         }
 
-        if (advance.EpochTick < 0) {
-            errors.Add(item: $"{path}.advance.epochTick {advance.EpochTick} must be non-negative.");
-        }
+        RequireNonNegativeEpoch(
+            value: advance.EpochTick,
+            name: $"{path}.advance.epochTick",
+            errors: errors
+        );
 
         // Advance is a SCALAR (slot) trait: legitimate only on a row declaring no capacity and holding at most its
         // one slot cell — empty (declared, never yet set) or exactly one cell keyed WorldStateRow.SlotKey. A row that
@@ -71,9 +73,11 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{cellPath}.advance.rateDenominator {advance.RateDenominator} must be positive.");
         }
 
-        if (advance.EpochTick < 0) {
-            errors.Add(item: $"{cellPath}.advance.epochTick {advance.EpochTick} must be non-negative.");
-        }
+        RequireNonNegativeEpoch(
+            value: advance.EpochTick,
+            name: $"{cellPath}.advance.epochTick",
+            errors: errors
+        );
     }
     /// <summary>Validates a row's authored <see cref="WorldStateDynamics"/> easing trait — the closed-form
     /// counterpart to <see cref="ValidateAdvance"/>, so shares its scalar-row/exclusivity shape.</summary>
@@ -94,16 +98,20 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path} ('{row.Name}') declares dynamics on a {DescribeKind(kind: row.Kind)} row — only int/fixed rows ease.");
         }
 
-        if (
-            string.IsNullOrWhiteSpace(value: dynamics.Row) ||
-            !dynamicsNames.Contains(item: dynamics.Row)
-        ) {
-            errors.Add(item: $"{path}.dynamics.row '{dynamics.Row}' names no dynamics row.");
-        }
+        RequireDeclared(
+            value: dynamics.Row,
+            declaredSet: dynamicsNames,
+            path: path,
+            field: "dynamics.row",
+            rowNoun: "dynamics",
+            errors: errors
+        );
 
-        if (dynamics.EpochTick < 0) {
-            errors.Add(item: $"{path}.dynamics.epochTick {dynamics.EpochTick} must be non-negative.");
-        }
+        RequireNonNegativeEpoch(
+            value: dynamics.EpochTick,
+            name: $"{path}.dynamics.epochTick",
+            errors: errors
+        );
 
         // Dynamics is a SCALAR (slot) trait, exactly like Advance — the same slot-eligibility test.
         var cells = (row.Cells ?? []);
@@ -125,16 +133,20 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares dynamics on a {DescribeKind(kind: row.Kind)} cell — only int/fixed cells ease.");
         }
 
-        if (
-            string.IsNullOrWhiteSpace(value: dynamics.Row) ||
-            !dynamicsNames.Contains(item: dynamics.Row)
-        ) {
-            errors.Add(item: $"{cellPath}.dynamics.row '{dynamics.Row}' names no dynamics row.");
-        }
+        RequireDeclared(
+            value: dynamics.Row,
+            declaredSet: dynamicsNames,
+            path: cellPath,
+            field: "dynamics.row",
+            rowNoun: "dynamics",
+            errors: errors
+        );
 
-        if (dynamics.EpochTick < 0) {
-            errors.Add(item: $"{cellPath}.dynamics.epochTick {dynamics.EpochTick} must be non-negative.");
-        }
+        RequireNonNegativeEpoch(
+            value: dynamics.EpochTick,
+            name: $"{cellPath}.dynamics.epochTick",
+            errors: errors
+        );
     }
     /// <summary>Validates a state row's authored <see cref="WorldDraw"/> site — its own shape rules, then the shared
     /// site rule with the row's own envelope as the admissible domain.</summary>

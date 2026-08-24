@@ -48,6 +48,45 @@
     ]
   },
   {
+    "Id": "scalar.move-toward-boundaries-and-segment",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "MoveToward"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.MoveToward's boundary identities, asserted EXACTLY over seven segments — increasing, decreasing, negative-range, mixed-sign and one degenerate: a zero step returns the current value unchanged, a step equal to the remaining distance and every larger step return the TARGET itself, and a degenerate segment whose endpoints coincide returns that point. The negative-step refusal is asserted by exception type AND by the parameter name it reports.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedUpstream",
+        "Subject": "the distance travelled by an INTERMEDIATE step, at six fractions of each segment's own length, and what remains of the segment afterward",
+        "Against": "the step the subject was handed and the segment's own separation",
+        "Shared": "FixedQ4816.Abs — the identical member MoveToward's own early-return branch reaches through (it compares Abs(delta) against maxDelta before ever computing the moved point). Both identities are EXACT rather than tolerance-bounded, unlike the vector law's counterpart: the scalar path has no divide or normalize between the compare and the add, so nothing is rounded. What this claim catches is everything ABOVE Abs — an overshoot, an undershoot, or a step applied against the wrong operand.",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedUpstream",
+        "Subject": "the direction the intermediate step moved",
+        "Against": "the sign of the segment's own displacement",
+        "Shared": "FixedQ4816.Sign, over the same raw Value comparison substrate MoveToward's own delta > Zero branch reduces to — a member MoveToward's body never calls directly, so a transposed current/target or a negated step is caught by reading the moved point's own displacement rather than by re-executing the subject's branch.",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
     "Id": "core.rust-port-emitters-are-pure-and-live",
     "Tier": "Default",
     "Members": [

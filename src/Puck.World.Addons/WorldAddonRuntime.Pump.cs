@@ -195,39 +195,23 @@ public sealed partial class WorldAddonRuntime {
                 // A row with no recorded budget is unreachable by construction: every principal reaching here is a
                 // mounted addon's own untrusted Principal, and TryGrant's Conflicts gate refuses an untrusted Drive
                 // hold with no budget before it can be added — so this refuses rather than dispatching unmetered.
-                if (m_server.Grants.TryGetBudget(
-                    principal: principal,
+                if (!TryChargeDispatch(
+                    addon: addon,
                     capability: WorldCapability.Drive,
+                    dispatchCounts: addon.DriveDispatchCounts,
+                    latches: ref addon.Drive,
+                    ordinal: act.Ordinal,
                     subject: subject,
-                    out var driveBudget
+                    verdict: out var chargeVerdict
                 )) {
-                    if (addon.DriveDispatchCounts[subject.Value] >= driveBudget) {
-                        QueueAnswer(
-                            addon: addon,
-                            ordinal: act.Ordinal,
-                            verdict: AddonVerdict.QuotaExhausted
-                        );
-                        driveExhaustedThisTick = true;
-
-                        if (!addon.DriveDispatchBudgetExhaustedReported) {
-                            addon.DriveDispatchBudgetExhaustedReported = true;
-                            Console.Error.WriteLine(value: $"[world.addon: {addon.Instance.Name} exceeded its drive/{subject.Describe()} dispatch budget ({driveBudget}/tick) — ordinal {act.Ordinal} refused QuotaExhausted]");
-                        }
-
-                        continue;
-                    }
-
-                    addon.DriveDispatchCounts[subject.Value]++;
-                } else {
                     QueueAnswer(
                         addon: addon,
                         ordinal: act.Ordinal,
-                        verdict: AddonVerdict.NoHold
+                        verdict: chargeVerdict
                     );
 
-                    if (!addon.DriveMissingBudgetReported) {
-                        addon.DriveMissingBudgetReported = true;
-                        Console.Error.WriteLine(value: $"[world.addon: {addon.Instance.Name} holds drive over {subject.Describe()} with no recorded dispatch budget — an authority-table inconsistency (unreachable by construction); ordinal {act.Ordinal} refused NoHold rather than dispatched unmetered]");
+                    if (chargeVerdict == AddonVerdict.QuotaExhausted) {
+                        driveExhaustedThisTick = true;
                     }
 
                     continue;
@@ -280,13 +264,13 @@ public sealed partial class WorldAddonRuntime {
                 }
             }
         } finally {
-            // DriveDispatchBudgetExhaustedReported is EDGE-TRIGGERED per exhaustion episode (reset here the moment a
+            // Drive.ExhaustedReported is EDGE-TRIGGERED per exhaustion episode (reset here the moment a
             // tick exhausts no drive budget), never a once-per-process-lifetime latch — the same shape as
             // MergeAnswers' QuotaDropReported, for the identical reason: a second, later saturation episode must be
             // able to say so again rather than staying silent forever after the first. The finally makes this run
             // even if the try above threw, rather than leaving the latch wherever the last successful tick left it.
             if (!driveExhaustedThisTick) {
-                addon.DriveDispatchBudgetExhaustedReported = false;
+                addon.Drive.ExhaustedReported = false;
             }
         }
     }
@@ -572,7 +556,7 @@ public sealed partial class WorldAddonRuntime {
                 // FoldActs did not run this tick, so its own bottom-of-method latch reset did not run either — clear
                 // it here so a guest disabled or faulted between an exhaustion and its next FoldActs call does not
                 // carry an armed-but-orphaned latch into a later enable and swallow the next real exhaustion.
-                addon.DriveDispatchBudgetExhaustedReported = false;
+                addon.Drive.ExhaustedReported = false;
 
                 continue;
             }
@@ -600,7 +584,7 @@ public sealed partial class WorldAddonRuntime {
                 // latch's own bottom-of-method reset ran either. Same reasoning as ApplyContributions' twin above,
                 // for both episodes this stage owns: a guest that stops being pumped has no open episode left to
                 // report on, on either axis, regardless of why it stopped.
-                addon.DispatchBudgetExhaustedReported = false;
+                addon.Observe.ExhaustedReported = false;
                 addon.QuotaDropReported = false;
 
                 continue;

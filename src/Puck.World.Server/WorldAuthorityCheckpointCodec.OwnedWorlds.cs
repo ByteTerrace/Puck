@@ -74,7 +74,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             items: member.SourceGrants,
             writeItem: WriteWorldGrant
         );
-        WriteMobility(
+        WorldWireLeaves.WriteMobility(
             writer: writer,
             mobility: member.Mobility
         );
@@ -105,7 +105,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             field: "landed member source grants",
             readItem: static (ref WireReader r) => ReadWorldGrant(reader: ref r)
         );
-        var mobility = ReadMobility(reader: ref reader);
+        var mobility = WorldWireLeaves.ReadMobility(reader: ref reader);
 
         return new WorldLandedMemberCheckpoint(
             AdmissionGrants: admissionGrants,
@@ -190,25 +190,25 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
     }
     private static void WriteForwardedBody(WireWriter writer, WorldForwardedBodyCheckpoint row) {
-        WriteEntityAddress(
+        WorldWireLeaves.WriteEntityAddress(
             writer: writer,
             address: row.SourceIncarnation
         );
-        WriteEntityAddress(
+        WorldWireLeaves.WriteEntityAddress(
             writer: writer,
             address: row.DestinationAddress
         );
         writer.WriteInt32(value: row.DestinationBodyIndex);
-        WriteMobility(
+        WorldWireLeaves.WriteMobility(
             writer: writer,
             mobility: row.Mobility
         );
     }
     private static WorldForwardedBodyCheckpoint ReadForwardedBody(ref WireReader reader) {
-        var sourceIncarnation = ReadEntityAddress(reader: ref reader);
-        var destinationAddress = ReadEntityAddress(reader: ref reader);
+        var sourceIncarnation = WorldWireLeaves.ReadEntityAddress(reader: ref reader);
+        var destinationAddress = WorldWireLeaves.ReadEntityAddress(reader: ref reader);
         var destinationBodyIndex = reader.ReadInt32();
-        var mobility = ReadMobility(reader: ref reader);
+        var mobility = WorldWireLeaves.ReadMobility(reader: ref reader);
 
         return new WorldForwardedBodyCheckpoint(
             DestinationAddress: destinationAddress,

@@ -182,7 +182,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         WriteOptional(
             writer: writer,
             value: member.Mobility,
-            writeValue: WriteMobility
+            writeValue: WorldWireLeaves.WriteMobility
         );
     }
     private static WorldTransferReservationMember ReadReservationMember(ref WireReader reader, WorldPlayerDefaults defaults) {
@@ -197,7 +197,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         var catalogRig = reader.ReadByte();
         var mobility = ReadOptional(
             reader: ref reader,
-            readValue: static (ref WireReader r) => ReadMobility(reader: ref r)
+            readValue: static (ref WireReader r) => WorldWireLeaves.ReadMobility(reader: ref r)
         );
 
         return new WorldTransferReservationMember(
@@ -341,7 +341,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         WriteArray(
             writer: writer,
             items: committed.Incarnations,
-            writeItem: WriteEntityAddress
+            writeItem: WorldWireLeaves.WriteEntityAddress
         );
     }
     private static WorldTransferEscrow.WorldTransferCommittedCheckpoint ReadCommitted(ref WireReader reader, WorldPlayerDefaults defaults) {
@@ -362,7 +362,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         var incarnations = ReadArray(
             reader: ref reader,
             field: "committed incarnations",
-            readItem: static (ref WireReader r) => ReadEntityAddress(reader: ref r)
+            readItem: static (ref WireReader r) => WorldWireLeaves.ReadEntityAddress(reader: ref r)
         );
 
         return new WorldTransferEscrow.WorldTransferCommittedCheckpoint(
@@ -389,7 +389,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             writer: writer,
             items: section.LatestCommittedTransfer,
             writeItem: static (w, row) => {
-                WriteEntityAddress(
+                WorldWireLeaves.WriteEntityAddress(
                     address: row.Incarnation,
                     writer: w
                 );
@@ -403,7 +403,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             writer: writer,
             items: section.MobilityLeases,
             writeItem: static (w, row) => {
-                WriteEntityAddress(
+                WorldWireLeaves.WriteEntityAddress(
                     address: row.Incarnation,
                     writer: w
                 );
@@ -419,7 +419,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             items: section.MobilityAdmissions,
             writeItem: static (w, row) => {
                 w.WriteString(value: row.SourceAuthority);
-                WriteEntityAddress(
+                WorldWireLeaves.WriteEntityAddress(
                     address: row.Incarnation,
                     writer: w
                 );
@@ -463,7 +463,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             reader: ref reader,
             field: "escrow latest committed transfer",
             readItem: static (ref WireReader r) => {
-                var incarnation = ReadEntityAddress(reader: ref r);
+                var incarnation = WorldWireLeaves.ReadEntityAddress(reader: ref r);
                 var transfer = ReadTransferKey(reader: ref r);
 
                 return (incarnation, transfer);
@@ -473,7 +473,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             reader: ref reader,
             field: "escrow mobility leases",
             readItem: static (ref WireReader r) => {
-                var incarnation = ReadEntityAddress(reader: ref r);
+                var incarnation = WorldWireLeaves.ReadEntityAddress(reader: ref r);
                 var transfer = ReadTransferKey(reader: ref r);
                 var expectedEpoch = r.ReadUInt64();
 
@@ -488,7 +488,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                     field: "mobility admission source authority",
                     maxBytes: MaxStringBytes
                 );
-                var incarnation = ReadEntityAddress(reader: ref r);
+                var incarnation = WorldWireLeaves.ReadEntityAddress(reader: ref r);
                 var epoch = r.ReadUInt64();
                 var principal = ReadPrincipal(reader: ref r);
 

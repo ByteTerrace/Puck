@@ -4,6 +4,39 @@ using System.Text.Json.Serialization;
 
 namespace Puck.Assets.Documents;
 
+/// <summary>The one array-element reader every fixed-arity numeric-array converter in the document graph shares.</summary>
+public static class JsonComponentReader {
+    /// <summary>Reads one array element as a float — a JSON number token, or a hard parse failure by
+    /// <paramref name="notNumberMessage"/>. A supplied <paramref name="notFiniteMessage"/> additionally refuses a
+    /// non-finite value (NaN/Infinity survive <see cref="Utf8JsonReader.GetSingle"/> even though they never appear
+    /// as a JSON number literal, e.g. a "raw" wire value copied through unchecked math before serialization).</summary>
+    public static float ReadFloat(ref Utf8JsonReader reader, string notNumberMessage, string? notFiniteMessage = null) {
+        if (
+            !reader.Read() ||
+            (reader.TokenType != JsonTokenType.Number)
+        ) {
+            throw new JsonException(message: notNumberMessage);
+        }
+
+        var value = reader.GetSingle();
+
+        return (((notFiniteMessage is not null) && !float.IsFinite(f: value))
+            ? throw new JsonException(message: notFiniteMessage)
+            : value
+        );
+    }
+    /// <summary>Reads one array element as an integer.</summary>
+    public static int ReadInt(ref Utf8JsonReader reader, string notNumberMessage) {
+        if (
+            !reader.Read() ||
+            (reader.TokenType != JsonTokenType.Number)
+        ) {
+            throw new JsonException(message: notNumberMessage);
+        }
+
+        return reader.GetInt32();
+    }
+}
 /// <summary>
 /// Reads and writes a <see cref="Vector2"/> as a two-element JSON array <c>[x, y]</c> — the one spelling every
 /// document family (world, creation, audio, synth) carries a <see cref="Vector2"/> in. Numbers ride STJ's default
@@ -13,25 +46,14 @@ namespace Puck.Assets.Documents;
 /// both what shape was expected and where the document went wrong.
 /// </summary>
 public sealed class Vector2JsonConverter : JsonConverter<Vector2> {
-    private static float ReadComponent(ref Utf8JsonReader reader) {
-        if (
-            !reader.Read() ||
-            (reader.TokenType != JsonTokenType.Number)
-        ) {
-            throw new JsonException(message: "a Vector2 element must be a finite number.");
-        }
-
-        return reader.GetSingle();
-    }
-
     /// <inheritdoc/>
     public override Vector2 Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
         if (reader.TokenType != JsonTokenType.StartArray) {
             throw new JsonException(message: "a Vector2 must be a two-element [x, y] array (the object form is no longer accepted).");
         }
 
-        var x = ReadComponent(reader: ref reader);
-        var y = ReadComponent(reader: ref reader);
+        var x = JsonComponentReader.ReadFloat(reader: ref reader, notNumberMessage: "a Vector2 element must be a finite number.");
+        var y = JsonComponentReader.ReadFloat(reader: ref reader, notNumberMessage: "a Vector2 element must be a finite number.");
 
         if (
             !reader.Read() ||
@@ -60,26 +82,15 @@ public sealed class Vector2JsonConverter : JsonConverter<Vector2> {
 /// remarks for the arity/object-form refusal posture, which this converter shares exactly.
 /// </summary>
 public sealed class Vector3JsonConverter : JsonConverter<Vector3> {
-    private static float ReadComponent(ref Utf8JsonReader reader) {
-        if (
-            !reader.Read() ||
-            (reader.TokenType != JsonTokenType.Number)
-        ) {
-            throw new JsonException(message: "a Vector3 element must be a finite number.");
-        }
-
-        return reader.GetSingle();
-    }
-
     /// <inheritdoc/>
     public override Vector3 Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
         if (reader.TokenType != JsonTokenType.StartArray) {
             throw new JsonException(message: "a Vector3 must be a three-element [x, y, z] array (the object form is no longer accepted).");
         }
 
-        var x = ReadComponent(reader: ref reader);
-        var y = ReadComponent(reader: ref reader);
-        var z = ReadComponent(reader: ref reader);
+        var x = JsonComponentReader.ReadFloat(reader: ref reader, notNumberMessage: "a Vector3 element must be a finite number.");
+        var y = JsonComponentReader.ReadFloat(reader: ref reader, notNumberMessage: "a Vector3 element must be a finite number.");
+        var z = JsonComponentReader.ReadFloat(reader: ref reader, notNumberMessage: "a Vector3 element must be a finite number.");
 
         if (
             !reader.Read() ||
@@ -112,27 +123,16 @@ public sealed class Vector3JsonConverter : JsonConverter<Vector3> {
 /// arity and the object form are both hard parse failures, by name, with the offending JSON path appended by STJ.
 /// </summary>
 public sealed class QuaternionJsonConverter : JsonConverter<Quaternion> {
-    private static float ReadComponent(ref Utf8JsonReader reader) {
-        if (
-            !reader.Read() ||
-            (reader.TokenType != JsonTokenType.Number)
-        ) {
-            throw new JsonException(message: "a Quaternion element must be a finite number.");
-        }
-
-        return reader.GetSingle();
-    }
-
     /// <inheritdoc/>
     public override Quaternion Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
         if (reader.TokenType != JsonTokenType.StartArray) {
             throw new JsonException(message: "a Quaternion must be a four-element [x, y, z, w] array (the object form with 'isIdentity' is no longer accepted).");
         }
 
-        var x = ReadComponent(reader: ref reader);
-        var y = ReadComponent(reader: ref reader);
-        var z = ReadComponent(reader: ref reader);
-        var w = ReadComponent(reader: ref reader);
+        var x = JsonComponentReader.ReadFloat(reader: ref reader, notNumberMessage: "a Quaternion element must be a finite number.");
+        var y = JsonComponentReader.ReadFloat(reader: ref reader, notNumberMessage: "a Quaternion element must be a finite number.");
+        var z = JsonComponentReader.ReadFloat(reader: ref reader, notNumberMessage: "a Quaternion element must be a finite number.");
+        var w = JsonComponentReader.ReadFloat(reader: ref reader, notNumberMessage: "a Quaternion element must be a finite number.");
 
         if (
             !reader.Read() ||

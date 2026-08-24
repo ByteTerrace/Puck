@@ -1,3 +1,5 @@
+using Puck.Abstractions.Documents;
+
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
@@ -5,32 +7,6 @@ public static partial class WorldDefinitionValidator {
         "pan", "tilt", "zoom", "exposure", "focus", "brightness", "contrast",
         "saturation", "sharpness", "gain", "whiteBalance", "backlightCompensation", "fieldOfView",
     };
-
-    // A socket name: an ASCII letter, then zero or more ASCII letters, digits, or hyphens — the grammar a probe
-    // kind's manifest names its typed input slots with (e.g. "color", "strobe-pair"). Distinct from IsKebabCase
-    // (WorldDefinitionValidator.Screens.cs), which forbids a leading digit but also forbids upper-case and a
-    // trailing/doubled hyphen; a socket name admits both.
-    private static bool IsSocketIdentifier(string value) {
-        if (
-            string.IsNullOrEmpty(value: value) ||
-            !char.IsAsciiLetter(c: value[0])
-        ) {
-            return false;
-        }
-
-        for (var index = 1; (index < value.Length); index++) {
-            var character = value[index];
-
-            if (
-                !char.IsAsciiLetterOrDigit(c: character) &&
-                (character != '-')
-            ) {
-                return false;
-            }
-        }
-
-        return true;
-    }
     // Vocabulary and structural shape only — the shallow half of the shallow-then-deep split
     // WorldRenderExtensionEntry.Config already establishes: a kind naming no registered probe kind, a probe
     // reference resolving to nothing, or a source colliding with another axis binding refuses here, at load, by name
@@ -152,7 +128,7 @@ public static partial class WorldDefinitionValidator {
             foreach (var (socket, source) in inputs) {
                 var socketPath = $"{path}.inputs['{socket}']";
 
-                if (!IsSocketIdentifier(value: socket)) {
+                if (!SocketIdentifierGrammar.IsValid(value: socket)) {
                     errors.Add(item: $"{socketPath} '{socket}' must be an identifier (a letter, then letters, digits, or hyphens).");
                 }
 
@@ -279,21 +255,27 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path}.source 'probe.{axis.Source}' is not a declared input source id.");
         }
 
-        if (
-            !float.IsFinite(f: axis.Deadband) ||
-            (axis.Deadband < 0f) ||
-            (axis.Deadband >= 1f)
-        ) {
-            errors.Add(item: $"{path}.deadband {axis.Deadband} is outside [0, 1).");
-        }
+        RequireRange(
+            value: axis.Deadband,
+            min: 0f,
+            max: 1f,
+            name: $"{path}.deadband",
+            errors: errors,
+            maxExclusive: true
+        );
 
-        if (
-            !float.IsFinite(f: axis.Hysteresis) ||
-            (axis.Hysteresis < 0f) ||
-            (axis.Hysteresis >= 1f)
-        ) {
-            errors.Add(item: $"{path}.hysteresis {axis.Hysteresis} is outside [0, 1).");
-        } else if (float.IsFinite(f: axis.Deadband) && (axis.Deadband >= 0f)) {
+        var hysteresisValid = (float.IsFinite(f: axis.Hysteresis) && (axis.Hysteresis >= 0f) && (axis.Hysteresis < 1f));
+
+        RequireRange(
+            value: axis.Hysteresis,
+            min: 0f,
+            max: 1f,
+            name: $"{path}.hysteresis",
+            errors: errors,
+            maxExclusive: true
+        );
+
+        if (hysteresisValid && float.IsFinite(f: axis.Deadband) && (axis.Deadband >= 0f)) {
             // Activation requires a magnitude above deadband + hysteresis and release a magnitude below
             // deadband - hysteresis; both thresholds must lie inside the [0, 1) axis magnitude domain or one of the
             // two transitions can never happen.
@@ -306,13 +288,11 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
-        if (
-            !float.IsFinite(f: axis.Smoothing) ||
-            (axis.Smoothing < 0f) ||
-            (axis.Smoothing > 1f)
-        ) {
-            errors.Add(item: $"{path}.smoothing {axis.Smoothing} is outside [0, 1].");
-        }
+        RequireUnitInterval(
+            value: axis.Smoothing,
+            name: $"{path}.smoothing",
+            errors: errors
+        );
 
         if (
             (axis.QuantizeBits < 1) ||
@@ -321,12 +301,11 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path}.quantizeBits {axis.QuantizeBits} is outside 1..16.");
         }
 
-        if (
-            !float.IsFinite(f: axis.MaxAgeSeconds) ||
-            (axis.MaxAgeSeconds <= 0f)
-        ) {
-            errors.Add(item: $"{path}.maxAgeSeconds {axis.MaxAgeSeconds} must be finite and positive.");
-        }
+        RequirePositive(
+            value: axis.MaxAgeSeconds,
+            name: $"{path}.maxAgeSeconds",
+            errors: errors
+        );
 
         if (isSeatRelative) {
             if (axis.Seat is not null) {
@@ -379,20 +358,32 @@ public static partial class WorldDefinitionValidator {
 
         if (parameter.Range is not { } range) {
             errors.Add(item: $"{path}.range is required.");
-        } else if (
-            !float.IsFinite(f: range.X) ||
-            !float.IsFinite(f: range.Y) ||
-            (range.X >= range.Y)
-        ) {
-            errors.Add(item: $"{path}.range [{range.X}, {range.Y}] must be finite with a minimum below its maximum.");
+        } else {
+            RequireFinite(
+                value: range.X,
+                name: $"{path}.range.x",
+                errors: errors
+            );
+            RequireFinite(
+                value: range.Y,
+                name: $"{path}.range.y",
+                errors: errors
+            );
+
+            if (
+                float.IsFinite(f: range.X) &&
+                float.IsFinite(f: range.Y) &&
+                (range.X >= range.Y)
+            ) {
+                errors.Add(item: $"{path}.range.x must be below {path}.range.y.");
+            }
         }
 
-        if (
-            !float.IsFinite(f: parameter.MaxAgeSeconds) ||
-            (parameter.MaxAgeSeconds <= 0f)
-        ) {
-            errors.Add(item: $"{path}.maxAgeSeconds {parameter.MaxAgeSeconds} must be finite and positive.");
-        }
+        RequirePositive(
+            value: parameter.MaxAgeSeconds,
+            name: $"{path}.maxAgeSeconds",
+            errors: errors
+        );
     }
     private static void ValidateProbeControlBinding(WorldProbeBinding.Control control, List<string> errors, string path) {
         if (
@@ -406,11 +397,10 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path}.minimum {control.Minimum} must be below {path}.maximum {control.Maximum}.");
         }
 
-        if (
-            !float.IsFinite(f: control.MaxAgeSeconds) ||
-            (control.MaxAgeSeconds <= 0f)
-        ) {
-            errors.Add(item: $"{path}.maxAgeSeconds {control.MaxAgeSeconds} must be finite and positive.");
-        }
+        RequirePositive(
+            value: control.MaxAgeSeconds,
+            name: $"{path}.maxAgeSeconds",
+            errors: errors
+        );
     }
 }

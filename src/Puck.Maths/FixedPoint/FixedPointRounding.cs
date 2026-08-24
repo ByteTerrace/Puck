@@ -44,7 +44,7 @@ public static class FixedPointRounding {
     /// it, and the tie is decided against the exact distance to the next multiple rather than by doubling the
     /// remainder — the formulation every sibling kernel in this family uses. Both the exact-rational mass-property
     /// chain here and <c>Puck.Physics</c>'s softness chain round through this body, so the two cannot drift onto
-    /// different tie rules.</remarks>
+    /// different tie rules. Narrows <see cref="RoundRational"/>'s unbounded result to a signed 64-bit raw.</remarks>
     public static bool TryRoundRational(BigInteger numerator, BigInteger denominator, int fractionBitCount, out long result) {
         if (
             denominator.IsZero ||
@@ -55,15 +55,15 @@ public static class FixedPointRounding {
             return false;
         }
 
-        var negative = ((numerator.Sign < 0) != (denominator.Sign < 0));
         var magnitude = BigInteger.Abs(value: numerator);
-        var divisor = BigInteger.Abs(value: denominator);
 
         if (magnitude.IsZero) {
             result = 0L;
 
             return true;
         }
+
+        var divisor = BigInteger.Abs(value: denominator);
 
         // Refuse an obviously over-wide quotient before materializing the shifted numerator. Without this guard a
         // public call such as (1, 1, int.MaxValue) asks BigInteger for hundreds of megabytes only to discover after
@@ -74,6 +74,44 @@ public static class FixedPointRounding {
 
             return false;
         }
+
+        var quotient = RoundRational(
+            denominator: denominator,
+            fractionBitCount: fractionBitCount,
+            numerator: numerator
+        );
+
+        if (
+            (quotient < long.MinValue) ||
+            (quotient > long.MaxValue)
+        ) {
+            result = 0L;
+
+            return false;
+        }
+
+        result = ((long)quotient);
+
+        return true;
+    }
+    /// <summary>Rounds the exact rational <c>numerator / denominator · 2^fractionBitCount</c> to the nearest
+    /// integer, to nearest with ties to even, at unbounded width.</summary>
+    /// <param name="numerator">The exact numerator, of either sign.</param>
+    /// <param name="denominator">The exact denominator, of either sign and non-zero.</param>
+    /// <param name="fractionBitCount">The result's fraction bit count, which must be non-negative.</param>
+    /// <returns>The rounded value, exactly — no width guard, no narrowing.</returns>
+    /// <remarks>The core every narrowing rounding in this family reduces to: <see cref="TryRoundRational"/> adds the
+    /// signed-64-bit width guard and narrowing; <c>SecondOrderExactMath.RoundToGuardScale</c> and
+    /// <c>FixedPointConvert.ScaleDecimalWide</c> call it directly at their own working scale.</remarks>
+    internal static BigInteger RoundRational(BigInteger numerator, BigInteger denominator, int fractionBitCount) {
+        var negative = ((numerator.Sign < 0) != (denominator.Sign < 0));
+        var magnitude = BigInteger.Abs(value: numerator);
+
+        if (magnitude.IsZero) {
+            return BigInteger.Zero;
+        }
+
+        var divisor = BigInteger.Abs(value: denominator);
 
         magnitude <<= fractionBitCount;
         var quotient = BigInteger.DivRem(
@@ -89,21 +127,6 @@ public static class FixedPointRounding {
             truncated: quotient
         );
 
-        if (negative) {
-            quotient = -quotient;
-        }
-
-        if (
-            (quotient < long.MinValue) ||
-            (quotient > long.MaxValue)
-        ) {
-            result = 0L;
-
-            return false;
-        }
-
-        result = ((long)quotient);
-
-        return true;
+        return (negative ? -quotient : quotient);
     }
 }

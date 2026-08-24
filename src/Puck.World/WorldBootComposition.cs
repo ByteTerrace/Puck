@@ -744,9 +744,9 @@ internal static class WorldBootComposition {
         // The authored world-scope AND player-scope HUD's STRUCTURE store (world panels reconciled from the
         // delivered definition on revision move; seat panels recomposed every tick from the roster + each joined
         // seat's profile — see WorldHudFeed's own remarks) and its feed (its Tick joins WorldOverlayFeed's in the
-        // render root's FeedTick chain below; roster/editor are read-only here, the SAME LayoutRegion call
-        // WorldOverlayFeed makes for its own per-seat rects). The live binding resolver and the world.hud verb
-        // surface are core (WorldBootComposition.AddWorldAuthoritativeCore) — only the on-screen render cache is
+        // render root's FeedTick chain below; roster/editor are read-only here, the SAME published WorldSeatViewports
+        // rect WorldOverlayFeed reads for its own per-seat viewport). The live binding resolver and the world.hud
+        // verb surface are core (WorldBootComposition.AddWorldAuthoritativeCore) — only the on-screen render cache is
         // presentation-only.
         services.AddSingleton<HudStore>();
         // The unified overlay's IOverlayFrameSources — adapts the binder's WorldFrameSource vocabulary (camera/
@@ -762,7 +762,8 @@ internal static class WorldBootComposition {
             roster: sp.GetRequiredService<PlayerRoster>(),
             store: sp.GetRequiredService<HudStore>(),
             facts: sp.GetRequiredService<WorldOverlayFacts>(),
-            frameSources: sp.GetRequiredService<WorldOverlayFrameSources>()
+            frameSources: sp.GetRequiredService<WorldOverlayFrameSources>(),
+            viewports: sp.GetRequiredService<WorldSeatViewports>()
         ));
 
         // The boot document's resolved icon table: the ONE place an icon name, a font id, or a codepoint is known
@@ -777,7 +778,8 @@ internal static class WorldBootComposition {
             icons: sp.GetRequiredService<WorldIconTable>(),
             roster: sp.GetRequiredService<PlayerRoster>(),
             router: sp.GetRequiredService<InputRouter>(),
-            store: sp.GetRequiredService<BindingBarStore>()
+            store: sp.GetRequiredService<BindingBarStore>(),
+            viewports: sp.GetRequiredService<WorldSeatViewports>()
         ));
         // WorldUiCommandModule (world.screenshot) is CORE-registered — see AddWorldAuthoritativeCore's tail — and
         // refuses by name headless. The console verb belongs to the terminal composition.

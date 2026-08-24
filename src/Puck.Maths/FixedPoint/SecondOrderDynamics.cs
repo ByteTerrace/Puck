@@ -78,10 +78,7 @@ public readonly record struct SecondOrderDynamics {
             );
         }
 
-        // ω = 2π·f as the exact rational omegaNumerator / omegaDenominator (no additional Q16 embedded — the ratio
-        // is the unscaled real number ω), the same construction FixedSoftConstraint.Create uses for its own ω.
-        var omegaNumerator = ((2 * ((BigInteger)FixedQ4816.PiQ61)) * frequencyHz.Value);
-        var omegaDenominator = (BigInteger.One << (FixedQ4816.PiQ61FractionBitCount + FixedQ4816.FractionBitCount));
+        var (omegaNumerator, omegaDenominator) = FixedQ4816.AngularFrequency(frequencyHz: frequencyHz);
 
         if (!FixedPointRounding.TryRoundRational(
             numerator: (omegaNumerator * omegaNumerator),
@@ -127,9 +124,8 @@ public readonly record struct SecondOrderDynamics {
             // 2·Guard − 2·16 shift accounts for discriminant already carrying ζ's own 2^32, so the square root
             // divides that exponent by two before rootRaw's target scale is added back.
             var discriminant = BigInteger.Abs((oneQ16 * oneQ16) - (zetaRaw * zetaRaw));
-            var rootRaw = SecondOrderExactMath.NearestSquareRoot(
-                value: (discriminant << ((2 * SecondOrderExactMath.GuardFractionBitCount) - (2 * FixedQ4816.FractionBitCount)))
-            );
+            var discriminantScaled = (discriminant << ((2 * SecondOrderExactMath.GuardFractionBitCount) - (2 * FixedQ4816.FractionBitCount)));
+            var rootRaw = ((BigIntegerFunctions.SquareRoot(value: (4 * discriminantScaled)) + 1) / 2);
 
             if (!FixedPointRounding.TryRoundRational(
                 numerator: (omegaNumerator * rootRaw),

@@ -184,13 +184,15 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
-        if (
-            !float.IsFinite(f: collision.MaxSlopeDegrees) ||
-            (collision.MaxSlopeDegrees <= 0f) ||
-            (collision.MaxSlopeDegrees >= 90f)
-        ) {
-            errors.Add(item: $"collision.maxSlopeDegrees must be in (0, 90) (was {collision.MaxSlopeDegrees}).");
-        }
+        RequireRange(
+            value: collision.MaxSlopeDegrees,
+            min: 0f,
+            max: 90f,
+            name: "collision.maxSlopeDegrees",
+            errors: errors,
+            minExclusive: true,
+            maxExclusive: true
+        );
 
         RequireNonNegative(
             value: collision.GradientProbe,
@@ -311,8 +313,6 @@ public static partial class WorldDefinitionValidator {
     // elements within their panel), rect sanity, WorldHudLayer.Replace refused for a seat panel, the closed
     // HudBindingVocabulary — including whether a state.<name> binding resolves against the state rows validated just
     // before this call — and (for a Frame element) the shared ValidateFrameSource gate against definition/cameras.
-    // Throws an enum-reasoned HudValidationException at the first violation, caught here and folded into the
-    // whole-document errors list.
     private static void ValidateHud(WorldDefinition definition, HashSet<string> cameras, WorldHudSection hud, IReadOnlyDictionary<string, WorldStateRow> stateRows, bool isIdentityScope, List<string> errors) {
         if (hud is null) {
             errors.Add(item: "hud is required.");
@@ -320,19 +320,16 @@ public static partial class WorldDefinitionValidator {
             return;
         }
 
-        try {
-            ValidateHudCore(
-                cameras: cameras,
-                definition: definition,
-                hud: hud,
-                isIdentityScope: isIdentityScope,
-                stateRows: stateRows
-            );
-        } catch (HudValidationException exception) {
-            errors.Add(item: $"hud.{exception.Reason}: {exception.Message}");
-        }
+        ValidateHudCore(
+            cameras: cameras,
+            definition: definition,
+            errors: errors,
+            hud: hud,
+            isIdentityScope: isIdentityScope,
+            stateRows: stateRows
+        );
     }
-    private static void ValidateHudCore(WorldDefinition definition, HashSet<string> cameras, WorldHudSection hud, IReadOnlyDictionary<string, WorldStateRow> stateRows, bool isIdentityScope) {
+    private static void ValidateHudCore(WorldDefinition definition, HashSet<string> cameras, WorldHudSection hud, IReadOnlyDictionary<string, WorldStateRow> stateRows, bool isIdentityScope, List<string> errors) {
         var panels = hud.Panels;
         var maxElements = (isIdentityScope
             ? WorldHudCapacity.MaxElementsPerSeatPanel
@@ -349,7 +346,8 @@ public static partial class WorldDefinitionValidator {
                 (cursor.HoverRadius <= 0f) ||
                 (cursor.HoverRadius > 1024f)
             ) {
-                throw new HudValidationException(
+                HudRowValidation.Refuse(
+                    errors: errors,
                     reason: HudRefusal.CursorInvalid,
                     message: $"hud.defaults.cursor.hoverRadius must be finite, positive, and at most 1024 world units (got {cursor.HoverRadius})."
                 );
@@ -360,14 +358,16 @@ public static partial class WorldDefinitionValidator {
                 (cursor.SizePx <= 0f) ||
                 (cursor.SizePx > 64f)
             ) {
-                throw new HudValidationException(
+                HudRowValidation.Refuse(
+                    errors: errors,
                     reason: HudRefusal.CursorInvalid,
                     message: $"hud.defaults.cursor.sizePx must be finite, positive, and at most 64 pixels (got {cursor.SizePx})."
                 );
             }
 
             if (!Enum.IsDefined(value: cursor.Role)) {
-                throw new HudValidationException(
+                HudRowValidation.Refuse(
+                    errors: errors,
                     reason: HudRefusal.CursorInvalid,
                     message: $"hud.defaults.cursor.role value {((int)cursor.Role)} is not a defined cursor role."
                 );
@@ -376,17 +376,20 @@ public static partial class WorldDefinitionValidator {
 
         ValidateHudVisible(
             definition: (isIdentityScope ? null : definition),
+            errors: errors,
             path: "hud.defaults.visible",
             predicate: hud.Defaults?.Visible
         );
         ValidateHudVisible(
             definition: (isIdentityScope ? null : definition),
+            errors: errors,
             path: "hud.defaults.cursor.visible",
             predicate: hud.Defaults?.Cursor?.Visible
         );
 
         if (panels.Count > maxPanels) {
-            throw new HudValidationException(
+            HudRowValidation.Refuse(
+                errors: errors,
                 reason: HudRefusal.TooManyPanels,
                 message: $"hud.panels count {panels.Count} exceeds the maximum of {maxPanels} ({(isIdentityScope
                 ? "WorldHudCapacity.MaxSeatPanels — an identity-owned world authors one seat panel"
@@ -405,14 +408,14 @@ public static partial class WorldDefinitionValidator {
             var panelPath = $"hud.panels[{panelIndex}]";
 
             if (string.IsNullOrWhiteSpace(value: panel.Id)) {
-                throw new HudValidationException(
+                HudRowValidation.Refuse(
+                    errors: errors,
                     message: $"{panelPath}.id is required.",
                     reason: HudRefusal.DuplicatePanelId
                 );
-            }
-
-            if (!panelIds.Add(item: panel.Id)) {
-                throw new HudValidationException(
+            } else if (!panelIds.Add(item: panel.Id)) {
+                HudRowValidation.Refuse(
+                    errors: errors,
                     reason: HudRefusal.DuplicatePanelId,
                     message: $"{panelPath}.id '{panel.Id}' is duplicated."
                 );
@@ -422,13 +425,15 @@ public static partial class WorldDefinitionValidator {
                 isIdentityScope &&
                 (panel.Layer == WorldHudLayer.Replace)
             ) {
-                throw new HudValidationException(
+                HudRowValidation.Refuse(
+                    errors: errors,
                     message: $"{panelPath}.layer 'replace' is not meaningful for an identity-owned seat panel confined to one seat's viewport — use under or over.",
                     reason: HudRefusal.SeatPanelReplaceRefused
                 );
             }
 
             HudRowValidation.ValidateRect(
+                errors: errors,
                 rect: panel.Rect,
                 path: $"{panelPath}.rect"
             );
@@ -436,12 +441,14 @@ public static partial class WorldDefinitionValidator {
                 cameras: cameras,
                 definition: definition,
                 elements: panel.Elements,
+                errors: errors,
                 panelPath: $"{panelPath} ('{panel.Id}')",
                 maxElements: maxElements,
                 stateRows: stateRows
             );
             ValidateHudVisible(
                 definition: (isIdentityScope ? null : definition),
+                errors: errors,
                 path: $"{panelPath}.visible",
                 predicate: panel.Visible
             );
@@ -462,7 +469,8 @@ public static partial class WorldDefinitionValidator {
                     }
 
                     if (frameSources.Count > WorldHudCapacity.MaxFrameSources) {
-                        throw new HudValidationException(
+                        HudRowValidation.Refuse(
+                            errors: errors,
                             reason: HudRefusal.TooManyFrameSources,
                             message: $"{panelPath} ('{panel.Id}') element '{element.Id}' introduces distinct frame source {frameSources.Count}, exceeding WorldHudCapacity.MaxFrameSources ({WorldHudCapacity.MaxFrameSources}). Repeated elements and candidates may share the same source."
                         );
@@ -583,11 +591,12 @@ public static partial class WorldDefinitionValidator {
                 }
             }
 
-            if (
-                (sun.Weight is { } weight) &&
-                (!float.IsFinite(f: weight) || (weight < 0f))
-            ) {
-                errors.Add(item: $"{path}.sun.weight must be finite and non-negative.");
+            if (sun.Weight is { } weight) {
+                RequireNonNegative(
+                    value: weight,
+                    name: $"{path}.sun.weight",
+                    errors: errors
+                );
             }
 
             if (
@@ -602,18 +611,20 @@ public static partial class WorldDefinitionValidator {
         }
 
         if (lighting.Ambient is { } ambient) {
-            if (
-                (ambient.Base is { } ambientBase) &&
-                (!float.IsFinite(f: ambientBase) || (ambientBase < 0f))
-            ) {
-                errors.Add(item: $"{path}.ambient.base must be finite and non-negative.");
+            if (ambient.Base is { } ambientBase) {
+                RequireNonNegative(
+                    value: ambientBase,
+                    name: $"{path}.ambient.base",
+                    errors: errors
+                );
             }
 
-            if (
-                (ambient.Hemisphere is { } hemisphere) &&
-                !float.IsFinite(f: hemisphere)
-            ) {
-                errors.Add(item: $"{path}.ambient.hemisphere must be finite.");
+            if (ambient.Hemisphere is { } hemisphere) {
+                RequireFinite(
+                    value: hemisphere,
+                    name: $"{path}.ambient.hemisphere",
+                    errors: errors
+                );
             }
 
             if (
@@ -662,94 +673,86 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path}.ground '{ground}' {WorldColor.Grammar}.");
         }
 
-        if (
-            (sky.FogDensity is { } fogDensity) &&
-            (!float.IsFinite(f: fogDensity) || (fogDensity < 0f))
-        ) {
-            errors.Add(item: $"{path}.fogDensity must be finite and non-negative.");
+        if (sky.FogDensity is { } fogDensity) {
+            RequireNonNegative(
+                value: fogDensity,
+                name: $"{path}.fogDensity",
+                errors: errors
+            );
         }
 
         if (sky.Sun is { } sun) {
-            if (
-                !float.IsFinite(f: sun.DiscRadians) ||
-                (sun.DiscRadians <= 0f) ||
-                (sun.DiscRadians > (MathF.PI / 2f))
-            ) {
-                errors.Add(item: $"{path}.sun.discRadians must be finite and in (0, pi/2].");
-            }
+            RequireRange(
+                value: sun.DiscRadians,
+                min: 0f,
+                max: (MathF.PI / 2f),
+                name: $"{path}.sun.discRadians",
+                errors: errors,
+                minExclusive: true
+            );
 
-            if (
-                !float.IsFinite(f: sun.Intensity) ||
-                (sun.Intensity < 0f)
-            ) {
-                errors.Add(item: $"{path}.sun.intensity must be finite and non-negative.");
-            }
+            RequireNonNegative(
+                value: sun.Intensity,
+                name: $"{path}.sun.intensity",
+                errors: errors
+            );
         }
 
         if (sky.Stars is { } stars) {
-            if (
-                !float.IsFinite(f: stars.Density) ||
-                (stars.Density <= 0f)
-            ) {
-                errors.Add(item: $"{path}.stars.density must be finite and positive.");
-            }
+            RequirePositive(
+                value: stars.Density,
+                name: $"{path}.stars.density",
+                errors: errors
+            );
 
-            if (
-                !float.IsFinite(f: stars.Brightness) ||
-                (stars.Brightness < 0f)
-            ) {
-                errors.Add(item: $"{path}.stars.brightness must be finite and non-negative.");
-            }
+            RequireNonNegative(
+                value: stars.Brightness,
+                name: $"{path}.stars.brightness",
+                errors: errors
+            );
 
             if (stars.Twinkle is { } twinkle) {
-                if (
-                    !float.IsFinite(f: twinkle.Share) ||
-                    (twinkle.Share < 0f) ||
-                    (twinkle.Share > 1f)
-                ) {
-                    errors.Add(item: $"{path}.stars.twinkle.share must be finite and in [0, 1].");
-                }
+                RequireUnitInterval(
+                    value: twinkle.Share,
+                    name: $"{path}.stars.twinkle.share",
+                    errors: errors
+                );
 
-                if (
-                    !float.IsFinite(f: twinkle.Depth) ||
-                    (twinkle.Depth < 0f) ||
-                    (twinkle.Depth > 1f)
-                ) {
-                    errors.Add(item: $"{path}.stars.twinkle.depth must be finite and in [0, 1].");
-                }
+                RequireUnitInterval(
+                    value: twinkle.Depth,
+                    name: $"{path}.stars.twinkle.depth",
+                    errors: errors
+                );
 
-                if (
-                    !float.IsFinite(f: twinkle.Rate) ||
-                    (twinkle.Rate <= 0f)
-                ) {
-                    errors.Add(item: $"{path}.stars.twinkle.rate must be finite and positive.");
-                }
+                RequirePositive(
+                    value: twinkle.Rate,
+                    name: $"{path}.stars.twinkle.rate",
+                    errors: errors
+                );
             }
         }
 
         if (sky.Clouds is { } clouds) {
-            if (
-                !float.IsFinite(f: clouds.Coverage) ||
-                (clouds.Coverage < 0f) ||
-                (clouds.Coverage > 1f)
-            ) {
-                errors.Add(item: $"{path}.clouds.coverage must be finite and in [0, 1].");
-            }
+            RequireUnitInterval(
+                value: clouds.Coverage,
+                name: $"{path}.clouds.coverage",
+                errors: errors
+            );
 
-            if (
-                !float.IsFinite(f: clouds.Softness) ||
-                (clouds.Softness <= 0f) ||
-                (clouds.Softness > 1f)
-            ) {
-                errors.Add(item: $"{path}.clouds.softness must be finite and in (0, 1].");
-            }
+            RequireRange(
+                value: clouds.Softness,
+                min: 0f,
+                max: 1f,
+                name: $"{path}.clouds.softness",
+                errors: errors,
+                minExclusive: true
+            );
 
-            if (
-                !float.IsFinite(f: clouds.Scale) ||
-                (clouds.Scale <= 0f)
-            ) {
-                errors.Add(item: $"{path}.clouds.scale must be finite and positive.");
-            }
+            RequirePositive(
+                value: clouds.Scale,
+                name: $"{path}.clouds.scale",
+                errors: errors
+            );
 
             if (
                 (clouds.Color is { } cloudColor) &&
@@ -768,18 +771,20 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.clouds.drift must contain finite coordinates.");
             }
 
-            if (
-                (clouds.Spin is { } spin) &&
-                !float.IsFinite(f: spin)
-            ) {
-                errors.Add(item: $"{path}.clouds.spin must be finite.");
+            if (clouds.Spin is { } spin) {
+                RequireFinite(
+                    value: spin,
+                    name: $"{path}.clouds.spin",
+                    errors: errors
+                );
             }
 
-            if (
-                (clouds.Curl is { } curl) &&
-                !float.IsFinite(f: curl)
-            ) {
-                errors.Add(item: $"{path}.clouds.curl must be finite.");
+            if (clouds.Curl is { } curl) {
+                RequireFinite(
+                    value: curl,
+                    name: $"{path}.clouds.curl",
+                    errors: errors
+                );
             }
 
             if (
@@ -952,11 +957,12 @@ public static partial class WorldDefinitionValidator {
         if (row.Mode == WorldObserverDisclosureMode.Radius) {
             if (row.Radius is not { } radius) {
                 errors.Add(item: "population.disclosure.radius is required for mode 'radius'.");
-            } else if (
-                !float.IsFinite(f: radius) ||
-                (radius <= 0f)
-            ) {
-                errors.Add(item: $"population.disclosure.radius {radius} must be finite and positive.");
+            } else {
+                RequirePositive(
+                    value: radius,
+                    name: "population.disclosure.radius",
+                    errors: errors
+                );
             }
         } else if (row.Radius is not null) {
             errors.Add(item: $"population.disclosure.radius must be absent for mode '{row.Mode}' — only 'radius' reads one.");
@@ -1162,11 +1168,13 @@ public static partial class WorldDefinitionValidator {
         for (var index = 0; (index < spawnPoints.Count); index++) {
             var spawn = spawnPoints[index];
 
-            if (string.IsNullOrWhiteSpace(value: spawn.Id)) {
-                errors.Add(item: $"spawnPoints[{index}].id is required.");
-            } else if (!ids.Add(item: spawn.Id)) {
-                errors.Add(item: $"spawnPoints[{index}].id '{spawn.Id}' is duplicated.");
-            }
+            RequireUniqueName(
+                value: spawn.Id,
+                seen: ids,
+                path: $"spawnPoints[{index}]",
+                field: "id",
+                errors: errors
+            );
 
             if (!IsFinite(value: spawn.Position)) {
                 errors.Add(item: $"spawnPoints[{index}].position must contain finite coordinates.");
@@ -1224,19 +1232,20 @@ public static partial class WorldDefinitionValidator {
     }
     // A malformed visible predicate is a hud.validate verdict like every other HUD refusal; identity scope passes no
     // definition, so subject and state references are admitted unresolved there.
-    private static void ValidateHudVisible(OverlayPredicate? predicate, string path, WorldDefinition? definition) {
-        var errors = new List<string>();
+    private static void ValidateHudVisible(OverlayPredicate? predicate, string path, WorldDefinition? definition, List<string> errors) {
+        var predicateErrors = new List<string>();
 
         ValidateOverlayPredicate(
             definition: definition,
-            errors: errors,
+            errors: predicateErrors,
             path: path,
             predicate: predicate
         );
 
-        if (errors.Count > 0) {
-            throw new HudValidationException(
-                message: string.Join(separator: " ", values: errors),
+        if (predicateErrors.Count > 0) {
+            HudRowValidation.Refuse(
+                errors: errors,
+                message: string.Join(separator: " ", values: predicateErrors),
                 reason: HudRefusal.VisiblePredicateInvalid
             );
         }

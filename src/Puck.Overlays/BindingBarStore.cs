@@ -67,7 +67,7 @@ public readonly record struct OverlayBindingModifier(
 /// each bank's own physical buttons resolved against ITS OWN named page — see <see cref="OverlayBindingSlot"/>) plus
 /// the normalized frame region its bar is confined to (per-viewport scoping happens here, at the writer layer — the
 /// render node stays dumb).</summary>
-/// <param name="Viewport">The seat's viewport rect in normalized frame space (its <c>LayoutRegion</c>).</param>
+/// <param name="Viewport">The seat's viewport rect in normalized frame space.</param>
 /// <param name="PageId">The seat's currently active page id (diagnostics / transitions).</param>
 /// <param name="Group">The seat's active page group (diagnostics / transitions).</param>
 /// <param name="Label">The active page's display label — drawn beside the modifier indicators so holding a trigger chord

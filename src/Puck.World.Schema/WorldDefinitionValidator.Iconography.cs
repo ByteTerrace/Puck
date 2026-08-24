@@ -80,11 +80,13 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            if (string.IsNullOrWhiteSpace(value: row.Name)) {
-                errors.Add(item: $"{path}.name is required.");
-            } else if (!names.Add(item: row.Name)) {
-                errors.Add(item: $"{path}.name '{row.Name}' is duplicated.");
-            }
+            RequireUniqueName(
+                value: row.Name,
+                seen: names,
+                path: path,
+                field: "name",
+                errors: errors
+            );
 
             ValidateIconRow(
                 row: row,
@@ -109,11 +111,14 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            if (string.IsNullOrWhiteSpace(value: badge.Source)) {
-                errors.Add(item: $"{path}.source is required.");
-            } else if (!seenSources.Add(item: badge.Source)) {
-                errors.Add(item: $"{path}.source '{badge.Source}' is duplicated.");
-            } else if (
+            if (
+                RequireUniqueName(
+                value: badge.Source,
+                seen: seenSources,
+                path: path,
+                field: "source",
+                errors: errors
+            ) &&
                 (InputSourceVocabularyHook.IsKnownSourceId is { } isKnownSource) &&
                 !isKnownSource(badge.Source)
             ) {
@@ -138,11 +143,14 @@ public static partial class WorldDefinitionValidator {
                     continue;
                 }
 
-                if (string.IsNullOrWhiteSpace(value: over.Family)) {
-                    errors.Add(item: $"{overridePath}.family is required.");
-                } else if (!seenFamilies.Add(item: over.Family)) {
-                    errors.Add(item: $"{overridePath}.family '{over.Family}' is duplicated.");
-                } else if (
+                if (
+                    RequireUniqueName(
+                    value: over.Family,
+                    seen: seenFamilies,
+                    path: overridePath,
+                    field: "family",
+                    errors: errors
+                ) &&
                     (GamepadFamilyVocabularyHook.IsKnownFamilyName is { } isKnownFamily) &&
                     !isKnownFamily(over.Family)
                 ) {

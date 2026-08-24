@@ -117,7 +117,6 @@ public sealed class WorldRenderCycleTrack {
             ? Vector3.Normalize(value: blended)
             : from);
     }
-    private static float Lerp(float a, float b, float t) => (a + ((b - a) * t));
     // Overlays a key's stated fields onto the carried state.
     private static WorldRenderLightingState Apply(WorldDefinition definition, WorldRenderLightingState carried, WorldRenderCycleKey key) {
         var sun = key.Lighting?.Sun;
@@ -185,32 +184,32 @@ public sealed class WorldRenderCycleTrack {
             t: t,
             to: b.SunDirection
         ),
-        SunWeight: Lerp(a: a.SunWeight, b: b.SunWeight, t: t),
+        SunWeight: float.Lerp(value1: a.SunWeight, value2: b.SunWeight, amount: t),
         SunColor: Vector3.Lerp(amount: t, value1: a.SunColor, value2: b.SunColor),
-        AmbientBase: Lerp(a: a.AmbientBase, b: b.AmbientBase, t: t),
-        AmbientHemisphere: Lerp(a: a.AmbientHemisphere, b: b.AmbientHemisphere, t: t),
+        AmbientBase: float.Lerp(value1: a.AmbientBase, value2: b.AmbientBase, amount: t),
+        AmbientHemisphere: float.Lerp(value1: a.AmbientHemisphere, value2: b.AmbientHemisphere, amount: t),
         AmbientColor: Vector3.Lerp(amount: t, value1: a.AmbientColor, value2: b.AmbientColor),
         SkyEnabled: (a.SkyEnabled || b.SkyEnabled),
         SkyZenithColor: Vector3.Lerp(amount: t, value1: a.SkyZenithColor, value2: b.SkyZenithColor),
         SkyHorizonColor: Vector3.Lerp(amount: t, value1: a.SkyHorizonColor, value2: b.SkyHorizonColor),
         SkyGroundColor: Vector3.Lerp(amount: t, value1: a.SkyGroundColor, value2: b.SkyGroundColor),
-        SkyFogDensity: Lerp(a: a.SkyFogDensity, b: b.SkyFogDensity, t: t),
-        SkySunDiscRadians: Lerp(a: a.SkySunDiscRadians, b: b.SkySunDiscRadians, t: t),
-        SkySunDiscIntensity: Lerp(a: a.SkySunDiscIntensity, b: b.SkySunDiscIntensity, t: t),
-        SkyStarDensity: Lerp(a: a.SkyStarDensity, b: b.SkyStarDensity, t: t),
-        SkyStarBrightness: Lerp(a: a.SkyStarBrightness, b: b.SkyStarBrightness, t: t),
+        SkyFogDensity: float.Lerp(value1: a.SkyFogDensity, value2: b.SkyFogDensity, amount: t),
+        SkySunDiscRadians: float.Lerp(value1: a.SkySunDiscRadians, value2: b.SkySunDiscRadians, amount: t),
+        SkySunDiscIntensity: float.Lerp(value1: a.SkySunDiscIntensity, value2: b.SkySunDiscIntensity, amount: t),
+        SkyStarDensity: float.Lerp(value1: a.SkyStarDensity, value2: b.SkyStarDensity, amount: t),
+        SkyStarBrightness: float.Lerp(value1: a.SkyStarBrightness, value2: b.SkyStarBrightness, amount: t),
         SkyStarSeed: a.SkyStarSeed,
-        SkyStarTwinkleShare: Lerp(a: a.SkyStarTwinkleShare, b: b.SkyStarTwinkleShare, t: t),
-        SkyStarTwinkleDepth: Lerp(a: a.SkyStarTwinkleDepth, b: b.SkyStarTwinkleDepth, t: t),
-        SkyStarTwinkleRate: Lerp(a: a.SkyStarTwinkleRate, b: b.SkyStarTwinkleRate, t: t),
+        SkyStarTwinkleShare: float.Lerp(value1: a.SkyStarTwinkleShare, value2: b.SkyStarTwinkleShare, amount: t),
+        SkyStarTwinkleDepth: float.Lerp(value1: a.SkyStarTwinkleDepth, value2: b.SkyStarTwinkleDepth, amount: t),
+        SkyStarTwinkleRate: float.Lerp(value1: a.SkyStarTwinkleRate, value2: b.SkyStarTwinkleRate, amount: t),
         SkyCloudColor: Vector3.Lerp(amount: t, value1: a.SkyCloudColor, value2: b.SkyCloudColor),
-        SkyCloudCoverage: Lerp(a: a.SkyCloudCoverage, b: b.SkyCloudCoverage, t: t),
-        SkyCloudSoftness: Lerp(a: a.SkyCloudSoftness, b: b.SkyCloudSoftness, t: t),
-        SkyCloudScale: Lerp(a: a.SkyCloudScale, b: b.SkyCloudScale, t: t),
+        SkyCloudCoverage: float.Lerp(value1: a.SkyCloudCoverage, value2: b.SkyCloudCoverage, amount: t),
+        SkyCloudSoftness: float.Lerp(value1: a.SkyCloudSoftness, value2: b.SkyCloudSoftness, amount: t),
+        SkyCloudScale: float.Lerp(value1: a.SkyCloudScale, value2: b.SkyCloudScale, amount: t),
         SkyCloudSeed: a.SkyCloudSeed,
         SkyCloudDrift: Vector2.Lerp(amount: t, value1: a.SkyCloudDrift, value2: b.SkyCloudDrift),
-        SkyCloudSpin: Lerp(a: a.SkyCloudSpin, b: b.SkyCloudSpin, t: t),
-        SkyCloudCurl: Lerp(a: a.SkyCloudCurl, b: b.SkyCloudCurl, t: t),
+        SkyCloudSpin: float.Lerp(value1: a.SkyCloudSpin, value2: b.SkyCloudSpin, amount: t),
+        SkyCloudCurl: float.Lerp(value1: a.SkyCloudCurl, value2: b.SkyCloudCurl, amount: t),
         SkyCloudShear: Vector2.Lerp(amount: t, value1: a.SkyCloudShear, value2: b.SkyCloudShear)
     );
     private void Rebuild(WorldDefinition definition, WorldRenderCycle cycle) {

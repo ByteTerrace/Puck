@@ -143,14 +143,12 @@ public sealed class LinkQuerySeamWireLawTests {
             ?? throw new InvalidOperationException(message: "connection closed before the query reply"));
 
         Assert.Equal(actual: reply.Kind, expected: WorldTcpWireFormat.DownstreamKind.Query);
+        Assert.True(
+            condition: WorldTcpWireFormat.TryReadResult(kind: reply.Kind, body: reply.Body, result: out var result, reason: out var reason),
+            userMessage: $"the query reply failed to decode: {reason}"
+        );
 
-        var offset = 1;
-        var refused = (reply.Body[0] != 0);
-        var text = WorldTcpWireFormat.ReadLengthPrefixedString(body: reply.Body, offset: ref offset, ok: out var ok);
-
-        Assert.True(condition: ok, userMessage: "the query reply's length-prefixed text field is truncated");
-
-        return new QueryAnswer(Text: text, Refused: refused);
+        return ((WorldSubmissionResult.Query)result!).Answer;
     }
 
     // ---- Shared scaffolding — the same shapes AdmissionSecurityLawTests carries, duplicated rather than shared

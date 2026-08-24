@@ -3,7 +3,12 @@
   "$schema": "puck.world.def.v1.schema.json",
   "documentId": "elements",
   "dynamics": [
-    { "name": "gauge", "f": 1.5, "zeta": 0.6, "r": 0 }
+    {
+      "name": "gauge",
+      "f": 1.5,
+      "zeta": 0.6,
+      "r": 0
+    }
   ],
   "creations": [
     {
@@ -1220,7 +1225,11 @@
           {
             "key": "0",
             "value": 300,
-            "dynamics": { "row": "gauge", "y0": 0, "v0": 0 }
+            "dynamics": {
+              "row": "gauge",
+              "y0": 0,
+              "v0": 0
+            }
           },
           {
             "key": "1",
@@ -3795,6 +3804,14 @@
         "max": 1,
         "heightScale": 0.08,
         "color": "#3B7BD6"
+      },
+      {
+        "name": "char",
+        "initial": 0,
+        "min": 0,
+        "max": 1,
+        "heightScale": 0.18,
+        "color": "#2A2320"
       }
     ],
     "paint": [
@@ -3884,6 +3901,11 @@
             "field": "fuel",
             "op": "Add",
             "value": -0.03
+          },
+          {
+            "field": "char",
+            "op": "Add",
+            "value": 0.02
           }
         ]
       },

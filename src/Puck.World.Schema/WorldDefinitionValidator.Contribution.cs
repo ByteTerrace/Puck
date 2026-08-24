@@ -7,20 +7,22 @@ public static partial class WorldDefinitionValidator {
     // is the engine's. Both halves are checked here so a hand-authored file and a live UpsertPlacement candidate refuse
     // through the same code — the compose arm's own refusals are the earlier, verb-named half of the same rules.
     private static void ValidateContribution(WorldPlacementContribution contribution, WorldPlacement placement, WorldDefinition definition, HashSet<string> creationIds, string path, List<string> errors) {
-        if (
-            string.IsNullOrWhiteSpace(value: contribution.SlotCreationId) ||
-            !creationIds.Contains(item: contribution.SlotCreationId)
-        ) {
-            errors.Add(item: $"{path}.slotCreationId '{contribution.SlotCreationId}' names no creation row.");
-        }
+        RequireDeclared(
+            value: contribution.SlotCreationId,
+            declaredSet: creationIds,
+            path: path,
+            field: "slotCreationId",
+            rowNoun: "creation",
+            errors: errors
+        );
 
-        if (
-            !float.IsFinite(f: contribution.GraceSeconds) ||
-            (contribution.GraceSeconds < 0f) ||
-            (contribution.GraceSeconds > WorldContributionCapacity.MaxGraceSeconds)
-        ) {
-            errors.Add(item: $"{path}.graceSeconds {contribution.GraceSeconds} is outside 0..{WorldContributionCapacity.MaxGraceSeconds}.");
-        }
+        RequireRange(
+            value: contribution.GraceSeconds,
+            min: 0f,
+            max: WorldContributionCapacity.MaxGraceSeconds,
+            name: $"{path}.graceSeconds",
+            errors: errors
+        );
 
         switch (contribution.Tenure) {
             case WorldContributionTenure.Presence:

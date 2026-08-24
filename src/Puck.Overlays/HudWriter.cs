@@ -10,7 +10,7 @@ namespace Puck.Overlays;
 /// elements confined to their owning panel's rect via <see cref="OverlayFrameBuilder.BeginClip"/>, the same
 /// clip-scope contract every per-seat writer uses.
 /// </summary>
-public sealed class HudWriter {
+public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
     // The panel being emitted's presence — multiplied into its chrome and every element's alpha.
     private float m_panelAlpha = 1f;
     // A gauge's label run is clipped to this many characters; TextRunChars is the wider bound the reservation takes.
@@ -258,10 +258,12 @@ public sealed class HudWriter {
             );
         }
     }
-    private void EmitPanel(OverlayFrameBuilder builder, in OverlayHudPanel panel) {
+    // The shared panel body: chrome + elements, placed by panel.Rect's fractions within the (originX, originY,
+    // spanW, spanH) rect — the whole frame for a world-scope panel, the seat viewport for a seat-scope one. The
+    // caller owns its own clip scope (a world-scope panel clips to ITSELF; a seat-scope one clips to the whole
+    // viewport, wider than its panel, so future seat-scope content can draw past the panel's own rect).
+    private void EmitPanelInto(OverlayFrameBuilder builder, in OverlayHudPanel panel, float originX, float originY, float spanW, float spanH) {
         var rect = panel.Rect;
-
-        m_panelAlpha = panel.Alpha;
 
         if (
             (rect.Width <= 0f) ||
@@ -270,17 +272,13 @@ public sealed class HudWriter {
             return;
         }
 
-        var x = (rect.X * builder.Width);
-        var y = (rect.Y * builder.Height);
-        var w = (rect.Width * builder.Width);
-        var h = (rect.Height * builder.Height);
+        m_panelAlpha = panel.Alpha;
 
-        builder.BeginClip(
-            h: h,
-            w: w,
-            x: x,
-            y: y
-        );
+        var x = (originX + (rect.X * spanW));
+        var y = (originY + (rect.Y * spanH));
+        var w = (rect.Width * spanW);
+        var h = (rect.Height * spanH);
+
         builder.WritePanel(
             x: x,
             y: y,
@@ -305,6 +303,37 @@ public sealed class HudWriter {
                 panelH: h
             );
         }
+    }
+    private void EmitPanel(OverlayFrameBuilder builder, in OverlayHudPanel panel) {
+        var rect = panel.Rect;
+
+        if (
+            (rect.Width <= 0f) ||
+            (rect.Height <= 0f)
+        ) {
+            return;
+        }
+
+        var x = (rect.X * builder.Width);
+        var y = (rect.Y * builder.Height);
+        var w = (rect.Width * builder.Width);
+        var h = (rect.Height * builder.Height);
+
+        builder.BeginClip(
+            h: h,
+            w: w,
+            x: x,
+            y: y
+        );
+
+        EmitPanelInto(
+            builder: builder,
+            originX: 0f,
+            originY: 0f,
+            panel: in panel,
+            spanH: builder.Height,
+            spanW: builder.Width
+        );
 
         builder.EndClip();
     }
@@ -331,44 +360,15 @@ public sealed class HudWriter {
         );
 
         var panel = seat.Panel;
-        var rect = panel.Rect;
 
-        m_panelAlpha = panel.Alpha;
-
-        if (
-            (rect.Width > 0f) &&
-            (rect.Height > 0f)
-        ) {
-            var x = (vx + (rect.X * vw));
-            var y = (vy + (rect.Y * vh));
-            var w = (rect.Width * vw);
-            var h = (rect.Height * vh);
-
-            builder.WritePanel(
-                x: x,
-                y: y,
-                w: w,
-                h: h,
-                titleBand: false,
-                bandHeight: 0f,
-                style: panel.Style,
-                ringRole: null,
-                alpha: panel.Alpha
-            );
-
-            var elements = panel.Elements.Span;
-
-            for (var index = 0; (index < elements.Length); index++) {
-                EmitElement(
-                    builder: builder,
-                    element: in elements[index],
-                    panelX: x,
-                    panelY: y,
-                    panelW: w,
-                    panelH: h
-                );
-            }
-        }
+        EmitPanelInto(
+            builder: builder,
+            originX: vx,
+            originY: vy,
+            panel: in panel,
+            spanH: vh,
+            spanW: vw
+        );
 
         builder.EndClip();
     }
@@ -432,20 +432,17 @@ public sealed class HudWriter {
             return;
         }
 
-        var seats = m_frame.SeatPanels.Span;
-
-        builder.Leases.EnsureSeatCapacity(
-            seatCount: seats.Length,
+        OverlaySeatLoop.Emit(
+            builder: builder,
+            seats: m_frame.SeatPanels.Span,
+            writer: this,
             writerName: nameof(HudWriter)
         );
-
-        for (var index = 0; (index < seats.Length); index++) {
-            EmitSeatPanel(
-                builder: builder,
-                seat: in seats[index]
-            );
-        }
     }
+    void IOverlaySeatEmitter<OverlayHudSeatPanel>.EmitSeat(OverlayFrameBuilder builder, in OverlayHudSeatPanel seat) => EmitSeatPanel(
+        builder: builder,
+        seat: in seat
+    );
     /// <summary>Emits every under-band panel, in document order.</summary>
     /// <param name="builder">The frame builder.</param>
     public void EmitUnder(OverlayFrameBuilder builder) => EmitBand(

@@ -25,11 +25,13 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            if (string.IsNullOrWhiteSpace(value: marker.Id)) {
-                errors.Add(item: $"{path}.id is required.");
-            } else if (!ids.Add(item: marker.Id)) {
-                errors.Add(item: $"{path}.id '{marker.Id}' is duplicated.");
-            }
+            RequireUniqueName(
+                value: marker.Id,
+                seen: ids,
+                path: path,
+                field: "id",
+                errors: errors
+            );
 
             if (
                 (marker.Source is WorldMarkerSource.Point point) &&

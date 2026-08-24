@@ -5,6 +5,45 @@ using Puck.World.Protocol;
 namespace Puck.World.Addons;
 
 public sealed partial class WorldAddonRuntime {
+    // The shared per-tick dispatch-budget gate: ResolveQueries' Observe charge and FoldActs' Drive charge are
+    // word-identical modulo the capability and which meter/latch pair they charge against. Charge order (resolve ->
+    // requested/manifest -> Allows -> BUDGET -> dispatch) is the caller's own, unchanged by this extraction; this is
+    // only the budget step. A missing budget entry is unreachable by construction for either capability — TryGrant's
+    // Conflicts gate refuses an untrusted Observe/Drive hold with no matching budget before it can be added — so
+    // this refuses (NoHold) rather than dispatching unmetered, the same as an exhausted one (QuotaExhausted).
+    private bool TryChargeDispatch(MountedAddon addon, WorldCapability capability, GrantSubject subject, int[] dispatchCounts, int ordinal, ref MountedAddon.DispatchLatches latches, out AddonVerdict verdict) {
+        if (m_server.Grants.TryGetBudget(
+            principal: addon.Principal,
+            capability: capability,
+            subject: subject,
+            out var budget
+        )) {
+            if (dispatchCounts[subject.Value] >= budget) {
+                verdict = AddonVerdict.QuotaExhausted;
+
+                if (!latches.ExhaustedReported) {
+                    latches.ExhaustedReported = true;
+                    Console.Error.WriteLine(value: $"[world.addon: {addon.Instance.Name} exceeded its {capability.ToString().ToLowerInvariant()}/{subject.Describe()} dispatch budget ({budget}/tick) — ordinal {ordinal} refused QuotaExhausted]");
+                }
+
+                return false;
+            }
+
+            dispatchCounts[subject.Value]++;
+            verdict = default;
+
+            return true;
+        }
+
+        verdict = AddonVerdict.NoHold;
+
+        if (!latches.MissingBudgetReported) {
+            latches.MissingBudgetReported = true;
+            Console.Error.WriteLine(value: $"[world.addon: {addon.Instance.Name} holds {capability.ToString().ToLowerInvariant()} over {subject.Describe()} with no recorded dispatch budget — an authority-table inconsistency (unreachable by construction); ordinal {ordinal} refused NoHold rather than dispatched unmetered]");
+        }
+
+        return false;
+    }
     private static void QueuePart(MountedAddon addon, ushort ordinal, AddonVerdict verdict, byte part, long a, long b) {
         addon.Answers[addon.AnswerCount++] = new AddonInCell(
             Kind: AddonInCellKind.Answer,
@@ -415,39 +454,23 @@ public sealed partial class WorldAddonRuntime {
                 // fires, the grant table itself has gone inconsistent, so it REFUSES the query rather than
                 // dispatching it unmetered. It reuses the Allows-denied branch's NoHold verdict and reports through
                 // its OWN latch so it can never be starved by DiscrepancyReported firing first at an unrelated site.
-                if (grants.TryGetBudget(
-                    principal: addon.Principal,
+                if (!TryChargeDispatch(
+                    addon: addon,
                     capability: WorldCapability.Observe,
+                    dispatchCounts: addon.DispatchCounts,
+                    latches: ref addon.Observe,
+                    ordinal: query.Ordinal,
                     subject: subject,
-                    out var budget
+                    verdict: out var chargeVerdict
                 )) {
-                    if (addon.DispatchCounts[subject.Value] >= budget) {
-                        QueueAnswer(
-                            addon: addon,
-                            ordinal: query.Ordinal,
-                            verdict: AddonVerdict.QuotaExhausted
-                        );
-                        exhaustedThisTick = true;
-
-                        if (!addon.DispatchBudgetExhaustedReported) {
-                            addon.DispatchBudgetExhaustedReported = true;
-                            Console.Error.WriteLine(value: $"[world.addon: {addon.Instance.Name} exceeded its observe/{subject.Describe()} dispatch budget ({budget}/tick) — ordinal {query.Ordinal} refused QuotaExhausted]");
-                        }
-
-                        continue;
-                    }
-
-                    addon.DispatchCounts[subject.Value]++;
-                } else {
                     QueueAnswer(
                         addon: addon,
                         ordinal: query.Ordinal,
-                        verdict: AddonVerdict.NoHold
+                        verdict: chargeVerdict
                     );
 
-                    if (!addon.MissingBudgetReported) {
-                        addon.MissingBudgetReported = true;
-                        Console.Error.WriteLine(value: $"[world.addon: {addon.Instance.Name} holds observe over {subject.Describe()} with no recorded dispatch budget — an authority-table inconsistency (unreachable by construction); ordinal {query.Ordinal} refused NoHold rather than dispatched unmetered]");
+                    if (chargeVerdict == AddonVerdict.QuotaExhausted) {
+                        exhaustedThisTick = true;
                     }
 
                     continue;
@@ -515,12 +538,12 @@ public sealed partial class WorldAddonRuntime {
                 );
             }
         } finally {
-            // DispatchBudgetExhaustedReported is EDGE-TRIGGERED per exhaustion episode (reset here the moment a tick
+            // Observe.ExhaustedReported is EDGE-TRIGGERED per exhaustion episode (reset here the moment a tick
             // exhausts no observe budget), never a once-per-process-lifetime latch — the same shape as MergeAnswers'
             // QuotaDropReported, for the identical reason: a second, later saturation episode must be able to say so
             // again rather than staying silent forever after the first.
             if (!exhaustedThisTick) {
-                addon.DispatchBudgetExhaustedReported = false;
+                addon.Observe.ExhaustedReported = false;
             }
         }
     }

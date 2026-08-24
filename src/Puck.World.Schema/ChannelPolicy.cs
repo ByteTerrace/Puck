@@ -17,7 +17,10 @@ public readonly record struct ChannelReachMask(ulong Bits) {
     /// <summary>Determines whether <paramref name="ordinal"/> is reached.</summary>
     /// <param name="ordinal">The channel ordinal.</param>
     /// <returns><see langword="true"/> when the ordinal's bit is set.</returns>
-    public bool Contains(int ordinal) => ((Bits & (1UL << ordinal)) != 0UL);
+    public bool Contains(int ordinal) => ClosedBitset.Contains(
+        bits: Bits,
+        ordinal: ordinal
+    );
     /// <summary>Returns the pooled-fold narrowing step — <see cref="MeetMask64"/>'s bitwise-AND semilattice over which
     /// ordinals BOTH this reach and the occupying seat's authored consent admit. Only a genuinely untrusted (pooled)
     /// contributor's term narrows this way; a trusted-by-authorship addon's own Reach gates alone, with no seat
@@ -40,7 +43,10 @@ public readonly record struct ChannelDeclaredMask(ulong Bits) {
     /// <summary>Returns the mask with <paramref name="ordinal"/> additionally declared.</summary>
     /// <param name="ordinal">The channel ordinal to add.</param>
     /// <returns>The widened mask.</returns>
-    public ChannelDeclaredMask With(int ordinal) => new(Bits: Bits | (1UL << ordinal));
+    public ChannelDeclaredMask With(int ordinal) => new(Bits: ClosedBitset.With(
+        bits: Bits,
+        ordinal: ordinal
+    ));
 }
 /// <summary>The channel ordinals admitted from a contribution into this tick's fold.</summary>
 /// <param name="Bits">The raw 64-bit lane, one bit per admitted channel ordinal.</param>
@@ -51,7 +57,10 @@ public readonly record struct ChannelHeldMask(ulong Bits) {
     /// <summary>Determines whether <paramref name="ordinal"/> is admitted.</summary>
     /// <param name="ordinal">The channel ordinal.</param>
     /// <returns><see langword="true"/> when the ordinal's bit is set.</returns>
-    public bool Contains(int ordinal) => ((Bits & (1UL << ordinal)) != 0UL);
+    public bool Contains(int ordinal) => ClosedBitset.Contains(
+        bits: Bits,
+        ordinal: ordinal
+    );
     /// <summary>Returns the union with <paramref name="other"/> — the ordinals EITHER mask admits.</summary>
     /// <param name="other">The mask to union with.</param>
     /// <returns>The union.</returns>
@@ -59,7 +68,10 @@ public readonly record struct ChannelHeldMask(ulong Bits) {
     /// <summary>Returns the mask with <paramref name="ordinal"/> additionally admitted.</summary>
     /// <param name="ordinal">The channel ordinal to add.</param>
     /// <returns>The widened mask.</returns>
-    public ChannelHeldMask With(int ordinal) => new(Bits: Bits | (1UL << ordinal));
+    public ChannelHeldMask With(int ordinal) => new(Bits: ClosedBitset.With(
+        bits: Bits,
+        ordinal: ordinal
+    ));
 }
 /// <summary>The channel ordinals for which the occupying seat authored a positive pool ceiling.</summary>
 /// <param name="Bits">The raw 64-bit lane, one bit per consented channel ordinal.</param>
@@ -70,7 +82,10 @@ public readonly record struct ChannelConsentMask(ulong Bits) {
     /// <summary>Determines whether <paramref name="ordinal"/> is consented to.</summary>
     /// <param name="ordinal">The channel ordinal.</param>
     /// <returns><see langword="true"/> when the ordinal's bit is set.</returns>
-    public bool Contains(int ordinal) => ((Bits & (1UL << ordinal)) != 0UL);
+    public bool Contains(int ordinal) => ClosedBitset.Contains(
+        bits: Bits,
+        ordinal: ordinal
+    );
 }
 
 [System.Runtime.CompilerServices.InlineArray(ChannelLimits.MaxChannels)]

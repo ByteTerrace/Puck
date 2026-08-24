@@ -134,16 +134,23 @@ public sealed class WorldSdfDocumentEmitter : ISdfSceneEmitter {
         // silently waiting for the next composition rebuild to discover it. ISOLATED on purpose: this catches a
         // structurally-broken document (a builder-level refusal) regardless of what else is loaded; it says nothing
         // about capacity, which the composed check below owns.
-        var probeBuilder = new SdfProgramBuilder();
-
-        using (probeBuilder.BeginMaterialScope()) {
-            SdfDocumentDecoder.Replay(
-                builder: probeBuilder,
-                program: program
+        try {
+            _ = SdfProgramMeasure.Measure(emit: probeBuilder => {
+                using (probeBuilder.BeginMaterialScope()) {
+                    SdfDocumentDecoder.Replay(
+                        builder: probeBuilder,
+                        program: program
+                    );
+                }
+            });
+        } catch (Exception exception) when ((exception is ArgumentException or InvalidOperationException)) {
+            // A PROGRAM-level pack refusal (no single op owns it - e.g. an uncontainable cellJitter prototype) must
+            // reach world.sdf.load as a document rejection, never an unhandled throw.
+            throw new SdfDocumentException(
+                message: exception.Message,
+                reason: SdfRefusal.BuilderRejectedProgram
             );
         }
-
-        _ = probeBuilder.Build();
 
         // THE COMPOSED-ADMISSION CHECK (the fix for the asymmetric join): a document that validates alone can still,
         // combined with whatever the live world scene is currently spending, exceed the ONE shared envelope the two

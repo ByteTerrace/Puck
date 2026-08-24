@@ -269,14 +269,13 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         // placement instances, the worst-case animated pool, and the authoring headroom), freezing the word, instance,
         // and dynamic-transform envelopes every live rebuild fits inside by construction.
         try {
+            // ParkPosition rides SdfCompositionFrameSource's own default (below the floor, outside the camera and
+            // tile-cull reach) — every emitter that hides a slot reads it back from SdfEmitContext.ParkPosition
+            // rather than carrying its own copy of the value.
             m_composed = new SdfCompositionFrameSource(
                 dresser: this,
                 emitters: [m_emitter, m_sdfDocuments, m_adjacencies, m_fields]
-            ) {
-                // Park unused slots exactly where a hidden avatar and an unused pool slot already sit — below the floor,
-                // outside the camera and tile-cull reach.
-                ParkPosition = WorldSceneEmitter.HiddenAvatar,
-            };
+            );
         } catch (SdfProgramCapacityException capacity) {
             // The probe is the only place the WHOLE composed worst case exists, so it is the only place that can name
             // what did not fit. Re-raise it as this world's own refusal so the composition root reports it the way it
@@ -341,11 +340,13 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         m_builtDefinitionRevision = int.MinValue;
     }
 
-    // The viewport region for the player at slot-order position `index` of `count`. NormalizedRect convention: origin
-    // top-left, Y increasing down. 1 = fullscreen; 2 = side-by-side halves; 3 = big-top (full-width, top half) over two
-    // bottom quarters; 4 = the 2×2 quad (index 0=TL, 1=TR, 2=BL, 3=BR). Internal: the overlay feed scopes each seat's
-    // screen-space UI (binding bar, later the editor HUD) into the SAME rect the seat renders in.
-    public static NormalizedRect LayoutRegion(int count, int index) {
+    // The BUILTIN viewport ladder for the player at slot-order position `index` of `count`, used only when the
+    // world authors no `views.layouts` (WorldViewComposer.ResolveBuiltin's fallback). NormalizedRect convention:
+    // origin top-left, Y increasing down. 1 = fullscreen; 2 = side-by-side halves; 3 = big-top (full-width, top
+    // half) over two bottom quarters; 4 = the 2×2 quad (index 0=TL, 1=TR, 2=BL, 3=BR). A presentation-side consumer
+    // that needs a seat's ACTUAL rendered rect — authored layout included — reads WorldSeatViewports.Seat(slot)
+    // instead; this ladder is not that rect once a layout is authored.
+    internal static NormalizedRect LayoutRegion(int count, int index) {
         return count switch {
             1 => new NormalizedRect(
             Height: 1f,
@@ -422,9 +423,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     // world emitter's FIXED (candidate-independent) DynamicSlotCount reserves — the document side declares no dynamic
     // slots of its own (see WorldSdfDocumentEmitter's type remarks), so the base only has to line up for parity with
     // the live composition, not correctness. A null documentProgram (no document loaded) composes the world side alone.
-    private (int Words, int Instances) MeasureComposed(WorldDefinition worldDefinition, SdfDocumentProgram? documentProgram) {
-        var builder = new SdfProgramBuilder();
-
+    private (int Words, int Instances) MeasureComposed(WorldDefinition worldDefinition, SdfDocumentProgram? documentProgram) => SdfProgramMeasure.Measure(emit: builder => {
         m_emitter.ComposeCandidate(
             builder: builder,
             candidate: worldDefinition
@@ -447,11 +446,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             builder: builder,
             slotBase: m_emitter.DynamicSlotCount
         );
-
-        var measured = builder.Build();
-
-        return (Words: measured.Words.Length, Instances: measured.Instances.Count);
-    }
+    });
     // Build the camera query from the same static scene layers the composed frame renders. The live program cannot
     // be queried directly because its avatar catalog carries TransformDynamic instructions; reconstructing only the
     // static placements/screens/adjacency geometry keeps the camera from treating the avatar it follows as an obstacle.
@@ -469,25 +464,17 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
                 placements: definition.Placements
             );
 
-            foreach (var screen in definition.Screens) {
-                WorldScreenStamper.Emit(
-                    builder: builder,
-                    screen: screen
-                );
-            }
-
             var facets = WorldCreationFacets.Derive(
                 definition: definition,
                 derivedFaceBase: WorldCreationFacets.DerivedFaceBase,
                 derivedFaceScreens: definition.Authoring.DerivedFaceScreens
             );
 
-            foreach (var screen in facets.Faces) {
-                WorldScreenStamper.Emit(
-                    builder: builder,
-                    screen: screen
-                );
-            }
+            WorldStaticSceneEmit.Emit(
+                builder: builder,
+                derivedFaces: facets.Faces,
+                screens: definition.Screens
+            );
 
             m_adjacencies.EmitCurrent(builder: builder);
             m_cameraClearanceField = new SdfFieldEvaluator(program: builder.Build(buildInstanceGrid: false));

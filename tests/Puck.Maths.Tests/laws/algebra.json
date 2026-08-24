@@ -132,5 +132,101 @@
         "Absolute": ""
       }
     ]
+  },
+  {
+    "Id": "algebra.angular-frequency-exact-and-vs-double",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "AngularFrequency"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.AngularFrequency's own contract over ten frequencies (zero, unit, negative, extreme raws): the returned denominator is EXACTLY 2^(PiQ61FractionBitCount + FractionBitCount) on every call, the numerator is EXACTLY 2·PiQ61·frequencyHz.Value, the numerator's sign agrees with the frequency's own sign, and doubling the authored frequency doubles the exact rational under cross-multiplication — a property independent of how the numerator/denominator pair happens to be formed, so a wrong shift or a wrong constant that still scaled linearly would still be caught",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the same ten frequencies, the exact rational reduced to a double and compared against 2π·frequencyHz reconstructed independently in double precision",
+        "Against": "(2.0 * System.Math.PI) * (double)frequencyHz — System.Math.PI, not FixedQ4816.PiQ61, and ordinary IEEE double multiplication, not the BigInteger path AngularFrequency itself takes",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "algebra.rational-field-axioms",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.Rational",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.Rational",
+        "Name": "Numerator"
+      },
+      {
+        "Type": "Puck.Maths.Rational",
+        "Name": "Denominator"
+      },
+      {
+        "Type": "Puck.Maths.Rational",
+        "Name": "One"
+      },
+      {
+        "Type": "Puck.Maths.Rational",
+        "Name": "Two"
+      },
+      {
+        "Type": "Puck.Maths.Rational",
+        "Name": "op_Addition"
+      },
+      {
+        "Type": "Puck.Maths.Rational",
+        "Name": "op_Subtraction"
+      },
+      {
+        "Type": "Puck.Maths.Rational",
+        "Name": "op_UnaryNegation"
+      },
+      {
+        "Type": "Puck.Maths.Rational",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.Rational",
+        "Name": "op_Division"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Rational never reduces a fraction, so its own record equality is not a valid rational-equality test; every identity below is checked by CROSS-MULTIPLICATION instead (a/b = c/d iff a·d = c·b), over eight operand rationals including a zero numerator, negative numerators and a pair wide enough (2^96 over 2^40) to exercise BigInteger growth. The ctor/Numerator/Denominator readback, Two = One + One, the additive identity and inverse (a + 0 = a, a + (-a) = 0, -(-a) = a), the multiplicative identity (a·1 = 1·a = a), and a - b = a + (-b) are asserted for every sample; commutativity of + and ·, and (a / b)·b = a for every nonzero b, over every ordered pair; associativity of + and · and distributivity of · over + over every ordered triple",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "a + b for every ordered pair of the eight samples, the exact BigInteger result reduced to double",
+        "Against": "(double)a.Numerator / (double)a.Denominator, plus the same for b, summed in ordinary IEEE double arithmetic — a second numeric domain that shares neither BigInteger nor Rational's own operators",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
   }
 ]

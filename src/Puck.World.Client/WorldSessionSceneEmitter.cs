@@ -95,18 +95,23 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         var noseFactor = m_mirror.Definition.PlayerDefaults.NoseFactor;
 
         for (var index = 0; (index < WorldAvatarCatalog.Capacity); index++) {
-            var bodyColor = m_mirror.BodyColor(index: index);
-            var look = m_mirror.Look(index: index);
-
-            m_emittedRigs[index] = LookRig(
-                look: look,
-                catalogRig: m_mirror.CatalogRig(index: index)
+            // A Creation look's body would render through the stamp pool on the boot path; this emitter has no
+            // stamp-pool seam (see this type's own remarks), so a mirrored Creation-look body still renders as its
+            // catalog avatar — RigFor's Creation-look fallback lands here for that reason.
+            WorldMirroredAvatarBand.EmitPalette(
+                accentMaterials: accentMaterials,
+                bodyColor: m_mirror.BodyColor(index: index),
+                bodyMaterials: bodyMaterials,
+                builder: builder,
+                catalogRig: m_mirror.CatalogRig(index: index),
+                emittedGaitAmplitudes: m_emittedGaitAmplitudes,
+                emittedRigs: m_emittedRigs,
+                emittedScales: m_emittedScales,
+                identityIndex: index,
+                look: m_mirror.Look(index: index),
+                materialIndex: index,
+                noseFactor: noseFactor
             );
-            m_emittedScales[index] = look.Scale;
-            m_emittedGaitAmplitudes[index] = look.Motion.GaitAmplitude;
-
-            bodyMaterials[index] = builder.AddMaterial(material: new SdfMaterial(Albedo: bodyColor));
-            accentMaterials[index] = builder.AddMaterial(material: new SdfMaterial(Albedo: (bodyColor * noseFactor)));
         }
 
         WorldAvatarCatalog.Emit(
@@ -124,14 +129,6 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             : index => m_emittedScales[index])
         );
     }
-    // The catalog geometry-source rig for a look: an authored Catalog(Index) pin, or the occupant-owned carried rig
-    // for an unpinned catalog OR a Creation look — the identical selector Client.WorldSceneEmitter.LookRig applies.
-    // A Creation look's body would render through the stamp pool on the boot path; this emitter has no stamp-pool
-    // seam (see this type's own remarks), so a mirrored Creation-look body still renders as its catalog avatar.
-    private static int LookRig(WorldLook look, byte catalogRig) => ((look.Source is WorldLookSource.Catalog { Index: { } pinned })
-        ? pinned
-        : catalogRig
-    );
     // The camera row's anchor pose, restricted to what a STATIC-geometry-only mirror can resolve: a Placement anchor
     // reads the destination's own authored transform (real data, no pose mirror needed); Entity/EntityPart/Group
     // anchors have no live body pose to read this wave (see WorldSessionMirror's own staged-boundary remarks) and
@@ -387,28 +384,14 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
                 amount: alpha
             );
 
-            var address = m_mirror.Address(index: index);
-
-            if (
-                m_avatarPoseSeeded[index] &&
-                (m_avatarMotionAddresses[index] == address)
-            ) {
-                var travelled = MathF.Min(
-                    x: Vector3.Distance(
-                        value1: position,
-                        value2: m_avatarPreviousPositions[index]
-                    ),
-                    y: 0.25f
-                );
-
-                m_avatarGaitPhases[index] += (travelled * 8.0f);
-            } else {
-                m_avatarPoseSeeded[index] = true;
-                m_avatarGaitPhases[index] = 0f;
-                m_avatarMotionAddresses[index] = address;
-            }
-
-            m_avatarPreviousPositions[index] = position;
+            WorldMirroredAvatarBand.AdvanceGait(
+                address: m_mirror.Address(index: index),
+                gaitPhase: ref m_avatarGaitPhases[index],
+                lastAddress: ref m_avatarMotionAddresses[index],
+                lastPosition: ref m_avatarPreviousPositions[index],
+                position: position,
+                seeded: ref m_avatarPoseSeeded[index]
+            );
 
             WorldAvatarCatalog.PackTransforms(
                 avatar: index,

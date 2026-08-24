@@ -1,4 +1,3 @@
-using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net;
@@ -767,68 +766,12 @@ public sealed class WorldRemoteAuthority : IDisposable {
 
         var frame = completion.Value;
 
-        switch (frame.Kind) {
-            case WorldTcpWireFormat.DownstreamKind.Ack:
-                result = WorldSubmissionResult.Ack.Instance;
-                reason = string.Empty;
-                return true;
-            case WorldTcpWireFormat.DownstreamKind.Session: {
-                    if (frame.Body.Length < ((sizeof(byte) + sizeof(int)) + sizeof(ushort))) {
-                        reason = "forwarded authority returned a truncated session completion";
-                        return false;
-                    }
-                    var offset = (sizeof(byte) + sizeof(int));
-                    var sessionReason = WorldTcpWireFormat.ReadLengthPrefixedString(
-                        body: frame.Body,
-                        offset: ref offset,
-                        ok: out var sessionOk
-                    );
-
-                    if (!sessionOk) {
-                        reason = "forwarded authority returned a truncated session completion";
-                        return false;
-                    }
-
-                    result = new WorldSubmissionResult.Session(Reply: new SessionReply(
-                        Accepted: (frame.Body[0] != 0),
-                        AssignedIndex: BinaryPrimitives.ReadInt32LittleEndian(source: frame.Body.AsSpan(start: sizeof(byte))),
-                        RosterEcho: string.Empty,
-                        Reason: sessionReason
-                    ));
-                    reason = string.Empty;
-                    return true;
-                }
-            case WorldTcpWireFormat.DownstreamKind.Query: {
-                    if (frame.Body.Length < (sizeof(byte) + sizeof(ushort))) {
-                        reason = "forwarded authority returned a truncated query completion";
-                        return false;
-                    }
-                    var offset = sizeof(byte);
-                    var queryText = WorldTcpWireFormat.ReadLengthPrefixedString(
-                        body: frame.Body,
-                        offset: ref offset,
-                        ok: out var queryOk
-                    );
-
-                    if (!queryOk) {
-                        reason = "forwarded authority returned a truncated query completion";
-                        return false;
-                    }
-
-                    result = new WorldSubmissionResult.Query(Answer: new QueryAnswer(
-                        Text: queryText,
-                        Refused: (frame.Body[0] != 0)
-                    ));
-                    reason = string.Empty;
-                    return true;
-                }
-            case WorldTcpWireFormat.DownstreamKind.Refusal:
-                reason = WorldTcpWireFormat.DecodeText(body: frame.Body);
-                return false;
-            default:
-                reason = $"forwarded authority returned unsupported completion {frame.Kind}";
-                return false;
-        }
+        return WorldTcpWireFormat.TryReadResult(
+            body: frame.Body,
+            kind: frame.Kind,
+            reason: out reason,
+            result: out result
+        );
     }
     private bool TryResolveTransferStep(string sourceAuthority, ulong transferId, WorldFederationRequest kind, Func<byte[]> body, out WorldFederationAnswer answer) {
         answer = default;

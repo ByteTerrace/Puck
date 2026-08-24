@@ -6,6 +6,7 @@ using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
 using Puck.Abstractions.Presentation;
+using Puck.Assets.Documents;
 using Puck.Commands;
 using Puck.Maths;
 using Puck.World.Protocol;
@@ -237,30 +238,17 @@ public sealed partial class WorldJsonContext : JsonSerializerContext {
 }
 
 internal sealed class CommandValueJsonConverter : JsonConverter<CommandValue> {
-    private static float ReadComponent(ref Utf8JsonReader reader) {
-        if (
-            !reader.Read() ||
-            (reader.TokenType != JsonTokenType.Number)
-        ) {
-            throw new JsonException(message: "CommandValue raw components must be finite numbers.");
-        }
-
-        var value = reader.GetSingle();
-
-        return (float.IsFinite(f: value)
-            ? value
-            : throw new JsonException(message: "CommandValue raw components must be finite numbers.")
-        );
-    }
     private static Vector4 ReadRaw(ref Utf8JsonReader reader) {
         if (reader.TokenType != JsonTokenType.StartArray) {
             throw new JsonException(message: "CommandValue raw must be a four-element array.");
         }
 
-        var x = ReadComponent(reader: ref reader);
-        var y = ReadComponent(reader: ref reader);
-        var z = ReadComponent(reader: ref reader);
-        var w = ReadComponent(reader: ref reader);
+        const string NotFiniteMessage = "CommandValue raw components must be finite numbers.";
+
+        var x = JsonComponentReader.ReadFloat(reader: ref reader, notNumberMessage: NotFiniteMessage, notFiniteMessage: NotFiniteMessage);
+        var y = JsonComponentReader.ReadFloat(reader: ref reader, notNumberMessage: NotFiniteMessage, notFiniteMessage: NotFiniteMessage);
+        var z = JsonComponentReader.ReadFloat(reader: ref reader, notNumberMessage: NotFiniteMessage, notFiniteMessage: NotFiniteMessage);
+        var w = JsonComponentReader.ReadFloat(reader: ref reader, notNumberMessage: NotFiniteMessage, notFiniteMessage: NotFiniteMessage);
 
         if (
             !reader.Read() ||
@@ -347,17 +335,30 @@ internal sealed class CommandValueJsonConverter : JsonConverter<CommandValue> {
         writer.WriteEndObject();
     }
 }
-internal sealed class ChannelReachMaskJsonConverter : JsonConverter<ChannelReachMask> {
-    public override ChannelReachMask Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
-        new(Bits: reader.GetUInt64());
-    public override void Write(Utf8JsonWriter writer, ChannelReachMask value, JsonSerializerOptions options) =>
-        writer.WriteNumberValue(value: value.Bits);
+/// <summary>The shared shape behind a plain 64-bit lane's wire form: a bare JSON number, round-tripped through the
+/// closed subclass's own <c>Bits</c> constructor/property.</summary>
+internal abstract class BitMaskJsonConverter<T> : JsonConverter<T> where T : struct {
+    /// <summary>Builds <typeparamref name="T"/> from its raw bit lane.</summary>
+    protected abstract T Create(ulong bits);
+    /// <summary>Reads back <paramref name="value"/>'s raw bit lane.</summary>
+    protected abstract ulong GetBits(T value);
+
+    /// <inheritdoc/>
+    public override T Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) => Create(bits: reader.GetUInt64());
+    /// <inheritdoc/>
+    public override void Write(Utf8JsonWriter writer, T value, JsonSerializerOptions options) => writer.WriteNumberValue(value: GetBits(value: value));
 }
-internal sealed class ChannelConsentMaskJsonConverter : JsonConverter<ChannelConsentMask> {
-    public override ChannelConsentMask Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
-        new(Bits: reader.GetUInt64());
-    public override void Write(Utf8JsonWriter writer, ChannelConsentMask value, JsonSerializerOptions options) =>
-        writer.WriteNumberValue(value: value.Bits);
+internal sealed class ChannelReachMaskJsonConverter : BitMaskJsonConverter<ChannelReachMask> {
+    /// <inheritdoc/>
+    protected override ChannelReachMask Create(ulong bits) => new(Bits: bits);
+    /// <inheritdoc/>
+    protected override ulong GetBits(ChannelReachMask value) => value.Bits;
+}
+internal sealed class ChannelConsentMaskJsonConverter : BitMaskJsonConverter<ChannelConsentMask> {
+    /// <inheritdoc/>
+    protected override ChannelConsentMask Create(ulong bits) => new(Bits: bits);
+    /// <inheritdoc/>
+    protected override ulong GetBits(ChannelConsentMask value) => value.Bits;
 }
 /// <summary>
 /// Reads and writes a <see cref="MutationKindMask"/> as the same comma-separated kind-name token
@@ -368,29 +369,60 @@ internal sealed class ChannelConsentMaskJsonConverter : JsonConverter<ChannelCon
 /// name list cannot be misread, and an unknown name refuses by name at parse rather than folding to a silently
 /// narrower mask.
 /// </summary>
-internal sealed class MutationKindMaskJsonConverter : JsonConverter<MutationKindMask> {
+/// <summary>The shared shape behind a comma-separated declared-name lane: <c>Read</c> parses via the closed
+/// subclass's own vocabulary and refuses an unrecognized name by it (never a silently narrower mask); <c>Write</c>
+/// prints the same name list back.</summary>
+internal abstract class NameListMaskJsonConverter<T> : JsonConverter<T> where T : struct {
+    /// <summary>Gets the mask's own noun, read into the refusal template as "a &lt;kind&gt; mask is …".</summary>
+    protected abstract string MaskKind { get; }
+    /// <summary>Gets the declared vocabulary description read into the refusal template.</summary>
+    protected abstract string Vocabulary { get; }
+    /// <summary>Gets the row noun an unrecognized name refuses against ("… names no declared &lt;noun&gt;.").</summary>
+    protected abstract string Noun { get; }
+
+    /// <summary>Parses the comma-separated name list, reporting the first unrecognized name.</summary>
+    protected abstract bool TryParse(string? text, out T mask, out string? unknown);
+    /// <summary>Prints <paramref name="value"/>'s comma-separated name list.</summary>
+    protected abstract string Describe(T value);
+
     /// <inheritdoc/>
-    public override MutationKindMask Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
+    public override T Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
         var token = ((reader.TokenType == JsonTokenType.String)
             ? reader.GetString()
             : null
         );
 
-        if (!MutationKindMask.TryParse(
-            mask: out var mask,
+        if (!TryParse(
             text: token,
+            mask: out var mask,
             unknown: out var unknown
         )) {
-            throw new JsonException(message: $"a verb mask is a comma-separated list of WorldMutation kind names (e.g. \"UpsertStateCell,RemoveStateCell\"); '{(string.IsNullOrEmpty(value: unknown)
+            throw new JsonException(message: $"a {MaskKind} mask is a comma-separated list of {Vocabulary}; '{(string.IsNullOrEmpty(value: unknown)
                 ? (token ?? "(absent)")
-                : unknown)}' names no declared mutation kind.");
+                : unknown)}' names no declared {Noun}.");
         }
 
         return mask;
     }
     /// <inheritdoc/>
-    public override void Write(Utf8JsonWriter writer, MutationKindMask value, JsonSerializerOptions options) =>
-        writer.WriteStringValue(value: value.Describe());
+    public override void Write(Utf8JsonWriter writer, T value, JsonSerializerOptions options) => writer.WriteStringValue(value: Describe(value: value));
+}
+internal sealed class MutationKindMaskJsonConverter : NameListMaskJsonConverter<MutationKindMask> {
+    /// <inheritdoc/>
+    protected override string MaskKind => "verb";
+    /// <inheritdoc/>
+    protected override string Vocabulary => "WorldMutation kind names (e.g. \"UpsertStateCell,RemoveStateCell\")";
+    /// <inheritdoc/>
+    protected override string Noun => "mutation kind";
+
+    /// <inheritdoc/>
+    protected override bool TryParse(string? text, out MutationKindMask mask, out string? unknown) => MutationKindMask.TryParse(
+        mask: out mask,
+        text: text,
+        unknown: out unknown
+    );
+    /// <inheritdoc/>
+    protected override string Describe(MutationKindMask value) => value.Describe();
 }
 /// <summary>
 /// Reads and writes a <see cref="DocumentWriteMask"/> as the same comma-separated operation-name token
@@ -398,29 +430,22 @@ internal sealed class MutationKindMaskJsonConverter : JsonConverter<MutationKind
 /// channel's own vocabulary, visibly different on the page from a
 /// <see cref="MutationKindMaskJsonConverter">verb mask</see> rather than an identically-shaped bit lane.
 /// </summary>
-internal sealed class DocumentWriteMaskJsonConverter : JsonConverter<DocumentWriteMask> {
+internal sealed class DocumentWriteMaskJsonConverter : NameListMaskJsonConverter<DocumentWriteMask> {
     /// <inheritdoc/>
-    public override DocumentWriteMask Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
-        var token = ((reader.TokenType == JsonTokenType.String)
-            ? reader.GetString()
-            : null
-        );
-
-        if (!DocumentWriteMask.TryParse(
-            mask: out var mask,
-            text: token,
-            unknown: out var unknown
-        )) {
-            throw new JsonException(message: $"a write mask is a comma-separated list of {DocumentWriteMask.All.Describe()}; '{(string.IsNullOrEmpty(value: unknown)
-                ? (token ?? "(absent)")
-                : unknown)}' names no declared operation.");
-        }
-
-        return mask;
-    }
+    protected override string MaskKind => "write";
     /// <inheritdoc/>
-    public override void Write(Utf8JsonWriter writer, DocumentWriteMask value, JsonSerializerOptions options) =>
-        writer.WriteStringValue(value: value.Describe());
+    protected override string Vocabulary => DocumentWriteMask.All.Describe();
+    /// <inheritdoc/>
+    protected override string Noun => "operation";
+
+    /// <inheritdoc/>
+    protected override bool TryParse(string? text, out DocumentWriteMask mask, out string? unknown) => DocumentWriteMask.TryParse(
+        mask: out mask,
+        text: text,
+        unknown: out unknown
+    );
+    /// <inheritdoc/>
+    protected override string Describe(DocumentWriteMask value) => value.Describe();
 }
 /// <summary>
 /// Reads and writes <see cref="WorldStateRow"/> — the cell substrate's one C# type — as one authored JSON shape (see
@@ -1300,126 +1325,107 @@ public sealed record WorldInputHoldAuthoring(
 }
 
 /// <summary>
-/// Reads and writes a <see cref="WorldBackendPreference"/> as an explicit lowercase token (<c>auto</c> / <c>directx</c>
-/// / <c>vulkan</c>) rather than the context's camelCase enum policy, which would emit <c>directX</c> — a spelling no one
-/// types and gratuitously divergent from World's token style. The <c>--backend</c> boot flag, the
-/// <c>host.backendDraw</c> resolver and the <c>world.host</c> read-back all speak the same map, so nothing that reads
-/// or prints a backend disagrees with the document.
+/// The shared shape behind every enum this document graph reads/writes as an explicit lowercase token rather than
+/// the context's camelCase enum policy: a <c>Read</c> that parses via <paramref name="tokens"/>'s owning vocabulary
+/// and refuses by name, and a <c>Write</c> that prints through the same map, so nothing that reads or prints a
+/// value disagrees with the document. A closed subclass supplies only the vocabulary's parse/print pair and the
+/// field name a refusal names.
 /// </summary>
-internal sealed class WorldBackendPreferenceJsonConverter : JsonConverter<WorldBackendPreference>, IJsonSchemaStringConverter {
+internal abstract class TokenEnumJsonConverter<T>(string fieldName, IReadOnlyList<string> tokens) : JsonConverter<T>, IJsonSchemaStringConverter where T : struct {
     /// <inheritdoc/>
-    public IReadOnlyList<string>? SchemaTokens { get; } = [WorldHostTokens.BackendAuto, WorldHostTokens.BackendDirectX, WorldHostTokens.BackendVulkan];
+    public IReadOnlyList<string>? SchemaTokens { get; } = tokens;
+
+    /// <summary>Parses <paramref name="token"/> against the closed vocabulary, or <see langword="null"/> when it names none.</summary>
+    protected abstract T? Parse(string? token);
+    /// <summary>Prints <paramref name="value"/>'s declared token.</summary>
+    protected abstract string ToToken(T value);
 
     /// <inheritdoc/>
-    public override WorldBackendPreference Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
-        return (WorldHostTokens.ParseBackend(token: reader.GetString())
-            ?? throw new JsonException(message: $"backend '{reader.GetString()}' must be '{WorldHostTokens.BackendAuto}', '{WorldHostTokens.BackendDirectX}', or '{WorldHostTokens.BackendVulkan}'."));
+    public override T Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
+        var token = reader.GetString();
+
+        return (Parse(token: token) ?? throw new JsonException(message: $"{fieldName} '{token}' must be {DescribeTokens()}."));
     }
     /// <inheritdoc/>
-    public override void Write(Utf8JsonWriter writer, WorldBackendPreference value, JsonSerializerOptions options) {
-        writer.WriteStringValue(value: WorldHostTokens.BackendToken(backend: value));
+    public override void Write(Utf8JsonWriter writer, T value, JsonSerializerOptions options) => writer.WriteStringValue(value: ToToken(value: value));
+
+    private string DescribeTokens() {
+        var quoted = SchemaTokens!.Select(selector: static token => $"'{token}'").ToArray();
+
+        return (quoted.Length switch {
+            1 => quoted[0],
+            2 => $"{quoted[0]} or {quoted[1]}",
+            _ => $"{string.Join(separator: ", ", values: quoted[..^1])}, or {quoted[^1]}",
+        });
     }
 }
 /// <summary>
+/// Reads and writes a <see cref="WorldBackendPreference"/> as an explicit lowercase token (<c>auto</c> / <c>directx</c>
+/// / <c>vulkan</c>), which would otherwise emit <c>directX</c> — a spelling no one types and gratuitously divergent
+/// from World's token style. The <c>--backend</c> boot flag, the <c>host.backendDraw</c> resolver and the
+/// <c>world.host</c> read-back all speak the same map.
+/// </summary>
+internal sealed class WorldBackendPreferenceJsonConverter() : TokenEnumJsonConverter<WorldBackendPreference>("backend", [WorldHostTokens.BackendAuto, WorldHostTokens.BackendDirectX, WorldHostTokens.BackendVulkan]) {
+    /// <inheritdoc/>
+    protected override WorldBackendPreference? Parse(string? token) => WorldHostTokens.ParseBackend(token: token);
+    /// <inheritdoc/>
+    protected override string ToToken(WorldBackendPreference value) => WorldHostTokens.BackendToken(backend: value);
+}
+/// <summary>
 /// Reads and writes the two authorable <see cref="SurfaceFormat"/> values as explicit tokens (<c>r8g8b8a8</c> /
-/// <c>b8g8r8a8</c>) rather than the context's camelCase enum policy, which would emit the unreadable <c>r8G8B8A8Unorm</c>.
+/// <c>b8g8r8a8</c>), which would otherwise emit the unreadable <c>r8G8B8A8Unorm</c>.
 /// <see cref="SurfaceFormat.Unknown"/> and any other member are rejected at read (the validator also rejects
 /// <see cref="SurfaceFormat.Unknown"/> — the hole the Demo's string list could not express). The
 /// <c>world.host</c> read-back prints through the same map.
 /// </summary>
-internal sealed class SurfaceFormatJsonConverter : JsonConverter<SurfaceFormat>, IJsonSchemaStringConverter {
-    // Deliberately NOT SurfaceFormat.Unknown, and deliberately NOT every enum member Write's own fallback arm could
-    // in principle produce — this list is the READ-accepted set (see IJsonSchemaStringConverter's own remarks),
-    // and Read below refuses Unknown by name exactly like the validator does.
+internal sealed class SurfaceFormatJsonConverter() : TokenEnumJsonConverter<SurfaceFormat>("surfaceFormat", [WorldHostTokens.SurfaceFormatRgba, WorldHostTokens.SurfaceFormatBgra]) {
     /// <inheritdoc/>
-    public IReadOnlyList<string>? SchemaTokens { get; } = [WorldHostTokens.SurfaceFormatRgba, WorldHostTokens.SurfaceFormatBgra];
-
+    protected override SurfaceFormat? Parse(string? token) => WorldHostTokens.ParseSurfaceFormat(token: token);
     /// <inheritdoc/>
-    public override SurfaceFormat Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
-        return (WorldHostTokens.ParseSurfaceFormat(token: reader.GetString())
-            ?? throw new JsonException(message: $"surfaceFormat '{reader.GetString()}' must be '{WorldHostTokens.SurfaceFormatRgba}' or '{WorldHostTokens.SurfaceFormatBgra}'."));
-    }
-    /// <inheritdoc/>
-    public override void Write(Utf8JsonWriter writer, SurfaceFormat value, JsonSerializerOptions options) {
-        writer.WriteStringValue(value: WorldHostTokens.SurfaceFormatToken(format: value));
-    }
+    protected override string ToToken(SurfaceFormat value) => WorldHostTokens.SurfaceFormatToken(format: value);
 }
 /// <summary>
 /// Reads and writes a <see cref="WorldDestinationDurability"/> as the lowercase token
 /// <c>Puck.World.WorldInstanceHost</c>'s <c>world.transfer</c> verb already speaks (<c>ephemeral</c> /
-/// <c>persisted</c>) rather than the context's camelCase enum policy, so an authored destination row and the console
-/// grammar its diegetic trigger drives never disagree on spelling. See <see cref="WorldDestinationTokens"/>.
+/// <c>persisted</c>), so an authored destination row and the console grammar its diegetic trigger drives never
+/// disagree on spelling. See <see cref="WorldDestinationTokens"/>.
 /// </summary>
-internal sealed class WorldDestinationDurabilityJsonConverter : JsonConverter<WorldDestinationDurability>, IJsonSchemaStringConverter {
+internal sealed class WorldDestinationDurabilityJsonConverter() : TokenEnumJsonConverter<WorldDestinationDurability>("destination durability", [WorldDestinationTokens.DurabilityEphemeral, WorldDestinationTokens.DurabilityPersisted]) {
     /// <inheritdoc/>
-    public IReadOnlyList<string>? SchemaTokens { get; } = [WorldDestinationTokens.DurabilityEphemeral, WorldDestinationTokens.DurabilityPersisted];
-
+    protected override WorldDestinationDurability? Parse(string? token) => WorldDestinationTokens.ParseDurability(token: token);
     /// <inheritdoc/>
-    public override WorldDestinationDurability Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
-        return (WorldDestinationTokens.ParseDurability(token: reader.GetString())
-            ?? throw new JsonException(message: $"destination durability '{reader.GetString()}' must be '{WorldDestinationTokens.DurabilityEphemeral}' or '{WorldDestinationTokens.DurabilityPersisted}'."));
-    }
-    /// <inheritdoc/>
-    public override void Write(Utf8JsonWriter writer, WorldDestinationDurability value, JsonSerializerOptions options) {
-        writer.WriteStringValue(value: WorldDestinationTokens.DurabilityToken(durability: value));
-    }
+    protected override string ToToken(WorldDestinationDurability value) => WorldDestinationTokens.DurabilityToken(durability: value);
 }
 /// <summary>
 /// Reads and writes a <see cref="WorldPortalTravel"/> as the lowercase token <c>world.transfer</c>'s <c>party</c>
-/// slot argument already speaks (<c>party</c> / <c>body</c>) rather than the context's camelCase enum policy. See
-/// <see cref="WorldDestinationTokens"/>.
+/// slot argument already speaks (<c>party</c> / <c>body</c>). See <see cref="WorldDestinationTokens"/>.
 /// </summary>
-internal sealed class WorldPortalTravelJsonConverter : JsonConverter<WorldPortalTravel>, IJsonSchemaStringConverter {
+internal sealed class WorldPortalTravelJsonConverter() : TokenEnumJsonConverter<WorldPortalTravel>("portal travel", [WorldDestinationTokens.TravelParty, WorldDestinationTokens.TravelBody]) {
     /// <inheritdoc/>
-    public IReadOnlyList<string>? SchemaTokens { get; } = [WorldDestinationTokens.TravelParty, WorldDestinationTokens.TravelBody];
-
+    protected override WorldPortalTravel? Parse(string? token) => WorldDestinationTokens.ParseTravel(token: token);
     /// <inheritdoc/>
-    public override WorldPortalTravel Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
-        return (WorldDestinationTokens.ParseTravel(token: reader.GetString())
-            ?? throw new JsonException(message: $"portal travel '{reader.GetString()}' must be '{WorldDestinationTokens.TravelParty}' or '{WorldDestinationTokens.TravelBody}'."));
-    }
-    /// <inheritdoc/>
-    public override void Write(Utf8JsonWriter writer, WorldPortalTravel value, JsonSerializerOptions options) {
-        writer.WriteStringValue(value: WorldDestinationTokens.TravelToken(travel: value));
-    }
+    protected override string ToToken(WorldPortalTravel value) => WorldDestinationTokens.TravelToken(travel: value);
 }
 /// <summary>
-/// Reads and writes a <see cref="WorldPortalArrival"/> as the lowercase token <c>spawn</c>/<c>mapped</c> rather than
-/// the context's camelCase enum policy, mirroring <see cref="WorldPortalTravelJsonConverter"/>. See
-/// <see cref="WorldDestinationTokens"/>.
+/// Reads and writes a <see cref="WorldPortalArrival"/> as the lowercase token <c>spawn</c>/<c>mapped</c>, mirroring
+/// <see cref="WorldPortalTravelJsonConverter"/>. See <see cref="WorldDestinationTokens"/>.
 /// </summary>
-internal sealed class WorldPortalArrivalJsonConverter : JsonConverter<WorldPortalArrival>, IJsonSchemaStringConverter {
+internal sealed class WorldPortalArrivalJsonConverter() : TokenEnumJsonConverter<WorldPortalArrival>("portal arrival", [WorldDestinationTokens.ArrivalSpawn, WorldDestinationTokens.ArrivalMapped]) {
     /// <inheritdoc/>
-    public IReadOnlyList<string>? SchemaTokens { get; } = [WorldDestinationTokens.ArrivalSpawn, WorldDestinationTokens.ArrivalMapped];
-
+    protected override WorldPortalArrival? Parse(string? token) => WorldDestinationTokens.ParseArrival(token: token);
     /// <inheritdoc/>
-    public override WorldPortalArrival Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
-        return (WorldDestinationTokens.ParseArrival(token: reader.GetString())
-            ?? throw new JsonException(message: $"portal arrival '{reader.GetString()}' must be '{WorldDestinationTokens.ArrivalSpawn}' or '{WorldDestinationTokens.ArrivalMapped}'."));
-    }
-    /// <inheritdoc/>
-    public override void Write(Utf8JsonWriter writer, WorldPortalArrival value, JsonSerializerOptions options) {
-        writer.WriteStringValue(value: WorldDestinationTokens.ArrivalToken(arrival: value));
-    }
+    protected override string ToToken(WorldPortalArrival value) => WorldDestinationTokens.ArrivalToken(arrival: value);
 }
 /// <summary>
 /// Reads and writes a <see cref="WorldDestinationScope"/> as the lowercase token docs/vision.md's "Durability,
-/// scope and generation" names (<c>user</c> / <c>group</c> / <c>global</c>) rather than the context's camelCase enum
-/// policy, mirroring <see cref="WorldDestinationDurabilityJsonConverter"/>. See <see cref="WorldDestinationTokens"/>.
+/// scope and generation" names (<c>user</c> / <c>group</c> / <c>global</c>), mirroring
+/// <see cref="WorldDestinationDurabilityJsonConverter"/>. See <see cref="WorldDestinationTokens"/>.
 /// </summary>
-internal sealed class WorldDestinationScopeJsonConverter : JsonConverter<WorldDestinationScope>, IJsonSchemaStringConverter {
+internal sealed class WorldDestinationScopeJsonConverter() : TokenEnumJsonConverter<WorldDestinationScope>("destination scope", [WorldDestinationTokens.ScopeUser, WorldDestinationTokens.ScopeGroup, WorldDestinationTokens.ScopeGlobal]) {
     /// <inheritdoc/>
-    public IReadOnlyList<string>? SchemaTokens { get; } = [WorldDestinationTokens.ScopeUser, WorldDestinationTokens.ScopeGroup, WorldDestinationTokens.ScopeGlobal];
-
+    protected override WorldDestinationScope? Parse(string? token) => WorldDestinationTokens.ParseScope(token: token);
     /// <inheritdoc/>
-    public override WorldDestinationScope Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
-        return (WorldDestinationTokens.ParseScope(token: reader.GetString())
-            ?? throw new JsonException(message: $"destination scope '{reader.GetString()}' must be '{WorldDestinationTokens.ScopeUser}', '{WorldDestinationTokens.ScopeGroup}', or '{WorldDestinationTokens.ScopeGlobal}'."));
-    }
-    /// <inheritdoc/>
-    public override void Write(Utf8JsonWriter writer, WorldDestinationScope value, JsonSerializerOptions options) {
-        writer.WriteStringValue(value: WorldDestinationTokens.ScopeToken(scope: value));
-    }
+    protected override string ToToken(WorldDestinationScope value) => WorldDestinationTokens.ScopeToken(scope: value);
 }
 /// <summary>
 /// Reads and writes a <see cref="GrantSubject"/> as the same compact token <c>world.grant</c> takes — <c>all</c>,

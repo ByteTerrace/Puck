@@ -558,6 +558,25 @@ public static partial class WorldDefinitionValidator {
 
         return true;
     }
+    // The dangling-reference door every "names a row this document must declare" check opens: blank or unresolved
+    // against declaredSet is one "{path}[.field] '{value}' names no {rowNoun} row." refusal. field may be empty when
+    // path already names the leaf. Returns whether the reference resolved, so a caller gating a further
+    // declared-only check (a rate/coefficient derived from the resolved row) can do so without re-deriving this
+    // same check.
+    private static bool RequireDeclared(string? value, ISet<string> declaredSet, string path, string field, string rowNoun, List<string> errors) {
+        if (
+            string.IsNullOrWhiteSpace(value: value) ||
+            !declaredSet.Contains(item: value)
+        ) {
+            var fullPath = (string.IsNullOrEmpty(value: field) ? path : $"{path}.{field}");
+
+            errors.Add(item: $"{fullPath} '{value}' names no {rowNoun} row.");
+
+            return false;
+        }
+
+        return true;
+    }
     private static void RequireFinite(float value, string name, List<string> errors) {
         if (!float.IsFinite(f: value)) {
             errors.Add(item: $"{name} must be finite.");
@@ -577,6 +596,11 @@ public static partial class WorldDefinitionValidator {
             (value < 0f)
         ) {
             errors.Add(item: $"{name} must be finite and non-negative.");
+        }
+    }
+    private static void RequireNonNegativeEpoch(long value, string name, List<string> errors) {
+        if (value < 0) {
+            errors.Add(item: $"{name} {value} must be non-negative.");
         }
     }
     private static void RequirePositive(float value, string name, List<string> errors) {
@@ -601,6 +625,43 @@ public static partial class WorldDefinitionValidator {
         ) {
             errors.Add(item: $"{path} {margin} inverts the collider (halfExtent + margin must be > 0 on every axis).");
         }
+    }
+    // The general bounded-float door every closed-interval check (unit alphas, gain ceilings, half-angle cones, …)
+    // folds onto: finite, and within [min, max] with either edge switchable to an open bound (e.g. a half-angle's
+    // 0 is excluded — a zero-width cone senses nothing — while its 180 ceiling is admitted).
+    private static void RequireRange(float value, float min, float max, string name, List<string> errors, bool minExclusive = false, bool maxExclusive = false) {
+        if (
+            !float.IsFinite(f: value) ||
+            (minExclusive ? (value <= min) : (value < min)) ||
+            (maxExclusive ? (value >= max) : (value > max))
+        ) {
+            var openBracket = (minExclusive ? "(" : "[");
+            var closeBracket = (maxExclusive ? ")" : "]");
+
+            errors.Add(item: $"{name} {value} must be finite and within {openBracket}{min}, {max}{closeBracket}.");
+        }
+    }
+    // The required-then-unique name door every row loop needing an ordinal identity opens: absent/blank is
+    // "{path}[.field] is required.", a repeat against the caller's own seen-set is "…is duplicated.". field may be
+    // empty when path already names the leaf (e.g. a tags[] entry) — no trailing dot is emitted in that case.
+    // Returns whether the name is admitted, so a caller gating further per-row work on it (an ordinal table insert,
+    // a nested loop) can do so without re-deriving the same check.
+    private static bool RequireUniqueName(string? value, HashSet<string> seen, string path, string field, List<string> errors) {
+        var fullPath = (string.IsNullOrEmpty(value: field) ? path : $"{path}.{field}");
+
+        if (string.IsNullOrWhiteSpace(value: value)) {
+            errors.Add(item: $"{fullPath} is required.");
+
+            return false;
+        }
+
+        if (!seen.Add(item: value)) {
+            errors.Add(item: $"{fullPath} '{value}' is duplicated.");
+
+            return false;
+        }
+
+        return true;
     }
     private static void RequireUnitInterval(float value, string name, List<string> errors) {
         if (
@@ -643,11 +704,13 @@ public static partial class WorldDefinitionValidator {
 
             var rowId = id(row);
 
-            if (string.IsNullOrWhiteSpace(value: rowId)) {
-                errors.Add(item: $"{path}.id is required.");
-            } else if (!ids.Add(item: rowId)) {
-                errors.Add(item: $"{path}.id '{rowId}' is duplicated.");
-            }
+            RequireUniqueName(
+                value: rowId,
+                seen: ids,
+                path: path,
+                field: "id",
+                errors: errors
+            );
 
             if (check(row) is not { } result) {
                 errors.Add(item: $"{path}.document is required.");
@@ -676,10 +739,26 @@ public static partial class WorldDefinitionValidator {
 
         return ids;
     }
+    // The declared-name sets ValidateCore's worst-threaded consumers (ValidatePlacements/ValidateFaceSources,
+    // ValidateScreenSource/ValidateMagazine) resolve dangling references against, carried as ONE parameter instead
+    // of one positional HashSet per set. Filled progressively as ValidateCore computes each set — a field is safe to
+    // read once ValidateCore's own call to its owning Validate* method has run, the same dependency order the
+    // un-scoped locals already followed.
+    private sealed class ValidationScope {
+        public HashSet<string> Cameras { get; set; } = [];
+        public HashSet<string> CreationIds { get; set; } = [];
+        public HashSet<string> DestinationNames { get; set; } = [];
+        public HashSet<string> FontNames { get; set; } = [];
+        public bool HasTextCatalog { get; set; }
+        public HashSet<string> KitNames { get; set; } = [];
+        public HashSet<string> LookNames { get; set; } = [];
+        public HashSet<string> PatchIds { get; set; } = [];
+    }
     private static void ValidateCore(WorldDefinition definition, IWorldNeighbourResolver? neighbours, bool validateAdjacencyClaims) {
         ArgumentNullException.ThrowIfNull(definition);
 
         var errors = new List<string>();
+        var scope = new ValidationScope();
 
         if (!string.Equals(
             a: definition.Schema,
@@ -826,13 +905,13 @@ public static partial class WorldDefinitionValidator {
         // 0 disables the reconnect grace window (immediate teardown); the 600s ceiling mirrors world.wait's own
         // ten-minute bound. Validated in authored seconds, not derived ticks — at rate 0 a positive value means
         // NEVER, not a tick count (see CompiledTickDuration).
-        if (
-            !float.IsFinite(f: definition.Population.ReconnectGraceSeconds) ||
-            (definition.Population.ReconnectGraceSeconds < 0f) ||
-            (definition.Population.ReconnectGraceSeconds > 600f)
-        ) {
-            errors.Add(item: $"population.reconnectGraceSeconds {definition.Population.ReconnectGraceSeconds} is outside 0..600.");
-        }
+        RequireRange(
+            value: definition.Population.ReconnectGraceSeconds,
+            min: 0f,
+            max: 600f,
+            name: "population.reconnectGraceSeconds",
+            errors: errors
+        );
 
         // The audio asset sections come FIRST among the row sets: emission facets on scene rows/placements and the
         // speaker rows below all resolve against the tune/patch id sets.
@@ -852,6 +931,8 @@ public static partial class WorldDefinitionValidator {
             check: CheckPatch,
             errors: errors
         );
+
+        scope.PatchIds = patchIds;
         // Music/judges validate right beside tunes/patches — the same asset-row shape, optional (null = none) rather
         // than required, since a required section would refuse every world checked in before this arc.
         _ = ValidateOptionalAssets(
@@ -862,7 +943,7 @@ public static partial class WorldDefinitionValidator {
             check: CheckMusic,
             errors: errors
         );
-        _ = ValidateOptionalAssets(
+        var judgeRowNames = ValidateOptionalAssets(
             rows: definition.Judges,
             section: "judges",
             id: static row => row.Name,
@@ -974,10 +1055,14 @@ public static partial class WorldDefinitionValidator {
             definition: definition,
             dynamicsNames: dynamicsNames,
             errors: errors,
+            judgeRowNames: judgeRowNames,
             programs: programs,
             stateRows: stateRows,
-            stateSlots: actionStateSlots
+            stateSlots: actionStateSlots,
+            targetRegisterNames: targetRegisterNames
         );
+
+        scope.KitNames = kitNames;
 
         ValidateAssignment(
             assignment: definition.Assignment,
@@ -1124,6 +1209,8 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
 
+        scope.DestinationNames = destinationNames;
+
         ValidateAdjacencies(
             definition: definition,
             destinationNames: destinationNames,
@@ -1168,6 +1255,10 @@ public static partial class WorldDefinitionValidator {
             text: definition.Text,
             errors: errors
         );
+
+        scope.FontNames = fontNames;
+        scope.HasTextCatalog = (definition.Text is not null);
+
         var creationIds = ValidateCreations(
             definition: definition,
             creations: definition.Creations,
@@ -1175,6 +1266,8 @@ public static partial class WorldDefinitionValidator {
             hasTextCatalog: (definition.Text is not null),
             errors: errors
         );
+
+        scope.CreationIds = creationIds;
 
         // The LOOK rows go AFTER ValidateCreations (a creation look resolves its CreationId against the id-set that
         // returns) and BEFORE ValidatePlacements (a future Inhabit facet will resolve its Look against the look-name set
@@ -1187,6 +1280,8 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
 
+        scope.LookNames = lookNames;
+
         ValidateLookAssignment(
             assignment: definition.LookAssignment,
             lookNames: lookNames,
@@ -1196,15 +1291,9 @@ public static partial class WorldDefinitionValidator {
         var placementIds = ValidatePlacements(
             placements: definition.Placements,
             definition: definition,
-            creationIds: creationIds,
-            lookNames: lookNames,
-            kitNames: kitNames,
             authoring: authoring,
-            patchIds: patchIds,
             requiresField: WorldContactSelection.RequiresField(collision: definition.Collision),
-            destinationNames: destinationNames,
-            fontNames: fontNames,
-            hasTextCatalog: (definition.Text is not null),
+            scope: scope,
             errors: errors
         );
 
@@ -1232,11 +1321,13 @@ public static partial class WorldDefinitionValidator {
                     continue;
                 }
 
-                if (string.IsNullOrWhiteSpace(value: camera.Name)) {
-                    errors.Add(item: $"{path}.name is required.");
-                } else if (!cameras.Add(item: camera.Name)) {
-                    errors.Add(item: $"{path}.name '{camera.Name}' is duplicated.");
-                }
+                RequireUniqueName(
+                    value: camera.Name,
+                    seen: cameras,
+                    path: path,
+                    field: "name",
+                    errors: errors
+                );
 
                 // A null anchor resolves the world reference frame.
                 if (camera.Anchor is { } anchor) {
@@ -1290,6 +1381,7 @@ public static partial class WorldDefinitionValidator {
 
                 ValidateProgram(
                     definition: definition,
+                    dynamicsNames: dynamicsNames,
                     errors: errors,
                     path: $"{path}.rig",
                     placementIds: placementIds,
@@ -1306,6 +1398,8 @@ public static partial class WorldDefinitionValidator {
                 }
             }
         }
+
+        scope.Cameras = cameras;
 
         // An owned world (Identity not null) authors seat-scope panels: WorldHudCapacity.MaxSeatPanels of them, each
         // capped at MaxElementsPerSeatPanel, WorldHudLayer.Replace refused (a panel confined to one seat's viewport
@@ -1338,6 +1432,7 @@ public static partial class WorldDefinitionValidator {
             capacity: definition.Population.Capacity,
             cameras: cameras,
             definition: definition,
+            dynamicsNames: dynamicsNames,
             errors: errors,
             placementIds: placementIds,
             views: definition.ViewsRaw
@@ -1474,10 +1569,7 @@ public static partial class WorldDefinitionValidator {
                     definition: definition,
                     source: screen.Source,
                     path: $"{path}.source",
-                    cameras: cameras,
-                    destinationNames: destinationNames,
-                    fontNames: fontNames,
-                    hasTextCatalog: (definition.Text is not null),
+                    scope: scope,
                     cablePermitted: true,
                     errors: errors
                 )) {
@@ -1495,10 +1587,7 @@ public static partial class WorldDefinitionValidator {
                     definition: definition,
                     magazine: screen.Magazine,
                     path: $"{path}.magazine",
-                    cameras: cameras,
-                    destinationNames: destinationNames,
-                    fontNames: fontNames,
-                    hasTextCatalog: (definition.Text is not null),
+                    scope: scope,
                     errors: errors
                 );
 

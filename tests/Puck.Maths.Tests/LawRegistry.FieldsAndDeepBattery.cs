@@ -1790,10 +1790,31 @@ internal static partial class LawRegistry {
             )
         ),
         Case(
+            id: "scalar.move-toward-boundaries-and-segment",
+            run: () => Laws.Claim(
+                claim: MoveTowardAndEmitterClaims.ScalarMoveTowardSurface,
+                lawId: "scalar.move-toward-boundaries-and-segment"
+            )
+        ),
+        Case(
             id: "core.rust-port-emitters-are-pure-and-live",
             run: () => Laws.Claim(
                 claim: MoveTowardAndEmitterClaims.RustPortEmitterSurface,
                 lawId: "core.rust-port-emitters-are-pure-and-live"
+            )
+        ),
+        Case(
+            id: "algebra.angular-frequency-exact-and-vs-double",
+            run: () => Laws.Claim(
+                claim: AngularFrequencyAndRationalClaims.AngularFrequencySurface,
+                lawId: "algebra.angular-frequency-exact-and-vs-double"
+            )
+        ),
+        Case(
+            id: "algebra.rational-field-axioms",
+            run: () => Laws.Claim(
+                claim: AngularFrequencyAndRationalClaims.RationalAlgebraSurface,
+                lawId: "algebra.rational-field-axioms"
             )
         ),
         Case(

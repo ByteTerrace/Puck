@@ -1073,7 +1073,12 @@ public sealed partial class WorldServer {
             verdict: out var gated
         )) {
             if (!m_driveDenied[submission.EntityIndex]) {
-                Console.Error.WriteLine(value: $"[world.grant denied: {submission.Principal.Describe()} cannot drive body:{submission.EntityIndex} ({gated.DescribeDenial()}) — intent dropped, body idle]");
+                Console.Error.WriteLine(value: $"[world.grant denied: {gated.DescribeRefusal(
+                    actor: submission.Principal,
+                    dropped: "intent dropped, body idle",
+                    subject: $"body:{submission.EntityIndex}",
+                    verb: "drive"
+                )}]");
                 m_driveDenied[submission.EntityIndex] = true;
             }
 
@@ -1088,7 +1093,12 @@ public sealed partial class WorldServer {
 
         if (!verdict.IsAllowed) {
             if (!m_driveDenied[submission.EntityIndex]) {
-                Console.Error.WriteLine(value: $"[world.grant denied: {submission.Principal.Describe()} cannot drive body:{submission.EntityIndex} ({verdict.DescribeDenial()}) — intent dropped, body idle]");
+                Console.Error.WriteLine(value: $"[world.grant denied: {verdict.DescribeRefusal(
+                    actor: submission.Principal,
+                    dropped: "intent dropped, body idle",
+                    subject: $"body:{submission.EntityIndex}",
+                    verb: "drive"
+                )}]");
                 m_driveDenied[submission.EntityIndex] = true;
             }
 

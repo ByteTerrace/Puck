@@ -370,6 +370,7 @@ uint sdfGridWordAt(SdfInstanceGridHeader grid, uint relativeWord) {
 // semantics HERE, not just bumping this #define. KEEP IN SYNC with SdfProgramBuilder.MaxFieldScopeDepth.
 #define SDF_OP_PUSH_FIELD      27u
 #define SDF_OP_POP_FIELD       28u
+#define SDF_OP_NOISE_DISPLACE  29u
 #define SDF_MAX_FIELD_SCOPE_DEPTH 1u
 // SDF_CORE_OPS — the CORE-OPS compiled variant of the tape interpreters (defined by sdf-world-views-core.comp.hlsl,
 // the second compiled flavor of the Stage 1 views kernel; every other kernel compiles the FULL ISA). Compiles out every
@@ -894,6 +895,66 @@ float sdfR2Dither(uint2 pixel) {
     uint h = ((pixel.x * SDF_R2_ALPHA1) + (pixel.y * SDF_R2_ALPHA2));
 
     return ((float)h * SDF_INV_2POW32);
+}
+
+// 3D value noise on the integer lattice (KEEP IN SYNC with Puck.SignedDistance.SdfOp.NoiseDisplace and
+// SdfProgram.NoiseDisplaceLipschitz): one integer-only sdfPcg3d per corner keyed on the two's-complement lattice cell
+// xored with the seed streams (bit-identical across both DXC targets), quintic-smoothed trilinear blend (float
+// mul/add, +-1 LSB), output in [-1, 1]. The quintic slope bound ((15/8) on the corner span of 2, axes combined
+// Euclidean) is what the host bakes into the step clamp.
+float sdfNoiseCorner3(int3 cell, uint3 seed) {
+    return ((float)sdfPcg3d(asuint(cell) ^ seed).x * SDF_INV_2POW32);
+}
+float sdfValueNoise3(float3 q, uint3 seed) {
+    float3 cellFloor = floor(q);
+    int3 cell = int3(cellFloor);
+    float3 f = (q - cellFloor);
+    float3 u = (((f * f) * f) * ((f * ((f * 6.0) - 15.0)) + 10.0));
+    float c000 = sdfNoiseCorner3(cell, seed);
+    float c100 = sdfNoiseCorner3((cell + int3(1, 0, 0)), seed);
+    float c010 = sdfNoiseCorner3((cell + int3(0, 1, 0)), seed);
+    float c110 = sdfNoiseCorner3((cell + int3(1, 1, 0)), seed);
+    float c001 = sdfNoiseCorner3((cell + int3(0, 0, 1)), seed);
+    float c101 = sdfNoiseCorner3((cell + int3(1, 0, 1)), seed);
+    float c011 = sdfNoiseCorner3((cell + int3(0, 1, 1)), seed);
+    float c111 = sdfNoiseCorner3((cell + int3(1, 1, 1)), seed);
+    float x00 = lerp(c000, c100, u.x);
+    float x10 = lerp(c010, c110, u.x);
+    float x01 = lerp(c001, c101, u.x);
+    float x11 = lerp(c011, c111, u.x);
+    float y0 = lerp(x00, x10, u.y);
+    float y1 = lerp(x01, x11, u.y);
+    return ((lerp(y0, y1, u.z) * 2.0) - 1.0);
+}
+// The gradient twin (KEEP IN SYNC with sdfValueNoise3 and mapGradCore's SDF_OP_NOISE_DISPLACE case): the same eight
+// corners plus the analytic partials of the quintic-blended trilinear (du = 30*f^2*(f-1)^2), in NOISE-CELL units —
+// the caller scales by the octave's world frequency.
+float sdfValueNoise3Grad(float3 q, uint3 seed, out float3 gradient) {
+    float3 cellFloor = floor(q);
+    int3 cell = int3(cellFloor);
+    float3 f = (q - cellFloor);
+    float3 u = (((f * f) * f) * ((f * ((f * 6.0) - 15.0)) + 10.0));
+    float3 fm = (f - 1.0);
+    float3 du = (((30.0 * f) * f) * (fm * fm));
+    float c000 = sdfNoiseCorner3(cell, seed);
+    float c100 = sdfNoiseCorner3((cell + int3(1, 0, 0)), seed);
+    float c010 = sdfNoiseCorner3((cell + int3(0, 1, 0)), seed);
+    float c110 = sdfNoiseCorner3((cell + int3(1, 1, 0)), seed);
+    float c001 = sdfNoiseCorner3((cell + int3(0, 0, 1)), seed);
+    float c101 = sdfNoiseCorner3((cell + int3(1, 0, 1)), seed);
+    float c011 = sdfNoiseCorner3((cell + int3(0, 1, 1)), seed);
+    float c111 = sdfNoiseCorner3((cell + int3(1, 1, 1)), seed);
+    float x00 = lerp(c000, c100, u.x);
+    float x10 = lerp(c010, c110, u.x);
+    float x01 = lerp(c001, c101, u.x);
+    float x11 = lerp(c011, c111, u.x);
+    float y0 = lerp(x00, x10, u.y);
+    float y1 = lerp(x01, x11, u.y);
+    float dvdux = lerp(lerp((c100 - c000), (c110 - c010), u.y), lerp((c101 - c001), (c111 - c011), u.y), u.z);
+    float dvduy = lerp((x10 - x00), (x11 - x01), u.z);
+    float dvduz = (y1 - y0);
+    gradient = (2.0 * (du * float3(dvdux, dvduy, dvduz)));
+    return ((lerp(y0, y1, u.z) * 2.0) - 1.0);
 }
 
 // === 3D primitives ===================================================================================================
@@ -2424,6 +2485,29 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     result.distance += (data0.w * ((sin(df.x) * sin(df.y)) * sin(df.z)));
                     break;
                 }
+                // fBm hash-lattice value-noise relief (KEEP IN SYNC with Puck.SignedDistance.SdfOp.NoiseDisplace /
+                // SdfProgramBuilder.NoiseDisplace / SdfProgram.NoiseDisplaceLipschitz). data0 = (frequency, amplitude,
+                // gain, lacunarity), data1.x = HOST-BAKED 1/sum(gain^k) normalization, header.y = seed, header.z =
+                // octave count. The corner hash is INTEGER-ONLY (sdfValueNoise3), so cell decisions are bit-identical
+                // across both DXC targets; the blend is float mul/add (+-1 LSB). AnalyzeLipschitz bakes the gradient
+                // bound as the step clamp; the normalized sum stays in [-1, 1], so the surface reach is bounded by
+                // |amplitude| (the scoped-reach / cull-margin channels read that).
+                case SDF_OP_NOISE_DISPLACE: {
+                    SDF_VM_LOAD_DATA0;
+                    SDF_VM_LOAD_DATA1;
+                    float3 q = (localPosition * data0.x);
+                    float octaveAmplitude = 1.0;
+                    float noiseSum = 0.0;
+                    uint octaveCount = instructionHeader.z;
+                    for (uint octave = 0u; (octave < octaveCount); octave++) {
+                        uint octaveSeed = (instructionHeader.y + octave);
+                        noiseSum += (octaveAmplitude * sdfValueNoise3(q, uint3(octaveSeed, (octaveSeed * SDF_HASH_STREAM_A), (octaveSeed * SDF_HASH_STREAM_B))));
+                        q *= data0.w;
+                        octaveAmplitude *= data0.z;
+                    }
+                    result.distance += ((data0.y * data1.x) * noiseSum);
+                    break;
+                }
                 case SDF_OP_WALLPAPER_FOLD: {
                     SDF_VM_LOAD_DATA0;
                     SDF_VM_LOAD_DATA1;
@@ -3113,6 +3197,30 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                         ((data0.x * cos(df.x)) * (sy * sz)),
                         ((sx * data0.y * cos(df.y)) * sz),
                         ((sx * sy) * (data0.z * cos(df.z)))));
+                    resultGradient += float3(dot(localGradProduct, jx), dot(localGradProduct, jy), dot(localGradProduct, jz));
+                    break;
+                }
+                case SDF_OP_NOISE_DISPLACE: {
+                    // distance += amp*invNorm*fbm; gradient += the analytic octave-summed lattice gradient, mapped to
+                    // world through the chain Jacobian columns (KEEP IN SYNC with mapCore's case above).
+                    float3 q = (localPosition * data0.x);
+                    float octaveAmplitude = 1.0;
+                    float octaveFrequency = data0.x;
+                    float noiseSum = 0.0;
+                    float3 noiseGradSum = float3(0.0, 0.0, 0.0);
+                    uint octaveCount = instructionHeader.z;
+                    for (uint octave = 0u; (octave < octaveCount); octave++) {
+                        uint octaveSeed = (instructionHeader.y + octave);
+                        float3 octaveGrad;
+                        noiseSum += (octaveAmplitude * sdfValueNoise3Grad(q, uint3(octaveSeed, (octaveSeed * SDF_HASH_STREAM_A), (octaveSeed * SDF_HASH_STREAM_B)), octaveGrad));
+                        noiseGradSum += ((octaveAmplitude * octaveFrequency) * octaveGrad);
+                        q *= data0.w;
+                        octaveFrequency *= data0.w;
+                        octaveAmplitude *= data0.z;
+                    }
+                    float noiseScale = (data0.y * data1.x);
+                    result.distance += (noiseScale * noiseSum);
+                    float3 localGradProduct = (noiseScale * noiseGradSum);
                     resultGradient += float3(dot(localGradProduct, jx), dot(localGradProduct, jy), dot(localGradProduct, jz));
                     break;
                 }

@@ -317,3 +317,54 @@ public struct SecondOrderFollower4 {
         return Value;
     }
 }
+
+/// <summary>The hemisphere-matched position+orientation follower step every root/part pose lag in this library
+/// shares.</summary>
+public static class SecondOrderPoseFollower {
+    /// <summary>Steps a position follower and an orientation follower together by one frame, flipping the
+    /// orientation target to the near hemisphere of the follower's own previous target first so the quaternion
+    /// follower never eases the long way around.</summary>
+    /// <param name="position">The position follower, stepped in place.</param>
+    /// <param name="orientation">The orientation follower (over the raw <see cref="Vector4"/> components), stepped
+    /// in place.</param>
+    /// <param name="response">The derived response both lanes step under.</param>
+    /// <param name="deltaSeconds">The frame's delta time, in seconds.</param>
+    /// <param name="targetPosition">This frame's target position.</param>
+    /// <param name="targetOrientation">This frame's target orientation.</param>
+    /// <returns>The eased position, and the eased orientation — re-normalized, or <paramref name="targetOrientation"/>
+    /// verbatim when the eased quaternion's length falls at or below the guard (an unseeded or freshly reseeded
+    /// follower).</returns>
+    public static (Vector3 Position, Quaternion Orientation) StepPose(
+        ref SecondOrderFollower3 position,
+        ref SecondOrderFollower4 orientation,
+        in SecondOrderResponse response,
+        float deltaSeconds,
+        Vector3 targetPosition,
+        Quaternion targetOrientation
+    ) {
+        var easedPosition = position.Step(
+            response: in response,
+            deltaSeconds: deltaSeconds,
+            target: targetPosition
+        );
+        var targetVector = new Vector4(targetOrientation.X, targetOrientation.Y, targetOrientation.Z, targetOrientation.W);
+
+        if (
+            orientation.Seeded &&
+            (Vector4.Dot(orientation.PreviousTarget, targetVector) < 0f)
+        ) {
+            targetVector = -targetVector;
+        }
+
+        var easedVector = orientation.Step(
+            response: in response,
+            deltaSeconds: deltaSeconds,
+            target: targetVector
+        );
+        var easedOrientation = ((easedVector.LengthSquared() > 1e-12f)
+            ? Quaternion.Normalize(value: new Quaternion(easedVector.X, easedVector.Y, easedVector.Z, easedVector.W))
+            : targetOrientation);
+
+        return (easedPosition, easedOrientation);
+    }
+}

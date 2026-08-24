@@ -37,6 +37,60 @@ public sealed class WorldFieldLatticeLawTests {
     );
 
     [Fact]
+    public void ABodyStandingOnAGroundLatticeSurfaceCouplesToItsColumn() {
+        // Layers = 1, cellSize 1, heightScale 2, max 10: the derived coupling ceiling is 1 + 2*10 = 21. A body at
+        // y = 1.5 stands ABOVE the one-voxel slab (a bare inside test refuses it) yet ON a plausible surface, so the
+        // emit reaction must deposit into its column.
+        var lattice = new WorldFieldLattice(document: Fields(
+            heightScale: 2f,
+            reactions: [new WorldReaction.Emit(Tag: "hot", Field: "heat", Amount: 4f)]
+        ));
+
+        lattice.Step(
+            tick: 1,
+            bodyCount: 1,
+            bodyPosition: _ => new FixedVector3(
+                X: FixedQ4816.FromDouble(value: 0.5),
+                Y: FixedQ4816.FromDouble(value: 1.5),
+                Z: FixedQ4816.FromDouble(value: 0.5)
+            ),
+            readTag: (_, _) => 1,
+            writeTag: (_, _, _) => { }
+        );
+
+        Assert.Equal(
+            expected: FixedQ4816.FromInteger(value: 4).Value,
+            actual: lattice.Value(field: 0, cell: 0).Value
+        );
+    }
+
+    [Fact]
+    public void ABodyAboveTheDerivedCouplingCeilingDoesNotCouple() {
+        // Same lattice: ceiling 21. A body at y = 30 flies far above any reachable surface — no deposit.
+        var lattice = new WorldFieldLattice(document: Fields(
+            heightScale: 2f,
+            reactions: [new WorldReaction.Emit(Tag: "hot", Field: "heat", Amount: 4f)]
+        ));
+
+        lattice.Step(
+            tick: 1,
+            bodyCount: 1,
+            bodyPosition: _ => new FixedVector3(
+                X: FixedQ4816.FromDouble(value: 0.5),
+                Y: FixedQ4816.FromInteger(value: 30),
+                Z: FixedQ4816.FromDouble(value: 0.5)
+            ),
+            readTag: (_, _) => 1,
+            writeTag: (_, _, _) => { }
+        );
+
+        Assert.Equal(
+            expected: 0L,
+            actual: lattice.Value(field: 0, cell: 0).Value
+        );
+    }
+
+    [Fact]
     public void MultipleWritesToOneCell_DeliverOneFinalDelta() {
         var lattice = new WorldFieldLattice(document: Fields(reactions: [
             new WorldReaction.Transform(

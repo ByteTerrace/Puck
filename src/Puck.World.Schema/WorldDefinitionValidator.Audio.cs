@@ -12,24 +12,15 @@ public static partial class WorldDefinitionValidator {
             b: WorldAudioDefaults.CurveLinear,
             comparisonType: StringComparison.Ordinal
         ));
-    // The one audio gain rule: finite, non-negative, and within the shared ceiling
-    // (Puck.Forge.Authoring.CreationSoundDocument.MaxLevel — one vocabulary for every audio gain-shaped field).
-    private static void RequireGain(float value, string name, List<string> errors) {
-        if (
-            !float.IsFinite(f: value) ||
-            (value < 0f) ||
-            (value > Puck.Forge.Authoring.CreationSoundDocument.MaxLevel)
-        ) {
-            errors.Add(item: $"{name} {value} must be within [0, {Puck.Forge.Authoring.CreationSoundDocument.MaxLevel}].");
-        }
-    }
     // The audio host-section defaults: the master gain rides the shared ceiling, the coalescing radius/fade are
     // physical, the curve token is v1's one recognized value, the listener policy resolves (focus | seat:<n> |
     // a declared camera name), and every cue-table row resolves (a CLOSED event token, a live patch id, the gain
     // ceiling in thousandths, a placement token whose emitter form names a declared speaker).
     private static void ValidateAudioDefaults(WorldAudioDefaults audio, HashSet<string> cameras, HashSet<string> patchIds, HashSet<string> speakerNames, int localSeats, List<string> errors) {
-        RequireGain(
+        RequireRange(
             value: audio.MasterGain,
+            min: 0f,
+            max: Puck.Forge.Authoring.CreationSoundDocument.MaxLevel,
             name: "audio.masterGain",
             errors: errors
         );
@@ -111,12 +102,14 @@ public static partial class WorldDefinitionValidator {
                 )}).");
             }
 
-            if (
-                string.IsNullOrWhiteSpace(value: cue.PatchId) ||
-                !patchIds.Contains(item: cue.PatchId)
-            ) {
-                errors.Add(item: $"{path}.patchId '{cue.PatchId}' names no patch row.");
-            }
+            RequireDeclared(
+                value: cue.PatchId,
+                declaredSet: patchIds,
+                path: path,
+                field: "patchId",
+                rowNoun: "patch",
+                errors: errors
+            );
 
             if (
                 (cue.GainThousandths is { } gain) &&
@@ -154,15 +147,19 @@ public static partial class WorldDefinitionValidator {
             return;
         }
 
-        if (
-            string.IsNullOrWhiteSpace(value: emission.PatchId) ||
-            !patchIds.Contains(item: emission.PatchId)
-        ) {
-            errors.Add(item: $"{path}.patchId '{emission.PatchId}' names no patch row.");
-        }
+        RequireDeclared(
+            value: emission.PatchId,
+            declaredSet: patchIds,
+            path: path,
+            field: "patchId",
+            rowNoun: "patch",
+            errors: errors
+        );
 
-        RequireGain(
+        RequireRange(
             value: emission.Level,
+            min: 0f,
+            max: Puck.Forge.Authoring.CreationSoundDocument.MaxLevel,
             name: $"{path}.level",
             errors: errors
         );
@@ -186,8 +183,10 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path}.channel '{feed.Channel}' must be '{WorldSpeakerFeed.ChannelMix}', '{WorldSpeakerFeed.ChannelLeft}', or '{WorldSpeakerFeed.ChannelRight}'.");
         }
 
-        RequireGain(
+        RequireRange(
             value: feed.Gain,
+            min: 0f,
+            max: Puck.Forge.Authoring.CreationSoundDocument.MaxLevel,
             name: $"{path}.gain",
             errors: errors
         );
@@ -235,11 +234,13 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            if (string.IsNullOrWhiteSpace(value: speaker.Name)) {
-                errors.Add(item: $"{path}.name is required.");
-            } else if (!names.Add(item: speaker.Name)) {
-                errors.Add(item: $"{path}.name '{speaker.Name}' is duplicated.");
-            }
+            RequireUniqueName(
+                value: speaker.Name,
+                seen: names,
+                path: path,
+                field: "name",
+                errors: errors
+            );
 
             switch (speaker) {
                 case WorldSpeaker.Fixed fixedSpeaker:

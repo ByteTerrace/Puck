@@ -974,26 +974,19 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
         ));
     }
     // Drop registry rows whose key left the derived plan, so a re-authored row later re-enters from silence with a
-    // fresh id rather than inheriting a stale ramp.
+    // fresh id rather than inheriting a stale ramp. The plan's keys are hashed once (regardless of registry size) so
+    // the whole retire pass is O(registry + plan), never O(registry * plan).
     private void RetireDepartedKeys() {
+        var live = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        foreach (var plan in m_plan) {
+            _ = live.Add(item: plan.Key);
+        }
+
         List<string>? departed = null;
 
         foreach (var key in m_registry.Keys) {
-            var present = false;
-
-            foreach (var plan in m_plan) {
-                if (string.Equals(
-                    a: plan.Key,
-                    b: key,
-                    comparisonType: StringComparison.Ordinal
-                )) {
-                    present = true;
-
-                    break;
-                }
-            }
-
-            if (!present) {
+            if (!live.Contains(item: key)) {
                 (departed ??= new List<string>()).Add(item: key);
             }
         }

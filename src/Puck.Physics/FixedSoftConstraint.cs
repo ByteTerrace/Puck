@@ -84,27 +84,23 @@ public readonly record struct FixedSoftConstraint(
             );
         }
 
-        // ω = 2π·f as the exact rational omegaNumerator / omegaDenominator.
-        var omegaNumerator = ((2 * ((BigInteger)FixedQ4816.PiQ61)) * clamped.Value);
-        var omegaDenominator = (BigInteger.One << (FixedQ4816.PiQ61FractionBitCount + FixedQ4816.FractionBitCount));
+        var (omegaNumerator, omegaDenominator) = FixedQ4816.AngularFrequency(frequencyHz: clamped);
+        var omega = new Rational(Numerator: omegaNumerator, Denominator: omegaDenominator);
 
         // hω, the ONE place the substep width enters. h = 1 / (rateHz · substepCount) exactly.
-        var productNumerator = omegaNumerator;
-        var productDenominator = (omegaDenominator * substepRate);
+        var hOmega = new Rational(Numerator: omegaNumerator, Denominator: (omegaDenominator * substepRate));
+        var twoZeta = new Rational(Numerator: (2 * ((BigInteger)dampingRatio.Value)), Denominator: (BigInteger.One << FixedQ4816.FractionBitCount));
 
-        // a₁ = 2ζ + hω.
-        var firstNumerator = (((2 * ((BigInteger)dampingRatio.Value)) * productDenominator) + (productNumerator << FixedQ4816.FractionBitCount));
-        var firstDenominator = (productDenominator << FixedQ4816.FractionBitCount);
-
-        // a₂ = hω·a₁, and 1 + a₂ over the same denominator.
-        var secondNumerator = (productNumerator * firstNumerator);
-        var secondDenominator = (productDenominator * firstDenominator);
-        var shiftedDenominator = (secondDenominator + secondNumerator);
+        // a₁ = 2ζ + hω; a₂ = hω·a₁; a₃ = 1/(1 + a₂).
+        var a1 = (twoZeta + hOmega);
+        var a2 = (hOmega * a1);
+        var biasRateExact = (omega / a1);
+        var massScaleExact = (a2 / (Rational.One + a2));
 
         if (!FixedPointRounding.TryRoundRational(
-            denominator: (omegaDenominator * firstNumerator),
+            denominator: biasRateExact.Denominator,
             fractionBitCount: fractionBitCount,
-            numerator: (omegaNumerator * firstDenominator),
+            numerator: biasRateExact.Numerator,
             result: out var biasRate
         )) {
             throw new ArgumentOutOfRangeException(
@@ -114,9 +110,9 @@ public readonly record struct FixedSoftConstraint(
         }
 
         if (!FixedPointRounding.TryRoundRational(
-            denominator: shiftedDenominator,
+            denominator: massScaleExact.Denominator,
             fractionBitCount: fractionBitCount,
-            numerator: secondNumerator,
+            numerator: massScaleExact.Numerator,
             result: out var massScale
         )) {
             throw new ArgumentOutOfRangeException(

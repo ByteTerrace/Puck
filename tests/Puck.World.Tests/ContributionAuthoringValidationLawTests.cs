@@ -145,7 +145,7 @@ public sealed class ContributionAuthoringValidationLawTests {
     public void GraceSecondsMustSitInsideItsBand() {
         AssertRefusedNaming(
             definition: With(contribution: (WellFormed() with { GraceSeconds = -1f })),
-            needle: "contribution.graceSeconds -1 is outside"
+            needle: "contribution.graceSeconds -1 must be finite and within"
         );
         AssertRefusedNaming(
             definition: With(contribution: (WellFormed() with { GraceSeconds = (WorldContributionCapacity.MaxGraceSeconds + 1f) })),

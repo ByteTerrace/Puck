@@ -1,7 +1,7 @@
 namespace Puck.World.Protocol;
 
 /// <summary>
-/// The kind-tagged vocabulary of live world edits carried over <see cref="IServerLink.SubmitWorldMutation"/> — the
+/// The kind-tagged vocabulary of live world edits carried over <see cref="ServerLinkSubmissions.SubmitWorldMutation"/> — the
 /// closed set of in-flight mutations that <em>is</em> the editor substrate. One coarse record per
 /// <see cref="WorldDefinition"/> section, addressed by stable id, whole-row upsert (never a field poke): a genre world
 /// arrives as different data through these same messages, never a new message shape. Mutations buffer

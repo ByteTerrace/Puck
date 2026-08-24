@@ -79,15 +79,6 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path} {size} is below the {WorldThemeCapacity.TypeAbsoluteFloorSize}px MSDF glyph coverage floor — below it glyph coverage degrades over a moving world.");
         }
     }
-    private static void RequireUnitFloat(float value, string path, List<string> errors) {
-        if (
-            !float.IsFinite(f: value) ||
-            (value < 0f) ||
-            (value > 1f)
-        ) {
-            errors.Add(item: $"{path} {value} must be finite and in [0, 1].");
-        }
-    }
     private static void ValidateTheme(WorldDefinition definition, List<string> errors) {
         if (definition.ThemeRaw is not { } theme) {
             return;
@@ -134,17 +125,17 @@ public static partial class WorldDefinitionValidator {
         );
     }
     private static void ValidateThemeChrome(WorldThemeChrome chrome, List<string> errors) {
-        RequireUnitFloat(errors: errors, path: "theme.chrome.dimQuietAlpha", value: chrome.DimQuietAlpha);
-        RequireUnitFloat(errors: errors, path: "theme.chrome.barLabelAlpha", value: chrome.BarLabelAlpha);
-        RequireUnitFloat(errors: errors, path: "theme.chrome.barHintAlpha", value: chrome.BarHintAlpha);
-        RequireUnitFloat(errors: errors, path: "theme.chrome.cursorAlpha", value: chrome.CursorAlpha);
-        RequireUnitFloat(errors: errors, path: "theme.chrome.cursorDotRatio", value: chrome.CursorDotRatio);
+        RequireUnitInterval(errors: errors, name: "theme.chrome.dimQuietAlpha", value: chrome.DimQuietAlpha);
+        RequireUnitInterval(errors: errors, name: "theme.chrome.barLabelAlpha", value: chrome.BarLabelAlpha);
+        RequireUnitInterval(errors: errors, name: "theme.chrome.barHintAlpha", value: chrome.BarHintAlpha);
+        RequireUnitInterval(errors: errors, name: "theme.chrome.cursorAlpha", value: chrome.CursorAlpha);
+        RequireUnitInterval(errors: errors, name: "theme.chrome.cursorDotRatio", value: chrome.CursorDotRatio);
         RequireNonNegative(errors: errors, name: "theme.chrome.cursorDotMaxHalf", value: chrome.CursorDotMaxHalf);
         RequireNonNegative(errors: errors, name: "theme.chrome.cursorLabelGap", value: chrome.CursorLabelGap);
-        RequireUnitFloat(errors: errors, path: "theme.chrome.wheelRingAlpha", value: chrome.WheelRingAlpha);
-        RequireUnitFloat(errors: errors, path: "theme.chrome.wheelActiveRingAlpha", value: chrome.WheelActiveRingAlpha);
+        RequireUnitInterval(errors: errors, name: "theme.chrome.wheelRingAlpha", value: chrome.WheelRingAlpha);
+        RequireUnitInterval(errors: errors, name: "theme.chrome.wheelActiveRingAlpha", value: chrome.WheelActiveRingAlpha);
         RequireNonNegative(errors: errors, name: "theme.chrome.wheelActiveRingOffset", value: chrome.WheelActiveRingOffset);
-        RequireUnitFloat(errors: errors, path: "theme.chrome.wheelLabelAlpha", value: chrome.WheelLabelAlpha);
+        RequireUnitInterval(errors: errors, name: "theme.chrome.wheelLabelAlpha", value: chrome.WheelLabelAlpha);
         RequireNonNegative(errors: errors, name: "theme.chrome.wheelHubDotHalf", value: chrome.WheelHubDotHalf);
         RequireNonNegative(errors: errors, name: "theme.chrome.wheelMarkerHalf", value: chrome.WheelMarkerHalf);
         RequireNonNegative(errors: errors, name: "theme.chrome.wheelMarkerGapRatio", value: chrome.WheelMarkerGapRatio);
@@ -185,14 +176,14 @@ public static partial class WorldDefinitionValidator {
         RequireBindableColor(color: diegetic.PlateStripeColor, definition: definition, errors: errors, path: "theme.diegetic.plateStripeColor");
         RequireBindableColor(color: diegetic.EmbossFill, definition: definition, errors: errors, path: "theme.diegetic.embossFill");
         RequireBindableColor(color: diegetic.EngraveFill, definition: definition, errors: errors, path: "theme.diegetic.engraveFill");
-        RequireUnitFloat(errors: errors, path: "theme.diegetic.embossShadowDropAlpha", value: diegetic.EmbossShadowDropAlpha);
+        RequireUnitInterval(errors: errors, name: "theme.diegetic.embossShadowDropAlpha", value: diegetic.EmbossShadowDropAlpha);
         RequireNonNegative(errors: errors, name: "theme.diegetic.embossShadowDropBlur", value: diegetic.EmbossShadowDropBlur);
         RequireFinite(errors: errors, name: "theme.diegetic.embossShadowDropOffsetY", value: diegetic.EmbossShadowDropOffsetY);
-        RequireUnitFloat(errors: errors, path: "theme.diegetic.embossShadowLitAlpha", value: diegetic.EmbossShadowLitAlpha);
+        RequireUnitInterval(errors: errors, name: "theme.diegetic.embossShadowLitAlpha", value: diegetic.EmbossShadowLitAlpha);
         RequireFinite(errors: errors, name: "theme.diegetic.embossShadowLitOffsetY", value: diegetic.EmbossShadowLitOffsetY);
-        RequireUnitFloat(errors: errors, path: "theme.diegetic.engraveShadowLipAlpha", value: diegetic.EngraveShadowLipAlpha);
+        RequireUnitInterval(errors: errors, name: "theme.diegetic.engraveShadowLipAlpha", value: diegetic.EngraveShadowLipAlpha);
         RequireFinite(errors: errors, name: "theme.diegetic.engraveShadowLipOffsetY", value: diegetic.EngraveShadowLipOffsetY);
-        RequireUnitFloat(errors: errors, path: "theme.diegetic.engraveShadowRecessAlpha", value: diegetic.EngraveShadowRecessAlpha);
+        RequireUnitInterval(errors: errors, name: "theme.diegetic.engraveShadowRecessAlpha", value: diegetic.EngraveShadowRecessAlpha);
         RequireNonNegative(errors: errors, name: "theme.diegetic.engraveShadowRecessBlur", value: diegetic.EngraveShadowRecessBlur);
         RequireFinite(errors: errors, name: "theme.diegetic.engraveShadowRecessOffsetY", value: diegetic.EngraveShadowRecessOffsetY);
         RequireBindableColor(color: diegetic.ScreenWellOuter, definition: definition, errors: errors, path: "theme.diegetic.screenWellOuter");
@@ -233,10 +224,10 @@ public static partial class WorldDefinitionValidator {
         RequireBindableColor(color: elevation.ShadowSeatStripColor, definition: definition, errors: errors, path: "theme.elevation.shadowSeatStripColor");
         RequireFinite(errors: errors, name: "theme.elevation.catchlightOffsetY", value: elevation.CatchlightOffsetY);
         RequireBindableColor(color: elevation.CatchlightColor, definition: definition, errors: errors, path: "theme.elevation.catchlightColor");
-        RequireUnitFloat(errors: errors, path: "theme.elevation.chipRestOpacity", value: elevation.ChipRestOpacity);
+        RequireUnitInterval(errors: errors, name: "theme.elevation.chipRestOpacity", value: elevation.ChipRestOpacity);
         RequireNonNegative(errors: errors, name: "theme.elevation.edgeHairlineWidth", value: elevation.EdgeHairlineWidth);
         RequireNonNegative(errors: errors, name: "theme.elevation.ringStatusWidth", value: elevation.RingStatusWidth);
-        RequireUnitFloat(errors: errors, path: "theme.elevation.ringStatusAlpha", value: elevation.RingStatusAlpha);
+        RequireUnitInterval(errors: errors, name: "theme.elevation.ringStatusAlpha", value: elevation.RingStatusAlpha);
     }
     private static void ValidateThemeIcon(WorldThemeIcon icon, List<string> errors) => RequirePositive(
         errors: errors,
@@ -252,9 +243,9 @@ public static partial class WorldDefinitionValidator {
         ValidateThemeCubicBezier(bezier: motion.EaseOut, errors: errors, path: "theme.motion.easeOut");
     }
     private static void ValidateThemeCubicBezier(WorldThemeCubicBezier bezier, string path, List<string> errors) {
-        RequireUnitFloat(errors: errors, path: $"{path}.x1", value: bezier.X1);
+        RequireUnitInterval(errors: errors, name: $"{path}.x1", value: bezier.X1);
         RequireFinite(errors: errors, name: $"{path}.y1", value: bezier.Y1);
-        RequireUnitFloat(errors: errors, path: $"{path}.x2", value: bezier.X2);
+        RequireUnitInterval(errors: errors, name: $"{path}.x2", value: bezier.X2);
         RequireFinite(errors: errors, name: $"{path}.y2", value: bezier.Y2);
     }
     private static void ValidateThemeRadius(WorldThemeRadius radius, List<string> errors) {

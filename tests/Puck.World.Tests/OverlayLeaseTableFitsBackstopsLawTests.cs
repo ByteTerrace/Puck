@@ -57,7 +57,9 @@ public sealed class OverlayLeaseTableFitsBackstopsLawTests {
             BindingBarMaxBanks: 0,
             BindingBarMaxSlotsPerBank: 0,
             BindingBarMaxModifiers: 0,
-            MarkerMaxChipsPerSeat: 0
+            MarkerMaxChipsPerSeat: 0,
+            WheelMaxRings: 0,
+            WheelMaxSectorsPerRing: 0
         );
 
         var refusal = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new OverlayChannelLeases(capacity: adversarial));

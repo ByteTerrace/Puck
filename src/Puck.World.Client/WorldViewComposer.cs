@@ -275,7 +275,7 @@ public sealed class WorldViewComposer {
                 from: new ViewLayout(Bindings: m_currentBindings.ToArray()),
                 to: new ViewLayout(Bindings: m_toScratch.ToArray()),
                 durationSeconds: seconds,
-                easing: static t => ((t * t) * (3f - (2f * t)))
+                easing: Easing.Smoothstep
             );
             m_transitionStart = elapsedSeconds;
             m_transitionSeconds = MathF.Max(

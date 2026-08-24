@@ -492,11 +492,13 @@ public static partial class WorldDefinitionValidator {
                     continue;
                 }
 
-                if (string.IsNullOrWhiteSpace(value: role.Name)) {
-                    errors.Add(item: $"{rolePath}.name is required.");
-                } else if (!roleNames.Add(item: role.Name)) {
-                    errors.Add(item: $"{rolePath}.name '{role.Name}' is duplicated.");
-                }
+                RequireUniqueName(
+                    value: role.Name,
+                    seen: roleNames,
+                    path: rolePath,
+                    field: "name",
+                    errors: errors
+                );
 
                 if (role.Capabilities.Count == 0) {
                     errors.Add(item: $"{rolePath}.capabilities is empty — a role reaching no capability could not exist without lying about what it is for; omit the role instead.");
@@ -564,11 +566,13 @@ public static partial class WorldDefinitionValidator {
                     var tag = tags[tagIndex];
                     var tagPath = $"{path}.tags[{tagIndex}]";
 
-                    if (string.IsNullOrWhiteSpace(value: tag)) {
-                        errors.Add(item: $"{tagPath} must be non-empty.");
-                    } else if (!seenTags.Add(item: tag)) {
-                        errors.Add(item: $"{tagPath} '{tag}' is duplicated.");
-                    }
+                    RequireUniqueName(
+                        value: tag,
+                        seen: seenTags,
+                        path: tagPath,
+                        field: "",
+                        errors: errors
+                    );
                 }
             }
 

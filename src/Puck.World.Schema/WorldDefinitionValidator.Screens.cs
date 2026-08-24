@@ -111,7 +111,7 @@ public static partial class WorldDefinitionValidator {
     }
     // The per-screen magazine: at least one entry, a selected index in range, and each entry crossing the SAME source
     // gate as a declared source.
-    private static void ValidateMagazine(WorldDefinition definition, WorldScreenMagazine? magazine, string path, HashSet<string> cameras, HashSet<string> destinationNames, HashSet<string> fontNames, bool hasTextCatalog, List<string> errors) {
+    private static void ValidateMagazine(WorldDefinition definition, WorldScreenMagazine? magazine, string path, ValidationScope scope, List<string> errors) {
         if (magazine is not { } value) {
             return;
         }
@@ -137,10 +137,7 @@ public static partial class WorldDefinitionValidator {
                 definition: definition,
                 source: value.Entries[index],
                 path: $"{path}.entries[{index}]",
-                cameras: cameras,
-                destinationNames: destinationNames,
-                fontNames: fontNames,
-                hasTextCatalog: hasTextCatalog,
+                scope: scope,
                 cablePermitted: false,
                 errors: errors
             );
@@ -237,7 +234,7 @@ public static partial class WorldDefinitionValidator {
     // op-ordering rules an evaluator relies on (an anchor op — if any — leads, and a clampPitch op — if any —
     // precedes the orbit op it governs). Blend's cross-program name/cycle check runs once over the whole document's
     // program table (ValidateCameraPrograms), not here — no single program's own validation can see its siblings.
-    private static void ValidateProgram(WorldCameraProgram program, WorldDefinition definition, string path, ISet<string> placementIds, List<string> errors) {
+    private static void ValidateProgram(WorldCameraProgram program, WorldDefinition definition, string path, ISet<string> placementIds, ISet<string> dynamicsNames, List<string> errors) {
         if (program is null) {
             errors.Add(item: $"{path} is required.");
 
@@ -301,22 +298,24 @@ public static partial class WorldDefinitionValidator {
 
                     break;
                 case WorldCameraProgramOp.Offset offset:
-                    if (
-                        !IsFinite(value: offset.Value) ||
-                        !float.IsFinite(f: offset.SpreadPullback)
-                    ) {
-                        errors.Add(item: $"{opPath} needs a finite value and spreadPullback.");
+                    if (!IsFinite(value: offset.Value)) {
+                        errors.Add(item: $"{opPath}.value must contain finite coordinates.");
                     }
+
+                    RequireFinite(
+                        value: offset.SpreadPullback,
+                        name: $"{opPath}.spreadPullback",
+                        errors: errors
+                    );
 
                     break;
                 case WorldCameraProgramOp.LookAt lookAt:
                     if (lookAt.Subject is null) {
-                        if (
-                            !float.IsFinite(f: lookAt.FocusDistance) ||
-                            (lookAt.FocusDistance < 0f)
-                        ) {
-                            errors.Add(item: $"{opPath}.focusDistance must be finite and non-negative.");
-                        }
+                        RequireNonNegative(
+                            value: lookAt.FocusDistance,
+                            name: $"{opPath}.focusDistance",
+                            errors: errors
+                        );
                     } else {
                         if (
                             (lookAt.TargetOffset is { } lookAtOffset) &&
@@ -341,12 +340,11 @@ public static partial class WorldDefinitionValidator {
 
                     seenOrbit = true;
 
-                    if (
-                        !float.IsFinite(f: orbit.Distance) ||
-                        (orbit.Distance <= 0f)
-                    ) {
-                        errors.Add(item: $"{opPath}.distance must be positive and finite.");
-                    }
+                    RequirePositive(
+                        value: orbit.Distance,
+                        name: $"{opPath}.distance",
+                        errors: errors
+                    );
 
                     RequireBindableScalar(
                         definition: definition,
@@ -373,14 +371,14 @@ public static partial class WorldDefinitionValidator {
 
                     seenDynamics = true;
 
-                    if (string.IsNullOrWhiteSpace(value: dynamicsOp.Row)) {
-                        errors.Add(item: $"{opPath}.row is required.");
-                    } else if (WorldDefinitionRows.FindDynamics(
-                        dynamics: definition.Dynamics,
-                        name: dynamicsOp.Row
-                    ) is null) {
-                        errors.Add(item: $"{opPath}.row '{dynamicsOp.Row}' names no dynamics row.");
-                    }
+                    RequireDeclared(
+                        value: dynamicsOp.Row,
+                        declaredSet: dynamicsNames,
+                        path: opPath,
+                        field: "row",
+                        rowNoun: "dynamics",
+                        errors: errors
+                    );
 
                     break;
                 case WorldCameraProgramOp.ClampPitch clampPitch:
@@ -392,12 +390,23 @@ public static partial class WorldDefinitionValidator {
 
                     seenClampPitch = true;
 
+                    RequireFinite(
+                        value: clampPitch.MinPitch,
+                        name: $"{opPath}.minPitch",
+                        errors: errors
+                    );
+                    RequireFinite(
+                        value: clampPitch.MaxPitch,
+                        name: $"{opPath}.maxPitch",
+                        errors: errors
+                    );
+
                     if (
-                        !float.IsFinite(f: clampPitch.MinPitch) ||
-                        !float.IsFinite(f: clampPitch.MaxPitch) ||
+                        float.IsFinite(f: clampPitch.MinPitch) &&
+                        float.IsFinite(f: clampPitch.MaxPitch) &&
                         (clampPitch.MinPitch >= clampPitch.MaxPitch)
                     ) {
-                        errors.Add(item: $"{opPath} needs a finite minPitch strictly less than maxPitch.");
+                        errors.Add(item: $"{opPath}.minPitch must be strictly less than maxPitch.");
                     }
 
                     break;
@@ -520,12 +529,11 @@ public static partial class WorldDefinitionValidator {
     // permanent no-op. cycleChannel stays unconsumed (no reader exists yet) and keeps its lighter kebab-case-only
     // bar.
     private static void ValidateRoute(WorldScreenRoute route, string path, ISet<string> channelNames, ISet<string> padKits, List<string> errors) {
-        if (
-            !float.IsFinite(f: route.EngageRadius) ||
-            (route.EngageRadius < 0f)
-        ) {
-            errors.Add(item: $"{path}.engageRadius {route.EngageRadius} must be finite and non-negative.");
-        }
+        RequireNonNegative(
+            value: route.EngageRadius,
+            name: $"{path}.engageRadius",
+            errors: errors
+        );
 
         ValidateChannel(
             channel: route.EngageChannel,
@@ -670,7 +678,12 @@ public static partial class WorldDefinitionValidator {
     // The one screen-source gate, shared by a declared source and every magazine entry — a pure extraction that closes a
     // real duplication risk (a magazine entry could otherwise name an undeclared camera). Returns whether the source is a
     // live CONSOLE (the caller counts these against the one-live ceiling).
-    private static bool ValidateScreenSource(WorldDefinition definition, WorldScreenSource source, string path, HashSet<string> cameras, HashSet<string> destinationNames, HashSet<string> fontNames, bool hasTextCatalog, bool cablePermitted, List<string> errors) {
+    private static bool ValidateScreenSource(WorldDefinition definition, WorldScreenSource source, string path, ValidationScope scope, bool cablePermitted, List<string> errors) {
+        var cameras = scope.Cameras;
+        var destinationNames = scope.DestinationNames;
+        var fontNames = scope.FontNames;
+        var hasTextCatalog = scope.HasTextCatalog;
+
         switch (source) {
             case null:
                 errors.Add(item: $"{path} is required.");
@@ -783,23 +796,34 @@ public static partial class WorldDefinitionValidator {
         if (!Enum.IsDefined(value: control.YawReference)) {
             errors.Add(item: $"{path}.yawReference is unknown.");
         }
+        RequireRange(
+            value: control.MinPitch,
+            min: (-MathF.PI / 2f),
+            max: (MathF.PI / 2f),
+            name: $"{path}.minPitch",
+            errors: errors
+        );
+        RequireRange(
+            value: control.MaxPitch,
+            min: (-MathF.PI / 2f),
+            max: (MathF.PI / 2f),
+            name: $"{path}.maxPitch",
+            errors: errors
+        );
+
         if (
-            !float.IsFinite(f: control.MinPitch) ||
-            !float.IsFinite(f: control.MaxPitch) ||
-            (control.MinPitch < (-MathF.PI / 2f)) ||
-            (control.MaxPitch > (MathF.PI / 2f))
+            float.IsFinite(f: control.MinPitch) &&
+            float.IsFinite(f: control.MaxPitch) &&
+            (control.MinPitch >= control.MaxPitch)
         ) {
-            errors.Add(item: $"{path}.minPitch and {path}.maxPitch must be finite and within [-pi/2, pi/2].");
-        } else if (control.MinPitch >= control.MaxPitch) {
             errors.Add(item: $"{path}.minPitch must be less than {path}.maxPitch.");
         }
         if (control.Follow is { } follow) {
-            if (
-                !float.IsFinite(f: follow.Rate) ||
-                (follow.Rate <= 0f)
-            ) {
-                errors.Add(item: $"{path}.follow.rate must be finite and positive.");
-            }
+            RequirePositive(
+                value: follow.Rate,
+                name: $"{path}.follow.rate",
+                errors: errors
+            );
             if (control.YawReference != WorldSeatYawReference.World) {
                 errors.Add(item: $"{path}.follow needs {path}.yawReference 'World' — a body-relative yaw already rides the body.");
             }
@@ -809,35 +833,31 @@ public static partial class WorldDefinitionValidator {
     // finite and non-negative. The member itself is required — an absent row is refused by the caller before this
     // runs, never silently defaulted.
     private static void ValidateSeatLook(WorldSeatLook seatLook, string path, List<string> errors) {
-        if (
-            !float.IsFinite(f: seatLook.YawSensitivity) ||
-            (seatLook.YawSensitivity < 0f)
-        ) {
-            errors.Add(item: $"{path}.yawSensitivity must be finite and non-negative.");
-        }
+        RequireNonNegative(
+            value: seatLook.YawSensitivity,
+            name: $"{path}.yawSensitivity",
+            errors: errors
+        );
 
-        if (
-            !float.IsFinite(f: seatLook.PitchSensitivity) ||
-            (seatLook.PitchSensitivity < 0f)
-        ) {
-            errors.Add(item: $"{path}.pitchSensitivity must be finite and non-negative.");
-        }
+        RequireNonNegative(
+            value: seatLook.PitchSensitivity,
+            name: $"{path}.pitchSensitivity",
+            errors: errors
+        );
 
-        if (
-            !float.IsFinite(f: seatLook.StickLookRate) ||
-            (seatLook.StickLookRate < 0f)
-        ) {
-            errors.Add(item: $"{path}.stickLookRate must be finite and non-negative.");
-        }
+        RequireNonNegative(
+            value: seatLook.StickLookRate,
+            name: $"{path}.stickLookRate",
+            errors: errors
+        );
 
         var gyro = seatLook.Gyro;
 
-        if (
-            !float.IsFinite(f: gyro.Scale) ||
-            (gyro.Scale < 0f)
-        ) {
-            errors.Add(item: $"{path}.gyro.scale must be finite and non-negative.");
-        }
+        RequireNonNegative(
+            value: gyro.Scale,
+            name: $"{path}.gyro.scale",
+            errors: errors
+        );
         if (
             !IsFinite(value: gyro.DeadZone) ||
             (gyro.DeadZone.X < 0f) ||
@@ -995,7 +1015,7 @@ public static partial class WorldDefinitionValidator {
     // The window composition (PRESENTATION-ONLY): the seat rig valid, layout names unique, slot rects inside
     // [0,1] and non-degenerate, and every named-camera slot resolving against the authored camera set. ABSENT is a
     // seatless document's right — the engine ships no rig, so a census implying a body must author one.
-    private static void ValidateViews(WorldViewDefaults? views, WorldDefinition definition, int capacity, HashSet<string> cameras, ISet<string> placementIds, List<string> errors) {
+    private static void ValidateViews(WorldViewDefaults? views, WorldDefinition definition, int capacity, HashSet<string> cameras, ISet<string> placementIds, ISet<string> dynamicsNames, List<string> errors) {
         if (views is null) {
             if (capacity > 0) {
                 errors.Add(item: $"views is required when population.capacity ({capacity}) is nonzero; the engine declares no seat rig (author one, or name a basis document that does).");
@@ -1006,6 +1026,7 @@ public static partial class WorldDefinitionValidator {
 
         ValidateProgram(
             definition: definition,
+            dynamicsNames: dynamicsNames,
             errors: errors,
             path: "views.seatRig",
             placementIds: placementIds,
@@ -1023,6 +1044,7 @@ public static partial class WorldDefinitionValidator {
         if (views.CameraRig is { } cameraRig) {
             ValidateProgram(
                 definition: definition,
+                dynamicsNames: dynamicsNames,
                 errors: errors,
                 path: "views.cameraRig",
                 placementIds: placementIds,
@@ -1050,30 +1072,32 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            if (string.IsNullOrWhiteSpace(value: layout.Name)) {
-                errors.Add(item: $"{path}.name is required.");
-            } else if (!names.Add(item: layout.Name)) {
-                errors.Add(item: $"{path}.name '{layout.Name}' is duplicated.");
-            }
+            RequireUniqueName(
+                value: layout.Name,
+                seen: names,
+                path: path,
+                field: "name",
+                errors: errors
+            );
 
             if (layout.SeatCount < 0) {
                 errors.Add(item: $"{path}.seatCount {layout.SeatCount} must be non-negative.");
             }
 
-            if (
-                !float.IsFinite(f: layout.TransitionSeconds) ||
-                (layout.TransitionSeconds < 0f)
-            ) {
-                errors.Add(item: $"{path}.transitionSeconds must be finite and non-negative.");
-            }
+            RequireNonNegative(
+                value: layout.TransitionSeconds,
+                name: $"{path}.transitionSeconds",
+                errors: errors
+            );
 
-            if (
-                !float.IsFinite(f: layout.TransitionRenderScale) ||
-                (layout.TransitionRenderScale <= 0f) ||
-                (layout.TransitionRenderScale > 1f)
-            ) {
-                errors.Add(item: $"{path}.transitionRenderScale must be finite and within (0, 1].");
-            }
+            RequireRange(
+                value: layout.TransitionRenderScale,
+                min: 0f,
+                max: 1f,
+                name: $"{path}.transitionRenderScale",
+                errors: errors,
+                minExclusive: true
+            );
 
             var slots = layout.Slots;
 

@@ -24,31 +24,47 @@ namespace Puck.World;
 /// resolves wholesale per <c>(slot, source)</c> and so cannot override one entry inside a shared page.
 /// </summary>
 public static class WorldBindingComposer {
-    // Context rows merge on (family, state): a later layer's row for the same key REPLACES the earlier one's group IN
-    // PLACE; rows at new keys append. The merged order is therefore the base layer's order with appended keys after —
-    // across-family precedence is authored primarily by the layer that ships the vocabulary, deliberately.
-    private static void MergeContexts(List<BindingContextDefinition> into, Dictionary<string, int> index, BindingProfileDocument layer) {
-        foreach (var row in (layer.Contexts ?? [])) {
-            if (
-                string.IsNullOrEmpty(value: row.Family) ||
-                string.IsNullOrEmpty(value: row.State)
-            ) {
+    // The shared key→position merge every layered row set (context/row/wheel) opens: a null/empty key skips the
+    // item; a key already indexed either MERGEs into the stored value in place (when the caller supplies one — a
+    // deep merge, as chord rows do) or REPLACES it wholesale; a new key appends, storing the ADOPTed value (identity
+    // for a row set stored as its own wire type; a conversion for one stored as a mutable accumulator, as chord rows
+    // are).
+    private static void MergeByKey<TSource, TStored>(List<TStored> into, Dictionary<string, int> index, IEnumerable<TSource> items, Func<TSource, string?> key, Func<TSource, TStored> adopt, Action<TStored, TSource>? merge = null) {
+        foreach (var item in items) {
+            var itemKey = key(item);
+
+            if (string.IsNullOrEmpty(value: itemKey)) {
                 continue;
             }
 
-            var key = $"{row.Family}\0{row.State}";
-
             if (index.TryGetValue(
-                key: key,
+                key: itemKey,
                 value: out var existing
             )) {
-                into[existing] = row;
+                if (merge is not null) {
+                    merge(into[existing], item);
+                } else {
+                    into[existing] = adopt(item);
+                }
             } else {
-                index[key] = into.Count;
-                into.Add(item: row);
+                index[itemKey] = into.Count;
+                into.Add(item: adopt(item));
             }
         }
     }
+    // Context rows merge on (family, state): a later layer's row for the same key REPLACES the earlier one's group IN
+    // PLACE; rows at new keys append. The merged order is therefore the base layer's order with appended keys after —
+    // across-family precedence is authored primarily by the layer that ships the vocabulary, deliberately.
+    private static void MergeContexts(List<BindingContextDefinition> into, Dictionary<string, int> index, BindingProfileDocument layer) => MergeByKey(
+        adopt: static row => row,
+        index: index,
+        into: into,
+        items: (layer.Contexts ?? []),
+        key: static row => (((row is null) || string.IsNullOrEmpty(value: row.Family) || string.IsNullOrEmpty(value: row.State))
+            ? null
+            : $"{row.Family}\0{row.State}"
+        )
+    );
     private static void MergeModifiers(List<BindingModifierDefinition> into, Dictionary<string, int> index, BindingProfileDocument layer, List<MutableRow> rows, Dictionary<string, int> rowIndex) {
         foreach (var modifier in (layer.Modifiers ?? [])) {
             if (string.IsNullOrEmpty(value: modifier.Id)) {
@@ -109,40 +125,23 @@ public static class WorldBindingComposer {
             into.Add(item: modifier);
         }
     }
-    private static void MergeRows(List<MutableRow> into, Dictionary<string, int> index, BindingProfileDocument layer) {
-        foreach (var row in (layer.Chords ?? [])) {
-            var key = RowKey(row: row);
-
-            if (index.TryGetValue(
-                key: key,
-                value: out var existing
-            )) {
-                into[existing].Merge(row: row);
-            } else {
-                index[key] = into.Count;
-                into.Add(item: MutableRow.From(row: row));
-            }
-        }
-    }
+    private static void MergeRows(List<MutableRow> into, Dictionary<string, int> index, BindingProfileDocument layer) => MergeByKey(
+        adopt: static row => MutableRow.From(row: row),
+        index: index,
+        into: into,
+        items: (layer.Chords ?? []),
+        key: static row => RowKey(row: row),
+        merge: static (existing, row) => existing.Merge(row: row)
+    );
     // Wheels merge on their ID: a later layer's wheel for the same identity replaces it wholesale; a distinct id
     // appends even inside the same group, which is how one group authors several radial presentations.
-    private static void MergeWheels(List<BindingWheelDefinition> into, Dictionary<string, int> index, BindingProfileDocument layer) {
-        foreach (var wheel in (layer.Wheels ?? [])) {
-            if (string.IsNullOrEmpty(value: wheel?.Id)) {
-                continue;
-            }
-
-            if (index.TryGetValue(
-                key: wheel.Id,
-                value: out var existing
-            )) {
-                into[existing] = wheel;
-            } else {
-                index[wheel.Id] = into.Count;
-                into.Add(item: wheel);
-            }
-        }
-    }
+    private static void MergeWheels(List<BindingWheelDefinition> into, Dictionary<string, int> index, BindingProfileDocument layer) => MergeByKey(
+        adopt: static wheel => wheel,
+        index: index,
+        into: into,
+        items: (layer.Wheels ?? []),
+        key: static wheel => wheel?.Id
+    );
     // The row merge key: group, the held set (sorted — order is not part of its identity), and the ordered chord (a
     // NUL/pipe no group or member id can carry), so ["lt","rt"] and ["rt","lt"] are distinct rows and a same-identity
     // row across layers merges.

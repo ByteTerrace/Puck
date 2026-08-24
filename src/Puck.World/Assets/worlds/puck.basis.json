@@ -1271,12 +1271,111 @@
       "GradientDerivedUp"
     ]
   },
-  "dynamics": [
-    { "name": "chase", "f": 0.9549, "zeta": 1, "r": 1 }
-  ],
   "creations": [
     {
       "document": {
+        "frames": [
+          {
+            "name": "blink",
+            "transforms": [
+              {
+                "id": 0,
+                "position": [
+                  0,
+                  0.5,
+                  0
+                ],
+                "rotation": [
+                  0,
+                  0,
+                  0,
+                  1
+                ],
+                "scale": [
+                  0.35,
+                  1.75,
+                  0.35
+                ]
+              },
+              {
+                "id": 1,
+                "position": [
+                  0.2,
+                  1.1,
+                  0.0
+                ],
+                "rotation": [
+                  0,
+                  0,
+                  0,
+                  1
+                ],
+                "scale": [
+                  0.14,
+                  0.14,
+                  0.14
+                ]
+              },
+              {
+                "id": 2,
+                "position": [
+                  0.2,
+                  1.1,
+                  0.0
+                ],
+                "rotation": [
+                  0,
+                  0,
+                  0,
+                  1
+                ],
+                "scale": [
+                  0.055,
+                  0.055,
+                  0.055
+                ]
+              },
+              {
+                "id": 3,
+                "position": [
+                  -0.2,
+                  1.1,
+                  0.0
+                ],
+                "rotation": [
+                  0,
+                  0,
+                  0,
+                  1
+                ],
+                "scale": [
+                  0.14,
+                  0.14,
+                  0.14
+                ]
+              },
+              {
+                "id": 4,
+                "position": [
+                  -0.2,
+                  1.1,
+                  0.0
+                ],
+                "rotation": [
+                  0,
+                  0,
+                  0,
+                  1
+                ],
+                "scale": [
+                  0.055,
+                  0.055,
+                  0.055
+                ]
+              }
+            ]
+          }
+        ],
         "name": "pip",
         "palette": [
           {
@@ -1441,111 +1540,17 @@
             "shapeId": 0,
             "text": "K"
           }
-        ],
-        "frames": [
-          {
-            "name": "blink",
-            "transforms": [
-              {
-                "id": 0,
-                "position": [
-                  0,
-                  0.5,
-                  0
-                ],
-                "rotation": [
-                  0,
-                  0,
-                  0,
-                  1
-                ],
-                "scale": [
-                  0.35,
-                  1.75,
-                  0.35
-                ]
-              },
-              {
-                "id": 1,
-                "position": [
-                  0.2,
-                  1.1,
-                  0.0
-                ],
-                "rotation": [
-                  0,
-                  0,
-                  0,
-                  1
-                ],
-                "scale": [
-                  0.14,
-                  0.14,
-                  0.14
-                ]
-              },
-              {
-                "id": 2,
-                "position": [
-                  0.2,
-                  1.1,
-                  0.0
-                ],
-                "rotation": [
-                  0,
-                  0,
-                  0,
-                  1
-                ],
-                "scale": [
-                  0.055,
-                  0.055,
-                  0.055
-                ]
-              },
-              {
-                "id": 3,
-                "position": [
-                  -0.2,
-                  1.1,
-                  0.0
-                ],
-                "rotation": [
-                  0,
-                  0,
-                  0,
-                  1
-                ],
-                "scale": [
-                  0.14,
-                  0.14,
-                  0.14
-                ]
-              },
-              {
-                "id": 4,
-                "position": [
-                  -0.2,
-                  1.1,
-                  0.0
-                ],
-                "rotation": [
-                  0,
-                  0,
-                  0,
-                  1
-                ],
-                "scale": [
-                  0.055,
-                  0.055,
-                  0.055
-                ]
-              }
-            ]
-          }
         ]
       },
       "id": "pip"
+    }
+  ],
+  "dynamics": [
+    {
+      "f": 0.9549,
+      "name": "chase",
+      "r": 1,
+      "zeta": 1
     }
   ],
   "grants": [
@@ -2296,17 +2301,17 @@
   "looks": [
     {
       "motion": {
-        "gaitAmplitude": 0,
-        "replayFrames": false,
-        "secondsPerFrame": 0,
         "cues": [
           {
             "frame": "blink",
             "holdSeconds": 0.12,
-            "minSeconds": 2.0,
-            "maxSeconds": 6.0
+            "maxSeconds": 6.0,
+            "minSeconds": 2.0
           }
-        ]
+        ],
+        "gaitAmplitude": 0,
+        "replayFrames": false,
+        "secondsPerFrame": 0
       },
       "name": "pip",
       "scale": 1,

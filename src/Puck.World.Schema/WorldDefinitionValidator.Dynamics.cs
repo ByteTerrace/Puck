@@ -16,42 +16,56 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            if (string.IsNullOrWhiteSpace(value: row.Name)) {
-                errors.Add(item: $"{path} requires a name.");
-            } else if (!names.Add(item: row.Name)) {
-                errors.Add(item: $"{path} duplicates the name '{row.Name}'.");
-            }
+            RequireUniqueName(
+                value: row.Name,
+                seen: names,
+                path: path,
+                field: "",
+                errors: errors
+            );
 
             var admitted = true;
 
-            if (
-                !float.IsFinite(f: row.Frequency) ||
-                (row.Frequency <= 0f)
-            ) {
-                errors.Add(item: $"{path}.f must be finite and positive.");
-                admitted = false;
-            } else if (row.Frequency > WorldDynamics.MaxFrequencyHz) {
-                errors.Add(item: $"{path}.f {row.Frequency} exceeds the {WorldDynamics.MaxFrequencyHz} Hz ceiling.");
+            var frequencyValid = (float.IsFinite(f: row.Frequency) && (row.Frequency > 0f) && (row.Frequency <= WorldDynamics.MaxFrequencyHz));
+
+            RequireRange(
+                value: row.Frequency,
+                min: 0f,
+                max: WorldDynamics.MaxFrequencyHz,
+                name: $"{path}.f",
+                errors: errors,
+                minExclusive: true
+            );
+
+            if (!frequencyValid) {
                 admitted = false;
             }
 
-            if (
-                !float.IsFinite(f: row.Damping) ||
-                (row.Damping < 0f)
-            ) {
-                errors.Add(item: $"{path}.zeta must be finite and non-negative.");
-                admitted = false;
-            } else if (row.Damping > WorldDynamics.MaxDamping) {
-                errors.Add(item: $"{path}.zeta {row.Damping} exceeds the {WorldDynamics.MaxDamping} ceiling.");
+            var dampingValid = (float.IsFinite(f: row.Damping) && (row.Damping >= 0f) && (row.Damping <= WorldDynamics.MaxDamping));
+
+            RequireRange(
+                value: row.Damping,
+                min: 0f,
+                max: WorldDynamics.MaxDamping,
+                name: $"{path}.zeta",
+                errors: errors
+            );
+
+            if (!dampingValid) {
                 admitted = false;
             }
 
-            if (
-                !float.IsFinite(f: row.Response) ||
-                (row.Response < WorldDynamics.MinResponse) ||
-                (row.Response > WorldDynamics.MaxResponse)
-            ) {
-                errors.Add(item: $"{path}.r {row.Response} is outside {WorldDynamics.MinResponse}..{WorldDynamics.MaxResponse}.");
+            var responseValid = (float.IsFinite(f: row.Response) && (row.Response >= WorldDynamics.MinResponse) && (row.Response <= WorldDynamics.MaxResponse));
+
+            RequireRange(
+                value: row.Response,
+                min: WorldDynamics.MinResponse,
+                max: WorldDynamics.MaxResponse,
+                name: $"{path}.r",
+                errors: errors
+            );
+
+            if (!responseValid) {
                 admitted = false;
             }
 

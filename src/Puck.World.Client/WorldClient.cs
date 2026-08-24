@@ -2,6 +2,7 @@ using System.Numerics;
 using Puck.Hosting;
 using Puck.Maths;
 using Puck.SdfVm;
+using Puck.SdfVm.Views;
 using Puck.World.Protocol;
 using Puck.Physics.Motion;
 
@@ -858,20 +859,10 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
     /// stamped part and the body it hangs off can never disagree about which row they are wearing.</summary>
     /// <param name="index">The 0-based entity index.</param>
     /// <returns>The entity's look row.</returns>
-    public WorldLook Look(int index) {
-        var rows = Definition.Looks;
-
-        if (rows.Count == 0) {
-            return WorldLook.Implicit;
-        }
-
-        var lookIndex = LookIndex(index: index);
-
-        return ((lookIndex < rows.Count)
-            ? rows[lookIndex]
-            : WorldLook.Implicit
-        );
-    }
+    public WorldLook Look(int index) => WorldDefinitionRows.ResolveLook(
+        rows: Definition.Looks,
+        index: LookIndex(index: index)
+    );
     /// <summary>The entity's resolved look row index from the latest snapshot — the frame source's appearance selector
     /// (presentation-only).</summary>
     /// <param name="index">The 0-based entity index.</param>
@@ -1169,7 +1160,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
                 // Smoothstep ease: weight is 1 at receipt (craft sits at its old pose) and eases to 0 as the window drains
                 // (craft arrives at authority), with a soft start and a soft settle. fraction = remaining/window runs 1→0.
                 var fraction = (m_remaining / m_window);
-                var weight = ((fraction * fraction) * (3f - (2f * fraction)));
+                var weight = Easing.Smoothstep(t: fraction);
 
                 position += (m_position * weight);
                 // At weight 1 the render attitude is E · interpolated = the old attitude; at weight 0 it is the

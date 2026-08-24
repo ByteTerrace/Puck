@@ -137,15 +137,15 @@ public sealed partial class WorldAddonRuntime {
                     if (admission.Rule == WorldMutationAdmissionRule.BudgetExhausted) {
                         dispatchExhaustedThisTick = true;
 
-                        if (!addon.MutateDispatchBudgetExhaustedReported) {
-                            addon.MutateDispatchBudgetExhaustedReported = true;
+                        if (!addon.Mutate.ExhaustedReported) {
+                            addon.Mutate.ExhaustedReported = true;
                             Console.Error.WriteLine(value: $"[world.addon: {addon.Instance.Name} {admission.Describe()} — ordinal {query.Ordinal} refused QuotaExhausted]");
                         }
                     } else if (
                         (admission.Rule == WorldMutationAdmissionRule.MissingBudget) &&
-                        !addon.MutateMissingBudgetReported
+                        !addon.Mutate.MissingBudgetReported
                     ) {
-                        addon.MutateMissingBudgetReported = true;
+                        addon.Mutate.MissingBudgetReported = true;
                         Console.Error.WriteLine(value: $"[world.addon: {addon.Instance.Name} {admission.Describe()}; ordinal {query.Ordinal} refused NoHold rather than dispatched unmetered]");
                     }
 
@@ -272,7 +272,7 @@ public sealed partial class WorldAddonRuntime {
             // Edge-triggered per exhaustion episode, the same shape every other dispatch-budget latch in this file
             // uses — reset the moment a tick exhausts neither ceiling, so a LATER episode can report again.
             if (!dispatchExhaustedThisTick) {
-                addon.MutateDispatchBudgetExhaustedReported = false;
+                addon.Mutate.ExhaustedReported = false;
             }
 
             if (!byteExhaustedThisTick) {

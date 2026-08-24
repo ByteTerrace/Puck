@@ -251,34 +251,57 @@ public sealed class WorldEventFeed {
                     continue;
                 }
 
-                var overlapping = Overlaps(
-                    a: bodyA,
-                    b: bodyB
-                );
                 var key = (a, b);
-                var was = m_overlapping.Contains(item: key);
+                var latch = m_overlapping.Contains(item: key);
 
-                if (overlapping == was) {
+                if (!EmitTransition(
+                    latch: ref latch,
+                    now: Overlaps(
+                        a: bodyA,
+                        b: bodyB
+                    ),
+                    onClear: new WorldEventEdge(
+                        Family: WorldEventFamily.CollisionEnd,
+                        GateA: GrantSubject.Body(index: a),
+                        GateB: GrantSubject.Body(index: b),
+                        A: a,
+                        B: b
+                    ),
+                    onSet: new WorldEventEdge(
+                        Family: WorldEventFamily.CollisionBegin,
+                        GateA: GrantSubject.Body(index: a),
+                        GateB: GrantSubject.Body(index: b),
+                        A: a,
+                        B: b
+                    )
+                )) {
                     continue;
                 }
 
-                if (overlapping) {
+                if (latch) {
                     _ = m_overlapping.Add(item: key);
                 } else {
                     _ = m_overlapping.Remove(item: key);
                 }
-
-                m_edges.Add(item: new WorldEventEdge(
-                    Family: (overlapping
-                    ? WorldEventFamily.CollisionBegin
-                    : WorldEventFamily.CollisionEnd),
-                    GateA: GrantSubject.Body(index: a),
-                    GateB: GrantSubject.Body(index: b),
-                    A: a,
-                    B: b
-                ));
             }
         }
+    }
+    // The shared latched-transition body every per-tick edge-detection pass (collision overlap, region containment,
+    // seat occupancy) follows: skip when `now` agrees with `latch`, else store `now` into `latch` and emit
+    // `onSet`/`onClear`. `latch` names a bool[] slot at every call site except the collision pass's HashSet-backed
+    // membership, which reads its latch into a local first and writes the set back only on a reported change.
+    private bool EmitTransition(ref bool latch, bool now, WorldEventEdge onSet, WorldEventEdge onClear) {
+        if (now == latch) {
+            return false;
+        }
+
+        latch = now;
+        m_edges.Add(item: (now
+            ? onSet
+            : onClear
+        ));
+
+        return true;
     }
 
     // One authored adjacency row's liveness. Reference type deliberately: the collection pass mutates in place, and a
@@ -403,63 +426,54 @@ public sealed class WorldEventFeed {
             var radius = FixedQ4816.FromDouble(value: region.Radius);
 
             for (var body = 0; (body < population.Capacity); body++) {
-                if (
-                    !hasCenter ||
-                    !population.IsActive(index: body) ||
-                    (population.EntryBody(index: body) is not { } entry)
-                ) {
-                    if (occupancy[body]) {
-                        occupancy[body] = false;
-                        m_edges.Add(item: new WorldEventEdge(
-                            Family: WorldEventFamily.RegionExit,
-                            GateA: GrantSubject.Region(name: placement.Id),
-                            GateB: null,
-                            A: body,
-                            B: thisOrdinal
-                        ));
-                    }
+                var inside = (
+                    hasCenter &&
+                    population.IsActive(index: body) &&
+                    (population.EntryBody(index: body) is { } entry) &&
+                    ((entry.FixedPosition - center).Length <= radius)
+                );
 
-                    continue;
-                }
-
-                var delta = (entry.FixedPosition - center);
-                var inside = (delta.Length <= radius);
-
-                if (inside == occupancy[body]) {
-                    continue;
-                }
-
-                occupancy[body] = inside;
-                m_edges.Add(item: new WorldEventEdge(
-                    Family: (inside
-                    ? WorldEventFamily.RegionEnter
-                    : WorldEventFamily.RegionExit),
-                    GateA: GrantSubject.Region(name: placement.Id),
-                    GateB: null,
-                    A: body,
-                    B: thisOrdinal
-                ));
+                _ = EmitTransition(
+                    latch: ref occupancy[body],
+                    now: inside,
+                    onClear: new WorldEventEdge(
+                        Family: WorldEventFamily.RegionExit,
+                        GateA: GrantSubject.Region(name: placement.Id),
+                        GateB: null,
+                        A: body,
+                        B: thisOrdinal
+                    ),
+                    onSet: new WorldEventEdge(
+                        Family: WorldEventFamily.RegionEnter,
+                        GateA: GrantSubject.Region(name: placement.Id),
+                        GateB: null,
+                        A: body,
+                        B: thisOrdinal
+                    )
+                );
             }
         }
     }
     private void CollectSeats(WorldPopulation population) {
         for (var seat = 0; (seat < WorldPopulationLimits.LocalSeatCount); seat++) {
-            var occupied = population.IsHumanOccupied(bodyIndex: seat);
-
-            if (occupied == m_seatOccupied[seat]) {
-                continue;
-            }
-
-            m_seatOccupied[seat] = occupied;
-            m_edges.Add(item: new WorldEventEdge(
-                Family: (occupied
-                ? WorldEventFamily.SeatJoin
-                : WorldEventFamily.SeatLeave),
-                GateA: GrantSubject.Seat(index: seat),
-                GateB: null,
-                A: seat,
-                B: 0L
-            ));
+            _ = EmitTransition(
+                latch: ref m_seatOccupied[seat],
+                now: population.IsHumanOccupied(bodyIndex: seat),
+                onClear: new WorldEventEdge(
+                    Family: WorldEventFamily.SeatLeave,
+                    GateA: GrantSubject.Seat(index: seat),
+                    GateB: null,
+                    A: seat,
+                    B: 0L
+                ),
+                onSet: new WorldEventEdge(
+                    Family: WorldEventFamily.SeatJoin,
+                    GateA: GrantSubject.Seat(index: seat),
+                    GateB: null,
+                    A: seat,
+                    B: 0L
+                )
+            );
         }
     }
     private static bool Overlaps(WorldBody a, WorldBody b) {

@@ -11,18 +11,6 @@ namespace Puck.World.Server;
 /// <param name="Ok">Whether the operation landed.</param>
 /// <param name="Detail">What happened — the receipt, or why it was refused.</param>
 public readonly record struct WorldSyncOutcome(string Id, bool Ok, string Detail);
-/// <summary>What the most recent push actually did — the honest three-valued answer <c>storage.status</c> echoes,
-/// distinguishing "no write has been attempted or every one landed" from the two ways a write fails, because a status
-/// line that only tracked the precondition bit read <c>ok</c> after a run in which every push was refused.</summary>
-public enum WorldSyncWriteOutcome {
-    /// <summary>No push has been attempted this session, or every world in the last one landed.</summary>
-    Ok,
-    /// <summary>At least one world hit an if-match precondition — the cloud copy moved since last sync.</summary>
-    PreconditionFailed,
-    /// <summary>At least one world failed for another reason — a transport error, a timeout, an unsynced cloud copy,
-    /// or a key its id cannot address.</summary>
-    Failed,
-}
 /// <summary>
 /// The owned-world cloud sync engine: pushes and pulls whole world documents against the per-user container, one blob
 /// per world under <c>puck/worlds/</c>, carrying the storage version token so a stale writer is refused rather than
@@ -98,7 +86,7 @@ public sealed class WorldOwnedWorldSync {
 
     private string m_lastClaimDetail = "no counterpart claim posted this session";
 
-    private WorldSyncWriteOutcome m_lastWrite;
+    private WorldAuthorityStoreOutcomeKind m_lastWrite;
 
     private readonly Dictionary<string, string> m_basisTokens = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<string, string> m_tokens = new(comparer: StringComparer.Ordinal);
@@ -135,9 +123,9 @@ public sealed class WorldOwnedWorldSync {
     /// <summary>Gets the catalog revision at the last fully successful whole-catalog push or pull THIS SESSION; 0 before
     /// one happens, so a fresh boot reads as unsynced (the safe side).</summary>
     public long LastSyncedRevision => m_lastSyncedRevision;
-    /// <summary>Gets what the most recent push actually did — <see cref="WorldSyncWriteOutcome.Ok"/> before any push and
+    /// <summary>Gets what the most recent push actually did — <see cref="WorldAuthorityStoreOutcomeKind.Ok"/> before any push and
     /// after one where every world landed, else the way it failed.</summary>
-    public WorldSyncWriteOutcome LastWrite => m_lastWrite;
+    public WorldAuthorityStoreOutcomeKind LastWrite => m_lastWrite;
     /// <summary>Gets how many owned worlds carry a tracked cloud token.</summary>
     public int TrackedCount => m_tokens.Count;
 
@@ -520,8 +508,8 @@ public sealed class WorldOwnedWorldSync {
     // path that ever refreshes it. Both a CreateOnly loss (untracked) and an if-match loss (tracked-but-stale) are
     // therefore read back and compared byte-for-byte — identical content adopts the current token; only genuine
     // divergence refuses.
-    private WorldSyncOutcome PushBasisLink(string name, byte[] bytes, out WorldSyncWriteOutcome write) {
-        write = WorldSyncWriteOutcome.Failed;
+    private WorldSyncOutcome PushBasisLink(string name, byte[] bytes, out WorldAuthorityStoreOutcomeKind write) {
+        write = WorldAuthorityStoreOutcomeKind.Failed;
 
         var label = $"{name} (basis)";
         var address = BasisAddressFor(
@@ -549,7 +537,7 @@ public sealed class WorldOwnedWorldSync {
             ).AsTask().GetAwaiter().GetResult();
 
             if (result.Succeeded) {
-                write = WorldSyncWriteOutcome.Ok;
+                write = WorldAuthorityStoreOutcomeKind.Ok;
                 m_basisTokens[key: name] = (result.VersionToken ?? string.Empty);
                 return new WorldSyncOutcome(
                     Id: label,
@@ -572,8 +560,8 @@ public sealed class WorldOwnedWorldSync {
             }
 
             write = (result.PreconditionFailed
-                ? WorldSyncWriteOutcome.PreconditionFailed
-                : WorldSyncWriteOutcome.Failed
+                ? WorldAuthorityStoreOutcomeKind.PreconditionFailed
+                : WorldAuthorityStoreOutcomeKind.Failed
             );
             return new WorldSyncOutcome(
                 Id: label,
@@ -627,8 +615,8 @@ public sealed class WorldOwnedWorldSync {
     }
     // The tip push (chain[0]) and each basis link (chain[1..]) share one worst-of ordering; PushOne folds them
     // together so a caller sees ONE write outcome per identity regardless of how many blobs its chain touched.
-    private WorldSyncOutcome PushOne(WorldIdentity identity, HashSet<string> basisPushedThisCall, List<WorldSyncOutcome> basisOutcomes, out WorldSyncWriteOutcome write) {
-        write = WorldSyncWriteOutcome.Failed;
+    private WorldSyncOutcome PushOne(WorldIdentity identity, HashSet<string> basisPushedThisCall, List<WorldSyncOutcome> basisOutcomes, out WorldAuthorityStoreOutcomeKind write) {
+        write = WorldAuthorityStoreOutcomeKind.Failed;
 
         if (
             (identity.Document is not { } document) ||
@@ -692,7 +680,7 @@ public sealed class WorldOwnedWorldSync {
             ).AsTask().GetAwaiter().GetResult();
 
             if (result.Succeeded) {
-                write = WorldSyncWriteOutcome.Ok;
+                write = WorldAuthorityStoreOutcomeKind.Ok;
                 m_tokens[key: identity.Id] = (result.VersionToken ?? string.Empty);
 
                 var claimDetail = PublishCounterpartClaim(
@@ -708,8 +696,8 @@ public sealed class WorldOwnedWorldSync {
                 );
             } else {
                 write = (result.PreconditionFailed
-                    ? WorldSyncWriteOutcome.PreconditionFailed
-                    : WorldSyncWriteOutcome.Failed
+                    ? WorldAuthorityStoreOutcomeKind.PreconditionFailed
+                    : WorldAuthorityStoreOutcomeKind.Failed
                 );
                 tipOutcome = new WorldSyncOutcome(
                     Id: identity.Id,
@@ -754,8 +742,8 @@ public sealed class WorldOwnedWorldSync {
 
         return tipOutcome;
     }
-    private WorldSyncOutcome ReconcileBasisCreateOnlyLoss(ObjectBlobAddress address, byte[] bytes, string label, string name, out WorldSyncWriteOutcome write) {
-        write = WorldSyncWriteOutcome.Failed;
+    private WorldSyncOutcome ReconcileBasisCreateOnlyLoss(ObjectBlobAddress address, byte[] bytes, string label, string name, out WorldAuthorityStoreOutcomeKind write) {
+        write = WorldAuthorityStoreOutcomeKind.Failed;
 
         ObjectBlobContent? existing;
 
@@ -779,7 +767,7 @@ public sealed class WorldOwnedWorldSync {
             (existing is { } found) &&
             found.Content.Span.SequenceEqual(other: bytes)
         ) {
-            write = WorldSyncWriteOutcome.Ok;
+            write = WorldAuthorityStoreOutcomeKind.Ok;
             m_basisTokens[key: name] = (found.VersionToken ?? string.Empty);
             return new WorldSyncOutcome(
                 Id: label,
@@ -1020,7 +1008,7 @@ public sealed class WorldOwnedWorldSync {
         var basisPushedThisCall = new HashSet<string>(comparer: StringComparer.Ordinal);
         // The worst thing that happened to any world (or basis link) in this push, in that order: a plain failure
         // outranks a precondition, because a run carrying both is not one storage.pull will settle.
-        var write = WorldSyncWriteOutcome.Ok;
+        var write = WorldAuthorityStoreOutcomeKind.Ok;
 
         foreach (var identity in identities) {
             outcomes.Add(item: PushOne(

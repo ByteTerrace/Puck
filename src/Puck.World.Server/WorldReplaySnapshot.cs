@@ -259,7 +259,7 @@ public sealed class WorldReplaySnapshot {
     // artifact pins (Puck.Scripting.AddonAbi). A tape-shape change does not re-key the ABI, and an ABI break does
     // not re-key this constant — MountedAddons below records what actually mounted, so an ABI break invalidates an
     // existing tape through receipt mismatch without a byte-offset change here.
-    private const uint Magic = 0x504B_4146u; // "PKAF" — puck replay tape; re-keyed for the addon-lifecycle fold (retired AddonLifecycle entry 5, added Mutation's Outcome field). Retired: 0x504B_4C4B ("PKLK"), 0x504B_4341 ("PKCA").
+    private const uint Magic = 0x504B_5754u; // "PKWT" — puck replay tape; re-keyed for the WorldWireTags PrincipalKind re-derivation (the pinned mapping now matches WorldSubmissionCodec's and can represent PrincipalKind.Group). Retired: 0x504B_4146 ("PKAF"), 0x504B_4C4B ("PKLK"), 0x504B_4341 ("PKCA").
     // A shape-identity token, not a version sequence, pinned at 1 permanently: this build writes and reads exactly
     // one tape shape, so there is no older shape to be newer than. A token that disagrees refuses the file by name
     // (found vs. expected) instead of decoding it as nonsense.
@@ -389,24 +389,30 @@ public sealed class WorldReplaySnapshot {
             throw new InvalidDataException(message: $"unknown .puckreplay mounted-addon lane-slot wire value {wire} — the lane axis is deleted and this slot is now a pinned constant ({Wire.AddonLaneReceiptConstant}), carried only so the tape shape does not move ahead of its own re-key.");
         }
     }
-    private static WorldCommand ReadCommandLeaf(BinaryReader reader) {
+    private static WorldCommand ReadCommandLeaf(BinaryReader reader) => ReadLeaf<WorldCommand>(
+        reader: reader,
+        tryDecode: WorldSubmissionCodec.TryDecodeCommand,
+        what: "command"
+    );
+    // The one shape every fixed leaf codec's TryDecodeX follows: a span of bytes decodes to a T or names a
+    // WorldCodecFailure. `value is null` is reachable only for the reference-typed leaves (WorldCommand,
+    // WorldComposition, WorldMutation, WorldQuery, SessionRequest) — a defensive check against a codec that reports
+    // success with no value, always false for the struct-typed leaves (WorldDesignation, WorldGrant).
+    private delegate bool TryDecodeLeaf<T>(ReadOnlySpan<byte> bytes, out T? value, out WorldCodecFailure failure);
+    private static T ReadLeaf<T>(BinaryReader reader, string what, TryDecodeLeaf<T> tryDecode) {
         var bytes = ReadLeafBytes(
             reader: reader,
-            what: "command leaf"
+            what: $"{what} leaf"
         );
 
         if (
-            !WorldSubmissionCodec.TryDecodeCommand(
-            bytes: bytes,
-            command: out var command,
-            failure: out var failure
-        ) ||
-            (command is null)
+            !tryDecode(bytes, out var value, out var failure) ||
+            (value is null)
         ) {
-            throw new InvalidDataException(message: $"Corrupt .puckreplay command leaf: {failure}");
+            throw new InvalidDataException(message: $"Corrupt .puckreplay {what} leaf: {failure}");
         }
 
-        return command;
+        return value;
     }
     // Every length prefix in a tape is UNTRUSTED — a doctored or truncated file reaches this reader through
     // `replay.verify <name>`, so a count is validated against the bytes actually left in the stream BEFORE it sizes an
@@ -431,79 +437,26 @@ public sealed class WorldReplaySnapshot {
 
         return count;
     }
-    private static WorldDesignation ReadDesignationLeaf(BinaryReader reader) {
-        var bytes = ReadLeafBytes(
-            reader: reader,
-            what: "designation leaf"
-        );
-
-        if (!WorldSubmissionCodec.TryDecodeDesignation(
-            bytes: bytes,
-            designation: out var designation,
-            failure: out var failure
-        )) {
-            throw new InvalidDataException(message: $"Corrupt .puckreplay designation leaf: {failure}");
-        }
-
-        return designation;
-    }
-    private static WorldComposition ReadCompositionLeaf(BinaryReader reader) {
-        var bytes = ReadLeafBytes(
-            reader: reader,
-            what: "composition leaf"
-        );
-
-        if (
-            !WorldSubmissionCodec.TryDecodeComposition(
-            bytes: bytes,
-            composition: out var composition,
-            failure: out var failure
-        ) ||
-            (composition is null)
-        ) {
-            throw new InvalidDataException(message: $"Corrupt .puckreplay composition leaf: {failure}");
-        }
-
-        return composition;
-    }
-    private static WorldMutation ReadMutationLeaf(BinaryReader reader) {
-        var bytes = ReadLeafBytes(
-            reader: reader,
-            what: "mutation leaf"
-        );
-
-        if (
-            !WorldSubmissionCodec.TryDecodeMutation(
-            bytes: bytes,
-            mutation: out var mutation,
-            failure: out var failure
-        ) ||
-            (mutation is null)
-        ) {
-            throw new InvalidDataException(message: $"Corrupt .puckreplay mutation leaf: {failure}");
-        }
-
-        return mutation;
-    }
-    private static WorldQuery ReadQueryLeaf(BinaryReader reader) {
-        var bytes = ReadLeafBytes(
-            reader: reader,
-            what: "query leaf"
-        );
-
-        if (
-            !WorldSubmissionCodec.TryDecodeQuery(
-            bytes: bytes,
-            query: out var query,
-            failure: out var failure
-        ) ||
-            (query is null)
-        ) {
-            throw new InvalidDataException(message: $"Corrupt .puckreplay query leaf: {failure}");
-        }
-
-        return query;
-    }
+    private static WorldDesignation ReadDesignationLeaf(BinaryReader reader) => ReadLeaf<WorldDesignation>(
+        reader: reader,
+        tryDecode: WorldSubmissionCodec.TryDecodeDesignation,
+        what: "designation"
+    );
+    private static WorldComposition ReadCompositionLeaf(BinaryReader reader) => ReadLeaf<WorldComposition>(
+        reader: reader,
+        tryDecode: WorldSubmissionCodec.TryDecodeComposition,
+        what: "composition"
+    );
+    private static WorldMutation ReadMutationLeaf(BinaryReader reader) => ReadLeaf<WorldMutation>(
+        reader: reader,
+        tryDecode: WorldSubmissionCodec.TryDecodeMutation,
+        what: "mutation"
+    );
+    private static WorldQuery ReadQueryLeaf(BinaryReader reader) => ReadLeaf<WorldQuery>(
+        reader: reader,
+        tryDecode: WorldSubmissionCodec.TryDecodeQuery,
+        what: "query"
+    );
     private static WorldReplayEntry ReadEntry(BinaryReader reader) {
         var kind = reader.ReadByte();
 
@@ -555,34 +508,16 @@ public sealed class WorldReplaySnapshot {
             _ => throw new InvalidDataException(message: $"unknown .puckreplay authority entry discriminant {kind}."),
         };
     }
-    private static WorldGrant ReadGrantLeaf(BinaryReader reader, bool revoke) {
-        var bytes = ReadLeafBytes(
-            reader: reader,
-            what: (revoke
-            ? "revoke leaf"
-            : "grant leaf")
-        );
-        var accepted = (revoke
-            ? WorldSubmissionCodec.TryDecodeRevoke(
-                bytes: bytes,
-                failure: out var failure,
-                revoke: out var grant
-            )
-            : WorldSubmissionCodec.TryDecodeGrant(
-                bytes: bytes,
-                failure: out failure,
-                grant: out grant
-            )
-        );
-
-        if (!accepted) {
-            throw new InvalidDataException(message: $"Corrupt .puckreplay {(revoke
-                ? "revoke"
-                : "grant")} leaf: {failure}");
-        }
-
-        return grant;
-    }
+    private static WorldGrant ReadGrantLeaf(BinaryReader reader, bool revoke) => ReadLeaf<WorldGrant>(
+        reader: reader,
+        tryDecode: (revoke
+            ? WorldSubmissionCodec.TryDecodeRevoke
+            : WorldSubmissionCodec.TryDecodeGrant
+        ),
+        what: (revoke
+            ? "revoke"
+            : "grant")
+    );
     private static IntentSubmission ReadIntent(BinaryReader reader) {
         var tick = reader.ReadUInt64();
         var entityIndex = reader.ReadInt32();
@@ -753,13 +688,13 @@ public sealed class WorldReplaySnapshot {
     private static PrincipalKind ReadPrincipalKind(BinaryReader reader) {
         var wire = reader.ReadByte();
 
-        return wire switch {
-            Wire.PrincipalSeat => PrincipalKind.Seat,
-            Wire.PrincipalConsole => PrincipalKind.Console,
-            Wire.PrincipalAddon => PrincipalKind.Addon,
-            Wire.PrincipalPeer => PrincipalKind.Peer,
-            _ => throw new InvalidDataException(message: $"unknown .puckreplay {nameof(PrincipalKind)} wire value {wire}."),
-        };
+        return (WorldWireTags.TryFromWire(
+            value: out PrincipalKind kind,
+            wire: wire
+        )
+            ? kind
+            : throw new InvalidDataException(message: $"unknown .puckreplay {nameof(PrincipalKind)} wire value {wire}.")
+        );
     }
     private static WorldReplayProfilePin? ReadProfilePin(BinaryReader reader) {
         if (!reader.ReadBoolean()) {
@@ -824,25 +759,11 @@ public sealed class WorldReplaySnapshot {
             Value: screenOp
         );
     }
-    private static SessionRequest ReadSessionLeaf(BinaryReader reader) {
-        var bytes = ReadLeafBytes(
-            reader: reader,
-            what: "session leaf"
-        );
-
-        if (
-            !WorldSubmissionCodec.TryDecodeSession(
-            bytes: bytes,
-            failure: out var failure,
-            request: out var request
-        ) ||
-            (request is null)
-        ) {
-            throw new InvalidDataException(message: $"Corrupt .puckreplay session leaf: {failure}");
-        }
-
-        return request;
-    }
+    private static SessionRequest ReadSessionLeaf(BinaryReader reader) => ReadLeaf<SessionRequest>(
+        reader: reader,
+        tryDecode: WorldSubmissionCodec.TryDecodeSession,
+        what: "session"
+    );
     private static WorldReplayEntry ReadTransferEntry(BinaryReader reader) {
         var transferId = reader.ReadUInt64();
         var destinationName = reader.ReadString();
@@ -989,13 +910,18 @@ public sealed class WorldReplaySnapshot {
     private static void WriteAddonLanePlaceholder(BinaryWriter writer) {
         writer.Write(value: Wire.AddonLaneReceiptConstant);
     }
-    private static void WriteCommandLeaf(BinaryWriter writer, WorldCommand command) {
-        if (!WorldSubmissionCodec.TryEncodeCommand(
-            bytes: out var bytes,
-            command: command,
-            failure: out var failure
-        )) {
-            throw new WorldReplayCodecException(message: $"the canonical command leaf refused while writing .puckreplay: {failure}");
+    private static void WriteCommandLeaf(BinaryWriter writer, WorldCommand command) => WriteLeaf(
+        tryEncode: WorldSubmissionCodec.TryEncodeCommand,
+        value: command,
+        what: "command",
+        writer: writer
+    );
+    // The write-side twin of ReadLeaf: every fixed leaf codec's TryEncodeX turns a T into bytes or names a
+    // WorldCodecFailure.
+    private delegate bool TryEncodeLeaf<T>(T value, out byte[] bytes, out WorldCodecFailure failure);
+    private static void WriteLeaf<T>(BinaryWriter writer, T value, string what, TryEncodeLeaf<T> tryEncode) {
+        if (!tryEncode(value, out var bytes, out var failure)) {
+            throw new WorldReplayCodecException(message: $"the canonical {what} leaf refused while writing .puckreplay: {failure}");
         }
 
         WriteLeafBytes(
@@ -1003,62 +929,30 @@ public sealed class WorldReplaySnapshot {
             writer: writer
         );
     }
-    private static void WriteDesignationLeaf(BinaryWriter writer, WorldDesignation designation) {
-        if (!WorldSubmissionCodec.TryEncodeDesignation(
-            bytes: out var bytes,
-            designation: designation,
-            failure: out var failure
-        )) {
-            throw new WorldReplayCodecException(message: $"the canonical designation leaf refused while writing .puckreplay: {failure}");
-        }
-
-        WriteLeafBytes(
-            bytes: bytes,
-            writer: writer
-        );
-    }
-    private static void WriteCompositionLeaf(BinaryWriter writer, WorldComposition composition) {
-        if (!WorldSubmissionCodec.TryEncodeComposition(
-            bytes: out var bytes,
-            composition: composition,
-            failure: out var failure
-        )) {
-            throw new WorldReplayCodecException(message: $"the canonical composition leaf refused while writing .puckreplay: {failure}");
-        }
-
-        WriteLeafBytes(
-            bytes: bytes,
-            writer: writer
-        );
-    }
-    private static void WriteMutationLeaf(BinaryWriter writer, WorldMutation mutation) {
-        if (!WorldSubmissionCodec.TryEncodeMutation(
-            bytes: out var bytes,
-            mutation: mutation,
-            failure: out var failure
-        )) {
-            throw new WorldReplayCodecException(message: $"the canonical mutation leaf refused while writing .puckreplay: {failure}");
-        }
-
-        WriteLeafBytes(
-            bytes: bytes,
-            writer: writer
-        );
-    }
-    private static void WriteQueryLeaf(BinaryWriter writer, WorldQuery query) {
-        if (!WorldSubmissionCodec.TryEncodeQuery(
-            bytes: out var bytes,
-            query: query,
-            failure: out var failure
-        )) {
-            throw new WorldReplayCodecException(message: $"the canonical query leaf refused while writing .puckreplay: {failure}");
-        }
-
-        WriteLeafBytes(
-            bytes: bytes,
-            writer: writer
-        );
-    }
+    private static void WriteDesignationLeaf(BinaryWriter writer, WorldDesignation designation) => WriteLeaf(
+        tryEncode: WorldSubmissionCodec.TryEncodeDesignation,
+        value: designation,
+        what: "designation",
+        writer: writer
+    );
+    private static void WriteCompositionLeaf(BinaryWriter writer, WorldComposition composition) => WriteLeaf(
+        tryEncode: WorldSubmissionCodec.TryEncodeComposition,
+        value: composition,
+        what: "composition",
+        writer: writer
+    );
+    private static void WriteMutationLeaf(BinaryWriter writer, WorldMutation mutation) => WriteLeaf(
+        tryEncode: WorldSubmissionCodec.TryEncodeMutation,
+        value: mutation,
+        what: "mutation",
+        writer: writer
+    );
+    private static void WriteQueryLeaf(BinaryWriter writer, WorldQuery query) => WriteLeaf(
+        tryEncode: WorldSubmissionCodec.TryEncodeQuery,
+        value: query,
+        what: "query",
+        writer: writer
+    );
     // The authority-INPUT tagged union: one discriminant byte, then the entry's own payload. Kept distinct from the
     // command tagged union below — that one discriminates WorldCommand's sealed subtypes, this one discriminates what
     // KIND of authority write crossed the link at all.
@@ -1233,31 +1127,17 @@ public sealed class WorldReplaySnapshot {
                 throw new WorldReplayCodecException(message: $"no .puckreplay encoding for authority entry kind '{entry.GetType().Name}'.");
         }
     }
-    private static void WriteGrantLeaf(BinaryWriter writer, WorldGrant grant, bool revoke) {
-        var accepted = (revoke
-            ? WorldSubmissionCodec.TryEncodeRevoke(
-                bytes: out var bytes,
-                failure: out var failure,
-                revoke: grant
-            )
-            : WorldSubmissionCodec.TryEncodeGrant(
-                bytes: out bytes,
-                failure: out failure,
-                grant: grant
-            )
-        );
-
-        if (!accepted) {
-            throw new WorldReplayCodecException(message: $"the canonical {(revoke
-                ? "revoke"
-                : "grant")} leaf refused while writing .puckreplay: {failure}");
-        }
-
-        WriteLeafBytes(
-            bytes: bytes,
-            writer: writer
-        );
-    }
+    private static void WriteGrantLeaf(BinaryWriter writer, WorldGrant grant, bool revoke) => WriteLeaf(
+        tryEncode: (revoke
+            ? WorldSubmissionCodec.TryEncodeRevoke
+            : WorldSubmissionCodec.TryEncodeGrant
+        ),
+        value: grant,
+        what: (revoke
+            ? "revoke"
+            : "grant"),
+        writer: writer
+    );
     private static void WriteIntent(BinaryWriter writer, in IntentSubmission submission) {
         writer.Write(value: submission.Tick);
         writer.Write(value: submission.EntityIndex);
@@ -1354,13 +1234,13 @@ public sealed class WorldReplaySnapshot {
         );
     }
     private static void WritePrincipalKind(BinaryWriter writer, PrincipalKind kind) {
-        writer.Write(value: kind switch {
-            PrincipalKind.Seat => Wire.PrincipalSeat,
-            PrincipalKind.Console => Wire.PrincipalConsole,
-            PrincipalKind.Addon => Wire.PrincipalAddon,
-            PrincipalKind.Peer => Wire.PrincipalPeer,
-            _ => throw new WorldReplayCodecException(message: $"no .puckreplay wire value for {nameof(PrincipalKind)}.{kind} — give the new member one in the pinned wire set."),
-        });
+        if (!WorldWireTags.TryToWire(
+            value: kind,
+            wire: out var wire
+        )) {
+            throw new WorldReplayCodecException(message: $"no .puckreplay wire value for {nameof(PrincipalKind)}.{kind} — a Document/World principal never rides the tape.");
+        }
+        writer.Write(value: wire);
     }
     // The seat's profile pin rides the same present-flag convention as WriteNullableString: a profileless seat writes
     // the flag and nothing else, and its body falls back to the seat kit's own tuning on the re-drive exactly as it did
@@ -1410,20 +1290,12 @@ public sealed class WorldReplaySnapshot {
             value: screenOp.ContentHash
         );
     }
-    private static void WriteSessionLeaf(BinaryWriter writer, SessionRequest request) {
-        if (!WorldSubmissionCodec.TryEncodeSession(
-            bytes: out var bytes,
-            failure: out var failure,
-            request: request
-        )) {
-            throw new WorldReplayCodecException(message: $"the canonical session leaf refused while writing .puckreplay: {failure}");
-        }
-
-        WriteLeafBytes(
-            bytes: bytes,
-            writer: writer
-        );
-    }
+    private static void WriteSessionLeaf(BinaryWriter writer, SessionRequest request) => WriteLeaf(
+        tryEncode: WorldSubmissionCodec.TryEncodeSession,
+        value: request,
+        what: "session",
+        writer: writer
+    );
     // The local-transfer leaf: five semantic fields (see WorldReplayEntry.Transfer's own remarks) followed by an
     // FNV-1a content signature folded over those SAME five fields, length-prefixing every string so two distinct
     // field sequences can never fold to the same signature regardless of what any one field contains (the identical
@@ -2175,11 +2047,6 @@ public sealed class WorldReplaySnapshot {
         // A fixed placeholder byte in the receipt's (now-unused) lane slot, kept constant so the receipt shape does
         // not move: the writer always emits it and the reader validates it as this constant.
         public const byte AddonLaneReceiptConstant = 1;
-        public const byte PrincipalAddon = 2;
-        public const byte PrincipalConsole = 1;
-        public const byte PrincipalPeer = 3;
-        // PrincipalKind
-        public const byte PrincipalSeat = 0;
         public const byte RebuildKindLoad = 1;
         public const byte RebuildKindReload = 2;
         // WorldRebuildKind — this codec's OWN discriminant set, independent of WorldSubmissionCodec's identically-

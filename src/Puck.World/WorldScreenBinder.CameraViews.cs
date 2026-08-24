@@ -379,7 +379,9 @@ internal sealed partial class WorldScreenBinder {
     /// its budget entry survive), a dimension or kind change releases and recreates the view (an offscreen render
     /// target cannot resize), and a removed row releases the view and unbinds every slot that filmed it. A declared
     /// View slot that faulted at boot (its camera did not exist yet) self-heals when the camera row arrives. Bounded by
-    /// <see cref="OffscreenRenderBudget.RegisteredViews"/> and the refresh-divisor budget; dimensions are validator-capped.</summary>
+    /// <see cref="OffscreenRenderBudget.RegisteredViews"/> and the refresh-divisor budget; dimensions are validator-capped.
+    /// Not migrated onto <c>Puck.World.Client.KeyedReconciler</c> — its recreate-in-place vs. release-and-recreate
+    /// split reads a per-field diff the generic shape cannot express.</summary>
     /// <param name="cameras">The mutated camera list (the live definition's cameras).</param>
     public void ReconcileCameras(IReadOnlyList<WorldCamera> cameras) {
         if (m_disposed) {

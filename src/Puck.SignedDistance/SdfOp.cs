@@ -148,4 +148,19 @@ public enum SdfOp : uint {
     /// <see cref="ShapeBlend"/> does, so repeated pops accumulate. KEEP IN SYNC with SDF_OP_POP_FIELD in
     /// Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
     PopField = 28,
+    /// <summary>Adds bounded hash-lattice fBm value noise to the field accumulated so far — irregular surface relief
+    /// (terrain crags, bark, rock) where <see cref="Displace"/>'s periodic sine product would read as corrugation. A
+    /// field op (like <see cref="Onion"/>/<see cref="Dilate"/>/<see cref="Displace"/>), evaluated at the current folded
+    /// point: order it after the shapes it should displace. Data0 = (frequency [cells per world unit], amplitude
+    /// [world units], gain, lacunarity), Data1.x = host-baked <c>1/Σ gainᵏ</c> normalization (the octave sum stays in
+    /// <c>[-1, 1]</c> before amplitude), Shape = seed, Blend = octave count. The basis is 3D value noise on the integer
+    /// lattice — one integer-only PCG3D hash per corner (cell decisions bit-identical across both DXC targets, the
+    /// <see cref="CellJitter"/> discipline), quintic-smoothed trilinear blend (deterministic float mul/add, ±1 LSB) —
+    /// summed over the declared octaves. Not 1-Lipschitz: the normalized fBm gradient is bounded by
+    /// <c>frequency·(15/4)·√3·(Σ (gain·lacunarity)ᵏ / Σ gainᵏ)</c> (quintic max slope 15/8 on a corner span of 2, axes
+    /// combined Euclidean), so the field can overestimate by <c>1 + amplitude·(that bound)</c> —
+    /// <c>AnalyzeLipschitz</c> bakes it as a conservative step clamp (reach-independent, folded like
+    /// <see cref="Displace"/>'s). The outward surface reach is at most <c>|amplitude|</c> (the normalized sum is
+    /// bounded by 1) — the scoped-field margin and cull channels read that. amplitude = 0 is an exact identity.</summary>
+    NoiseDisplace = 29,
 }

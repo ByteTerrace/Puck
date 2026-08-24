@@ -116,6 +116,13 @@ Bound-preserving noise must provide all of the following:
 - an explicit effect on `AnalyzeLipschitz`; and
 - matching results across shader targets within the configured parity policy.
 
+`NoiseDisplace` is the shipped instance: an integer-only PCG3D hash per
+lattice corner, output host-normalized to `[-1, 1]`, a quintic-blend gradient
+bound (`frequency·(15/4)·√3` per normalized octave sum) folded by
+`AnalyzeLipschitz` into the step clamp, and cross-backend agreement inside the
+relaxed parity envelope (isolated silhouette winner flips only). The
+sine-product `Displace` remains the hash-free periodic sibling.
+
 Visual plausibility is not evidence of a safe distance estimate. Validate new
 field operations with grazing rays, fold boundaries, thin geometry, and a
 strict/reference march comparison.

@@ -653,6 +653,24 @@ public readonly record struct GrantVerdict(GrantRule Rule, WorldPrincipal? Reser
         GrantRule.DriveGated => $"gated by state row '{GateRow}' — a nonzero per-body cell there refuses Drive regardless of any hold, including an exclusive reservation, until it reads zero again",
         _ => "not denied",
     };
+    /// <summary>Builds the <c>"{actor} cannot {verb} {subject} ({denial})[ — {dropped}]"</c> denial sentence shared by
+    /// every submission-ingress capability-check refusal that follows this exact shape. Only meaningful when
+    /// <see cref="IsAllowed"/> is <see langword="false"/>.</summary>
+    /// <param name="actor">The acting principal.</param>
+    /// <param name="verb">The capability verb ("drive", "observe", "control", …).</param>
+    /// <param name="subject">The already-formatted subject description (a <see cref="GrantSubject.Describe"/> result,
+    /// or a literal like <c>"body:3"</c>).</param>
+    /// <param name="dropped">What was dropped as a result of the refusal, appended as <c>" — {dropped}"</c>; omitted
+    /// when <see langword="null"/>.</param>
+    /// <returns>The denial sentence.</returns>
+    public string DescribeRefusal(WorldPrincipal actor, string verb, string subject, string? dropped = null) {
+        var sentence = $"{actor.Describe()} cannot {verb} {subject} ({DescribeDenial()})";
+
+        return (dropped is null
+            ? sentence
+            : $"{sentence} — {dropped}"
+        );
+    }
 }
 /// <summary>One grant row — the wire payload of <c>world.grant</c>/<c>world.revoke</c>: a principal holds a capability
 /// over a subject, optionally exclusive (the engagement latch generalized — acquiring an exclusive grant a live holder
