@@ -73,7 +73,7 @@ public sealed partial class WorldPopulation {
         // Field state exists independently of the selected contact/target provider. A world may use its lattice only
         // for reactions, exposure rows, snapshots, or rendering and still owes the same authoritative state.
         m_fields ??= ((definition.Fields is { } fieldsSection)
-            ? new WorldFieldLattice(document: fieldsSection)
+            ? new WorldFieldLattice(document: fieldsSection, worldSeed: (definition.Generation?.WorldSeed ?? 0UL))
             : null
         );
 

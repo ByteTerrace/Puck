@@ -34,6 +34,7 @@
           "color": "#3F7A3A",
           "paint": [
             {
+              "$type": "rect",
               "value": 1,
               "minX": -16,
               "minZ": -40,
@@ -67,6 +68,7 @@
           "color": "#D8F1FF",
           "paint": [
             {
+              "$type": "rect",
               "value": 1,
               "minX": 0.5,
               "minZ": -40,

@@ -19,7 +19,7 @@ public sealed record WorldFieldsSection(
     WorldFieldLatticeDefinition Lattice,
     IReadOnlyList<WorldFieldRow> Fields,
     IReadOnlyList<WorldReaction>? Reactions = null,
-    IReadOnlyList<WorldFieldPaint>? Paint = null
+    IReadOnlyList<WorldLatticeFill>? Paint = null
 ) {
     /// <summary>Compiles the state section's lattice topology and lattice-shaped rows into the runtime composite, or
     /// <see langword="null"/> when the section declares no topology. Row order is state-section declaration order --
@@ -33,7 +33,7 @@ public sealed record WorldFieldsSection(
 
         var topology = topologies[0];
         var rows = new List<WorldFieldRow>();
-        var paint = new List<WorldFieldPaint>();
+        var paint = new List<WorldLatticeFill>();
 
         foreach (var row in (state.World ?? [])) {
             if (row.Lattice is not { } trait) {
@@ -157,7 +157,7 @@ public sealed record WorldStateLatticeTrait(
     float Max = 1f,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float HeightScale = 0f,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Color = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldFieldPaint>? Paint = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldLatticeFill>? Paint = null
 );
 /// <summary>A lattice's footprint: cubic cells from <paramref name="Origin"/> along +X (<paramref name="Width"/>),
 /// +Y (<paramref name="Layers"/>), and +Z (<paramref name="Depth"/>). <paramref name="Layers"/> = 1 is a ground
@@ -195,19 +195,47 @@ public sealed record WorldFieldRow(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float HeightScale = 0f,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Color = null
 );
-/// <summary>One initial fill: every cell whose XZ centre lies in the rectangle takes <paramref name="Value"/>.</summary>
-/// <param name="Field">The field painted.</param>
-/// <param name="Value">The value written.</param>
-/// <param name="MinX">The rectangle's least X, world units.</param>
-/// <param name="MinZ">The rectangle's least Z, world units.</param>
-/// <param name="MaxX">The rectangle's greatest X, world units.</param>
-/// <param name="MaxZ">The rectangle's greatest Z, world units.</param>
-[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldFieldPaint(float Value, float MinX, float MinZ, float MaxX, float MaxZ, string Field = "") {
-    /// <summary>Gets the painted row's name. Inside a row's <c>lattice.paint</c> the member is omitted -- the
-    /// carrying row supplies it at compile; the compiled composite always carries it.</summary>
+/// <summary>One initial fill of a lattice row, applied in order over the row's <c>initial</c>. Every kind decides
+/// per CELL with integer hashes and Q48.16 arithmetic only, so a fill is bit-identical on every machine and backend
+/// -- lattice values are simulation state. The <c>Field</c> member is compile-stamped from the carrying row (see
+/// <see cref="WorldFieldsSection.Compile"/>) and omitted in the document.</summary>
+[JsonDerivedType(typeof(WorldLatticeFill.Rect), typeDiscriminator: "rect")]
+[JsonDerivedType(typeof(WorldLatticeFill.Noise), typeDiscriminator: "noise")]
+[JsonDerivedType(typeof(WorldLatticeFill.Scatter), typeDiscriminator: "scatter")]
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
+public abstract record WorldLatticeFill {
+    /// <summary>Gets the filled row's name -- compile-stamped, never authored inside a trait.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
-    public string Field { get; init; } = (Field ?? string.Empty);
+    public string Field { get; init; } = string.Empty;
+
+    /// <summary>Every cell whose XZ centre lies in the rectangle takes <paramref name="Value"/>.</summary>
+    /// <param name="Value">The value written.</param>
+    /// <param name="MinX">The rectangle's least X, world units.</param>
+    /// <param name="MinZ">The rectangle's least Z, world units.</param>
+    /// <param name="MaxX">The rectangle's greatest X, world units.</param>
+    /// <param name="MaxZ">The rectangle's greatest Z, world units.</param>
+    public sealed record Rect(float Value, float MinX, float MinZ, float MaxX, float MaxZ) : WorldLatticeFill;
+    /// <summary>Patchy fill: fixed-point hash-lattice fBm over the CELL INDEX decides each cell. Where the octave
+    /// sum <c>n</c> (in [0, 1]) reaches <paramref name="Threshold"/>, the cell takes
+    /// <c>Value · (n − Threshold) / (1 − Threshold)</c> -- a smooth patch interior rising to the full value. The
+    /// hash folds the fill's <paramref name="Seed"/> with the world seed (the generation section's reroll lever),
+    /// and every blend runs in Q48.16, so two boots of one document at one seed are bit-identical.</summary>
+    /// <param name="Value">The peak value written inside a patch.</param>
+    /// <param name="Frequency">Lattice cells per noise cell reciprocal -- noise-cell edge in CELLS (e.g. 8 = one
+    /// noise cell spans 8 lattice cells). At least 1.</param>
+    /// <param name="Threshold">The patch admission level in [0, 1); higher = sparser patches.</param>
+    /// <param name="Octaves">Octave count, 1..4.</param>
+    /// <param name="Seed">The hash seed, folded with the world seed.</param>
+    public sealed record Noise(float Value, int Frequency, float Threshold = 0.5f, int Octaves = 3, uint Seed = 0u) : WorldLatticeFill;
+    /// <summary>Scattered discs: one jittered point per <paramref name="Spacing"/>-cell block (integer-hash offset),
+    /// and every cell within <paramref name="Radius"/> cells of a point takes <paramref name="Value"/> -- the CPU
+    /// boot-fill sibling of the renderer's CellJitter scatter.</summary>
+    /// <param name="Value">The value written inside each disc.</param>
+    /// <param name="Spacing">The scatter block edge in CELLS (at least 2).</param>
+    /// <param name="Radius">The disc radius in CELLS (at least 1; must leave the disc inside its block's jitter
+    /// envelope, refused otherwise).</param>
+    /// <param name="Seed">The hash seed, folded with the world seed.</param>
+    public sealed record Scatter(float Value, int Spacing, int Radius = 1, uint Seed = 0u) : WorldLatticeFill;
 }
 /// <summary>One per-cell condition of a <see cref="WorldReaction.Transform"/>.</summary>
 /// <param name="Field">The field read at the cell.</param>

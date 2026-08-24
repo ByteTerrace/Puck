@@ -204,7 +204,7 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldFieldsSection))]
 [JsonSerializable(typeof(WorldReaction))]
 [JsonSerializable(typeof(WorldFieldRow))]
-[JsonSerializable(typeof(WorldFieldPaint))]
+[JsonSerializable(typeof(WorldLatticeFill))]
 [JsonSerializable(typeof(WorldAdjacency))]
 [JsonSerializable(typeof(WorldAdjacencyBoundary))]
 // The signed border claim's payload shape — a separate document family, sharing this context's strictness and

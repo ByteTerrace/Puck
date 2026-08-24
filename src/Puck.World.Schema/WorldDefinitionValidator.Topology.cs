@@ -1118,16 +1118,50 @@ public static partial class WorldDefinitionValidator {
                 path: $"{path}.field"
             );
 
-            if (
-                !FitsFixed(value: row.Value) ||
-                !FitsFixed(value: row.MinX) ||
-                !FitsFixed(value: row.MinZ) ||
-                !FitsFixed(value: row.MaxX) ||
-                !FitsFixed(value: row.MaxZ) ||
-                (row.MinX > row.MaxX) ||
-                (row.MinZ > row.MaxZ)
-            ) {
-                errors.Add(item: $"{path} must carry a finite value and a finite min <= max rectangle.");
+            switch (row) {
+                case WorldLatticeFill.Rect rect:
+                    if (
+                        !FitsFixed(value: rect.Value) ||
+                        !FitsFixed(value: rect.MinX) ||
+                        !FitsFixed(value: rect.MinZ) ||
+                        !FitsFixed(value: rect.MaxX) ||
+                        !FitsFixed(value: rect.MaxZ) ||
+                        (rect.MinX > rect.MaxX) ||
+                        (rect.MinZ > rect.MaxZ)
+                    ) {
+                        errors.Add(item: $"{path} must carry a finite value and a finite min <= max rectangle.");
+                    }
+
+                    break;
+                case WorldLatticeFill.Noise noise:
+                    if (
+                        !FitsFixed(value: noise.Value) ||
+                        !float.IsFinite(f: noise.Threshold) ||
+                        (noise.Threshold < 0f) ||
+                        (noise.Threshold >= 1f)
+                    ) {
+                        errors.Add(item: $"{path} must carry a finite value and a threshold in [0, 1).");
+                    }
+                    if (noise.Frequency < 1) {
+                        errors.Add(item: $"{path}.frequency must be at least 1 (noise-cell edge in lattice cells; was {noise.Frequency}).");
+                    }
+                    if ((noise.Octaves < 1) || (noise.Octaves > 4)) {
+                        errors.Add(item: $"{path}.octaves must be in 1..4 (was {noise.Octaves}).");
+                    }
+
+                    break;
+                case WorldLatticeFill.Scatter scatter:
+                    if (!FitsFixed(value: scatter.Value)) {
+                        errors.Add(item: $"{path} must carry a finite value.");
+                    }
+                    if (scatter.Spacing < 2) {
+                        errors.Add(item: $"{path}.spacing must be at least 2 cells (was {scatter.Spacing}).");
+                    }
+                    if ((scatter.Radius < 1) || ((2 * scatter.Radius) > scatter.Spacing)) {
+                        errors.Add(item: $"{path}.radius must be at least 1 and at most spacing/2 (a disc never leaves its block; was {scatter.Radius} against spacing {scatter.Spacing}).");
+                    }
+
+                    break;
             }
         }
     }

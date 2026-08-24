@@ -48,7 +48,7 @@ public sealed class WorldFieldLattice {
         FixedQ4816 Value
     );
 
-    public WorldFieldLattice(WorldFieldsSection document) {
+    public WorldFieldLattice(WorldFieldsSection document, ulong worldSeed = 0UL) {
         ArgumentNullException.ThrowIfNull(argument: document);
 
         m_document = document;
@@ -102,8 +102,25 @@ public sealed class WorldFieldLattice {
 
         m_bodyCouplingCeiling += (m_cellSize * FixedQ4816.FromInteger(value: m_layers));
 
-        foreach (var paint in (document.Paint ?? [])) {
-            var field = FieldIndex(name: paint.Field);
+        foreach (var fill in (document.Paint ?? [])) {
+            var field = FieldIndex(name: fill.Field);
+
+            switch (fill) {
+                case WorldLatticeFill.Noise noise:
+                    ApplyNoiseFill(
+                        field: field,
+                        fill: noise,
+                        worldSeed: worldSeed
+                    );
+                    continue;
+                case WorldLatticeFill.Scatter scatter:
+                    ApplyScatterFill(
+                        field: field,
+                        fill: scatter,
+                        worldSeed: worldSeed
+                    );
+                    continue;
+                case WorldLatticeFill.Rect paint: {
             var value = Clamp(
                 field: field,
                 value: FixedQ4816.FromDouble(value: paint.Value)
@@ -137,6 +154,9 @@ public sealed class WorldFieldLattice {
                     for (var y = 0; (y < m_layers); y++) {
                         m_values[field][CellIndex(x: x, y: y, z: z)] = value;
                     }
+                }
+            }
+                    break;
                 }
             }
         }
@@ -448,6 +468,144 @@ public sealed class WorldFieldLattice {
     /// <summary>Gets the lattice's layer count.</summary>
     public int Layers => m_layers;
 
+    // Integer PCG3D (Jarzynski & Olano) — the SAME mixing the renderer's sdfPcg3d uses, so cell decisions are
+    // bit-identical everywhere integers are. KEEP IN SYNC with sdfPcg3d in Assets/Shaders/Sdf/sdf-vm.hlsli.
+    private static (uint X, uint Y, uint Z) Pcg3d(uint x, uint y, uint z) {
+        unchecked {
+            x = ((x * 1664525u) + 1013904223u);
+            y = ((y * 1664525u) + 1013904223u);
+            z = ((z * 1664525u) + 1013904223u);
+            x += (y * z); y += (z * x); z += (x * y);
+            x ^= (x >> 16); y ^= (y >> 16); z ^= (z >> 16);
+            x += (y * z); y += (z * x); z += (x * y);
+
+            return (x, y, z);
+        }
+    }
+    // A corner's [0, 1) value in Q48.16: the hash's top 16 bits ARE the fractional ticks — integer in, integer out.
+    private static FixedQ4816 Corner01(uint cellX, uint cellZ, uint seed) => FixedQ4816.FromRawBits(value: (long)(Pcg3d(x: cellX, y: cellZ, z: seed).X >> 16));
+    // Quintic fade 6t⁵−15t⁴+10t³ in Q48.16 — the CPU twin of the renderer's blend, exact for t in [0, 1].
+    private static FixedQ4816 Quintic(FixedQ4816 t) {
+        var t2 = (t * t);
+        var t3 = (t2 * t);
+
+        return (t3 * (((t * ((t * FixedQ4816.FromInteger(value: 6)) - FixedQ4816.FromInteger(value: 15)))) + FixedQ4816.FromInteger(value: 10)));
+    }
+    private static FixedQ4816 Lerp(FixedQ4816 a, FixedQ4816 b, FixedQ4816 t) => (a + ((b - a) * t));
+    // One octave of 2D value noise over the lattice CELL INDEX (XZ; layers share the column), Q48.16 throughout.
+    private static FixedQ4816 ValueNoise01(int cellX, int cellZ, int noiseCells, uint seed) {
+        var nx = (cellX / noiseCells);
+        var nz = (cellZ / noiseCells);
+        var fx = (FixedQ4816.FromInteger(value: (cellX - (nx * noiseCells))) / FixedQ4816.FromInteger(value: noiseCells));
+        var fz = (FixedQ4816.FromInteger(value: (cellZ - (nz * noiseCells))) / FixedQ4816.FromInteger(value: noiseCells));
+        var ux = Quintic(t: fx);
+        var uz = Quintic(t: fz);
+        var c00 = Corner01(cellX: (uint)nx, cellZ: (uint)nz, seed: seed);
+        var c10 = Corner01(cellX: (uint)(nx + 1), cellZ: (uint)nz, seed: seed);
+        var c01 = Corner01(cellX: (uint)nx, cellZ: (uint)(nz + 1), seed: seed);
+        var c11 = Corner01(cellX: (uint)(nx + 1), cellZ: (uint)(nz + 1), seed: seed);
+
+        return Lerp(
+            a: Lerp(a: c00, b: c10, t: ux),
+            b: Lerp(a: c01, b: c11, t: ux),
+            t: uz
+        );
+    }
+    private void ApplyNoiseFill(int field, WorldLatticeFill.Noise fill, ulong worldSeed) {
+        var value = Clamp(
+            field: field,
+            value: FixedQ4816.FromDouble(value: fill.Value)
+        );
+        var threshold = FixedQ4816.FromDouble(value: fill.Threshold);
+        var one = FixedQ4816.One;
+        var span = (one - threshold);
+        var seed = unchecked((uint)(fill.Seed ^ (uint)worldSeed ^ (uint)(worldSeed >> 32)));
+
+        for (var z = 0; (z < m_depth); z++) {
+            for (var x = 0; (x < m_width); x++) {
+                // fBm: per-octave halved amplitude, halved noise-cell edge (floored at 1), decorrelated seed stream.
+                var amplitude = FixedQ4816.One;
+                var total = FixedQ4816.Zero;
+                var weight = FixedQ4816.Zero;
+                var cells = fill.Frequency;
+
+                for (var octave = 0; (octave < fill.Octaves); octave++) {
+                    total += (amplitude * ValueNoise01(
+                        cellX: x,
+                        cellZ: z,
+                        noiseCells: System.Math.Max(val1: 1, val2: cells),
+                        seed: unchecked(seed + ((uint)octave * 0x9E3779B9u))
+                    ));
+                    weight += amplitude;
+                    amplitude = FixedQ4816.FromRawBits(value: (amplitude.Value >> 1));
+                    cells = System.Math.Max(val1: 1, val2: (cells >> 1));
+                }
+
+                var n = (total / weight);
+
+                if (n < threshold) {
+                    continue;
+                }
+
+                var scaled = ((span.Value > 0) ? (value * ((n - threshold) / span)) : value);
+
+                for (var y = 0; (y < m_layers); y++) {
+                    m_values[field][CellIndex(x: x, y: y, z: z)] = Clamp(
+                        field: field,
+                        value: scaled
+                    );
+                }
+            }
+        }
+    }
+    private void ApplyScatterFill(int field, WorldLatticeFill.Scatter fill, ulong worldSeed) {
+        var value = Clamp(
+            field: field,
+            value: FixedQ4816.FromDouble(value: fill.Value)
+        );
+        var seed = unchecked((uint)(fill.Seed ^ (uint)worldSeed ^ (uint)(worldSeed >> 32)));
+        var spacing = System.Math.Max(val1: 2, val2: fill.Spacing);
+        var radius = System.Math.Max(val1: 1, val2: fill.Radius);
+        var radiusSquared = (radius * radius);
+
+        for (var z = 0; (z < m_depth); z++) {
+            for (var x = 0; (x < m_width); x++) {
+                // The cell tests its own block and the 8 neighbours — a jittered point near a block edge reaches
+                // across it, and 3×3 covers every reachable point while radius stays within one block.
+                var blockX = (x / spacing);
+                var blockZ = (z / spacing);
+                var hit = false;
+
+                for (var dz = -1; (!hit && (dz <= 1)); dz++) {
+                    for (var dx = -1; (!hit && (dx <= 1)); dx++) {
+                        var bx = (blockX + dx);
+                        var bz = (blockZ + dz);
+                        var h = Pcg3d(
+                            x: unchecked((uint)bx),
+                            y: unchecked((uint)bz),
+                            z: seed
+                        );
+                        // The point sits inside its block, radius-inset so a disc never leaves the block.
+                        var inset = System.Math.Max(val1: 0, val2: (spacing - (2 * radius)));
+                        var px = ((bx * spacing) + radius + ((inset > 0) ? (int)(h.X % (uint)inset) : 0));
+                        var pz = ((bz * spacing) + radius + ((inset > 0) ? (int)(h.Y % (uint)inset) : 0));
+                        var ddx = (x - px);
+                        var ddz = (z - pz);
+
+                        hit = (((ddx * ddx) + (ddz * ddz)) <= radiusSquared);
+                    }
+                }
+
+                if (!hit) {
+                    continue;
+                }
+
+                for (var y = 0; (y < m_layers); y++) {
+                    m_values[field][CellIndex(x: x, y: y, z: z)] = value;
+                }
+            }
+        }
+    }
     /// <summary>Steps the reactions once when <paramref name="tick"/> falls on the cadence; a no-op otherwise.</summary>
     /// <param name="tick">The simulation tick.</param>
     /// <param name="bodyCount">The entity-table capacity; bodies are visited by index.</param>

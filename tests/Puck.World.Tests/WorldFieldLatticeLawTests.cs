@@ -36,6 +36,72 @@ public sealed class WorldFieldLatticeLawTests {
         writeTag: (_, _, _) => { }
     );
 
+    private static WorldFieldsSection FilledFields(WorldLatticeFill fill, int width = 32, int depth = 32) => new(
+        Lattice: new WorldFieldLatticeDefinition(
+            Origin: new DocumentVector3(x: 0f, y: 0f, z: 0f),
+            CellSize: 1f,
+            Width: width,
+            Depth: depth,
+            Layers: 1,
+            StepEveryTicks: 1
+        ),
+        Fields: [new WorldFieldRow(Name: "grass", Min: 0f, Max: 1f)],
+        Paint: [(fill with { Field = "grass" })]
+    );
+    private static long SumBits(WorldFieldLattice lattice, int cells) {
+        var sum = 0L;
+
+        for (var cell = 0; (cell < cells); cell++) {
+            sum = unchecked(sum + (lattice.Value(field: 0, cell: cell).Value * 31L));
+        }
+
+        return sum;
+    }
+
+    [Fact]
+    public void ANoiseFillIsBitIdenticalAcrossConstructionsAndMovesWithTheWorldSeed() {
+        var fill = new WorldLatticeFill.Noise(Value: 1f, Frequency: 8, Threshold: 0.4f, Octaves: 3, Seed: 7u);
+        var a = new WorldFieldLattice(document: FilledFields(fill: fill), worldSeed: 5UL);
+        var b = new WorldFieldLattice(document: FilledFields(fill: fill), worldSeed: 5UL);
+        var rerolled = new WorldFieldLattice(document: FilledFields(fill: fill), worldSeed: 6UL);
+        var filled = 0;
+
+        for (var cell = 0; (cell < (32 * 32)); cell++) {
+            Assert.Equal(
+                actual: b.Value(field: 0, cell: cell).Value,
+                expected: a.Value(field: 0, cell: cell).Value
+            );
+
+            if (a.Value(field: 0, cell: cell).Value != 0L) {
+                filled++;
+            }
+        }
+
+        // Patchy, not degenerate: some cells filled, some not, and the world seed rerolls the pattern.
+        Assert.InRange(actual: filled, high: ((32 * 32) - 1), low: 1);
+        Assert.NotEqual(
+            actual: SumBits(lattice: rerolled, cells: (32 * 32)),
+            expected: SumBits(lattice: a, cells: (32 * 32))
+        );
+    }
+
+    [Fact]
+    public void AScatterFillWritesDiscsAndNothingOutsideThem() {
+        var fill = new WorldLatticeFill.Scatter(Value: 1f, Spacing: 8, Radius: 2, Seed: 3u);
+        var lattice = new WorldFieldLattice(document: FilledFields(fill: fill), worldSeed: 1UL);
+        var filled = 0;
+
+        for (var cell = 0; (cell < (32 * 32)); cell++) {
+            if (lattice.Value(field: 0, cell: cell).Value != 0L) {
+                filled++;
+            }
+        }
+
+        // 16 blocks of one disc each: pi*r^2 ~ 13 cells per disc; discs never merge (radius <= spacing/2), so the
+        // count stays within the per-block disc envelope on BOTH sides.
+        Assert.InRange(actual: filled, high: (16 * 21), low: 16);
+    }
+
     [Fact]
     public void ABodyStandingOnAGroundLatticeSurfaceCouplesToItsColumn() {
         // Layers = 1, cellSize 1, heightScale 2, max 10: the derived coupling ceiling is 1 + 2*10 = 21. A body at
