@@ -18,9 +18,11 @@ the file-length ledger (`FileLengths.json`, LEN001–LEN004: no source file over
 `experimental/` and out of the build, so nothing it used to gate is enforced
 today; do not cite it, run it, or write a stage for it. The engine-contract
 verification story it carried is a live gap, not a live gate — except the one
-narrow slice `puck parity` covers: cross-backend composed-frame agreement,
-checked on demand against the real windowed `Puck.World` under the relaxed
-envelope. Presentation-only float and artistic
+narrow slice `puck parity` covers: it boots the authored parity world
+(`tests/Puck.Parity/parity.world.json`) offscreen once per backend, the
+world's own tick-scheduled `captures` rows write a manifest, and each capture
+gets three verdicts — content gate, exact `stateHash`, per-tile pixels under
+the contract versioned beside the world. Presentation-only float and artistic
 work remain outside the simulation-state determinism contract.
 
 Enforcement covers **observable behavior** — pixels, hashes, parity, determinism
@@ -131,9 +133,11 @@ correct them where they live.
    — it is not built, not run, and not cited; the shared engine contract it
    used to gate (cross-backend render path, SDF VM ISA, document schemas,
    deterministic numerics) currently has no automated gate; the one narrow
-   on-demand check is `puck parity`, which boots the real windowed `Puck.World`
-   on both backends and compares the same fenced composed frame under the
-   relaxed envelope. Say the rest is uncovered plainly when
+   on-demand check is `puck parity`, which boots the authored parity world
+   offscreen (no window) once per backend and renders three verdicts per
+   tick-scheduled capture: content gate (a degenerate frame never reaches
+   comparison), exact `stateHash`, and per-tile pixels under
+   `tests/Puck.Parity/parity.contract.json`. Say the rest is uncovered plainly when
    it matters rather than implying coverage. Emulator changes use the
    `Puck.HumbleGamingBrick.Post`/`Puck.AdvancedGamingBrick.Post` batteries,
    which are still in the build.

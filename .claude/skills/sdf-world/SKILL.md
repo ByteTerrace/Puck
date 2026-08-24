@@ -583,12 +583,16 @@ plus the existing instanced==flat stages.
 world-path stages exercised every kernel is quarantined with `Puck.Post` and
 never run, the `--run`/`--capture` entry points that drove the example
 documents left with the `Puck.Demo` composition root, and nothing replaced
-either. The one on-demand check is `puck parity` (tests/Puck.Parity/):
-cross-backend composed-frame agreement over the authored pattern corpus —
-gradient, edges, modifiers, glyphs (both text tiers: marched `Glyph` geometry
-and the `text`-source screen decal off one uploaded atlas), plus the shipped
-world. Everything else about a kernel, ISA, or render-assembly change is
-unverified by machine.
+either. The one on-demand check is `puck parity` (tests/Puck.Parity/): it boots
+the authored parity world (`parity.world.json` + its `parity.sdf.json`
+companion) offscreen once per backend — stations: sky, materials, a
+`state.lattices` height-field, `noiseDisplace`+`cellJitter` — and renders
+three verdicts per tick-scheduled capture: content gate (camera-inside/
+census-floor refusals — `parity-inside.world.json` proves the refusal),
+exact `stateHash`, per-tile pixels under `parity.contract.json` (thresholds
+are content facts, re-calibrated in the change that changes a station).
+There is NO text/glyph station currently. Everything else about a kernel,
+ISA, or render-assembly change is unverified by machine.
 
 What remains is looking at it: `dotnet run --project src/Puck.World -c Release --
 --exit-after-seconds 2` (0 or less runs until the window is closed), plus the

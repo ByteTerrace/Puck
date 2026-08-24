@@ -163,9 +163,20 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   full flag surface is parsed in `Program.cs` (`--backend`, `--width`,
   `--height`, `--exit-after-seconds`, `--present-mode`, `--world`,
   `--recording`, `--storage-uri`, `--user-id`, `--state-dir`, `--headless`,
-  `--listen`, `--connect`); host-related flags are nullable deployment
-  overrides. Absent host overrides leave the world document's `host`
-  section in control.
+  `--capture-dir`, `--listen`, `--connect`); host-related flags are nullable
+  deployment overrides. Absent host overrides leave the world document's
+  `host` section in control. `host.presentation` has three values: windowed,
+  `none` (`HeadlessWorldSimulation` — full authority, no GPU), and
+  `offscreen` (full authority + GPU composition to images, no window —
+  what `puck parity` boots). A world may author a `captures` section:
+  tick-scheduled capture rows that arm the `world.screenshot` path at exact
+  sim ticks, refuse when the camera is inside geometry
+  (`map(cameraPos) <= 0`, `cameraInside=true`), stamp a per-station
+  material census and a `world.state.hash`-matching state hash, and write a
+  `puck.parity.manifest.v1` into `captures.directory` (overridable by
+  `--capture-dir`). The camera program's `select` op dispatches to named
+  sub-programs keyed on a live `state.<row>` value — the discrete sibling
+  of `blend`.
 - `--state-dir <dir>` redirects the on-disk state root (profile catalog,
   replays) — use a temp dir for hermetic verification runs; parallel runs
   each need their own.
