@@ -1,6 +1,8 @@
 using Puck.Assets.Documents;
+using System.Numerics;
 using System.Text.Json.Serialization;
 using Puck.Forge.Authoring;
+using Puck.Maths;
 
 namespace Puck.World;
 
@@ -149,7 +151,10 @@ public sealed record WorldPlacementAttach(int BodyIndex, DocumentVector3 LocalOf
 /// <param name="YawDegrees">The stamp yaw about +Y, degrees. Same attach caveat as <paramref name="Position"/>.</param>
 /// <param name="Scale">The uniform stamp scale (clamped to the placement policy envelope by validation).</param>
 /// <param name="Distribution">The placement distribution, or <see langword="null"/> for a single copy. Static
-/// placements currently accept a lattice region with a <c>none</c> fill. Refused together with <paramref name="Attach"/>.</param>
+/// placements accept a Lattice, Noise, or Scatter region, each with a <c>none</c> fill — Lattice materializes a
+/// regular two-axis grid (<see cref="WorldPlacementStamp.PatternFor"/>); Noise and Scatter materialize a
+/// deterministic hash-sampled instance set instead (<see cref="WorldPlacementStamp.SampledFixedOffsetsFor"/>), the
+/// placement twin of the field lattice's own Noise/Scatter fills. Refused together with <paramref name="Attach"/>.</param>
 /// <param name="Mirror">The authored local reflection plane, or <see langword="null"/> for no reflected copy. Refused
 /// together with <paramref name="Attach"/>.</param>
 /// <param name="Emission">The placement's emission facet (a synth voice the stamp itself makes — see
@@ -217,4 +222,83 @@ public static class WorldPlacementStamp {
         )
         : null
     );
+    /// <summary>Resolves a Noise/Scatter distribution's placement-local offsets in fixed point — the deterministic,
+    /// Q48.16-only instance decision (see <see cref="CreationStampSampling"/>). <see langword="null"/> when the
+    /// placement carries no distribution or a Lattice/none region (<see cref="PatternFor"/> governs those instead).</summary>
+    /// <param name="placement">The placement row.</param>
+    /// <param name="worldSeed">The world's reroll seed (<c>generation.worldSeed</c>).</param>
+    public static IReadOnlyList<FixedVector3>? SampledFixedOffsetsFor(WorldPlacement placement, ulong worldSeed) => placement.Distribution?.Region switch {
+        WorldDistributionRegion.Noise noise => CreationStampSampling.ResolveNoise(
+            cellSize: FixedQ4816.FromDouble(value: noise.CellSize),
+            width: noise.Width,
+            depth: noise.Depth,
+            frequency: noise.Frequency,
+            threshold: FixedQ4816.FromDouble(value: noise.Threshold),
+            octaves: noise.Octaves,
+            seed: noise.Seed,
+            worldSeed: worldSeed
+        ),
+        WorldDistributionRegion.Scatter scatter => CreationStampSampling.ResolveScatter(
+            cellSize: FixedQ4816.FromDouble(value: scatter.CellSize),
+            width: scatter.Width,
+            depth: scatter.Depth,
+            spacing: scatter.Spacing,
+            radius: scatter.Radius,
+            seed: scatter.Seed,
+            worldSeed: worldSeed
+        ),
+        _ => null,
+    };
+    /// <summary>The presentation-float widening of <see cref="SampledFixedOffsetsFor"/>, for the renderer's stamp
+    /// emission — never fed back into simulation state.</summary>
+    /// <param name="placement">The placement row.</param>
+    /// <param name="worldSeed">The world's reroll seed (<c>generation.worldSeed</c>).</param>
+    public static IReadOnlyList<Vector3>? SampledOffsetsFor(WorldPlacement placement, ulong worldSeed) {
+        if (SampledFixedOffsetsFor(placement: placement, worldSeed: worldSeed) is not { } fixedOffsets) {
+            return null;
+        }
+
+        var offsets = new Vector3[fixedOffsets.Count];
+
+        for (var index = 0; (index < offsets.Length); index++) {
+            offsets[index] = fixedOffsets[index].ToVector3();
+        }
+
+        return offsets;
+    }
+    /// <summary>The worst-case, seed-independent materialized copy count a placement's distribution could ever
+    /// produce — a Lattice's exact CountA x CountB, a Scatter's exact block count, a Noise grid's worst case
+    /// (Width x Depth, since actual admission needs the world seed and is not paid for during validation), or 1 for
+    /// no distribution — mirror-doubled and saturated at <paramref name="ceiling"/>. The seed-independent ceiling
+    /// the document validator bounds an authored grid against; see <see cref="SampledFixedOffsetsFor"/> for the
+    /// actual (seed-resolved) count a booted world materializes.</summary>
+    /// <param name="placement">The placement row.</param>
+    /// <param name="ceiling">The largest returned value.</param>
+    public static long MaterializedCopyCeiling(WorldPlacement placement, long ceiling = long.MaxValue) {
+        var mirror = MirrorFor(placement: placement);
+
+        return placement.Distribution?.Region switch {
+            WorldDistributionRegion.Noise noise => WithMirror(
+                copies: Math.Min(val1: CreationStampSampling.NoiseInstanceCeiling(width: noise.Width, depth: noise.Depth), val2: ceiling),
+                mirror: mirror,
+                ceiling: ceiling
+            ),
+            WorldDistributionRegion.Scatter scatter => WithMirror(
+                copies: Math.Min(val1: CreationStampSampling.ScatterInstanceCeiling(width: scatter.Width, depth: scatter.Depth, spacing: scatter.Spacing), val2: ceiling),
+                mirror: mirror,
+                ceiling: ceiling
+            ),
+            _ => CreationStampLattice.MaterializedCopyCount(
+                pattern: PatternFor(placement: placement),
+                sampledCount: null,
+                mirror: mirror,
+                ceiling: ceiling
+            ),
+        };
+
+        static long WithMirror(long copies, CreationStampPlane? mirror, long ceiling) => ((mirror is null)
+            ? copies
+            : CreationStampLattice.MultiplySaturated(left: copies, right: 2L, ceiling: ceiling)
+        );
+    }
 }

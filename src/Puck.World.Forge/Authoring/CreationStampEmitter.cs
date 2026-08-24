@@ -750,58 +750,71 @@ public static class CreationStampEmitter {
 /// <summary>Materializes the same placement pattern and reflected copies consumed by creation stamp emission.</summary>
 public static class CreationStampLattice {
     /// <summary>Visits pattern copies in A-major, then B-major order, followed immediately by each reflected copy —
-    /// the deterministic counterpart to <see cref="ForEachInstance"/>, in the same order.</summary>
+    /// the deterministic counterpart to <see cref="ForEachInstance"/>, in the same order. When
+    /// <paramref name="sampledOffsets"/> is supplied (a resolved <see cref="CreationStampSampling"/> Noise/Scatter
+    /// offset set), those offsets replace the regular pattern grid entirely — <paramref name="pattern"/> is ignored —
+    /// while mirroring composes identically either way.</summary>
     /// <param name="origin">The placement origin.</param>
     /// <param name="rotation">The placement rotation.</param>
     /// <param name="pattern">The pattern declaration, or <see langword="null"/> for one copy.</param>
+    /// <param name="sampledOffsets">Precomputed placement-local offsets from a hash-sampled Noise/Scatter region, or
+    /// <see langword="null"/> to use <paramref name="pattern"/>.</param>
     /// <param name="mirror">The authored local reflection plane, or <see langword="null"/>.</param>
     /// <param name="visitor">Receives each materialized instance.</param>
     /// <remarks>The pattern and mirror are AUTHORED single-precision records, so they enter the contract through
     /// <see cref="FixedVector3.FromVector3"/> here rather than at each caller. The step accumulation is a scaled
     /// index rather than a running sum, exactly as the single-precision body computes it, so copy <c>n</c> does not
     /// inherit <c>n−1</c> roundings.</remarks>
-    public static void ForEachFixedInstance(FixedVector3 origin, FixedQuaternion rotation, CreationStampPattern? pattern, CreationStampPlane? mirror, Action<FixedCreationStampInstance> visitor) {
+    public static void ForEachFixedInstance(FixedVector3 origin, FixedQuaternion rotation, CreationStampPattern? pattern, IReadOnlyList<FixedVector3>? sampledOffsets, CreationStampPlane? mirror, Action<FixedCreationStampInstance> visitor) {
         ArgumentNullException.ThrowIfNull(visitor);
 
-        var countA = Math.Max(
-            val1: (pattern?.CountA ?? 1),
-            val2: 1
-        );
-        var countB = Math.Max(
-            val1: (pattern?.CountB ?? 1),
-            val2: 1
-        );
-        var stepA = FixedVector3.FromVector3(value: (pattern?.StepA ?? Vector3.Zero));
-        var stepB = FixedVector3.FromVector3(value: (pattern?.StepB ?? Vector3.Zero));
         var planeNormal = ((mirror is { } authoredPlane)
             ? FixedVector3.FromVector3(value: authoredPlane.Normal).Normalize()
             : (FixedVector3?)null
         );
         var planeOffset = FixedQ4816.FromDouble(value: (mirror?.Offset ?? 0f));
 
-        for (var indexA = 0; (indexA < countA); indexA++) {
-            for (var indexB = 0; (indexB < countB); indexB++) {
-                var localOrigin = ((stepA * FixedQ4816.FromInteger(value: indexA)) + (stepB * FixedQ4816.FromInteger(value: indexB)));
+        if (sampledOffsets is { Count: > 0 } offsets) {
+            for (var index = 0; (index < offsets.Count); index++) {
+                VisitLocal(local: offsets[index]);
+            }
+        } else {
+            var countA = Math.Max(
+                val1: (pattern?.CountA ?? 1),
+                val2: 1
+            );
+            var countB = Math.Max(
+                val1: (pattern?.CountB ?? 1),
+                val2: 1
+            );
+            var stepA = FixedVector3.FromVector3(value: (pattern?.StepA ?? Vector3.Zero));
+            var stepB = FixedVector3.FromVector3(value: (pattern?.StepB ?? Vector3.Zero));
 
-                Visit(
-                    local: localOrigin,
-                    reflectionNormal: null
-                );
-
-                if (planeNormal is { } reflectionNormal) {
-                    var signedDistance = (FixedVector3.Dot(
-                        left: localOrigin,
-                        right: reflectionNormal
-                    ) - planeOffset);
-
-                    Visit(
-                        local: (localOrigin - (reflectionNormal * (signedDistance + signedDistance))),
-                        reflectionNormal: reflectionNormal
-                    );
+            for (var indexA = 0; (indexA < countA); indexA++) {
+                for (var indexB = 0; (indexB < countB); indexB++) {
+                    VisitLocal(local: ((stepA * FixedQ4816.FromInteger(value: indexA)) + (stepB * FixedQ4816.FromInteger(value: indexB))));
                 }
             }
         }
 
+        void VisitLocal(FixedVector3 local) {
+            Visit(
+                local: local,
+                reflectionNormal: null
+            );
+
+            if (planeNormal is { } reflectionNormal) {
+                var signedDistance = (FixedVector3.Dot(
+                    left: local,
+                    right: reflectionNormal
+                ) - planeOffset);
+
+                Visit(
+                    local: (local - (reflectionNormal * (signedDistance + signedDistance))),
+                    reflectionNormal: reflectionNormal
+                );
+            }
+        }
         void Visit(FixedVector3 local, FixedVector3? reflectionNormal) {
             visitor(obj: new FixedCreationStampInstance(
                 Origin: (origin + rotation.Rotate(vector: local)),
@@ -813,21 +826,13 @@ public static class CreationStampLattice {
     /// <param name="origin">The placement origin.</param>
     /// <param name="rotation">The placement rotation.</param>
     /// <param name="pattern">The pattern declaration, or <see langword="null"/> for one copy.</param>
+    /// <param name="sampledOffsets">Precomputed placement-local offsets from a hash-sampled Noise/Scatter region
+    /// (see <see cref="ForEachFixedInstance"/>), or <see langword="null"/> to use <paramref name="pattern"/>.</param>
     /// <param name="mirror">The authored local reflection plane, or <see langword="null"/>.</param>
     /// <param name="visitor">Receives each materialized instance.</param>
-    public static void ForEachInstance(Vector3 origin, Quaternion rotation, CreationStampPattern? pattern, CreationStampPlane? mirror, Action<CreationStampInstance> visitor) {
+    public static void ForEachInstance(Vector3 origin, Quaternion rotation, CreationStampPattern? pattern, IReadOnlyList<Vector3>? sampledOffsets, CreationStampPlane? mirror, Action<CreationStampInstance> visitor) {
         ArgumentNullException.ThrowIfNull(visitor);
 
-        var countA = Math.Max(
-            val1: (pattern?.CountA ?? 1),
-            val2: 1
-        );
-        var countB = Math.Max(
-            val1: (pattern?.CountB ?? 1),
-            val2: 1
-        );
-        var stepA = (pattern?.StepA ?? Vector3.Zero);
-        var stepB = (pattern?.StepB ?? Vector3.Zero);
         var plane = ((mirror is { } authoredPlane)
             ? new CreationStampPlane(
                 Normal: Vector3.Normalize(value: authoredPlane.Normal),
@@ -836,29 +841,47 @@ public static class CreationStampLattice {
             : (CreationStampPlane?)null
         );
 
-        for (var indexA = 0; (indexA < countA); indexA++) {
-            for (var indexB = 0; (indexB < countB); indexB++) {
-                var localOrigin = ((stepA * indexA) + (stepB * indexB));
+        if (sampledOffsets is { Count: > 0 } offsets) {
+            for (var index = 0; (index < offsets.Count); index++) {
+                VisitLocal(local: offsets[index]);
+            }
+        } else {
+            var countA = Math.Max(
+                val1: (pattern?.CountA ?? 1),
+                val2: 1
+            );
+            var countB = Math.Max(
+                val1: (pattern?.CountB ?? 1),
+                val2: 1
+            );
+            var stepA = (pattern?.StepA ?? Vector3.Zero);
+            var stepB = (pattern?.StepB ?? Vector3.Zero);
 
-                Visit(
-                    local: localOrigin,
-                    reflectionNormal: null
-                );
-
-                if (plane is { } reflection) {
-                    var reflectedOrigin = (localOrigin - ((2f * (Vector3.Dot(
-                        vector1: localOrigin,
-                        vector2: reflection.Normal
-                    ) - reflection.Offset)) * reflection.Normal));
-
-                    Visit(
-                        local: reflectedOrigin,
-                        reflectionNormal: reflection.Normal
-                    );
+            for (var indexA = 0; (indexA < countA); indexA++) {
+                for (var indexB = 0; (indexB < countB); indexB++) {
+                    VisitLocal(local: ((stepA * indexA) + (stepB * indexB)));
                 }
             }
         }
 
+        void VisitLocal(Vector3 local) {
+            Visit(
+                local: local,
+                reflectionNormal: null
+            );
+
+            if (plane is { } reflection) {
+                var reflectedOrigin = (local - ((2f * (Vector3.Dot(
+                    vector1: local,
+                    vector2: reflection.Normal
+                ) - reflection.Offset)) * reflection.Normal));
+
+                Visit(
+                    local: reflectedOrigin,
+                    reflectionNormal: reflection.Normal
+                );
+            }
+        }
         void Visit(Vector3 local, Vector3? reflectionNormal) {
             visitor(obj: new CreationStampInstance(
                 Origin: (origin + Vector3.Transform(
@@ -871,17 +894,17 @@ public static class CreationStampLattice {
     }
     /// <summary>Returns the number of materialized render instances.</summary>
     /// <param name="pattern">The pattern declaration, or <see langword="null"/>.</param>
+    /// <param name="sampledCount">The resolved Noise/Scatter offset count, or <see langword="null"/> to count
+    /// <paramref name="pattern"/>'s grid instead.</param>
     /// <param name="mirror">The authored local reflection plane, or <see langword="null"/>.</param>
-    public static int InstanceCount(CreationStampPattern? pattern, CreationStampPlane? mirror) {
-        var countA = Math.Max(
+    public static int InstanceCount(CreationStampPattern? pattern, int? sampledCount, CreationStampPlane? mirror) {
+        var copies = (sampledCount ?? checked((Math.Max(
             val1: (pattern?.CountA ?? 1),
             val2: 1
-        );
-        var countB = Math.Max(
+        ) * Math.Max(
             val1: (pattern?.CountB ?? 1),
             val2: 1
-        );
-        var copies = checked((countA * countB));
+        ))));
 
         return ((mirror is null)
             ? copies
@@ -890,22 +913,24 @@ public static class CreationStampLattice {
     }
     /// <summary>Returns the materialized pattern-and-mirror copy count, saturated at <paramref name="ceiling"/>.</summary>
     /// <param name="pattern">The pattern declaration, or <see langword="null"/>.</param>
+    /// <param name="sampledCount">The resolved Noise/Scatter offset count, or <see langword="null"/> to count
+    /// <paramref name="pattern"/>'s grid instead.</param>
     /// <param name="mirror">The authored local reflection plane, or <see langword="null"/>.</param>
     /// <param name="ceiling">The largest returned value.</param>
-    public static long MaterializedCopyCount(CreationStampPattern? pattern, CreationStampPlane? mirror, long ceiling = long.MaxValue) {
-        var countA = Math.Max(
-            val1: (pattern?.CountA ?? 1),
-            val2: 1
-        );
-        var countB = Math.Max(
-            val1: (pattern?.CountB ?? 1),
-            val2: 1
-        );
-        var copies = MultiplySaturated(
-            ceiling: ceiling,
-            left: countA,
-            right: countB
-        );
+    public static long MaterializedCopyCount(CreationStampPattern? pattern, long? sampledCount, CreationStampPlane? mirror, long ceiling = long.MaxValue) {
+        var copies = (sampledCount is { } sampled
+            ? Math.Min(val1: sampled, val2: ceiling)
+            : MultiplySaturated(
+                ceiling: ceiling,
+                left: Math.Max(
+                    val1: (pattern?.CountA ?? 1),
+                    val2: 1
+                ),
+                right: Math.Max(
+                    val1: (pattern?.CountB ?? 1),
+                    val2: 1
+                )
+            ));
 
         return ((mirror is null)
             ? copies

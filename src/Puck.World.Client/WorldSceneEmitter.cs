@@ -178,7 +178,8 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
         );
         m_placementReservation = (WorldPlacementStamper.StaticStampInstances(
             creations: definition.Creations,
-            placements: definition.Placements
+            placements: definition.Placements,
+            worldSeed: (definition.Generation?.WorldSeed ?? 0UL)
         ) + m_authoringHeadroomPlacements);
     }
 
@@ -258,7 +259,8 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
         ) {
             var candidateInstances = WorldPlacementStamper.StaticStampInstances(
                 creations: creations,
-                placements: placements
+                placements: placements,
+                worldSeed: (client.Definition.Generation?.WorldSeed ?? 0UL)
             );
 
             WorldPlacementStamper.EmitProbe(

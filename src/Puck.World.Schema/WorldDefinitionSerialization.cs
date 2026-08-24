@@ -154,6 +154,8 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldDistributionRegion.Disc), TypeInfoPropertyName = "WorldDistributionRegionDisc")]
 [JsonSerializable(typeof(WorldDistributionRegion.Points), TypeInfoPropertyName = "WorldDistributionRegionPoints")]
 [JsonSerializable(typeof(WorldDistributionRegion.Lattice), TypeInfoPropertyName = "WorldDistributionRegionLattice")]
+[JsonSerializable(typeof(WorldDistributionRegion.Noise), TypeInfoPropertyName = "WorldDistributionRegionNoise")]
+[JsonSerializable(typeof(WorldDistributionRegion.Scatter), TypeInfoPropertyName = "WorldDistributionRegionScatter")]
 // The hud section rows (the world.row.set hud.panels / world.row.set hud.defaults payload shapes; an element rides its panel row). Also
 // reachable from WorldDefinition already; these entries expose the typed WorldJsonContext.Default.<Type> accessors.
 [JsonSerializable(typeof(WorldHudPanel))]

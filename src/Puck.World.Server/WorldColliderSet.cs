@@ -72,6 +72,7 @@ internal sealed class WorldColliderSet : IContactField {
     /// <param name="definition">The live world definition.</param>
     /// <returns>The screen and placement contribution.</returns>
     internal static WorldContactCensus Measure(WorldDefinition definition) {
+        var worldSeed = (definition.Generation?.WorldSeed ?? 0UL);
         var spheres = 0L;
         var boxes = 0L;
         var planes = 0L;
@@ -99,6 +100,7 @@ internal sealed class WorldColliderSet : IContactField {
 
             var copies = CreationStampLattice.MaterializedCopyCount(
                 pattern: WorldPlacementStamp.PatternFor(placement: placement),
+                sampledCount: WorldPlacementStamp.SampledFixedOffsetsFor(placement: placement, worldSeed: worldSeed)?.Count,
                 mirror: WorldPlacementStamp.MirrorFor(placement: placement)
             );
 
@@ -200,6 +202,7 @@ internal sealed class WorldColliderSet : IContactField {
     /// <returns>The analytic field.</returns>
     public static WorldColliderSet Build(WorldDefinition definition) {
         var collision = definition.Collision;
+        var worldSeed = (definition.Generation?.WorldSeed ?? 0UL);
 
         var tuning = FixedWorldCollision.Compile(collision: collision);
         var colliders = new List<FixedStaticCollider>();
@@ -267,6 +270,7 @@ internal sealed class WorldColliderSet : IContactField {
                 origin: FixedVector3.FromVector3(value: placement.Position),
                 rotation: rotation,
                 pattern: WorldPlacementStamp.PatternFor(placement: placement),
+                sampledOffsets: WorldPlacementStamp.SampledFixedOffsetsFor(placement: placement, worldSeed: worldSeed),
                 mirror: WorldPlacementStamp.MirrorFor(placement: placement),
                 visitor: instance => CreationStampEmitter.VisitFixedPrimitiveCopies(
                     document: creation.EngineDocument,

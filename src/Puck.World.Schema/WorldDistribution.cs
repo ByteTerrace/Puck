@@ -8,6 +8,8 @@ namespace Puck.World;
 [JsonDerivedType(typeof(WorldDistributionRegion.Disc), typeDiscriminator: "disc")]
 [JsonDerivedType(typeof(WorldDistributionRegion.Points), typeDiscriminator: "points")]
 [JsonDerivedType(typeof(WorldDistributionRegion.Lattice), typeDiscriminator: "lattice")]
+[JsonDerivedType(typeof(WorldDistributionRegion.Noise), typeDiscriminator: "noise")]
+[JsonDerivedType(typeof(WorldDistributionRegion.Scatter), typeDiscriminator: "scatter")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record WorldDistributionRegion {
     private WorldDistributionRegion() { }
@@ -26,6 +28,32 @@ public abstract record WorldDistributionRegion {
     /// <param name="StepB">The second per-copy step.</param>
     /// <param name="CountB">The copy count along <paramref name="StepB"/>.</param>
     public sealed record Lattice(DocumentVector3 StepA, int CountA, DocumentVector3 StepB, int CountB) : WorldDistributionRegion;
+    /// <summary>Deterministic hash-lattice fBm patch admission over a placement-local grid, centered on the
+    /// placement — one instance at the center of every admitted cell. The placement twin of
+    /// <see cref="WorldLatticeFill.Noise"/>: same fixed-point fBm, same seed fold against
+    /// <c>generation.worldSeed</c>, same threshold semantics; here admission stamps a creation copy instead of
+    /// writing a field value.</summary>
+    /// <param name="CellSize">The local grid's cubic cell edge, world units.</param>
+    /// <param name="Width">Cells along the placement's local +X.</param>
+    /// <param name="Depth">Cells along the placement's local +Z.</param>
+    /// <param name="Frequency">Noise-cell edge in lattice cells (see <see cref="WorldLatticeFill.Noise.Frequency"/>). At least 1.</param>
+    /// <param name="Threshold">The patch admission level in [0, 1); higher = sparser patches.</param>
+    /// <param name="Octaves">Octave count, 1..4.</param>
+    /// <param name="Seed">The hash seed, folded with the world seed.</param>
+    public sealed record Noise(float CellSize, int Width, int Depth, int Frequency, float Threshold = 0.5f, int Octaves = 3, uint Seed = 0u) : WorldDistributionRegion;
+    /// <summary>One jittered instance per <paramref name="Spacing"/>-cell block over a placement-local grid,
+    /// centered on the placement. The placement twin of <see cref="WorldLatticeFill.Scatter"/>: same integer PCG3D
+    /// block jitter, same seed fold — every block materializes exactly the one jittered point (never a filled
+    /// neighborhood), so the instance count is exact and seed-independent: ceil(Width/Spacing) x
+    /// ceil(Depth/Spacing).</summary>
+    /// <param name="CellSize">The local grid's cubic cell edge, world units.</param>
+    /// <param name="Width">Cells along the placement's local +X.</param>
+    /// <param name="Depth">Cells along the placement's local +Z.</param>
+    /// <param name="Spacing">The scatter block edge in cells (at least 2).</param>
+    /// <param name="Radius">The jitter inset in cells (at least 1; at most spacing/2 — a point never leaves its
+    /// block, mirroring <see cref="WorldLatticeFill.Scatter.Radius"/>'s own bound).</param>
+    /// <param name="Seed">The hash seed, folded with the world seed.</param>
+    public sealed record Scatter(float CellSize, int Width, int Depth, int Spacing, int Radius = 1, uint Seed = 0u) : WorldDistributionRegion;
 }
 /// <summary>A spatial region composed with the deterministic sequence that fills it.</summary>
 /// <param name="Region">The region to fill.</param>

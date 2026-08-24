@@ -3145,6 +3145,61 @@
             }
           }
         }
+      },
+      {
+        "id": "iceShardField",
+        "prototypeId": "iceShard",
+        "position": [
+          10,
+          0,
+          0
+        ],
+        "scale": 1,
+        "yawDegrees": 0,
+        "distribution": {
+          "region": {
+            "$type": "scatter",
+            "cellSize": 1,
+            "width": 15,
+            "depth": 15,
+            "spacing": 5,
+            "radius": 1,
+            "seed": 17
+          },
+          "fill": {
+            "name": "none",
+            "offset": 0,
+            "step": 0
+          }
+        }
+      },
+      {
+        "id": "emberField",
+        "prototypeId": "emberSpark",
+        "position": [
+          -10,
+          0,
+          0
+        ],
+        "scale": 1,
+        "yawDegrees": 0,
+        "distribution": {
+          "region": {
+            "$type": "noise",
+            "cellSize": 1,
+            "width": 10,
+            "depth": 10,
+            "frequency": 4,
+            "threshold": 0.55,
+            "octaves": 3,
+            "seed": 42
+          },
+          "fill": {
+            "name": "none",
+            "offset": 0,
+            "step": 0
+          }
+        }
       }
     ]
   },
@@ -3221,6 +3276,83 @@
             ],
             "smooth": 0,
             "type": "Cylinder"
+          }
+        ]
+      }
+    },
+    {
+      "id": "iceShard",
+      "document": {
+        "name": "iceShard",
+        "palette": [
+          {
+            "color": "state.colors.ice"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "spike",
+            "position": [
+              0,
+              0.3,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.2,
+              0.6,
+              0.2
+            ],
+            "smooth": 0,
+            "type": "Cone"
+          }
+        ]
+      }
+    },
+    {
+      "id": "emberSpark",
+      "document": {
+        "name": "emberSpark",
+        "palette": [
+          {
+            "color": "state.colors.fire",
+            "emissive": 0.6
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "spark",
+            "position": [
+              0,
+              0.2,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.18,
+              0.18,
+              0.18
+            ],
+            "smooth": 0,
+            "type": "Sphere"
           }
         ]
       }

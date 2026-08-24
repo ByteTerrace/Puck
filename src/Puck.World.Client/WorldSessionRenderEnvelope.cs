@@ -57,7 +57,8 @@ internal static class WorldSessionRenderEnvelope {
 
         var reserved = WorldPlacementStamper.StaticStampInstances(
             creations: candidate.Creations,
-            placements: candidate.Placements
+            placements: candidate.Placements,
+            worldSeed: (candidate.Generation?.WorldSeed ?? 0UL)
         );
 
         WorldPlacementStamper.EmitProbe(

@@ -129,6 +129,7 @@ public sealed class WorldSolidField : IContactField {
         reason = string.Empty;
 
         var tuning = FixedWorldCollision.Compile(collision: definition.Collision);
+        var worldSeed = (definition.Generation?.WorldSeed ?? 0UL);
         var builder = new SdfProgramBuilder();
         var placementShapeCount = 0L;
 
@@ -194,6 +195,7 @@ public sealed class WorldSolidField : IContactField {
                 origin: FixedVector3.FromVector3(value: placement.Position),
                 rotation: fixedRotation,
                 pattern: WorldPlacementStamp.PatternFor(placement: placement),
+                sampledOffsets: WorldPlacementStamp.SampledFixedOffsetsFor(placement: placement, worldSeed: worldSeed),
                 mirror: WorldPlacementStamp.MirrorFor(placement: placement),
                 visitor: instance => {
                     if (scoped) {

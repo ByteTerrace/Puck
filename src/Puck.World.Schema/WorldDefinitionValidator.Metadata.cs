@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Text.Json;
+using Puck.Forge.Authoring;
 using Puck.Maths;
 using Puck.SignedDistance;
 
@@ -221,7 +222,7 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: "collision.gradientProbe > 0 requires at least one field-contact requirement.");
         }
     }
-    private static void ValidateDistribution(WorldDistribution distribution, string path, HashSet<string> spawnPointIds, bool allowDisc, bool allowPoints, bool allowLattice, bool allowZeroDisc, List<string> errors) {
+    private static void ValidateDistribution(WorldDistribution distribution, string path, HashSet<string> spawnPointIds, bool allowDisc, bool allowPoints, bool allowLattice, bool allowZeroDisc, List<string> errors, bool allowNoise = false, bool allowScatter = false) {
         if (
             (distribution is null) ||
             (distribution.Region is null)
@@ -295,6 +296,61 @@ public static partial class WorldDefinitionValidator {
                     lattice: lattice,
                     path: $"{path}.region"
                 );
+                ValidateSequence(
+                    sequence: distribution.Fill,
+                    path: $"{path}.fill",
+                    minIndex: 0,
+                    errors: errors,
+                    WorldSequence.None
+                );
+                break;
+            case WorldDistributionRegion.Noise noise when allowNoise:
+                ValidateSampledGrid(
+                    cellSize: noise.CellSize,
+                    depth: noise.Depth,
+                    errors: errors,
+                    path: $"{path}.region",
+                    width: noise.Width
+                );
+
+                if (
+                    !float.IsFinite(f: noise.Threshold) ||
+                    (noise.Threshold < 0f) ||
+                    (noise.Threshold >= 1f)
+                ) {
+                    errors.Add(item: $"{path}.region.threshold must be in [0, 1) (was {noise.Threshold}).");
+                }
+                if (noise.Frequency < 1) {
+                    errors.Add(item: $"{path}.region.frequency must be at least 1 (noise-cell edge in grid cells; was {noise.Frequency}).");
+                }
+                if ((noise.Octaves < 1) || (noise.Octaves > 4)) {
+                    errors.Add(item: $"{path}.region.octaves must be in 1..4 (was {noise.Octaves}).");
+                }
+
+                ValidateSequence(
+                    sequence: distribution.Fill,
+                    path: $"{path}.fill",
+                    minIndex: 0,
+                    errors: errors,
+                    WorldSequence.None
+                );
+                break;
+            case WorldDistributionRegion.Scatter scatter when allowScatter:
+                ValidateSampledGrid(
+                    cellSize: scatter.CellSize,
+                    depth: scatter.Depth,
+                    errors: errors,
+                    path: $"{path}.region",
+                    width: scatter.Width
+                );
+
+                if (scatter.Spacing < 2) {
+                    errors.Add(item: $"{path}.region.spacing must be at least 2 cells (was {scatter.Spacing}).");
+                }
+                if ((scatter.Radius < 1) || ((2 * scatter.Radius) > scatter.Spacing)) {
+                    errors.Add(item: $"{path}.region.radius must be at least 1 and at most spacing/2 (a jittered point never leaves its block; was {scatter.Radius} against spacing {scatter.Spacing}).");
+                }
+
                 ValidateSequence(
                     sequence: distribution.Fill,
                     path: $"{path}.fill",
@@ -548,6 +604,34 @@ public static partial class WorldDefinitionValidator {
         ).LengthSquared() <= 0f)
         ) {
             errors.Add(item: $"{path} steps must be independent when both counts exceed 1.");
+        }
+    }
+    // The Noise/Scatter placement-local grid both regions declare (see WorldDistributionRegion.Noise/.Scatter):
+    // width/depth bound the worst-case materialized copy count against the engine's static-instance ceiling
+    // (WorldPlacementStamp.MaterializedCopyCeiling), so a refusal here is what keeps that count computable without
+    // resolving the actual hash-sampled offsets during validation.
+    private static void ValidateSampledGrid(float cellSize, int width, int depth, string path, List<string> errors) {
+        if (
+            !float.IsFinite(f: cellSize) ||
+            (cellSize <= 0f)
+        ) {
+            errors.Add(item: $"{path}.cellSize must be finite and positive (was {cellSize}).");
+        }
+
+        if (width < 1) {
+            errors.Add(item: $"{path}.width must be at least 1 (was {width}).");
+        }
+
+        if (depth < 1) {
+            errors.Add(item: $"{path}.depth must be at least 1 (was {depth}).");
+        }
+
+        if (
+            (width >= 1) &&
+            (depth >= 1) &&
+            (CreationStampSampling.NoiseInstanceCeiling(width: width, depth: depth) > SdfProgramBuilder.MaxInstances)
+        ) {
+            errors.Add(item: $"{path} width x depth ({width}x{depth}) worst-case exceeds the {SdfProgramBuilder.MaxInstances}-instance engine ceiling.");
         }
     }
     // Vocabulary only — the shallow half of the shallow-then-deep split WorldScreenSource.Machine's Options string

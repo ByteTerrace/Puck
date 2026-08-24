@@ -88,7 +88,7 @@ public static class WorldPlacementStamper {
             )]
         );
     }
-    private static void EmitPlacement(SdfProgramBuilder builder, CreationDocument creation, int[] paletteIds, WorldPlacement placement, PackedFontAtlasCatalog? textCatalog) {
+    private static void EmitPlacement(SdfProgramBuilder builder, CreationDocument creation, int[] paletteIds, WorldPlacement placement, PackedFontAtlasCatalog? textCatalog, ulong worldSeed) {
         var reach = CreationStampEmitter.RenderReach(
             document: creation,
             scale: placement.Scale,
@@ -110,6 +110,7 @@ public static class WorldPlacementStamper {
             origin: placement.Position,
             rotation: rotation,
             pattern: WorldPlacementStamp.PatternFor(placement: placement),
+            sampledOffsets: WorldPlacementStamp.SampledOffsetsFor(placement: placement, worldSeed: worldSeed),
             mirror: WorldPlacementStamp.MirrorFor(placement: placement),
             visitor: instance => {
                 _ = builder.BeginInstance(
@@ -233,6 +234,7 @@ public static class WorldPlacementStamper {
     /// assets to resolve.</param>
     /// <param name="tintFor">Resolves a placement id's albedo tint (color + blend), or <see langword="null"/> untinted.</param>
     public static void EmitStatic(SdfProgramBuilder builder, WorldDefinition definition, IReadOnlyList<WorldCreation> creations, IReadOnlyList<WorldPlacement> placements, PackedFontAtlasCatalog? textCatalog = null, Func<string, (Vector3 Color, float Blend)?>? tintFor = null) {
+        var worldSeed = (definition.Generation?.WorldSeed ?? 0UL);
         var paletteById = new Dictionary<string, int[]>(comparer: StringComparer.Ordinal);
 
         foreach (var placement in placements) {
@@ -270,15 +272,19 @@ public static class WorldPlacementStamper {
                 creation: creation.EngineDocument,
                 paletteIds: paletteIds,
                 placement: placement,
-                textCatalog: textCatalog
+                textCatalog: textCatalog,
+                worldSeed: worldSeed
             );
         }
     }
-    /// <summary>The emitted instance count of one placement, including pattern and reflected copies.</summary>
+    /// <summary>The emitted instance count of one placement, including pattern/sampled and reflected copies.</summary>
     /// <param name="placement">The placement row.</param>
-    public static int InstanceCount(WorldPlacement placement) {
+    /// <param name="worldSeed">The world's reroll seed (<c>generation.worldSeed</c>) — resolves a Noise/Scatter
+    /// distribution's actual admitted count.</param>
+    public static int InstanceCount(WorldPlacement placement, ulong worldSeed) {
         return CreationStampLattice.InstanceCount(
             pattern: WorldPlacementStamp.PatternFor(placement: placement),
+            sampledCount: WorldPlacementStamp.SampledOffsetsFor(placement: placement, worldSeed: worldSeed)?.Count,
             mirror: WorldPlacementStamp.MirrorFor(placement: placement)
         );
     }
@@ -300,7 +306,9 @@ public static class WorldPlacementStamper {
     /// charge nothing here) — the apply-time measure's placement charge unit.</summary>
     /// <param name="creations">The world's creation rows.</param>
     /// <param name="placements">The placement rows.</param>
-    public static int StaticStampInstances(IReadOnlyList<WorldCreation> creations, IReadOnlyList<WorldPlacement> placements) {
+    /// <param name="worldSeed">The world's reroll seed (<c>generation.worldSeed</c>) — resolves each row's
+    /// Noise/Scatter distribution to its actual admitted count.</param>
+    public static int StaticStampInstances(IReadOnlyList<WorldCreation> creations, IReadOnlyList<WorldPlacement> placements, ulong worldSeed = 0UL) {
         var instances = 0;
 
         foreach (var placement in placements) {
@@ -314,7 +322,7 @@ public static class WorldPlacementStamper {
                 placement: placement
             )
             ) {
-                instances = checked((instances + InstanceCount(placement: placement)));
+                instances = checked((instances + InstanceCount(placement: placement, worldSeed: worldSeed)));
             }
         }
 

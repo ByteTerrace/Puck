@@ -1027,7 +1027,9 @@ public static partial class WorldDefinitionValidator {
                 ValidateDistribution(
                     allowDisc: false,
                     allowLattice: true,
+                    allowNoise: true,
                     allowPoints: false,
+                    allowScatter: true,
                     allowZeroDisc: false,
                     distribution: distribution,
                     errors: errors,
@@ -1096,9 +1098,8 @@ public static partial class WorldDefinitionValidator {
                     // The field provider compiles every solid row into ONE program instead of one collider per copy,
                     // so the analytic ceiling does not describe what it costs.
                     if (!requiresField) {
-                        var copies = CreationStampLattice.MaterializedCopyCount(
-                            pattern: WorldPlacementStamp.PatternFor(placement: placement),
-                            mirror: WorldPlacementStamp.MirrorFor(placement: placement),
+                        var copies = WorldPlacementStamp.MaterializedCopyCeiling(
+                            placement: placement,
                             ceiling: (WorldPlacementPolicy.MaxSolidPlacementColliders + 1L)
                         );
                         var contribution = CreationStampLattice.MultiplySaturated(
@@ -1177,9 +1178,8 @@ public static partial class WorldDefinitionValidator {
                 !isAnimated &&
                 (placement.Inhabit is null)
             ) {
-                var contribution = CreationStampLattice.MaterializedCopyCount(
-                    pattern: WorldPlacementStamp.PatternFor(placement: placement),
-                    mirror: WorldPlacementStamp.MirrorFor(placement: placement),
+                var contribution = WorldPlacementStamp.MaterializedCopyCeiling(
+                    placement: placement,
                     ceiling: (SdfProgramBuilder.MaxInstances + 1L)
                 );
                 var previousInstanceCount = staticPlacementInstanceCount;
