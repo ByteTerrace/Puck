@@ -1039,6 +1039,94 @@
   "state": {
     "world": [
       {
+        "name": "heat",
+        "kind": "fixed",
+        "lattice": {
+          "topology": "world",
+          "initial": 0,
+          "min": -5,
+          "max": 10
+        }
+      },
+      {
+        "name": "fuel",
+        "kind": "fixed",
+        "lattice": {
+          "topology": "world",
+          "initial": 0,
+          "min": 0,
+          "max": 1,
+          "heightScale": 1.2,
+          "color": "#3F7A3A",
+          "paint": [
+            {
+              "value": 1,
+              "minX": -16,
+              "minZ": -40,
+              "maxX": -0.5,
+              "maxZ": -8
+            }
+          ]
+        }
+      },
+      {
+        "name": "fire",
+        "kind": "fixed",
+        "lattice": {
+          "topology": "world",
+          "initial": 0,
+          "min": 0,
+          "max": 1,
+          "heightScale": 0.9,
+          "color": "#FF5A1F"
+        }
+      },
+      {
+        "name": "ice",
+        "kind": "fixed",
+        "lattice": {
+          "topology": "world",
+          "initial": 0,
+          "min": 0,
+          "max": 1,
+          "heightScale": 1.5,
+          "color": "#D8F1FF",
+          "paint": [
+            {
+              "value": 1,
+              "minX": 0.5,
+              "minZ": -40,
+              "maxX": 16,
+              "maxZ": -8
+            }
+          ]
+        }
+      },
+      {
+        "name": "water",
+        "kind": "fixed",
+        "lattice": {
+          "topology": "world",
+          "initial": 0,
+          "min": 0,
+          "max": 1,
+          "heightScale": 0.08,
+          "color": "#3B7BD6"
+        }
+      },
+      {
+        "name": "char",
+        "kind": "fixed",
+        "lattice": {
+          "topology": "world",
+          "initial": 0,
+          "min": 0,
+          "max": 1,
+          "heightScale": 0.18,
+          "color": "#2A2320"
+        }
+      },
+      {
         "name": "colors",
         "kind": "text",
         "cells": [
@@ -1768,6 +1856,248 @@
           {
             "key": "2",
             "value": 0
+          }
+        ]
+      }
+    ],
+    "lattices": [
+      {
+        "name": "world",
+        "origin": [
+          -16,
+          0,
+          -40
+        ],
+        "cellSize": 0.5,
+        "width": 64,
+        "depth": 64,
+        "layers": 1,
+        "stepEveryTicks": 8,
+        "reactions": [
+          {
+            "$type": "diffuse",
+            "field": "heat",
+            "rate": 0.35
+          },
+          {
+            "$type": "decay",
+            "field": "heat",
+            "rate": 0.04
+          },
+          {
+            "$type": "emit",
+            "tag": "hot",
+            "field": "heat",
+            "amount": 4
+          },
+          {
+            "$type": "emit",
+            "tag": "cold",
+            "field": "heat",
+            "amount": -4
+          },
+          {
+            "$type": "transform",
+            "when": [
+              {
+                "field": "heat",
+                "comparison": "GreaterOrEqual",
+                "value": 1.2
+              },
+              {
+                "field": "fuel",
+                "comparison": "Greater",
+                "value": 0.05
+              },
+              {
+                "field": "fire",
+                "comparison": "LessOrEqual",
+                "value": 0
+              }
+            ],
+            "then": [
+              {
+                "field": "fire",
+                "op": "Set",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "$type": "transform",
+            "when": [
+              {
+                "field": "fire",
+                "comparison": "Greater",
+                "value": 0
+              }
+            ],
+            "then": [
+              {
+                "field": "heat",
+                "op": "Add",
+                "value": 3
+              },
+              {
+                "field": "fuel",
+                "op": "Add",
+                "value": -0.03
+              },
+              {
+                "field": "char",
+                "op": "Add",
+                "value": 0.02
+              }
+            ]
+          },
+          {
+            "$type": "transform",
+            "when": [
+              {
+                "field": "fire",
+                "comparison": "Greater",
+                "value": 0
+              },
+              {
+                "field": "fuel",
+                "comparison": "LessOrEqual",
+                "value": 0.05
+              }
+            ],
+            "then": [
+              {
+                "field": "fire",
+                "op": "Set",
+                "value": 0
+              },
+              {
+                "field": "fuel",
+                "op": "Set",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "$type": "transform",
+            "when": [
+              {
+                "field": "ice",
+                "comparison": "Greater",
+                "value": 0
+              },
+              {
+                "field": "heat",
+                "comparison": "Greater",
+                "value": 0.5
+              }
+            ],
+            "then": [
+              {
+                "field": "ice",
+                "op": "Add",
+                "value": -0.05
+              },
+              {
+                "field": "water",
+                "op": "Add",
+                "value": 0.05
+              },
+              {
+                "field": "heat",
+                "op": "Add",
+                "value": -0.5
+              }
+            ]
+          },
+          {
+            "$type": "transform",
+            "when": [
+              {
+                "field": "water",
+                "comparison": "Greater",
+                "value": 0.2
+              },
+              {
+                "field": "fire",
+                "comparison": "Greater",
+                "value": 0
+              }
+            ],
+            "then": [
+              {
+                "field": "fire",
+                "op": "Set",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "$type": "transform",
+            "when": [
+              {
+                "field": "water",
+                "comparison": "Greater",
+                "value": 0
+              },
+              {
+                "field": "heat",
+                "comparison": "Greater",
+                "value": 4
+              }
+            ],
+            "then": [
+              {
+                "field": "water",
+                "op": "Add",
+                "value": -0.03
+              },
+              {
+                "field": "heat",
+                "op": "Add",
+                "value": -0.3
+              }
+            ]
+          },
+          {
+            "$type": "transform",
+            "when": [
+              {
+                "field": "water",
+                "comparison": "Greater",
+                "value": 0.1
+              },
+              {
+                "field": "heat",
+                "comparison": "Less",
+                "value": -1
+              }
+            ],
+            "then": [
+              {
+                "field": "water",
+                "op": "Add",
+                "value": -0.05
+              },
+              {
+                "field": "ice",
+                "op": "Add",
+                "value": 0.05
+              }
+            ]
+          },
+          {
+            "$type": "expose",
+            "field": "fire",
+            "comparison": "Greater",
+            "value": 0,
+            "row": "inFire"
+          },
+          {
+            "$type": "expose",
+            "field": "water",
+            "comparison": "GreaterOrEqual",
+            "value": 0.2,
+            "row": "inWater"
           }
         ]
       }
@@ -3752,312 +4082,5 @@
         "dash": null
       }
     }
-  ],
-  "fields": {
-    "lattice": {
-      "origin": [
-        -16,
-        0,
-        -40
-      ],
-      "cellSize": 0.5,
-      "width": 64,
-      "depth": 64,
-      "layers": 1,
-      "stepEveryTicks": 8
-    },
-    "fields": [
-      {
-        "name": "heat",
-        "initial": 0,
-        "min": -5,
-        "max": 10
-      },
-      {
-        "name": "fuel",
-        "initial": 0,
-        "min": 0,
-        "max": 1,
-        "heightScale": 1.2,
-        "color": "#3F7A3A"
-      },
-      {
-        "name": "fire",
-        "initial": 0,
-        "min": 0,
-        "max": 1,
-        "heightScale": 0.9,
-        "color": "#FF5A1F"
-      },
-      {
-        "name": "ice",
-        "initial": 0,
-        "min": 0,
-        "max": 1,
-        "heightScale": 1.5,
-        "color": "#D8F1FF"
-      },
-      {
-        "name": "water",
-        "initial": 0,
-        "min": 0,
-        "max": 1,
-        "heightScale": 0.08,
-        "color": "#3B7BD6"
-      },
-      {
-        "name": "char",
-        "initial": 0,
-        "min": 0,
-        "max": 1,
-        "heightScale": 0.18,
-        "color": "#2A2320"
-      }
-    ],
-    "paint": [
-      {
-        "field": "fuel",
-        "value": 1,
-        "minX": -16,
-        "minZ": -40,
-        "maxX": -0.5,
-        "maxZ": -8
-      },
-      {
-        "field": "ice",
-        "value": 1,
-        "minX": 0.5,
-        "minZ": -40,
-        "maxX": 16,
-        "maxZ": -8
-      }
-    ],
-    "reactions": [
-      {
-        "$type": "diffuse",
-        "field": "heat",
-        "rate": 0.35
-      },
-      {
-        "$type": "decay",
-        "field": "heat",
-        "rate": 0.04
-      },
-      {
-        "$type": "emit",
-        "tag": "hot",
-        "field": "heat",
-        "amount": 4
-      },
-      {
-        "$type": "emit",
-        "tag": "cold",
-        "field": "heat",
-        "amount": -4
-      },
-      {
-        "$type": "transform",
-        "when": [
-          {
-            "field": "heat",
-            "comparison": "GreaterOrEqual",
-            "value": 1.2
-          },
-          {
-            "field": "fuel",
-            "comparison": "Greater",
-            "value": 0.05
-          },
-          {
-            "field": "fire",
-            "comparison": "LessOrEqual",
-            "value": 0
-          }
-        ],
-        "then": [
-          {
-            "field": "fire",
-            "op": "Set",
-            "value": 1
-          }
-        ]
-      },
-      {
-        "$type": "transform",
-        "when": [
-          {
-            "field": "fire",
-            "comparison": "Greater",
-            "value": 0
-          }
-        ],
-        "then": [
-          {
-            "field": "heat",
-            "op": "Add",
-            "value": 3
-          },
-          {
-            "field": "fuel",
-            "op": "Add",
-            "value": -0.03
-          },
-          {
-            "field": "char",
-            "op": "Add",
-            "value": 0.02
-          }
-        ]
-      },
-      {
-        "$type": "transform",
-        "when": [
-          {
-            "field": "fire",
-            "comparison": "Greater",
-            "value": 0
-          },
-          {
-            "field": "fuel",
-            "comparison": "LessOrEqual",
-            "value": 0.05
-          }
-        ],
-        "then": [
-          {
-            "field": "fire",
-            "op": "Set",
-            "value": 0
-          },
-          {
-            "field": "fuel",
-            "op": "Set",
-            "value": 0
-          }
-        ]
-      },
-      {
-        "$type": "transform",
-        "when": [
-          {
-            "field": "ice",
-            "comparison": "Greater",
-            "value": 0
-          },
-          {
-            "field": "heat",
-            "comparison": "Greater",
-            "value": 0.5
-          }
-        ],
-        "then": [
-          {
-            "field": "ice",
-            "op": "Add",
-            "value": -0.05
-          },
-          {
-            "field": "water",
-            "op": "Add",
-            "value": 0.05
-          },
-          {
-            "field": "heat",
-            "op": "Add",
-            "value": -0.5
-          }
-        ]
-      },
-      {
-        "$type": "transform",
-        "when": [
-          {
-            "field": "water",
-            "comparison": "Greater",
-            "value": 0.2
-          },
-          {
-            "field": "fire",
-            "comparison": "Greater",
-            "value": 0
-          }
-        ],
-        "then": [
-          {
-            "field": "fire",
-            "op": "Set",
-            "value": 0
-          }
-        ]
-      },
-      {
-        "$type": "transform",
-        "when": [
-          {
-            "field": "water",
-            "comparison": "Greater",
-            "value": 0
-          },
-          {
-            "field": "heat",
-            "comparison": "Greater",
-            "value": 4
-          }
-        ],
-        "then": [
-          {
-            "field": "water",
-            "op": "Add",
-            "value": -0.03
-          },
-          {
-            "field": "heat",
-            "op": "Add",
-            "value": -0.3
-          }
-        ]
-      },
-      {
-        "$type": "transform",
-        "when": [
-          {
-            "field": "water",
-            "comparison": "Greater",
-            "value": 0.1
-          },
-          {
-            "field": "heat",
-            "comparison": "Less",
-            "value": -1
-          }
-        ],
-        "then": [
-          {
-            "field": "water",
-            "op": "Add",
-            "value": -0.05
-          },
-          {
-            "field": "ice",
-            "op": "Add",
-            "value": 0.05
-          }
-        ]
-      },
-      {
-        "$type": "expose",
-        "field": "fire",
-        "comparison": "Greater",
-        "value": 0,
-        "row": "inFire"
-      },
-      {
-        "$type": "expose",
-        "field": "water",
-        "comparison": "GreaterOrEqual",
-        "value": 0.2,
-        "row": "inWater"
-      }
-    ]
-  }
+  ]
 }

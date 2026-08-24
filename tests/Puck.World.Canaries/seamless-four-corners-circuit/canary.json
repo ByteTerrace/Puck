@@ -8,7 +8,7 @@
   "binding": "One process, one world (quilt-nw), no companion authority and no federation: each hop poses and drives the SAME traveler inside the next ground world's own named instance (instance:6~global2~<id>), and the automatic adjacency crossing that follows closes the ring — nw's east edge into ne, ne's own south edge into se, se's own west edge into sw, sw's own north edge back onto boot (nw) — with zero rejected commands throughout. The discriminating leg poses the traveler at the same four spots but never drives it, so no crossing ever fires and every named instance beyond the first stays unmaterialized: addressing it is cleanly refused (six refusals, in the same shape the positive leg never sees).",
   "fixtures": [],
   "positive": {
-    "world": "src/Puck.World/Assets/worlds/quilt-nw.world.json",
+    "world": "src/Puck.World/Assets/worlds/prototypes/quilt-nw.world.json",
     "script": "positive.script.txt",
     "commands": [
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
@@ -47,7 +47,7 @@
     ]
   },
   "discriminating": {
-    "world": "src/Puck.World/Assets/worlds/quilt-nw.world.json",
+    "world": "src/Puck.World/Assets/worlds/prototypes/quilt-nw.world.json",
     "script": "discriminating.script.txt",
     "commands": [
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },

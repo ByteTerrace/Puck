@@ -8,7 +8,7 @@
   "binding": "The positive leg boots the nexus (which authors title/description/authors/tags) and reads world.metadata back; the discriminating leg boots dive (no metadata authored) and gets the 'none' line instead.",
   "fixtures": [],
   "positive": {
-    "world": "src/Puck.World/Assets/worlds/nexus.world.json",
+    "world": "src/Puck.World/Assets/worlds/prototypes/nexus.world.json",
     "script": "positive.script.txt",
     "commands": [
       { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" },
@@ -23,7 +23,7 @@
     ]
   },
   "discriminating": {
-    "world": "src/Puck.World/Assets/worlds/dive.world.json",
+    "world": "src/Puck.World/Assets/worlds/prototypes/dive.world.json",
     "script": "discriminating.script.txt",
     "commands": [
       { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" },

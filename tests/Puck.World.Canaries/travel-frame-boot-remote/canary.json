@@ -8,8 +8,8 @@
   "binding": "Both legs boot normal window composition through --connect to a runner-owned quilt-nw authority; only the positive leg moves the remotely authoritative body between captures.",
   "fixtures": [],
   "positive": {
-    "world": "src/Puck.World/Assets/worlds/quilt-nw.world.json",
-    "authorityWorld": "src/Puck.World/Assets/worlds/quilt-nw.world.json",
+    "world": "src/Puck.World/Assets/worlds/prototypes/quilt-nw.world.json",
+    "authorityWorld": "src/Puck.World/Assets/worlds/prototypes/quilt-nw.world.json",
     "connect": true,
     "script": "positive.script.txt",
     "commands": [
@@ -37,8 +37,8 @@
     ]
   },
   "discriminating": {
-    "world": "src/Puck.World/Assets/worlds/quilt-nw.world.json",
-    "authorityWorld": "src/Puck.World/Assets/worlds/quilt-nw.world.json",
+    "world": "src/Puck.World/Assets/worlds/prototypes/quilt-nw.world.json",
+    "authorityWorld": "src/Puck.World/Assets/worlds/prototypes/quilt-nw.world.json",
     "connect": true,
     "script": "discriminating.script.txt",
     "commands": [

@@ -34,10 +34,13 @@ public enum CellKind : byte {
 /// <param name="World">Document-owned cell rows. These remain mutation-addressable through <c>state:&lt;name&gt;</c>.</param>
 /// <param name="Body">Per-body ephemeral counters and timers, compiled into each body's bounded ordinal arrays.</param>
 /// <param name="Identity">Per-body counters and timers synchronized through the durable identity-document seam.</param>
+/// <param name="Lattices">The lattice topologies the section's lattice-shaped rows lie over (see
+/// <see cref="WorldStateLatticeTopology"/>).</param>
 public sealed record WorldStateSection(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldStateRow>? World = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ActionStateSlot>? Body = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ActionStateSlot>? Identity = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ActionStateSlot>? Identity = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldStateLatticeTopology>? Lattices = null
 );
 /// <summary>
 /// One cell of the <c>state</c> section's substrate — a typed value addressed by a stable string <see cref="Key"/>
@@ -151,6 +154,8 @@ public sealed record WorldStateCell(WorldCellName Key, long Value = 0, string? T
 /// Legitimate only for <see cref="CellKind.Int"/>/<see cref="CellKind.Fixed"/>, only on a scalar (slot-eligible)
 /// row, and never together with <see cref="Advance"/> or <see cref="Draw"/>. A keyed row's own cells ease
 /// independently through <see cref="WorldStateCell.Dynamics"/> instead.</param>
+/// <param name="Lattice">The lattice trait — the row holds one scalar per cell of a named topology (see
+/// <see cref="WorldStateLatticeTrait"/>); <see langword="null"/> for a slot/keyed row.</param>
 public sealed record WorldStateRow(
     WorldCellName Name,
     CellKind Kind,
@@ -165,7 +170,8 @@ public sealed record WorldStateRow(
     WorldDraw? Draw = null,
     long DrawCursor = 0,
     IReadOnlyList<long>? DrawDecks = null,
-    WorldStateDynamics? Dynamics = null
+    WorldStateDynamics? Dynamics = null,
+    WorldStateLatticeTrait? Lattice = null
 ) {
     /// <summary>The prefix every engine-minted row or cell name carries, and the one an author may never spell. A
     /// row name starting with it is refused outright (nothing mints a row); a cell key starting with it is refused

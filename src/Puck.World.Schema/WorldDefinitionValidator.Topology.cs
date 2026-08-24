@@ -762,6 +762,25 @@ public static partial class WorldDefinitionValidator {
         }
     }
     private static void ValidateFields(WorldDefinition definition, List<string> errors) {
+        var topologies = definition.StateRaw?.Lattices;
+
+        if (topologies is { Count: > 1 }) {
+            errors.Add(item: $"state.lattices declares {topologies.Count} topologies; exactly one is admitted today (the wire frame and checkpoint key off a single lattice).");
+        }
+
+        foreach (var row in (definition.StateRaw?.World ?? [])) {
+            if (
+                (row?.Lattice is { } trait) &&
+                ((topologies is not { Count: > 0 }) || !string.Equals(a: trait.Topology, b: topologies[0].Name, comparisonType: StringComparison.Ordinal))
+            ) {
+                errors.Add(item: $"state row '{row.Name}' lattice.topology '{trait.Topology}' names no declared state.lattices topology.");
+            }
+        }
+
+        if ((topologies is { Count: > 0 }) && (definition.Fields is { Fields.Count: 0 })) {
+            errors.Add(item: $"state.lattices '{topologies[0].Name}' is declared but no state row carries a lattice trait — a topology with no rows steps nothing.");
+        }
+
         if (definition.Fields is not { } fields) {
             return;
         }

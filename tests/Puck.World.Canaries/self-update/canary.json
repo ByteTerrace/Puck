@@ -8,7 +8,7 @@
   "binding": "Both legs run through a leg-private Puck.Launcher.Stub install: the positive leg's first boot signs a throwaway 2.0.0 release, runs update.check/update.apply against it, and its second boot observes the stub launch the applied version; the discriminating leg pre-stages a 2.0.0 with no executable at all, so its first boot observes the stub refuse to launch it and its second boot observes the generation-safe revert to the pre-existing 1.0.0.",
   "fixtures": [],
   "positive": {
-    "world": "src/Puck.World/Assets/worlds/nexus.world.json",
+    "world": "src/Puck.World/Assets/worlds/prototypes/nexus.world.json",
     "script": "positive.script.txt",
     "commands": [
       { "verb": "update.check", "occurrence": 1, "outcome": "accepted" },
@@ -22,7 +22,7 @@
     ]
   },
   "discriminating": {
-    "world": "src/Puck.World/Assets/worlds/nexus.world.json",
+    "world": "src/Puck.World/Assets/worlds/prototypes/nexus.world.json",
     "script": "discriminating.script.txt",
     "commands": [
       { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" }

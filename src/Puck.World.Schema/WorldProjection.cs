@@ -228,7 +228,6 @@ public static class WorldProjection {
             Dynamics: definition.Dynamics,
             Hud: definition.Hud,
             Water: definition.Water,
-            Fields: definition.Fields,
             Simulation: definition.Simulation,
             Interactions: definition.Interactions,
             References: definition.References,
@@ -356,7 +355,7 @@ public static class WorldProjection {
             DynamicsRaw: projection.Dynamics,
             GrantsRaw: [],
             HudRaw: projection.Hud,
-            StateRaw: new WorldStateSection(World: []),
+            StateRaw: WorldFieldsSection.ToStateSection(composite: projection.Fields),
             InputHoldRaw: new WorldInputHoldAuthoring(
                 CeilingSeconds: 0f,
                 DefaultSeconds: 0f,
@@ -365,7 +364,6 @@ public static class WorldProjection {
                 Participants: []
             ),
             Water: projection.Water,
-            Fields: projection.Fields,
             Simulation: projection.Simulation,
             Interactions: projection.Interactions,
             References: projection.References,

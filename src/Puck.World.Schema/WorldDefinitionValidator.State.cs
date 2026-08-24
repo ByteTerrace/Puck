@@ -650,6 +650,30 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.name '{row.Name}' is duplicated.");
             }
 
+            // A lattice-shaped row is per-cell fixed-point substrate: its cells live in the lattice (checkpointed,
+            // snapshot-delivered), never as authored slot/keyed cells, and every keyed-row trait is refused at this
+            // door so the shape cannot be held by convention.
+            if (row.Lattice is not null) {
+                if (row.Kind != CellKind.Fixed) {
+                    errors.Add(item: $"{path} ('{row.Name}') declares a lattice trait with kind '{row.Kind}' — a lattice row is kind 'fixed'.");
+                }
+                if (row.Cells is { Count: > 0 }) {
+                    errors.Add(item: $"{path} ('{row.Name}') declares both a lattice trait and cells — a lattice row's cells are the lattice's.");
+                }
+                if (row.Capacity is not null) {
+                    errors.Add(item: $"{path} ('{row.Name}') declares both a lattice trait and capacity — the topology sizes a lattice row.");
+                }
+                if (row.Advance is not null) {
+                    errors.Add(item: $"{path} ('{row.Name}') declares both a lattice trait and advance.");
+                }
+                if (row.Dynamics is not null) {
+                    errors.Add(item: $"{path} ('{row.Name}') declares both a lattice trait and dynamics.");
+                }
+                if (row.Draw is not null) {
+                    errors.Add(item: $"{path} ('{row.Name}') declares both a lattice trait and a draw — per-cell lattice draws are not yet admitted.");
+                }
+            }
+
             // The reserved prefix is ENGINE-MINTED ONLY, and the rule lives HERE — in the validator every ingress
             // passes (boot, live mutation, undo replay), never in one door a hand-authored file walks around.
             // Nothing mints a state ROW, so the prefix is refused outright on a row name; that is also what keeps a

@@ -15,7 +15,7 @@
     {
       "id": "head",
       "inputs": null,
-      "track": "../probes/tracks/brio-head.probe-track.json"
+      "track": "../../probes/tracks/brio-head.probe-track.json"
     }
   ]
 }

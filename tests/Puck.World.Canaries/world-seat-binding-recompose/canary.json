@@ -8,7 +8,7 @@
   "timeoutSeconds": 20,
   "fixtures": [],
   "positive": {
-    "world": "src/Puck.World/Assets/worlds/nexus.world.json",
+    "world": "src/Puck.World/Assets/worlds/prototypes/nexus.world.json",
     "script": "positive.script.txt",
     "commands": [
       { "verb": "replay.status", "occurrence": 1, "outcome": "accepted" },
@@ -24,7 +24,7 @@
     ]
   },
   "discriminating": {
-    "world": "src/Puck.World/Assets/worlds/nexus.world.json",
+    "world": "src/Puck.World/Assets/worlds/prototypes/nexus.world.json",
     "script": "discriminating.script.txt",
     "commands": [
       { "verb": "replay.status", "occurrence": 1, "outcome": "accepted" },

@@ -25,23 +25,460 @@
             "alpha": 1,
             "id": "resting",
             "pageId": "base"
+          },
+          {
+            "activeAlpha": 1,
+            "alpha": 0.6,
+            "id": "lt",
+            "pageId": "pageLt"
+          },
+          {
+            "activeAlpha": 1,
+            "alpha": 0.6,
+            "id": "rt",
+            "pageId": "pageRt"
+          },
+          {
+            "activeAlpha": 1,
+            "alpha": 0.6,
+            "id": "ltRt",
+            "pageId": "pageLtRt"
+          },
+          {
+            "activeAlpha": 1,
+            "alpha": 0.6,
+            "id": "rtLt",
+            "pageId": "pageRtLt"
           }
         ],
         "hideUnbound": false,
-        "multiSeatAlpha": 0.5,
-        "layout": {
-          "anchorOffsetY": 0.36666667,
-          "badgeCorner": 1,
-          "buttonSize": 0.075,
-          "centerGap": 0.1,
-          "centerRowLift": 1.9,
-          "centerSlotSpacing": 1.15,
-          "exoticRowLift": 3.6,
-          "exoticSlotSpacing": 1.15,
-          "glyphOffsetRatio": 0.4375,
-          "glyphSizeRatio": 0.53333336,
-          "scale": 1
+        "iconRow": "state.actionIcons",
+        "layout": "crossbar",
+        "layoutCell": "state.bar.layout",
+        "layouts": {
+          "crossbar": {
+            "anchor": {
+              "edge": "Bottom",
+              "inset": 0.67
+            },
+            "banks": {
+              "lt": {
+                "pieces": [
+                  {
+                    "at": [
+                      -3,
+                      1
+                    ],
+                    "table": "left"
+                  },
+                  {
+                    "at": [
+                      3,
+                      1
+                    ],
+                    "table": "right"
+                  }
+                ]
+              },
+              "ltRt": {
+                "pieces": [
+                  {
+                    "at": [
+                      -7,
+                      2
+                    ],
+                    "table": "left"
+                  },
+                  {
+                    "at": [
+                      7,
+                      2
+                    ],
+                    "table": "right"
+                  }
+                ]
+              },
+              "resting": {
+                "pieces": [
+                  {
+                    "at": [
+                      -5,
+                      0
+                    ],
+                    "table": "left"
+                  },
+                  {
+                    "at": [
+                      5,
+                      0
+                    ],
+                    "table": "right"
+                  }
+                ]
+              },
+              "rt": {
+                "pieces": [
+                  {
+                    "at": [
+                      -3,
+                      -2
+                    ],
+                    "table": "left"
+                  },
+                  {
+                    "at": [
+                      3,
+                      -2
+                    ],
+                    "table": "right"
+                  }
+                ]
+              },
+              "rtLt": {
+                "pieces": [
+                  {
+                    "at": [
+                      -6,
+                      -2
+                    ],
+                    "table": "left"
+                  },
+                  {
+                    "at": [
+                      6,
+                      -2
+                    ],
+                    "table": "right"
+                  }
+                ]
+              }
+            },
+            "buttonSize": 0.075,
+            "glyphOffsetRatio": 0.4375,
+            "glyphSizeRatio": 0.53333336,
+            "tables": {
+              "left": [
+                {
+                  "badge": [
+                    0,
+                    1
+                  ],
+                  "source": "gamepad.dpadUp",
+                  "x": 0,
+                  "y": 1
+                },
+                {
+                  "badge": [
+                    1,
+                    0
+                  ],
+                  "source": "gamepad.dpadRight",
+                  "x": 1,
+                  "y": 0
+                },
+                {
+                  "badge": [
+                    0,
+                    -1
+                  ],
+                  "source": "gamepad.dpadDown",
+                  "x": 0,
+                  "y": -1
+                },
+                {
+                  "badge": [
+                    -1,
+                    0
+                  ],
+                  "source": "gamepad.dpadLeft",
+                  "x": -1,
+                  "y": 0
+                },
+                {
+                  "badge": [
+                    -1,
+                    1
+                  ],
+                  "source": "gamepad.leftShoulder",
+                  "x": -1,
+                  "y": 1
+                },
+                {
+                  "badge": [
+                    -1,
+                    -1
+                  ],
+                  "source": "gamepad.leftStickPress",
+                  "x": 0,
+                  "y": 0
+                }
+              ],
+              "right": [
+                {
+                  "badge": [
+                    0,
+                    1
+                  ],
+                  "source": "gamepad.buttonNorth",
+                  "x": 0,
+                  "y": 1
+                },
+                {
+                  "badge": [
+                    -1,
+                    0
+                  ],
+                  "source": "gamepad.buttonWest",
+                  "x": -1,
+                  "y": 0
+                },
+                {
+                  "badge": [
+                    0,
+                    -1
+                  ],
+                  "source": "gamepad.buttonSouth",
+                  "x": 0,
+                  "y": -1
+                },
+                {
+                  "badge": [
+                    1,
+                    0
+                  ],
+                  "source": "gamepad.buttonEast",
+                  "x": 1,
+                  "y": 0
+                },
+                {
+                  "badge": [
+                    1,
+                    1
+                  ],
+                  "source": "gamepad.rightShoulder",
+                  "x": 1,
+                  "y": 1
+                },
+                {
+                  "badge": [
+                    1,
+                    -1
+                  ],
+                  "source": "gamepad.rightStickPress",
+                  "x": 0,
+                  "y": 0
+                }
+              ]
+            }
+          },
+          "linear": {
+            "anchor": {
+              "edge": "Bottom",
+              "inset": 0.33
+            },
+            "banks": {
+              "lt": {
+                "anchor": {
+                  "edge": "Left",
+                  "inset": 0.5
+                },
+                "pieces": [
+                  {
+                    "table": "column"
+                  }
+                ]
+              },
+              "ltRt": {
+                "anchor": {
+                  "edge": "Left",
+                  "inset": 0.5
+                },
+                "pieces": [
+                  {
+                    "at": [
+                      1,
+                      0
+                    ],
+                    "table": "column"
+                  }
+                ]
+              },
+              "resting": {
+                "pieces": [
+                  {
+                    "table": "strip"
+                  }
+                ]
+              },
+              "rt": {
+                "anchor": {
+                  "edge": "Right",
+                  "inset": 0.5
+                },
+                "pieces": [
+                  {
+                    "badge": [
+                      -1,
+                      1
+                    ],
+                    "table": "column"
+                  }
+                ]
+              },
+              "rtLt": {
+                "anchor": {
+                  "edge": "Right",
+                  "inset": 0.5
+                },
+                "pieces": [
+                  {
+                    "at": [
+                      -1,
+                      0
+                    ],
+                    "badge": [
+                      -1,
+                      1
+                    ],
+                    "table": "column"
+                  }
+                ]
+              }
+            },
+            "buttonSize": 0.075,
+            "glyphOffsetRatio": 0.4375,
+            "glyphSizeRatio": 0.53333336,
+            "tables": {
+              "column": [
+                {
+                  "source": "gamepad.dpadUp",
+                  "x": 0,
+                  "y": 0
+                },
+                {
+                  "source": "gamepad.dpadRight",
+                  "x": 0,
+                  "y": -1
+                },
+                {
+                  "source": "gamepad.dpadDown",
+                  "x": 0,
+                  "y": -2
+                },
+                {
+                  "source": "gamepad.dpadLeft",
+                  "x": 0,
+                  "y": -3
+                },
+                {
+                  "source": "gamepad.leftShoulder",
+                  "x": 0,
+                  "y": -4
+                },
+                {
+                  "source": "gamepad.leftStickPress",
+                  "x": 0,
+                  "y": -5
+                },
+                {
+                  "source": "gamepad.buttonNorth",
+                  "x": 0,
+                  "y": -6
+                },
+                {
+                  "source": "gamepad.buttonWest",
+                  "x": 0,
+                  "y": -7
+                },
+                {
+                  "source": "gamepad.buttonSouth",
+                  "x": 0,
+                  "y": -8
+                },
+                {
+                  "source": "gamepad.buttonEast",
+                  "x": 0,
+                  "y": -9
+                },
+                {
+                  "source": "gamepad.rightShoulder",
+                  "x": 0,
+                  "y": -10
+                },
+                {
+                  "source": "gamepad.rightStickPress",
+                  "x": 0,
+                  "y": -11
+                }
+              ],
+              "strip": [
+                {
+                  "source": "gamepad.dpadLeft",
+                  "x": -5.5,
+                  "y": 0
+                },
+                {
+                  "source": "gamepad.dpadUp",
+                  "x": -4.5,
+                  "y": 0
+                },
+                {
+                  "source": "gamepad.dpadDown",
+                  "x": -3.5,
+                  "y": 0
+                },
+                {
+                  "source": "gamepad.dpadRight",
+                  "x": -2.5,
+                  "y": 0
+                },
+                {
+                  "source": "gamepad.leftShoulder",
+                  "x": -1.5,
+                  "y": 0
+                },
+                {
+                  "source": "gamepad.leftStickPress",
+                  "x": -0.5,
+                  "y": 0
+                },
+                {
+                  "source": "gamepad.rightStickPress",
+                  "x": 0.5,
+                  "y": 0
+                },
+                {
+                  "source": "gamepad.rightShoulder",
+                  "x": 1.5,
+                  "y": 0
+                },
+                {
+                  "source": "gamepad.buttonWest",
+                  "x": 2.5,
+                  "y": 0
+                },
+                {
+                  "source": "gamepad.buttonNorth",
+                  "x": 3.5,
+                  "y": 0
+                },
+                {
+                  "source": "gamepad.buttonSouth",
+                  "x": 4.5,
+                  "y": 0
+                },
+                {
+                  "source": "gamepad.buttonEast",
+                  "x": 5.5,
+                  "y": 0
+                }
+              ]
+            }
+          }
         },
+        "modelCell": "state.bar.model",
+        "modifiers": false,
+        "multiSeatAlpha": 0.5,
         "slotSet": [
           "gamepad.dpadUp",
           "gamepad.dpadRight",
@@ -60,6 +497,7 @@
         "visible": {
           "$type": "recently",
           "fact": "SeatInput",
+          "fadeSeconds": 2,
           "windowSeconds": 3
         }
       },
@@ -256,36 +694,6 @@
           },
           {
             "chord": [
-              "gamepad.leftStickPress"
-            ],
-            "command": {
-              "channel": "forward",
-              "label": "Autorun",
-              "mode": "Toggle",
-              "scale": 1
-            },
-            "group": "state.bindingGroups.defaultActionGroup",
-            "held": [
-              "look"
-            ]
-          },
-          {
-            "chord": [
-              "gamepad.rightStickPress"
-            ],
-            "command": {
-              "channel": "up",
-              "label": "Auto-jetpack",
-              "mode": "Toggle",
-              "scale": 1
-            },
-            "group": "state.bindingGroups.defaultActionGroup",
-            "held": [
-              "look"
-            ]
-          },
-          {
-            "chord": [
               "look",
               "gamepad.rightShoulder",
               "actionWheel"
@@ -304,6 +712,18 @@
             "group": "state.bindingGroups.defaultActionGroup",
             "page": {
               "entries": [
+                {
+                  "command": "player.move.strafe",
+                  "sources": [
+                    "gamepad.leftStick"
+                  ]
+                },
+                {
+                  "command": "player.motion.angular",
+                  "sources": [
+                    "gamepad.gyro"
+                  ]
+                },
                 {
                   "command": "player.wheel.select",
                   "sources": [
@@ -337,8 +757,10 @@
             ]
           },
           {
-            "chord": [],
-            "group": "flying",
+            "chord": [
+              "look"
+            ],
+            "group": "state.bindingGroups.defaultActionGroup",
             "page": {
               "entries": [
                 {
@@ -354,35 +776,186 @@
                   ]
                 },
                 {
-                  "channel": "up",
-                  "label": "Ascend",
+                  "command": "player.motion.angular",
+                  "sources": [
+                    "gamepad.gyro"
+                  ]
+                },
+                {
+                  "command": "console",
+                  "id": "console",
+                  "sources": [
+                    "gamepad.buttonNorth"
+                  ]
+                },
+                {
+                  "command": "view.override",
+                  "id": "cameraOverhead",
+                  "sources": [
+                    "gamepad.buttonWest"
+                  ],
+                  "value": {
+                    "kind": "Axis1D",
+                    "raw": [
+                      2.0,
+                      0,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                {
+                  "command": "view.override",
+                  "id": "cameraAction",
+                  "sources": [
+                    "gamepad.buttonEast"
+                  ],
+                  "value": {
+                    "kind": "Axis1D",
+                    "raw": [
+                      1.0,
+                      0,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                {
+                  "channel": "forward",
+                  "id": "autorun",
+                  "label": "Autorun",
+                  "mode": "Toggle",
                   "scale": 1,
                   "sources": [
-                    "gamepad.rightStickPress",
-                    "keyboard.space"
+                    "gamepad.leftStickPress"
                   ]
                 },
                 {
                   "channel": "up",
-                  "label": "Descend",
-                  "scale": -1,
+                  "id": "autoJetpack",
+                  "label": "Auto-jetpack",
+                  "mode": "Toggle",
+                  "scale": 1,
                   "sources": [
-                    "gamepad.leftStickPress",
-                    "keyboard.controlLeft"
+                    "gamepad.rightStickPress"
                   ]
                 }
               ],
-              "id": "flying-base"
+              "id": "pageLt"
+            }
+          },
+          {
+            "chord": [
+              "rt"
+            ],
+            "group": "state.bindingGroups.defaultActionGroup",
+            "page": {
+              "entries": [
+                {
+                  "command": "player.move.strafe",
+                  "sources": [
+                    "gamepad.leftStick"
+                  ]
+                },
+                {
+                  "command": "player.look.steer",
+                  "sources": [
+                    "gamepad.rightStick"
+                  ]
+                },
+                {
+                  "command": "player.motion.angular",
+                  "sources": [
+                    "gamepad.gyro"
+                  ]
+                },
+                {
+                  "command": "player.camera",
+                  "id": "freeCam",
+                  "sources": [
+                    "gamepad.buttonNorth"
+                  ]
+                },
+                {
+                  "command": "player.where",
+                  "id": "where",
+                  "sources": [
+                    "gamepad.buttonWest"
+                  ]
+                },
+                {
+                  "command": "quit",
+                  "id": "quit",
+                  "sources": [
+                    "gamepad.buttonEast"
+                  ]
+                }
+              ],
+              "id": "pageRt"
+            }
+          },
+          {
+            "chord": [
+              "look",
+              "rt"
+            ],
+            "group": "state.bindingGroups.defaultActionGroup",
+            "page": {
+              "entries": [
+                {
+                  "command": "player.move.strafe",
+                  "sources": [
+                    "gamepad.leftStick"
+                  ]
+                },
+                {
+                  "command": "player.look.steer",
+                  "sources": [
+                    "gamepad.rightStick"
+                  ]
+                },
+                {
+                  "command": "player.motion.angular",
+                  "sources": [
+                    "gamepad.gyro"
+                  ]
+                }
+              ],
+              "id": "pageLtRt"
+            }
+          },
+          {
+            "chord": [
+              "rt",
+              "look"
+            ],
+            "group": "state.bindingGroups.defaultActionGroup",
+            "page": {
+              "entries": [
+                {
+                  "command": "player.move.strafe",
+                  "sources": [
+                    "gamepad.leftStick"
+                  ]
+                },
+                {
+                  "command": "player.look.steer",
+                  "sources": [
+                    "gamepad.rightStick"
+                  ]
+                },
+                {
+                  "command": "player.motion.angular",
+                  "sources": [
+                    "gamepad.gyro"
+                  ]
+                }
+              ],
+              "id": "pageRtLt"
             }
           }
         ],
-        "contexts": [
-          {
-            "family": "camera",
-            "group": "flying",
-            "state": "free"
-          }
-        ],
+        "contexts": [],
         "modifiers": [
           {
             "id": "actionWheel",
@@ -399,6 +972,14 @@
               "gamepad.leftTrigger",
               "keyboard.shiftLeft"
             ]
+          },
+          {
+            "id": "rt",
+            "label": "Shift",
+            "sources": [
+              "gamepad.rightTrigger",
+              "keyboard.altLeft"
+            ]
           }
         ],
         "version": "puck.bindings.v1",
@@ -408,44 +989,87 @@
             "holdPages": [
               "actionWheel"
             ],
+            "iconRow": "state.actionIcons",
             "id": "defaultActionWheel",
+            "labelRow": "state.wheelLabels",
             "rings": [
               {
                 "entries": [
                   {
+                    "command": "view.override",
+                    "id": "cameraOverhead",
+                    "sources": null,
+                    "value": {
+                      "kind": "Axis1D",
+                      "raw": [
+                        2.0,
+                        0,
+                        0,
+                        0
+                      ]
+                    }
+                  },
+                  {
+                    "command": "view.override",
+                    "id": "cameraAction",
+                    "sources": null,
+                    "value": {
+                      "kind": "Axis1D",
+                      "raw": [
+                        1.0,
+                        0,
+                        0,
+                        0
+                      ]
+                    }
+                  },
+                  {
+                    "command": "quit",
+                    "id": "quit",
+                    "sources": null
+                  },
+                  {
                     "command": "console",
                     "id": "console",
-                    "sources": []
+                    "sources": null
                   },
                   {
-                    "command": "player.camera",
-                    "id": "freeCam",
-                    "sources": []
+                    "command": "world.reload",
+                    "id": "reload",
+                    "sources": null
                   },
                   {
-                    "command": "player.where",
-                    "id": "where",
-                    "sources": []
+                    "command": "player.state.cell.toggle",
+                    "id": "barLayout",
+                    "sources": null,
+                    "text": "bar layout crossbar linear"
                   },
                   {
-                    "command": "player.disengage",
-                    "id": "disengage",
-                    "sources": []
+                    "command": "player.state.cell.toggle",
+                    "id": "barModel",
+                    "sources": null,
+                    "text": "bar model multi single"
+                  },
+                  {
+                    "command": "player.state.cell.toggle",
+                    "id": "portrait",
+                    "sources": null,
+                    "text": "portrait source avatar webcam off"
                   }
                 ],
                 "icon": null,
                 "id": "ring0",
-                "label": "Ring0"
+                "label": "Actions"
               }
             ],
             "style": {
               "axisDeadZone": 0.08,
+              "deadZoneFraction": 0.11,
               "placement": "ViewportCenter",
+              "ringWidthFraction": 0.13,
               "selectionGraceSeconds": 0.13,
               "switchFraction": 0.4
-            },
-            "labelRow": "state.wheelLabels",
-            "iconRow": "state.actionIcons"
+            }
           }
         ]
       },
@@ -557,7 +1181,12 @@
     "requirements": []
   },
   "dynamics": [
-    { "name": "chase", "f": 0.9549, "zeta": 1, "r": 1 }
+    {
+      "name": "chase",
+      "f": 0.9549,
+      "zeta": 1,
+      "r": 1
+    }
   ],
   "host": {
     "presentation": "Windowed",
@@ -586,16 +1215,29 @@
     "panels": [
       {
         "id": "face",
-        "rect": { "x": 0.79, "y": 0.03, "width": 0.18, "height": 0.24 },
+        "rect": {
+          "x": 0.79,
+          "y": 0.03,
+          "width": 0.18,
+          "height": 0.24
+        },
         "layer": "Over",
         "style": "Chip",
         "elements": [
           {
             "id": "cam",
             "kind": "Frame",
-            "rect": { "x": 0, "y": 0, "width": 1, "height": 1 },
+            "rect": {
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1
+            },
             "style": "Primary",
-            "source": { "$type": "camera", "sensor": "Color" },
+            "source": {
+              "$type": "camera",
+              "sensor": "Color"
+            },
             "mirror": true,
             "radius": 10
           }
@@ -605,91 +1247,427 @@
   },
   "icons": {
     "icons": [
-      { "name": "dpad.up", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+2191" } },
-      { "name": "dpad.right", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+2192" } },
-      { "name": "dpad.down", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+2193" } },
-      { "name": "dpad.left", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+2190" } },
-      { "name": "face.north", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+25B2" } },
-      { "name": "face.east", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+25B6" } },
-      { "name": "face.south", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+25BC" } },
-      { "name": "face.west", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+25C0" } },
-      { "name": "bumper.left", "label": "LB" },
-      { "name": "bumper.right", "label": "RB" },
-      { "name": "trigger.left", "label": "LT" },
-      { "name": "trigger.right", "label": "RT" },
-      { "name": "stick.left", "label": "LS" },
-      { "name": "stick.right", "label": "RS" },
-      { "name": "menu.back", "label": "BK" },
-      { "name": "menu.start", "label": "ST" },
-      { "name": "menu.guide", "label": "GD" },
-      { "name": "menu.touchpad", "label": "TP" },
-      { "name": "menu.mute", "label": "MU" },
-      { "name": "grip.left", "label": "LG" },
-      { "name": "grip.right", "label": "RG" },
-      { "name": "grip.leftUpper", "label": "L5" },
-      { "name": "grip.rightUpper", "label": "R5" },
-      { "name": "menu.quickAccess", "label": "QA" },
-      { "name": "touchpad.left", "label": "TL" },
-      { "name": "action.jump", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+2191" } },
-      { "name": "action.interact", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+25C7" } },
-      { "name": "action.target", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+25CE" } },
-      { "name": "action.1", "label": "1" },
-      { "name": "action.2", "label": "2" },
-      { "name": "action.3", "label": "3" },
-      { "name": "action.4", "label": "4" },
-      { "name": "action.5", "label": "5" },
-      { "name": "action.6", "label": "6" },
-      { "name": "action.7", "label": "7" },
-      { "name": "action.8", "label": "8" },
-      { "name": "action.9", "label": "9" },
-      { "name": "action.10", "label": "10" },
-      { "name": "action.11", "label": "11" },
-      { "name": "action.12", "label": "12" },
-      { "name": "edit.prev", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+2039" } },
-      { "name": "edit.next", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+203A" } },
-      { "name": "edit.place", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+2193" } },
-      { "name": "edit.delete", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+00D7" } },
-      { "name": "edit.exit", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+2190" } },
-      { "name": "edit.duplicate", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+25AA" } },
-      { "name": "edit.link", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+2295" } },
-      { "name": "edit.material", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+25C9" } },
-      { "name": "edit.op", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+2229" } },
-      { "name": "edit.style", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+25CB" } },
-      { "name": "edit.deselect", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+2298" } },
-      { "name": "edit.record", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+25CF" } },
-      { "name": "edit.play", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+25B6" } },
-      { "name": "edit.undo", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+21A9" } },
-      { "name": "edit.redo", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+21AA" } },
-      { "name": "edit.speaker", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+25A0" } },
-      { "name": "edit.bed", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+25EF" } },
-      { "name": "view.freeCam", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+25A1" } }
+      {
+        "name": "dpad.up",
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+2191"
+        }
+      },
+      {
+        "name": "dpad.right",
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+2192"
+        }
+      },
+      {
+        "name": "dpad.down",
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+2193"
+        }
+      },
+      {
+        "name": "dpad.left",
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+2190"
+        }
+      },
+      {
+        "name": "face.north",
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+25B2"
+        }
+      },
+      {
+        "name": "face.east",
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+25B6"
+        }
+      },
+      {
+        "name": "face.south",
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+25BC"
+        }
+      },
+      {
+        "name": "face.west",
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+25C0"
+        }
+      },
+      {
+        "name": "bumper.left",
+        "label": "LB"
+      },
+      {
+        "name": "bumper.right",
+        "label": "RB"
+      },
+      {
+        "name": "trigger.left",
+        "label": "LT"
+      },
+      {
+        "name": "trigger.right",
+        "label": "RT"
+      },
+      {
+        "name": "stick.left",
+        "label": "LS"
+      },
+      {
+        "name": "stick.right",
+        "label": "RS"
+      },
+      {
+        "name": "menu.back",
+        "label": "BK"
+      },
+      {
+        "name": "menu.start",
+        "label": "ST"
+      },
+      {
+        "name": "menu.guide",
+        "label": "GD"
+      },
+      {
+        "name": "menu.touchpad",
+        "label": "TP"
+      },
+      {
+        "name": "menu.mute",
+        "label": "MU"
+      },
+      {
+        "name": "grip.left",
+        "label": "LG"
+      },
+      {
+        "name": "grip.right",
+        "label": "RG"
+      },
+      {
+        "name": "grip.leftUpper",
+        "label": "L5"
+      },
+      {
+        "name": "grip.rightUpper",
+        "label": "R5"
+      },
+      {
+        "name": "menu.quickAccess",
+        "label": "QA"
+      },
+      {
+        "name": "touchpad.left",
+        "label": "TL"
+      },
+      {
+        "name": "action.jump",
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+2191"
+        }
+      },
+      {
+        "name": "action.interact",
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+25C7"
+        }
+      },
+      {
+        "name": "action.target",
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+25CE"
+        }
+      },
+      {
+        "name": "action.1",
+        "label": "1"
+      },
+      {
+        "name": "action.2",
+        "label": "2"
+      },
+      {
+        "name": "action.3",
+        "label": "3"
+      },
+      {
+        "name": "action.4",
+        "label": "4"
+      },
+      {
+        "name": "action.5",
+        "label": "5"
+      },
+      {
+        "name": "action.6",
+        "label": "6"
+      },
+      {
+        "name": "action.7",
+        "label": "7"
+      },
+      {
+        "name": "action.8",
+        "label": "8"
+      },
+      {
+        "name": "action.9",
+        "label": "9"
+      },
+      {
+        "name": "action.10",
+        "label": "10"
+      },
+      {
+        "name": "action.11",
+        "label": "11"
+      },
+      {
+        "name": "action.12",
+        "label": "12"
+      },
+      {
+        "name": "edit.prev",
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+2039"
+        }
+      },
+      {
+        "name": "edit.next",
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+203A"
+        }
+      },
+      {
+        "name": "edit.place",
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+2193"
+        }
+      },
+      {
+        "name": "edit.delete",
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+00D7"
+        }
+      },
+      {
+        "name": "edit.exit",
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+2190"
+        }
+      },
+      {
+        "name": "edit.duplicate",
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+25AA"
+        }
+      },
+      {
+        "name": "edit.link",
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+2295"
+        }
+      },
+      {
+        "name": "edit.material",
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+25C9"
+        }
+      },
+      {
+        "name": "edit.op",
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+2229"
+        }
+      },
+      {
+        "name": "edit.style",
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+25CB"
+        }
+      },
+      {
+        "name": "edit.deselect",
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+2298"
+        }
+      },
+      {
+        "name": "edit.record",
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+25CF"
+        }
+      },
+      {
+        "name": "edit.play",
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+25B6"
+        }
+      },
+      {
+        "name": "edit.undo",
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+21A9"
+        }
+      },
+      {
+        "name": "edit.redo",
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+21AA"
+        }
+      },
+      {
+        "name": "edit.speaker",
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+25A0"
+        }
+      },
+      {
+        "name": "edit.bed",
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+25EF"
+        }
+      },
+      {
+        "name": "view.freeCam",
+        "glyph": {
+          "font": "jetbrains-mono-regular",
+          "glyph": "U+25A1"
+        }
+      }
     ],
     "badges": [
-      { "source": "gamepad.dpadUp", "icon": "dpad.up" },
-      { "source": "gamepad.dpadRight", "icon": "dpad.right" },
-      { "source": "gamepad.dpadDown", "icon": "dpad.down" },
-      { "source": "gamepad.dpadLeft", "icon": "dpad.left" },
-      { "source": "gamepad.buttonNorth", "icon": "face.north" },
-      { "source": "gamepad.buttonEast", "icon": "face.east" },
-      { "source": "gamepad.buttonSouth", "icon": "face.south" },
-      { "source": "gamepad.buttonWest", "icon": "face.west" },
-      { "source": "gamepad.leftShoulder", "icon": "bumper.left" },
-      { "source": "gamepad.rightShoulder", "icon": "bumper.right" },
-      { "source": "gamepad.leftTrigger", "icon": "trigger.left" },
-      { "source": "gamepad.rightTrigger", "icon": "trigger.right" },
-      { "source": "gamepad.leftStickPress", "icon": "stick.left" },
-      { "source": "gamepad.rightStickPress", "icon": "stick.right" },
-      { "source": "gamepad.back", "icon": "menu.back" },
-      { "source": "gamepad.start", "icon": "menu.start" },
-      { "source": "gamepad.guide", "icon": "menu.guide" },
-      { "source": "gamepad.touchpad", "icon": "menu.touchpad" },
-      { "source": "gamepad.mute", "icon": "menu.mute" },
-      { "source": "gamepad.leftGrip", "icon": "grip.left" },
-      { "source": "gamepad.rightGrip", "icon": "grip.right" },
-      { "source": "gamepad.leftUpperGrip", "icon": "grip.leftUpper" },
-      { "source": "gamepad.rightUpperGrip", "icon": "grip.rightUpper" },
-      { "source": "gamepad.quickAccess", "icon": "menu.quickAccess" },
-      { "source": "gamepad.touchpadLeft", "icon": "touchpad.left" }
+      {
+        "source": "gamepad.dpadUp",
+        "icon": "dpad.up"
+      },
+      {
+        "source": "gamepad.dpadRight",
+        "icon": "dpad.right"
+      },
+      {
+        "source": "gamepad.dpadDown",
+        "icon": "dpad.down"
+      },
+      {
+        "source": "gamepad.dpadLeft",
+        "icon": "dpad.left"
+      },
+      {
+        "source": "gamepad.buttonNorth",
+        "icon": "face.north"
+      },
+      {
+        "source": "gamepad.buttonEast",
+        "icon": "face.east"
+      },
+      {
+        "source": "gamepad.buttonSouth",
+        "icon": "face.south"
+      },
+      {
+        "source": "gamepad.buttonWest",
+        "icon": "face.west"
+      },
+      {
+        "source": "gamepad.leftShoulder",
+        "icon": "bumper.left"
+      },
+      {
+        "source": "gamepad.rightShoulder",
+        "icon": "bumper.right"
+      },
+      {
+        "source": "gamepad.leftTrigger",
+        "icon": "trigger.left"
+      },
+      {
+        "source": "gamepad.rightTrigger",
+        "icon": "trigger.right"
+      },
+      {
+        "source": "gamepad.leftStickPress",
+        "icon": "stick.left"
+      },
+      {
+        "source": "gamepad.rightStickPress",
+        "icon": "stick.right"
+      },
+      {
+        "source": "gamepad.back",
+        "icon": "menu.back"
+      },
+      {
+        "source": "gamepad.start",
+        "icon": "menu.start"
+      },
+      {
+        "source": "gamepad.guide",
+        "icon": "menu.guide"
+      },
+      {
+        "source": "gamepad.touchpad",
+        "icon": "menu.touchpad"
+      },
+      {
+        "source": "gamepad.mute",
+        "icon": "menu.mute"
+      },
+      {
+        "source": "gamepad.leftGrip",
+        "icon": "grip.left"
+      },
+      {
+        "source": "gamepad.rightGrip",
+        "icon": "grip.right"
+      },
+      {
+        "source": "gamepad.leftUpperGrip",
+        "icon": "grip.leftUpper"
+      },
+      {
+        "source": "gamepad.rightUpperGrip",
+        "icon": "grip.rightUpper"
+      },
+      {
+        "source": "gamepad.quickAccess",
+        "icon": "menu.quickAccess"
+      },
+      {
+        "source": "gamepad.touchpadLeft",
+        "icon": "touchpad.left"
+      }
     ]
   },
   "kits": [
@@ -1044,8 +2022,13 @@
       "defaultState": "seat",
       "name": "camera",
       "states": [
-        { "name": "seat" },
-        { "name": "free", "target": "camera" }
+        {
+          "name": "seat"
+        },
+        {
+          "name": "free",
+          "target": "camera"
+        }
       ]
     }
   ],

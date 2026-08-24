@@ -8,8 +8,8 @@
   "binding": "Both legs boot the Play world through --connect to a runner-owned Play authority; only the positive leg teleports the remotely authoritative body into and back out of arcade-cabinet's authored region. music.state is read on the CONNECTING process, proving it follows seat 1's routed endpoint rather than its own local boot instance.",
   "fixtures": [],
   "positive": {
-    "world": "src/Puck.World/Assets/worlds/nexus.world.json",
-    "authorityWorld": "src/Puck.World/Assets/worlds/nexus.world.json",
+    "world": "src/Puck.World/Assets/worlds/prototypes/nexus.world.json",
+    "authorityWorld": "src/Puck.World/Assets/worlds/prototypes/nexus.world.json",
     "connect": true,
     "script": "positive.script.txt",
     "commands": [
@@ -58,8 +58,8 @@
     ]
   },
   "discriminating": {
-    "world": "src/Puck.World/Assets/worlds/nexus.world.json",
-    "authorityWorld": "src/Puck.World/Assets/worlds/nexus.world.json",
+    "world": "src/Puck.World/Assets/worlds/prototypes/nexus.world.json",
+    "authorityWorld": "src/Puck.World/Assets/worlds/prototypes/nexus.world.json",
     "connect": true,
     "script": "discriminating.script.txt",
     "commands": [

@@ -173,6 +173,8 @@ namespace Puck.World;
 // The authored-randomness facet a state row (WorldStateRow.Draw), the population section
 // (WorldPopulationDefaults.CapacityDraw), or the host section (WorldHostDefaults.BackendDraw) may declare.
 [JsonSerializable(typeof(WorldDraw))]
+[JsonSerializable(typeof(WorldStateLatticeTrait))]
+[JsonSerializable(typeof(WorldStateLatticeTopology))]
 // The continuous-accumulation trait a state row's SLOT cell, or (independently) any of a keyed row's OWN cells, may
 // declare — read/written by WorldStateRowJsonConverter through this typed accessor, the same "hand-written row,
 // ordinary strict-parsed nested object" split the generator table above already uses, at either grain.
@@ -467,7 +469,7 @@ internal sealed class DocumentWriteMaskJsonConverter : NameListMaskJsonConverter
 /// <c>UnmappedMemberHandling.Disallow</c> policy, so this converter re-implements it by hand.</para>
 /// </summary>
 internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> {
-    private const string Shape = "{\"name\":…,\"kind\":\"int\"|\"fixed\"|\"bool\"|\"text\",\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"provenance\":…,\"advance\":{\"rateNumerator\":…,\"rateDenominator\":…,\"epochTick\":…},\"dynamics\":{\"row\":…,\"y0\":…,\"v0\":…,\"epochTick\":…}}],\"min\":…,\"max\":…,\"capacity\":…,\"nonNegative\":…,\"gatesDrive\":…,\"evicts\":…,\"advance\":{\"rateNumerator\":…,\"rateDenominator\":…,\"epochTick\":…},\"dynamics\":{\"row\":…,\"y0\":…,\"v0\":…,\"epochTick\":…},\"draw\":{\"source\":… or \"generator\":{\"source\":\"markov\"|\"uniformRange\"|\"weightedNumeric\"|\"streamDraw\",…},\"timing\":\"boot\"|\"tickPeriod\"|\"event\"},\"drawCursor\":…,\"drawDecks\":[…]}";
+    private const string Shape = "{\"name\":…,\"kind\":\"int\"|\"fixed\"|\"bool\"|\"text\",\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"provenance\":…,\"advance\":{\"rateNumerator\":…,\"rateDenominator\":…,\"epochTick\":…},\"dynamics\":{\"row\":…,\"y0\":…,\"v0\":…,\"epochTick\":…}}],\"min\":…,\"max\":…,\"capacity\":…,\"nonNegative\":…,\"gatesDrive\":…,\"evicts\":…,\"advance\":{\"rateNumerator\":…,\"rateDenominator\":…,\"epochTick\":…},\"dynamics\":{\"row\":…,\"y0\":…,\"v0\":…,\"epochTick\":…},\"lattice\":{\"topology\":…,\"initial\":…,\"min\":…,\"max\":…,\"heightScale\":…,\"color\":…,\"paint\":[…]},\"draw\":{\"source\":… or \"generator\":{\"source\":\"markov\"|\"uniformRange\"|\"weightedNumeric\"|\"streamDraw\",…},\"timing\":\"boot\"|\"tickPeriod\"|\"event\"},\"drawCursor\":…,\"drawDecks\":[…]}";
 
     private static string DescribeCellKind(CellKind cellKind) => cellKind switch {
         CellKind.Int => "int",
@@ -844,6 +846,7 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
         JsonElement? drawDecks = null;
         JsonElement? advance = null;
         JsonElement? dynamics = null;
+        JsonElement? lattice = null;
 
         while (
             reader.Read() &&
@@ -907,6 +910,9 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
                     break;
                 case "dynamics":
                     dynamics = JsonElement.ParseValue(reader: ref reader);
+                    break;
+                case "lattice":
+                    lattice = JsonElement.ParseValue(reader: ref reader);
                     break;
                 default:
                     throw new JsonException(message: $"state row contains unmapped member '{property}' — a state row is {Shape}.");
@@ -1087,6 +1093,10 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
                     context: $"state row '{name}'.dynamics",
                     element: dynamicsElement
                 )
+            : null),
+            Lattice: ((lattice is { } latticeElement)
+            ? (latticeElement.Deserialize(jsonTypeInfo: WorldJsonContext.Default.WorldStateLatticeTrait)
+                    ?? throw new JsonException(message: $"state row '{name}'.lattice must be an object."))
             : null)
         );
     }
@@ -1217,6 +1227,15 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
                 kind: value.Kind,
                 propertyName: "dynamics",
                 writer: writer
+            );
+        }
+
+        if (value.Lattice is { } latticeTrait) {
+            writer.WritePropertyName(propertyName: "lattice");
+            JsonSerializer.Serialize(
+                writer: writer,
+                value: latticeTrait,
+                jsonTypeInfo: WorldJsonContext.Default.WorldStateLatticeTrait
             );
         }
 

@@ -8,7 +8,7 @@
   "binding": "Both legs boot the same Four Corners shard, prove authored ground reaches the invisible seam, measure the 0.12 resting height (the authored floor half-height 0.1 plus the 0.02 contact skin), and require grounded contacts with zero wire errors. Only the positive leg crosses east, so its post-crossing contacts must follow the seat authority and only it can emit a handoff and expose a generation-addressed NE entity through NW's delivered neighbour image.",
   "fixtures": [],
   "positive": {
-    "world": "src/Puck.World/Assets/worlds/quilt-nw.world.json",
+    "world": "src/Puck.World/Assets/worlds/prototypes/quilt-nw.world.json",
     "script": "positive.script.txt",
     "commands": [
       { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" },
@@ -34,7 +34,7 @@
     ]
   },
   "discriminating": {
-    "world": "src/Puck.World/Assets/worlds/quilt-nw.world.json",
+    "world": "src/Puck.World/Assets/worlds/prototypes/quilt-nw.world.json",
     "script": "discriminating.script.txt",
     "commands": [
       { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" },

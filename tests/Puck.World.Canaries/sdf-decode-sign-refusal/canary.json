@@ -22,7 +22,7 @@
     "valid-control.sdf.json"
   ],
   "positive": {
-    "world": "src/Puck.World/Assets/worlds/nexus.world.json",
+    "world": "src/Puck.World/Assets/worlds/prototypes/nexus.world.json",
     "script": "positive.script.txt",
     "commands": [
       { "verb": "world.sdf.load", "occurrence": 1, "outcome": "refused" },
@@ -58,7 +58,7 @@
     ]
   },
   "discriminating": {
-    "world": "src/Puck.World/Assets/worlds/nexus.world.json",
+    "world": "src/Puck.World/Assets/worlds/prototypes/nexus.world.json",
     "script": "discriminating.script.txt",
     "commands": [
       { "verb": "world.sdf.load", "occurrence": 1, "outcome": "accepted" },

@@ -33,7 +33,7 @@ var presentModeOption = new Option<string?>(name: "--present-mode") {
 };
 var worldOption = new Option<string?>(name: "--world") {
     DefaultValueFactory = static _ => null,
-    Description = "The world definition file (puck.world.def.v1) to load. A missing or invalid file FAILS the boot with a named reason and exit 1. Absent, the shipped Assets/worlds/nexus.world.json beside the executable loads; failure to load that document also fails the boot.",
+    Description = "The world definition file (puck.world.def.v1) to load. A missing or invalid file FAILS the boot with a named reason and exit 1. Absent, the shipped Assets/worlds/puck.world.json beside the executable loads; failure to load that document also fails the boot.",
 };
 var recordingOption = new Option<string?>(name: "--recording") {
     DefaultValueFactory = static _ => null,
@@ -156,7 +156,7 @@ WorldHostPresentation? presentationOverride = (parseResult.GetValue(option: head
     false => WorldHostPresentation.Windowed,
     null => null,
 });
-// The world definition (see WorldDefinition) — a --world file or the shipped Assets/worlds/nexus.world.json beside
+// The world definition (see WorldDefinition) — a --world file or the shipped Assets/worlds/puck.world.json beside
 // the executable, loaded / schema-checked / validated (see WorldDefinitionLoader). LOADED BEFORE the
 // window/launcher/presentation registrations because those now read their values from the resolved host section. Read
 // by DI from the roster, population, frame source, render settings, and the world.quality verb; the resolved source is

@@ -378,23 +378,31 @@ kit's `motion.dynamics` (planar velocity shaping — exactly one of `dynamics`
 or the engage/release `response` table, never both, never neither), and a
 `state` row/cell's `dynamics` trait (the eased read, above).
 
-### `fields` — the lattice (scalar fields, reactions, field-derived geometry)
+### `state.lattices` + the `lattice` row trait — the lattice (scalar rows, reactions, lattice-derived geometry)
 
-`WorldFields.cs`. A boot-authored `lattice` (origin, `cellSize`, `width` ×
-`depth` × `layers`, `stepEveryTicks`) of named fixed-point scalar `fields`
-(`initial`/`min`/`max`), seeded by `paint` rectangles and evolved by
-`reactions` in document order each step: `diffuse`, `decay`, `transform`
+`WorldFields.cs` (the compiled composite) + `WorldState.cs` (the document
+spelling). The document declares ONE `state.lattices` topology (name, origin,
+`cellSize`, `width` × `depth` × `layers`, `stepEveryTicks`, `reactions`) and
+lattice-shaped state rows: `{"name": …, "kind": "fixed", "lattice":
+{"topology": …, "initial"/"min"/"max", optional "heightScale"/"color",
+"paint": […]}}`. `WorldFieldsSection.Compile` assembles the runtime composite
+the engine consumes (`WorldDefinition.Fields` is that compiled view — never
+an authored section; there is no top-level `fields` member any more). A cell
+write against a lattice row (`world.state.cell.set`) refuses through
+whole-document revalidation — the lattice's cells are simulation state, not
+authored cells. Rows are seeded by their trait's `paint` rectangles and
+evolved by the topology's `reactions` in document order each step: `diffuse`, `decay`, `transform`
 (`when` conditions on the cell → `then` set/add writes), `emit` (bodies tagged
 nonzero in a keyed row deposit into the cell they stand in), `expose` (writes
 1/0 into a keyed row per body by a field test at the body's cell — the bridge
-to body-level chemistry). A field with `heightScale` IS geometry: its value
+to body-level chemistry). A row with `heightScale` IS geometry: its value
 raises a solid column above the origin that bodies stand on
 (`WorldFieldLatticeSolid`, unioned with the authored solids for contact) and
 the renderer shows (`WorldFieldEmitter`: one CPU-baked distance brick per
 height field, coloured by `color`, uploaded through the engine's brick pool).
 `layers: 1` is a ground lattice; more layers is a voxel volume and costs
 proportionally. A lattice carries at most 262,144 cells so a full eight-field
-primer remains inside the federation frame; when any field has `heightScale`,
+primer (eight lattice rows) remains inside the federation frame; when any row has `heightScale`,
 the XZ footprint is at most 126 × 126 cells and the sum across layers may raise
 at most 126 cells, fitting the padded 128³ render brick without truncation.
 Cell values are sim state beside the population — stepped

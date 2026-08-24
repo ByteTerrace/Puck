@@ -133,9 +133,14 @@ public sealed class WorldFieldLatticeLawTests {
         Assert.Single(collection: incremental);
     }
 
+    // The document spelling of a composite: state.lattices topology + one lattice-shaped row per composite row —
+    // what `with { Fields = ... }` said before the fold made Fields a compiled view of the state section.
+    private static WorldDefinition WithLattice(WorldDefinition definition, WorldFieldsSection composite) =>
+        (definition with { StateRaw = WorldFieldsSection.ToStateSection(composite: composite) });
+
     [Fact]
     public void PopulationCreatesFields_WhenCollisionAndTargetsDoNotRequireAnSdfField() {
-        var definition = (Fixtures.BuildDocument() with { Fields = Fields() });
+        var definition = WithLattice(definition: Fixtures.BuildDocument(), composite: Fields());
 
         Assert.True(
             condition: WorldDefinitionValidator.TryValidate(definition: definition, neighbours: null, reason: out var reason),
@@ -149,8 +154,8 @@ public sealed class WorldFieldLatticeLawTests {
 
     [Fact]
     public void ValidatorRefusesHeightGeometryThatCannotFitOneRenderBrick() {
-        var tooWide = (Fixtures.BuildDocument() with { Fields = Fields(width: (WorldFieldCapacity.MaxSurfaceCells + 1), heightScale: 1f) });
-        var tooTall = (Fixtures.BuildDocument() with { Fields = Fields(layers: 2, heightScale: 64f) });
+        var tooWide = WithLattice(definition: Fixtures.BuildDocument(), composite: Fields(width: (WorldFieldCapacity.MaxSurfaceCells + 1), heightScale: 1f));
+        var tooTall = WithLattice(definition: Fixtures.BuildDocument(), composite: Fields(layers: 2, heightScale: 64f));
 
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: tooWide, neighbours: null, reason: out var wideReason));
         Assert.Contains(expectedSubstring: "render brick", actualString: wideReason, comparisonType: StringComparison.Ordinal);
@@ -160,13 +165,13 @@ public sealed class WorldFieldLatticeLawTests {
 
     [Fact]
     public void ValidatorRefusesValuesThatCollapseOrChangeMeaningAtTheFixedPointBoundary() {
-        var tinyCell = (Fixtures.BuildDocument() with { Fields = Fields(cellSize: 0.000001f) });
-        var invalidComparison = (Fixtures.BuildDocument() with { Fields = Fields(reactions: [
+        var tinyCell = WithLattice(definition: Fixtures.BuildDocument(), composite: Fields(cellSize: 0.000001f));
+        var invalidComparison = WithLattice(definition: Fixtures.BuildDocument(), composite: Fields(reactions: [
             new WorldReaction.Transform(
                 When: [new WorldFieldCondition(Field: "heat", Comparison: ((WorldFieldComparison)byte.MaxValue), Value: 0f)],
                 Then: [new WorldFieldWrite(Field: "heat", Op: WorldFieldWriteOp.Set, Value: 1f)]
             ),
-        ]) });
+        ]));
 
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: tinyCell, neighbours: null, reason: out var cellReason));
         Assert.Contains(expectedSubstring: "quantize to a positive Q48.16", actualString: cellReason, comparisonType: StringComparison.Ordinal);

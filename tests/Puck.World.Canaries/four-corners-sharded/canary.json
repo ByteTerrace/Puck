@@ -8,14 +8,14 @@
   "binding": "Five real Puck.World processes (nw, ne, se, sw, island) each bind a distinct dynamic loopback endpoint and trust each other's generated federation identity. Only nw's script drives a body: it crosses nw's east edge into ne, then (via the router that follows a body to wherever it now lives) ne's south edge into se, then se's west edge into sw, and sw's own north edge lands it back on nw — a full four-authority human-driven ring. The other four authorities never receive a drive command; the crossing narration each of their own transcripts carries is server-side, fired by the same simulation the forwarded commands reached, under a seat number ne assigns on arrival and every downstream hop keeps. The discriminating leg keeps the same five worlds and the same topology but nw's script never flies the body, so no crossing and no remote-authority naming can be asserted against it.",
   "fixtures": [],
   "positive": {
-    "world": "src/Puck.World/Assets/worlds/quilt-nw.world.json",
+    "world": "src/Puck.World/Assets/worlds/prototypes/quilt-nw.world.json",
     "script": "nw-positive.script.txt",
     "authorities": [
-      { "id": "nw", "world": "src/Puck.World/Assets/worlds/quilt-nw.world.json", "script": "nw-positive.script.txt" },
-      { "id": "ne", "world": "src/Puck.World/Assets/worlds/quilt-ne.world.json", "script": "ground-watch.script.txt" },
-      { "id": "se", "world": "src/Puck.World/Assets/worlds/quilt-se.world.json", "script": "ground-watch.script.txt" },
-      { "id": "sw", "world": "src/Puck.World/Assets/worlds/quilt-sw.world.json", "script": "ground-watch.script.txt" },
-      { "id": "island", "world": "src/Puck.World/Assets/worlds/quilt-island.world.json", "script": "ground-watch.script.txt" }
+      { "id": "nw", "world": "src/Puck.World/Assets/worlds/prototypes/quilt-nw.world.json", "script": "nw-positive.script.txt" },
+      { "id": "ne", "world": "src/Puck.World/Assets/worlds/prototypes/quilt-ne.world.json", "script": "ground-watch.script.txt" },
+      { "id": "se", "world": "src/Puck.World/Assets/worlds/prototypes/quilt-se.world.json", "script": "ground-watch.script.txt" },
+      { "id": "sw", "world": "src/Puck.World/Assets/worlds/prototypes/quilt-sw.world.json", "script": "ground-watch.script.txt" },
+      { "id": "island", "world": "src/Puck.World/Assets/worlds/prototypes/quilt-island.world.json", "script": "ground-watch.script.txt" }
     ],
     "commands": [
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
@@ -60,14 +60,14 @@
     ]
   },
   "discriminating": {
-    "world": "src/Puck.World/Assets/worlds/quilt-nw.world.json",
+    "world": "src/Puck.World/Assets/worlds/prototypes/quilt-nw.world.json",
     "script": "nw-discriminating.script.txt",
     "authorities": [
-      { "id": "nw", "world": "src/Puck.World/Assets/worlds/quilt-nw.world.json", "script": "nw-discriminating.script.txt" },
-      { "id": "ne", "world": "src/Puck.World/Assets/worlds/quilt-ne.world.json", "script": "ground-watch.script.txt" },
-      { "id": "se", "world": "src/Puck.World/Assets/worlds/quilt-se.world.json", "script": "ground-watch.script.txt" },
-      { "id": "sw", "world": "src/Puck.World/Assets/worlds/quilt-sw.world.json", "script": "ground-watch.script.txt" },
-      { "id": "island", "world": "src/Puck.World/Assets/worlds/quilt-island.world.json", "script": "ground-watch.script.txt" }
+      { "id": "nw", "world": "src/Puck.World/Assets/worlds/prototypes/quilt-nw.world.json", "script": "nw-discriminating.script.txt" },
+      { "id": "ne", "world": "src/Puck.World/Assets/worlds/prototypes/quilt-ne.world.json", "script": "ground-watch.script.txt" },
+      { "id": "se", "world": "src/Puck.World/Assets/worlds/prototypes/quilt-se.world.json", "script": "ground-watch.script.txt" },
+      { "id": "sw", "world": "src/Puck.World/Assets/worlds/prototypes/quilt-sw.world.json", "script": "ground-watch.script.txt" },
+      { "id": "island", "world": "src/Puck.World/Assets/worlds/prototypes/quilt-island.world.json", "script": "ground-watch.script.txt" }
     ],
     "commands": [
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },

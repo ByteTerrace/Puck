@@ -4,7 +4,7 @@ using Puck.Assets.Documents;
 namespace Puck.World;
 
 /// <summary>
-/// The <c>fields</c> document section — a lattice of named fixed-point scalar fields over a region of the world
+/// The runtime lattice composite compiled from the state section (see <c>Compile</c>) — a lattice of named fixed-point scalar fields over a region of the world
 /// (heat, moisture, fuel, …), the per-cell reactions that evolve them, and the paint that seeds them. A field with a
 /// <see cref="WorldFieldRow.HeightScale"/> is geometry: its value raises a solid surface above the lattice origin that
 /// bodies stand on and the renderer shows, so a glacier or a forest is field content rather than authored solids.
@@ -15,11 +15,148 @@ namespace Puck.World;
 /// <param name="Fields">The declared fields, in order; a reaction, paint, or render row names them.</param>
 /// <param name="Reactions">The per-step reactions, applied in document order each lattice step.</param>
 /// <param name="Paint">The initial fills, applied in order over the fields' <see cref="WorldFieldRow.Initial"/>.</param>
-[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldFieldsSection(
     WorldFieldLatticeDefinition Lattice,
     IReadOnlyList<WorldFieldRow> Fields,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldReaction>? Reactions = null,
+    IReadOnlyList<WorldReaction>? Reactions = null,
+    IReadOnlyList<WorldFieldPaint>? Paint = null
+) {
+    /// <summary>Compiles the state section's lattice topology and lattice-shaped rows into the runtime composite, or
+    /// <see langword="null"/> when the section declares no topology. Row order is state-section declaration order --
+    /// the order every wire index, checkpoint entry, and render channel keys off.</summary>
+    /// <param name="state">The state section.</param>
+    /// <returns>The composite, or <see langword="null"/>.</returns>
+    public static WorldFieldsSection? Compile(WorldStateSection? state) {
+        if (state?.Lattices is not { Count: > 0 } topologies) {
+            return null;
+        }
+
+        var topology = topologies[0];
+        var rows = new List<WorldFieldRow>();
+        var paint = new List<WorldFieldPaint>();
+
+        foreach (var row in (state.World ?? [])) {
+            if (row.Lattice is not { } trait) {
+                continue;
+            }
+
+            rows.Add(item: new WorldFieldRow(
+                Color: trait.Color,
+                HeightScale: trait.HeightScale,
+                Initial: trait.Initial,
+                Max: trait.Max,
+                Min: trait.Min,
+                Name: row.Name.Value
+            ));
+
+            foreach (var fill in (trait.Paint ?? [])) {
+                paint.Add(item: fill with { Field = row.Name.Value });
+            }
+        }
+
+        return new WorldFieldsSection(
+            Fields: rows,
+            Lattice: new WorldFieldLatticeDefinition(
+                CellSize: topology.CellSize,
+                Depth: topology.Depth,
+                Layers: topology.Layers,
+                Origin: topology.Origin,
+                StepEveryTicks: topology.StepEveryTicks,
+                Width: topology.Width
+            ),
+            Paint: paint,
+            Reactions: topology.Reactions
+        );
+    }
+    /// <summary>Decompiles a composite back into the state-section spelling — the inverse of <see cref="Compile"/>,
+    /// for the projection reconstruction that must hand a client-side definition the SAME lattice through the state
+    /// section the compile reads. <see langword="null"/> in, empty section out.</summary>
+    /// <param name="composite">The composite, or <see langword="null"/>.</param>
+    /// <returns>A state section carrying the topology and one lattice-shaped row per composite row.</returns>
+    public static WorldStateSection ToStateSection(WorldFieldsSection? composite) {
+        if (composite is null) {
+            return new WorldStateSection(World: []);
+        }
+
+        var rows = new List<WorldStateRow>();
+
+        foreach (var row in composite.Fields) {
+            rows.Add(item: new WorldStateRow(
+                Kind: CellKind.Fixed,
+                Lattice: new WorldStateLatticeTrait(
+                    Color: row.Color,
+                    HeightScale: row.HeightScale,
+                    Initial: row.Initial,
+                    Max: row.Max,
+                    Min: row.Min,
+                    Paint: null,
+                    Topology: DefaultTopologyName
+                ),
+                Name: WorldCellName.Parse(candidate: row.Name)
+            ));
+        }
+
+        return new WorldStateSection(
+            Lattices: [new WorldStateLatticeTopology(
+                CellSize: composite.Lattice.CellSize,
+                Depth: composite.Lattice.Depth,
+                Layers: composite.Lattice.Layers,
+                Name: DefaultTopologyName,
+                Origin: composite.Lattice.Origin,
+                Reactions: composite.Reactions,
+                StepEveryTicks: composite.Lattice.StepEveryTicks,
+                Width: composite.Lattice.Width
+            )],
+            World: rows
+        );
+    }
+    /// <summary>The topology name a decompiled projection lattice carries — one lattice exists today, so the
+    /// round-trip needs no authored name.</summary>
+    public const string DefaultTopologyName = "world";
+}
+/// <summary>One <c>state.lattices</c> topology -- the footprint, cadence, and reactions every lattice-shaped state
+/// row referencing it shares. Exactly one topology may be declared today (the wire frame and checkpoint key off a
+/// single lattice); the list spelling is the growth seam, not a live capacity.</summary>
+/// <param name="Name">The topology's name -- what a row's <c>lattice.topology</c> references.</param>
+/// <param name="Origin">The minimum corner, world units.</param>
+/// <param name="CellSize">The cubic cell edge, world units.</param>
+/// <param name="Width">Cells along +X.</param>
+/// <param name="Depth">Cells along +Z.</param>
+/// <param name="Layers">Cells along +Y -- 1 is a ground lattice.</param>
+/// <param name="StepEveryTicks">Simulation ticks between reaction steps.</param>
+/// <param name="Reactions">The per-step reactions over this topology's rows, applied in document order.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldStateLatticeTopology(
+    string Name,
+    DocumentVector3 Origin,
+    float CellSize,
+    int Width,
+    int Depth,
+    int Layers = 1,
+    int StepEveryTicks = 8,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldReaction>? Reactions = null
+);
+/// <summary>A state row's <c>lattice</c> trait -- the row holds one <see cref="CellKind.Fixed"/> scalar per cell of
+/// the named topology instead of slot/keyed cells. Values are authored DECIMAL (like every lattice quantity), not
+/// raw Q48.16 bits; a lattice row refuses slot/keyed members (<c>cells</c>, <c>capacity</c>, <c>advance</c>,
+/// <c>dynamics</c>, <c>draw</c> -- per-cell draws are the spatial-draw seam, refused until it lands).</summary>
+/// <param name="Topology">The <c>state.lattices</c> topology this row lies over.</param>
+/// <param name="Initial">The value every cell starts at before paint.</param>
+/// <param name="Min">The least value a cell holds.</param>
+/// <param name="Max">The greatest value a cell holds.</param>
+/// <param name="HeightScale">World units of solid surface per unit of value above the lattice origin -- 0 for a row
+/// that is not geometry.</param>
+/// <param name="Color">The <c>#RRGGBB</c> the row's surface shades with; required when <paramref name="HeightScale"/>
+/// is nonzero.</param>
+/// <param name="Paint">The initial fills, applied in order over <paramref name="Initial"/>.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldStateLatticeTrait(
+    string Topology,
+    float Initial = 0f,
+    float Min = 0f,
+    float Max = 1f,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float HeightScale = 0f,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Color = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldFieldPaint>? Paint = null
 );
 /// <summary>A lattice's footprint: cubic cells from <paramref name="Origin"/> along +X (<paramref name="Width"/>),
@@ -66,7 +203,12 @@ public sealed record WorldFieldRow(
 /// <param name="MaxX">The rectangle's greatest X, world units.</param>
 /// <param name="MaxZ">The rectangle's greatest Z, world units.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldFieldPaint(string Field, float Value, float MinX, float MinZ, float MaxX, float MaxZ);
+public sealed record WorldFieldPaint(float Value, float MinX, float MinZ, float MaxX, float MaxZ, string Field = "") {
+    /// <summary>Gets the painted row's name. Inside a row's <c>lattice.paint</c> the member is omitted -- the
+    /// carrying row supplies it at compile; the compiled composite always carries it.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public string Field { get; init; } = (Field ?? string.Empty);
+}
 /// <summary>One per-cell condition of a <see cref="WorldReaction.Transform"/>.</summary>
 /// <param name="Field">The field read at the cell.</param>
 /// <param name="Comparison">The comparison.</param>

@@ -22,7 +22,7 @@ public sealed record WorldDefinitionSource(WorldDefinition Definition, string So
 }
 /// <summary>
 /// Resolves the world definition at boot: a <c>--world &lt;path&gt;</c> argument (or the checked-in
-/// <c>Assets/worlds/nexus.world.json</c> beside the executable — the hub, the floating island the lane worlds are
+/// <c>Assets/worlds/puck.world.json</c> beside the executable — the one shipped world
 /// reached from), loaded through
 /// <see cref="WorldJsonContext"/>, schema-checked, and passed through <see cref="WorldDefinitionValidator"/>.
 /// </summary>
@@ -40,7 +40,7 @@ public static class WorldDefinitionLoader {
     public static readonly string DefaultRelativePath = Path.Combine(
         path1: "Assets",
         path2: "worlds",
-        path3: "nexus.world.json"
+        path3: "puck.world.json"
     );
 
     // The step every load path shares after its own parse+first-validate: resolve first-fill draws, then re-validate

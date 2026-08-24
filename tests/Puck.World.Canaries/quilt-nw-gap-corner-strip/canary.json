@@ -8,7 +8,7 @@
   "binding": "Both legs boot a world whose own local ground never reaches the corner pocket beyond NW's east and south edges (the collision probe there is identical and off-surface in both legs). The positive leg keeps both direct adjacencies, so the pocket is covered by a neighbour's delivered terrain and a body resting there is grounded. The discriminating leg is quilt-nw-gap — the same world with both adjacencies delivering that corner removed — so the identical pocket carries nothing and the same body falls through, isolating the delivered strip as the source of the continuity rather than any local geometry.",
   "fixtures": [],
   "positive": {
-    "world": "src/Puck.World/Assets/worlds/quilt-nw.world.json",
+    "world": "src/Puck.World/Assets/worlds/prototypes/quilt-nw.world.json",
     "script": "positive.script.txt",
     "commands": [
       { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" },
@@ -37,7 +37,7 @@
     ]
   },
   "discriminating": {
-    "world": "src/Puck.World/Assets/worlds/quilt-nw-gap.world.json",
+    "world": "src/Puck.World/Assets/worlds/prototypes/quilt-nw-gap.world.json",
     "script": "discriminating.script.txt",
     "commands": [
       { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" },

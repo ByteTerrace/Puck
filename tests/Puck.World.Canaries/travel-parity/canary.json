@@ -8,8 +8,8 @@
   "binding": "The positive leg launches quilt-ne as a separate listening authority and walks through quilt-nw's invisible east adjacency; the same script against colocated authorities must preserve arrival while losing only the remote-authority evidence.",
   "fixtures": [],
   "positive": {
-    "world": "src/Puck.World/Assets/worlds/quilt-nw.world.json",
-    "authorityWorld": "src/Puck.World/Assets/worlds/quilt-ne.world.json",
+    "world": "src/Puck.World/Assets/worlds/prototypes/quilt-nw.world.json",
+    "authorityWorld": "src/Puck.World/Assets/worlds/prototypes/quilt-ne.world.json",
     "script": "cross-ne.script.txt",
     "commands": [
       { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" },
@@ -66,7 +66,7 @@
     ]
   },
   "discriminating": {
-    "world": "src/Puck.World/Assets/worlds/quilt-nw.world.json",
+    "world": "src/Puck.World/Assets/worlds/prototypes/quilt-nw.world.json",
     "script": "cross-ne-local-control.script.txt",
     "commands": [
       { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" },

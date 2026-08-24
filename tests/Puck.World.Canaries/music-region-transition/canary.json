@@ -8,7 +8,7 @@
   "binding": "Both legs boot the Play world over real stdin; only the positive leg teleports the driven body into and back out of arcade-cabinet's authored region.",
   "fixtures": [],
   "positive": {
-    "world": "src/Puck.World/Assets/worlds/nexus.world.json",
+    "world": "src/Puck.World/Assets/worlds/prototypes/nexus.world.json",
     "script": "positive.script.txt",
     "commands": [
       { "verb": "console", "occurrence": 1, "outcome": "accepted" },
@@ -56,7 +56,7 @@
     ]
   },
   "discriminating": {
-    "world": "src/Puck.World/Assets/worlds/nexus.world.json",
+    "world": "src/Puck.World/Assets/worlds/prototypes/nexus.world.json",
     "script": "discriminating.script.txt",
     "commands": [
       { "verb": "console", "occurrence": 1, "outcome": "accepted" },

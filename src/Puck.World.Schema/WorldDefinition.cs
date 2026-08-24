@@ -69,7 +69,6 @@ public sealed record WorldDefinition(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldGenerationDefaults? Generation = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldGeneratorRow>? Generators = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldWaterSection? Water = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldFieldsSection? Fields = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldReference>? References = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPortalsSection? Portals = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSimulationDefaults? Simulation = null,
@@ -91,6 +90,12 @@ public sealed record WorldDefinition(
     /// <summary>Gets the data-side addon descriptors — ABSENT resolves to none.</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldAddonRow> Addons => (AddonsRaw ?? []);
+    /// <summary>Gets the runtime lattice composite compiled from the state section's topology and lattice-shaped
+    /// rows, or <see langword="null"/> when the state section declares no lattice. The state section is the single
+    /// authored source; this accessor is the engine's compiled view of it.</summary>
+    [JsonIgnore]
+    public WorldFieldsSection? Fields => (m_fields ??= WorldFieldsSection.Compile(state: StateRaw));
+    private WorldFieldsSection? m_fields;
     /// <summary>Gets the kit→entity assignment policy — ABSENT resolves to <see cref="WorldRowAssignment.Default"/>.</summary>
     [JsonIgnore]
     public WorldRowAssignment Assignment => (AssignmentRaw ?? WorldRowAssignment.Default);
