@@ -1,55 +1,33 @@
-# Cross-backend parity pattern corpus
+# The parity world
 
-`puck parity` boots every world in this directory, plus the shipped default
-world, once per graphics backend, screenshots the same fenced simulation
-moment in each run, and compares each backend pair under the relaxed parity
-envelope (mean absolute channel delta ≤ 0.35 LSB, differing pixels ≤ 20%).
-There are no stored baselines: both frames of a pair come from the same build,
-so content changes cannot fail the check — only a cross-backend divergence
-can. Two different patterns from the same backend must fail the same envelope
-on every run, so the comparator proves it can refuse before it may report
-green.
+`parity.world.json` is the cross-backend parity check, authored as a world:
+`host.presentation: offscreen`, zero seats and zero input, a `station` state
+row advanced by rules on `$tick` thresholds, a `select` camera program
+dispatching one authored pose per station, and tick-scheduled `captures` rows
+that land the frames and write the `puck.parity.manifest.v1` the comparator
+consumes. `parity.sdf.json` is its companion `puck.sdf.v1` document
+(`world.sdf.load`), carrying the SDF-program stations.
 
-Each pattern targets one contract slice, so a divergence names the slice that
-moved:
-
-| World | Stresses |
+| Station | Stresses |
 |---|---|
-| `parity-gradient.world.json` | Smooth-blend seams, curved normals, broad specular falloff — where benign ±1-LSB codegen noise clusters. |
-| `parity-edges.world.json` | Hard high-contrast edges: checker boxes, a yawed silhouette, a thin distant sliver, an emissive bar. |
-| `parity-modifiers.world.json` | Shape modifiers beyond identity transforms: twist, bend, onion, dilate, mirror. |
-| `parity-glyphs.world.json` | Both text tiers off one uploaded font atlas: marched `Glyph` geometry (an embossed centered run with wrap/tracking/line-spacing, an engraved run) and the per-cell glyph decal on a `text`-source screen. |
-| `parity-film-grain.world.json` | The `sdf-film-grain` post-render extension authored over the gradient pattern — proves `sdfPcg3d` (pixel/tick/seed) produces the same noise field on SPIR-V and DXIL. |
+| `sky` | The procedural sky gradient and stars — smooth broad-band shading. |
+| `materials` | Two SDF primitives with distinct materials — silhouette edges and specular. |
+| `lattice` | A `state.lattices` height-field — the fields-to-pixels path. |
+| `noise` | `noiseDisplace` + `cellJitter` — `sdfPcg3d` agreement on SPIR-V and DXIL. |
 
-The shipped default world rides along as the one integration entry — the
-composed game frame with a live avatar body. Window extent is a per-entry
-fact (each document's authored `host`), so extents are required to match
-WITHIN a pair, never across the corpus: the pattern worlds author their own
-extent and the shipped entry inherits the standard one.
+`parity.contract.json` is the per-station comparison contract (tile size,
+per-tile mean/max delta ceilings, census floors). It is versioned beside the
+world on purpose: thresholds are content facts, re-calibrated in the same
+change that changes a station, echoable in review. Census floors come from
+observed coverage at roughly half its value — a frame whose declared content
+collapses fails the gate before any pixel is compared.
 
-## Editing a pattern
+`parity-inside.world.json` is the negative-path proof: its camera is authored
+inside solid geometry, so every scheduled capture must refuse with
+`cameraInside: true` and no frame written. If it ever produces a frame, the
+camera-validity gate is broken.
 
-The worlds are generated; edit `ParityCorpusGenerator.cs`
-(`src/Puck.Cli/Parity/`), never the JSON.
-
-1. Change the pattern in `ParityCorpusGenerator.cs` and run
-   `puck parity --generate`. New or changed creations are stamped with a
-   zero hash.
-2. Boot the world once; the validator refuses and names the canonical sha256:
-
-   ```bash
-   dotnet run --project src/Puck.World -c Release -- --world tests/Puck.Parity/parity-gradient.world.json --headless true --exit-after-seconds 5 --state-dir "$TMP/parity-state"
-   ```
-
-3. Re-run `puck parity --generate --hashes parity-gradient=<hex64>,...` with
-   every id the refusals named, and confirm each world boots to a
-   `world.status` echo. Pass EVERY pattern's hash, not only the changed one —
-   the generator writes all the worlds each run, and an id it has no hash for
-   is stamped back to zero (recover an unchanged pattern's hash from its
-   committed world file).
-4. Run `puck parity` and look at the frames it leaves in its artifact
-   directory — a pattern that stopped framing its subject measures nothing.
-
-Solid placements compile into the contact field, which accepts anisotropy only
-for primitives with an exact spelling: keep `Torus` and `RoundCone` scales
-uniform or boot refuses.
+Editing a station: edit `parity.world.json`/`parity.sdf.json` directly (they
+are authored documents, not generated), re-run `puck parity`, and re-calibrate
+the station's contract entry from the run's observed deltas in the same
+change.
