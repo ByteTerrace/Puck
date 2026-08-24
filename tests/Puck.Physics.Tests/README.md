@@ -9,6 +9,10 @@ These tests keep the Physics kernels honest through separate evidence:
   Barnes–Hut, remains bit-deterministic and allocation-free after workspace warm-up, and reduces 4,096-body interaction
   work below the quadratic baseline; overflow fixtures pin both rejected M2L pairs and deferred L2L expansions;
 - the contact cases pin dynamic compound correction direction and the policy-free analytic static push contract;
+- `FixedSurfaceQueryTests` pins the nearest-surface-point query's per-kind exactness (box face/edge/corner, sphere,
+  half-space), the unit-outward-normal contract, reach inclusion at the boundary, the `(Source, ColliderIndex)`
+  tie-break under 1,000 shuffled rebuilds of a set containing an exact tie, and the directed variant's
+  angle-before-distance candidate ordering;
 - the two-body kernel cases pin what is exact (impulse sign antisymmetry, a mass-symmetric pair's velocity deltas)
   against what is only bounded (an asymmetric pair's momentum residue, counted in applications and shown sensitive to
   a restored gravity term), the candidate canonical-order key's coverage of the second anchor, and the checked
@@ -46,6 +50,7 @@ walk or cell-translation pass from an accidentally quadratic implementation.
 | `../../src/Puck.Physics/FixedRigid*.cs` | The production solver, body/options/contact API, mixed-scale arithmetic, and substep loop. |
 | `../../src/Puck.Physics/FixedSoftConstraint.cs` | The soft-constraint coefficient chain, formed at the substep width `h = 1/(rateHz·n)`. |
 | `../../src/Puck.Physics/FixedManifoldSlotTable.cs` | Persistent slots and deterministic association, matching, and eviction. |
+| `../../src/Puck.Physics/FixedSurfaceQuery.cs` | The nearest-surface-point query — the anchor primitive climbing and grappling both resolve against. |
 | `Geometry/SpikeGeometry.cs` | Shapes, absolute placement, and the three candidate generators (half-space, slab, signed-distance field). |
 | `Fixtures/` | The `SpikeWorld` harness, `SpikeBodies`, and the six scenario fixtures. |
 | `TwoBody/` | The two-dynamic-body measurement rig — `TwoBodyDynamics`, `TwoBodySolver`, `EnvelopeCornerMeasurement` — independent of the production `FixedTwoBodyKernel`/`FixedRigidWorld`; it exists to justify their shape and to give the precision-floor measurements an instrument proven equivalent to the real single-body solver, not to share code with production. |
