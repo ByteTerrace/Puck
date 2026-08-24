@@ -143,6 +143,10 @@ beside an existing one:
    its neighbors.
 4. **Sweep every shipped world** in the same change (strict parse, above).
 5. **Add the read-back verb** (above) — the decision must be echoable.
+6. **Echo the derived cost.** A feature whose declaration carries a price (a
+   step clamp, an envelope reservation, a per-step loop) folds that price
+   into the `world.budget` cost sheet in the same change — a derived cost
+   nothing can echo is a silent frame tax.
 
 **Doc hygiene, same commit.** [`docs/campaign.md`](../../../docs/campaign.md) is the one document that says what we are collectively building; correct it in the SAME commit as any landing that changes its truth. NEVER write a status column — a status claim duplicates what the code answers better, so record the DECISION and let the code answer "is it done". Component READMEs are developer references (no doctrine
 prose); if a change stales one, or stales a comment, fix it in the same

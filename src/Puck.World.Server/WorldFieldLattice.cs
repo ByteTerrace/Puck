@@ -243,6 +243,10 @@ public sealed class WorldFieldLattice {
         }
     }
 
+    /// <summary>Gets the declared reaction count.</summary>
+    public int ReactionCount => m_reactions.Length;
+    /// <summary>Gets the declared step cadence in simulation ticks.</summary>
+    public int StepEveryTicks => m_stepEveryTicks;
     /// <summary>Gets the lattice's cell count (width × layers × depth).</summary>
     public int CellCount => ((m_width * m_layers) * m_depth);
     /// <summary>Gets the declared cubic cell edge.</summary>

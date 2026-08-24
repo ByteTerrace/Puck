@@ -56,6 +56,16 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
     private readonly uint m_height;
     private readonly int m_instanceCapacity;
     private readonly SdfWorldKernels m_kernels;
+    /// <summary>Gets the last uploaded program's packed word count, or 0 before the first upload — the live half of
+    /// the <c>world.budget</c> cost sheet against <see cref="ProgramWordCapacity"/>.</summary>
+    public int LiveProgramWords { get; private set; }
+    /// <summary>Gets the last uploaded program's instance count, or 0 before the first upload.</summary>
+    public int LiveProgramInstances { get; private set; }
+    /// <summary>Gets the last uploaded program's Lipschitz step scale (1 = no clamp), or 0 before the first
+    /// upload.</summary>
+    public float LiveProgramStepScale { get; private set; }
+    /// <summary>Gets the frozen program-word envelope this node was constructed with.</summary>
+    public int ProgramWordCapacity => m_programWordCapacity;
     private readonly int m_programWordCapacity;
     private readonly bool? m_rayQueryEnabled;
     private readonly Dictionary<int, Func<Vector3>> m_screenLights;
@@ -701,6 +711,9 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
 
         if (frame.ProgramChanged) {
             m_engine!.UploadProgram(program: frame.Program);
+            LiveProgramWords = frame.Program.Words.Length;
+            LiveProgramInstances = frame.Program.Instances.Count;
+            LiveProgramStepScale = frame.Program.StepScale;
         }
 
         var bindingsTicks = (cpuTimingEnabled

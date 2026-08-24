@@ -941,6 +941,28 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
+            name: "world.budget",
+            description: "Prints the compose-time cost sheet (Immediate): the live render program's packed words and instances against their frozen envelopes, the program's Lipschitz step scale with its march multiplier (1.00 = unclamped), the lattice's per-step reaction cost and cadence, and the state row count. Every number is DERIVED from what the document declares — the sheet is how an authored choice's price becomes legible instead of a silent frame tax.",
+            handler: (_, args) => {
+                if (args.Count != 0) {
+                    return CommandResult.Error(output: $"[world.budget: unrecognized '{args[0]}' — expected no arguments]");
+                }
+
+                var render = ((renderProbe.Node is { } node)
+                    ? $"program {node.LiveProgramWords}/{node.ProgramWordCapacity} word(s), {node.LiveProgramInstances} instance(s), stepScale {node.LiveProgramStepScale.ToString(format: "0.###", provider: System.Globalization.CultureInfo.InvariantCulture)}{((node.LiveProgramStepScale is > 0f and < 1f) ? $" (march ~{(1f / node.LiveProgramStepScale).ToString(format: "0.#", provider: System.Globalization.CultureInfo.InvariantCulture)}x baseline)" : string.Empty)}"
+                    : "renderer not built yet"
+                );
+                var lattice = ((population.Fields is { } fields)
+                    ? $"lattice {fields.CellCount} cell(s) x {fields.ReactionCount} reaction(s) every {fields.StepEveryTicks} tick(s)"
+                    : "lattice none"
+                );
+                var rows = (server.Definition.State?.Count ?? 0);
+
+                return new CommandResult(Output: $"[world.budget: {render} | {lattice} | state {rows} row(s)]");
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "world.debug-view",
             description: "Selects the live SDF diagnostic output for every World camera: world.debug-view [off|depth|normals|raydir|material-id|iteration-count|termination|slice|mask|overshoot]. Depth is the primary-march-only performance probe; off restores final shading.",
             handler: (_, args) => {
