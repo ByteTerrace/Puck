@@ -84,7 +84,7 @@ selectively: `Motion`, `SpawnPoints`, `Render`, `Screens`, `Cameras`,
 `Population`, `PlayerDefaults`, `Channels`, `TargetRegisters`,
 `BodyMotionPrograms`, `Kits`, `DefaultSeatKit`, `Assignment`, `Addons`,
 `BindingOverlays`, `Storage`, `Creations`, `Placements`, `Authoring`,
-`Speakers`, `Tunes`, `Patches`, `Audio`, `Collision`, `Host`, `Views`,
+`Speakers`, `Tunes`, `Patches`, `Audio`, `Collision`, `Gravity`, `Host`, `Views`,
 `Looks`, `LookAssignment`, `Dynamics` (see below), `Grants`, `Hud`, `State`,
 `InputHold` (its own type, `WorldInputHoldAuthoring`, is the AUTHORED seconds
 shape — `WorldDefinition.CompiledInputHold` is the compiled ticks form
@@ -124,6 +124,19 @@ mutates them in session and no grant subject names them:
   every `IWorldNeighbourResolver` call site resolves against. This is what a
   portal facet's `destination` resolves against: the nexus's own `references`
   section names the three dungeons by document path.
+- **`Gravity`** (`WorldGravity.cs`) — an acceleration field, deliberately not
+  geometry. `uniform` is an authored acceleration vector. `attractors` names a
+  placement plus explicit mass; optional `points` instead names a placement,
+  positive `surfaceGravity`, and positive `referenceRadius`, then lowers that
+  promise through the actual softened Q48.16 Plummer kernel into a mass. The
+  thick validator refuses an unrepresentable lowering before boot, requires
+  positive `gravitationalConstant` only when `points` is nonempty, and refuses
+  a placement duplicated across the two source spellings. Compilation keeps
+  explicit attractors first and point presets second, preserving authored order
+  within each. A source reads only its placement transform — never its SDF or
+  solidity. Read back authored/derived values and last deterministic solver
+  work with `world.gravity`; `world.budget` echoes the source and evaluation
+  price.
 - **`Portals`** (`WorldPortals.cs`) — `WorldPortalsSection(WorldPortalDefaults
   PortalDefaults)`, whose `travel` is `Party` (the traveling seat's whole
   active local-seat party) or `Body` (one seat). It is the world-scope default
@@ -330,6 +343,17 @@ actions, and the runtime never performs document lookups on the action hot path.
 The lane is the lifetime declaration; there is no second `lifetime` field to
 contradict it.
 
+`WorldStateCatalog` (`WorldStateCompilation.cs`) is the typed compiled view of
+that inventory. It assigns catalog-bound `WorldStateHandle` values in
+world → body → identity document order and records each declaration's ownership
+lane, slot/keyed/lattice storage shape, deterministic value kind, and lane-local
+ordinal. Runtime processors resolve `(lane, name)` once, retain the handle while
+that catalog is current, and index the immutable descriptor catalog thereafter;
+a replacement declaration shape rejects old handles, and the catalog neither
+owns values nor changes their lane-specific storage. `WorldDefinition.StateCatalog`
+is non-serialized; definitions sharing `StateRaw` share its compiled view, and
+`WithWorldState` preserves that view and its handles across value-only updates.
+
 `state.world` (`WorldStateRow`) is genre-neutral game state — score, rounds,
 inventory, flags. **A slot is a table with one
 key, and there is ONE authored spelling for both.** A row names itself,
@@ -400,6 +424,17 @@ raises a solid column above the origin that bodies stand on
 (`WorldFieldLatticeSolid`, unioned with the authored solids for contact) and
 the renderer shows (`WorldFieldEmitter`: one CPU-baked distance brick per
 height field, coloured by `color`, uploaded through the engine's brick pool).
+`WorldFieldProgram.Compile` is the typed reaction compiler view over that same
+authored topology and reaction list: stable field/node handles, its canonical
+state catalog, fixed-point scalar inputs, typed state dependencies, immutable
+canonical read/write sets, the dependency DAG they imply, and separate
+cell-node/full-cell/body work counts. It is deliberately not a second serialized
+graph language; editors and schedulers consume it beside `WorldDefinition.Fields`,
+which remains the complete topology/paint/display composite and the document
+remains the one authoring home. `WorldDefinition.FieldProgram` is the cached,
+non-serialized door. It retains compatible handles across unrelated definition
+edits and value-only state updates, and replaces them when field or reaction
+program inputs change.
 `layers: 1` is a ground lattice; more layers is a voxel volume and costs
 proportionally. A lattice carries at most 262,144 cells so a full eight-field
 primer (eight lattice rows) remains inside the federation frame; when any row has `heightScale`,
@@ -1400,6 +1435,10 @@ zone, and neutral-grace duration.
 - `WorldState.cs` — the `state` section: `WorldStateSection` (world/body/identity ownership lanes),
   `WorldStateRow` (the document-cell substrate — `kind` int/fixed/bool/text,
   `value` sugar or `cells`), `WorldStateCell`, and `WorldStateCapacity`.
+- `WorldStateCompilation.cs` — the immutable typed descriptor catalog over the
+  state section: ownership lane, storage shape, value kind, stable handle and
+  lane-local ordinals, plus one-time `(lane, name)` resolution for runtime
+  processors.
 - `WorldDefinitionRows.cs` — the one row-find per section
   (`FindCreation`/`FindPlacement`/`FindKit`/`FindSpawnPoint`/`FindStateRow`),
   ordinal and allocation-free.

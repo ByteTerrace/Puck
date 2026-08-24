@@ -173,6 +173,10 @@ public sealed partial class WorldPopulation {
 
     /// <summary>Gets the field lattice, when the world declares a <c>fields</c> section.</summary>
     public WorldFieldLattice? Fields => m_fields;
+    /// <summary>Gets the compiled gravity declaration for read-back.</summary>
+    public FixedWorldGravity CompiledGravity => (m_gravityField?.Compiled ?? FixedWorldGravity.Inert);
+    /// <summary>Gets the last gravity solve's deterministic structural work counters.</summary>
+    public GravitySolveStatistics GravityStatistics => (m_gravityField?.Statistics ?? default);
 
     private WorldPlayerDefaults m_playerDefaults = null!;
     private WorldPopulationVariation m_peerVariation = null!;

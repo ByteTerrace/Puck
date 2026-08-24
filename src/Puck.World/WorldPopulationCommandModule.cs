@@ -1,4 +1,6 @@
+using System.Globalization;
 using Puck.Commands;
+using Puck.Maths;
 using Puck.World.Client;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -14,6 +16,58 @@ namespace Puck.World;
 /// device.
 /// </summary>
 internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopulation population, WorldServer server, IServerLink link) : ICommandModule {
+    private static string DescribeFixed(FixedQ4816 value) => ((double)value).ToString(
+        format: "0.#####",
+        provider: CultureInfo.InvariantCulture
+    );
+    private string DescribeGravity() {
+        var authored = server.Definition.Gravity;
+        var compiled = population.CompiledGravity;
+        var statistics = population.GravityStatistics;
+        var uniform = authored.UniformAcceleration;
+        var sources = new List<string>();
+
+        foreach (var attractor in authored.Attractors) {
+            sources.Add(item: string.Create(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"mass:{attractor.PlacementId}={attractor.Mass:0.#####}"
+            ));
+        }
+
+        // Installed definitions passed the thick validator, so every explicit attractor resolves and occupies the
+        // authored prefix of FixedWorldGravity.Attractors. Point presets follow that prefix in authored order.
+        var compiledIndex = authored.Attractors.Count;
+
+        foreach (var point in (authored.Points ?? [])) {
+            var derivedMass = ((compiledIndex < compiled.Attractors.Length)
+                ? DescribeFixed(compiled.Attractors[compiledIndex].Mass)
+                : "uncompiled"
+            );
+
+            sources.Add(item: string.Create(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"point:{point.PlacementId}=g{point.SurfaceGravity:0.#####}@r{point.ReferenceRadius:0.#####}->mass{derivedMass}"
+            ));
+            compiledIndex++;
+        }
+
+        var sourceRows = ((sources.Count == 0)
+            ? "none"
+            : string.Join(
+                separator: ",",
+                values: sources
+            )
+        );
+        var targetCount = Math.Max(
+            val1: 0,
+            val2: (statistics.BodyCount - compiled.Attractors.Length)
+        );
+
+        return string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"[world.gravity: solver {authored.Solver} uniform=({uniform.X:0.#####},{uniform.Y:0.#####},{uniform.Z:0.#####}) G={authored.GravitationalConstant:0.#####} softening={authored.SofteningLength:0.#####} | sources {sourceRows} | compiled={compiled.Attractors.Length} static source(s) last targets={targetCount} nodes={statistics.TreeNodeCount} exact={statistics.ExactSourceEvaluations} approximate={statistics.ApproximatedNodeEvaluations} represented={statistics.ApproximatedSourceCount} m2m={statistics.MultipoleToMultipoleTranslations} m2l={statistics.MultipoleToLocalTranslations} l2l={statistics.LocalToLocalTranslations} local={statistics.LocalExpansionEvaluations} deferred={statistics.DeferredLocalExpansionEvaluations}]"
+        );
+    }
     private static string DescribeAssignment(WorldRowAssignment assignment) =>
         $"{DescribeSequence(sequence: assignment.Sequence)}[{((assignment.Rows.Count == 0)
             ? "all"
@@ -116,6 +170,15 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.gravity",
+            description: "Reads the authored and compiled gravity field back (Immediate): solver, uniform acceleration, shared G/softening, explicit mass sources, point/planet surface-gravity presets with their derived masses, and the last deterministic solve's work counters.",
+            handler: (_, args) => ((args.Count == 0)
+                ? new CommandResult(Output: DescribeGravity())
+                : CommandResult.Error(output: $"[world.gravity: unrecognized '{args[0]}' — expected no arguments]")),
+            routing: CommandRouting.Immediate
+        );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.fields",

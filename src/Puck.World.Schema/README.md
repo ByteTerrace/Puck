@@ -310,6 +310,26 @@ VOLUMES are the destination shape and arrive as a future optional member
 beside `level`, never a reshape of it. The section carries no mutation
 dispatch axis and no grant subject — it is boot-authored data.
 
+## The `gravity` section — acceleration, not geometry
+
+`WorldGravity.cs` holds the optional `gravity` section. `uniform` is a constant
+acceleration vector in world units per second squared. Static point sources may
+be authored either as explicit `attractors` (`placementId` plus mass), or as
+designer-facing `points` (`placementId`, positive `surfaceGravity`, positive
+`referenceRadius`). A point row promises the named acceleration at the named
+radius after the section's Plummer `softeningLength` is applied; the thick
+validator lowers that promise through the fixed Q48.16 kernel and refuses an
+underflow or overflow before the server boots. The compiled source order is
+explicit attractors followed by points, each in authored order.
+
+The `gravitationalConstant` may remain zero for a uniform-only field, but must
+be positive when `points` is nonempty. A placement may appear in only one source
+row across both spellings. Point authoring never reads a placement's solid or
+SDF: its transform locates the source, while geometry and acceleration remain
+separate decisions. `world.gravity` reads authored values, derived point masses,
+and the last solver work counters back; `world.budget` includes the static
+source count and last evaluation counts.
+
 ## The `metadata` section — free-form author-facing facts
 
 `WorldMetadata.cs` holds the optional `metadata` section (`WorldMetadataSection`):
@@ -346,6 +366,20 @@ ONE authored spelling (`WorldStateRowJsonConverter` in
  "cells":[{"key":..,"value":..}],   // ... OR the keyed form; never both
  "min":.., "max":.., "capacity":.., "nonNegative":..}
 ```
+
+`WorldStateCatalog.Compile` turns this authored inventory into immutable typed
+descriptors for runtime processors. Each descriptor records its ownership lane
+(`world`, `body`, or `identity`), storage shape (`slot`, `keyed`, or `lattice`),
+value kind, one stable catalog ordinal, and its document-order ordinal within
+the lane. A processor resolves `(lane, name)` once to a `WorldStateHandle`, then
+indexes that same catalog by the catalog-bound handle instead of repeating
+string lookup during execution. `WorldDefinition.StateCatalog` is the
+non-serialized compiled view. Definitions sharing one `StateRaw` share that
+view; value-only updates through `WithWorldState` retain it when the declaration
+shape is unchanged, so processor handles remain live across ordinary state
+writes. A name, lane, storage-shape, value-kind, or order change produces a new
+catalog, and that catalog refuses handles minted by the previous instance. The
+catalog changes no state value, document spelling, or storage implementation.
 
 `kind` is required; `value` and `cells` are two optional fields, not two
 `$type` discriminators — a row carrying both, or a `value` beside a
@@ -450,6 +484,22 @@ cell — the bridge to body-level chemistry). A reaction scalar
 weather-intensity row modulates chemistry live with no new reaction kind; an
 unwritten referenced row reads `0`, so a row-gated reaction is inert until
 something writes it. A row-driven `diffuse`/`decay` rate clamps to `[0, 1]`.
+
+`WorldFieldProgram.Compile` is the typed reaction-program view over that same
+spelling, not a second graph language. It resolves lattice rows and
+scalar/tag/output state dependencies once into
+`WorldFieldHandle`/`WorldStateHandle` values, exposes its canonical
+`StateCatalog`, quantizes literal scalars to `FixedQ4816` at the compiler
+boundary, preserves reaction order as stable node order, and exposes immutable
+canonical read/write sets plus the dependency DAG they imply and exact
+cell-node/full-cell/body-pass cost classes. It is consumed alongside
+`WorldDefinition.Fields`, which remains the complete topology, paint,
+initialization, and display composite. `WorldDefinition.FieldProgram` is the
+cached non-serialized door: unrelated definition edits and value-only state
+updates preserve compatible program handles, while a field declaration or
+reaction-program change creates a replacement. This is the shared reaction
+boundary an editor, inspector, scheduler, and future runtime lowering consume;
+nodes own no hidden state or random stream.
 
 A row with `heightScale` IS geometry: its value raises a solid column above the
 lattice origin (unioned with the authored solids for contact) that the

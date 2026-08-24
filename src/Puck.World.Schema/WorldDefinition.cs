@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Runtime.CompilerServices;
 using Puck.Text;
 using Puck.World.Protocol;
 
@@ -91,8 +92,16 @@ public sealed record WorldDefinition(
     /// rows, or <see langword="null"/> when the state section declares no lattice. The state section is the single
     /// authored source; this accessor is the engine's compiled view of it.</summary>
     [JsonIgnore]
-    public WorldFieldsSection? Fields => (m_fields ??= WorldFieldsSection.Compile(state: StateRaw));
-    private WorldFieldsSection? m_fields;
+    public WorldFieldsSection? Fields => GetCompiledFields();
+    /// <summary>Gets the typed descriptor catalog compiled from the authored <c>state</c> section. Runtime processors
+    /// resolve names against this catalog once, retain <see cref="WorldStateHandle"/> values, and then use ordinal
+    /// descriptor access without repeated string lookup.</summary>
+    [JsonIgnore]
+    public WorldStateCatalog StateCatalog => GetStateCatalog();
+    /// <summary>Gets the typed deterministic program compiled from the lattice-shaped state rows and their ordered
+    /// reactions, or <see langword="null"/> when the state section declares no lattice topology.</summary>
+    [JsonIgnore]
+    public WorldFieldProgram? FieldProgram => GetFieldProgram();
     /// <summary>Bridge spellings for compose sites: each writes ONE member of its dealt section, preserving the
     /// other. The document spelling is the section object; these never serialize.</summary>
     [JsonIgnore]
@@ -401,7 +410,167 @@ public sealed record WorldDefinition(
 
     /// <summary>Returns a copy with its document-owned world-state rows replaced while preserving the body and
     /// identity declaration lanes.</summary>
-    public WorldDefinition WithWorldState(IReadOnlyList<WorldStateRow> rows) => this with {
-        StateRaw = ((StateRaw ?? new WorldStateSection()) with { World = rows }),
-    };
+    public WorldDefinition WithWorldState(IReadOnlyList<WorldStateRow> rows) {
+        var updated = this with {
+            StateRaw = ((StateRaw ?? new WorldStateSection()) with { World = rows }),
+        };
+
+        PreserveCompatibleCompilation(target: updated);
+
+        return updated;
+    }
+
+    private static readonly RuntimeCompilationCache s_absentStateCompilation = new();
+    private static readonly ConditionalWeakTable<WorldStateSection, RuntimeCompilationCache> s_runtimeCompilationCaches = new();
+
+    private WorldFieldsSection? GetCompiledFields() {
+        var cache = GetCompilationCache(state: StateRaw);
+
+        lock (cache.SyncRoot) {
+            if (
+                !cache.FieldsCompiled ||
+                !WorldFieldsSection.MatchesState(
+                    composite: cache.Fields,
+                    state: StateRaw
+                )
+            ) {
+                cache.Fields = WorldFieldsSection.Compile(state: StateRaw);
+                cache.FieldsCompiled = true;
+            }
+
+            return cache.Fields;
+        }
+    }
+
+    private WorldStateCatalog GetStateCatalog() {
+        var cache = GetCompilationCache(state: StateRaw);
+
+        lock (cache.SyncRoot) {
+            if (
+                (cache.StateCatalog is null) ||
+                !cache.StateCatalog.MatchesShape(section: StateRaw)
+            ) {
+                cache.StateCatalog = WorldStateCatalog.Compile(section: StateRaw);
+            }
+
+            return cache.StateCatalog;
+        }
+    }
+
+    private WorldFieldProgram? GetFieldProgram() {
+        var cache = GetCompilationCache(state: StateRaw);
+
+        lock (cache.SyncRoot) {
+            var fields = GetCompiledFields();
+            var catalog = GetStateCatalog();
+
+            if (
+                !cache.FieldProgramCompiled ||
+                ((fields is null) != (cache.FieldProgram is null)) ||
+                (
+                    (fields is not null) &&
+                    (
+                        (cache.FieldProgram is null) ||
+                        (cache.FieldProgramFields is null) ||
+                        !ReferenceEquals(objA: cache.FieldProgram.StateCatalog, objB: catalog) ||
+                        !cache.FieldProgramFields.HasSameProgram(other: fields)
+                    )
+                )
+            ) {
+                cache.FieldProgram = ((fields is null)
+                    ? null
+                    : WorldFieldProgram.Compile(document: fields, state: catalog)
+                );
+                cache.FieldProgramFields = fields;
+                cache.FieldProgramCompiled = true;
+            }
+
+            return cache.FieldProgram;
+        }
+    }
+
+    private void PreserveCompatibleCompilation(WorldDefinition target) {
+        if (!TryGetCompilationCache(state: StateRaw, cache: out var sourceCache)) {
+            return;
+        }
+
+        var targetCache = GetCompilationCache(state: target.StateRaw);
+
+        lock (sourceCache.SyncRoot) {
+            lock (targetCache.SyncRoot) {
+                if (sourceCache.FieldsCompiled) {
+                    var candidate = WorldFieldsSection.Compile(state: target.StateRaw);
+
+                    targetCache.Fields = (
+                        (sourceCache.Fields is not null) &&
+                        (candidate is not null) &&
+                        sourceCache.Fields.HasSameCompilation(other: candidate)
+                            ? sourceCache.Fields
+                            : candidate
+                    );
+                    targetCache.FieldsCompiled = true;
+                }
+
+                if (sourceCache.StateCatalog is not null) {
+                    var candidate = WorldStateCatalog.Compile(section: target.StateRaw);
+
+                    targetCache.StateCatalog = (sourceCache.StateCatalog.HasSameShape(other: candidate)
+                        ? sourceCache.StateCatalog
+                        : candidate
+                    );
+                }
+
+                if (sourceCache.FieldProgramCompiled) {
+                    var fields = (targetCache.FieldsCompiled
+                        ? targetCache.Fields
+                        : WorldFieldsSection.Compile(state: target.StateRaw)
+                    );
+                    var catalog = (targetCache.StateCatalog ?? WorldStateCatalog.Compile(section: target.StateRaw));
+
+                    targetCache.Fields = fields;
+                    targetCache.FieldsCompiled = true;
+                    targetCache.StateCatalog = catalog;
+                    targetCache.FieldProgram = (
+                        (sourceCache.FieldProgram is not null) &&
+                        (sourceCache.FieldProgramFields is not null) &&
+                        (fields is not null) &&
+                        ReferenceEquals(objA: sourceCache.FieldProgram.StateCatalog, objB: catalog) &&
+                        sourceCache.FieldProgramFields.HasSameProgram(other: fields)
+                            ? sourceCache.FieldProgram
+                            : ((fields is null)
+                                ? null
+                                : WorldFieldProgram.Compile(document: fields, state: catalog)
+                    ));
+                    targetCache.FieldProgramFields = fields;
+                    targetCache.FieldProgramCompiled = true;
+                }
+            }
+        }
+    }
+
+    private static RuntimeCompilationCache GetCompilationCache(WorldStateSection? state) => (
+        (state is null)
+            ? s_absentStateCompilation
+            : s_runtimeCompilationCaches.GetOrCreateValue(key: state)
+    );
+
+    private static bool TryGetCompilationCache(WorldStateSection? state, out RuntimeCompilationCache cache) {
+        if (state is null) {
+            cache = s_absentStateCompilation;
+
+            return true;
+        }
+
+        return s_runtimeCompilationCaches.TryGetValue(key: state, value: out cache!);
+    }
+
+    private sealed class RuntimeCompilationCache {
+        public object SyncRoot { get; } = new();
+        public bool FieldsCompiled { get; set; }
+        public WorldFieldsSection? Fields { get; set; }
+        public WorldStateCatalog? StateCatalog { get; set; }
+        public bool FieldProgramCompiled { get; set; }
+        public WorldFieldProgram? FieldProgram { get; set; }
+        public WorldFieldsSection? FieldProgramFields { get; set; }
+    }
 }

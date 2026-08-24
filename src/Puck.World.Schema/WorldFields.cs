@@ -21,9 +21,104 @@ public sealed record WorldFieldsSection(
     IReadOnlyList<WorldReaction>? Reactions = null,
     IReadOnlyList<WorldLatticeFill>? Paint = null
 ) {
+    /// <summary>Determines without allocation whether an authored state section still compiles to a cached
+    /// composite.</summary>
+    internal static bool MatchesState(WorldFieldsSection? composite, WorldStateSection? state) {
+        if (state?.Lattices is not { Count: > 0 } topologies) {
+            return (composite is null);
+        }
+
+        if (
+            (composite is null) ||
+            (topologies[0] is not { } topology) ||
+            (composite.Lattice.Origin != topology.Origin) ||
+            (composite.Lattice.CellSize != topology.CellSize) ||
+            (composite.Lattice.Width != topology.Width) ||
+            (composite.Lattice.Depth != topology.Depth) ||
+            (composite.Lattice.Layers != topology.Layers) ||
+            (composite.Lattice.StepEveryTicks != topology.StepEveryTicks) ||
+            !ReactionsEqual(left: composite.Reactions, right: topology.Reactions)
+        ) {
+            return false;
+        }
+
+        var fieldIndex = 0;
+        var paintIndex = 0;
+        var paint = (composite.Paint ?? []);
+        var worldRows = (state.World ?? []);
+
+        for (var rowIndex = 0; (rowIndex < worldRows.Count); rowIndex++) {
+            if (worldRows[rowIndex] is not { } row) {
+                return false;
+            }
+
+            if (row.Lattice is not { } trait) {
+                continue;
+            }
+
+            if ((uint)fieldIndex >= (uint)composite.Fields.Count) {
+                return false;
+            }
+
+            var field = composite.Fields[fieldIndex++];
+
+            if (
+                !string.Equals(a: field.Name, b: row.Name, comparisonType: StringComparison.Ordinal) ||
+                (field.Initial != trait.Initial) ||
+                (field.Min != trait.Min) ||
+                (field.Max != trait.Max) ||
+                (field.HeightScale != trait.HeightScale) ||
+                !string.Equals(a: field.Color, b: trait.Color, comparisonType: StringComparison.Ordinal)
+            ) {
+                return false;
+            }
+
+            var fills = (trait.Paint ?? []);
+
+            for (var fillIndex = 0; (fillIndex < fills.Count); fillIndex++) {
+                var fill = fills[fillIndex];
+
+                if (
+                    ((uint)paintIndex >= (uint)paint.Count) ||
+                    (fill is null) ||
+                    !string.Equals(a: paint[paintIndex].Field, b: row.Name, comparisonType: StringComparison.Ordinal) ||
+                    !FillEqual(authored: fill, compiled: paint[paintIndex])
+                ) {
+                    return false;
+                }
+
+                paintIndex++;
+            }
+        }
+
+        return (
+            (fieldIndex == composite.Fields.Count) &&
+            (paintIndex == paint.Count)
+        );
+    }
+
+    /// <summary>Determines whether two compiled composites carry the same runtime field inputs, including paint.</summary>
+    internal bool HasSameCompilation(WorldFieldsSection other) => (
+        (Lattice == other.Lattice) &&
+        Fields.SequenceEqual(second: other.Fields) &&
+        ReactionsEqual(left: Reactions, right: other.Reactions) &&
+        (Paint ?? []).SequenceEqual(second: (other.Paint ?? []))
+    );
+
+    /// <summary>Determines whether two compiled composites lower to the same reaction program. Paint and display
+    /// metadata remain inputs to the companion composite, not to reaction scheduling.</summary>
+    internal bool HasSameProgram(WorldFieldsSection other) => (
+        (Lattice.Width == other.Lattice.Width) &&
+        (Lattice.Depth == other.Lattice.Depth) &&
+        (Lattice.Layers == other.Lattice.Layers) &&
+        ProgramFieldsEqual(left: Fields, right: other.Fields) &&
+        ReactionsEqual(left: Reactions, right: other.Reactions)
+    );
+
     /// <summary>Compiles the state section's lattice topology and lattice-shaped rows into the runtime composite, or
     /// <see langword="null"/> when the section declares no topology. Row order is state-section declaration order --
-    /// the order every wire index, checkpoint entry, and render channel keys off.</summary>
+    /// the order every wire index, checkpoint entry, and render channel keys off. Reaction collections are
+    /// snapshotted so mutating a caller-owned list cannot rewrite an already compiled composite.</summary>
     /// <param name="state">The state section.</param>
     /// <returns>The composite, or <see langword="null"/>.</returns>
     public static WorldFieldsSection? Compile(WorldStateSection? state) {
@@ -65,7 +160,13 @@ public sealed record WorldFieldsSection(
                 Width: topology.Width
             ),
             Paint: paint,
-            Reactions: topology.Reactions
+            Reactions: (topology.Reactions ?? []).Select(selector: static reaction => reaction switch {
+                WorldReaction.Transform transform => transform with {
+                    When = [.. (transform.When ?? [])],
+                    Then = [.. (transform.Then ?? [])],
+                },
+                _ => reaction,
+            }).ToArray()
         );
     }
     /// <summary>Decompiles a composite back into the state-section spelling — the inverse of <see cref="Compile"/>,
@@ -113,6 +214,82 @@ public sealed record WorldFieldsSection(
     /// <summary>The topology name a decompiled projection lattice carries — one lattice exists today, so the
     /// round-trip needs no authored name.</summary>
     public const string DefaultTopologyName = "world";
+
+    private static bool ReactionsEqual(IReadOnlyList<WorldReaction>? left, IReadOnlyList<WorldReaction>? right) {
+        var leftRows = (left ?? []);
+        var rightRows = (right ?? []);
+
+        if (leftRows.Count != rightRows.Count) {
+            return false;
+        }
+
+        for (var index = 0; (index < leftRows.Count); index++) {
+            if (!ReactionEqual(left: leftRows[index], right: rightRows[index])) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool ReactionEqual(WorldReaction left, WorldReaction right) => (left, right) switch {
+        (WorldReaction.Diffuse a, WorldReaction.Diffuse b) => (a == b),
+        (WorldReaction.Decay a, WorldReaction.Decay b) => (a == b),
+        (WorldReaction.Emit a, WorldReaction.Emit b) => (a == b),
+        (WorldReaction.Expose a, WorldReaction.Expose b) => (a == b),
+        (WorldReaction.Transform a, WorldReaction.Transform b) => (
+            (a.When ?? []).SequenceEqual(second: (b.When ?? [])) &&
+            (a.Then ?? []).SequenceEqual(second: (b.Then ?? []))
+        ),
+        _ => false,
+    };
+
+    private static bool FillEqual(WorldLatticeFill authored, WorldLatticeFill compiled) => (authored, compiled) switch {
+        (WorldLatticeFill.Rect a, WorldLatticeFill.Rect b) => (
+            (a.Value == b.Value) &&
+            (a.MinX == b.MinX) &&
+            (a.MinZ == b.MinZ) &&
+            (a.MaxX == b.MaxX) &&
+            (a.MaxZ == b.MaxZ)
+        ),
+        (WorldLatticeFill.Noise a, WorldLatticeFill.Noise b) => (
+            (a.Value == b.Value) &&
+            (a.Frequency == b.Frequency) &&
+            (a.Threshold == b.Threshold) &&
+            (a.Octaves == b.Octaves) &&
+            (a.Seed == b.Seed)
+        ),
+        (WorldLatticeFill.Scatter a, WorldLatticeFill.Scatter b) => (
+            (a.Value == b.Value) &&
+            (a.Spacing == b.Spacing) &&
+            (a.Radius == b.Radius) &&
+            (a.Seed == b.Seed)
+        ),
+        _ => false,
+    };
+
+    private static bool ProgramFieldsEqual(IReadOnlyList<WorldFieldRow> left, IReadOnlyList<WorldFieldRow> right) {
+        if (left.Count != right.Count) {
+            return false;
+        }
+
+        for (var index = 0; (index < left.Count); index++) {
+            var a = left[index];
+            var b = right[index];
+
+            if (
+                !string.Equals(a: a.Name, b: b.Name, comparisonType: StringComparison.Ordinal) ||
+                (a.Initial != b.Initial) ||
+                (a.Min != b.Min) ||
+                (a.Max != b.Max) ||
+                (a.HeightScale != b.HeightScale)
+            ) {
+                return false;
+            }
+        }
+
+        return true;
+    }
 }
 /// <summary>One <c>state.lattices</c> topology -- the footprint, cadence, and reactions every lattice-shaped state
 /// row referencing it shares. Exactly one topology may be declared today (the wire frame and checkpoint key off a

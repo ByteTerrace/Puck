@@ -69,7 +69,11 @@ ordinary `fixed` rows is the field/terrain primitive, not a sibling section: `re
 paint seeds a row deterministically (integer-hash + Q48.16, seeded from `generation.worldSeed`), and
 `diffuse`/`decay`/`transform`/`emit`/`expose` reactions evolve it each `stepEveryTicks`, every reaction
 scalar a literal or a `{"row": "name"}` read fresh per step — a season or weather-intensity row
-modulates chemistry live with no new reaction kind. `world.budget` reads the derived cost every
+modulates chemistry live with no new reaction kind. The compiled reaction form is one typed program
+over that same spelling — stable field/state handles, fixed-point scalar inputs, ordered nodes,
+immutable read/write sets and their dependency DAG, and exact cell/body work classes — consumed
+beside the full topology/paint/display composite so editors and schedulers share the runtime's
+vocabulary instead of growing a parallel graph format. `world.budget` reads the derived cost every
 authorable feature with a price now folds into (render program words/instances against their frozen
 envelope, the Lipschitz step scale, the lattice's per-step reaction cost, the state row count) — a
 decision's price stays legible instead of a silent frame tax. The document vocabulary moved with it:
@@ -78,6 +82,14 @@ dissolved into placements' own policy block); `prototypes` (`prototypeId` refere
 `creations`; `bodies` replaces `population`; `seatDefaults`/`seatCameraFeel` replace
 `playerDefaults`/`seatLook`. `elements.world.json` is the worked example: a `rect`-painted fuel forest
 beside an ice glacier, burning and melting on the folded spelling.
+
+**Gravity authoring names acceleration independently of geometry.** A world may
+author a uniform acceleration directly, retain explicit placement-plus-mass
+attractors, or describe a point/planet source by its surface gravity and
+reference radius. The latter lowers deterministically through the same softened
+fixed-point kernel the server solves; it does not infer force from a solid or
+SDF gradient. `world.gravity` exposes the authored promise, derived mass, and
+last solve work, while `world.budget` carries the source/evaluation price.
 
 ## Where the campaign actually is
 

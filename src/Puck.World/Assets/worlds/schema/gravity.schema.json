@@ -50,6 +50,41 @@
       "description": "A constant acceleration added to every solved answer, in world units per second squared. Point masses cannot express a uniform field, so this is how a world keeps a flat floor underfoot while its attractors own the space around them: authored as an acceleration, it is already what a body integrates.",
       "default": null
     },
+    "points": {
+      "description": "Ergonomic point/planet presets lowered to static masses through the same Plummer kernel as Attractors. Absent means none.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "A point-gravity preset riding a placement, authored in the quantities a world designer observes.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "placementId": {
+            "description": "The placements row at the point source\u0027s centre.",
+            "type": "string"
+          },
+          "surfaceGravity": {
+            "description": "The positive acceleration magnitude, in world units per second squared, promised at ReferenceRadius after the world\u0027s authored softening is applied.",
+            "type": "number"
+          },
+          "referenceRadius": {
+            "description": "The positive distance from the source centre at which SurfaceGravity is promised. For a planet this is its surface radius; a source need not carry geometry.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "placementId",
+          "surfaceGravity",
+          "referenceRadius"
+        ],
+        "additionalProperties": false
+      },
+      "default": null
+    },
     "isActive": {
       "description": "Gets a value indicating whether this field can produce a nonzero acceleration.",
       "type": "boolean"

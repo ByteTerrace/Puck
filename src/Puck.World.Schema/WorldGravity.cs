@@ -13,6 +13,13 @@ namespace Puck.World;
 /// visible; only its transform is read.</param>
 /// <param name="Mass">The source's non-negative gravitational mass.</param>
 public sealed record WorldGravityAttractor(string PlacementId, float Mass);
+/// <summary>A point-gravity preset riding a placement, authored in the quantities a world designer observes.</summary>
+/// <param name="PlacementId">The <c>placements</c> row at the point source's centre.</param>
+/// <param name="SurfaceGravity">The positive acceleration magnitude, in world units per second squared, promised at
+/// <paramref name="ReferenceRadius"/> after the world's authored softening is applied.</param>
+/// <param name="ReferenceRadius">The positive distance from the source centre at which <paramref name="SurfaceGravity"/>
+/// is promised. For a planet this is its surface radius; a source need not carry geometry.</param>
+public sealed record WorldGravityPoint(string PlacementId, float SurfaceGravity, float ReferenceRadius);
 /// <summary>The gravitational strategies a world may select.</summary>
 /// <remarks>The three disagree by design: <see cref="Pairwise"/> is the exact oracle, and the two hierarchical solvers
 /// approximate it under their own opening rules. Selecting one is therefore a simulation-state decision, not a
@@ -46,12 +53,15 @@ public enum WorldGravitySolver : byte {
 /// <param name="GravitationalConstant">The non-negative proportionality constant applied to every source mass.</param>
 /// <param name="SofteningLength">The positive Plummer softening length that bounds the force at short range.</param>
 /// <param name="Attractors">The static sources, or empty for a field summed from bodies alone.</param>
+/// <param name="Points">Ergonomic point/planet presets lowered to static masses through the same Plummer kernel as
+/// <paramref name="Attractors"/>. Absent means none.</param>
 public sealed record WorldGravity(
     WorldGravitySolver Solver,
     float GravitationalConstant,
     float SofteningLength,
     IReadOnlyList<WorldGravityAttractor> Attractors,
-    DocumentVector3? Uniform = null
+    DocumentVector3? Uniform = null,
+    IReadOnlyList<WorldGravityPoint>? Points = null
 ) {
     /// <summary>Gets the inert field — the exact solver, no sources, and constants that produce no acceleration.</summary>
     public static WorldGravity Default { get; } = new(
@@ -59,12 +69,16 @@ public sealed record WorldGravity(
         GravitationalConstant: 0f,
         SofteningLength: 1f,
         Solver: WorldGravitySolver.Pairwise,
-        Uniform: null
+        Uniform: null,
+        Points: null
     );
     /// <summary>Gets a value indicating whether this field can produce a nonzero acceleration.</summary>
     public bool IsActive => (
         (UniformAcceleration != Vector3.Zero) ||
-        ((GravitationalConstant > 0f) && (Attractors is { Count: > 0 }))
+        ((GravitationalConstant > 0f) && (
+            (Attractors is { Count: > 0 }) ||
+            (Points is { Count: > 0 })
+        ))
     );
     /// <summary>Gets the authored uniform acceleration — ABSENT resolves to none.</summary>
     [JsonIgnore]
@@ -113,13 +127,15 @@ public readonly record struct FixedWorldGravity(
 
         var uniform = FixedVector3.FromVector3(value: gravity.UniformAcceleration);
 
-        if (!((gravity.GravitationalConstant > 0f) && (gravity.Attractors is { Count: > 0 }))) {
+        var sourceCount = ((gravity.Attractors?.Count ?? 0) + (gravity.Points?.Count ?? 0));
+
+        if (!((gravity.GravitationalConstant > 0f) && (sourceCount > 0))) {
             return Inert with { Uniform = uniform };
         }
 
-        var attractors = new List<GravityBody>(capacity: gravity.Attractors.Count);
+        var attractors = new List<GravityBody>(capacity: sourceCount);
 
-        foreach (var attractor in gravity.Attractors) {
+        foreach (var attractor in (gravity.Attractors ?? [])) {
             // An attractor naming no live placement contributes nothing rather than throwing: the validator already
             // refuses the unresolved id, so reaching here means the row was removed after validation.
             if (WorldDefinitionRows.FindPlacement(
@@ -131,6 +147,29 @@ public readonly record struct FixedWorldGravity(
 
             attractors.Add(item: new GravityBody(
                 Mass: FixedQ4816.FromDouble(value: attractor.Mass),
+                Position: FixedVector3.FromVector3(value: placement.Position)
+            ));
+        }
+
+        foreach (var point in (gravity.Points ?? [])) {
+            if (
+                (point is null) ||
+                (WorldDefinitionRows.FindPlacement(
+                    id: point.PlacementId,
+                    placements: placements
+                ) is not { } placement) ||
+                !TryCompilePointMass(
+                    gravitationalConstant: gravity.GravitationalConstant,
+                    mass: out var mass,
+                    point: point,
+                    softeningLength: gravity.SofteningLength
+                )
+            ) {
+                continue;
+            }
+
+            attractors.Add(item: new GravityBody(
+                Mass: mass,
                 Position: FixedVector3.FromVector3(value: placement.Position)
             ));
         }
@@ -152,5 +191,87 @@ public readonly record struct FixedWorldGravity(
             ),
             Uniform: uniform
         );
+    }
+
+    // The point preset promises the ACTUAL softened-kernel acceleration at its reference radius. Keeping this
+    // derivation in fixed point means validation, compilation, and the per-tick solver agree about every rounding
+    // boundary; it also makes every overflow a named authoring refusal instead of a first-tick failure.
+    internal static bool TryCompilePointMass(
+        WorldGravityPoint point,
+        float gravitationalConstant,
+        float softeningLength,
+        out FixedQ4816 mass
+    ) {
+        mass = FixedQ4816.Zero;
+
+        if (
+            !float.IsFinite(f: point.SurfaceGravity) ||
+            !(point.SurfaceGravity > 0f) ||
+            !float.IsFinite(f: point.ReferenceRadius) ||
+            !(point.ReferenceRadius > 0f) ||
+            !float.IsFinite(f: gravitationalConstant) ||
+            !(gravitationalConstant > 0f) ||
+            !float.IsFinite(f: softeningLength) ||
+            !(softeningLength > 0f)
+        ) {
+            return false;
+        }
+
+        try {
+            // FromDouble saturates finite out-of-range inputs, and the checked kernel below then rejects them. Keep
+            // conversion inside this guarded block so this method stays a total validation predicate if that primitive's
+            // conversion contract ever tightens.
+            var surfaceGravity = FixedQ4816.FromDouble(value: point.SurfaceGravity);
+            var referenceRadius = FixedQ4816.FromDouble(value: point.ReferenceRadius);
+            var gravitationalScale = FixedQ4816.FromDouble(value: gravitationalConstant);
+            var softening = FixedQ4816.FromDouble(value: softeningLength);
+
+            if (
+                (surfaceGravity <= FixedQ4816.Zero) ||
+                (referenceRadius <= FixedQ4816.Zero) ||
+                (gravitationalScale <= FixedQ4816.Zero) ||
+                (softening <= FixedQ4816.Zero)
+            ) {
+                return false;
+            }
+
+            var radiusSquared = checked((referenceRadius * referenceRadius));
+            var softeningSquared = checked((softening * softening));
+            var softenedRadiusSquared = checked((radiusSquared + softeningSquared));
+            var softenedRadius = FixedQ4816.Sqrt(value: softenedRadiusSquared);
+            var softenedCube = checked((softenedRadiusSquared * softenedRadius));
+            var numerator = checked((surfaceGravity * softenedCube));
+            var denominator = checked((gravitationalScale * referenceRadius));
+
+            mass = checked((numerator / denominator));
+
+            if (mass <= FixedQ4816.Zero) {
+                mass = FixedQ4816.Zero;
+
+                return false;
+            }
+
+            // Mirror the exact point-kernel arithmetic once so a representable mass whose eventual G*m intermediate
+            // overflows is refused here, not during WorldGravityField.Solve.
+            var inverseSquareStrength = checked((checked((gravitationalScale * mass)) / softenedRadiusSquared));
+            var scale = checked((inverseSquareStrength / softenedRadius));
+            var compiledSurfaceGravity = checked((referenceRadius * scale));
+
+            if (compiledSurfaceGravity <= FixedQ4816.Zero) {
+                mass = FixedQ4816.Zero;
+
+                return false;
+            }
+
+            return true;
+        } catch (OverflowException) {
+            mass = FixedQ4816.Zero;
+
+            return false;
+        } catch (DivideByZeroException) {
+            mass = FixedQ4816.Zero;
+
+            return false;
+        }
     }
 }

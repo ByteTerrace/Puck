@@ -151,6 +151,70 @@ public static partial class WorldDefinitionValidator {
                 errors: errors
             );
         }
+
+        if (gravity.Points is not { Count: > 0 } points) {
+            return;
+        }
+
+        if (!(gravity.GravitationalConstant > 0f)) {
+            errors.Add(item: "gravity.gravitationalConstant must be positive when gravity.points declares a source.");
+        }
+
+        for (var index = 0; (index < points.Count); index++) {
+            var point = points[index];
+            var path = $"gravity.points[{index}]";
+
+            if (point is null) {
+                errors.Add(item: $"{path} is required.");
+
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(value: point.PlacementId)) {
+                errors.Add(item: $"{path}.placementId is required.");
+            } else {
+                if (!seen.Add(item: point.PlacementId)) {
+                    errors.Add(item: $"{path}.placementId duplicates gravity source '{point.PlacementId}'.");
+                }
+
+                if (WorldDefinitionRows.FindPlacement(
+                    id: point.PlacementId,
+                    placements: placements
+                ) is null) {
+                    errors.Add(item: $"{path}.placementId '{point.PlacementId}' resolves to no placement.");
+                }
+            }
+
+            RequirePositive(
+                value: point.SurfaceGravity,
+                name: $"{path}.surfaceGravity",
+                errors: errors
+            );
+            RequirePositive(
+                value: point.ReferenceRadius,
+                name: $"{path}.referenceRadius",
+                errors: errors
+            );
+
+            if (
+                float.IsFinite(f: point.SurfaceGravity) &&
+                (point.SurfaceGravity > 0f) &&
+                float.IsFinite(f: point.ReferenceRadius) &&
+                (point.ReferenceRadius > 0f) &&
+                float.IsFinite(f: gravity.GravitationalConstant) &&
+                (gravity.GravitationalConstant > 0f) &&
+                float.IsFinite(f: gravity.SofteningLength) &&
+                (gravity.SofteningLength > 0f) &&
+                !FixedWorldGravity.TryCompilePointMass(
+                    gravitationalConstant: gravity.GravitationalConstant,
+                    mass: out _,
+                    point: point,
+                    softeningLength: gravity.SofteningLength
+                )
+            ) {
+                errors.Add(item: $"{path} cannot lower its surfaceGravity/referenceRadius promise through gravity's Q48.16 Plummer kernel without underflow or overflow.");
+            }
+        }
     }
     // The contact-solver tuning (SIM-AFFECTING). ContactSkin positive; MaxIterations 1..8 (above 8 is a solver
     // pathology, not a choice); requirements are unique; MaxSlopeDegrees in (0, 90) — 0 grounds nothing, 90 grounds a

@@ -29,8 +29,9 @@ public enum CellKind : byte {
     /// <see cref="WorldStateCell.Value"/>.</summary>
     Text,
 }
-/// <summary>The root <c>state</c> declaration. It is the document's abstract state inventory; compilation lowers
-/// each lane into the storage appropriate to its ownership and access pattern.</summary>
+/// <summary>The root <c>state</c> declaration. It is the document's abstract state inventory; compilation through
+/// <see cref="WorldStateCatalog"/> describes each lane's typed ownership and storage contract before runtime lowers
+/// values into the storage appropriate to their access pattern.</summary>
 /// <param name="World">Document-owned cell rows. These remain mutation-addressable through <c>state:&lt;name&gt;</c>.</param>
 /// <param name="Body">Per-body ephemeral counters and timers, compiled into each body's bounded ordinal arrays.</param>
 /// <param name="Identity">Per-body counters and timers synchronized through the durable identity-document seam.</param>

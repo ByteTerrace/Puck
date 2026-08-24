@@ -942,7 +942,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.budget",
-            description: "Prints the compose-time cost sheet (Immediate): the live render program's packed words and instances against their frozen envelopes, the program's Lipschitz step scale with its march multiplier (1.00 = unclamped), the lattice's per-step reaction cost and cadence, the derived static placement instance count (including any Noise/Scatter distribution's resolved copies) against its authored row count, and the state row count. Every number is DERIVED from what the document declares — the sheet is how an authored choice's price becomes legible instead of a silent frame tax.",
+            description: "Prints the compose-time cost sheet (Immediate): the live render program's packed words and instances against their frozen envelopes, the program's Lipschitz step scale with its march multiplier (1.00 = unclamped), the lattice's per-step reaction cost and cadence, gravity's static source count and last deterministic solve work, the derived static placement instance count (including any Noise/Scatter distribution's resolved copies) against its authored row count, and the state row count. Every number is DERIVED from what the document declares — the sheet is how an authored choice's price becomes legible instead of a silent frame tax.",
             handler: (_, args) => {
                 if (args.Count != 0) {
                     return CommandResult.Error(output: $"[world.budget: unrecognized '{args[0]}' — expected no arguments]");
@@ -957,6 +957,9 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                     : "lattice none"
                 );
                 var rows = (server.Definition.State?.Count ?? 0);
+                var gravityCompiled = population.CompiledGravity;
+                var gravityStatistics = population.GravityStatistics;
+                var gravity = $"gravity {gravityCompiled.Attractors.Length} static source(s), last targets {Math.Max(val1: 0, val2: (gravityStatistics.BodyCount - gravityCompiled.Attractors.Length))}, exact {gravityStatistics.ExactSourceEvaluations}, approximate {gravityStatistics.ApproximatedNodeEvaluations}, m2l {gravityStatistics.MultipoleToLocalTranslations}";
                 var placementInstances = WorldPlacementStamper.StaticStampInstances(
                     creations: server.Definition.Creations,
                     placements: server.Definition.Placements,
@@ -964,7 +967,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 );
                 var placements = $"placements {placementInstances} static instance(s) ({server.Definition.Placements.Count} row(s))";
 
-                return new CommandResult(Output: $"[world.budget: {render} | {lattice} | {placements} | state {rows} row(s)]");
+                return new CommandResult(Output: $"[world.budget: {render} | {lattice} | {gravity} | {placements} | state {rows} row(s)]");
             }
         );
         yield return CommandDefinition.WithWireArgs(
