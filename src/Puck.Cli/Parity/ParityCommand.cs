@@ -10,7 +10,8 @@ namespace Puck.Cli.Parity;
 /// real <c>Puck.World</c> windowed once per graphics backend, arms <c>world.screenshot</c> at the same fenced
 /// simulation moment in each run, and compares the backend pair under <see cref="ParityEnvelope"/>. Two different
 /// patterns rendered by the same backend must FAIL the same envelope, so a comparator that cannot refuse cannot
-/// report green.</summary>
+/// report green. <c>puck parity compare</c> (<see cref="ParityCompareCommand"/>) is the gate/state/pixel-verdict
+/// replacement corpus runs will move to; this verb still owns the live windowed run.</summary>
 internal static class ParityCommand {
     private const string ScratchPrefix = "puck-parity-";
 
@@ -30,6 +31,11 @@ internal static class ParityCommand {
     ];
 
     public static int Run(string[] args) {
+        // Dispatched before the -h/--help check below: 'compare' owns its own usage text and exit code (3, not
+        // this verb's 2), so its help must never fall through to this verb's Usage().
+        if ((args.Length != 0) && (args[0] == "compare")) {
+            return ParityCompareCommand.Run(args: args[1..]);
+        }
         if ((Array.IndexOf(array: args, value: "-h") >= 0) || (Array.IndexOf(array: args, value: "--help") >= 0)) {
             return Usage();
         }
@@ -49,7 +55,7 @@ internal static class ParityCommand {
 
         CliScratchDirectories.SweepScratch(scratchPrefix: ScratchPrefix);
 
-        var runDirectory = CreateRunDirectory();
+        var runDirectory = CliScratchDirectories.CreateRunDirectory(scratchPrefix: ScratchPrefix);
 
         Console.WriteLine(value: $"parity: artifacts {runDirectory}");
 
@@ -365,34 +371,20 @@ internal static class ParityCommand {
 
         return false;
     }
-    private static string CreateRunDirectory() {
-        var temp = Path.GetTempPath();
-
-        for (var attempt = 0; (attempt < 8); attempt++) {
-            var path = Path.Combine(path1: temp, path2: $"{ScratchPrefix}{Guid.NewGuid():N}");
-
-            if (Directory.Exists(path: path)) {
-                continue;
-            }
-
-            Directory.CreateDirectory(path: path);
-
-            return path;
-        }
-
-        throw new IOException(message: "Could not create a fresh random parity run directory after 8 attempts.");
-    }
     private static int Usage() {
         Console.Error.WriteLine(
             value:
                 """
                 parity [--world <path.world.json>]
                 parity --generate [--hashes id=hex64,...]
+                parity compare <leftDir> <rightDir> --contract <file> [--out <dir>]
 
                   no arguments           run the authored pattern corpus plus the shipped default world
                   --world <path>         additionally run the named world document as a corpus entry
                   --generate             regenerate tests/Puck.Parity/*.world.json from their pattern definitions
                   --hashes id=hex64,...  pin a regenerated creation's canonical hash (see tests/Puck.Parity/README.md)
+                  compare                gate/state/pixel-verdict comparison of two pinned manifest.json runs
+                                         (run 'parity compare -h' for its own usage)
 
                 For every corpus entry — the authored pattern worlds under tests/Puck.Parity/ and the
                 shipped default world — this boots the real Puck.World windowed twice, once per
