@@ -35,18 +35,31 @@ public sealed class WorldFieldLattice {
     /// <param name="Raw">The raw values, one array per declared field.</param>
     public sealed record WorldFieldCheckpoint(IReadOnlyList<long[]> Raw);
 
-    private readonly record struct CompiledCondition(int Field, WorldFieldComparison Comparison, FixedQ4816 Value);
-    private readonly record struct CompiledWrite(int Field, WorldFieldWriteOp Op, FixedQ4816 Value);
+    private readonly record struct CompiledCondition(int Field, WorldFieldComparison Comparison, CompiledScalar Value);
+    private readonly record struct CompiledWrite(int Field, WorldFieldWriteOp Op, CompiledScalar Value);
     private readonly record struct CompiledReaction(
         WorldReaction Kind,
         int Field,
-        FixedQ4816 Rate,
+        CompiledScalar Rate,
         CompiledCondition[] When,
         CompiledWrite[] Then,
         string? Row,
         WorldFieldComparison Comparison,
-        FixedQ4816 Value
+        CompiledScalar Value
     );
+    // A reaction scalar compiled once: the literal in Q48.16, or the scalar state row it reads at each step. An
+    // unwritten referenced slot reads 0 (the row's slot cell is minted by its first write), so a row-gated reaction
+    // is inert until something writes the row.
+    private readonly record struct CompiledScalar(FixedQ4816 Literal, string? Row) {
+        public static CompiledScalar Compile(WorldLatticeScalar scalar) => new(
+            Literal: FixedQ4816.FromDouble(value: (scalar.Literal ?? 0f)),
+            Row: scalar.Row
+        );
+        public FixedQ4816 Resolve(Func<string, FixedQ4816> readScalar) => ((Row is { } row)
+            ? readScalar(row)
+            : Literal
+        );
+    }
 
     public WorldFieldLattice(WorldFieldsSection document, ulong worldSeed = 0UL) {
         ArgumentNullException.ThrowIfNull(argument: document);
@@ -170,7 +183,7 @@ public sealed class WorldFieldLattice {
                 WorldReaction.Diffuse diffuse => new CompiledReaction(
                 Kind: diffuse,
                 Field: FieldIndex(name: diffuse.Field),
-                Rate: FixedQ4816.FromDouble(value: diffuse.Rate),
+                Rate: CompiledScalar.Compile(scalar: diffuse.Rate),
                 When: [],
                 Then: [],
                 Row: null,
@@ -180,7 +193,7 @@ public sealed class WorldFieldLattice {
                 WorldReaction.Decay decay => new CompiledReaction(
                 Kind: decay,
                 Field: FieldIndex(name: decay.Field),
-                Rate: FixedQ4816.FromDouble(value: decay.Rate),
+                Rate: CompiledScalar.Compile(scalar: decay.Rate),
                 When: [],
                 Then: [],
                 Row: null,
@@ -194,12 +207,12 @@ public sealed class WorldFieldLattice {
                 When: (transform.When ?? []).Select(selector: c => new CompiledCondition(
                     Field: FieldIndex(name: c.Field),
                     Comparison: c.Comparison,
-                    Value: FixedQ4816.FromDouble(value: c.Value)
+                    Value: CompiledScalar.Compile(scalar: c.Value)
                 )).ToArray(),
                 Then: (transform.Then ?? []).Select(selector: w => new CompiledWrite(
                     Field: FieldIndex(name: w.Field),
                     Op: w.Op,
-                    Value: FixedQ4816.FromDouble(value: w.Value)
+                    Value: CompiledScalar.Compile(scalar: w.Value)
                 )).ToArray(),
                 Row: null,
                 Comparison: default,
@@ -208,7 +221,7 @@ public sealed class WorldFieldLattice {
                 WorldReaction.Emit emit => new CompiledReaction(
                 Kind: emit,
                 Field: FieldIndex(name: emit.Field),
-                Rate: FixedQ4816.FromDouble(value: emit.Amount),
+                Rate: CompiledScalar.Compile(scalar: emit.Amount),
                 When: [],
                 Then: [],
                 Row: emit.Tag,
@@ -223,7 +236,7 @@ public sealed class WorldFieldLattice {
                 Then: [],
                 Row: expose.Row,
                 Comparison: expose.Comparison,
-                Value: FixedQ4816.FromDouble(value: expose.Value)
+                Value: CompiledScalar.Compile(scalar: expose.Value)
             ),
                 _ => throw new InvalidOperationException(message: $"fields.reactions[{index}] is an unknown reaction kind."),
             };
@@ -612,21 +625,34 @@ public sealed class WorldFieldLattice {
     /// <param name="bodyPosition">Resolves an active body's position, or <see langword="null"/> for an inactive slot.</param>
     /// <param name="readTag">Reads a keyed int state row's cell for a body index (0 when absent).</param>
     /// <param name="writeTag">Writes a keyed int state row's cell for a body index.</param>
-    public void Step(ulong tick, int bodyCount, Func<int, FixedVector3?> bodyPosition, Func<string, int, long> readTag, Action<string, int, long> writeTag) {
+    /// <param name="readScalar">Reads a scalar fixed-kind state row's slot cell for a row-referenced reaction
+    /// scalar (0 when absent or unwritten); <see langword="null"/> resolves every reference to 0.</param>
+    public void Step(ulong tick, int bodyCount, Func<int, FixedVector3?> bodyPosition, Func<string, int, long> readTag, Action<string, int, long> writeTag, Func<string, FixedQ4816>? readScalar = null) {
         if ((tick % ((ulong)m_stepEveryTicks)) != 0UL) {
             return;
         }
 
+        var scalars = (readScalar ?? (static _ => FixedQ4816.Zero));
+
         foreach (var reaction in m_reactions) {
             switch (reaction.Kind) {
                 case WorldReaction.Diffuse:
-                    StepDiffuse(reaction: in reaction);
+                    StepDiffuse(
+                        rate: ClampRate(rate: reaction.Rate.Resolve(readScalar: scalars)),
+                        reaction: in reaction
+                    );
                     break;
                 case WorldReaction.Decay:
-                    StepDecay(reaction: in reaction);
+                    StepDecay(
+                        rate: ClampRate(rate: reaction.Rate.Resolve(readScalar: scalars)),
+                        reaction: in reaction
+                    );
                     break;
                 case WorldReaction.Transform:
-                    StepTransform(reaction: in reaction);
+                    StepTransform(
+                        readScalar: scalars,
+                        reaction: in reaction
+                    );
                     break;
                 case WorldReaction.Emit:
                     for (var body = 0; (body < bodyCount); body++) {
@@ -647,7 +673,7 @@ public sealed class WorldFieldLattice {
                             value: AddClamped(
                                 field: reaction.Field,
                                 x: m_values[reaction.Field][cell],
-                                y: reaction.Rate
+                                y: reaction.Rate.Resolve(readScalar: scalars)
                             )
                         );
                     }
@@ -664,7 +690,7 @@ public sealed class WorldFieldLattice {
                             cell: out var cell
                         ) && Holds(
                             comparison: reaction.Comparison,
-                            expected: reaction.Value,
+                            expected: reaction.Value.Resolve(readScalar: scalars),
                             value: m_values[reaction.Field][cell]
                         ));
 
@@ -681,7 +707,11 @@ public sealed class WorldFieldLattice {
             }
         }
     }
-    private void StepDiffuse(in CompiledReaction reaction) {
+    private static FixedQ4816 ClampRate(FixedQ4816 rate) => ((rate < FixedQ4816.Zero)
+        ? FixedQ4816.Zero
+        : ((rate > FixedQ4816.One) ? FixedQ4816.One : rate)
+    );
+    private void StepDiffuse(in CompiledReaction reaction, FixedQ4816 rate) {
         var values = m_values[reaction.Field];
 
         Array.Copy(
@@ -714,13 +744,13 @@ public sealed class WorldFieldLattice {
                     Write(
                         cell: cell,
                         field: reaction.Field,
-                        value: (current + ((mean - current) * reaction.Rate))
+                        value: (current + ((mean - current) * rate))
                     );
                 }
             }
         }
     }
-    private void StepDecay(in CompiledReaction reaction) {
+    private void StepDecay(in CompiledReaction reaction, FixedQ4816 rate) {
         var values = m_values[reaction.Field];
 
         for (var cell = 0; (cell < values.Length); cell++) {
@@ -733,18 +763,32 @@ public sealed class WorldFieldLattice {
             Write(
                 cell: cell,
                 field: reaction.Field,
-                value: (current - (current * reaction.Rate))
+                value: (current - (current * rate))
             );
         }
     }
-    private void StepTransform(in CompiledReaction reaction) {
+    private void StepTransform(in CompiledReaction reaction, Func<string, FixedQ4816> readScalar) {
+        // Row-referenced terms resolve ONCE per step, before the cell loop — a season row's value is a step-wide
+        // constant, never a per-cell read.
+        var whenValues = new FixedQ4816[reaction.When.Length];
+        var thenValues = new FixedQ4816[reaction.Then.Length];
+
+        for (var index = 0; (index < reaction.When.Length); index++) {
+            whenValues[index] = reaction.When[index].Value.Resolve(readScalar: readScalar);
+        }
+        for (var index = 0; (index < reaction.Then.Length); index++) {
+            thenValues[index] = reaction.Then[index].Value.Resolve(readScalar: readScalar);
+        }
+
         for (var cell = 0; (cell < CellCount); cell++) {
             var holds = true;
 
-            foreach (var condition in reaction.When) {
+            for (var index = 0; (index < reaction.When.Length); index++) {
+                var condition = reaction.When[index];
+
                 if (!Holds(
                     comparison: condition.Comparison,
-                    expected: condition.Value,
+                    expected: whenValues[index],
                     value: m_values[condition.Field][cell]
                 )) {
                     holds = false;
@@ -756,7 +800,9 @@ public sealed class WorldFieldLattice {
                 continue;
             }
 
-            foreach (var write in reaction.Then) {
+            for (var index = 0; (index < reaction.Then.Length); index++) {
+                var write = reaction.Then[index];
+
                 Write(
                     cell: cell,
                     field: write.Field,
@@ -764,9 +810,9 @@ public sealed class WorldFieldLattice {
                         ? AddClamped(
                             field: write.Field,
                             x: m_values[write.Field][cell],
-                            y: write.Value
+                            y: thenValues[index]
                         )
-                        : write.Value)
+                        : thenValues[index])
                 );
             }
         }

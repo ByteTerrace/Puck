@@ -237,18 +237,74 @@ public abstract record WorldLatticeFill {
     /// <param name="Seed">The hash seed, folded with the world seed.</param>
     public sealed record Scatter(float Value, int Spacing, int Radius = 1, uint Seed = 0u) : WorldLatticeFill;
 }
+/// <summary>A reaction scalar: a literal number, or a reference to a scalar <c>fixed</c>-kind state row's slot cell
+/// read at each lattice step -- how a rule-driven row (a season, a weather intensity) modulates reaction chemistry
+/// live without a new reaction kind. In JSON a plain number is the literal and <c>{"row": "name"}</c> the
+/// reference; an unwritten referenced slot reads 0, so a season-gated reaction is inert until something writes the
+/// row.</summary>
+/// <param name="Literal">The literal value, or <see langword="null"/> when <paramref name="Row"/> is set.</param>
+/// <param name="Row">The referenced scalar state row, or <see langword="null"/> for a literal.</param>
+[JsonConverter(typeof(WorldLatticeScalarJsonConverter))]
+public readonly record struct WorldLatticeScalar(float? Literal = null, string? Row = null) {
+    /// <summary>Creates a literal scalar.</summary>
+    /// <param name="value">The literal.</param>
+    public static implicit operator WorldLatticeScalar(float value) => new(Literal: value);
+}
+/// <summary>Reads a JSON number as a literal <see cref="WorldLatticeScalar"/> and <c>{"row": "name"}</c> as a row
+/// reference; writes the same spellings back.</summary>
+public sealed class WorldLatticeScalarJsonConverter : System.Text.Json.Serialization.JsonConverter<WorldLatticeScalar> {
+    /// <inheritdoc/>
+    public override WorldLatticeScalar Read(ref System.Text.Json.Utf8JsonReader reader, Type typeToConvert, System.Text.Json.JsonSerializerOptions options) {
+        if (reader.TokenType == System.Text.Json.JsonTokenType.Number) {
+            return new WorldLatticeScalar(Literal: reader.GetSingle());
+        }
+
+        if (reader.TokenType != System.Text.Json.JsonTokenType.StartObject) {
+            throw new System.Text.Json.JsonException(message: "a reaction scalar is a number or {\"row\": \"name\"}.");
+        }
+
+        string? row = null;
+
+        while (reader.Read() && (reader.TokenType != System.Text.Json.JsonTokenType.EndObject)) {
+            if ((reader.TokenType != System.Text.Json.JsonTokenType.PropertyName) || (reader.GetString() != "row")) {
+                throw new System.Text.Json.JsonException(message: "a reaction scalar object carries exactly one member, 'row'.");
+            }
+
+            _ = reader.Read();
+            row = reader.GetString();
+        }
+
+        if (string.IsNullOrEmpty(value: row)) {
+            throw new System.Text.Json.JsonException(message: "a reaction scalar's 'row' must name a state row.");
+        }
+
+        return new WorldLatticeScalar(Row: row);
+    }
+    /// <inheritdoc/>
+    public override void Write(System.Text.Json.Utf8JsonWriter writer, WorldLatticeScalar value, System.Text.Json.JsonSerializerOptions options) {
+        if (value.Row is { } row) {
+            writer.WriteStartObject();
+            writer.WriteString(propertyName: "row", value: row);
+            writer.WriteEndObject();
+
+            return;
+        }
+
+        writer.WriteNumberValue(value: (value.Literal ?? 0f));
+    }
+}
 /// <summary>One per-cell condition of a <see cref="WorldReaction.Transform"/>.</summary>
 /// <param name="Field">The field read at the cell.</param>
 /// <param name="Comparison">The comparison.</param>
-/// <param name="Value">The constant compared against.</param>
+/// <param name="Value">The scalar compared against (literal or state-row reference).</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldFieldCondition(string Field, WorldFieldComparison Comparison, float Value);
+public sealed record WorldFieldCondition(string Field, WorldFieldComparison Comparison, WorldLatticeScalar Value);
 /// <summary>One per-cell write of a <see cref="WorldReaction.Transform"/>.</summary>
 /// <param name="Field">The field written at the cell.</param>
 /// <param name="Op">Set or add.</param>
 /// <param name="Value">The constant written or added; the result clamps to the field's range.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldFieldWrite(string Field, WorldFieldWriteOp Op, float Value);
+public sealed record WorldFieldWrite(string Field, WorldFieldWriteOp Op, WorldLatticeScalar Value);
 /// <summary>One reaction — a local rule every cell (or every tagged body) applies each lattice step. Reactions run
 /// in document order; <see cref="Diffuse"/> reads the previous step's values for the whole field, every other kind
 /// reads and writes cells in place, row-major.</summary>
@@ -263,11 +319,11 @@ public abstract record WorldReaction {
     /// lattice, six in a volume).</summary>
     /// <param name="Field">The field diffused.</param>
     /// <param name="Rate">The fraction per step, in [0, 1].</param>
-    public sealed record Diffuse(string Field, float Rate) : WorldReaction;
+    public sealed record Diffuse(string Field, WorldLatticeScalar Rate) : WorldReaction;
     /// <summary>Scales each cell toward zero: <c>v -= v·rate</c>.</summary>
     /// <param name="Field">The field decayed.</param>
     /// <param name="Rate">The fraction per step, in [0, 1].</param>
-    public sealed record Decay(string Field, float Rate) : WorldReaction;
+    public sealed record Decay(string Field, WorldLatticeScalar Rate) : WorldReaction;
     /// <summary>Where every condition holds at a cell, applies every write at that cell — ignition, melting,
     /// evaporation, freezing are rows of this shape.</summary>
     /// <param name="When">The conditions, all of which must hold.</param>
@@ -279,7 +335,7 @@ public abstract record WorldReaction {
     /// <param name="Tag">The keyed int state row whose nonzero cells name the emitting bodies.</param>
     /// <param name="Field">The field deposited into.</param>
     /// <param name="Amount">The amount per step; the cell clamps to the field's range.</param>
-    public sealed record Emit(string Tag, string Field, float Amount) : WorldReaction;
+    public sealed record Emit(string Tag, string Field, WorldLatticeScalar Amount) : WorldReaction;
     /// <summary>Writes 1 or 0 into <paramref name="Row"/>'s cell for every active body, by whether
     /// <paramref name="Field"/> at the body's cell satisfies the comparison — a body standing in a burning cell
     /// becomes tagged, and body-level chemistry takes it from there.</summary>
@@ -287,7 +343,7 @@ public abstract record WorldReaction {
     /// <param name="Comparison">The comparison.</param>
     /// <param name="Value">The constant compared against.</param>
     /// <param name="Row">The keyed int state row written, keyed by body index.</param>
-    public sealed record Expose(string Field, WorldFieldComparison Comparison, float Value, string Row) : WorldReaction;
+    public sealed record Expose(string Field, WorldFieldComparison Comparison, WorldLatticeScalar Value, string Row) : WorldReaction;
 }
 /// <summary>How a field value compares against a constant.</summary>
 [JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<WorldFieldComparison>))]

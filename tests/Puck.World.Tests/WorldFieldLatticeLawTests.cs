@@ -103,6 +103,37 @@ public sealed class WorldFieldLatticeLawTests {
     }
 
     [Fact]
+    public void ARowReferencedReactionScalarModulatesChemistryOnlyWhileTheRowIsNonzero() {
+        var lattice = new WorldFieldLattice(document: (FilledFields(fill: new WorldLatticeFill.Rect(Value: 1f, MinX: 0f, MinZ: 0f, MaxX: 32f, MaxZ: 32f), width: 4, depth: 4) with {
+            Reactions = [new WorldReaction.Transform(
+                When: [new WorldFieldCondition(Field: "grass", Comparison: WorldFieldComparison.Greater, Value: 0f)],
+                Then: [new WorldFieldWrite(Field: "grass", Op: WorldFieldWriteOp.Add, Value: new WorldLatticeScalar(Row: "season"))]
+            )],
+        }));
+        var season = FixedQ4816.Zero;
+
+        void StepOnce() => lattice.Step(
+            tick: 1,
+            bodyCount: 0,
+            bodyPosition: static _ => null,
+            readTag: static (_, _) => 0,
+            writeTag: static (_, _, _) => { },
+            readScalar: _ => season
+        );
+
+        StepOnce();
+        Assert.Equal(expected: FixedQ4816.One.Value, actual: lattice.Value(field: 0, cell: 0).Value);
+
+        season = FixedQ4816.FromDouble(value: -0.25);
+        StepOnce();
+        Assert.Equal(expected: FixedQ4816.FromDouble(value: 0.75).Value, actual: lattice.Value(field: 0, cell: 0).Value);
+
+        season = FixedQ4816.Zero;
+        StepOnce();
+        Assert.Equal(expected: FixedQ4816.FromDouble(value: 0.75).Value, actual: lattice.Value(field: 0, cell: 0).Value);
+    }
+
+    [Fact]
     public void ABodyStandingOnAGroundLatticeSurfaceCouplesToItsColumn() {
         // Layers = 1, cellSize 1, heightScale 2, max 10: the derived coupling ceiling is 1 + 2*10 = 21. A body at
         // y = 1.5 stands ABOVE the one-voxel slab (a bare inside test refuses it) yet ON a plausible surface, so the

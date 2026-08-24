@@ -962,11 +962,52 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
-        void RequireRate(float rate, string path) => RequireUnitInterval(
-            value: rate,
-            name: path,
-            errors: errors
-        );
+        void RequireScalarRow(string row, string path) {
+            if (WorldDefinitionRows.FindStateRow(
+                rows: definition.State,
+                name: row
+            ) is not { } declared) {
+                errors.Add(item: $"{path} references state row '{row}', which the document does not declare.");
+            } else if (
+                (declared.Kind != CellKind.Fixed) ||
+                declared.IsKeyed ||
+                (declared.Lattice is not null)
+            ) {
+                errors.Add(item: $"{path} references state row '{row}', which must be a scalar kind=fixed row (a reaction scalar reads one slot cell per step).");
+            }
+        }
+
+        void RequireRate(WorldLatticeScalar rate, string path) {
+            if (rate.Row is { } row) {
+                RequireScalarRow(
+                    path: path,
+                    row: row
+                );
+
+                return;
+            }
+
+            RequireUnitInterval(
+                value: (rate.Literal ?? 0f),
+                name: path,
+                errors: errors
+            );
+        }
+
+        void RequireScalarValue(WorldLatticeScalar value, string path) {
+            if (value.Row is { } row) {
+                RequireScalarRow(
+                    path: path,
+                    row: row
+                );
+
+                return;
+            }
+
+            if (!FitsFixed(value: (value.Literal ?? 0f))) {
+                errors.Add(item: $"{path} must carry a finite Q48.16 value.");
+            }
+        }
 
         void RequireKeyedIntRow(string? row, string path) {
             if (
@@ -1031,8 +1072,11 @@ public static partial class WorldDefinitionValidator {
                                 path: $"{path}.when[{c}].field"
                             );
 
-                            if ((conditions[c] is { } condition) && !FitsFixed(value: condition.Value)) {
-                                errors.Add(item: $"{path}.when[{c}].value must fit Q48.16.");
+                            if (conditions[c] is { } condition) {
+                                RequireScalarValue(
+                                    path: $"{path}.when[{c}].value",
+                                    value: condition.Value
+                                );
                             }
 
                             if ((conditions[c] is { } definedCondition) && !Enum.IsDefined(value: definedCondition.Comparison)) {
@@ -1046,8 +1090,11 @@ public static partial class WorldDefinitionValidator {
                                 path: $"{path}.then[{t}].field"
                             );
 
-                            if ((writes[t] is { } write) && !FitsFixed(value: write.Value)) {
-                                errors.Add(item: $"{path}.then[{t}].value must fit Q48.16.");
+                            if (writes[t] is { } write) {
+                                RequireScalarValue(
+                                    path: $"{path}.then[{t}].value",
+                                    value: write.Value
+                                );
                             }
 
                             if ((writes[t] is { } definedWrite) && !Enum.IsDefined(value: definedWrite.Op)) {
@@ -1067,9 +1114,10 @@ public static partial class WorldDefinitionValidator {
                         path: $"{path}.tag"
                     );
 
-                    if (!FitsFixed(value: emit.Amount)) {
-                        errors.Add(item: $"{path}.amount must fit Q48.16.");
-                    }
+                    RequireScalarValue(
+                        path: $"{path}.amount",
+                        value: emit.Amount
+                    );
 
                     break;
                 case WorldReaction.Expose expose:
@@ -1082,9 +1130,10 @@ public static partial class WorldDefinitionValidator {
                         path: $"{path}.row"
                     );
 
-                    if (!FitsFixed(value: expose.Value)) {
-                        errors.Add(item: $"{path}.value must fit Q48.16.");
-                    }
+                    RequireScalarValue(
+                        path: $"{path}.value",
+                        value: expose.Value
+                    );
 
                     if (!Enum.IsDefined(value: expose.Comparison)) {
                         errors.Add(item: $"{path}.comparison '{expose.Comparison}' is unknown.");

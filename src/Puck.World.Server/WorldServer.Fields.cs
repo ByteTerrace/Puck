@@ -1,3 +1,4 @@
+using Puck.Maths;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -30,9 +31,27 @@ public sealed partial class WorldServer {
                 row: row,
                 tick: tick,
                 value: value
+            ),
+            readScalar: row => ReadScalarSlot(
+                row: row,
+                tick: tick
             )
         );
     }
+    // A reaction scalar's row read: the named row's SLOT cell as Q48.16 raw bits (0 when the row or its slot cell
+    // does not exist yet — the slot is minted by its first write).
+    private FixedQ4816 ReadScalarSlot(string row, ulong tick) => ((WorldStateReader.TryRead(
+        definition: m_definition,
+        rowName: row,
+        key: WorldStateRow.SlotKey,
+        tick: tick,
+        row: out _,
+        rawValue: out var raw,
+        text: out _
+    ) && (raw is { } value))
+        ? FixedQ4816.FromRawBits(value: value)
+        : FixedQ4816.Zero
+    );
     private long ReadTagCell(string row, int body, ulong tick) => ((WorldStateReader.TryRead(
         definition: m_definition,
         rowName: row,
