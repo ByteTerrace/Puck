@@ -5,7 +5,7 @@ using Puck.World.Protocol;
 namespace Puck.World.Tests;
 
 /// <summary>Proves a market fact cell keys a <see cref="PrincipalKind.Peer"/> holder on its full (index, generation)
-/// pair, never the index alone — <see cref="WorldPopulationLimits"/> recycles a vacated population slot for a later,
+/// pair, never the index alone — <see cref="WorldBodiesLimits"/> recycles a vacated population slot for a later,
 /// unrelated connection, so keying on index alone would let generation 2 read (and spend) generation 1's balance.
 /// Every mutating verb here is submitted under <see cref="WorldPrincipal.Console"/> — the party-authority law
 /// (<see cref="MarketPartyAuthorityLawTests"/>) is proved elsewhere; this suite isolates the key-derivation

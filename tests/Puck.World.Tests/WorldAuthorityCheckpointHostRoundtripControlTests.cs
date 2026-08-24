@@ -176,12 +176,12 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
     public void Control_UnparkedRemoteHumanPeerEntry_ReadsRed() {
         var document = Fixtures.BuildDocument() with {
             PopulationRaw = Fixtures.BuildDocument().Population with {
-                CapacityRaw = (WorldPopulationLimits.LocalSeatCount + 1),
+                CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 1),
                 NetworkPlayers = 1,
             },
             Admission = [Fixtures.AnyAuthorityArrivals()],
         };
-        const int peerSlot = WorldPopulationLimits.LocalSeatCount;
+        const int peerSlot = WorldBodiesLimits.LocalSeatCount;
 
         using var fixture = Fixtures.FreshServer(definition: document);
 
@@ -234,11 +234,11 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
     public void ReconnectingPeer_ResumesTheSameBody_ControlAFreshAdmissionMintsADuplicate() {
         var document = Fixtures.BuildDocument() with {
             PopulationRaw = Fixtures.BuildDocument().Population with {
-                CapacityRaw = (WorldPopulationLimits.LocalSeatCount + 2),
+                CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 2),
                 NetworkPlayers = 2,
             },
         };
-        const int peerSlot = WorldPopulationLimits.LocalSeatCount;
+        const int peerSlot = WorldBodiesLimits.LocalSeatCount;
 
         using var fixture = Fixtures.FreshServer(definition: document);
         var admitted = default(WorldPeerEventEntry);

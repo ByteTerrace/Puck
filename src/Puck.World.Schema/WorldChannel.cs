@@ -263,7 +263,7 @@ public sealed class WorldChannelTable {
 /// <see cref="Puck.World.Protocol.PlayerIntent"/>). The consumer is exactly one of <see cref="Role"/> (an engine
 /// motion channel, claimable by at most one channel) or <see cref="Composition"/> (a kit composition trigger, bound —
 /// or left inert — per kit via <see cref="WorldKit.Actions"/>).</summary>
-/// <param name="Name">The channel's unique, non-empty name — the vocabulary key every binding, <c>player.press</c>,
+/// <param name="Name">The channel's unique, non-empty name — the vocabulary key every binding, <c>body.press</c>,
 /// kit <c>Actions</c> entry, and the addon wire resolve against.</param>
 /// <param name="Shape">The declared value shape: bipolar <c>[-1, 1]</c>, unipolar <c>[0, 1]</c>, or binary.</param>
 /// <param name="Role">The engine motion role this channel claims, or <see langword="null"/> for a composition channel.</param>

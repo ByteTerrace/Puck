@@ -154,7 +154,7 @@ public static class ServerLinkSubmissions {
     /// identity is checked for <see cref="WorldCapability.Control"/> over the named screen (or every named screen,
     /// for a link) before <c>WorldServer.Machines</c> is touched, and the outcome is reported loudly on stderr and
     /// through <c>WorldServer.EchoTap</c>. A following <c>screen.state</c> read observes the settled state
-    /// immediately, so <c>player.engage</c>'s auto-insert precheck can submit a <see cref="WorldScreenOp.Select"/>
+    /// immediately, so <c>body.engage</c>'s auto-insert precheck can submit a <see cref="WorldScreenOp.Select"/>
     /// immediately ahead of the <see cref="WorldCommand.ComposeControl"/> that follows it in the same batch.</summary>
     /// <param name="link">The link.</param>
     /// <param name="op">The screen op.</param>

@@ -182,7 +182,7 @@ public static class WorldRuleFacts {
     /// <summary>The prefix; <c>$channel:&lt;seat&gt;:&lt;channelName&gt;</c> reads the 1-based local seat's current value of
     /// a declared <c>channels[]</c> row as its body integrates it that tick — the drained
     /// <see cref="Puck.Commands.CommandSnapshot"/> read folded with co-driving contributions and the admitted held
-    /// overlay (the path a held sample such as a probe axis reaches a channel by), the same value <c>player.channels</c>
+    /// overlay (the path a held sample such as a probe axis reaches a channel by), the same value <c>body.channels</c>
     /// reports as <c>composed</c>. The value rides the channel's own native <see cref="Puck.Maths.FixedQ4816"/>
     /// domain unchanged — a bipolar/unipolar channel's <c>1</c> is already "fully pressed/1.0", so an authored
     /// <c>compareState($channel:1:portal, greaterOrEqual, 1)</c> needs no rescale, unlike <see cref="ParkedPrefix"/>/

@@ -6,7 +6,7 @@ namespace Puck.World.Protocol;
 /// through the one ordered domain, landing in <c>Server.WorldServer.Machines</c> — the only project that boots, steps, or holds a live
 /// <c>Puck.Abstractions.Machines.IScreenMachine</c>. Applied synchronously at submit, exactly like
 /// <see cref="WorldCommand"/>/<see cref="WorldGrant"/> — never buffered to the tick boundary — because
-/// <c>player.engage</c>'s auto-insert precheck submits a <see cref="Select"/> immediately ahead of the
+/// <c>body.engage</c>'s auto-insert precheck submits a <see cref="Select"/> immediately ahead of the
 /// <see cref="WorldCommand.ComposeControl"/> that follows it in the same batch, and the second submission must observe the
 /// first's effect (the "walk over, press the button, the screen lights" one-act UX). Deliberately narrower than
 /// <see cref="WorldDefinition.Screens"/>' <c>UpsertScreen</c>/<c>RemoveScreen</c> mutations, which are document-only

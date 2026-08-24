@@ -489,7 +489,7 @@ public sealed partial class WorldServer {
     // The item/currency fact vocabulary's cell key for a market participant. A seat's index is its own stable
     // identity (generation is always 0), so its key is the plain 0-based entity index — the same addressing
     // WorldRuleFacts.ArgMaxPrefix/ArgMinPrefix already read off an unkeyed row. A peer's index is not stable on its
-    // own: WorldPopulationLimits recycles a vacated population slot for a later, unrelated connection, and
+    // own: WorldBodiesLimits recycles a vacated population slot for a later, unrelated connection, and
     // WorldGrants/the ownership escrow substrate both key a peer's real authority on the full (index, generation)
     // pair (WorldPrincipal's own equality) — so a market cell keys the same pair, or a later occupant of the same
     // slot would silently inherit the departed peer's balance/items/listing proceeds. The compound key never
@@ -557,33 +557,32 @@ public sealed partial class WorldServer {
         ArgumentNullException.ThrowIfNull(argument: query);
 
         return query switch {
-            WorldQuery.PlayerWhere where when (Body(index: (where.Index - 1)) is { } body) => new QueryAnswer(
+            WorldQuery.PlayerWhere where when (Body(index: where.Index) is { } body) => new QueryAnswer(
             Text: body.DescribeWhere(index: where.Index),
             Payload: (Source: body.Source, Pose: body.DescribePose())
         ),
             WorldQuery.PlayerWhere where => new QueryAnswer(
-            Text: $"[player.where: player {where.Index} is not an active population entry — see world.population]",
+            Text: $"[body.where: body:{where.Index} is not an active population entry — see world.population]",
             Refused: true
         ),
-            WorldQuery.PlayerChannels channels when (Body(index: (channels.Index - 1)) is { } body) => new QueryAnswer(Text: DescribeChannels(
-            index: channels.Index,
-            bodyIndex: (channels.Index - 1),
+            WorldQuery.PlayerChannels channels when (Body(index: channels.Index) is { } body) => new QueryAnswer(Text: DescribeChannels(
+            bodyIndex: channels.Index,
             body: body
         )),
             WorldQuery.PlayerChannels channels => new QueryAnswer(
-            Text: $"[player.channels: player {channels.Index} is not an active population entry — see world.population]",
+            Text: $"[body.channels: body:{channels.Index} is not an active population entry — see world.population]",
             Refused: true
         ),
-            WorldQuery.PlayerState state when (Body(index: (state.Index - 1)) is { } body) => new QueryAnswer(Text: $"[player.state: p{state.Index} identity={(body.Profile?.Id ?? "none")} {body.DescribeActionState()} outputs={DescribeDurableOutputs(entityIndex: (state.Index - 1))} writeback={DescribeDocumentReceipt(ownerId: body.Profile?.Id)}]"),
+            WorldQuery.PlayerState state when (Body(index: state.Index) is { } body) => new QueryAnswer(Text: $"[body.state: body:{state.Index} identity={(body.Profile?.Id ?? "none")} {body.DescribeActionState()} outputs={DescribeDurableOutputs(entityIndex: state.Index)} writeback={DescribeDocumentReceipt(ownerId: body.Profile?.Id)}]"),
             WorldQuery.PlayerState state => new QueryAnswer(
-            Text: $"[player.state: player {state.Index} is not an active population entry — see world.population]",
+            Text: $"[body.state: body:{state.Index} is not an active population entry — see world.population]",
             Refused: true
         ),
             WorldQuery.InputHolds => new QueryAnswer(Text: m_inputHold.Describe()),
             WorldQuery.Rules => new QueryAnswer(Text: DescribeRules()),
-            WorldQuery.PlayerTargets targets when (Body(index: (targets.Index - 1)) is not null) => new QueryAnswer(Text: m_population.DescribeTargets(bodyIndex: (targets.Index - 1))),
+            WorldQuery.PlayerTargets targets when (Body(index: targets.Index) is not null) => new QueryAnswer(Text: m_population.DescribeTargets(bodyIndex: targets.Index)),
             WorldQuery.PlayerTargets targets => new QueryAnswer(
-            Text: $"[player.targets: player {targets.Index} is not an active population entry — see world.population]",
+            Text: $"[body.targets: body:{targets.Index} is not an active population entry — see world.population]",
             Refused: true
         ),
             WorldQuery.Contacts contacts when (Body(index: (contacts.Index - 1)) is { } body) => new QueryAnswer(Text: DescribeContacts(

@@ -91,7 +91,7 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Population">The census defaults.</param>
     [MutationKind(ordinal: 11, section: WorldSection.Population)]
-    public sealed record SetPopulationDefaults(WorldPrincipal Principal, WorldPopulationDefaults Population) : WorldMutation(Principal);
+    public sealed record SetPopulationDefaults(WorldPrincipal Principal, WorldBodiesDefaults Population) : WorldMutation(Principal);
     /// <summary>Replaces the render-lever defaults and quality-preset table (document-only; live render levers stay
     /// <c>WorldRenderSettings</c>).</summary>
     /// <param name="Principal">The acting identity.</param>
@@ -120,14 +120,14 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Id">The overlay id to remove.</param>
     [MutationKind(ordinal: 16, section: WorldSection.Bindings)]
     public sealed record RemoveBindingOverlay(WorldPrincipal Principal, string Id) : WorldMutation(Principal);
-    /// <summary>Upserts a creation asset row addressed by <see cref="WorldCreation.Id"/>. The compose boundary
+    /// <summary>Upserts a creation asset row addressed by <see cref="WorldPrototype.Id"/>. The compose boundary
     /// canonicalizes the row's document (doc + hash always come from the same <see cref="Puck.Assets.Documents.CanonicalDocument{TDocument}"/>)
     /// and rejects loudly when the carried hash does not match the canonical one — a hash the pipeline did not itself
     /// compute is never accepted.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Creation">The whole creation row.</param>
     [MutationKind(ordinal: 17, section: WorldSection.Creations)]
-    public sealed record UpsertCreation(WorldPrincipal Principal, WorldCreation Creation) : WorldMutation(Principal);
+    public sealed record UpsertCreation(WorldPrincipal Principal, WorldPrototype Creation) : WorldMutation(Principal);
     /// <summary>Removes the creation row with id <paramref name="Id"/>. Rejected loudly when no row declares that id
     /// or when live placements still reference it (the conservative no-cascade ruling — remove the placements first).</summary>
     /// <param name="Principal">The acting identity.</param>
@@ -192,14 +192,14 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     [MutationKind(ordinal: 27, section: WorldSection.Audio)]
     public sealed record SetAudioDefaults(WorldPrincipal Principal, WorldAudioDefaults Audio) : WorldMutation(Principal);
     /// <summary>Replaces the whole editor/authoring policy row. A single whole-row mutation carries both
-    /// consumption classes the row holds (see <see cref="WorldAuthoringDefaults"/>'s remarks): the boot-consumed
+    /// consumption classes the row holds (see <see cref="WorldPlacementPolicyDefaults"/>'s remarks): the boot-consumed
     /// headroom/repeat-cap fields apply at the next boot (the frozen render-envelope probe cannot retroactively grow),
     /// while the live-consumed candidate/layout/preview fields apply at the very next tick — the server's accept echo
     /// narrates the split honestly rather than picking one class for the whole row.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Authoring">The whole authoring policy row.</param>
     [MutationKind(ordinal: 28, section: WorldSection.Authoring)]
-    public sealed record SetAuthoringDefaults(WorldPrincipal Principal, WorldAuthoringDefaults Authoring) : WorldMutation(Principal);
+    public sealed record SetAuthoringDefaults(WorldPrincipal Principal, WorldPlacementPolicyDefaults Authoring) : WorldMutation(Principal);
     /// <summary>Replaces the whole contact-solver tuning (the <see cref="WorldCollision"/> section). Applies live: the
     /// population rebuilds the collider set and hands it to every body on the next tick.</summary>
     /// <param name="Principal">The acting identity.</param>

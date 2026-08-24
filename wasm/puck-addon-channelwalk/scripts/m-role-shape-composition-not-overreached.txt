@@ -17,8 +17,8 @@
 replay.status
 world.wait 5
 # Verified at this SHA: the world booted at all (this line only runs if it did) and 'level' is a real,
-# resolvable channel ordinal -- both proven by a clean player.channels read naming it.
-player.channels 1
+# resolvable channel ordinal -- both proven by a clean body.channels read naming it.
+body.channels 1
 world.affordances
 #
 # NOT exercised by this battery (the rule itself is present, only this negative case is unbuilt): a second

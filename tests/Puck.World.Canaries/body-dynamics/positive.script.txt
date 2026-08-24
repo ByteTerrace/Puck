@@ -1,8 +1,8 @@
 world.status
 world.kits
-player.where 1
+body.where 0
 world.wait 5
-player.fly 1 0 0 0 0 0 2
+body.fly 1 0 0 0 0 0 2
 world.wait 500
-player.where 1
+body.where 0
 world.wait 5

@@ -93,7 +93,7 @@ internal static class WorldSessionCapture {
     // The world.save hash recompute: every creation row re-crosses the ONE canonicalize pipeline so the persisted
     // doc + hash come from the SAME CanonicalCreation. Rows are already canonical at compose time, so this is exactly
     // idempotent (no drift dimension) — it exists so the SAVED file's pin can never diverge from its embedded bytes.
-    private static IReadOnlyList<WorldCreation> CaptureCreations(IReadOnlyList<WorldCreation> creations) =>
+    private static IReadOnlyList<WorldPrototype> CaptureCreations(IReadOnlyList<WorldPrototype> creations) =>
         CaptureCanonicalAssets(
             assets: creations,
             id: static creation => creation.Id,
@@ -142,7 +142,7 @@ internal static class WorldSessionCapture {
     // live figures (R-C: networkPlayers is a remote admission cap, not the live census count — the running count is
     // transient session state that world.save does not persist), so they stay as authored. This keeps a fresh default
     // world byte-clean through a boot-and-save round-trip even though its boot census is zero.
-    private static WorldPopulationDefaults CapturePopulation(WorldPopulation population, WorldPopulationDefaults defaults) => (defaults with {
+    private static WorldBodiesDefaults CapturePopulation(WorldPopulation population, WorldBodiesDefaults defaults) => (defaults with {
         DefaultPeerSourceRaw = population.DefaultPeerSource,
     });
     // Fold the live render levers into the document's render-lever boot defaults, quantizing the continuous shadow reach

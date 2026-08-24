@@ -250,7 +250,7 @@ public sealed partial class WorldPopulation {
             : entry.DesignationRefusal
         );
 
-        return $"[player.targets: p{(bodyIndex + 1)} {((rows.Length == 0)
+        return $"[body.targets: body:{bodyIndex} {((rows.Length == 0)
             ? "registers=none"
             : string.Join(
                 separator: "; ",
@@ -395,19 +395,19 @@ public sealed partial class WorldPopulation {
     /// <returns>The slot's assigned kit row index.</returns>
     public byte KitIndex(int index) => m_entries[index].KitIndex;
     /// <summary>The declared locomotion model of the kit assigned to a stable population slot — the runtime
-    /// <c>player.motion</c> door's read of the same fact <see cref="WorldDefinitionValidator.TryValidateProgramCoherence"/>
+    /// <c>body.motion</c> door's read of the same fact <see cref="WorldDefinitionValidator.TryValidateProgramCoherence"/>
     /// checks at boot, so a document-legal kit cannot runtime-switch into a program its model cannot back.</summary>
     /// <param name="index">The population index (0-based).</param>
     /// <returns>The slot's assigned kit's motion model.</returns>
     public WorldMotionModel KitMotion(int index) => m_kitRows[ResolveKitIndex(index: index)].Motion;
-    /// <summary>The most recent timed <c>player.press</c> outcome for a body, or a zeroed/<see cref="PressHoldCapKind.None"/>
+    /// <summary>The most recent timed <c>body.press</c> outcome for a body, or a zeroed/<see cref="PressHoldCapKind.None"/>
     /// outcome when none has been made (or the last attempt was refused — see <see cref="PressRefusal"/>).</summary>
     /// <param name="bodyIndex">The 0-based entity index.</param>
     public PressOutcome LastPressOutcome(int bodyIndex) => ((((uint)bodyIndex) < ((uint)m_entries.Length))
         ? m_entries[bodyIndex].PressOutcome
         : default
     );
-    /// <summary>The most recent <c>player.stop</c> outcome for a body, or a zeroed outcome when none has been made
+    /// <summary>The most recent <c>body.stop</c> outcome for a body, or a zeroed outcome when none has been made
     /// (or the last attempt was refused — see <see cref="StopRefusal"/>).</summary>
     /// <param name="bodyIndex">The 0-based entity index.</param>
     public StopOutcome LastStopOutcome(int bodyIndex) => ((((uint)bodyIndex) < ((uint)m_entries.Length))
@@ -418,7 +418,7 @@ public sealed partial class WorldPopulation {
     /// renderer (presentation-only).</summary>
     /// <param name="index">The 0-based population index.</param>
     public byte LookIndex(int index) => m_entries[index].LookIndex;
-    /// <summary>The most recent <c>player.motion</c> switch refusal for a body, or <see cref="string.Empty"/> when its
+    /// <summary>The most recent <c>body.motion</c> switch refusal for a body, or <see cref="string.Empty"/> when its
     /// last attempt succeeded (or none has been made).</summary>
     /// <param name="bodyIndex">The 0-based entity index.</param>
     public string MotionRefusal(int bodyIndex) => ((((uint)bodyIndex) < ((uint)m_entries.Length))
@@ -431,8 +431,8 @@ public sealed partial class WorldPopulation {
             m_entries[bodyIndex].DesignationRefusal = reason;
         }
     }
-    /// <summary>Records the outcome of the latest <c>player.motion</c> switch attempt for a body — an empty
-    /// <paramref name="reason"/> on success, the named refusal otherwise. <c>player.motion</c>'s handler reads this
+    /// <summary>Records the outcome of the latest <c>body.motion</c> switch attempt for a body — an empty
+    /// <paramref name="reason"/> on success, the named refusal otherwise. <c>body.motion</c>'s handler reads this
     /// back through <see cref="MotionRefusal(int)"/> immediately after its synchronous submit (<c>WorldServer.Submit</c>
     /// drains inline) so its immediate echo reports the true outcome instead of assuming success.</summary>
     /// <param name="bodyIndex">The 0-based entity index.</param>
@@ -442,7 +442,7 @@ public sealed partial class WorldPopulation {
             m_entries[bodyIndex].MotionRefusal = reason;
         }
     }
-    /// <summary>Records the outcome of a successful timed <c>player.press</c> — the effective hold (post
+    /// <summary>Records the outcome of a successful timed <c>body.press</c> — the effective hold (post
     /// grant-ceiling and engine-backstop clamping) and which cap, if any, decided it — the same synchronous-submit
     /// read-back shape as <see cref="NoteMotionRefusal"/>, so the handler can name a silent truncation instead of
     /// echoing the requested duration as if it were honored. Always clears any refusal note the body's press slot
@@ -455,7 +455,7 @@ public sealed partial class WorldPopulation {
             m_entries[bodyIndex].PressOutcome = outcome;
         }
     }
-    /// <summary>Records a refused <c>player.press</c> attempt (timed or untimed alike — they share one refusal
+    /// <summary>Records a refused <c>body.press</c> attempt (timed or untimed alike — they share one refusal
     /// slot) for a body — <see cref="WorldServer.ApplyCommand"/> calls this from every early return a
     /// <see cref="WorldCommand.PressChannel"/> can take, so the slot is written on every single outcome the command
     /// can have. Also resets the timed-path's outcome to a neutral default, so a handler that reads it without
@@ -468,7 +468,7 @@ public sealed partial class WorldPopulation {
             m_entries[bodyIndex].PressOutcome = default;
         }
     }
-    /// <summary>Records a successful untimed <c>player.press</c> (the host-step tap, which carries no numeric
+    /// <summary>Records a successful untimed <c>body.press</c> (the host-step tap, which carries no numeric
     /// outcome of its own) — clears any refusal note the body's press slot carried, the same way
     /// <see cref="NotePressOutcome"/> does for the timed path, so the one shared refusal slot both press paths read
     /// back through is always fresh regardless of which one last ran.</summary>
@@ -478,8 +478,8 @@ public sealed partial class WorldPopulation {
             m_entries[bodyIndex].PressRefusal = string.Empty;
         }
     }
-    /// <summary>Records the outcome of a successful <c>player.stop</c> for a body — the same synchronous-submit
-    /// read-back shape as <see cref="NoteMotionRefusal"/>, so <c>player.stop</c>'s handler can quote the true
+    /// <summary>Records the outcome of a successful <c>body.stop</c> for a body — the same synchronous-submit
+    /// read-back shape as <see cref="NoteMotionRefusal"/>, so <c>body.stop</c>'s handler can quote the true
     /// released/cleared counts instead of a fixed template string. Always clears any refusal note the body's stop
     /// slot carried, so a denial from an earlier attempt can never bleed into a fresh success's echo.</summary>
     /// <param name="bodyIndex">The 0-based entity index.</param>
@@ -490,7 +490,7 @@ public sealed partial class WorldPopulation {
             m_entries[bodyIndex].StopOutcome = outcome;
         }
     }
-    /// <summary>Records a refused <c>player.stop</c> attempt for a body — <see cref="WorldServer.ApplyCommand"/>
+    /// <summary>Records a refused <c>body.stop</c> attempt for a body — <see cref="WorldServer.ApplyCommand"/>
     /// calls this from every early return a <see cref="WorldCommand.Stop"/> can take (the grant-table denial, the
     /// missing/inactive body) before it ever reaches <see cref="NoteStopOutcome"/>, so the slot is written on every
     /// single outcome a Stop command can have — never left holding a stale success from some earlier, unrelated
@@ -504,8 +504,8 @@ public sealed partial class WorldPopulation {
             m_entries[bodyIndex].StopOutcome = default;
         }
     }
-    /// <summary>The most recent <c>player.press</c> refusal for a body, or <see cref="string.Empty"/> when its last
-    /// attempt succeeded (or none has been made). <c>player.press</c>'s handler checks this before
+    /// <summary>The most recent <c>body.press</c> refusal for a body, or <see cref="string.Empty"/> when its last
+    /// attempt succeeded (or none has been made). <c>body.press</c>'s handler checks this before
     /// <see cref="LastPressOutcome"/> — a non-empty refusal means no press was applied.</summary>
     /// <param name="bodyIndex">The 0-based entity index.</param>
     public string PressRefusal(int bodyIndex) => ((((uint)bodyIndex) < ((uint)m_entries.Length))
@@ -678,8 +678,8 @@ public sealed partial class WorldPopulation {
 
         return clamped;
     }
-    /// <summary>The most recent <c>player.stop</c> refusal for a body, or <see cref="string.Empty"/> when its last
-    /// attempt succeeded (or none has been made). <c>player.stop</c>'s handler checks this before
+    /// <summary>The most recent <c>body.stop</c> refusal for a body, or <see cref="string.Empty"/> when its last
+    /// attempt succeeded (or none has been made). <c>body.stop</c>'s handler checks this before
     /// <see cref="LastStopOutcome"/> — a non-empty refusal means the counts were never applied.</summary>
     /// <param name="bodyIndex">The 0-based entity index.</param>
     public string StopRefusal(int bodyIndex) => ((((uint)bodyIndex) < ((uint)m_entries.Length))

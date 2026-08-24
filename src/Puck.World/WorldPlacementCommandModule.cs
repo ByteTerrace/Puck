@@ -321,12 +321,12 @@ internal sealed class WorldPlacementCommandModule(WorldServer server, WorldPopul
                 id: placementId,
                 placements: placements
             );
-            var creationId = (placement?.CreationId ?? "?");
+            var prototypeId = (placement?.PrototypeId ?? "?");
             var kit = ((placement?.Inhabit?.Kit) ?? "(locomotion)");
             var source = (placement?.Inhabit?.Source.ToString() ?? "?");
             var position = body.Position;
 
-            _ = builder.Append(value: $" {placementId}[creation={creationId} kit={kit} source={source} body={index} pos={position.X:0.0},{position.Y:0.0},{position.Z:0.0}]");
+            _ = builder.Append(value: $" {placementId}[creation={prototypeId} kit={kit} source={source} body={index} pos={position.X:0.0},{position.Y:0.0},{position.Z:0.0}]");
         }
 
         return builder.Append(value: (any
@@ -343,7 +343,7 @@ internal sealed class WorldPlacementCommandModule(WorldServer server, WorldPopul
 
         var seats = new List<string>();
 
-        for (var seat = 0; (seat < WorldPopulationLimits.LocalSeatCount); seat++) {
+        for (var seat = 0; (seat < WorldBodiesLimits.LocalSeatCount); seat++) {
             if (instance.PortalOccupancy.IsInside(
                 faceName: faceName,
                 placementId: placementId,
@@ -549,7 +549,7 @@ internal sealed class WorldPlacementCommandModule(WorldServer server, WorldPopul
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.inhabitants",
-            description: "Reports the inhabited-placement census (Immediate; reads the settled state after any pending mutation): one line per inhabited body — placementId, creationId, kit, source, bodyIndex, position. A trailing instance:<name> token reads a named running instance's own population instead of the boot world's (see world.instance.status) — the same grammar every instance-addressed read-back shares.",
+            description: "Reports the inhabited-placement census (Immediate; reads the settled state after any pending mutation): one line per inhabited body — placementId, prototypeId, kit, source, bodyIndex, position. A trailing instance:<name> token reads a named running instance's own population instead of the boot world's (see world.instance.status) — the same grammar every instance-addressed read-back shares.",
             handler: (_, args) => {
                 if (!TryResolveInstance(
                     args: in args,

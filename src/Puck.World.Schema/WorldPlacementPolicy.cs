@@ -3,9 +3,9 @@ namespace Puck.World;
 /// <summary>
 /// The placement contract invariants that size fixed engine buffers allocated before any <see cref="WorldDefinition"/>
 /// exists. World-varying policy values live in <see cref="WorldDefinition.Authoring"/> /
-/// <see cref="WorldAuthoringDefaults"/> instead. What is left here stays a compile-time constant because each one
+/// <see cref="WorldPlacementPolicyDefaults"/> instead. What is left here stays a compile-time constant because each one
 /// sizes a FIXED engine buffer — <c>Client.WorldSceneEmitter</c> declares its dynamic-transform slot count
-/// (<c>WorldAvatarCatalog.DynamicTransformCapacity + WorldStampPool.DynamicSlotCount</c>) as the composition host
+/// (<c>WorldRigCatalog.DynamicTransformCapacity + WorldStampPool.DynamicSlotCount</c>) as the composition host
 /// reads it, before any definition is in hand, and <c>Client.WorldStampPool</c>'s replay
 /// pool and per-shape stackalloc spans are sized from the same static chain. Making one of these per-world data would
 /// require redesigning that allocation to run after the boot definition loads. Values are read at probe/validate/replay
@@ -14,7 +14,7 @@ namespace Puck.World;
 public static class WorldPlacementPolicy {
     /// <summary>The first reserved derived-face screen index — high in the engine's screen-surface range so it never
     /// collides with authored screens (which pack from index 0). Single-sourced here (rather than beside
-    /// <c>Client.WorldCreationFacets.Derive</c>, which needs Puck.SdfVm and so cannot live in Puck.World.Schema)
+    /// <c>Client.WorldPrototypeFacets.Derive</c>, which needs Puck.SdfVm and so cannot live in Puck.World.Schema)
     /// because the document validator must exclude the same reserved band an authored screen index cannot enter.</summary>
     public const int DerivedFaceBase = 24;
     /// <summary>The per-animated-placement shape-slot pool — equal to <see cref="MaxShapesPerStamp"/>, so an animated

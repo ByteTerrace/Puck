@@ -16,7 +16,7 @@ public sealed class OverlayLeaseTableFitsBackstopsLawTests {
     public void SchemaDerivedCapacityBuildsALeaseTableWithinEveryBackstop() {
         var leases = new OverlayChannelLeases(capacity: WorldOverlayCapacity.FromSchema());
 
-        Assert.Equal(expected: WorldPopulationLimits.LocalSeatCount, actual: leases.MaxSeats);
+        Assert.Equal(expected: WorldBodiesLimits.LocalSeatCount, actual: leases.MaxSeats);
         Assert.True(condition: (leases.TotalClips <= OverlayFrameBuilder.MaxClips), userMessage: $"clips {leases.TotalClips} exceed the backstop {OverlayFrameBuilder.MaxClips}");
         Assert.True(condition: (leases.TotalElements <= OverlayFrameBuilder.MaxElements), userMessage: $"elements {leases.TotalElements} exceed the backstop {OverlayFrameBuilder.MaxElements}");
         Assert.True(condition: (leases.TotalPanels <= OverlayFrameBuilder.MaxPanels), userMessage: $"panels {leases.TotalPanels} exceed the backstop {OverlayFrameBuilder.MaxPanels}");

@@ -185,7 +185,7 @@ public sealed partial class WorldPopulation {
         foreach (var creation in definition.Creations) {
             if (string.Equals(
                 a: creation.Id,
-                b: placement.CreationId,
+                b: placement.PrototypeId,
                 comparisonType: StringComparison.Ordinal
             )) {
                 return creation.Document.Behavior?.Locomotion;
@@ -195,7 +195,7 @@ public sealed partial class WorldPopulation {
         return null;
     }
     // The look row an inhabited placement's bodies wear: its Inhabit.Look when it names an authored look, else the
-    // implicit index-derived look (the client renders the creation stamp from the placement's own CreationId regardless).
+    // implicit index-derived look (the client renders the creation stamp from the placement's own PrototypeId regardless).
     private byte ResolveInhabitLook(WorldPlacement placement) {
         if (
             (placement.Inhabit?.Look is { Length: > 0 } lookName) &&
@@ -498,10 +498,10 @@ public sealed partial class WorldPopulation {
     /// </summary>
     public void ResolveDynamicContacts() {
         var two = FixedQ4816.FromInteger(value: 2L);
-        Span<int> indices = stackalloc int[WorldPopulationLimits.CapacityCeiling];
-        Span<FixedQ4816> minimumX = stackalloc FixedQ4816[WorldPopulationLimits.CapacityCeiling];
-        Span<FixedQ4816> maximumX = stackalloc FixedQ4816[WorldPopulationLimits.CapacityCeiling];
-        Span<FixedQ4816> radii = stackalloc FixedQ4816[WorldPopulationLimits.CapacityCeiling];
+        Span<int> indices = stackalloc int[WorldBodiesLimits.CapacityCeiling];
+        Span<FixedQ4816> minimumX = stackalloc FixedQ4816[WorldBodiesLimits.CapacityCeiling];
+        Span<FixedQ4816> maximumX = stackalloc FixedQ4816[WorldBodiesLimits.CapacityCeiling];
+        Span<FixedQ4816> radii = stackalloc FixedQ4816[WorldBodiesLimits.CapacityCeiling];
         var count = 0;
 
         for (var index = 0; (index < Capacity); index++) {

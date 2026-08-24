@@ -11,7 +11,7 @@ namespace Puck.World;
 public abstract record WorldLookSource {
     private WorldLookSource() { }
 
-    /// <summary>The procedural humanoid catalog (<c>WorldAvatarCatalog</c>) — one look source among others.</summary>
+    /// <summary>The procedural humanoid catalog (<c>WorldRigCatalog</c>) — one look source among others.</summary>
     /// <param name="Index">The procedural renderer catalog rig to pin, or
     /// <see langword="null"/> for the occupant-owned pick. A fresh occupant seeds that pick from its first local
     /// slot and carries it across authority transfers, so ordinary admission does not restyle it.</param>
@@ -19,10 +19,10 @@ public abstract record WorldLookSource {
         /// <summary>The procedural renderer's fixed rig count.</summary>
         public const int RigCount = 128;
     }
-    /// <summary>A sculpted creation worn by the body — resolved against the world's <see cref="WorldCreation"/> rows.</summary>
-    /// <param name="CreationId">The referenced <see cref="WorldCreation.Id"/>, authored literally or through a Text
+    /// <summary>A sculpted creation worn by the body — resolved against the world's <see cref="WorldPrototype"/> rows.</summary>
+    /// <param name="PrototypeId">The referenced <see cref="WorldPrototype.Id"/>, authored literally or through a Text
     /// state cell; it must resolve at validation.</param>
-    public sealed record Creation([property: System.Text.Json.Serialization.JsonPropertyName("prototypeId")] DocumentIdentifier CreationId) : WorldLookSource;
+    public sealed record Creation([property: System.Text.Json.Serialization.JsonPropertyName("prototypeId")] DocumentIdentifier PrototypeId) : WorldLookSource;
 }
 /// <summary>One cue of a creation look: a named timeline frame the body holds for <paramref name="HoldSeconds"/>
 /// when the cue fires — a blink, a twitch, a tail flick. A cue fires by itself on a semi-random interval drawn

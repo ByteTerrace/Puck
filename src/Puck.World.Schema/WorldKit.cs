@@ -191,7 +191,7 @@ public readonly record struct FixedWorldKit(
     /// motion model's own declared row name (validation has already refused a dangling name).</param>
     /// <param name="simulationRateHz">The world's own simulation rate — the step width a resolved dynamics row's
     /// propagator compiles against (validation has already refused a resolved name at rate 0).</param>
-    public static FixedWorldKit Compile(WorldKit kit, WorldChannelTable channels, WorldTargetRegisterTable targets, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, IReadOnlyDictionary<string, BodyMotionProgram> programRows, IReadOnlyList<WorldCreation> creations, IReadOnlyList<ActionStateSlot> bodyState, IReadOnlyList<ActionStateSlot> identityState, IReadOnlyList<WorldDynamicsRow> dynamics, int simulationRateHz) {
+    public static FixedWorldKit Compile(WorldKit kit, WorldChannelTable channels, WorldTargetRegisterTable targets, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, IReadOnlyDictionary<string, BodyMotionProgram> programRows, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<ActionStateSlot> bodyState, IReadOnlyList<ActionStateSlot> identityState, IReadOnlyList<WorldDynamicsRow> dynamics, int simulationRateHz) {
         var actions = new CompiledActionSpec?[ChannelLimits.MaxChannels];
         var thresholds = new FixedQ4816[ChannelLimits.MaxChannels];
         // Every ordinal, not just bound ones — a composition channel's shape is a WORLD property, not a per-kit one,

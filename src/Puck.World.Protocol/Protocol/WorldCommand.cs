@@ -35,7 +35,7 @@ public abstract record WorldCommand(WorldPrincipal Principal, int EntityIndex) {
         Principal,
         EntityIndex
     );
-    /// <summary>Presses a channel for a timed auto-release (the wire <c>player.press</c> path) — independent of the
+    /// <summary>Presses a channel for a timed auto-release (the wire <c>body.press</c> path) — independent of the
     /// movement tape, reaching any declared channel (movement roles included).</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="EntityIndex">The 0-based entity index.</param>
@@ -83,7 +83,7 @@ public abstract record WorldCommand(WorldPrincipal Principal, int EntityIndex) {
         EntityIndex
     );
     /// <summary>Composes a <see cref="ControlApplication"/> onto <see cref="TargetPrincipal"/>'s application set —
-    /// the <c>player.engage</c> wire path. The target is a diegetic screen's booted machine or another body
+    /// the <c>body.engage</c> wire path. The target is a diegetic screen's booted machine or another body
     /// (possession); the application's kit and channel reach are resolved SERVER-SIDE from document data (a screen's
     /// authored <c>WorldScreenRoute.Kit</c>/<c>Channels</c>, or passthrough over every ordinal for a body target), so
     /// nothing here needs carrying that is a deterministic function of already-replayed state. The server checks
@@ -106,7 +106,7 @@ public abstract record WorldCommand(WorldPrincipal Principal, int EntityIndex) {
         EntityIndex
     );
     /// <summary>Dissolves every non-own-body <see cref="ControlApplication"/> in <see cref="TargetPrincipal"/>'s set,
-    /// restoring the default single own-body application — the <c>player.disengage</c> wire path. The server checks
+    /// restoring the default single own-body application — the <c>body.disengage</c> wire path. The server checks
     /// <see cref="Principal"/> holds <see cref="WorldCapability.Control"/> over each dissolved application's target;
     /// dissolving a set that is already the default is a friendly no-op (see <see cref="ControlOutcome"/>).</summary>
     /// <param name="Principal">The acting identity — the submitter, checked for Control over each dissolved target.</param>
@@ -159,7 +159,7 @@ public enum ControlOutcome : byte {
 /// <summary>Identifies which pose components a <see cref="WorldCommand.SnapPose"/> replaces. One shape today, and the
 /// enum stays because the wire tag it carries is what lets a second one arrive without re-versioning the leaf.</summary>
 public enum SnapPoseMode : byte {
-    /// <summary>A full 6DOF pose (<c>player.pose</c>): position and yaw/pitch/roll are all written. A caller holding
+    /// <summary>A full 6DOF pose (<c>body.pose</c>): position and yaw/pitch/roll are all written. A caller holding
     /// an axis current spells that with <c>-</c> at the verb, which resolves before the command is built — never a
     /// mode of its own.</summary>
     Pose,

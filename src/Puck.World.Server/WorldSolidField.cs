@@ -166,7 +166,7 @@ public sealed class WorldSolidField : IContactField {
                 (placement.Solid is not { } solid) ||
                 (WorldDefinitionRows.FindCreation(
                 creations: definition.Creations,
-                id: placement.CreationId
+                id: placement.PrototypeId
             ) is not { } creation)
             ) {
                 continue;

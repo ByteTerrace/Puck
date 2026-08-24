@@ -162,7 +162,7 @@ internal static class Fixtures {
     /// <param name="seatCollider">The seat kit's body collider, or <see langword="null"/> for none.</param>
     /// <param name="creations">The document's creation rows.</param>
     /// <param name="placements">The document's placement rows.</param>
-    private static WorldDefinition BuildDocumentCore(WorldSpawnPoint[] spawnPoints, WorldCollision collision, WorldCollider? seatCollider, WorldCreation[] creations, WorldPlacement[] placements) {
+    private static WorldDefinition BuildDocumentCore(WorldSpawnPoint[] spawnPoints, WorldCollision collision, WorldCollider? seatCollider, WorldPrototype[] creations, WorldPlacement[] placements) {
         var channels = new WorldChannel[] {
             new(Name: "forward", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveAdvance),
             new(Name: "strafe", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveStrafe),
@@ -199,7 +199,7 @@ internal static class Fixtures {
             ),
         };
 
-        var population = new WorldPopulationDefaults(
+        var population = new WorldBodiesDefaults(
             SeatActivationRaw: [SeatActivationPolicy.Eager, SeatActivationPolicy.Eager, SeatActivationPolicy.Eager, SeatActivationPolicy.Eager],
             NetworkPlayers: 0,
             // Idle, not Producer("wander") — this fixture declares no producer program at all; nothing simulated
@@ -227,7 +227,7 @@ internal static class Fixtures {
             // DefaultPeerSource — a requirement this minimal fixture has no reason to carry, since none of this
             // suite's laws exercise simulated/peer bodies. Pinning capacity to the seat count makes that loop empty
             // (LocalSeatCount..Capacity is 4..4) rather than declaring an unused producer just to satisfy it.
-            CapacityRaw: WorldPopulationLimits.LocalSeatCount,
+            CapacityRaw: WorldBodiesLimits.LocalSeatCount,
             ReconnectGraceSeconds: 3.0f
         );
 
@@ -245,7 +245,7 @@ internal static class Fixtures {
             PickerNeutralColorRaw: "#8C8C8C",
             PickerNeutralBlend: 0.5f,
             // Explicit — this fixture states what its seats feel like, matching the shipped worlds' numbers.
-            SeatLookRaw: new WorldSeatLook(
+            SeatLookRaw: new WorldSeatCameraFeel(
                 InvertPitch: false,
                 InvertYaw: false,
                 PitchSensitivity: 0.001f,
@@ -353,7 +353,7 @@ internal static class Fixtures {
 
     /// <summary>The standard authoring policy row (the values <c>standard.world.json</c> authors), for fixtures
     /// that exercise editor/placement behavior — the engine no longer carries one.</summary>
-    public static WorldAuthoringDefaults StandardAuthoring { get; } = new(
+    public static WorldPlacementPolicyDefaults StandardAuthoring { get; } = new(
         AuthoringHeadroomPlacements: 8,
         AuthoringHeadroomScreens: 4,
         CandidateCap: 16,
@@ -450,7 +450,7 @@ internal static class Fixtures {
     /// shape scaled so the placed ball's surface radius is exactly <see cref="BallSurfaceRadius"/>. The hash is
     /// COMPILER-MAINTAINED — computed through the same pipeline <c>WorldDefinitionValidator.ValidateCreations</c>
     /// re-derives and compares against, never hand-pinned (this suite's whole point).</summary>
-    private static WorldCreation BuildBallCreation() {
+    private static WorldPrototype BuildBallCreation() {
         var shape = new ShapeDocument(
             Id: 0,
             Name: null,
@@ -472,7 +472,7 @@ internal static class Fixtures {
         );
         var canonical = CreationCanonicalizer.Canonicalize(document: document, source: "ball");
 
-        return new WorldCreation(Id: "ball", Document: canonical.Document, HashRaw: canonical.Hash);
+        return new WorldPrototype(Id: "ball", Document: canonical.Document, HashRaw: canonical.Hash);
     }
 
     /// <summary>Extends <see cref="BuildDocumentCore"/> with the ONE fixture <see cref="GradientUpContactLawTests"/>
@@ -500,7 +500,7 @@ internal static class Fixtures {
             seatCollider: new WorldCollider.Capsule(Endpoint: new Vector3(x: 0f, y: 1f, z: 0f), Radius: 0.35f),
             creations: [creation],
             placements: [
-                new WorldPlacement(Id: "ball", CreationId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f)),
+                new WorldPlacement(Id: "ball", PrototypeId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f)),
             ]
         );
     }
@@ -517,7 +517,7 @@ internal static class Fixtures {
             placements: [
                 new WorldPlacement(
                     Id: $"{WorldSeatModeState.CameraPlacementIdPrefix}0",
-                    CreationId: creation.Id,
+                    PrototypeId: creation.Id,
                     Position: new DocumentVector3(value: Vector3.Zero),
                     YawDegrees: 0f,
                     Scale: 1f,
@@ -534,7 +534,7 @@ internal static class Fixtures {
         // One body of headroom past the seats: an inhabited placement draws from the census, and the shared core
         // pins capacity to the seat count.
         return (document with {
-            PopulationRaw = (document.Population with { CapacityRaw = (WorldPopulationLimits.LocalSeatCount + 1) }),
+            PopulationRaw = (document.Population with { CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 1) }),
         });
     }
     /// <summary>The code-built document's canonical UTF-8 bytes — <see cref="WorldDefinitionSerialization.Serialize"/>
@@ -560,7 +560,7 @@ internal static class Fixtures {
         return node.ToJsonBytes();
     }
     /// <summary>Serializes the code-built document and REMOVES <c>playerDefaults.seatLook</c>, returning the
-    /// re-serialized bytes — proves the member parses absent and resolves through <see cref="WorldSeatLook.Default"/>.
+    /// re-serialized bytes — proves the member parses absent and resolves through <see cref="WorldSeatCameraFeel.Default"/>.
     /// Starts from the canonical writer's own output (<see cref="DefaultWorldBytes"/>), so the removal is the only
     /// difference from a document known to parse clean.</summary>
     public static byte[] MissingSeatLookBytes() {

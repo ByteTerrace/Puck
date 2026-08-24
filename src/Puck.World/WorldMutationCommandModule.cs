@@ -110,12 +110,12 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
 
                 if (
                     (local < 1) ||
-                    (local > WorldPopulationLimits.LocalSeatCount)
+                    (local > WorldBodiesLimits.LocalSeatCount)
                 ) {
-                    return CommandResult.Error(output: $"[world.population.defaults: local must be 1..{WorldPopulationLimits.LocalSeatCount}]");
+                    return CommandResult.Error(output: $"[world.population.defaults: local must be 1..{WorldBodiesLimits.LocalSeatCount}]");
                 }
 
-                var seatActivation = new SeatActivationPolicy[WorldPopulationLimits.LocalSeatCount];
+                var seatActivation = new SeatActivationPolicy[WorldBodiesLimits.LocalSeatCount];
 
                 for (var slot = 0; (slot < seatActivation.Length); slot++) {
                     seatActivation[slot] = ((slot < local)

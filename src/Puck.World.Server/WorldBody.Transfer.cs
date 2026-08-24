@@ -225,7 +225,7 @@ public sealed partial class WorldBody {
     public void ApplyTransferState(TransferState state) {
         // FIRST: a program switch reruns part of the SAME reset ApplyTransferState exists to restore on top of (see
         // this method's own summary) — every write below must be the LAST word, never this one. A no-op when the
-        // captured name already matches the fresh body's own kit-default program (the common case, no player.motion
+        // captured name already matches the fresh body's own kit-default program (the common case, no body.motion
         // switch): SetBodyMotionProgram's own early-return skips every side effect entirely.
         if (!string.IsNullOrEmpty(value: state.BodyMotionProgramName)) {
             SetBodyMotionProgram(programName: state.BodyMotionProgramName);
@@ -455,16 +455,16 @@ public sealed partial class WorldBody {
     /// <para><b>Captured (this struct's fields, below).</b> <see cref="PlanarVelocity"/>, <see cref="VerticalVelocity"/>,
     /// <see cref="Orientation"/>, <see cref="VehiclePitch"/>, <see cref="OverlayVelocity"/>/<see cref="OverlayRemainingTicks"/>,
     /// <see cref="ChannelTimerTicks"/>/<see cref="ChannelTimerValues"/>.
-    /// <see cref="BodyMotionProgramName"/> — a live <c>player.motion</c> switch away from the seat kit's own default
+    /// <see cref="BodyMotionProgramName"/> — a live <c>body.motion</c> switch away from the seat kit's own default
     /// program (<see cref="Puck.World.Server.WorldPopulation.RestoreDetachedSeat"/> always reconstructs from the kit's
     /// default program; nothing else remembers a switch away from it).
-    /// <see cref="Source"/> — the intent-source axis (<c>player.control</c>/the peer sweep); a fresh body always
+    /// <see cref="Source"/> — the intent-source axis (<c>body.control</c>/the peer sweep); a fresh body always
     /// defaults to <c>Live</c>, so a body driven by a producer would silently snap back without this.
     /// <see cref="PreviousChannelBit"/> — the previous tick's per-ordinal threshold-crossing bit; without it a
     /// currently-held bound action's edge detector reads "not held last tick" on the very next Advance and can
     /// spuriously re-fire a rising-edge action (a jump) the player never released.
     /// <see cref="PendingDefaultChannelPress"/>/<see cref="PendingDefaultChannelValue"/> — an argument-less
-    /// <c>player.press</c> tap staged but not yet materialized into a lane timer (<see cref="MaterializeDefaultLanePresses"/>
+    /// <c>body.press</c> tap staged but not yet materialized into a lane timer (<see cref="MaterializeDefaultLanePresses"/>
     /// only runs at the next Advance).
     /// <see cref="MotionRecency"/> — the body-motion program's own Recently-gate clocks (combo/gate windows a
     /// program's predicates read); <see cref="ResetVertical"/> zeroes these on every hard teleport by design (a
@@ -501,7 +501,7 @@ public sealed partial class WorldBody {
     /// <see cref="DurableInputWriters"/>/<see cref="DurableInputTick"/> — an incoming durable-state write staged this
     /// tick (<see cref="ApplyDurableInput"/>) but not yet consumed by the next Advance — the same "staged, not yet
     /// materialized" class of gap as the pending channel press.
-    /// <see cref="TapeIntents"/>/<see cref="TapeRemainingTicks"/> — the scripted tape (<c>player.fly</c>) in FIFO
+    /// <see cref="TapeIntents"/>/<see cref="TapeRemainingTicks"/> — the scripted tape (<c>body.fly</c>) in FIFO
     /// order, captured/restored at exact tick counts (never round-tripped through
     /// <see cref="FixedTickConversion.DurationEngineTicks"/>'s own seconds conversion, which would drift the
     /// restored duration from what was actually live) — the body's own future trajectory.</para>
@@ -566,18 +566,18 @@ public sealed partial class WorldBody {
     /// seat kit — carried for the same forward-compatibility reason as <paramref name="Orientation"/>).</param>
     /// <param name="OverlayVelocity">The timed impulse overlay's (the dash) world-space velocity, if one is live.</param>
     /// <param name="OverlayRemainingTicks">Engine ticks remaining on the live overlay — a duration, not a deadline.</param>
-    /// <param name="ChannelTimerTicks">Per-ordinal remaining ticks on an in-flight timed <c>player.press</c> — a
+    /// <param name="ChannelTimerTicks">Per-ordinal remaining ticks on an in-flight timed <c>body.press</c> — a
     /// duration per ordinal, copied defensively (never the live array).</param>
     /// <param name="ChannelTimerValues">The value each timed press in <paramref name="ChannelTimerTicks"/> holds while
     /// live, copied defensively.</param>
     /// <param name="BodyMotionProgramName">The live body-motion program's own name, reapplied through the same
-    /// public <see cref="SetBodyMotionProgram(string)"/> door <c>player.motion</c> uses.</param>
-    /// <param name="Source">The intent-source axis (<c>player.control</c>/the peer sweep).</param>
+    /// public <see cref="SetBodyMotionProgram(string)"/> door <c>body.motion</c> uses.</param>
+    /// <param name="Source">The intent-source axis (<c>body.control</c>/the peer sweep).</param>
     /// <param name="PreviousChannelBit">The previous tick's per-ordinal threshold-crossing bit (edge-detection carry),
     /// copied defensively.</param>
     /// <param name="HeldChannelImage">The last admitted device-held composition image, carried so a destination
     /// authority does not manufacture a release while its replacement input stream is connecting.</param>
-    /// <param name="PendingDefaultChannelPress">Per-ordinal: an argument-less <c>player.press</c> tap staged but not
+    /// <param name="PendingDefaultChannelPress">Per-ordinal: an argument-less <c>body.press</c> tap staged but not
     /// yet materialized into a lane timer, copied defensively.</param>
     /// <param name="PendingDefaultChannelValue">The value each pending tap in <paramref name="PendingDefaultChannelPress"/>
     /// holds, copied defensively.</param>

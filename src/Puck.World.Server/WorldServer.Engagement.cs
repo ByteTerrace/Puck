@@ -55,7 +55,7 @@ public sealed partial class WorldServer {
         reason = string.Empty;
         return true;
     }
-    // player.press and player.stop are read back SYNCHRONOUSLY by their console handlers immediately after a submit
+    // body.press and body.stop are read back SYNCHRONOUSLY by their console handlers immediately after a submit
     // (WorldPopulation.PressRefusal/StopRefusal, mirroring MotionRefusal) — so a refusal that reaches EITHER of
     // ApplyCommand's early returns above (the grant-table denial, the missing/inactive body) must leave a note
     // behind too, or the handler reads whatever an EARLIER, unrelated attempt on the SAME body left there and
@@ -162,7 +162,7 @@ public sealed partial class WorldServer {
     /// <see cref="WorldPopulation.AdvanceSeats"/>), and would actually pass <see cref="WorldEngagement.CheckEngage"/>.
     /// <para>
     /// <see cref="WorldEngagement.Compose"/>'s own remarks leave engageable/proximity/machine policy to the caller
-    /// (ordinarily the client, ahead of a manual <c>player.engage</c>'s submission) — this is that same policy,
+    /// (ordinarily the client, ahead of a manual <c>body.engage</c>'s submission) — this is that same policy,
     /// resolved here instead, from document and grant state alone. Pure sim state in, pure sim state out: a shadow
     /// replay re-derives the identical decision at the identical tick from the identical taped inputs, with nothing
     /// new to tape — the same "re-derived, not recorded" shape <see cref="WorldEngagement"/>'s own body-route

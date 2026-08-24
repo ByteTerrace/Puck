@@ -20,7 +20,7 @@ namespace Puck.World.Client;
 /// <para>
 /// Reuses <see cref="WorldPlacementStamper"/> directly — the same static-stamp compiler
 /// <c>WorldSceneEmitter</c> calls for the boot world's own decoration placements — and
-/// <see cref="WorldAvatarCatalog"/> directly for avatars, rather than a second implementation of either. No screens,
+/// <see cref="WorldRigCatalog"/> directly for avatars, rather than a second implementation of either. No screens,
 /// no editor overlay: a session mirror does not process the destination's own <c>screens</c> section at all, which is
 /// what closes recursion structurally (a destination naming its own session screen has no path this type ever walks
 /// into) — <c>WorldScreenBinder</c> still narrates the depth-1 policy by name when it detects that shape, so
@@ -63,13 +63,13 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     // Per-avatar movement-driven gait state, scratch reused across frames to keep packing allocation-free — the SAME
     // distance-driven approach Client.WorldSceneEmitter.PackDynamicTransforms uses, over this emitter's own
     // interpolated (not host-supplied) positions.
-    private readonly float[] m_avatarGaitPhases = new float[WorldAvatarCatalog.Capacity];
-    private readonly Vector3[] m_avatarPreviousPositions = new Vector3[WorldAvatarCatalog.Capacity];
-    private readonly bool[] m_avatarPoseSeeded = new bool[WorldAvatarCatalog.Capacity];
-    private readonly WorldEntityAddress[] m_avatarMotionAddresses = new WorldEntityAddress[WorldAvatarCatalog.Capacity];
-    private readonly int[] m_emittedRigs = new int[WorldAvatarCatalog.Capacity];
-    private readonly float[] m_emittedScales = new float[WorldAvatarCatalog.Capacity];
-    private readonly float[] m_emittedGaitAmplitudes = new float[WorldAvatarCatalog.Capacity];
+    private readonly float[] m_avatarGaitPhases = new float[WorldRigCatalog.Capacity];
+    private readonly Vector3[] m_avatarPreviousPositions = new Vector3[WorldRigCatalog.Capacity];
+    private readonly bool[] m_avatarPoseSeeded = new bool[WorldRigCatalog.Capacity];
+    private readonly WorldEntityAddress[] m_avatarMotionAddresses = new WorldEntityAddress[WorldRigCatalog.Capacity];
+    private readonly int[] m_emittedRigs = new int[WorldRigCatalog.Capacity];
+    private readonly float[] m_emittedScales = new float[WorldRigCatalog.Capacity];
+    private readonly float[] m_emittedGaitAmplitudes = new float[WorldRigCatalog.Capacity];
 
     /// <summary>Initializes the emitter over a resolved session mirror and a bind-time-resolved camera choice.</summary>
     /// <param name="mirror">The destination's client-side mirror this emitter reads static geometry from.</param>
@@ -87,14 +87,14 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
     // Registers the avatar palette and emits the catalog range — the probe branch (worst-case, every rig at unit
     // scale) and the live branch (only mirrored-active avatars, each sourcing its LOOK's pinned rig and uniform
-    // scale) both flow through the ONE WorldAvatarCatalog.Emit call, exactly like Client.WorldSceneEmitter.Compose's
+    // scale) both flow through the ONE WorldRigCatalog.Emit call, exactly like Client.WorldSceneEmitter.Compose's
     // own avatar block.
     private void EmitAvatars(SdfProgramBuilder builder, bool probeWorstCase, int slotBase) {
-        var bodyMaterials = new int[WorldAvatarCatalog.Capacity];
-        var accentMaterials = new int[WorldAvatarCatalog.Capacity];
+        var bodyMaterials = new int[WorldRigCatalog.Capacity];
+        var accentMaterials = new int[WorldRigCatalog.Capacity];
         var noseFactor = m_mirror.Definition.PlayerDefaults.NoseFactor;
 
-        for (var index = 0; (index < WorldAvatarCatalog.Capacity); index++) {
+        for (var index = 0; (index < WorldRigCatalog.Capacity); index++) {
             // A Creation look's body would render through the stamp pool on the boot path; this emitter has no
             // stamp-pool seam (see this type's own remarks), so a mirrored Creation-look body still renders as its
             // catalog avatar — RigFor's Creation-look fallback lands here for that reason.
@@ -114,7 +114,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             );
         }
 
-        WorldAvatarCatalog.Emit(
+        WorldRigCatalog.Emit(
             builder: builder,
             isActive: m_mirror.IsActive,
             bodyMaterials: bodyMaterials,
@@ -313,7 +313,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     }
     /// <inheritdoc/>
     /// <remarks>The placement branch is unchanged (static reservation vs. static emission). The avatar branch is
-    /// appended after it, in both the probe and the live arm: <see cref="WorldAvatarCatalog.Emit"/> already owns its
+    /// appended after it, in both the probe and the live arm: <see cref="WorldRigCatalog.Emit"/> already owns its
     /// own probe-vs-live split internally (see <see cref="EmitAvatars"/>), so this call site never branches on
     /// <see cref="SdfEmitContext.Probe"/> a second time for it.</remarks>
     public void Emit(SdfProgramBuilder builder, in SdfEmitContext context) {
@@ -360,11 +360,11 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     public void PackDynamicTransforms(Span<DynamicTransform> slots, in SdfEmitContext context) {
         var avatars = slots.Slice(
             start: context.SlotBase,
-            length: WorldAvatarCatalog.DynamicTransformCapacity
+            length: WorldRigCatalog.DynamicTransformCapacity
         );
         var alpha = m_mirror.InterpolationAlpha;
 
-        for (var index = 0; (index < WorldAvatarCatalog.Capacity); index++) {
+        for (var index = 0; (index < WorldRigCatalog.Capacity); index++) {
             if (!m_mirror.IsActive(index: index)) {
                 m_avatarPoseSeeded[index] = false;
 
@@ -393,7 +393,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
                 seeded: ref m_avatarPoseSeeded[index]
             );
 
-            WorldAvatarCatalog.PackTransforms(
+            WorldRigCatalog.PackTransforms(
                 avatar: index,
                 rootPosition: position,
                 rootOrientation: orientation,
@@ -434,10 +434,10 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
     /// <summary>The frozen transform-slot count this emitter declares: the all-128-rig avatar catalog's leaf capacity
     /// — the same frozen worst case <c>WorldSceneEmitter.DynamicSlotCount</c> reserves for its own
-    /// avatar range, sized off the destination's population capacity (<see cref="WorldAvatarCatalog.Capacity"/> and
-    /// <see cref="WorldPopulationLimits.CapacityCeiling"/> are single-sourced today), so a full destination can never
+    /// avatar range, sized off the destination's population capacity (<see cref="WorldRigCatalog.Capacity"/> and
+    /// <see cref="WorldBodiesLimits.CapacityCeiling"/> are single-sourced today), so a full destination can never
     /// outgrow this emitter's own probe.</summary>
-    public int DynamicSlotCount => WorldAvatarCatalog.DynamicTransformCapacity;
+    public int DynamicSlotCount => WorldRigCatalog.DynamicTransformCapacity;
     /// <inheritdoc/>
     public int RevisionComponentCount => 2;
 }

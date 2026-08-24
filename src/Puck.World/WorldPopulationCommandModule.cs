@@ -36,7 +36,7 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
     }
     // The world.parked readout: every entity index currently PARKED (see WorldPopulation.Entry.Parked), its
     // remaining grace and absolute deadline tick, and — when the retained body carries one — its profile name, so a
-    // script can tell WHO a parked seat is waiting for without inferring it from player.where's silence. A body
+    // script can tell WHO a parked seat is waiting for without inferring it from body.where's silence. A body
     // parked with NO deadline (a positive reconnect grace compiled at simulation rate 0 — see
     // CompiledTickDuration.IsNever) reads null from WorldPopulation.ParkedRemainingTicks and renders "never" for
     // both fields — a concrete expiry that will never arrive would be worse than saying nothing. The same null is
@@ -93,7 +93,7 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
                 ? $"producer:{producer}"
                 : "live"
         ));
-        var workload = WorldAvatarCatalog.ActiveWorkload(
+        var workload = WorldRigCatalog.ActiveWorkload(
             isActive: population.IsActive,
             capacity: population.Capacity
         );
@@ -107,7 +107,7 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
         var kitAssignment = DescribeAssignment(assignment: server.Definition.Assignment);
         var lookAssignment = DescribeAssignment(assignment: server.Definition.LookAssignment);
 
-        return $"[world.population: {simulated} network-human stand-ins active (0..{population.PeerCapacity}), behavior {behavior} | distribution {DescribeDistribution(distribution: defaults.Distribution)} | peerVariation {DescribeVariation(variation: defaults.PeerVariation)} seatVariation {DescribeVariation(variation: defaults.SeatVariation)} peerColors {DescribeSequence(sequence: defaults.PeerColors)} | assignments kit={kitAssignment} look={lookAssignment} | {local} local + {simulated} = {(local + simulated)}/{population.Capacity} inhabitants | archetypes {kits} | unique deterministic rigs {WorldAvatarCatalog.MinInstructionCount}..{WorldAvatarCatalog.MaxInstructionCount} instructions/avatar; active {workload.Leaves} leaf instances, {workload.Instructions} authored VM instructions]";
+        return $"[world.population: {simulated} network-human stand-ins active (0..{population.PeerCapacity}), behavior {behavior} | distribution {DescribeDistribution(distribution: defaults.Distribution)} | peerVariation {DescribeVariation(variation: defaults.PeerVariation)} seatVariation {DescribeVariation(variation: defaults.SeatVariation)} peerColors {DescribeSequence(sequence: defaults.PeerColors)} | assignments kit={kitAssignment} look={lookAssignment} | {local} local + {simulated} = {(local + simulated)}/{population.Capacity} inhabitants | archetypes {kits} | unique deterministic rigs {WorldRigCatalog.MinInstructionCount}..{WorldRigCatalog.MaxInstructionCount} instructions/avatar; active {workload.Leaves} leaf instances, {workload.Instructions} authored VM instructions]";
     }
     private static string DescribeSequence(WorldSequence sequence) =>
         $"{sequence.Name}(offset={sequence.Offset},step={sequence.Step:0.########})";
@@ -192,7 +192,7 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
                 // INLINE over loopback, so the echo below (built AFTER both Submit calls return) still reads the
                 // applied state — it is just assembled from the completion payloads rather than a live read taken
                 // after a discarded synchronous return. An explicit idle/producer token sets the peer-source DEFAULT and
-                // sweeps ALL peers (4..127) to it — last-writer-wins, so a per-entity player.control does not survive
+                // sweeps ALL peers (4..127) to it — last-writer-wins, so a per-entity body.control does not survive
                 // the global flip; a count alone leaves existing peers' sources be. A census beyond the live ceiling is
                 // CLAMPED, not refused — the ceiling is the tighter of the authored networkPlayers admission cap and
                 // the inhabitant floor, and shrinking to fit is the right behavior. The echo leads with

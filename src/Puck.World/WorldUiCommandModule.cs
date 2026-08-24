@@ -85,12 +85,12 @@ internal sealed class WorldUiCommandModule(IServerLink link, WorldRenderProbe? r
         }
         if (
             (player < 1) ||
-            (player > WorldPopulationLimits.LocalSeatCount)
+            (player > WorldBodiesLimits.LocalSeatCount)
         ) {
-            return CommandResult.Error(output: $"[world.binding-bar: player {player} is outside 1..{WorldPopulationLimits.LocalSeatCount}]");
+            return CommandResult.Error(output: $"[world.binding-bar: player {player} is outside 1..{WorldBodiesLimits.LocalSeatCount}]");
         }
 
-        var slot = (player - 1);
+        var slot = PlayerRoster.SlotFromDisplay(number: player);
 
         if (writesOverride) {
             // Routed, not written: the server checks Mutate over section:bindings — the section the bar's authoring

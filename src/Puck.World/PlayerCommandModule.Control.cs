@@ -28,7 +28,7 @@ internal sealed partial class PlayerCommandModule {
             valueKind: CommandValueKind.Axis1D,
             handler: context => {
                 if (context.Origin != CommandOrigin.Binding) {
-                    return CommandResult.Error(output: $"[{commandName}: an internal bound-channel destination, not a typed verb — use player.press <channel-name> [value] [holdSeconds] [player] to script it]");
+                    return CommandResult.Error(output: $"[{commandName}: an internal bound-channel destination, not a typed verb — use body.press <channel-name> [value] [holdSeconds] [player] to script it]");
                 }
 
                 var slot = context.Slot;
@@ -105,7 +105,7 @@ internal sealed partial class PlayerCommandModule {
     }
     private CommandResult ChannelsHandler(CommandContext context, WireArgs args) {
         if (args.Count > 1) {
-            return CommandResult.Error(output: "[player.channels: expected at most 1 value — an optional player index]");
+            return CommandResult.Error(output: "[body.channels: expected at most 1 value — an optional body index]");
         }
 
         if (TryRoutedSeatQuery(
@@ -119,14 +119,14 @@ internal sealed partial class PlayerCommandModule {
         var (player, index, error) = ResolveTarget(
             args: in args,
             requiredCount: 0,
-            verb: "player.channels"
+            verb: "body.channels"
         );
 
         if (player is null) {
             return CommandResult.Error(output: error!);
         }
 
-        // A query verb, exactly like player.where: the channel read-back IS the answer, so it always echoes — even
+        // A query verb, exactly like body.where: the channel read-back IS the answer, so it always echoes — even
         // under wire.ack quiet — and its verdict rides through as IsError so a miss reaches wire.errors. The
         // completion fires INLINE over loopback; the result formats from it, never a post-submit live read.
         var result = default(CommandResult);
@@ -143,9 +143,9 @@ internal sealed partial class PlayerCommandModule {
         return result;
     }
     private CommandResult ControlHandler(CommandContext context, WireArgs args) {
-        // Token 0 is the MODE only when it names one; otherwise the whole (0- or 1-token) tail is just the player index
-        // for a read-back — the same positional shape as player.motion, so a bare `player.control 7` echoes player 7's
-        // source while `player.control idle` sets player 1 with no positional guesswork.
+        // Token 0 is the MODE only when it names one; otherwise the whole (0- or 1-token) tail is just the body index
+        // for a read-back — the same positional shape as body.motion, so a bare `body.control 7` echoes body 7's
+        // source while `body.control idle` sets body 0 with no positional guesswork.
         var source = IntentSource.Live;
         var hasMode = ((args.Count >= 1) && TryParseIntentSource(
             token: args[0],
@@ -156,7 +156,7 @@ internal sealed partial class PlayerCommandModule {
             args: in args,
             choices: "live|idle|producer:<name>",
             hasMode: hasMode,
-            verb: "player.control"
+            verb: "body.control"
         );
 
         if (error is { } modeError) {
@@ -165,43 +165,43 @@ internal sealed partial class PlayerCommandModule {
 
         // A PENDING seat's source cannot be set — its inputs drive the profile picker, not gameplay, so a source set
         // now would sit dormant and take effect only on confirm. Reuse the tape verbs' pending guard (seats only;
-        // population entries 5..128 are never pending). Gates BOTH set and read — a pending seat is always Live anyway.
+        // population entries 4..127 are never pending). Gates BOTH set and read — a pending seat is always Live anyway.
         if (PendingTapeError(
             index: index,
-            verb: "player.control"
+            verb: "body.control"
         ) is { } pendingError) {
             return pendingError;
         }
 
         if (hasMode) {
             if (!m_population.SupportsSource(
-                index: (index - 1),
+                index: index,
                 refusal: out var refusal,
                 source: source
             )) {
-                return CommandResult.Error(output: $"[player.control: {refusal}]");
+                return CommandResult.Error(output: $"[body.control: {refusal}]");
             }
 
             m_link.SubmitCommand(command: new WorldCommand.SetControl(
                 Principal: context.ActingPrincipal(),
-                EntityIndex: (index - 1),
+                EntityIndex: index,
                 Source: source
             ));
 
             // The seat's client-side source copy gates the live device producers; write it in the same command so the
             // mask lands with no tick gap (dropping any held keys/lanes on the transition).
             if (IsSeat(index: index)) {
-                m_roster.Seat(slot: PlayerRoster.SlotFromDisplay(number: index))?.SetIntentSource(source: source);
+                m_roster.Seat(slot: index)?.SetIntentSource(source: source);
             }
 
             return Echoed(
                 args: in args,
-                handler: $"[player.control: p{index} {SourceWord(source: source)}]"
+                handler: $"[body.control: body:{index} {SourceWord(source: source)}]"
             );
         }
 
-        // No mode: a read-back — echo the target's current source. Always surfaced (a query answer), like player.motion.
-        return new CommandResult(Output: $"[player.control: p{index} is {SourceWord(source: player!.Source)}]");
+        // No mode: a read-back — echo the target's current source. Always surfaced (a query answer), like body.motion.
+        return new CommandResult(Output: $"[body.control: body:{index} is {SourceWord(source: player!.Source)}]");
     }
     // The other of the two quantization doors — see MoveRouter's remarks.
     // A held presentation flag on the dispatching seat: press/active edges set it, release/cancel edges clear it.
@@ -270,29 +270,29 @@ internal sealed partial class PlayerCommandModule {
     }
     private CommandResult PressHandler(CommandContext context, WireArgs args) {
         if (args.Count is (< 1 or > 4)) {
-            return CommandResult.Error(output: "[player.press: expected a channel name — plus an optional value, hold time, and player index]");
+            return CommandResult.Error(output: "[body.press: expected a channel name — plus an optional value, hold time, and body index]");
         }
 
-        // Layout: <channel> [value] [holdSeconds] [player]. Resolve the console-facing seat before the channel:
+        // Layout: <channel> [value] [holdSeconds] [body]. Resolve the console-facing seat before the channel:
         // after a transfer the destination document owns both the body's channel vocabulary and the command door.
         // Looking either up in the boot world makes an otherwise fully routed seat lose action buttons precisely at
-        // an invisible boundary (movement continued to work because player.fly already followed this route).
+        // an invisible boundary (movement continued to work because body.fly already followed this route).
         if (!WorldArgs.TryParseIndex(
             args: in args,
             at: 3,
-            min: 1,
-            max: m_population.Capacity,
-            fallback: 1,
+            min: 0,
+            max: (m_population.Capacity - 1),
+            fallback: 0,
             value: out var index
         )) {
-            return CommandResult.Error(output: $"[player.press: player index must be an integer 1..{m_population.Capacity}]");
+            return CommandResult.Error(output: $"[body.press: body index must be an integer 0..{(m_population.Capacity - 1)}]");
         }
 
         WorldAuthorityRoute? routedLocation = null;
         var targetChannels = m_channels;
 
-        if (index <= PlayerRoster.MaxSlots) {
-            var rosterSlot = PlayerRoster.SlotFromDisplay(number: index);
+        if (IsSeat(index: index)) {
+            var rosterSlot = index;
             var location = seatRouter.Route(slot: rosterSlot);
 
             if (
@@ -314,7 +314,7 @@ internal sealed partial class PlayerCommandModule {
             name: channelName,
             ordinal: out var ordinal
         )) {
-            return CommandResult.Error(output: $"[player.press: unknown channel '{channelName}' — see world.affordances]");
+            return CommandResult.Error(output: $"[body.press: unknown channel '{channelName}' — see world.affordances]");
         }
 
         if (routedLocation is null) {
@@ -322,7 +322,7 @@ internal sealed partial class PlayerCommandModule {
             var (player, _, error) = ResolveTarget(
                 args: in args,
                 requiredCount: 3,
-                verb: "player.press"
+                verb: "body.press"
             );
 
             if (player is null) {
@@ -331,7 +331,7 @@ internal sealed partial class PlayerCommandModule {
 
             if (PendingTapeError(
                 index: index,
-                verb: "player.press"
+                verb: "body.press"
             ) is { } pendingError) {
                 return pendingError;
             }
@@ -345,16 +345,16 @@ internal sealed partial class PlayerCommandModule {
                 index: 1,
                 value: out var authoredValue
             )) {
-                return CommandResult.Error(output: "[player.press: could not parse <value> as a number]");
+                return CommandResult.Error(output: "[body.press: could not parse <value> as a number]");
             }
 
             value = FixedQ4816.FromDouble(value: authoredValue);
         }
 
         var shapeError = shape switch {
-            ChannelShape.Binary when ((value != FixedQ4816.Zero) && (value != FixedQ4816.One)) => $"[player.press: channel \"{channelName}\" is binary — value must be 0 or 1]",
-            ChannelShape.Unipolar when ((value < FixedQ4816.Zero) || (value > FixedQ4816.One)) => $"[player.press: channel \"{channelName}\" is unipolar — value must be in [0, 1]]",
-            ChannelShape.Bipolar when ((value < -FixedQ4816.One) || (value > FixedQ4816.One)) => $"[player.press: channel \"{channelName}\" is bipolar — value must be in [-1, 1]]",
+            ChannelShape.Binary when ((value != FixedQ4816.Zero) && (value != FixedQ4816.One)) => $"[body.press: channel \"{channelName}\" is binary — value must be 0 or 1]",
+            ChannelShape.Unipolar when ((value < FixedQ4816.Zero) || (value > FixedQ4816.One)) => $"[body.press: channel \"{channelName}\" is unipolar — value must be in [0, 1]]",
+            ChannelShape.Bipolar when ((value < -FixedQ4816.One) || (value > FixedQ4816.One)) => $"[body.press: channel \"{channelName}\" is bipolar — value must be in [-1, 1]]",
             _ => null,
         };
 
@@ -370,7 +370,7 @@ internal sealed partial class PlayerCommandModule {
                 index: 2,
                 value: out authoredHoldSeconds
             )) {
-                return CommandResult.Error(output: "[player.press: could not parse <holdSeconds> as a number]");
+                return CommandResult.Error(output: "[body.press: could not parse <holdSeconds> as a number]");
             }
 
             // Sent raw, unclamped — the server is the sole authority over both caps (the deciding grant's ceiling
@@ -398,13 +398,13 @@ internal sealed partial class PlayerCommandModule {
 
             return Echoed(
                 args: in args,
-                handler: $"[player.press: {channelName}={((double)value):0.###} p{index} via '{route.Endpoint.Identity}' body={route.EntityIndex}{routedDuration}]"
+                handler: $"[body.press: {channelName}={((double)value):0.###} body:{index} via '{route.Endpoint.Identity}' body={route.EntityIndex}{routedDuration}]"
             );
         }
 
         m_link.SubmitCommand(command: new WorldCommand.PressChannel(
             Principal: context.ActingPrincipal(),
-            EntityIndex: (index - 1),
+            EntityIndex: index,
             ChannelOrdinal: ordinal,
             Value: value,
             HoldSeconds: holdSeconds
@@ -415,10 +415,10 @@ internal sealed partial class PlayerCommandModule {
         // untimed paths (they share one refusal slot): WorldServer writes it from EVERY early return a
         // PressChannel command can take, so a non-empty refusal means nothing below was ever applied and must not
         // be echoed as an affirmative quoting some earlier, unrelated attempt's numbers.
-        var refusal = m_population.PressRefusal(bodyIndex: (index - 1));
+        var refusal = m_population.PressRefusal(bodyIndex: index);
 
         if (refusal is { Length: > 0 }) {
-            return new CommandResult(Output: $"[player.press: {channelName}={((double)value):0.###} p{index} refused → {refusal}]");
+            return new CommandResult(Output: $"[body.press: {channelName}={((double)value):0.###} body:{index} refused → {refusal}]");
         }
 
         if (holdSeconds is { } seconds) {
@@ -427,35 +427,35 @@ internal sealed partial class PlayerCommandModule {
             // binder from the effective value's magnitude — CapKind is computed server-side against the actual
             // clamp inputs, so it names the binder that structurally applied, not whichever one a coincidence of
             // numbers would suggest.
-            var outcome = m_population.LastPressOutcome(bodyIndex: (index - 1));
+            var outcome = m_population.LastPressOutcome(bodyIndex: index);
 
             switch (outcome.CapKind) {
                 case PressHoldCapKind.Ignored:
                     return Echoed(
                         args: in args,
-                        handler: $"[player.press: {channelName}={((double)value):0.###} p{index} — non-positive hold ignored, in-flight hold (if any) left untouched]"
+                        handler: $"[body.press: {channelName}={((double)value):0.###} body:{index} — non-positive hold ignored, in-flight hold (if any) left untouched]"
                     );
                 case PressHoldCapKind.GrantBudget:
                     return Echoed(
                         args: in args,
-                        handler: $"[player.press: {channelName}={((double)value):0.###} p{index} holding {((double)outcome.EffectiveHoldSeconds):0.###}s — requested {authoredHoldSeconds:0.###}, capped by the grant's hold budget]"
+                        handler: $"[body.press: {channelName}={((double)value):0.###} body:{index} holding {((double)outcome.EffectiveHoldSeconds):0.###}s — requested {authoredHoldSeconds:0.###}, capped by the grant's hold budget]"
                     );
                 case PressHoldCapKind.EngineCeiling:
                     return Echoed(
                         args: in args,
-                        handler: $"[player.press: {channelName}={((double)value):0.###} p{index} holding {((double)outcome.EffectiveHoldSeconds):0.###}s — requested {authoredHoldSeconds:0.###}, capped by the engine's {WorldBody.MaxActionHoldSeconds:0.###}s hold ceiling]"
+                        handler: $"[body.press: {channelName}={((double)value):0.###} body:{index} holding {((double)outcome.EffectiveHoldSeconds):0.###}s — requested {authoredHoldSeconds:0.###}, capped by the engine's {WorldBody.MaxActionHoldSeconds:0.###}s hold ceiling]"
                     );
                 default:
                     return Echoed(
                         args: in args,
-                        handler: $"[player.press: {channelName}={((double)value):0.###} p{index} for {seconds:0.###}s]"
+                        handler: $"[body.press: {channelName}={((double)value):0.###} body:{index} for {seconds:0.###}s]"
                     );
             }
         }
 
         return Echoed(
             args: in args,
-            handler: $"[player.press: {channelName}={((double)value):0.###} p{index} for one host step]"
+            handler: $"[body.press: {channelName}={((double)value):0.###} body:{index} for one host step]"
         );
     }
     private static string SourceWord(IntentSource source) => (source.IsIdle

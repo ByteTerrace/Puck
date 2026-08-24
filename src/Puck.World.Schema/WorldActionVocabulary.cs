@@ -254,12 +254,12 @@ public abstract record ActionEffect {
     /// </para>
     /// </remarks>
     public sealed record Save : ActionEffect;
-    /// <summary>Teleports one body to a pose — the rule-side spelling of the <c>player.pose</c> verb, world scope
+    /// <summary>Teleports one body to a pose — the rule-side spelling of the <c>body.pose</c> verb, world scope
     /// only (refused at body scope). Like <see cref="Save"/> it submits no <c>WorldMutation</c>: a pose is body state,
     /// not document state, so nothing composes, validates, or journals, and a replay reproduces it by re-firing the
     /// same rule. Applied as the world's own act through <c>WorldBody.Pose</c>, deliberately outside the
     /// drive-admission gate: a body whose <c>gatesDrive</c> row reads nonzero is a body a rule still needs to move
-    /// (a dead body back to its spawn). The client sees the same teleport continuity a <c>player.pose</c> produces.
+    /// (a dead body back to its spawn). The client sees the same teleport continuity a <c>body.pose</c> produces.
     /// </summary>
     /// <param name="Key">The target body's 0-based entity index, spelled as a plain integer — the same literal
     /// addressing every other world-scope effect uses for a per-body cell.</param>

@@ -3310,7 +3310,7 @@
           ]
         },
         "look": {
-          "description": "The Name the bodies wear, or null to wear an implicit creation look on this placement\u0027s own CreationId.",
+          "description": "The Name the bodies wear, or null to wear an implicit creation look on this placement\u0027s own PrototypeId.",
           "type": [
             "string",
             "null"
@@ -3641,7 +3641,7 @@
       "additionalProperties": false
     },
     "ActionEffectPose": {
-      "description": "Teleports one body to a pose \u2014 the rule-side spelling of the player.pose verb, world scope only (refused at body scope). Like Save it submits no WorldMutation: a pose is body state, not document state, so nothing composes, validates, or journals, and a replay reproduces it by re-firing the same rule. Applied as the world\u0027s own act through WorldBody.Pose, deliberately outside the drive-admission gate: a body whose gatesDrive row reads nonzero is a body a rule still needs to move (a dead body back to its spawn). The client sees the same teleport continuity a player.pose produces.",
+      "description": "Teleports one body to a pose \u2014 the rule-side spelling of the body.pose verb, world scope only (refused at body scope). Like Save it submits no WorldMutation: a pose is body state, not document state, so nothing composes, validates, or journals, and a replay reproduces it by re-firing the same rule. Applied as the world\u0027s own act through WorldBody.Pose, deliberately outside the drive-admission gate: a body whose gatesDrive row reads nonzero is a body a rule still needs to move (a dead body back to its spawn). The client sees the same teleport continuity a body.pose produces.",
       "properties": {
         "$type": {
           "const": "pose"

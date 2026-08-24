@@ -75,7 +75,7 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     private int m_selectionRevision;
 
     // WriteRevision's own scratch: the rebuild watch must not disturb the emitted latch it is comparing against.
-    private readonly bool[] m_polledEntities = new bool[WorldAvatarCatalog.Capacity];
+    private readonly bool[] m_polledEntities = new bool[WorldRigCatalog.Capacity];
 
     // The last-polled reachability/revision per band, keyed by (placementId, faceName) — WriteRevision's own poll
     // compares against this to decide whether a rebuild is owed, without ever emitting from inside WriteRevision
@@ -107,7 +107,7 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
         m_source = source;
         m_suppressEntity = suppressEntity;
         m_bandCount = WorldAdjacencyBands.ProjectionCapacity(definition: client.Definition);
-        m_gaitPhases = new float[(m_bandCount * WorldAvatarCatalog.Capacity)];
+        m_gaitPhases = new float[(m_bandCount * WorldRigCatalog.Capacity)];
         m_previousRenderPositions = new Vector3[m_gaitPhases.Length];
         m_motionAddresses = new WorldEntityAddress[m_gaitPhases.Length];
         m_motionSeeded = new bool[m_gaitPhases.Length];
@@ -118,7 +118,7 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     }
 
     /// <inheritdoc/>
-    public int DynamicSlotCount => (m_bandCount * WorldAvatarCatalog.DynamicTransformCapacity);
+    public int DynamicSlotCount => (m_bandCount * WorldRigCatalog.DynamicTransformCapacity);
     /// <inheritdoc/>
     public bool OwnsMaterialScope => false;
     /// <inheritdoc/>
@@ -145,8 +145,8 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
         );
 
         for (var band = 0; (band < bandCount); band++) {
-            var bodyMaterials = new int[WorldAvatarCatalog.Capacity];
-            var accentMaterials = new int[WorldAvatarCatalog.Capacity];
+            var bodyMaterials = new int[WorldRigCatalog.Capacity];
+            var accentMaterials = new int[WorldRigCatalog.Capacity];
 
             // The palette a live band adds — one body plus one accent per rendered body. Reserved because AddMaterial
             // never dedupes, so an unreserved live palette would spend program words nothing measured.
@@ -155,14 +155,14 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
                 accentMaterials[entity] = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
             }
 
-            WorldAvatarCatalog.Emit(
+            WorldRigCatalog.Emit(
                 builder: builder,
                 isActive: static _ => true,
                 bodyMaterials: bodyMaterials,
                 accentMaterials: accentMaterials,
                 probeAvatarLimit: MaxEntitiesPerBand,
                 probeWorstCase: true,
-                slotBase: (slotBase + (band * WorldAvatarCatalog.DynamicTransformCapacity))
+                slotBase: (slotBase + (band * WorldRigCatalog.DynamicTransformCapacity))
             );
         }
     }
@@ -224,7 +224,7 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
                     builder: builder,
                     projection: projection,
                     bandIndex: bandIndex,
-                    slotBase: (slotBase + (bandIndex * WorldAvatarCatalog.DynamicTransformCapacity))
+                    slotBase: (slotBase + (bandIndex * WorldRigCatalog.DynamicTransformCapacity))
                 );
             }
             bandIndex++;
@@ -255,13 +255,13 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     //     at two places at once.
     private void EmitEntities(SdfProgramBuilder builder, WorldAdjacencyProjection projection, int bandIndex, int slotBase) {
         var neighbour = projection.Neighbour;
-        var bodyMaterials = new int[WorldAvatarCatalog.Capacity];
-        var accentMaterials = new int[WorldAvatarCatalog.Capacity];
+        var bodyMaterials = new int[WorldRigCatalog.Capacity];
+        var accentMaterials = new int[WorldRigCatalog.Capacity];
         var noseFactor = neighbour.Definition.PlayerDefaults.NoseFactor;
-        var appearanceBase = (bandIndex * WorldAvatarCatalog.Capacity);
+        var appearanceBase = (bandIndex * WorldRigCatalog.Capacity);
         var truncated = SelectBand(
             destination: m_emittedEntities.AsSpan(
-                length: WorldAvatarCatalog.Capacity,
+                length: WorldRigCatalog.Capacity,
                 start: appearanceBase
             ),
             projection: projection
@@ -274,7 +274,7 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
             Console.Error.WriteLine(value: $"[world.adjacency: '{projection.Name}' neighbour bodies truncated for rendering at {MaxEntitiesPerBand} bodies]");
         }
 
-        for (var index = 0; (index < WorldAvatarCatalog.Capacity); index++) {
+        for (var index = 0; (index < WorldRigCatalog.Capacity); index++) {
             var appearanceIndex = (appearanceBase + index);
 
             if (!m_emittedEntities[appearanceIndex]) {
@@ -297,7 +297,7 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
             );
         }
 
-        WorldAvatarCatalog.Emit(
+        WorldRigCatalog.Emit(
             builder: builder,
             isActive: index => m_emittedEntities[(appearanceBase + index)],
             bodyMaterials: bodyMaterials,
@@ -336,7 +336,7 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
                 frame: frame,
                 overlapDepth: overlapDepth,
                 position: neighbour.CurrentPosition(index: index),
-                reach: (WorldAvatarCatalog.Reach * MathF.Max(
+                reach: (WorldRigCatalog.Reach * MathF.Max(
                     x: neighbour.Look(index: index).Scale,
                     y: 1f
                 ))
@@ -441,18 +441,18 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
         foreach (var projection in m_emittedProjections) {
             var neighbour = projection.Neighbour;
             var avatarSlots = slots.Slice(
-                start: (context.SlotBase + (bandIndex * WorldAvatarCatalog.DynamicTransformCapacity)),
-                length: WorldAvatarCatalog.DynamicTransformCapacity
+                start: (context.SlotBase + (bandIndex * WorldRigCatalog.DynamicTransformCapacity)),
+                length: WorldRigCatalog.DynamicTransformCapacity
             );
             var alpha = neighbour.InterpolationAlpha;
 
             var bound = Math.Min(
                 val1: neighbour.EntityCapacity,
-                val2: WorldAvatarCatalog.Capacity
+                val2: WorldRigCatalog.Capacity
             );
 
             for (var entity = 0; (entity < bound); entity++) {
-                var motionIndex = ((bandIndex * WorldAvatarCatalog.Capacity) + entity);
+                var motionIndex = ((bandIndex * WorldRigCatalog.Capacity) + entity);
 
                 // The emitted latch, not a fresh liveness read: the program's geometry was compiled for exactly this
                 // set, and re-deriving the set here would pack a body whose leaves this program never emitted.
@@ -486,7 +486,7 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
                     path: projection.Path
                 );
 
-                WorldAvatarCatalog.PackTransforms(
+                WorldRigCatalog.PackTransforms(
                     avatar: entity,
                     rootPosition: mapped.Position,
                     rootOrientation: mapped.Orientation,
@@ -539,7 +539,7 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
                 break;
             }
 
-            var appearanceBase = (bandIndex * WorldAvatarCatalog.Capacity);
+            var appearanceBase = (bandIndex * WorldRigCatalog.Capacity);
             var polled = m_polledEntities.AsSpan();
 
             _ = SelectBand(
@@ -548,7 +548,7 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
             );
 
             if (!polled.SequenceEqual(other: m_emittedEntities.AsSpan(
-                length: WorldAvatarCatalog.Capacity,
+                length: WorldRigCatalog.Capacity,
                 start: appearanceBase
             ))) {
                 m_selectionRevision++;

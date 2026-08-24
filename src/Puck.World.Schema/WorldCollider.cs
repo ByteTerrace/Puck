@@ -40,8 +40,8 @@ public abstract record WorldCollider {
     /// <param name="Rotation">The body-local orientation.</param>
     public sealed record Box(DocumentVector3 HalfExtents, DocumentQuaternion Rotation) : WorldCollider;
     /// <summary>The finite primitive bounds emitted by a creation, composed into one compound body collider.</summary>
-    /// <param name="CreationId">The referenced <see cref="WorldCreation.Id"/>.</param>
-    public sealed record FromCreation(string CreationId) : WorldCollider;
+    /// <param name="PrototypeId">The referenced <see cref="WorldPrototype.Id"/>.</param>
+    public sealed record FromCreation(string PrototypeId) : WorldCollider;
 }
 /// <summary>The contact solver's world-scale tuning.</summary>
 /// <param name="Requirements">The contact qualities the world requires. An empty list permits analytic primitive
@@ -120,7 +120,7 @@ public readonly record struct FixedWorldCollider(FixedBodyColliderVolume[] Volum
     ).Normalize();
 
     /// <summary>Compiles authored collider floats and creation primitive copies to fixed point.</summary>
-    public static FixedWorldCollider? Compile(WorldCollider? collider, IReadOnlyList<WorldCreation> creations) {
+    public static FixedWorldCollider? Compile(WorldCollider? collider, IReadOnlyList<WorldPrototype> creations) {
         if (collider is null) {
             return null;
         }
@@ -173,9 +173,9 @@ public readonly record struct FixedWorldCollider(FixedBodyColliderVolume[] Volum
             case WorldCollider.FromCreation fromCreation: {
                     var creation = (WorldDefinitionRows.FindCreation(
                         creations: creations,
-                        id: fromCreation.CreationId
+                        id: fromCreation.PrototypeId
                     )
-                        ?? throw new InvalidOperationException(message: $"Body collider creation '{fromCreation.CreationId}' is not defined."));
+                        ?? throw new InvalidOperationException(message: $"Body collider creation '{fromCreation.PrototypeId}' is not defined."));
 
                     // The fixed-point enumeration, not a single-precision one: every value below lands in a collider
                     // volume, and a body collider decides where a body stops.
@@ -189,7 +189,7 @@ public readonly record struct FixedWorldCollider(FixedBodyColliderVolume[] Volum
                         ),
                         visitor: copy => {
                             if (copy.Shape.Type == SdfSolidPrimitive.Plane) {
-                                throw new InvalidOperationException(message: $"Body collider creation '{fromCreation.CreationId}' contains an unbounded plane.");
+                                throw new InvalidOperationException(message: $"Body collider creation '{fromCreation.PrototypeId}' contains an unbounded plane.");
                             }
 
                             if (

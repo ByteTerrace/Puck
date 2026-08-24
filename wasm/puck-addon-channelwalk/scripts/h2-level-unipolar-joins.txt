@@ -3,7 +3,7 @@
 # README's "unipolar validator path" finding). No shipped world declares a Unipolar channel at all, so every
 # stage below is a first exercise of that validator/fold/read-back path, not just the threshold corner:
 #   (a) device/press ingress: a negative unipolar value must be REFUSED; a legal in-range value accepted.
-#   (b) the submitted value visible in player.channels' base fields.
+#   (b) the submitted value visible in body.channels' base fields.
 #   (c) fold with a contribution -- NOT independently exercised: channelwalk does not declare/act on 'level' (it
 #       was not part of the task's declared channel set and adding a fourth act was out of scope for this pass)
 #       -- this stage is reported as UNVERIFIED, not silently claimed, per the addendum's own "report, do not
@@ -14,22 +14,22 @@
 #       threshold is hardcoded to FixedQ4816.Zero regardless of any declared value
 #       (WorldChannelTable.Compile), so there is no edge/quantize behavior to observe here at all. This is a
 #       design fact, not a bug this run found.
-#   (e) read-back consistency: player.channels' raw bits against the pressed value's expected quantization.
+#   (e) read-back consistency: body.channels' raw bits against the pressed value's expected quantization.
 #
 # --world must be an absolute path to worlds/channel-walk-world.json. Substitute <ABS_WORLD_PATH> before running.
 replay.status
 world.wait 5
 # (a) RED: a negative unipolar value. Expect refusal citing 'level' is unipolar -- value must be in [0, 1].
-player.press level -0.1 1 1
+body.press level -0.1 1 1
 # (a) GREEN: a legal in-range value.
-player.press level 0.4 2 1
+body.press level 0.4 2 1
 world.wait 5
 # (b)/(e): the pressed value's base/read-back. 0.4 * 65536 = 26214.4 -- watch the printed raw bits to see which
 # way this quantizes (FixedQ4816's own rounding rule), and compare against 'folded'/'held'/'composed'.
-player.channels 1
+body.channels 1
 world.wait 60
 # still within the 2s hold: same reading expected, steady.
-player.channels 1
+body.channels 1
 world.wait 180
 # past the 2s hold: the held press should have released -- expect level back to its rest value.
-player.channels 1
+body.channels 1

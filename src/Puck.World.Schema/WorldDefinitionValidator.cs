@@ -361,8 +361,8 @@ public static partial class WorldDefinitionValidator {
 
                 return;
             case OverlaySubject.Seat seat:
-                if ((seat.Number is { } number) && ((number < 1) || (number > WorldPopulationLimits.LocalSeatCount))) {
-                    errors.Add(item: $"{path}.number {number} is outside 1..{WorldPopulationLimits.LocalSeatCount}.");
+                if ((seat.Number is { } number) && ((number < 1) || (number > WorldBodiesLimits.LocalSeatCount))) {
+                    errors.Add(item: $"{path}.number {number} is outside 1..{WorldBodiesLimits.LocalSeatCount}.");
                 }
 
                 return;
@@ -746,7 +746,7 @@ public static partial class WorldDefinitionValidator {
     // un-scoped locals already followed.
     private sealed class ValidationScope {
         public HashSet<string> Cameras { get; set; } = [];
-        public HashSet<string> CreationIds { get; set; } = [];
+        public HashSet<string> PrototypeIds { get; set; } = [];
         public HashSet<string> DestinationNames { get; set; } = [];
         public HashSet<string> FontNames { get; set; } = [];
         public bool HasTextCatalog { get; set; }
@@ -847,9 +847,9 @@ public static partial class WorldDefinitionValidator {
 
         if (
             (localSeats < 0) ||
-            (localSeats > WorldPopulationLimits.LocalSeatCount)
+            (localSeats > WorldBodiesLimits.LocalSeatCount)
         ) {
-            errors.Add(item: $"bodies.localSeats {localSeats} is outside 0..{WorldPopulationLimits.LocalSeatCount} (the host's seat ceiling).");
+            errors.Add(item: $"bodies.localSeats {localSeats} is outside 0..{WorldBodiesLimits.LocalSeatCount} (the host's seat ceiling).");
         }
 
         ValidateSeatActivation(
@@ -860,9 +860,9 @@ public static partial class WorldDefinitionValidator {
 
         if (
             (definition.Population.Capacity < localSeats) ||
-            (definition.Population.Capacity > WorldPopulationLimits.CapacityCeiling)
+            (definition.Population.Capacity > WorldBodiesLimits.CapacityCeiling)
         ) {
-            errors.Add(item: $"bodies.capacity {definition.Population.Capacity} is outside {localSeats}..{WorldPopulationLimits.CapacityCeiling}.");
+            errors.Add(item: $"bodies.capacity {definition.Population.Capacity} is outside {localSeats}..{WorldBodiesLimits.CapacityCeiling}.");
         }
 
         if (definition.Population.CapacityRow is { } capacityRow) {
@@ -997,7 +997,7 @@ public static partial class WorldDefinitionValidator {
         ValidateSequence(
             sequence: definition.Population.PeerColors,
             path: "bodies.peerColors",
-            minIndex: WorldPopulationLimits.LocalSeatCount,
+            minIndex: WorldBodiesLimits.LocalSeatCount,
             errors: errors,
             WorldSequence.Additive,
             WorldSequence.R1
@@ -1180,7 +1180,7 @@ public static partial class WorldDefinitionValidator {
         );
 
         // A destination row's own `reference` resolves against this set — captured here rather than re-walked, the
-        // same forward-threading creationIds/lookNames already ride.
+        // same forward-threading prototypeIds/lookNames already ride.
         var referenceNames = ValidateReferences(
             references: definition.References,
             errors: errors
@@ -1217,7 +1217,7 @@ public static partial class WorldDefinitionValidator {
 
         var authoring = definition.Authoring;
 
-        // Only an AUTHORED section validates — absence reads the inert WorldAuthoringDefaults.Absent (zero headroom,
+        // Only an AUTHORED section validates — absence reads the inert WorldPlacementPolicyDefaults.Absent (zero headroom,
         // zero-width scale envelope), whose zeros are "no authoring capacity", not authored values to range-check.
         if (definition.PlacementsRaw?.Policy is { } authoredAuthoring) {
             ValidateAuthoring(
@@ -1253,7 +1253,7 @@ public static partial class WorldDefinitionValidator {
         scope.FontNames = fontNames;
         scope.HasTextCatalog = (definition.Text is not null);
 
-        var creationIds = ValidateCreations(
+        var prototypeIds = ValidateCreations(
             definition: definition,
             creations: definition.Creations,
             fontNames: fontNames,
@@ -1261,15 +1261,15 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
 
-        scope.CreationIds = creationIds;
+        scope.PrototypeIds = prototypeIds;
 
-        // The LOOK rows go AFTER ValidateCreations (a creation look resolves its CreationId against the id-set that
+        // The LOOK rows go AFTER ValidateCreations (a creation look resolves its PrototypeId against the id-set that
         // returns) and BEFORE ValidatePlacements (a future Inhabit facet will resolve its Look against the look-name set
-        // this returns) — the same forward-threading creationIds already rides.
+        // this returns) — the same forward-threading prototypeIds already rides.
         var lookNames = ValidateLooks(
             creations: definition.Creations,
                 looks: definition.Looks,
-            creationIds: creationIds,
+            prototypeIds: prototypeIds,
             dynamicsNames: dynamicsNames,
             errors: errors
         );
@@ -1486,7 +1486,7 @@ public static partial class WorldDefinitionValidator {
         // The derived-face slots the binder reserves up front (Program.cs concatenates them after the document screens):
         // a document screen at one of these indices would silently collide with the reserved placeholder in the binder's
         // dict-fill, so the range is carved out of the authored screen-index space here. The membership test itself is
-        // WorldCreationFacets.IsReservedFaceIndex — shared with the authoring-headroom scan, which excludes the same
+        // WorldPrototypeFacets.IsReservedFaceIndex — shared with the authoring-headroom scan, which excludes the same
         // band; these two are the only rules that hand out a screen index, and they must exclude ONE set.
         var reservedFaceStart = WorldPlacementPolicy.DerivedFaceBase;
         var reservedFaceEnd = (reservedFaceStart + authoring.DerivedFaceScreens);

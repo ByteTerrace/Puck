@@ -16,14 +16,14 @@ world.grant addon:channelwalk drive body:0 budget:60 channels:trigger
 world.grant seat1 drive body:0 channels:trigger ceiling:0.7499847412109375
 # ticks_since_drive ~60: forward/trigger both still below their windows (trigger presses at [360, 600)).
 world.wait 60
-player.channels 1
+body.channels 1
 # ticks_since_drive ~510: solidly inside trigger's press window. Expect: trigger held=1(65536, the addon's
 # own raw act), composed=1(65536), clamped=no — the ceiling does NOT bite. Identical to h-at-threshold's
 # reading despite the ceiling sitting on the other side of the threshold; that identity is the observation,
 # not a failure. See README "Finding 2".
 world.wait 450
-player.channels 1
+body.channels 1
 # ticks_since_drive ~810: past the press window close. Expect: trigger held=0, composed=0, folded=0 (released).
 world.wait 300
-player.channels 1
+body.channels 1
 world.grants seat1

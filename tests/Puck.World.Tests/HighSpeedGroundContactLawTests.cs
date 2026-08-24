@@ -190,7 +190,7 @@ public sealed class HighSpeedGroundContactLawTests {
             Shapes: [shape],
             Frames: null);
         var canonical = CreationCanonicalizer.Canonicalize(document: document, source: "thin-floor");
-        var creation = new WorldCreation(Id: "floor", Document: canonical.Document, HashRaw: canonical.Hash);
+        var creation = new WorldPrototype(Id: "floor", Document: canonical.Document, HashRaw: canonical.Hash);
 
         return source with {
             CollisionRaw = source.Collision with {
@@ -200,7 +200,7 @@ public sealed class HighSpeedGroundContactLawTests {
                 Motion = ((WorldMotionModel.Grounded)kit.Motion) with { MaxFallSpeed = 40f },
             }).ToArray(),
             CreationsRaw = [creation],
-            PlacementRowsRaw = [new WorldPlacement(Id: "floor", CreationId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f))],
+            PlacementRowsRaw = [new WorldPlacement(Id: "floor", PrototypeId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f))],
         };
     }
 }

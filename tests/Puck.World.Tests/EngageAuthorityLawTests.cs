@@ -9,7 +9,7 @@ namespace Puck.World.Tests;
 /// in-process substrate law directly against the control-application door:
 /// <see cref="Puck.World.Server.WorldEngagement.CheckEngage"/>, which is nothing more than a
 /// <see cref="WorldCapability.Control"/> read over the ONE grant table (<c>m_grants.Allows</c>) — the SAME table
-/// <c>player.engage</c> consults server-side before it ever calls
+/// <c>body.engage</c> consults server-side before it ever calls
 /// <see cref="Puck.World.Server.WorldEngagement.Compose"/>. THE LAW: a principal that LACKS Control over a target
 /// screen is REFUSED the composition; the identical attempt by the SAME principal, once it HOLDS Control over that
 /// exact target, SUCCEEDS.

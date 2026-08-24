@@ -29,7 +29,7 @@ public sealed class WorldFaceCatalogLawTests {
     // A rotation about the face's own RIGHT axis — pitch, the axis a world-up-pinned frame cannot represent.
     private static Quaternion Pitched { get; } = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitX, angle: (MathF.PI / 6f));
 
-    private static WorldCreation BuildDoorCreation(SdfSolidPrimitive faceShape = SdfSolidPrimitive.Box, bool faceNamesShape = true, bool animated = false, bool pitched = false) {
+    private static WorldPrototype BuildDoorCreation(SdfSolidPrimitive faceShape = SdfSolidPrimitive.Box, bool faceNamesShape = true, bool animated = false, bool pitched = false) {
         var shape = new ShapeDocument(
             Id: 0,
             Name: null,
@@ -54,7 +54,7 @@ public sealed class WorldFaceCatalogLawTests {
         // frame here (the inverse CreationFrame applies at the engine door) keeps every assertion below unchanged.
         var canonical = CreationCanonicalizer.Canonicalize(document: CreationFrame.ToAuthor(document: document), source: "door");
 
-        return new WorldCreation(Id: "door", Document: canonical.Document, HashRaw: canonical.Hash);
+        return new WorldPrototype(Id: "door", Document: canonical.Document, HashRaw: canonical.Hash);
     }
     private static WorldDefinition BuildDoorDocument(
         float yawDegrees = 0f,
@@ -71,7 +71,7 @@ public sealed class WorldFaceCatalogLawTests {
         var portal = new WorldPlacementPortal(Destination: DestinationName, Travel: null, Arrival: WorldPortalArrival.Spawn, Counterpart: null);
         var placement = new WorldPlacement(
             Id: DoorPlacementId,
-            CreationId: creation.Id,
+            PrototypeId: creation.Id,
             Position: new Vector3(x: 4f, y: 1.5f, z: -7f),
             YawDegrees: yawDegrees,
             Scale: scale,
@@ -308,7 +308,7 @@ public sealed class WorldFaceCatalogLawTests {
         for (var index = 0; (index < liveFaces); index++) {
             placements[index] = new WorldPlacement(
                 Id: $"{DoorPlacementId}-{index}",
-                CreationId: creation.Id,
+                PrototypeId: creation.Id,
                 Position: new Vector3(x: (index * 8f), y: 1.5f, z: -7f),
                 YawDegrees: 0f,
                 Scale: 1f,

@@ -38,7 +38,7 @@ public sealed class ContributionAuthoringValidationLawTests {
             expectedSubstring: needle
         );
     }
-    private static WorldCreation Creation(string id) {
+    private static WorldPrototype Creation(string id) {
         var document = new CreationDocument(
             Schema: CreationDocument.CurrentSchema,
             Name: id,
@@ -64,7 +64,7 @@ public sealed class ContributionAuthoringValidationLawTests {
             source: id
         );
 
-        return new WorldCreation(
+        return new WorldPrototype(
             Id: id,
             Document: canonical.Document,
             HashRaw: canonical.Hash
@@ -78,7 +78,7 @@ public sealed class ContributionAuthoringValidationLawTests {
             PlacementRowsRaw = [
                 new WorldPlacement(
                     Id: SlotId,
-                    CreationId: SlotCreation,
+                    PrototypeId: SlotCreation,
                     Position: new DocumentVector3(value: Vector3.Zero),
                     YawDegrees: 0f,
                     Scale: 1f,
@@ -197,7 +197,7 @@ public sealed class ContributionAuthoringValidationLawTests {
         );
         AssertRefusedNaming(
             definition: With(contribution: (WellFormed() with { Contributor = Puck.World.Protocol.WorldPrincipal.Seat(slot: 1) })),
-            needle: "its creationId still reads slotCreationId"
+            needle: "its prototypeId still reads slotCreationId"
         );
         AssertValidates(definition: With(contribution: WellFormed()));
     }

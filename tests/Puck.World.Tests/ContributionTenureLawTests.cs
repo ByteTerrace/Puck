@@ -29,7 +29,7 @@ public sealed class ContributionTenureLawTests {
         seconds: LivenessGraceSeconds
     );
 
-    private static WorldCreation Creation(string id) {
+    private static WorldPrototype Creation(string id) {
         var document = new CreationDocument(
             Schema: CreationDocument.CurrentSchema,
             Name: id,
@@ -55,7 +55,7 @@ public sealed class ContributionTenureLawTests {
             source: id
         );
 
-        return new WorldCreation(
+        return new WorldPrototype(
             Id: id,
             Document: canonical.Document,
             HashRaw: canonical.Hash
@@ -74,7 +74,7 @@ public sealed class ContributionTenureLawTests {
             PlacementRowsRaw = [
                 new WorldPlacement(
                     Id: SlotId,
-                    CreationId: SlotCreation,
+                    PrototypeId: SlotCreation,
                     Position: new DocumentVector3(value: new Vector3(x: 3f, y: 0f, z: 4f)),
                     YawDegrees: 45f,
                     Scale: 2f,
@@ -87,7 +87,7 @@ public sealed class ContributionTenureLawTests {
                     )
                 ),
             ],
-            PopulationRaw = (document.Population with { CapacityRaw = (WorldPopulationLimits.LocalSeatCount + 1) }),
+            PopulationRaw = (document.Population with { CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 1) }),
             References = [
                 new WorldReference(
                     Name: WorldSafeName.Parse(candidate: "peer"),
@@ -129,13 +129,13 @@ public sealed class ContributionTenureLawTests {
             fixture.Step();
         }
     }
-    // Fills the slot the way a partner does — an ordinary whole-row UpsertPlacement re-pointing creationId, carrying
+    // Fills the slot the way a partner does — an ordinary whole-row UpsertPlacement re-pointing prototypeId, carrying
     // NO stamped half. `actor` is the identity the ingress would have stamped on the envelope.
     private static void Fill(WorldFixture fixture, WorldPrincipal actor) {
         var slot = Slot(fixture: fixture);
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertPlacement(
-            Placement: (slot with { CreationId = ContributedCreation }),
+            Placement: (slot with { PrototypeId = ContributedCreation }),
             Principal: actor
         ));
         fixture.Step();
@@ -214,7 +214,7 @@ public sealed class ContributionTenureLawTests {
         Assert.NotNull(@object: deferred.RetractDeadlineTick);
         Assert.True(condition: (deferred.RetractDeadlineTick!.Value < unchecked((long)(fixture.Server.NextInputTick - 1UL))));
         Assert.Equal(
-            actual: Slot(fixture: fixture).CreationId,
+            actual: Slot(fixture: fixture).PrototypeId,
             expected: ContributedCreation
         );
         Assert.NotNull(@object: deferred.Contributor);
@@ -229,7 +229,7 @@ public sealed class ContributionTenureLawTests {
         fixture.Step();
 
         Assert.Equal(
-            actual: Slot(fixture: fixture).CreationId,
+            actual: Slot(fixture: fixture).PrototypeId,
             expected: SlotCreation
         );
         Assert.Null(@object: Facet(fixture: fixture).Contributor);
@@ -271,13 +271,13 @@ public sealed class ContributionTenureLawTests {
         );
         Assert.Null(@object: Facet(fixture: fixture).RetractDeadlineTick);
         Assert.Equal(
-            actual: Slot(fixture: fixture).CreationId,
+            actual: Slot(fixture: fixture).PrototypeId,
             expected: ContributedCreation
         );
         Assert.NotNull(@object: Facet(fixture: fixture).Contributor);
     }
     /// <summary>The expiry contract: the host's frame stands and only the piece goes — id, pose, scale and the whole
-    /// authored half survive, creationId returns to the authored slotCreationId, the stamped half clears, and the
+    /// authored half survive, prototypeId returns to the authored slotCreationId, the stamped half clears, and the
     /// contributed creation row is released. CONTROL: an <c>endowed</c> slot under the identical dropped link is
     /// untouched.</summary>
     [Fact]
@@ -301,7 +301,7 @@ public sealed class ContributionTenureLawTests {
         var facet = retracted.Contribution!;
 
         Assert.Equal(
-            actual: retracted.CreationId,
+            actual: retracted.PrototypeId,
             expected: SlotCreation
         );
         Assert.Null(@object: facet.Contributor);
@@ -347,7 +347,7 @@ public sealed class ContributionTenureLawTests {
         using var endowed = Fixtures.FreshServer(definition: EndowedDocument());
 
         endowed.Server.EnqueueMutation(mutation: new WorldMutation.UpsertPlacement(
-            Placement: (Slot(fixture: endowed) with { CreationId = ContributedCreation }),
+            Placement: (Slot(fixture: endowed) with { PrototypeId = ContributedCreation }),
             Principal: WorldPrincipal.Console
         ));
         endowed.Step();
@@ -358,7 +358,7 @@ public sealed class ContributionTenureLawTests {
         }
 
         Assert.Equal(
-            actual: Slot(fixture: endowed).CreationId,
+            actual: Slot(fixture: endowed).PrototypeId,
             expected: ContributedCreation
         );
         Assert.NotNull(@object: Facet(fixture: endowed).Contributor);
@@ -400,9 +400,9 @@ public sealed class ContributionTenureLawTests {
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertPlacement(
             Placement: (slot with {
-            CreationId = ContributedCreation,
-            Contribution = (slot.Contribution! with { Contributor = impersonated }),
-        }),
+                PrototypeId = ContributedCreation,
+                Contribution = (slot.Contribution! with { Contributor = impersonated }),
+            }),
             Principal: actor
         ));
         fixture.Step();
@@ -415,9 +415,9 @@ public sealed class ContributionTenureLawTests {
         // DENIAL, the deadline half: naming a deadline is refused on the same terms.
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertPlacement(
             Placement: (slot with {
-            CreationId = ContributedCreation,
-            Contribution = (slot.Contribution! with { RetractDeadlineTick = 1L }),
-        }),
+                PrototypeId = ContributedCreation,
+                Contribution = (slot.Contribution! with { RetractDeadlineTick = 1L }),
+            }),
             Principal: actor
         ));
         fixture.Step();
@@ -434,7 +434,7 @@ public sealed class ContributionTenureLawTests {
         );
 
         Assert.Equal(
-            actual: Slot(fixture: fixture).CreationId,
+            actual: Slot(fixture: fixture).PrototypeId,
             expected: ContributedCreation
         );
         Assert.Equal(

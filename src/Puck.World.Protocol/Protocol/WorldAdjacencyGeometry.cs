@@ -18,7 +18,7 @@ public static class WorldAdjacencyGeometry {
     /// <summary>One deterministic selection result.</summary>
     public readonly record struct Selection(IReadOnlyList<WorldPlacement> Placements, bool Truncated);
 
-    private static bool IsWithinReach(WorldPlacement placement, WorldCreation creation, WorldFaceFrame frame, float overlapDepth) {
+    private static bool IsWithinReach(WorldPlacement placement, WorldPrototype creation, WorldFaceFrame frame, float overlapDepth) {
         foreach (var shape in (creation.Document.Shapes ?? [])) {
             if (SdfSolidGeometry.GetLocalBounds(type: shape.Type).IsUnbounded) {
                 return true;
@@ -78,7 +78,7 @@ public static class WorldAdjacencyGeometry {
                 (placement?.Solid is null) ||
                 (WorldDefinitionRows.FindCreation(
                 creations: definition.Creations,
-                id: placement.CreationId
+                id: placement.PrototypeId
             ) is not { } creation) ||
                 !IsWithinReach(
                 creation: creation,

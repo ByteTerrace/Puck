@@ -69,7 +69,7 @@ public sealed class WorldAuthorityEndpoint : IDisposable {
     /// <summary>Reads the render identity belonging to the same complete entity claim as <see cref="TryEntityPose(in WorldEntityAddress, out Vector3, out Quaternion)"/>.</summary>
     public bool TryEntityAppearance(in WorldEntityAddress entity, out Vector3 bodyColor, out WorldLook look, out byte catalogRig) {
         if (
-            (((uint)entity.Index) < WorldPopulationLimits.CapacityCeiling) &&
+            (((uint)entity.Index) < WorldBodiesLimits.CapacityCeiling) &&
             m_mirror.IsActive(index: entity.Index) &&
             (m_mirror.Address(index: entity.Index) == entity)
         ) {
@@ -89,7 +89,7 @@ public sealed class WorldAuthorityEndpoint : IDisposable {
     /// authority handoff.</summary>
     public bool TryEntityPose(int index, out Vector3 position, out Quaternion orientation) {
         if (
-            (((uint)index) < WorldPopulationLimits.CapacityCeiling) &&
+            (((uint)index) < WorldBodiesLimits.CapacityCeiling) &&
             m_mirror.IsActive(index: index)
         ) {
             position = m_mirror.CurrentPosition(index: index);
@@ -105,7 +105,7 @@ public sealed class WorldAuthorityEndpoint : IDisposable {
     /// coordinate frame — what a heading-framed movement composition rotates against.</summary>
     public bool TryEntityHeading(int index, out float heading) {
         if (
-            (((uint)index) < WorldPopulationLimits.CapacityCeiling) &&
+            (((uint)index) < WorldBodiesLimits.CapacityCeiling) &&
             m_mirror.IsActive(index: index)
         ) {
             heading = m_mirror.Heading(index: index);
@@ -118,7 +118,7 @@ public sealed class WorldAuthorityEndpoint : IDisposable {
     /// <summary>Reads a pose only when the complete generation-addressed identity is still the active occupant.</summary>
     public bool TryEntityPose(in WorldEntityAddress entity, out Vector3 position, out Quaternion orientation) {
         if (
-            (((uint)entity.Index) < WorldPopulationLimits.CapacityCeiling) &&
+            (((uint)entity.Index) < WorldBodiesLimits.CapacityCeiling) &&
             m_mirror.IsActive(index: entity.Index) &&
             (m_mirror.Address(index: entity.Index) == entity)
         ) {

@@ -19,11 +19,11 @@ namespace Puck.World.Client;
 /// <remarks>Single-threaded on the launcher's window-pump thread: snapshots arrive synchronously inside the server
 /// step, submissions run immediately before it, and the render-pose refresh runs during frame produce.</remarks>
 public sealed class WorldClient : IClientSink, ISdfAnchorSource {
-    /// <summary>The entity-view capacity — single-sourced from <see cref="WorldPopulationLimits.CapacityCeiling"/>
+    /// <summary>The entity-view capacity — single-sourced from <see cref="WorldBodiesLimits.CapacityCeiling"/>
     /// so the validator's admitted population.capacity and this client's fixed
     /// per-entity arrays can never again drift apart: an over-capacity document refuses at load instead of booting
     /// into a latent out-of-bounds throw here.</summary>
-    public const int EntityCapacity = WorldPopulationLimits.CapacityCeiling;
+    public const int EntityCapacity = WorldBodiesLimits.CapacityCeiling;
     /// <summary>How many counters <see cref="WriteRevision"/> reports — the component count
     /// <c>WorldSceneEmitter</c> folds into its own when it lays out its revision vector.</summary>
     public const int RevisionComponentCount = 3;
@@ -1092,7 +1092,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
     /// <summary>Resolves this frame's render pose for every active entity: position <c>Lerp(previous, current,
     /// alpha)</c>, orientation shortest-path nlerp, then the eased correction offset folded in. Called once per
     /// captured frame before anything reads <see cref="Position"/>/<see cref="Orientation"/>. On a frame that banked
-    /// zero sub-steps previous == current, so both hold stably (no snap-back). Presentation only: <c>player.where</c>
+    /// zero sub-steps previous == current, so both hold stably (no snap-back). Presentation only: <c>body.where</c>
     /// reports the server sim pose, never this.</summary>
     /// <param name="alpha">How far this frame sits between the last and next fixed sim step, in <c>[0, 1)</c>.</param>
     public void UpdateRenderPoses(float alpha) {
@@ -1138,7 +1138,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
     }
 
     // The correction error-smoothing state, one per entity, with a Begin/Decay/Apply/Reset lifecycle. Presentation
-    // only — the sim never reads it, and it is never part of the pose flowing out to player.where. A
+    // only — the sim never reads it, and it is never part of the pose flowing out to body.where. A
     // default-constructed easer has a zero (non-identity) m_orientation, but Apply is guarded on m_remaining > 0 and
     // Begin always sets the orientation before arming it (and construction calls Reset), so the zero is never observed.
     private struct RenderErrorEaser {

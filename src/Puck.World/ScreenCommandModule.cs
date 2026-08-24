@@ -49,7 +49,7 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
     // The Control check over a screen subject, under whichever identity this dispatch's ingress door stamped —
     // a CLIENT-SIDE precheck for a fast, friendly denial; Server.WorldMachineHost's own apply re-checks the
     // identical pair AUTHORITATIVELY for screen-op verbs (see TryApplyScreenOp), so this is defense in depth, not
-    // the only gate, exactly like player.engage's own documented precheck/re-check split. Console and every seat
+    // the only gate, exactly like body.engage's own documented precheck/re-check split. Console and every seat
     // hold Control over every screen by the permissive local defaults, so this is transparent until someone narrows
     // the trust (world.grant/world.revoke).
     private bool AllowsControl(WorldPrincipal principal, int index) =>

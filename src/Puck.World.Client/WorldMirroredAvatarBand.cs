@@ -51,7 +51,7 @@ internal static class WorldMirroredAvatarBand {
     /// <param name="builder">The program builder.</param>
     /// <param name="look">The entity's resolved look.</param>
     /// <param name="bodyColor">The entity's body color.</param>
-    /// <param name="catalogRig">The entity's own carried catalog rig — <see cref="WorldAvatarCatalog.RigFor"/>'s
+    /// <param name="catalogRig">The entity's own carried catalog rig — <see cref="WorldRigCatalog.RigFor"/>'s
     /// fallback for an unpinned look.</param>
     /// <param name="noseFactor">The accent-material color multiplier (<c>playerDefaults.noseFactor</c>).</param>
     /// <param name="identityIndex">The slot to write <paramref name="emittedRigs"/>/<paramref name="emittedScales"/>/
@@ -65,7 +65,7 @@ internal static class WorldMirroredAvatarBand {
     /// <param name="bodyMaterials">The body material id per material slot.</param>
     /// <param name="accentMaterials">The accent material id per material slot.</param>
     public static void EmitPalette(SdfProgramBuilder builder, WorldLook look, Vector3 bodyColor, byte catalogRig, float noseFactor, int identityIndex, int[] emittedRigs, float[] emittedScales, float[] emittedGaitAmplitudes, int materialIndex, int[] bodyMaterials, int[] accentMaterials) {
-        emittedRigs[identityIndex] = WorldAvatarCatalog.RigFor(
+        emittedRigs[identityIndex] = WorldRigCatalog.RigFor(
             catalogRig: catalogRig,
             look: look
         );

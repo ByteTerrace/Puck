@@ -10,7 +10,7 @@ internal static class WorldStaticSceneEmit {
     /// <paramref name="derivedFaces"/>.</summary>
     /// <param name="builder">The program builder.</param>
     /// <param name="screens">The document's declared screen rows.</param>
-    /// <param name="derivedFaces">The already-resolved derived-face rows (see <see cref="WorldCreationFacets"/>) —
+    /// <param name="derivedFaces">The already-resolved derived-face rows (see <see cref="WorldPrototypeFacets"/>) —
     /// a caller with a long-lived derivation must thread its OWN resolved set here rather than re-deriving one, so
     /// the geometry this call emits and whatever else reads the same derivation can never disagree about which
     /// placement a face belongs to.</param>

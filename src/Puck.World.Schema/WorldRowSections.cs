@@ -28,9 +28,9 @@ public sealed record WorldLooksSection(
 /// deadline, and the derived face-screen reservation).</summary>
 /// <param name="Rows">The placements, in order.</param>
 /// <param name="Policy">The live-placement policy — ABSENT resolves to
-/// <see cref="WorldAuthoringDefaults.Absent"/>.</param>
+/// <see cref="WorldPlacementPolicyDefaults.Absent"/>.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldPlacementsSection(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldPlacement>? Rows = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldAuthoringDefaults? Policy = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementPolicyDefaults? Policy = null
 );

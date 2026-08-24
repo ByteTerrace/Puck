@@ -5,7 +5,7 @@ namespace Puck.World;
 /// <summary>The authored seed identities and player presentation tuning. Every field is optional; the resolved
 /// (non-"Raw") property of each field's own name states its ABSENT semantics. <see cref="SeatLook"/> is read per
 /// seat from whichever document owns it: the world's for an unclaimed seat, the joined identity's own for a claimed
-/// one, which is how a player's feel travels with their profile (see <see cref="WorldSeatLook"/>).</summary>
+/// one, which is how a player's feel travels with their profile (see <see cref="WorldSeatCameraFeel"/>).</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldPlayerDefaults(
     // ABSENT semantics below hold for every raw field: the document declares only what it wants to state; a raw
@@ -20,7 +20,7 @@ public sealed record WorldPlayerDefaults(
     float PickerThreshold = 0f,
     [property: JsonPropertyName("pickerNeutralColor"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? PickerNeutralColorRaw = null,
     float PickerNeutralBlend = 0f,
-    [property: JsonPropertyName("seatCameraFeel"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSeatLook? SeatLookRaw = null
+    [property: JsonPropertyName("seatCameraFeel"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSeatCameraFeel? SeatLookRaw = null
 ) {
     /// <summary>The neutral gray used for every color field an absent document leaves unauthored.</summary>
     private const string InertColor = "#8C8C8C";
@@ -41,9 +41,9 @@ public sealed record WorldPlayerDefaults(
     [JsonIgnore]
     public string PickerNeutralColor => (PickerNeutralColorRaw ?? InertColor);
     /// <summary>Gets the control feel a seat of this document wakes with — ABSENT resolves to
-    /// <see cref="WorldSeatLook.Default"/>.</summary>
+    /// <see cref="WorldSeatCameraFeel.Default"/>.</summary>
     [JsonIgnore]
-    public WorldSeatLook SeatLook => (SeatLookRaw ?? WorldSeatLook.Default);
+    public WorldSeatCameraFeel SeatLook => (SeatLookRaw ?? WorldSeatCameraFeel.Default);
     /// <summary>Gets the inert player-presentation defaults.</summary>
     public static WorldPlayerDefaults Default { get; } = new();
 }

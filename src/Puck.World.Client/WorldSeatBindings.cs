@@ -33,7 +33,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     private static readonly string[] BuiltInContextFamilies = [.. WorldContextFamilies.Families];
 
     /// <summary>The number of local seats this router resolves for.</summary>
-    public const int SeatCount = WorldPopulationLimits.LocalSeatCount;
+    public const int SeatCount = WorldBodiesLimits.LocalSeatCount;
 
     // The exact channel row list each seat's m_channels entry was compiled from — the second half of SyncSeat's
     // per-seat change test, so a channels-only mutation (which leaves the overlay list reference-equal) still

@@ -78,10 +78,10 @@ internal sealed class WorldFederatedServerLink(WorldRemoteAuthority authority) :
     public void Query(WorldQuery query, Action<QueryAnswer> completion) {
         ArgumentNullException.ThrowIfNull(completion);
         var bodyIndex = query switch {
-            WorldQuery.PlayerWhere where => (where.Index - 1),
-            WorldQuery.PlayerChannels channels => (channels.Index - 1),
-            WorldQuery.PlayerState state => (state.Index - 1),
-            WorldQuery.PlayerTargets targets => (targets.Index - 1),
+            WorldQuery.PlayerWhere where => where.Index,
+            WorldQuery.PlayerChannels channels => channels.Index,
+            WorldQuery.PlayerState state => state.Index,
+            WorldQuery.PlayerTargets targets => targets.Index,
             WorldQuery.Contacts contacts => (contacts.Index - 1),
             WorldQuery.MusicState music => (music.Index - 1),
             WorldQuery.JudgeState judge => (judge.Index - 1),

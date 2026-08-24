@@ -223,7 +223,8 @@ public sealed partial class WorldServer {
             }
 
             if (row.Dynamics is { } rowDynamics) {
-                rebasedRow = (rebasedRow with { Dynamics = RebaseDynamics(
+                rebasedRow = (rebasedRow with {
+                    Dynamics = RebaseDynamics(
                     candidateTrait: rowDynamics,
                     newTarget: (FindCell(
                         cells: row.Cells,
@@ -236,7 +237,8 @@ public sealed partial class WorldServer {
                     ),
                     originalRow: originalRow,
                     tick: tick
-                ) });
+                )
+                });
             }
         }
 
@@ -593,7 +595,7 @@ public sealed partial class WorldServer {
     // `hash` is the row's AUTHORED hash lane (a creation's HashRaw, a tune/patch's stored Hash) — never a computed
     // property, whose canonicalize-on-read would throw on a hostile document in the caller's own argument list,
     // before this boundary's refusal could run. Null means the submitter carried none: the canonical hash is adopted
-    // (an absent hash is trivially self-consistent — WorldCreation.Hash's own rule), while a CARRIED hash must equal
+    // (an absent hash is trivially self-consistent — WorldPrototype.Hash's own rule), while a CARRIED hash must equal
     // the one this pipeline computes.
     private static bool TryCanonicalizeDocument<TDocument>(
         TDocument document,
@@ -862,7 +864,7 @@ public sealed partial class WorldServer {
 
                     foreach (var placement in current.Placements) {
                         if (string.Equals(
-                            a: placement.CreationId,
+                            a: placement.PrototypeId,
                             b: m.Id,
                             comparisonType: StringComparison.Ordinal
                         )) {

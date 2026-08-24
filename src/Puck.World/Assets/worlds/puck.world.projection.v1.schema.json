@@ -4187,7 +4187,7 @@
         ],
         "properties": {
           "name": {
-            "description": "The channel\u0027s unique, non-empty name \u2014 the vocabulary key every binding, player.press, kit Actions entry, and the addon wire resolve against.",
+            "description": "The channel\u0027s unique, non-empty name \u2014 the vocabulary key every binding, body.press, kit Actions entry, and the addon wire resolve against.",
             "type": "string"
           },
           "shape": {
@@ -5115,13 +5115,13 @@
                   "$type": {
                     "const": "fromCreation"
                   },
-                  "creationId": {
+                  "prototypeId": {
                     "description": "The referenced Id.",
                     "type": "string"
                   }
                 },
                 "required": [
-                  "creationId"
+                  "prototypeId"
                 ],
                 "additionalProperties": false
               }
@@ -6597,7 +6597,7 @@
                 ]
               },
               "look": {
-                "description": "The Name the bodies wear, or null to wear an implicit creation look on this placement\u0027s own CreationId.",
+                "description": "The Name the bodies wear, or null to wear an implicit creation look on this placement\u0027s own PrototypeId.",
                 "type": [
                   "string",
                   "null"
@@ -7576,7 +7576,7 @@
       "description": "The tune assets.",
       "type": "array",
       "items": {
-        "description": "One tune asset row \u2014 a whole puck.audio.v1 document embedded inline-canonical with its identity hash pinned beside it (the same hash-pin/canonicalize contract as WorldCreation): the compose boundary canonicalizes on upsert through AudioCanonicalizer and rejects a hash the pipeline did not itself compute; the validator re-verifies the pin on every candidate; world.save re-canonicalizes. The hash doubles as the runtime restart discriminator: a content change restarts the tune\u0027s headless host, a rename does not.",
+        "description": "One tune asset row \u2014 a whole puck.audio.v1 document embedded inline-canonical with its identity hash pinned beside it (the same hash-pin/canonicalize contract as WorldPrototype): the compose boundary canonicalizes on upsert through AudioCanonicalizer and rejects a hash the pipeline did not itself compute; the validator re-verifies the pin on every candidate; world.save re-canonicalizes. The hash doubles as the runtime restart discriminator: a content change restarts the tune\u0027s headless host, a rename does not.",
         "type": [
           "object",
           "null"
@@ -7606,7 +7606,7 @@
       "description": "The synth patch assets.",
       "type": "array",
       "items": {
-        "description": "One synth-patch asset row \u2014 a whole puck.synth.v1 document embedded inline-canonical with its identity hash pinned beside it via SynthPatchCanonicalizer, the same pin/restart contract as WorldCreation; see WorldTune for the shared pin/restart semantics.",
+        "description": "One synth-patch asset row \u2014 a whole puck.synth.v1 document embedded inline-canonical with its identity hash pinned beside it via SynthPatchCanonicalizer, the same pin/restart contract as WorldPrototype; see WorldTune for the shared pin/restart semantics.",
         "type": [
           "object",
           "null"
@@ -8003,7 +8003,7 @@
             ],
             "anyOf": [
               {
-                "description": "The procedural humanoid catalog (WorldAvatarCatalog) \u2014 one look source among others.",
+                "description": "The procedural humanoid catalog (WorldRigCatalog) \u2014 one look source among others.",
                 "properties": {
                   "$type": {
                     "const": "catalog"
@@ -8022,7 +8022,7 @@
                 "additionalProperties": false
               },
               {
-                "description": "A sculpted creation worn by the body \u2014 resolved against the world\u0027s WorldCreation rows.",
+                "description": "A sculpted creation worn by the body \u2014 resolved against the world\u0027s WorldPrototype rows.",
                 "properties": {
                   "$type": {
                     "const": "creation"
@@ -10480,7 +10480,7 @@
                       "additionalProperties": false
                     },
                     {
-                      "description": "Teleports one body to a pose \u2014 the rule-side spelling of the player.pose verb, world scope only (refused at body scope). Like Save it submits no WorldMutation: a pose is body state, not document state, so nothing composes, validates, or journals, and a replay reproduces it by re-firing the same rule. Applied as the world\u0027s own act through WorldBody.Pose, deliberately outside the drive-admission gate: a body whose gatesDrive row reads nonzero is a body a rule still needs to move (a dead body back to its spawn). The client sees the same teleport continuity a player.pose produces.",
+                      "description": "Teleports one body to a pose \u2014 the rule-side spelling of the body.pose verb, world scope only (refused at body scope). Like Save it submits no WorldMutation: a pose is body state, not document state, so nothing composes, validates, or journals, and a replay reproduces it by re-firing the same rule. Applied as the world\u0027s own act through WorldBody.Pose, deliberately outside the drive-admission gate: a body whose gatesDrive row reads nonzero is a body a rule still needs to move (a dead body back to its spawn). The client sees the same teleport continuity a body.pose produces.",
                       "properties": {
                         "$type": {
                           "const": "pose"

@@ -34,10 +34,10 @@ public sealed class AdmissionSecurityLawTests {
         var denied = await RunQueryScenarioAsync(observe: false);
         var allowed = await RunQueryScenarioAsync(observe: true);
 
-        Assert.True(condition: denied.Refused, userMessage: $"a zero-grant remote peer read player.where: {denied.Text}");
+        Assert.True(condition: denied.Refused, userMessage: $"a zero-grant remote peer read body.where: {denied.Text}");
         Assert.Contains(expectedSubstring: "cannot observe body:4", actualString: denied.Text);
-        Assert.False(condition: allowed.Refused, userMessage: $"an Observe/body:4 peer was refused player.where: {allowed.Text}");
-        Assert.Contains(expectedSubstring: "player.where: p5", actualString: allowed.Text);
+        Assert.False(condition: allowed.Refused, userMessage: $"an Observe/body:4 peer was refused body.where: {allowed.Text}");
+        Assert.Contains(expectedSubstring: "body.where: body:4", actualString: allowed.Text);
     }
     /// <summary>Finding 1 (P1): a peer's admission-minted grant, explicitly revoked live, must stay revoked across
     /// <c>world.reset</c> — the rebuild's re-authorization must consult the CURRENT admission policy and the
@@ -468,7 +468,7 @@ public sealed class AdmissionSecurityLawTests {
                 var admitted = await ConnectAndAdmitAsync(host: host, identity: identity, ct: requestCts.Token);
 
                 using (admitted.Client) {
-                    return await SubmitQueryAsync(stream: admitted.Client.GetStream(), query: new WorldQuery.PlayerWhere(Index: (PeerBodyIndex + 1)), ct: requestCts.Token);
+                    return await SubmitQueryAsync(stream: admitted.Client.GetStream(), query: new WorldQuery.PlayerWhere(Index: PeerBodyIndex), ct: requestCts.Token);
                 }
             } finally {
                 pumpCts.Cancel();
@@ -600,14 +600,14 @@ public sealed class AdmissionSecurityLawTests {
     /// literal, untouched.</summary>
     private static WorldDefinition BuildAdmissionDocument(WorldAdmissionEntry entry) {
         var baseDocument = Fixtures.BuildDocument();
-        var population = (baseDocument.Population with { CapacityRaw = (WorldPopulationLimits.LocalSeatCount + 1), NetworkPlayers = 1 });
+        var population = (baseDocument.Population with { CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 1), NetworkPlayers = 1 });
 
         return (baseDocument with { PopulationRaw = population, Admission = [entry] });
     }
 
     /// <summary>The 0-based body index every law in this file admits its remote peer onto — the ONE peer slot
     /// <see cref="BuildAdmissionDocument"/> adds beyond the four local seats.</summary>
-    private const int PeerBodyIndex = WorldPopulationLimits.LocalSeatCount;
+    private const int PeerBodyIndex = WorldBodiesLimits.LocalSeatCount;
 
     private static byte[] MalformedSpkiDocumentBytes() {
         var garbage = new byte[91]; // a real P-256 SPKI's typical DER length — plausible garbage, not a short-circuit

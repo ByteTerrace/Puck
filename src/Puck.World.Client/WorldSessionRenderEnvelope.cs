@@ -13,9 +13,9 @@ internal static class WorldSessionRenderEnvelope {
     // headroom. The hidden headroom slabs are capacity probes only; live emission adds them if and when an authored
     // mutation consumes those rows. Indices are chosen from the same free range as WorldSceneEmitter's boot probe.
     private static void EmitScreenReservation(SdfProgramBuilder builder, WorldDefinition candidate) {
-        var facets = WorldCreationFacets.Derive(
+        var facets = WorldPrototypeFacets.Derive(
             definition: candidate,
-            derivedFaceBase: WorldCreationFacets.DerivedFaceBase,
+            derivedFaceBase: WorldPrototypeFacets.DerivedFaceBase,
             derivedFaceScreens: candidate.Authoring.DerivedFaceScreens
         );
 
@@ -37,7 +37,7 @@ internal static class WorldSessionRenderEnvelope {
 
         foreach (var screen in WorldScreenHeadroom.Reserve(
             authoredCount: candidate.Screens.Count,
-            derivedFaceBase: WorldCreationFacets.DerivedFaceBase,
+            derivedFaceBase: WorldPrototypeFacets.DerivedFaceBase,
             derivedFaceScreens: candidate.Authoring.DerivedFaceScreens,
             headroomCount: candidate.Authoring.AuthoringHeadroomScreens,
             usedIndices: used
@@ -73,18 +73,18 @@ internal static class WorldSessionRenderEnvelope {
             );
         }
 
-        var bodyMaterials = new int[WorldAvatarCatalog.Capacity];
-        var accentMaterials = new int[WorldAvatarCatalog.Capacity];
+        var bodyMaterials = new int[WorldRigCatalog.Capacity];
+        var accentMaterials = new int[WorldRigCatalog.Capacity];
         var noseFactor = candidate.PlayerDefaults.NoseFactor;
 
-        for (var index = 0; (index < WorldAvatarCatalog.Capacity); index++) {
+        for (var index = 0; (index < WorldRigCatalog.Capacity); index++) {
             var color = bodyColor(index);
 
             bodyMaterials[index] = builder.AddMaterial(material: new SdfMaterial(Albedo: color));
             accentMaterials[index] = builder.AddMaterial(material: new SdfMaterial(Albedo: (color * noseFactor)));
         }
 
-        WorldAvatarCatalog.Emit(
+        WorldRigCatalog.Emit(
             builder: builder,
             isActive: static _ => true,
             bodyMaterials: bodyMaterials,

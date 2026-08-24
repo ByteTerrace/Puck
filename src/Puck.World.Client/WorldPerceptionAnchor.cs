@@ -15,7 +15,7 @@ namespace Puck.World.Client;
 /// seat every tick over the loopback view for the engagement context family, so the anchor resolution rides that
 /// SAME read rather than opening a second one. Swapped in ONE place,
 /// never per-system retargets, else a seat would see through one body and hear from another. Presentation-side
-/// only: the anchor is derived, never simulation state, and <c>player.where</c> echoes it
+/// only: the anchor is derived, never simulation state, and <c>body.where</c> echoes it
 /// (<c>anchor=body:&lt;n&gt;</c>) so the resolution is observable and live.
 /// </summary>
 public sealed class WorldPerceptionAnchor {

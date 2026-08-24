@@ -195,23 +195,22 @@ public sealed partial class WorldServer {
         WorldMutation.PruneMarketListings => "PruneMarketListings",
         _ => "unknown",
     };
-    /// <summary>Composes the <c>player.channels</c> echo — the fold and held-image join's read-back
+    /// <summary>Composes the <c>body.channels</c> echo — the fold and held-image join's read-back
     /// (the arithmetic rule lives in <see cref="FixedContributionFold"/>), so a script can tell "the addon asked for more
     /// and the pool held it" apart from "the addon asked for exactly this" without inferring it from displacement
     /// across ticks. Reports every declared channel of <paramref name="bodyIndex"/>'s last write: the folded value
     /// the simulation received, the owning seat's own base <c>h</c>, every contributor that reached it tagged by
     /// principal (trusted/untrusted), the pool ceiling in force, whether the pool actually clamped, the held overlay
     /// admitted later by <see cref="WorldBody"/>, and the value after that overlay composed with the movement tier.</summary>
-    /// <param name="index">The 1-based player display index (for the echo's own tag).</param>
-    /// <param name="bodyIndex">The 0-based entity index already resolved to a live body.</param>
+    /// <param name="bodyIndex">The 0-based body index already resolved to a live body.</param>
     /// <param name="body">The live body retaining the later held-overlay decision.</param>
-    private string DescribeChannels(int index, int bodyIndex, WorldBody body) {
+    private string DescribeChannels(int bodyIndex, WorldBody body) {
         // The fold — and this read-back — only ever exists over a HUMAN-OCCUPIED LOCAL SEAT
         // (WorldPopulation.IsHumanOccupied; the whole per-seat retention above is sized WorldPopulation.LocalSeatCount).
-        // A population entry (5..128) or an unoccupied local seat is a bot at full authority by construction — there
+        // A population entry (4..127) or an unoccupied local seat is a bot at full authority by construction — there
         // is no base/pool/contributor to report, so say that rather than fabricating one.
         if (!m_population.IsHumanOccupied(bodyIndex: bodyIndex)) {
-            return $"[player.channels: p{index} body:{bodyIndex} is not human-occupied — the co-driving pool only ever exists over an occupied local seat (see world.population); nothing folds here]";
+            return $"[body.channels: body:{bodyIndex} is not human-occupied — the co-driving pool only ever exists over an occupied local seat (see world.population); nothing folds here]";
         }
 
         // The application-set summary: every target this seat's channels reach, each with its kit and reach mask, so
@@ -273,7 +272,7 @@ public sealed partial class WorldServer {
                 : "no")}");
         }
 
-        return $"[player.channels: p{index} {routeText} {string.Join(
+        return $"[body.channels: body:{bodyIndex} {routeText} {string.Join(
             separator: " | ",
             values: segments
         )}]";

@@ -409,7 +409,7 @@ public sealed class SimulationRateZeroLawTests {
         // One free peer slot above the four local seats, with room in networkPlayers to admit it — the fixture's own
         // default document pins Capacity to LocalSeatCount specifically to keep the census/inhabitant loop empty
         // (see Fixtures.BuildDocumentCore's own remarks); a peer-path law needs that loop non-empty instead.
-        return (document with { PopulationRaw = (document.Population with { CapacityRaw = (WorldPopulationLimits.LocalSeatCount + 1), NetworkPlayers = 1 }) });
+        return (document with { PopulationRaw = (document.Population with { CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 1), NetworkPlayers = 1 }) });
     }
     private static WorldDefinition BuildWithRateAndGrace(int rateHz, float reconnectGraceSeconds) {
         var document = Fixtures.BuildDocument();

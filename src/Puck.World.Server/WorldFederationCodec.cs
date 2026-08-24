@@ -926,7 +926,7 @@ public static class WorldFederationCodec {
 
         var count = reader.ReadCount(
             field: "commit member count",
-            maximum: WorldPopulationLimits.CapacityCeiling,
+            maximum: WorldBodiesLimits.CapacityCeiling,
             minimum: 1
         );
 
@@ -1132,7 +1132,7 @@ public static class WorldFederationCodec {
         var remote = reader.ReadBoolean();
         var count = reader.ReadCount(
             field: "reservation traveler count",
-            maximum: WorldPopulationLimits.CapacityCeiling,
+            maximum: WorldBodiesLimits.CapacityCeiling,
             minimum: 1
         );
 
@@ -1190,7 +1190,7 @@ public static class WorldFederationCodec {
         var deadline = reader.ReadUInt64();
         var count = reader.ReadCount(
             field: "reservation reply body count",
-            maximum: WorldPopulationLimits.CapacityCeiling,
+            maximum: WorldBodiesLimits.CapacityCeiling,
             minimum: 0
         );
 
@@ -1291,7 +1291,7 @@ public static class WorldFederationCodec {
         }
 
         if (
-            (((uint)entity.Index) >= ((uint)WorldPopulationLimits.CapacityCeiling)) ||
+            (((uint)entity.Index) >= ((uint)WorldBodiesLimits.CapacityCeiling)) ||
             (entity.Generation < 0)
         ) {
             reader.Fail(
@@ -1363,7 +1363,7 @@ public static class WorldFederationCodec {
         var authority = reader.ReadString(field: "snapshot authority");
         var count = reader.ReadCount(
             field: "snapshot entry count",
-            maximum: WorldPopulationLimits.CapacityCeiling,
+            maximum: WorldBodiesLimits.CapacityCeiling,
             minimum: 0
         );
 

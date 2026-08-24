@@ -107,7 +107,7 @@ public sealed class WorldSeatAuthorityRouter {
     }
     /// <summary>Returns the current complete authority claim.</summary>
     /// <exception cref="InvalidOperationException"><paramref name="slot"/> was never published — a world declaring
-    /// fewer local seats than the host's seat ceiling (<see cref="WorldPopulationLimits.LocalSeatCount"/>) never
+    /// fewer local seats than the host's seat ceiling (<see cref="WorldBodiesLimits.LocalSeatCount"/>) never
     /// routes the seats it did not declare; use <see cref="TryRoute"/> for a slot that may be unrouted by
     /// design.</exception>
     public WorldAuthorityRoute Route(int slot) {

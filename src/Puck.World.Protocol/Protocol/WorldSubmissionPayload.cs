@@ -39,7 +39,7 @@ public abstract record WorldSubmissionPayload {
     /// <summary>A live session-lever write (<c>world.volume</c>, <c>world.shadows</c>, …).</summary>
     /// <param name="Value">The lever write.</param>
     public sealed record Lever(WorldSessionLever Value) : WorldSubmissionPayload;
-    /// <summary>A read-back query (<c>player.where</c>, <c>player.channels</c>, …).</summary>
+    /// <summary>A read-back query (<c>body.where</c>, <c>body.channels</c>, …).</summary>
     /// <param name="Value">The query.</param>
     public sealed record Query(WorldQuery Value) : WorldSubmissionPayload;
     /// <summary>A live screen-machine lifecycle change (<c>screen.insert</c>/<c>.eject</c>/<c>.select</c>/

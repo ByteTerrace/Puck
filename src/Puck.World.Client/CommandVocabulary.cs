@@ -4,7 +4,7 @@ namespace Puck.World.Client;
 /// binding authoring surface (<see cref="WorldSeatBindings"/>) lives in this project and
 /// cannot reference the root's command modules, so each name's true declaration moves here and the root constant
 /// becomes a forwarding const, the same shape <c>WorldPopulation.LocalSeatCount</c> already uses for
-/// <c>WorldPopulationLimits.LocalSeatCount</c>.</summary>
+/// <c>WorldBodiesLimits.LocalSeatCount</c>.</summary>
 public static class PlayerCommandNames {
     public const string AssignCommand = "player.assign";
     public const string ClaimCommand = "player.claim";

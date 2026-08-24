@@ -157,7 +157,7 @@ public static class WorldPlacementStamper {
             }
         );
     }
-    private static int[] ResolvePalette(SdfProgramBuilder builder, WorldDefinition definition, WorldCreation creation, Dictionary<string, int[]> paletteById) {
+    private static int[] ResolvePalette(SdfProgramBuilder builder, WorldDefinition definition, WorldPrototype creation, Dictionary<string, int[]> paletteById) {
         if (paletteById.TryGetValue(
             key: creation.Id,
             value: out var cached
@@ -233,7 +233,7 @@ public static class WorldPlacementStamper {
     /// null only when no catalog is declared, while remote projection callers currently have no transported font
     /// assets to resolve.</param>
     /// <param name="tintFor">Resolves a placement id's albedo tint (color + blend), or <see langword="null"/> untinted.</param>
-    public static void EmitStatic(SdfProgramBuilder builder, WorldDefinition definition, IReadOnlyList<WorldCreation> creations, IReadOnlyList<WorldPlacement> placements, PackedFontAtlasCatalog? textCatalog = null, Func<string, (Vector3 Color, float Blend)?>? tintFor = null) {
+    public static void EmitStatic(SdfProgramBuilder builder, WorldDefinition definition, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<WorldPlacement> placements, PackedFontAtlasCatalog? textCatalog = null, Func<string, (Vector3 Color, float Blend)?>? tintFor = null) {
         var worldSeed = (definition.Generation?.WorldSeed ?? 0UL);
         var paletteById = new Dictionary<string, int[]>(comparer: StringComparer.Ordinal);
 
@@ -241,7 +241,7 @@ public static class WorldPlacementStamper {
             if (
                 (WorldDefinitionRows.FindCreation(
                 creations: creations,
-                id: placement.CreationId
+                id: placement.PrototypeId
             ) is not { } creation) ||
                 !IsStaticStamp(
                 creation: creation,
@@ -291,7 +291,7 @@ public static class WorldPlacementStamper {
     /// <summary>Whether a creation row replays a timeline (frames present) — the static/animated fork every consumer
     /// shares.</summary>
     /// <param name="creation">The creation row.</param>
-    public static bool IsAnimated(WorldCreation creation) => (creation.Document.Frames is { Count: > 0 });
+    public static bool IsAnimated(WorldPrototype creation) => (creation.Document.Frames is { Count: > 0 });
     /// <summary>Whether a placement renders as a STATIC furniture stamp — not when it is animated (the stamp pool replays
     /// it), not when it INHABITS (a live body renders its creation through a body-rooted stamp instead), and not when it
     /// ATTACHES (the stamp pool roots it on a live body's pose plus the facet's local offset, so its authored transform
@@ -300,7 +300,7 @@ public static class WorldPlacementStamper {
     /// them.</summary>
     /// <param name="placement">The placement row.</param>
     /// <param name="creation">The placement's resolved creation.</param>
-    public static bool IsStaticStamp(WorldPlacement placement, WorldCreation creation) =>
+    public static bool IsStaticStamp(WorldPlacement placement, WorldPrototype creation) =>
         (!IsAnimated(creation: creation) && (placement.Inhabit is null) && (placement.Attach is null));
     /// <summary>The total static stamp instances of a placement set (animated rows ride the constant replay pool and
     /// charge nothing here) — the apply-time measure's placement charge unit.</summary>
@@ -308,14 +308,14 @@ public static class WorldPlacementStamper {
     /// <param name="placements">The placement rows.</param>
     /// <param name="worldSeed">The world's reroll seed (<c>generation.worldSeed</c>) — resolves each row's
     /// Noise/Scatter distribution to its actual admitted count.</param>
-    public static int StaticStampInstances(IReadOnlyList<WorldCreation> creations, IReadOnlyList<WorldPlacement> placements, ulong worldSeed = 0UL) {
+    public static int StaticStampInstances(IReadOnlyList<WorldPrototype> creations, IReadOnlyList<WorldPlacement> placements, ulong worldSeed = 0UL) {
         var instances = 0;
 
         foreach (var placement in placements) {
             if (
                 (WorldDefinitionRows.FindCreation(
                 creations: creations,
-                id: placement.CreationId
+                id: placement.PrototypeId
             ) is { } creation) &&
                 IsStaticStamp(
                 creation: creation,

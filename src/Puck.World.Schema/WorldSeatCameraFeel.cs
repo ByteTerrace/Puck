@@ -112,7 +112,7 @@ public sealed record WorldSeatGyro(
 /// <param name="StickLookRate">The look stick's yaw/pitch rate in radians per second at full deflection.</param>
 /// <param name="GyroRaw">The optional full-axis gyro projection. Absent resolves to <see cref="WorldSeatGyro.Default"/>.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldSeatLook(
+public sealed record WorldSeatCameraFeel(
     float YawSensitivity,
     float PitchSensitivity,
     bool InvertYaw,
@@ -121,7 +121,7 @@ public sealed record WorldSeatLook(
     [property: JsonPropertyName("gyro"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSeatGyro? GyroRaw = null
 ) {
     /// <summary>Gets the inert seat feel — zero pointer/stick response and the default gyro projection.</summary>
-    public static WorldSeatLook Default { get; } = new(
+    public static WorldSeatCameraFeel Default { get; } = new(
         YawSensitivity: 0f,
         PitchSensitivity: 0f,
         InvertYaw: false,

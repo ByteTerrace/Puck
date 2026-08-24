@@ -32,7 +32,7 @@ public sealed class WorldInstanceHostTwoRowTransferLawTests {
 
         return document with {
             PopulationRaw = document.Population with {
-                CapacityRaw = (WorldPopulationLimits.LocalSeatCount + 1),
+                CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 1),
                 NetworkPlayers = 1,
             },
             Admission = [Fixtures.AnyAuthorityArrivals()],
@@ -42,7 +42,7 @@ public sealed class WorldInstanceHostTwoRowTransferLawTests {
     [Fact]
     public void LocalTransfer_Commits_LandsInDestination_AndForwardsAtTheSource() {
         var document = PeerPopulationDocument();
-        const int peerSlot = WorldPopulationLimits.LocalSeatCount;
+        const int peerSlot = WorldBodiesLimits.LocalSeatCount;
 
         using var host = BuildHost(machineId: Guid.NewGuid());
         using var rowA = HostRow.Build(definition: document, name: "row-a");

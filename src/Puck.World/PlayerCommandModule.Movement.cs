@@ -1,20 +1,19 @@
 using System.Numerics;
 using Puck.Commands;
 using Puck.Maths;
-using Puck.World.Client;
 using Puck.World.Protocol;
 
 namespace Puck.World;
 
 internal sealed partial class PlayerCommandModule {
-    // The player.reconcile smoothing window: the default when [seconds] is omitted, and the clamp a supplied value is
+    // The body.reconcile smoothing window: the default when [seconds] is omitted, and the clamp a supplied value is
     // held to.
     private const float DefaultReconcileSeconds = 0.25f;
     private const float MaxReconcileSeconds = 2f;
     private const float MinReconcileSeconds = 0.05f;
 
     // A resolved pose's current heading decomposed to degrees — the exact inverse of the Euler construction
-    // WorldBody.Pose applies (Ry(yaw)·Rx(pitch)·Rz(roll)), read from an orientation quaternion so player.pose's
+    // WorldBody.Pose applies (Ry(yaw)·Rx(pitch)·Rz(roll)), read from an orientation quaternion so body.pose's
     // "-" hold never re-derives a fact its source (a local WorldBody or a routed endpoint's mirrored pose) does
     // not already expose; mirrors WorldBody's own private EulerRadians (see its remarks on the codebase-wide
     // yaw-about-+Y / pitch-about-+X / roll-about-+Z convention).
@@ -54,21 +53,21 @@ internal sealed partial class PlayerCommandModule {
             args: in args,
             error: out var tokenError,
             target: out var instanceTarget,
-            verb: "player.fly"
+            verb: "body.fly"
         )) {
             return tokenError!.Value;
         }
 
         if (instanceTarget.Instance is { } instance) {
             if (instanceTarget.EffectiveCount != 8) {
-                return CommandResult.Error(output: $"[player.fly: instance-targeted form expects 7 values — <forward> <strafe> <up> <yaw> <pitch> <roll> <seconds> — plus the REQUIRED instance seat, before instance:<name> — slot is 1..{WorldPopulationLimits.LocalSeatCount}]");
+                return CommandResult.Error(output: $"[body.fly: instance-targeted form expects 7 values — <forward> <strafe> <up> <yaw> <pitch> <roll> <seconds> — plus the REQUIRED instance seat, before instance:<name> — slot is 1..{WorldBodiesLimits.LocalSeatCount}]");
             }
 
             var (instancePlayer, instanceSlot, slotError) = ResolveInstanceSlot(
                 args: in args,
                 instance: instance,
                 slotTokenIndex: 7,
-                verb: "player.fly"
+                verb: "body.fly"
             );
 
             if (instancePlayer is null) {
@@ -85,11 +84,11 @@ internal sealed partial class PlayerCommandModule {
                 up: out var iUp,
                 yaw: out var iYaw
             )) {
-                return CommandResult.Error(output: "[player.fly: could not parse the seven values as numbers]");
+                return CommandResult.Error(output: "[body.fly: could not parse the seven values as numbers]");
             }
 
             if (!(iSeconds > 0f)) {
-                return CommandResult.Error(output: "[player.fly: <seconds> must be greater than 0]");
+                return CommandResult.Error(output: "[body.fly: <seconds> must be greater than 0]");
             }
 
             // The instance's OWN channel table — a spawned instance's document may declare channels differently from
@@ -111,11 +110,11 @@ internal sealed partial class PlayerCommandModule {
                 Seconds: iSeconds
             ));
 
-            return new CommandResult(Output: $"[player.fly: '{instance.Name}' seat {instanceSlot} fwd={iForward:0.##} strafe={iStrafe:0.##} up={iUp:0.##} yaw={iYaw:0.##} pitch={iPitch:0.##} roll={iRoll:0.##} for {iSeconds:0.##}s]");
+            return new CommandResult(Output: $"[body.fly: '{instance.Name}' seat {instanceSlot} fwd={iForward:0.##} strafe={iStrafe:0.##} up={iUp:0.##} yaw={iYaw:0.##} pitch={iPitch:0.##} roll={iRoll:0.##} for {iSeconds:0.##}s]");
         }
 
         if (instanceTarget.EffectiveCount is not (7 or 8)) {
-            return CommandResult.Error(output: "[player.fly: expected 7 values — <forward> <strafe> <up> <yaw> <pitch> <roll> <seconds> — plus an optional player index]");
+            return CommandResult.Error(output: "[body.fly: expected 7 values — <forward> <strafe> <up> <yaw> <pitch> <roll> <seconds> — plus an optional body index]");
         }
 
         if (!TryParseFlySegment(
@@ -128,31 +127,31 @@ internal sealed partial class PlayerCommandModule {
             up: out var up,
             yaw: out var yaw
         )) {
-            return CommandResult.Error(output: "[player.fly: could not parse the seven values as numbers]");
+            return CommandResult.Error(output: "[body.fly: could not parse the seven values as numbers]");
         }
 
         if (!(seconds > 0f)) {
-            return CommandResult.Error(output: "[player.fly: <seconds> must be greater than 0]");
+            return CommandResult.Error(output: "[body.fly: <seconds> must be greater than 0]");
         }
 
         if (!WorldArgs.TryParseIndex(
             args: in args,
             at: 7,
-            min: 1,
-            max: m_population.Capacity,
-            fallback: 1,
+            min: 0,
+            max: (m_population.Capacity - 1),
+            fallback: 0,
             value: out var index
         )) {
-            return CommandResult.Error(output: $"[player.fly: player index must be an integer 1..{m_population.Capacity}]");
+            return CommandResult.Error(output: $"[body.fly: body index must be an integer 0..{(m_population.Capacity - 1)}]");
         }
 
-        // A local seat keeps its console-facing player number while its authoritative body travels. Follow the
-        // identical live route player.where and ordinary device intent already use; resolving through the boot
+        // A local seat's 0-based index IS its roster slot — no display-number conversion. Follow the
+        // identical live route body.where and ordinary device intent already use; resolving through the boot
         // roster here would reject the deliberately departed boot body and make a remotely presented seat
         // inspectable but not script-drivable. The routed link owns both local-instance and federated credential
         // translation, while the destination definition supplies its own channel ordinals.
-        if (index <= PlayerRoster.MaxSlots) {
-            var rosterSlot = PlayerRoster.SlotFromDisplay(number: index);
+        if (IsSeat(index: index)) {
+            var rosterSlot = index;
             var location = seatRouter.Route(slot: rosterSlot);
 
             if (
@@ -181,7 +180,7 @@ internal sealed partial class PlayerCommandModule {
 
                 return Echoed(
                     args: in args,
-                    handler: $"[player.fly: p{index} via '{location.Endpoint.Identity}' body={location.EntityIndex} fwd={forward:0.##} strafe={strafe:0.##} up={up:0.##} yaw={yaw:0.##} pitch={pitch:0.##} roll={roll:0.##} for {seconds:0.##}s]"
+                    handler: $"[body.fly: body:{index} via '{location.Endpoint.Identity}' body={location.EntityIndex} fwd={forward:0.##} strafe={strafe:0.##} up={up:0.##} yaw={yaw:0.##} pitch={pitch:0.##} roll={roll:0.##} for {seconds:0.##}s]"
                 );
             }
         }
@@ -189,7 +188,7 @@ internal sealed partial class PlayerCommandModule {
         var (player, resolvedIndex, error) = ResolveTarget(
             args: in args,
             requiredCount: 7,
-            verb: "player.fly"
+            verb: "body.fly"
         );
 
         if (player is null) {
@@ -198,7 +197,7 @@ internal sealed partial class PlayerCommandModule {
 
         if (PendingTapeError(
             index: resolvedIndex,
-            verb: "player.fly"
+            verb: "body.fly"
         ) is { } pendingError) {
             return pendingError;
         }
@@ -207,7 +206,7 @@ internal sealed partial class PlayerCommandModule {
         // Turn, MoveUp, Pitch, Roll) — the "yaw" channel is the Turn rate.
         m_link.SubmitCommand(command: new WorldCommand.EnqueueSegment(
             Principal: context.ActingPrincipal(),
-            EntityIndex: (resolvedIndex - 1),
+            EntityIndex: resolvedIndex,
             Intent: m_channels.RoleOrdinals.Intent(
                 moveAdvance: FixedQ4816.FromDouble(value: forward),
                 moveStrafe: FixedQ4816.FromDouble(value: strafe),
@@ -221,7 +220,7 @@ internal sealed partial class PlayerCommandModule {
 
         return Echoed(
             args: in args,
-            handler: $"[player.fly: fwd={forward:0.##} strafe={strafe:0.##} up={up:0.##} yaw={yaw:0.##} pitch={pitch:0.##} roll={roll:0.##} for {seconds:0.##}s]"
+            handler: $"[body.fly: fwd={forward:0.##} strafe={strafe:0.##} up={up:0.##} yaw={yaw:0.##} pitch={pitch:0.##} roll={roll:0.##} for {seconds:0.##}s]"
         );
     }
     private CommandResult MotionHandler(CommandContext context, WireArgs args) {
@@ -238,7 +237,7 @@ internal sealed partial class PlayerCommandModule {
             args: in args,
             choices: "<program>",
             hasMode: hasMode,
-            verb: "player.motion"
+            verb: "body.motion"
         );
 
         if (error is { } modeError) {
@@ -248,45 +247,45 @@ internal sealed partial class PlayerCommandModule {
         if (hasMode) {
             m_link.SubmitCommand(command: new WorldCommand.SetBodyMotion(
                 Principal: context.ActingPrincipal(),
-                EntityIndex: (index - 1),
+                EntityIndex: index,
                 BodyMotionProgram: program
             ));
 
             // The submit drains synchronously (WorldServer.Submit), so the coherence door has already run by the time
             // control returns here — read back its verdict rather than assuming success, the same "deep refusal
-            // reported in the read-back, not flagged IsError" shape player.designate's TargetsResult already uses
+            // reported in the read-back, not flagged IsError" shape body.designate's TargetsResult already uses
             // (the request itself was well-formed; the server-side switch was refused). Always echoes, unconditionally
             // (never gated by wire.ack quiet) — a refusal must never go silent.
-            if (m_population.MotionRefusal(bodyIndex: (index - 1)) is { Length: > 0 } refusal) {
-                return new CommandResult(Output: $"[player.motion: player {index} refused → {refusal}]");
+            if (m_population.MotionRefusal(bodyIndex: index) is { Length: > 0 } refusal) {
+                return new CommandResult(Output: $"[body.motion: body:{index} refused → {refusal}]");
             }
 
-            return new CommandResult(Output: $"[player.motion: player {index} → {program}]");
+            return new CommandResult(Output: $"[body.motion: body:{index} → {program}]");
         }
 
         // No program: echo the target's current selection.
-        return new CommandResult(Output: $"[player.motion: player {index} is {player!.BodyMotionProgram}]");
+        return new CommandResult(Output: $"[body.motion: body:{index} is {player!.BodyMotionProgram}]");
     }
     private CommandResult PoseHandler(CommandContext context, WireArgs args) {
         if (!TryStripInstanceToken(
             args: in args,
             error: out var tokenError,
             target: out var instanceTarget,
-            verb: "player.pose"
+            verb: "body.pose"
         )) {
             return tokenError!.Value;
         }
 
         if (instanceTarget.Instance is { } instance) {
             if (instanceTarget.EffectiveCount != 7) {
-                return CommandResult.Error(output: $"[player.pose: instance-targeted form expects 6 values — <x> <y> <z> <yawDeg> <pitchDeg> <rollDeg>, any of which may be - to hold its current value — plus the REQUIRED instance seat, before instance:<name> — slot is 1..{WorldPopulationLimits.LocalSeatCount}]");
+                return CommandResult.Error(output: $"[body.pose: instance-targeted form expects 6 values — <x> <y> <z> <yawDeg> <pitchDeg> <rollDeg>, any of which may be - to hold its current value — plus the REQUIRED instance seat, before instance:<name> — slot is 1..{WorldBodiesLimits.LocalSeatCount}]");
             }
 
             var (instancePlayer, instanceSlot, slotError) = ResolveInstanceSlot(
                 args: in args,
                 instance: instance,
                 slotTokenIndex: 6,
-                verb: "player.pose"
+                verb: "body.pose"
             );
 
             if (instancePlayer is null) {
@@ -300,7 +299,7 @@ internal sealed partial class PlayerCommandModule {
                 error: out var parseError,
                 pitchDegrees: out var ipitch,
                 rollDegrees: out var iroll,
-                verb: "player.pose",
+                verb: "body.pose",
                 x: out var ix,
                 y: out var iy,
                 yawDegrees: out var iyaw,
@@ -323,14 +322,14 @@ internal sealed partial class PlayerCommandModule {
                 Mode: SnapPoseMode.Pose
             ));
 
-            return new CommandResult(Output: $"[player.pose: '{instance.Name}' seat {instanceSlot} ({ix:0.00}, {iy:0.00}, {iz:0.00}) yaw={iyaw:0}° pitch={ipitch:0}° roll={iroll:0}°]");
+            return new CommandResult(Output: $"[body.pose: '{instance.Name}' seat {instanceSlot} ({ix:0.00}, {iy:0.00}, {iz:0.00}) yaw={iyaw:0}° pitch={ipitch:0}° roll={iroll:0}°]");
         }
 
         if (instanceTarget.EffectiveCount is not (6 or 7)) {
-            return CommandResult.Error(output: "[player.pose: expected 6 values — <x> <y> <z> <yawDeg> <pitchDeg> <rollDeg>, any of which may be - to hold its current value — plus an optional player index]");
+            return CommandResult.Error(output: "[body.pose: expected 6 values — <x> <y> <z> <yawDeg> <pitchDeg> <rollDeg>, any of which may be - to hold its current value — plus an optional body index]");
         }
 
-        // Follow the identical live route player.where/player.fly already use before falling back to the boot
+        // Follow the identical live route body.where/body.fly already use before falling back to the boot
         // roster: resolving through the boot roster here would reject a deliberately departed boot body and make a
         // remotely presented seat inspectable but not teleportable. A held ("-") axis reads the routed endpoint's
         // own mirrored pose, never the local (stale) body.
@@ -338,14 +337,14 @@ internal sealed partial class PlayerCommandModule {
             WorldArgs.TryParseIndex(
             args: in args,
             at: 6,
-            min: 1,
-            max: m_population.Capacity,
-            fallback: 1,
+            min: 0,
+            max: (m_population.Capacity - 1),
+            fallback: 0,
             value: out var routedIndex
         ) &&
-            (routedIndex <= PlayerRoster.MaxSlots)
+            IsSeat(index: routedIndex)
         ) {
-            var rosterSlot = PlayerRoster.SlotFromDisplay(number: routedIndex);
+            var rosterSlot = routedIndex;
             var location = seatRouter.Route(slot: rosterSlot);
 
             if (
@@ -361,7 +360,7 @@ internal sealed partial class PlayerCommandModule {
                     orientation: out var routedOrientation,
                     position: out var routedPosition
                 )) {
-                    return CommandResult.Error(output: $"[player.pose: '{location.Endpoint.Identity}' body {location.EntityIndex} is not active]");
+                    return CommandResult.Error(output: $"[body.pose: '{location.Endpoint.Identity}' body {location.EntityIndex} is not active]");
                 }
 
                 if (!TryResolvePoseSegment(
@@ -371,7 +370,7 @@ internal sealed partial class PlayerCommandModule {
                     error: out var routedParseError,
                     pitchDegrees: out var rpitch,
                     rollDegrees: out var rroll,
-                    verb: "player.pose",
+                    verb: "body.pose",
                     x: out var rx,
                     y: out var ry,
                     yawDegrees: out var ryaw,
@@ -398,7 +397,7 @@ internal sealed partial class PlayerCommandModule {
 
                 return Echoed(
                     args: in args,
-                    handler: $"[player.pose: p{routedIndex} via '{location.Endpoint.Identity}' body={location.EntityIndex} ({rx:0.00}, {ry:0.00}, {rz:0.00}) yaw={ryaw:0}° pitch={rpitch:0}° roll={rroll:0}°]"
+                    handler: $"[body.pose: body:{routedIndex} via '{location.Endpoint.Identity}' body={location.EntityIndex} ({rx:0.00}, {ry:0.00}, {rz:0.00}) yaw={ryaw:0}° pitch={rpitch:0}° roll={rroll:0}°]"
                 );
             }
         }
@@ -406,7 +405,7 @@ internal sealed partial class PlayerCommandModule {
         var (player, index, error) = ResolveTarget(
             args: in args,
             requiredCount: 6,
-            verb: "player.pose"
+            verb: "body.pose"
         );
 
         if (player is null) {
@@ -420,7 +419,7 @@ internal sealed partial class PlayerCommandModule {
             error: out var bootParseError,
             pitchDegrees: out var pitchDegrees,
             rollDegrees: out var rollDegrees,
-            verb: "player.pose",
+            verb: "body.pose",
             x: out var x,
             y: out var y,
             yawDegrees: out var yawDegrees,
@@ -433,7 +432,7 @@ internal sealed partial class PlayerCommandModule {
 
         m_link.SubmitCommand(command: new WorldCommand.SnapPose(
             Principal: context.ActingPrincipal(),
-            EntityIndex: (index - 1),
+            EntityIndex: index,
             Position: new Vector3(
                 x: x,
                 y: y,
@@ -447,21 +446,21 @@ internal sealed partial class PlayerCommandModule {
 
         return Echoed(
             args: in args,
-            handler: $"[player.pose: ({x:0.00}, {y:0.00}, {z:0.00}) yaw={yawDegrees:0}° pitch={pitchDegrees:0}° roll={rollDegrees:0}°]"
+            handler: $"[body.pose: ({x:0.00}, {y:0.00}, {z:0.00}) yaw={yawDegrees:0}° pitch={pitchDegrees:0}° roll={rollDegrees:0}°]"
         );
     }
     // The drive-a-player wire verbs. Each takes a zero-copy WireArgs (parsed from the stdin line span), marks every
     // failure IsError so `wire.ack quiet` drops only successes, and gates its success-echo on args.Echo so a quiet flood
-    // builds no ack string. The error strings are the wire contract. player.where is a query (not AcknowledgementOnly) — its data
+    // builds no ack string. The error strings are the wire contract. body.where is a query (not AcknowledgementOnly) — its data
     // always echoes.
     private CommandResult ReconcileHandler(CommandContext context, WireArgs args) {
         if (args.Count is not (3 or 4 or 5)) {
-            return CommandResult.Error(output: "[player.reconcile: expected 3 values — <x> <z> <yawDegrees> — plus an optional smoothing time and player index]");
+            return CommandResult.Error(output: "[body.reconcile: expected 3 values — <x> <z> <yawDegrees> — plus an optional smoothing time and body index]");
         }
 
-        // Layout: <x> <z> <yawDegrees> [seconds] [player]. The trailing player index is the LAST token (as with every
-        // drive-a-player verb); the optional [seconds] appears only in the full 5-token form. So the index sits at token 4
-        // when seconds is present, token 3 otherwise — and is absent (default player 1) in the bare 3-token form.
+        // Layout: <x> <z> <yawDegrees> [seconds] [body]. The trailing body index is the LAST token (as with every
+        // drive-a-body verb); the optional [seconds] appears only in the full 5-token form. So the index sits at token 4
+        // when seconds is present, token 3 otherwise — and is absent (default body 0) in the bare 3-token form.
         var hasSeconds = (args.Count == 5);
 
         var (player, index, error) = ResolveTarget(
@@ -469,7 +468,7 @@ internal sealed partial class PlayerCommandModule {
             requiredCount: (hasSeconds
             ? 4
             : 3),
-            verb: "player.reconcile"
+            verb: "body.reconcile"
         );
 
         if (player is null) {
@@ -490,7 +489,7 @@ internal sealed partial class PlayerCommandModule {
             value: out var degrees
         )
         ) {
-            return CommandResult.Error(output: "[player.reconcile: could not parse <x> <z> <yawDegrees> as numbers]");
+            return CommandResult.Error(output: "[body.reconcile: could not parse <x> <z> <yawDegrees> as numbers]");
         }
 
         var seconds = DefaultReconcileSeconds;
@@ -502,7 +501,7 @@ internal sealed partial class PlayerCommandModule {
             value: out seconds
         )
         ) {
-            return CommandResult.Error(output: "[player.reconcile: could not parse <seconds> as a number]");
+            return CommandResult.Error(output: "[body.reconcile: could not parse <seconds> as a number]");
         }
 
         seconds = Math.Clamp(
@@ -513,7 +512,7 @@ internal sealed partial class PlayerCommandModule {
 
         m_link.SubmitCommand(command: new WorldCommand.Reconcile(
             Principal: context.ActingPrincipal(),
-            EntityIndex: (index - 1),
+            EntityIndex: index,
             X: x,
             Z: z,
             YawRadians: (degrees * (MathF.PI / 180f)),
@@ -522,7 +521,7 @@ internal sealed partial class PlayerCommandModule {
 
         return Echoed(
             args: in args,
-            handler: $"[player.reconcile: p{index} → ({x:0.00}, {z:0.00}) yaw={degrees:0}° over {seconds:0.##}s]"
+            handler: $"[body.reconcile: body:{index} → ({x:0.00}, {z:0.00}) yaw={degrees:0}° over {seconds:0.##}s]"
         );
     }
     private CommandResult StopHandler(CommandContext context, WireArgs args) {
@@ -530,7 +529,7 @@ internal sealed partial class PlayerCommandModule {
             args: in args,
             error: out var tokenError,
             target: out var instanceTarget,
-            verb: "player.stop"
+            verb: "body.stop"
         )) {
             return tokenError!.Value;
         }
@@ -541,14 +540,14 @@ internal sealed partial class PlayerCommandModule {
         // spawned instance's seat, so there is no held-key/toggle-latch state to reconcile here either).
         if (instanceTarget.Instance is { } instance) {
             if (instanceTarget.EffectiveCount != 1) {
-                return CommandResult.Error(output: $"[player.stop: instance-targeted form expects <slot>, before instance:<name> — slot is 1..{WorldPopulationLimits.LocalSeatCount}]");
+                return CommandResult.Error(output: $"[body.stop: instance-targeted form expects <slot>, before instance:<name> — slot is 1..{WorldBodiesLimits.LocalSeatCount}]");
             }
 
             var (instancePlayer, instanceSlot, slotError) = ResolveInstanceSlot(
                 args: in args,
                 instance: instance,
                 slotTokenIndex: 0,
-                verb: "player.stop"
+                verb: "body.stop"
             );
 
             if (instancePlayer is null) {
@@ -560,29 +559,29 @@ internal sealed partial class PlayerCommandModule {
                 EntityIndex: (instanceSlot - 1)
             ));
 
-            return new CommandResult(Output: $"[player.stop: '{instance.Name}' seat {instanceSlot} — tape cleared]");
+            return new CommandResult(Output: $"[body.stop: '{instance.Name}' seat {instanceSlot} — tape cleared]");
         }
 
         if (instanceTarget.EffectiveCount > 1) {
-            return CommandResult.Error(output: "[player.stop: expected at most 1 value — an optional player index]");
+            return CommandResult.Error(output: "[body.stop: expected at most 1 value — an optional body index]");
         }
 
         if (!WorldArgs.TryParseIndex(
             args: in args,
             at: 0,
-            min: 1,
-            max: m_population.Capacity,
-            fallback: 1,
+            min: 0,
+            max: (m_population.Capacity - 1),
+            fallback: 0,
             value: out var requestedIndex
         )) {
-            return CommandResult.Error(output: $"[player.stop: player index must be an integer 1..{m_population.Capacity}]");
+            return CommandResult.Error(output: $"[body.stop: body index must be an integer 0..{(m_population.Capacity - 1)}]");
         }
 
-        // A local seat retains its console-facing number after authority handoff. Stop through the same immutable
-        // route used by live sticks and player.fly; resolving the departed boot body first would reject precisely
-        // the panic command a traveler needs during a remote-control failure.
-        if (requestedIndex <= PlayerRoster.MaxSlots) {
-            var routedSlot = PlayerRoster.SlotFromDisplay(number: requestedIndex);
+        // A local seat's 0-based index is its roster slot directly — no display-number conversion. Stop through the
+        // same immutable route used by live sticks and body.fly; resolving the departed boot body first would
+        // reject precisely the panic command a traveler needs during a remote-control failure.
+        if (IsSeat(index: requestedIndex)) {
+            var routedSlot = requestedIndex;
             var route = seatRouter.Route(slot: routedSlot);
 
             if (
@@ -602,7 +601,7 @@ internal sealed partial class PlayerCommandModule {
 
                 return Echoed(
                     args: in args,
-                    handler: $"[player.stop: p{requestedIndex} via '{route.Endpoint.Identity}' body={route.EntityIndex} — tape and held input cleared, {routedLatches} toggle latch{((routedLatches == 1)
+                    handler: $"[body.stop: body:{requestedIndex} via '{route.Endpoint.Identity}' body={route.EntityIndex} — tape and held input cleared, {routedLatches} toggle latch{((routedLatches == 1)
                     ? ""
                     : "es")} cleared]"
                 );
@@ -612,7 +611,7 @@ internal sealed partial class PlayerCommandModule {
         var (player, index, error) = ResolveTarget(
             args: in args,
             requiredCount: 0,
-            verb: "player.stop"
+            verb: "body.stop"
         );
 
         if (player is null) {
@@ -621,21 +620,21 @@ internal sealed partial class PlayerCommandModule {
 
         m_link.SubmitCommand(command: new WorldCommand.Stop(
             Principal: context.ActingPrincipal(),
-            EntityIndex: (index - 1)
+            EntityIndex: index
         ));
 
         // The submit drains synchronously (WorldServer.Submit), so the outcome — or the refusal, if the Drive gate
         // denied it — is already recorded by the time control returns here. Refusal is checked FIRST: WorldServer
         // writes it from EVERY early return a Stop command can take, so a non-empty refusal means the counts below
-        // were never applied and must not be echoed as if they were (the read-back shape player.motion's
+        // were never applied and must not be echoed as if they were (the read-back shape body.motion's
         // MotionRefusal uses, mirrored so a refused stop can never quote another attempt's stale numbers).
-        var refusal = m_population.StopRefusal(bodyIndex: (index - 1));
+        var refusal = m_population.StopRefusal(bodyIndex: index);
 
         if (refusal is { Length: > 0 }) {
-            return new CommandResult(Output: $"[player.stop: player {index} refused → {refusal}]");
+            return new CommandResult(Output: $"[body.stop: body:{index} refused → {refusal}]");
         }
 
-        var outcome = m_population.LastStopOutcome(bodyIndex: (index - 1));
+        var outcome = m_population.LastStopOutcome(bodyIndex: index);
         var clearedLatches = 0;
 
         // A seat's held device state is client-side: free it here so the stop covers both halves. Only on an actual
@@ -643,7 +642,7 @@ internal sealed partial class PlayerCommandModule {
         // silently dropped. This also releases a Toggle-mode channel latched ON (see BindingEntryMode), which a
         // physical release alone never reaches.
         if (IsSeat(index: index)) {
-            var slot = PlayerRoster.SlotFromDisplay(number: index);
+            var slot = index;
 
             m_roster.Seat(slot: slot)?.ReleaseAllHeld();
             clearedLatches = router().ClearSlotHeld(slot: slot);
@@ -651,12 +650,12 @@ internal sealed partial class PlayerCommandModule {
 
         return Echoed(
             args: in args,
-            handler: $"[player.stop: player {index} — tape cleared, released {outcome.ReleasedHeldChannels} held channels, cleared {outcome.ClearedTimedPresses} timed presses, {clearedLatches} toggle latch{((clearedLatches == 1)
+            handler: $"[body.stop: body:{index} — tape cleared, released {outcome.ReleasedHeldChannels} held channels, cleared {outcome.ClearedTimedPresses} timed presses, {clearedLatches} toggle latch{((clearedLatches == 1)
             ? ""
             : "es")} cleared]"
         );
     }
-    // Parses a player.pose positional axis token: a literal "-" holds the value already read into `current`;
+    // Parses a body.pose positional axis token: a literal "-" holds the value already read into `current`;
     // anything else must parse as a finite float, exactly like every other drive-a-player float argument.
     private static bool TryFloatOrHold(in WireArgs args, int index, float current, out float value) {
         if (args.Is(
@@ -673,7 +672,7 @@ internal sealed partial class PlayerCommandModule {
             value: out value
         );
     }
-    // Parses and clamps player.fly's seven positional values — shared by the boot and instance-targeted branches so
+    // Parses and clamps body.fly's seven positional values — shared by the boot and instance-targeted branches so
     // the exact same [-1,1] clamp (every role channel IS bipolar by validator rule — WorldDefinitionValidator
     // .ValidateChannels refuses any other declared shape on a role channel) applies identically to both.
     private static bool TryParseFlySegment(in WireArgs args, out float forward, out float strafe, out float up, out float yaw, out float pitch, out float roll, out float seconds) {
@@ -749,7 +748,7 @@ internal sealed partial class PlayerCommandModule {
     // same-thread read of the same live pose the caller just resolved (a local body's own state, or a routed
     // endpoint's mirrored pose), so nothing can move it before the SnapPose submission a few lines later — one
     // atomic write, never a read-then-write race. Heading/pitch/roll are decomposed from the orientation with the
-    // exact inverse of WorldBody's Euler construction, so a held axis reproduces the identical triple player.where
+    // exact inverse of WorldBody's Euler construction, so a held axis reproduces the identical triple body.where
     // would report.
     private static bool TryResolvePoseSegment(in WireArgs args, Vector3 currentPosition, Quaternion currentOrientation, string verb, out float x, out float y, out float z, out float yawDegrees, out float pitchDegrees, out float rollDegrees, out CommandResult? error) {
         x = y = z = yawDegrees = pitchDegrees = rollDegrees = 0f;
@@ -808,7 +807,7 @@ internal sealed partial class PlayerCommandModule {
             args: in args,
             error: out var tokenError,
             target: out var instanceTarget,
-            verb: "player.where"
+            verb: "body.where"
         )) {
             return tokenError!.Value;
         }
@@ -818,7 +817,7 @@ internal sealed partial class PlayerCommandModule {
         // state a spawned instance's seat has no client mirroring).
         if (instanceTarget.Instance is { } instance) {
             if (instanceTarget.EffectiveCount != 1) {
-                return CommandResult.Error(output: $"[player.where: instance-targeted form expects <slot>, before instance:<name> — slot is 1..{WorldPopulationLimits.LocalSeatCount}]");
+                return CommandResult.Error(output: $"[body.where: instance-targeted form expects <slot>, before instance:<name> — slot is 1..{WorldBodiesLimits.LocalSeatCount}]");
             }
 
             if (
@@ -827,12 +826,12 @@ internal sealed partial class PlayerCommandModule {
                 value: out var instanceSlot
             ) ||
                 (instanceSlot < 1) ||
-                (instanceSlot > WorldPopulationLimits.LocalSeatCount)
+                (instanceSlot > WorldBodiesLimits.LocalSeatCount)
             ) {
-                return CommandResult.Error(output: $"[player.where: instance-targeted <slot> must be an integer 1..{WorldPopulationLimits.LocalSeatCount}]");
+                return CommandResult.Error(output: $"[body.where: instance-targeted <slot> must be an integer 1..{WorldBodiesLimits.LocalSeatCount}]");
             }
 
-            var instanceAnswer = instance.Server.Answer(query: new WorldQuery.PlayerWhere(Index: instanceSlot));
+            var instanceAnswer = instance.Server.Answer(query: new WorldQuery.PlayerWhere(Index: (instanceSlot - 1)));
 
             return new CommandResult(Output: WithInstanceTag(
                 text: instanceAnswer.Text,
@@ -843,21 +842,21 @@ internal sealed partial class PlayerCommandModule {
         }
 
         if (instanceTarget.EffectiveCount > 1) {
-            return CommandResult.Error(output: "[player.where: expected at most 1 value — an optional player index]");
+            return CommandResult.Error(output: "[body.where: expected at most 1 value — an optional body index]");
         }
 
         if (
             WorldArgs.TryParseIndex(
             args: in args,
             at: 0,
-            min: 1,
-            max: m_population.Capacity,
-            fallback: 1,
+            min: 0,
+            max: (m_population.Capacity - 1),
+            fallback: 0,
             value: out var routedIndex
         ) &&
-            (routedIndex <= PlayerRoster.MaxSlots)
+            IsSeat(index: routedIndex)
         ) {
-            var rosterSlot = PlayerRoster.SlotFromDisplay(number: routedIndex);
+            var rosterSlot = routedIndex;
             var location = seatRouter.Route(slot: rosterSlot);
 
             if (
@@ -871,7 +870,7 @@ internal sealed partial class PlayerCommandModule {
                 var routedResult = default(CommandResult);
 
                 location.Endpoint.Submissions.Query(
-                    query: new WorldQuery.PlayerWhere(Index: (location.EntityIndex + 1)),
+                    query: new WorldQuery.PlayerWhere(Index: location.EntityIndex),
                     completion: answer => {
                         var current = seatRouter.Route(slot: rosterSlot);
                         var tagged = WithInstanceTag(
@@ -889,7 +888,7 @@ internal sealed partial class PlayerCommandModule {
         var (player, index, error) = ResolveTarget(
             args: in args,
             requiredCount: 0,
-            verb: "player.where"
+            verb: "body.where"
         );
 
         if (player is null) {
@@ -917,20 +916,20 @@ internal sealed partial class PlayerCommandModule {
 
         return result;
     }
-    // The perception-anchor read-back: a LOCAL seat's player.where answer carries anchor=body:<n> — the 0-based body
+    // The perception-anchor read-back: a LOCAL seat's body.where answer carries anchor=body:<n> — the 0-based body
     // index ALL of that seat's presentation derives from (camera eye, audio listener, seat.<n>.position.* HUD
     // bindings; see Client.WorldPerceptionAnchor) — spliced inside the server's bracketed echo CLIENT-side, because
     // the anchor is client presentation state the server never holds and the wire answer must stay untouched.
-    // Refusals and non-seat targets (5..128 own no seat, hence no anchor) pass through verbatim.
+    // Refusals and non-seat targets (4..127 own no seat, hence no anchor) pass through verbatim.
     private string WithPerceptionAnchor(string text, int index, bool refused) {
         if (
             refused ||
-            (index > PlayerRoster.MaxSlots) ||
+            !IsSeat(index: index) ||
             !text.EndsWith(value: ']')
         ) {
             return text;
         }
 
-        return $"{text[..^1]} anchor=body:{m_anchor.PerceivedBody(slot: PlayerRoster.SlotFromDisplay(number: index))}]";
+        return $"{text[..^1]} anchor=body:{m_anchor.PerceivedBody(slot: index)}]";
     }
 }

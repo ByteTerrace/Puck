@@ -33,7 +33,7 @@ public sealed class WorldTextAuthoringLawTests {
             CodePointRanges: ["U+0020-U+007E"]
         )]
     );
-    private static WorldCreation TextCreation(string? font = null) {
+    private static WorldPrototype TextCreation(string? font = null) {
         var document = new CreationDocument(
             Schema: CreationDocument.CurrentSchema,
             Name: "sign",
@@ -53,7 +53,7 @@ public sealed class WorldTextAuthoringLawTests {
         );
         var canonical = CreationCanonicalizer.Canonicalize(document: document, source: "sign");
 
-        return new WorldCreation(Id: "sign", Document: canonical.Document, HashRaw: canonical.Hash);
+        return new WorldPrototype(Id: "sign", Document: canonical.Document, HashRaw: canonical.Hash);
     }
 
     [Fact]
@@ -168,7 +168,7 @@ public sealed class WorldTextAuthoringLawTests {
         var creation = original with { Document = canonical.Document, HashRaw = canonical.Hash };
         var placement = new WorldPlacement(
             Id: "sign-placement",
-            CreationId: creation.Id,
+            PrototypeId: creation.Id,
             Position: Vector3.Zero,
             YawDegrees: 0f,
             Scale: 1f,
@@ -219,7 +219,7 @@ public sealed class WorldTextAuthoringLawTests {
         var definition = Fixtures.BuildDocument() with {
             Text = Catalog(),
             CreationsRaw = [creation],
-            PlacementRowsRaw = [new WorldPlacement(Id: "marquee", CreationId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f)],
+            PlacementRowsRaw = [new WorldPlacement(Id: "marquee", PrototypeId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f)],
         };
 
         Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: definition, neighbours: null, reason: out var reason), userMessage: reason);
@@ -227,7 +227,7 @@ public sealed class WorldTextAuthoringLawTests {
 
     // A text-bearing creation that ALSO carries a timeline frame, so a placement of it roots through the replay
     // pool rather than the static stamper.
-    private static WorldCreation TextCreationWithFrames() {
+    private static WorldPrototype TextCreationWithFrames() {
         var document = new CreationDocument(
             Schema: CreationDocument.CurrentSchema,
             Name: "marquee",
@@ -257,7 +257,7 @@ public sealed class WorldTextAuthoringLawTests {
         );
         var canonical = CreationCanonicalizer.Canonicalize(document: document, source: "marquee");
 
-        return new WorldCreation(Id: "marquee", Document: canonical.Document, HashRaw: canonical.Hash);
+        return new WorldPrototype(Id: "marquee", Document: canonical.Document, HashRaw: canonical.Hash);
     }
 
     [Fact]

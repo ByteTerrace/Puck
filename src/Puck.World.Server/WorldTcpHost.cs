@@ -39,7 +39,7 @@ public sealed class WorldTcpHost : IDisposable {
     /// admitted or refused). A safety representation constant, never a document knob (CLAUDE.md core rule 8's
     /// "legitimate constants" carve-out names capacity bounds that size memory or the wire — this sizes the
     /// pre-admission connection table, not a per-world tunable Play/Dive/Kart/Jump would ever want different).
-    /// Sized independently of <see cref="WorldPopulationLimits.CapacityCeiling"/> (128, the admitted population
+    /// Sized independently of <see cref="WorldBodiesLimits.CapacityCeiling"/> (128, the admitted population
     /// bound) — a stalled handshake never reaches the population table at all, so it needs its own,
     /// smaller ceiling. 64 is chosen against this class's own documented design target ("a trusted-LAN connection
     /// count small enough that fairness never needs more" — this type's remarks above): generous headroom for that

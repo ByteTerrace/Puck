@@ -300,7 +300,7 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
     // A spoken line stamps the speech clock for the body the player drives (its own body when the slot drives
     // nothing), so a Speaking predicate or a RecentSpeaker anchor follows the driven avatar.
     private void NoteSpoke(int player) {
-        var slot = (player - 1);
+        var slot = PlayerRoster.SlotFromDisplay(number: player);
         var target = m_roster.DriveTarget(slot: slot);
 
         m_facts.NoteSpoke(bodyIndex: ((((uint)target) < ((uint)WorldClient.EntityCapacity))

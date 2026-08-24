@@ -45,7 +45,7 @@ public static class WorldDefinitionRows {
     /// <param name="creations">The section's creations.</param>
     /// <param name="id">The creation id to find.</param>
     /// <returns>The creation, or <see langword="null"/> when the section declares none by that id.</returns>
-    public static WorldCreation? FindCreation(IReadOnlyList<WorldCreation>? creations, string id) => Find(
+    public static WorldPrototype? FindCreation(IReadOnlyList<WorldPrototype>? creations, string id) => Find(
         rows: creations,
         name: id,
         selector: static creation => creation.Id

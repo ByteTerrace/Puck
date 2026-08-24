@@ -31,7 +31,7 @@ public static class WorldAnchorGeometry {
 
             var creation = WorldDefinitionRows.FindCreation(
                 creations: definition.Creations,
-                id: placement.CreationId
+                id: placement.PrototypeId
             );
 
             return ((creation is null)
@@ -52,7 +52,7 @@ public static class WorldAnchorGeometry {
     /// <param name="creation">The placement's creation.</param>
     /// <param name="shapeId">The shape id, or <see langword="null"/>.</param>
     /// <returns>The stamped world position.</returns>
-    public static Vector3 StaticShapePosition(WorldPlacement placement, WorldCreation creation, int? shapeId) {
+    public static Vector3 StaticShapePosition(WorldPlacement placement, WorldPrototype creation, int? shapeId) {
         if (shapeId is not { } targetShapeId) {
             return placement.Position;
         }

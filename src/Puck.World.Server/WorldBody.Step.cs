@@ -19,7 +19,7 @@ public sealed partial class WorldBody {
     /// (screen radius, machine-bearing, un-engaged, authority) before calling this and supplies the ordinal only when
     /// eligible; a fired edge here only reports it — the caller performs the actual
     /// <see cref="Puck.World.Server.WorldEngagement.Compose"/> afterward, through the same authority path a manual
-    /// <c>player.engage</c> takes.</param>
+    /// <c>body.engage</c> takes.</param>
     /// <param name="entityIndex">The source body's population index.</param>
     /// <param name="effectTargets">The pre-step entity target image.</param>
     /// <param name="effectOutputs">Receives non-self effects for post-advance application.</param>
@@ -1041,7 +1041,7 @@ public sealed partial class WorldBody {
         m_producerIntent = default;
         m_hasProducerIntent = false;
 
-        // Overlay the action track, per ordinal: a wire timer (player.press) overlays UNCONDITIONALLY — the poke
+        // Overlay the action track, per ordinal: a wire timer (body.press) overlays UNCONDITIONALLY — the poke
         // stays a poke regardless of intent source — replacing whatever the movement tier resolved for that ordinal;
         // otherwise a non-role ordinal additionally takes the live-held device image, admitted under
         // Live only (role ordinals never carry a held-device overlay — a seat submits them directly
@@ -1079,8 +1079,8 @@ public sealed partial class WorldBody {
     }
     // Build a canonical orientation from Tait-Bryan angles (radians): yaw about world up (+Y), then pitch about the body
     // right (+X), then roll about the body forward (+Z) — the codebase-wide convention, the exact inverse EulerRadians
-    // decomposes. Roll is about local +Z uniformly here and in the free integrator, so the pose set by player.pose and
-    // the attitude flown by player.fly share one sign convention.
+    // decomposes. Roll is about local +Z uniformly here and in the free integrator, so the pose set by body.pose and
+    // the attitude flown by body.fly share one sign convention.
     private static FixedQuaternion OrientationFromEuler(FixedQ4816 yaw, FixedQ4816 pitch, FixedQ4816 roll) {
         return ((FixedQuaternion.FromAxisAngle(
             angle: yaw,
@@ -2098,7 +2098,7 @@ public sealed partial class WorldBody {
     // movement channels (consumed whole-frame, dropped when its time runs out; expired/empty front segments are
     // skipped first, so a drained tape falls through the same frame it empties); with the tape dry, the tick's
     // submitted intent (admitted unless Idle), else the producer image (iff the source names it), else zero. The
-    // action-track lanes are then overlaid, so a wire player.press jumps a tape-driven runner.
+    // action-track lanes are then overlaid, so a wire body.press jumps a tape-driven runner.
     // Whether an intent source names a server-side producer whose staged image fills gaps.
     private static bool SourceNamesProducer(IntentSource source) => source.IsProducer;
     private static ulong SubtractSaturating(ulong value, ulong amount) => ((value > amount)

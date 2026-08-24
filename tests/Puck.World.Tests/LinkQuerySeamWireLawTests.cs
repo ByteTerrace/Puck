@@ -157,7 +157,7 @@ public sealed class LinkQuerySeamWireLawTests {
     private readonly record struct TestIdentity(ECDsa Key, string Domain, string Subject, byte[] Spki);
     private readonly record struct AdmittedPeer(TcpClient Client, int PeerIndex, int Generation);
 
-    private const int PeerBodyIndex = WorldPopulationLimits.LocalSeatCount;
+    private const int PeerBodyIndex = WorldBodiesLimits.LocalSeatCount;
 
     private static TestIdentity GenerateIdentity(string subject) {
         var key = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);
@@ -177,7 +177,7 @@ public sealed class LinkQuerySeamWireLawTests {
         );
     private static WorldDefinition BuildAdmissionDocument(WorldAdmissionEntry entry) {
         var baseDocument = Fixtures.BuildDocument();
-        var population = (baseDocument.Population with { CapacityRaw = (WorldPopulationLimits.LocalSeatCount + 1), NetworkPlayers = 1 });
+        var population = (baseDocument.Population with { CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 1), NetworkPlayers = 1 });
 
         return (baseDocument with { PopulationRaw = population, Admission = [entry] });
     }

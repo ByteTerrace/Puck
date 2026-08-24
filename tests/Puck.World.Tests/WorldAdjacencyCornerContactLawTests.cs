@@ -171,13 +171,13 @@ public sealed class WorldAdjacencyCornerContactLawTests {
             Shapes: [shape],
             Frames: null);
         var canonical = CreationCanonicalizer.Canonicalize(document: document, source: "ground");
-        var creation = new WorldCreation(Id: "ground", Document: canonical.Document, HashRaw: canonical.Hash);
+        var creation = new WorldPrototype(Id: "ground", Document: canonical.Document, HashRaw: canonical.Hash);
         var spawn = (floorCenterZ / 2f);
 
         return source with {
             CollisionRaw = source.Collision with { Requirements = [WorldContactRequirement.SmoothUnionContact] },
             CreationsRaw = [creation],
-            PlacementRowsRaw = [new WorldPlacement(Id: "ground", CreationId: creation.Id, Position: new Vector3(x: 0f, y: 0f, z: floorCenterZ), YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f))],
+            PlacementRowsRaw = [new WorldPlacement(Id: "ground", PrototypeId: creation.Id, Position: new Vector3(x: 0f, y: 0f, z: floorCenterZ), YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f))],
             SpawnPointsRaw = [
                 new WorldSpawnPoint(Id: "seat-1", Position: new Vector3(x: 0f, y: 1f, z: spawn)),
                 new WorldSpawnPoint(Id: "seat-2", Position: new Vector3(x: 2f, y: 1f, z: spawn)),

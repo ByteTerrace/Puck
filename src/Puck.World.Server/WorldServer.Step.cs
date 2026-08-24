@@ -650,7 +650,7 @@ public sealed partial class WorldServer {
             tick: tick
         );
     }
-    // Body state, not document state: the same WorldBody.Pose door ApplyCommand's SnapPose arm (player.pose) uses,
+    // Body state, not document state: the same WorldBody.Pose door ApplyCommand's SnapPose arm (body.pose) uses,
     // but as the world's own act — no drive-gate or grant check, since a gated body is one a rule still needs to
     // move.
     private void FirePoseEffect(CompiledWorldEffect effect, ulong tick) {
@@ -927,7 +927,7 @@ public sealed partial class WorldServer {
             }
         }
 
-        // Route every fired probe into an ordinary Engage, through the SAME authority path a manual player.engage
+        // Route every fired probe into an ordinary Engage, through the SAME authority path a manual body.engage
         // takes — see ResolveEngageProbes for why this is expected to succeed (its own eligibility pass already
         // re-checks CheckEngage), so a denial here can only mean the grant table changed between the two passes on
         // this single-threaded step (an admin revoke applied in between — not a concurrent race, the step runs one
@@ -1065,7 +1065,7 @@ public sealed partial class WorldServer {
     /// released, never latched: once the gate row's cell reads zero, this check passes straight through to the
     /// ordinary <see cref="WorldGrants.Allows"/> call below. <see cref="ApplyCommand"/>'s generic Drive gate checks
     /// the same <see cref="TryDriveGateVerdict"/> before its own <see cref="WorldGrants.Allows"/> call, so a
-    /// scripted tape segment (<c>player.fly</c>/<c>EnqueueSegment</c>) is refused by the same fact a raw per-tick
+    /// scripted tape segment (<c>body.fly</c>/<c>EnqueueSegment</c>) is refused by the same fact a raw per-tick
     /// channel submission is.</remarks>
     public GrantVerdict ApplyIntentSubmission(WorldBody body, in IntentSubmission submission) {
         if (TryDriveGateVerdict(

@@ -61,7 +61,7 @@ public sealed class WorldGrants : IWorldGrantsView {
     private static readonly long DefaultHoldCeiling = Puck.Maths.FixedQ4816.FromDouble(value: WorldGrant.DefaultHoldSeconds).Value;
     // The per-body-index own-body default sets, minted on first read and never mutated afterward — every
     // uncomposed participant shares its index's instance.
-    private static readonly IReadOnlyList<ControlApplication>?[] s_ownBodyApplications = new IReadOnlyList<ControlApplication>?[WorldPopulationLimits.CapacityCeiling];
+    private static readonly IReadOnlyList<ControlApplication>?[] s_ownBodyApplications = new IReadOnlyList<ControlApplication>?[WorldBodiesLimits.CapacityCeiling];
     private readonly Dictionary<WorldPrincipal, PrincipalGrants> m_byPrincipal = new();
     // Every principal that has COMPOSED an application set away from its own-body default. An absent row IS the
     // default (see DefaultApplications) — the single storage engagement lives in, distinct from the capability sets
@@ -417,7 +417,7 @@ public sealed class WorldGrants : IWorldGrantsView {
                 return true;
             }
 
-            // WorldCreation.Id is a DocumentIdentifier, so a `state.` token there is a REFERENCE whose resolved
+            // WorldPrototype.Id is a DocumentIdentifier, so a `state.` token there is a REFERENCE whose resolved
             // value is some other string. WorldPlacement.Id is a plain literal, which is why this is creation-only.
             if (
                 (grant.Subject.Kind == GrantSubjectKind.Creation) &&
@@ -721,7 +721,7 @@ public sealed class WorldGrants : IWorldGrantsView {
                 (!trustedWildcard && (subject.Kind == GrantSubjectKind.Screen)) ||
                 (!trustedWildcard && (subject.Kind == GrantSubjectKind.Region)) ||
                 (!trustedWildcard && (subject.Kind == GrantSubjectKind.Adjacency)) ||
-                (!trustedWildcard && (subject.Kind == GrantSubjectKind.Seat) && (((uint)subject.Value) < ((uint)WorldPopulationLimits.LocalSeatCount))) ||
+                (!trustedWildcard && (subject.Kind == GrantSubjectKind.Seat) && (((uint)subject.Value) < ((uint)WorldBodiesLimits.LocalSeatCount))) ||
                 ((subject.Kind == GrantSubjectKind.All) && trustedWildcard)),
             WorldCapability.Control => ((subject.Kind == GrantSubjectKind.Screen) ||
                 // A control application's target may be a BODY — a possession/co-drive application, bounded by the
@@ -939,7 +939,7 @@ public sealed class WorldGrants : IWorldGrantsView {
             (capability == WorldCapability.Observe) &&
             (subject.Kind == GrantSubjectKind.Seat)
         ) {
-            return $"seat:{subject.Value} does not exist — local seats are 0..{(WorldPopulationLimits.LocalSeatCount - 1)}";
+            return $"seat:{subject.Value} does not exist — local seats are 0..{(WorldBodiesLimits.LocalSeatCount - 1)}";
         }
 
         var trusted = (principal.Kind is PrincipalKind.Console or PrincipalKind.Seat);

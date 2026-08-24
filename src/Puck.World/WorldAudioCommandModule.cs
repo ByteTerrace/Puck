@@ -189,7 +189,7 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
         yield return CommandDefinition.Verb(
             bindability: CommandBindability.Unbindable,
             name: "music.state",
-            description: "Reads the live music clock/director state authoritatively off seat 1's currently claimed authority — the current segment, any pending transition, elapsed clock ticks, transition count, and the tick/from/to of the most recent committed transition (none= before the first one, or when the world declares no music). Follows a transferred seat the same way player.where does, so it answers correctly whether that authority is local or remote. A query — always echoes.",
+            description: "Reads the live music clock/director state authoritatively off seat 1's currently claimed authority — the current segment, any pending transition, elapsed clock ticks, transition count, and the tick/from/to of the most recent committed transition (none= before the first one, or when the world declares no music). Follows a transferred seat the same way body.where does, so it answers correctly whether that authority is local or remote. A query — always echoes.",
             valueKind: CommandValueKind.Digital,
             handler: _ => RoutedQuery(
                 query: static index => new WorldQuery.MusicState(Index: index),
@@ -200,7 +200,7 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
         yield return CommandDefinition.Verb(
             bindability: CommandBindability.Unbindable,
             name: "judge.state",
-            description: "Reads the declared judge window sets, and the last judged grade/tick, authoritatively off seat 1's currently claimed authority. Follows a transferred seat the same way player.where does. A query — always echoes.",
+            description: "Reads the declared judge window sets, and the last judged grade/tick, authoritatively off seat 1's currently claimed authority. Follows a transferred seat the same way body.where does. A query — always echoes.",
             valueKind: CommandValueKind.Digital,
             handler: _ => RoutedQuery(
                 query: static index => new WorldQuery.JudgeState(Index: index),

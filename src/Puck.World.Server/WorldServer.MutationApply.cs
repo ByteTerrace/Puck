@@ -301,7 +301,7 @@ public sealed partial class WorldServer {
                 ));
             case WorldSubmissionPayload.ScreenOp screenOp:
                 // Synchronous, like Command/Grant/Revoke — never buffered to the tick boundary — so a following
-                // WorldCommand.ComposeControl submitted in the same batch (player.engage's auto-insert precheck) observes
+                // WorldCommand.ComposeControl submitted in the same batch (body.engage's auto-insert precheck) observes
                 // this op's effect immediately. See WorldScreenOp's own remarks for why.
                 TryApplyScreenOp(
                     op: screenOp.Value,
@@ -1219,7 +1219,7 @@ public sealed partial class WorldServer {
         // A defaults-class mutation edits what the NEXT boot wakes on while the live
         // session levers keep their values (world.save folds them); every other mutation applies live on delivery.
         // SetAuthoringDefaults is the honest exception to the binary split: ONE whole-row mutation carries BOTH
-        // classes at once (WorldAuthoringDefaults' own remarks name which field is which) — the headroom/repeat-cap
+        // classes at once (WorldPlacementPolicyDefaults' own remarks name which field is which) — the headroom/repeat-cap
         // fields are boot-consumed by the frozen render-envelope probe, while candidate/layout/preview fields are
         // re-read live at every use site. The narration spells out the split rather than forcing the mutation into
         // either WorldEditEchoKind bucket; Kind stays Mutation because the live-consumed majority applies NOW.
@@ -1461,7 +1461,7 @@ public sealed partial class WorldServer {
 
         // CC/death gating (Seam A) — see TryDriveGateVerdict's own remarks: the SAME rule ApplyIntentSubmission
         // consults, checked here BEFORE the ordinary grant-table lookup so a scripted tape segment
-        // (player.fly/EnqueueSegment) or any other authority command is refused by the identical state fact a raw
+        // (body.fly/EnqueueSegment) or any other authority command is refused by the identical state fact a raw
         // per-tick submission is, never a lesser door a script could walk around.
         var gated = TryDriveGateVerdict(
             bodyIndex: command.EntityIndex,
@@ -1548,7 +1548,7 @@ public sealed partial class WorldServer {
                         authoredMaximum: holdCeiling
                     );
 
-                    // The submit drains synchronously, so player.press's handler can read this back immediately —
+                    // The submit drains synchronously, so body.press's handler can read this back immediately —
                     // the same MotionRefusal/StopOutcome read-back shape — and name a silent grant-budget truncation
                     // instead of echoing the requested duration as if it were honored. Clears any prior refusal note
                     // this body's press slot carried, so a stale denial can never bleed into a fresh success.
@@ -1570,7 +1570,7 @@ public sealed partial class WorldServer {
                 // is the SAME check WorldDefinitionValidator runs at boot (WorldDefinitionValidator.TryValidateProgramCoherence)
                 // — reusing it here is what keeps a document-legal kit from runtime-switching into an incoherent program.
                 // Refusal narrates through the SAME echo path world.designation/world.grant use (stderr line + EchoTap),
-                // and records on the population so the SYNCHRONOUS submitter (player.motion's handler) can read back the
+                // and records on the population so the SYNCHRONOUS submitter (body.motion's handler) can read back the
                 // true outcome instead of assuming success.
                 if (
                     !m_population.TryGetBodyMotionProgram(
@@ -1585,7 +1585,7 @@ public sealed partial class WorldServer {
                         bodyIndex: motion.EntityIndex,
                         reason: reason
                     );
-                    Console.Error.WriteLine(value: $"[player.motion refused: {reason}]");
+                    Console.Error.WriteLine(value: $"[body.motion refused: {reason}]");
                     EchoTap?.Invoke(obj: new WorldEditEcho(
                         Message: reason,
                         Rejected: true,
@@ -1602,7 +1602,7 @@ public sealed partial class WorldServer {
                         bodyIndex: motion.EntityIndex,
                         reason: coherenceReason
                     );
-                    Console.Error.WriteLine(value: $"[player.motion refused: {coherenceReason}]");
+                    Console.Error.WriteLine(value: $"[body.motion refused: {coherenceReason}]");
                     EchoTap?.Invoke(obj: new WorldEditEcho(
                         Message: coherenceReason,
                         Rejected: true,
@@ -1634,7 +1634,7 @@ public sealed partial class WorldServer {
                 )) {
                     body.SetIntentSource(source: control.Source);
                 } else {
-                    Console.Error.WriteLine(value: $"[player.control refused: {sourceRefusal}]");
+                    Console.Error.WriteLine(value: $"[body.control refused: {sourceRefusal}]");
                 }
 
                 break;
@@ -1645,13 +1645,13 @@ public sealed partial class WorldServer {
                     yawRadians: reconcile.YawRadians,
                     seconds: reconcile.Seconds
                 );
-                Console.Error.WriteLine(value: $"[player.reconcile: body:{reconcile.EntityIndex} continuity={continuity.ToString().ToLowerInvariant()} maxSmoothError={m_definition.Motion.MaxSmoothError:0.###}]");
+                Console.Error.WriteLine(value: $"[body.reconcile: body:{reconcile.EntityIndex} continuity={continuity.ToString().ToLowerInvariant()} maxSmoothError={m_definition.Motion.MaxSmoothError:0.###}]");
 
                 break;
             case WorldCommand.Stop:
-                // The submit drains synchronously (WorldServer.Submit), so player.stop's handler can read this back
+                // The submit drains synchronously (WorldServer.Submit), so body.stop's handler can read this back
                 // through WorldPopulation.LastStopOutcome the instant control returns to it — the same pattern
-                // player.motion's MotionRefusal read-back uses.
+                // body.motion's MotionRefusal read-back uses.
                 m_population.NoteStopOutcome(
                     bodyIndex: command.EntityIndex,
                     outcome: body.Stop()
@@ -1660,7 +1660,7 @@ public sealed partial class WorldServer {
                 break;
             case WorldCommand.LoadDurableState load:
                 if (load.Tick != NextInputTick) {
-                    Console.Error.WriteLine(value: $"[player.state-load refused: tick {load.Tick} is not next tick {NextInputTick}]");
+                    Console.Error.WriteLine(value: $"[body.state-load refused: tick {load.Tick} is not next tick {NextInputTick}]");
                 } else if (!body.TryStageDurableState(
                     tick: load.Tick,
                     values: load.Values,
@@ -1668,7 +1668,7 @@ public sealed partial class WorldServer {
                     writer: load.Principal.Describe(),
                     reason: out var stateReason
                 )) {
-                    Console.Error.WriteLine(value: $"[player.state-load refused: {stateReason}]");
+                    Console.Error.WriteLine(value: $"[body.state-load refused: {stateReason}]");
                 }
 
                 break;

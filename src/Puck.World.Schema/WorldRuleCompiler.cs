@@ -1678,7 +1678,7 @@ public static class WorldRuleCompiler {
     }
     // upsertHudPanel/upsertPlacement are whole-row upserts, exactly like WorldMutation.UpsertHudPanel/UpsertPlacement
     // submitted from the console or an addon — the row's own content (capacity, unknown binding, unresolved
-    // creationId) is validated by the ORDINARY whole-document revalidation when the effect actually fires, never
+    // prototypeId) is validated by the ORDINARY whole-document revalidation when the effect actually fires, never
     // duplicated here. Compile time checks only what a whole-row upsert can check in isolation: that it names itself.
     private static CompiledWorldEffect ResolveUpsertHudPanel(ActionEffect.UpsertHudPanel effect, string ruleName) {
         if (

@@ -15,7 +15,7 @@ namespace Puck.World.Client;
 /// <remarks>Face geometry is not derived here: <see cref="WorldFaceCatalog"/> owns it, in fixed point, shared with
 /// the portal trigger and the arrival isometry. This class is the render consumer — it converts a finished frame to
 /// single precision once and applies the render-only policy (proud epsilon, interior fraction) on top.</remarks>
-public static class WorldCreationFacets {
+public static class WorldPrototypeFacets {
     // RENDER POLICY over the shared frame, not geometry: the slab sits proud of the face surface by
     // FaceProudEpsilon so its zero-set never coincides with the host shape's (coincident zero-sets speckle), and it
     // covers FaceInteriorFraction of the frame so the drawn image reads as an inset screen rather than reaching the
@@ -100,7 +100,7 @@ public static class WorldCreationFacets {
         foreach (var placement in definition.Placements) {
             if (WorldDefinitionRows.FindCreation(
                 creations: definition.Creations,
-                id: placement.CreationId
+                id: placement.PrototypeId
             ) is not { } creation) {
                 continue;
             }

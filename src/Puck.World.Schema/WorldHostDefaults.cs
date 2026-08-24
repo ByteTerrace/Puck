@@ -71,9 +71,9 @@ public sealed record WorldStorageDefaults(string? Endpoint = null, string? UserI
 /// released overlay with no definition delivery after this many produced frames drops honestly.</param>
 /// <param name="DerivedFaceScreens">Boot-consumed. The derived screen slots the binder reserves at boot for creation
 /// faces (a face declared by a placement's creation, lit by a feed), registered at
-/// <c>[<c>Client.WorldCreationFacets.DerivedFaceBase</c>, DerivedFaceBase + this)</c>. Bounded so the range
+/// <c>[<c>Client.WorldPrototypeFacets.DerivedFaceBase</c>, DerivedFaceBase + this)</c>. Bounded so the range
 /// stays inside the engine screen table.</param>
-public sealed record WorldAuthoringDefaults(
+public sealed record WorldPlacementPolicyDefaults(
     int AuthoringHeadroomScreens,
     int AuthoringHeadroomPlacements,
     float MinPlacementScale,
@@ -87,7 +87,7 @@ public sealed record WorldAuthoringDefaults(
     /// The engine holds no authoring policy of its own: the standard policy is AUTHORED, in
     /// <c>Assets/worlds/standard.world.json</c>, and a world inherits it by naming that document as its basis; a
     /// world reading this cannot author placements or edit.</summary>
-    public static WorldAuthoringDefaults Absent { get; } = new WorldAuthoringDefaults(
+    public static WorldPlacementPolicyDefaults Absent { get; } = new WorldPlacementPolicyDefaults(
         AuthoringHeadroomPlacements: 0,
         AuthoringHeadroomScreens: 0,
         CandidateCap: 0,

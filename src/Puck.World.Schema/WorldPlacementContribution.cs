@@ -32,11 +32,11 @@ public enum WorldContributionTenure : byte {
 /// laundering the acting-principal rule refuses.</para>
 /// <para>An unfilled slot shows its own <see cref="SlotCreationId"/>, so no creationless placement has to be
 /// representable. <see cref="Contributor"/> is the filled discriminator, and the validator pins the pair: unfilled
-/// requires <c>placement.creationId == slotCreationId</c>, filled requires them to differ. Retraction re-points
-/// <c>creationId</c> back and clears the stamp through one <c>WorldMutation.UpsertPlacement</c>.</para>
+/// requires <c>placement.prototypeId == slotCreationId</c>, filled requires them to differ. Retraction re-points
+/// <c>prototypeId</c> back and clears the stamp through one <c>WorldMutation.UpsertPlacement</c>.</para>
 /// </remarks>
 /// <param name="Tenure">The authored lifecycle.</param>
-/// <param name="SlotCreationId">The host-owned <see cref="WorldCreation.Id"/> the slot shows while unfilled and
+/// <param name="SlotCreationId">The host-owned <see cref="WorldPrototype.Id"/> the slot shows while unfilled and
 /// returns to on retraction. Must resolve to a declared creation row.</param>
 /// <param name="Link">The authored <c>adjacencies</c> row name the presence check watches — the same key the
 /// <c>$link:&lt;adjacencyName&gt;</c> reserved rule channel reads. Required for
