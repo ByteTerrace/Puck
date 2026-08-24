@@ -978,7 +978,7 @@ public sealed partial class WorldServer {
             return false;
         }
 
-        candidate = RebaseAdvanceEpoch(
+        candidate = RebaseCellTraits(
             candidate: candidate,
             mutation: mutation,
             original: m_definition,

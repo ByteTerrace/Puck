@@ -1,0 +1,8 @@
+world.status
+world.kits
+player.where 1
+world.wait 5
+player.fly 1 0 0 0 0 0 2
+world.wait 500
+player.where 1
+world.wait 5

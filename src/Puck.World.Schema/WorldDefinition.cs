@@ -46,6 +46,7 @@ public sealed record WorldDefinition(
     [property: JsonPropertyName("views"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldViewDefaults? ViewsRaw = null,
     [property: JsonPropertyName("looks"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldLook>? LooksRaw = null,
     [property: JsonPropertyName("lookAssignment"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRowAssignment? LookAssignmentRaw = null,
+    [property: JsonPropertyName("dynamics"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldDynamicsRow>? DynamicsRaw = null,
     [property: JsonPropertyName("grants"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldGrant>? GrantsRaw = null,
     [property: JsonPropertyName("hud"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldHudSection? HudRaw = null,
     [property: JsonPropertyName("icons"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldIconographySection? IconsRaw = null,
@@ -148,6 +149,11 @@ public sealed record WorldDefinition(
         : string.Empty));
     /// <summary>Gets the stable document id used when this world submits to another document.</summary>
     public string? DocumentId { get; init; }
+    /// <summary>Gets the named second-order "personality" rows every follower consumer (looks, camera booms, kit
+    /// planar shaping, state cells) names by <see cref="WorldDynamicsRow.Name"/> — ABSENT resolves to none, so an
+    /// unauthored world is unchanged.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<WorldDynamicsRow> Dynamics => (DynamicsRaw ?? []);
     /// <summary>Gets the unknown top-level members captured during deserialization, declared identically on every versioned
     /// document root here and validated
     /// through the shared <see cref="DocumentExtensionsPolicy"/> regime (see <see cref="WorldDefinitionValidator"/>): a

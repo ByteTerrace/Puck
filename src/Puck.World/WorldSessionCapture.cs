@@ -208,10 +208,15 @@ internal static class WorldSessionCapture {
     // computed value at `tick`, epoch projected to 0; a KEYED row's independently-advancing cells (WorldStateCell.Advance)
     // settle the same way, one at a time, leaving any non-advancing cell in the same row untouched. Both read through
     // WorldStateAdvance.ComputeCurrentValue — the SAME computation world.state/a rule gate/a HUD binding already read live
-    // — so the projected base is exactly what an observer would have seen this session, never a re-derived guess. A row
-    // with nothing advancing returns unchanged (no allocation), matching CaptureLinks/CaptureScreens' own "nothing
-    // drifted, hand back the original list" idiom.
-    private static IReadOnlyList<WorldStateRow> CaptureState(IReadOnlyList<WorldStateRow> rows, ulong tick) {
+    // — so the projected base is exactly what an observer would have seen this session, never a re-derived guess. A
+    // Dynamics trait settles the same way but on the TRAIT alone, never the cell's own stored truth: Y0/V0 become the
+    // live eased value/velocity WorldStateReader.TryEvaluateDynamics reports at `tick`, epoch projected to 0, so a
+    // reloaded session's follower resumes exactly where this one left it rather than snapping back to rest. A row
+    // with nothing advancing or easing returns unchanged (no allocation), matching CaptureLinks/CaptureScreens' own
+    // "nothing drifted, hand back the original list" idiom.
+    private static IReadOnlyList<WorldStateRow> CaptureState(WorldDefinition definition, ulong tick) {
+        var rows = definition.State;
+
         if (rows.Count == 0) {
             return rows;
         }
@@ -221,6 +226,7 @@ internal static class WorldSessionCapture {
         for (var index = 0; (index < rows.Count); index++) {
             var row = rows[index];
             var settledRow = SettleRow(
+                definition: definition,
                 row: row,
                 tick: tick
             );
@@ -326,10 +332,10 @@ internal static class WorldSessionCapture {
 
         return false;
     }
-    private static WorldStateRow SettleRow(WorldStateRow row, ulong tick) {
+    private static WorldStateRow SettleRow(WorldDefinition definition, WorldStateRow row, ulong tick) {
         // A slot-shaped row's OWN trait governs its one cell — the row-level counterpart of a keyed cell's own trait
-        // below, and never both on the SAME cell (the validator refuses a slot-shaped row from declaring Advance
-        // beside a keyed cells array in the first place).
+        // below, and never both on the SAME cell (the validator refuses a slot-shaped row from declaring Advance or
+        // Dynamics beside a keyed cells array, or the two together, in the first place).
         if (row.Advance is { } rowAdvance) {
             var slot = row.Cells![0];
             var settledValue = rowAdvance.ComputeCurrentValue(
@@ -344,6 +350,29 @@ internal static class WorldSessionCapture {
             });
         }
 
+        if (row.Dynamics is { } rowDynamics) {
+            var slot = row.Cells![0];
+
+            if (!WorldStateReader.TryEvaluateDynamics(
+                cell: slot,
+                definition: definition,
+                row: row,
+                sample: out var sample,
+                tick: tick,
+                trait: out _
+            )) {
+                return row;
+            }
+
+            return (row with {
+                Dynamics = (rowDynamics with {
+                    EpochTick = 0,
+                    V0 = WorldStateReader.DynamicsFixedToRaw(row: row, value: sample.Velocity),
+                    Y0 = WorldStateReader.DynamicsFixedToRaw(row: row, value: sample.Value),
+                }),
+            });
+        }
+
         if (row.Cells is not { Count: > 0 } cells) {
             return row;
         }
@@ -353,19 +382,40 @@ internal static class WorldSessionCapture {
         for (var index = 0; (index < cells.Count); index++) {
             var cell = cells[index];
 
-            if (cell.Advance is not { } cellAdvance) {
+            if (cell.Advance is { } cellAdvance) {
+                settledCells ??= new List<WorldStateCell>(collection: cells);
+                settledCells[index] = (cell with {
+                    Value = cellAdvance.ComputeCurrentValue(
+                    row: row,
+                    baseValue: cell.Value,
+                    currentTick: tick
+                ),
+                    Advance = (cellAdvance with { EpochTick = 0 }),
+                });
+
                 continue;
             }
 
-            settledCells ??= new List<WorldStateCell>(collection: cells);
-            settledCells[index] = (cell with {
-                Value = cellAdvance.ComputeCurrentValue(
+            if (
+                (cell.Dynamics is { } cellDynamics) &&
+                WorldStateReader.TryEvaluateDynamics(
+                cell: cell,
+                definition: definition,
                 row: row,
-                baseValue: cell.Value,
-                currentTick: tick
-            ),
-                Advance = (cellAdvance with { EpochTick = 0 }),
-            });
+                sample: out var cellSample,
+                tick: tick,
+                trait: out _
+            )
+            ) {
+                settledCells ??= new List<WorldStateCell>(collection: cells);
+                settledCells[index] = (cell with {
+                    Dynamics = (cellDynamics with {
+                        EpochTick = 0,
+                        V0 = WorldStateReader.DynamicsFixedToRaw(row: row, value: cellSample.Velocity),
+                        Y0 = WorldStateReader.DynamicsFixedToRaw(row: row, value: cellSample.Value),
+                    }),
+                });
+            }
         }
 
         return ((settledCells is null)
@@ -429,7 +479,7 @@ internal static class WorldSessionCapture {
         ),
             StateRaw = ((definition.StateRaw ?? new WorldStateSection()) with {
                 World = CaptureState(
-            rows: definition.State,
+            definition: definition,
             tick: tick
         ),
             }),

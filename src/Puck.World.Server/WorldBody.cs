@@ -143,6 +143,26 @@ public sealed partial class WorldBody {
     // so only a hard teleport that resets vertical state clears it (Warp/Pose/Reconcile) — Face keeps it (resetVertical:
     // false, no momentum lost across a heading snap).
     private FixedVector3 m_planarVelocity;
+    // The planar dynamics follower's own Q32 state — meaningful only under a kit whose motion model names a
+    // dynamics row (m_tuning.PlanarDynamics is non-null); read/written exclusively by WorldBody.Dynamics.cs. Its
+    // Position lane tracks m_planarVelocity: StepPlanarFollower re-seeds it (keeping the velocity raw) whenever a
+    // contact write-back, an up-axis transport, or a continuum arrival moved m_planarVelocity out from under it, and
+    // the follower's own raw output is what a per-tick move-speed clamp on m_planarVelocity later pulls back toward.
+    // SURVIVES a live kit recompile, alongside m_planarVelocity; reset in ResetVertical, alongside it.
+    private SecondOrderState3 m_planarFollower;
+    // The target StepPlanarFollower last saw, held so it can derive the ZOH target velocity (target − previous)
+    // × the world's simulation rate — the second-order system's r-driven initial-response term. Meaningless until
+    // m_planarFollowerSeeded is set: StepPlanarFollower's FIRST step after a reset writes it without differencing,
+    // so a teleport can never manufacture a target-velocity impulse out of the zeroed previous target.
+    private FixedVector3 m_planarPreviousTarget;
+    private bool m_planarFollowerSeeded;
+    // The swim vertical dynamics follower's own Q32 state and previous target — the one-dimensional counterparts of
+    // m_planarFollower/m_planarPreviousTarget, stepped by ApplyBuoyancyAndSurface under the SAME compiled
+    // FixedMotionDynamics.Planar propagator a swim kit's planar lanes step. m_verticalFollowerSeeded is the vertical
+    // lane's counterpart to m_planarFollowerSeeded.
+    private SecondOrderState m_verticalFollower;
+    private FixedQ4816 m_verticalPreviousTarget;
+    private bool m_verticalFollowerSeeded;
     // The avatar's simulation position. See Position.
     private FixedVector3 m_position;
     // The position captured at the top of the most recent Advance — the swept portal-crossing scan's segment start
@@ -339,9 +359,12 @@ public sealed partial class WorldBody {
     /// (<see cref="FixedWorldKit.SprintChannelOrdinal"/>), or <c>-1</c> for a kit with no sprint capability.</param>
     /// <param name="driftChannelOrdinal">The ordinal <see cref="WorldMotionModel.Vehicle.DriftChannel"/> resolved to
     /// (<see cref="FixedWorldKit.DriftChannelOrdinal"/>), or <c>-1</c> for a kit that cannot drift.</param>
+    /// <param name="planarDynamics">The kit's compiled second-order follower
+    /// (<see cref="FixedWorldKit.PlanarDynamics"/>), or <see langword="null"/> when the kit shapes planar velocity
+    /// through its response table instead.</param>
     /// <exception cref="ArgumentNullException"><paramref name="program"/> or <paramref name="programs"/> is <see langword="null"/>.</exception>
-    public WorldBody(WorldMotionModel motion, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedQ4816 maxSmoothError, CompiledActionSpec?[]? actions = null, FixedQ4816[]? actionThresholds = null, ChannelShape[]? actionShapes = null, bool[]? roleMask = null, RoleChannelOrdinals roleOrdinals = default, CompiledActionStateSlot[]? actionState = null, FixedWorldCollider? collider = null, int sprintChannelOrdinal = -1, int driftChannelOrdinal = -1) {
-        SetTuning(motion: motion);
+    public WorldBody(WorldMotionModel motion, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedQ4816 maxSmoothError, CompiledActionSpec?[]? actions = null, FixedQ4816[]? actionThresholds = null, ChannelShape[]? actionShapes = null, bool[]? roleMask = null, RoleChannelOrdinals roleOrdinals = default, CompiledActionStateSlot[]? actionState = null, FixedWorldCollider? collider = null, int sprintChannelOrdinal = -1, int driftChannelOrdinal = -1, FixedMotionDynamics? planarDynamics = null) {
+        SetTuning(motion: motion, planarDynamics: planarDynamics);
         m_bodyMotionProgram = (program ?? throw new ArgumentNullException(paramName: nameof(program)));
         m_bodyMotionPrograms = (programs ?? throw new ArgumentNullException(paramName: nameof(programs)));
         CopyChannelBindings(

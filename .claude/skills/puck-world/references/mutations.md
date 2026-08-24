@@ -208,6 +208,7 @@ nested records, which are the authority:
 | Groups | UpsertGroupKind 56, RemoveGroupKind 57, FormGroup 58, JoinGroup 59, LeaveGroup 60, KickMember 61, OfferOwnership 62, SettleOwnership 63 |
 | PlayerDefaults | SetPlayerDefaults 64 |
 | Market | CreateMarketListing 65, PlaceMarketBid 66, BuyoutMarketListing 67, CancelMarketListing 68, SettleMarketListing 69, PruneMarketListings 70 |
+| Dynamics | UpsertDynamics 71, RemoveDynamics 72 |
 
 Ordinals 37/38 (the retired screen-link pair) are unassigned and never reused:
 machine cable linking is authored on the `Machine` source itself
@@ -259,8 +260,8 @@ Rules the catalog encodes:
 
 ## Adding a mutation kind, end to end
 
-**FIRST — the catalog declares 69 kinds on a 128-bit lane (0–70 with 37/38
-retired).** Ordinals 71–127 are free; a colliding ordinal is still a boot failure, not an
+**FIRST — the catalog declares 71 kinds on a 128-bit lane (0–72 with 37/38
+retired).** Ordinals 73–127 are free; a colliding ordinal is still a boot failure, not an
 option. A genuinely new kind is
 a SUBSTRATE decision, not a lane's, and must SURVIVE CONSOLIDATION REVIEW first:
 is this an existing kind's payload? Most proposals are — a new section reuses
@@ -305,7 +306,7 @@ past the consolidation gate do the steps below apply.
 A kind's CONSOLE reachability (steps above) is independent of its ADDON
 reachability: a guest submits a mutation through a Mutate handle's own
 hand-walked JSON door, `Addons.WorldAddonMutationDecoder`, which wires only a
-NAMED SUBSET of the 64 declared kinds today (10, as of this writing — the 5 HUD
+NAMED SUBSET of the 71 declared kinds today (10, as of this writing — the 5 HUD
 kinds plus the 2 placement kinds, the 2 state kinds, and `SetInputHold`; the
 Properties/Interactions/Groups kinds are console-only, not addon-reachable; see
 [addons.md](addons.md#requests-queries-verdicts) for the exact list and the

@@ -747,6 +747,14 @@ public static partial class WorldDefinitionValidator {
             path: "motion",
             errors: errors
         );
+
+        // Dynamics validates BEFORE every consumer that names a row by dynamics/row: state, kits, looks, and camera
+        // programs all refuse a dangling reference against THIS set.
+        var dynamicsNames = ValidateDynamics(
+            dynamics: definition.Dynamics,
+            errors: errors
+        );
+
         ValidatePlayerDefaults(
             defaults: definition.PlayerDefaults,
             errors: errors
@@ -928,6 +936,7 @@ public static partial class WorldDefinitionValidator {
         var stateRows = ValidateState(
             rows: definition.State,
             generators: definition.Generators,
+            dynamicsNames: dynamicsNames,
             errors: errors
         );
         var actionStateSlots = ValidateActionState(
@@ -963,6 +972,7 @@ public static partial class WorldDefinitionValidator {
             allChannelNames: allChannelNames,
             compositionChannelNames: compositionChannelNames,
             definition: definition,
+            dynamicsNames: dynamicsNames,
             errors: errors,
             programs: programs,
             stateRows: stateRows,
@@ -1173,6 +1183,7 @@ public static partial class WorldDefinitionValidator {
             creations: definition.Creations,
                 looks: definition.Looks,
             creationIds: creationIds,
+            dynamicsNames: dynamicsNames,
             errors: errors
         );
 

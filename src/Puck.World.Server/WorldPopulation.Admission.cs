@@ -24,7 +24,8 @@ public sealed partial class WorldPopulation {
             collider: kit.Collider,
             maxSmoothError: m_fixedMotion.MaxSmoothError,
             sprintChannelOrdinal: kit.SprintChannelOrdinal,
-            driftChannelOrdinal: kit.DriftChannelOrdinal
+            driftChannelOrdinal: kit.DriftChannelOrdinal,
+            planarDynamics: kit.PlanarDynamics
         );
 
         body.SetContactField(field: m_contactField);
@@ -82,7 +83,8 @@ public sealed partial class WorldPopulation {
             collider: kit.Collider,
             maxSmoothError: m_fixedMotion.MaxSmoothError,
             sprintChannelOrdinal: kit.SprintChannelOrdinal,
-            driftChannelOrdinal: kit.DriftChannelOrdinal
+            driftChannelOrdinal: kit.DriftChannelOrdinal,
+            planarDynamics: kit.PlanarDynamics
         );
 
         player.SetContactField(field: m_contactField);
@@ -243,7 +245,8 @@ public sealed partial class WorldPopulation {
             collider: m_kits[m_seatKit].Collider,
             maxSmoothError: m_fixedMotion.MaxSmoothError,
             sprintChannelOrdinal: m_kits[m_seatKit].SprintChannelOrdinal,
-            driftChannelOrdinal: m_kits[m_seatKit].DriftChannelOrdinal
+            driftChannelOrdinal: m_kits[m_seatKit].DriftChannelOrdinal,
+            planarDynamics: m_kits[m_seatKit].PlanarDynamics
         ) {
             Profile = profile,
         };
@@ -674,7 +677,8 @@ public sealed partial class WorldPopulation {
                 collider: m_kits[kitIndex].Collider,
                 maxSmoothError: m_fixedMotion.MaxSmoothError,
                 sprintChannelOrdinal: m_kits[kitIndex].SprintChannelOrdinal,
-                driftChannelOrdinal: m_kits[kitIndex].DriftChannelOrdinal
+                driftChannelOrdinal: m_kits[kitIndex].DriftChannelOrdinal,
+                planarDynamics: m_kits[kitIndex].PlanarDynamics
             );
         }
 
@@ -835,7 +839,8 @@ public sealed partial class WorldPopulation {
             collider: m_kits[m_seatKit].Collider,
             maxSmoothError: m_fixedMotion.MaxSmoothError,
             sprintChannelOrdinal: m_kits[m_seatKit].SprintChannelOrdinal,
-            driftChannelOrdinal: m_kits[m_seatKit].DriftChannelOrdinal
+            driftChannelOrdinal: m_kits[m_seatKit].DriftChannelOrdinal,
+            planarDynamics: m_kits[m_seatKit].PlanarDynamics
         ) {
             Profile = profile,
         };

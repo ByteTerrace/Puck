@@ -189,6 +189,11 @@ public enum WorldSection : byte {
     /// <summary>The <c>probes</c> section — the probe and binding rows, targeted by the section-scoped grant
     /// hold alone; no <c>WorldMutation</c> kind targets it yet (the section is boot-authored only).</summary>
     Probes,
+
+    /// <summary>The named <c>dynamics</c> rows — the second-order "personality" table every follower consumer (a
+    /// look, a camera boom, a kit, a state cell) names by row, targeted by <c>WorldMutation.UpsertDynamics</c> /
+    /// <c>WorldMutation.RemoveDynamics</c>.</summary>
+    Dynamics,
 }
 /// <summary>Which flavor of subject a <see cref="GrantSubject"/> addresses.</summary>
 public enum GrantSubjectKind : byte {

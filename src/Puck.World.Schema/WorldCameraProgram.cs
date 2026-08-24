@@ -46,7 +46,7 @@ public abstract record WorldCameraSubject {
 [System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraProgramOp.Offset), typeDiscriminator: "offset")]
 [System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraProgramOp.LookAt), typeDiscriminator: "lookAt")]
 [System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraProgramOp.Orbit), typeDiscriminator: "orbit")]
-[System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraProgramOp.Smooth), typeDiscriminator: "smooth")]
+[System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraProgramOp.Dynamics), typeDiscriminator: "dynamics")]
 [System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraProgramOp.ClampPitch), typeDiscriminator: "clampPitch")]
 [System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraProgramOp.Fov), typeDiscriminator: "fov")]
 [System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraProgramOp.Blend), typeDiscriminator: "blend")]
@@ -61,11 +61,11 @@ public abstract record WorldCameraProgramOp {
         Anchor => "anchor",
         Blend => "blend",
         ClampPitch => "clampPitch",
+        Dynamics => "dynamics",
         Fov => "fov",
         LookAt => "lookAt",
         Offset => "offset",
         Orbit => "orbit",
-        Smooth => "smooth",
         _ => "unknown",
     });
 
@@ -102,11 +102,10 @@ public abstract record WorldCameraProgramOp {
     /// <param name="Pitch">The orbit tilt in radians, as a literal or numeric state binding.</param>
     /// <param name="PivotOffset">The world-axis offset from the current subject's origin to the pivot.</param>
     public sealed record Orbit(float Distance, BindableScalar Yaw, BindableScalar Pitch, DocumentVector3? PivotOffset = null) : WorldCameraProgramOp;
-    /// <summary>Sets the presentation-only exponential response rate (per second) the resolved eye/target boom eases
-    /// at; zero disables smoothing. Read by the caller after resolving a frame — never affects the resolved pose
-    /// itself. At most one per program.</summary>
-    /// <param name="Rate">The non-negative response rate.</param>
-    public sealed record Smooth(float Rate) : WorldCameraProgramOp;
+    /// <summary>Sets the second-order response the resolved eye/target boom eases through. Read by the caller after
+    /// resolving a frame — never affects the resolved pose itself. At most one per program.</summary>
+    /// <param name="Row">The referenced <c>dynamics</c> row name; must resolve.</param>
+    public sealed record Dynamics(string Row) : WorldCameraProgramOp;
     /// <summary>Clamps the effective pitch the NEXT <see cref="Orbit"/> op resolves with (its authored
     /// <see cref="Orbit.Pitch"/> plus any live seat delta) to <c>[MinPitch, MaxPitch]</c>. At most one per program;
     /// must precede the <see cref="Orbit"/> op it governs. A joined seat's own <c>views.seatControl</c> band already
@@ -154,9 +153,8 @@ public sealed record WorldCameraProgram(string Name, string Version, IReadOnlyLi
     public WorldCameraProgramOp.Offset? OffsetOp => FirstOrDefault<WorldCameraProgramOp.Offset>();
     /// <summary>Gets the program's <see cref="WorldCameraProgramOp.Orbit"/> op, or <see langword="null"/>.</summary>
     public WorldCameraProgramOp.Orbit? OrbitOp => FirstOrDefault<WorldCameraProgramOp.Orbit>();
-    /// <summary>Gets the program's <see cref="WorldCameraProgramOp.Smooth"/> op, or <see langword="null"/> (rate 0 —
-    /// no smoothing — when absent).</summary>
-    public WorldCameraProgramOp.Smooth? SmoothOp => FirstOrDefault<WorldCameraProgramOp.Smooth>();
+    /// <summary>Gets the program's <see cref="WorldCameraProgramOp.Dynamics"/> op, or <see langword="null"/>.</summary>
+    public WorldCameraProgramOp.Dynamics? DynamicsOp => FirstOrDefault<WorldCameraProgramOp.Dynamics>();
 
     private TOp? FirstOrDefault<TOp>() where TOp : WorldCameraProgramOp {
         var operations = Operations;
@@ -173,15 +171,4 @@ public sealed record WorldCameraProgram(string Name, string Version, IReadOnlyLi
 
         return null;
     }
-}
-/// <summary>Names why an authored camera program was refused.</summary>
-public enum WorldCameraProgramRefusal : byte {
-    VersionUnsupported,
-    NameMissing,
-    OperationCountOutOfRange,
-    OpcodeUnknown,
-    OpcodeDuplicate,
-    AnchorNotFirst,
-    ClampPitchNotBeforeOrbit,
-    SubjectInvalid,
 }

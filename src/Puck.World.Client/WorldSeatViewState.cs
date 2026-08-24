@@ -11,7 +11,7 @@ namespace Puck.World.Client;
 public sealed class WorldSeatViewState {
 
     private readonly Lock m_gate = new();
-    private readonly SdfCameraBoomSmoother m_smoothing = new();
+    private readonly SdfCameraBoomFollower m_boom = new();
 
     // How much of the world-derived alignment is taken back per update once it is trustworthy again. Small enough
     // that the carried frame is what the seat feels moment to moment, large enough that a lap's accumulated drift is
@@ -25,6 +25,11 @@ public sealed class WorldSeatViewState {
     private Vector3 m_alignedUp = Vector3.UnitY;
 
     private WorldCameraProgram? m_authoredRig;
+    // The Dynamics op's coefficients are baked into the compiled ops at translate time (see
+    // WorldCameraRigCompiler), never re-read per frame — so a `dynamics` row mutation with the authored program
+    // instance unchanged still needs a recompile. KEEP IN SYNC: only the section's own compose path may reuse this
+    // list's reference across deliveries; anything that clones it unconditionally defeats this cache check.
+    private IReadOnlyList<WorldDynamicsRow>? m_authoredDynamics;
     private IWorldCameraProgramRig? m_compiledRig;
     private float m_pitch;
     private float m_yaw;
@@ -182,7 +187,7 @@ public sealed class WorldSeatViewState {
         lock (m_gate) {
             m_yaw = 0f;
             m_pitch = 0f;
-            m_smoothing.Reseed();
+            m_boom.Reseed();
         }
     }
     public void Reclamp(WorldViewDefaults views) {
@@ -210,11 +215,18 @@ public sealed class WorldSeatViewState {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: views);
 
-        if (!ReferenceEquals(
-            objA: m_authoredRig,
-            objB: views.SeatRig
-        )) {
+        if (
+            !ReferenceEquals(
+                objA: m_authoredRig,
+                objB: views.SeatRig
+            ) ||
+            !ReferenceEquals(
+                objA: m_authoredDynamics,
+                objB: definition.Dynamics
+            )
+        ) {
             m_authoredRig = views.SeatRig;
+            m_authoredDynamics = definition.Dynamics;
             m_compiledRig = WorldCameraRigCompiler.Compile(
                 definition: definition,
                 interactive: true,
@@ -248,17 +260,25 @@ public sealed class WorldSeatViewState {
 
         return rig;
     }
-    public void Smooth(float rate, bool enabled, float deltaSeconds, ref Vector3 eye, ref Vector3 target) {
+    /// <summary>The chase boom's second-order ease: eases <paramref name="eye"/> toward <paramref name="target"/> by
+    /// <paramref name="dynamics"/> while this seat frames through its own chase rig.</summary>
+    /// <param name="dynamics">The chase rig's reported response.</param>
+    /// <param name="enabled">Whether the boom should ease this frame — <see langword="false"/> reseeds and passes
+    /// the pose through untouched.</param>
+    /// <param name="deltaSeconds">The frame step.</param>
+    /// <param name="eye">The resolved eye, eased in place.</param>
+    /// <param name="target">The resolved target, read but never moved.</param>
+    public void Follow(in SdfCameraDynamics dynamics, bool enabled, float deltaSeconds, ref Vector3 eye, ref Vector3 target) {
         lock (m_gate) {
             if (enabled) {
-                m_smoothing.Apply(
+                m_boom.Apply(
                     deltaSeconds: deltaSeconds,
+                    dynamics: in dynamics,
                     eye: ref eye,
-                    rate: rate,
                     target: ref target
                 );
             } else {
-                m_smoothing.Reseed();
+                m_boom.Reseed();
             }
         }
     }

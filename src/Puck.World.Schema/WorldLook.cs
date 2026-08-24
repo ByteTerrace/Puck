@@ -51,11 +51,20 @@ public sealed record WorldLookCue(
 /// <param name="SecondsPerFrame">The creation timeline cadence when <see cref="ReplayFrames"/> is set.</param>
 /// <param name="Cues">The creation look's cues (see <see cref="WorldLookCue"/>); a firing cue's frame overrides the
 /// replay cursor for its hold.</param>
+/// <param name="Dynamics">The <c>dynamics</c> row a second-order follower drives the stamped ROOT through — the
+/// client's interpolated body pose is the target, the follower's output is what renders. <see langword="null"/>
+/// (the default) is today's behavior: the root follows the interpolated pose exactly, no lag.</param>
+/// <param name="PartDynamics">A creation part id to <c>dynamics</c> row map — each named part follows the root's own
+/// resolved transform with its own personality, layered ON TOP of <see cref="Dynamics"/>. Legitimate only on a
+/// creation source (a catalog rig exports no parts); each key must name a part the creation's own part table
+/// declares.</param>
 public readonly record struct WorldLookMotion(
     float GaitAmplitude,
     bool ReplayFrames,
     float SecondsPerFrame,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldLookCue>? Cues = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldLookCue>? Cues = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Dynamics = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, string>? PartDynamics = null
 ) {
     /// <summary>Gets the implicit look motion — full gait, no timeline replay — every body wore before this arc.</summary>
     public static WorldLookMotion Default { get; } = new WorldLookMotion(

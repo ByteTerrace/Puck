@@ -50,7 +50,9 @@ public sealed partial class WorldPopulation {
                 programRows: programRows,
                 creations: definition.Creations,
                 bodyState: definition.BodyState,
-                identityState: definition.IdentityState
+                identityState: definition.IdentityState,
+                dynamics: definition.Dynamics,
+                simulationRateHz: definition.SimulationRateHz
             );
         }
 
@@ -482,7 +484,8 @@ public sealed partial class WorldPopulation {
                 collider: kit.Collider,
                 maxSmoothError: m_fixedMotion.MaxSmoothError,
                 sprintChannelOrdinal: kit.SprintChannelOrdinal,
-                driftChannelOrdinal: kit.DriftChannelOrdinal
+                driftChannelOrdinal: kit.DriftChannelOrdinal,
+                planarDynamics: kit.PlanarDynamics
             );
             // Hand the (possibly rebuilt) contact field to every live body, so a live solid-geometry or collision-tuning
             // edit takes effect on the next tick.

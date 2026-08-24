@@ -122,6 +122,26 @@
               ],
               "additionalProperties": false
             }
+          },
+          "dynamics": {
+            "description": "The dynamics row a second-order follower drives the stamped ROOT through \u2014 the client\u0027s interpolated body pose is the target, the follower\u0027s output is what renders. null (the default) is today\u0027s behavior: the root follows the interpolated pose exactly, no lag.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "partDynamics": {
+            "description": "A creation part id to dynamics row map \u2014 each named part follows the root\u0027s own resolved transform with its own personality, layered ON TOP of Dynamics. Legitimate only on a creation source (a catalog rig exports no parts); each key must name a part the creation\u0027s own part table declares.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
           }
         },
         "additionalProperties": false

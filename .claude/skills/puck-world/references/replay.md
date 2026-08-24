@@ -209,7 +209,14 @@ index order — per body the index, the raw `FixedPosition.X/Y/Z` lanes, ALL
 FOUR raw `FixedOrientation` quaternion lanes, and the raw `FixedYaw` scalar
 (authoritative under the grounded model; the quaternion is built from it).
 So a MATCH proves the authoritative 6DOF pose trajectory and NOTHING about
-document state, the grant table, the journal, the HUD, or any presentation.
+document state, the grant table, the journal, the HUD, or any presentation. A
+kit's `dynamics`-shaped planar follower state rides ALONGSIDE the hashed pose
+(`WorldBody`'s own Q32 follower raws feed `m_planarVelocity`, which the
+tracked pose derives from every tick), so a follower divergence still surfaces
+as a hash MISMATCH on the very next tick it moves the pose — but the follower
+raws themselves are not independently hashed; they cross only through
+`TransferState`/`WorldAuthorityCheckpointCodec` (see
+[mutations.md](mutations.md)'s body-motion notes), never the replay tape.
 Across a session request, MATCH proves that re-executing the request reproduced
 the same hashed pose trajectory. It does not directly prove the request's reply,
 roster echo, profile document, population metadata, or any other unhashed effect.

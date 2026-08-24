@@ -39,6 +39,26 @@ public static class WorldDefinitionRows {
 
         return null;
     }
+    /// <summary>Finds a dynamics row by stable name.</summary>
+    /// <param name="dynamics">The section's dynamics rows.</param>
+    /// <param name="name">The dynamics row name to find.</param>
+    /// <returns>The row, or <see langword="null"/> when the section declares none by that name.</returns>
+    public static WorldDynamicsRow? FindDynamics(IReadOnlyList<WorldDynamicsRow> dynamics, string name) {
+        foreach (var row in dynamics) {
+            if (
+                (row is not null) &&
+                string.Equals(
+                a: row.Name,
+                b: name,
+                comparisonType: StringComparison.Ordinal
+            )
+            ) {
+                return row;
+            }
+        }
+
+        return null;
+    }
     /// <summary>Finds a destinations row by stable name — the primitive a portal facet's <c>destination</c> resolves
     /// against (see <see cref="WorldPlacementPortal.Destination"/>).</summary>
     /// <param name="destinations">The section's destinations, or <see langword="null"/> for a document declaring none.</param>

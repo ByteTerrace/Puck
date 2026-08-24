@@ -42,6 +42,7 @@ public sealed class AbsentDerivationLawTests {
               "population": { "localSeats": 1 },
               {{MinimalChannelSection}},
               {{MinimalCollisionSection}},
+              {{MinimalDynamicsSection}},
               {{MinimalViewsSection}},
               "bodyMotionPrograms": [
                 {
@@ -101,6 +102,9 @@ public sealed class AbsentDerivationLawTests {
     private const string MinimalCollisionSection = """
         "collision": { "requirements": [], "contactSkin": 0.02, "maxIterations": 4, "maxSlopeDegrees": 60, "gradientProbe": 0 }
         """;
+    private const string MinimalDynamicsSection = """
+        "dynamics": [ { "name": "chase", "f": 0.9549, "zeta": 1, "r": 1 } ]
+        """;
     private const string MinimalViewsSection = """
         "views": {
           "layouts": [],
@@ -112,7 +116,7 @@ public sealed class AbsentDerivationLawTests {
               { "$type": "orbit", "distance": 5.4626001, "yaw": 0, "pitch": 0.4145069, "pivotOffset": [0, 0, 0] },
               { "$type": "lookAt", "subject": { "$type": "reference" }, "targetOffset": [0, 1, 0], "worldAxes": false },
               { "$type": "fov", "fieldOfViewRadians": 0.9599311 },
-              { "$type": "smooth", "rate": 6 }
+              { "$type": "dynamics", "row": "chase" }
             ]
           }
         }
@@ -140,6 +144,7 @@ public sealed class AbsentDerivationLawTests {
               {{MinimalChannelSection}},
               {{MinimalCollisionSection}},
               {{MinimalKitSection}},
+              {{MinimalDynamicsSection}},
               {{MinimalViewsSection}}
             }
             """);
@@ -157,6 +162,7 @@ public sealed class AbsentDerivationLawTests {
               {{MinimalChannelSection}},
               {{MinimalCollisionSection}},
               {{MinimalKitSection}},
+              {{MinimalDynamicsSection}},
               {{MinimalViewsSection}}
             }
             """);
@@ -201,6 +207,7 @@ public sealed class AbsentDerivationLawTests {
               "documentId": "channels-required",
               "population": { "localSeats": 1 },
               {{MinimalKitSection}},
+              {{MinimalDynamicsSection}},
               {{MinimalViewsSection}}
             }
             """));

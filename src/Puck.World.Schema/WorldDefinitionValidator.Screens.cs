@@ -272,7 +272,7 @@ public static partial class WorldDefinitionValidator {
         var seenClampPitch = false;
         var seenFov = false;
         var seenOrbit = false;
-        var seenSmooth = false;
+        var seenDynamics = false;
         var seenBlend = false;
 
         for (var index = 0; (index < operations.Count); index++) {
@@ -366,18 +366,20 @@ public static partial class WorldDefinitionValidator {
                     }
 
                     break;
-                case WorldCameraProgramOp.Smooth smooth:
-                    if (seenSmooth) {
-                        errors.Add(item: $"{opPath} is a second 'smooth' op — at most one is admitted.");
+                case WorldCameraProgramOp.Dynamics dynamicsOp:
+                    if (seenDynamics) {
+                        errors.Add(item: $"{opPath} is a second 'dynamics' op — at most one is admitted.");
                     }
 
-                    seenSmooth = true;
+                    seenDynamics = true;
 
-                    if (
-                        !float.IsFinite(f: smooth.Rate) ||
-                        (smooth.Rate < 0f)
-                    ) {
-                        errors.Add(item: $"{opPath}.rate must be finite and non-negative.");
+                    if (string.IsNullOrWhiteSpace(value: dynamicsOp.Row)) {
+                        errors.Add(item: $"{opPath}.row is required.");
+                    } else if (WorldDefinitionRows.FindDynamics(
+                        dynamics: definition.Dynamics,
+                        name: dynamicsOp.Row
+                    ) is null) {
+                        errors.Add(item: $"{opPath}.row '{dynamicsOp.Row}' names no dynamics row.");
                     }
 
                     break;

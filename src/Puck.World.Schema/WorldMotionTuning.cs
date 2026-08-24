@@ -38,10 +38,15 @@ public abstract record WorldMotionModel {
     /// <param name="RiseGravity">The downward acceleration while rising (u/s²) — the floaty top of the arc.</param>
     /// <param name="FallGravity">The downward acceleration while falling (u/s²) — the snappy descent (heavier than the rise).</param>
     /// <param name="MaxFallSpeed">The terminal fall speed the descent is clamped to (u/s).</param>
-    /// <param name="Response">The velocity-response table (see <see cref="MotionResponse"/>) — it affects the simulation.
-    /// The empty table snaps planar velocity instantly.</param>
     /// <param name="SprintMultiplier">The held-sprint speed multiplier, applied while
     /// <paramref name="SprintChannel"/> reads held; <c>1</c> is a no-op.</param>
+    /// <param name="Response">The velocity-response table (see <see cref="MotionResponse"/>) planar velocity converges
+    /// through, or <see langword="null"/> (the default) when <paramref name="Dynamics"/> shapes it instead — exactly
+    /// one of the two is authored. The empty table snaps planar velocity instantly; <see cref="DeclaredResponse"/> is
+    /// the null-coalesced read every caller uses.</param>
+    /// <param name="Dynamics">The <c>dynamics</c> row a second-order follower shapes planar velocity through instead
+    /// of <paramref name="Response"/>, or <see langword="null"/> (the default) for the response table. Exactly one of
+    /// the two is authored.</param>
     /// <param name="SprintChannel">The declared channel name a body reads while held (not edge-triggered — a continuous
     /// multiplier, unlike the press/release <see cref="ActionSpec"/> vocabulary) to apply <paramref name="SprintMultiplier"/>,
     /// or <see langword="null"/> (the default) for a kit with no sprint capability. Resolved to an ordinal once, alongside
@@ -71,8 +76,9 @@ public abstract record WorldMotionModel {
         float RiseGravity,
         float FallGravity,
         float MaxFallSpeed,
-        IReadOnlyList<MotionResponse> Response,
         float SprintMultiplier,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<MotionResponse>? Response = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Dynamics = null,
         string? SprintChannel = null,
         MotionMoveFrame MoveFrame = MotionMoveFrame.World,
         bool FacingSnap = true,
@@ -174,9 +180,6 @@ public abstract record WorldMotionModel {
     /// <param name="TurnSpeed">Turn speed in radians per second (the profileless fallback counterpart).</param>
     /// <param name="VerticalThrustFraction">The fraction of <paramref name="ThrustSpeed"/> the vertical channel
     /// commands — swimmers climb and dive slower than they cruise. <c>1</c> is fully isotropic thrust.</param>
-    /// <param name="Response">The velocity-response table (see <see cref="MotionResponse"/>) — it affects the simulation, read
-    /// for both the planar and the vertical convergence. The empty table snaps instantly (no drag, no coast); a
-    /// water feel wants at least an always-row.</param>
     /// <param name="Buoyancy">The medium's idle vertical drift velocity (u/s, signed) below the bob band: positive
     /// drifts the body up toward its float line, negative sinks, zero holds depth. Folded into the commanded thrust
     /// target — see <see cref="FixedSwimTuning"/> — never applied as a separate acceleration.</param>
@@ -194,6 +197,15 @@ public abstract record WorldMotionModel {
     /// reach.</param>
     /// <param name="SprintMultiplier">The held-burst speed multiplier applied while <paramref name="SprintChannel"/>
     /// reads held; <c>1</c> is a no-op. Scales the whole thrust vector, vertical included.</param>
+    /// <param name="Response">The velocity-response table (see <see cref="MotionResponse"/>) — read for both the
+    /// planar and the vertical convergence — or <see langword="null"/> (the default) when <paramref name="Dynamics"/>
+    /// shapes both instead; exactly one of the two is authored. The empty table snaps instantly (no drag, no coast);
+    /// a water feel wants at least an always-row. <see cref="DeclaredResponse"/> is the null-coalesced read every
+    /// caller uses.</param>
+    /// <param name="Dynamics">The <c>dynamics</c> row a second-order follower shapes both the planar and the vertical
+    /// convergence through instead of <paramref name="Response"/> — the same seam as
+    /// <see cref="Grounded.Dynamics"/> — or <see langword="null"/> (the default) for the response table. Exactly one
+    /// of the two is authored.</param>
     /// <param name="SprintChannel">The declared channel name read while held for the burst, or <see langword="null"/>
     /// (the default) for a kit with no burst — the same resolution path <see cref="Grounded.SprintChannel"/>
     /// documents.</param>
@@ -211,13 +223,14 @@ public abstract record WorldMotionModel {
         float ThrustSpeed,
         float TurnSpeed,
         float VerticalThrustFraction,
-        IReadOnlyList<MotionResponse> Response,
         float Buoyancy,
         float MaxRiseSpeed,
         float MaxSinkSpeed,
         float SurfaceSettleRate,
         float FloatDepth,
         float SprintMultiplier,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<MotionResponse>? Response = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Dynamics = null,
         string? SprintChannel = null,
         MotionMoveFrame MoveFrame = MotionMoveFrame.World,
         bool FacingSnap = true,
@@ -248,6 +261,22 @@ public abstract record WorldMotionModel {
         Grounded grounded => grounded.TurnSpeed,
         Swim swim => swim.TurnSpeed,
         _ => 0f,
+    };
+    /// <summary>The declared velocity-response table of whichever arm this is (see <see cref="Grounded.Response"/>/
+    /// <see cref="Swim.Response"/>), null-coalesced to the empty table — a kit's authored <see langword="null"/> and a
+    /// kit with no planar-shaping arm at all read identically here.</summary>
+    public IReadOnlyList<MotionResponse> DeclaredResponse => (this switch {
+        Grounded grounded => grounded.Response,
+        Swim swim => swim.Response,
+        _ => null,
+    }) ?? [];
+    /// <summary>The declared <c>dynamics</c> row name of whichever arm this is (see <see cref="Grounded.Dynamics"/>/
+    /// <see cref="Swim.Dynamics"/>), or <see langword="null"/> for an arm shaped by <see cref="DeclaredResponse"/>
+    /// instead, or with no planar-shaping arm at all.</summary>
+    public string? DeclaredDynamics => this switch {
+        Grounded grounded => grounded.Dynamics,
+        Swim swim => swim.Dynamics,
+        _ => null,
     };
 }
 /// <summary>
@@ -309,7 +338,7 @@ public readonly record struct MotionScalarEnvelope(float Min, float Max);
 /// <summary>The document intake for the engine's compiled motion tunings — the one place an authored
 /// <see cref="WorldMotionModel"/> arm becomes the fixed-point form simulation reads.</summary>
 public static class WorldMotionTuningFactory {
-    private static FixedMotionTuning Compile(float moveSpeed, float turnSpeed, float riseGravity, float fallGravity, float maxFallSpeed, IReadOnlyList<MotionResponse> response, float sprintMultiplier, MotionMoveFrame moveFrame, bool facingSnap, MotionScalarEnvelope? moveSpeedEnvelope) {
+    private static FixedMotionTuning Compile(float moveSpeed, float turnSpeed, float riseGravity, float fallGravity, float maxFallSpeed, IReadOnlyList<MotionResponse> response, float sprintMultiplier, MotionMoveFrame moveFrame, bool facingSnap, MotionScalarEnvelope? moveSpeedEnvelope, FixedMotionDynamics? dynamics) {
         var rows = response;
         var compiled = new FixedMotionResponse[rows.Count];
         var recencyFacts = new List<ActionFact>();
@@ -348,7 +377,8 @@ public static class WorldMotionTuningFactory {
             FacingSnap: facingSnap,
             MoveSpeedEnvelope: ((moveSpeedEnvelope is { } envelope)
             ? Compile(envelope: envelope)
-            : null)
+            : null),
+            PlanarDynamics: dynamics
         );
     }
 
@@ -369,36 +399,44 @@ public static class WorldMotionTuningFactory {
     );
     /// <summary>Compiles an authored grounded motion row to its fixed-point form.</summary>
     /// <param name="tuning">The authored grounded arm.</param>
+    /// <param name="dynamics">The compiled <c>dynamics</c>-row follower <paramref name="tuning"/> names, or
+    /// <see langword="null"/> when it shapes planar velocity through <see cref="WorldMotionModel.Grounded.Response"/>
+    /// instead.</param>
     /// <returns>The compiled tuning.</returns>
-    public static FixedMotionTuning Compile(WorldMotionModel.Grounded tuning) => Compile(
+    public static FixedMotionTuning Compile(WorldMotionModel.Grounded tuning, FixedMotionDynamics? dynamics = null) => Compile(
         moveSpeed: tuning.MoveSpeed,
         turnSpeed: tuning.TurnSpeed,
         riseGravity: tuning.RiseGravity,
         fallGravity: tuning.FallGravity,
         maxFallSpeed: tuning.MaxFallSpeed,
-        response: tuning.Response,
+        response: tuning.DeclaredResponse,
         sprintMultiplier: tuning.SprintMultiplier,
         moveFrame: tuning.MoveFrame,
         facingSnap: tuning.FacingSnap,
-        moveSpeedEnvelope: tuning.MoveSpeedEnvelope
+        moveSpeedEnvelope: tuning.MoveSpeedEnvelope,
+        dynamics: dynamics
     );
     /// <summary>Compiles an authored swim motion row's shared half — speeds, response table, sprint, frame — to the
     /// same fixed-point form every model rides (the gravity fields compile to zero; the swim program's facet
     /// coherence already refused any op that would read them). The swim-specific half is
     /// <see cref="CompileSwim"/>.</summary>
     /// <param name="tuning">The authored swim arm.</param>
+    /// <param name="dynamics">The compiled <c>dynamics</c>-row follower <paramref name="tuning"/> names, or
+    /// <see langword="null"/> when it shapes convergence through <see cref="WorldMotionModel.Swim.Response"/>
+    /// instead.</param>
     /// <returns>The compiled shared tuning.</returns>
-    public static FixedMotionTuning Compile(WorldMotionModel.Swim tuning) => Compile(
+    public static FixedMotionTuning Compile(WorldMotionModel.Swim tuning, FixedMotionDynamics? dynamics = null) => Compile(
         moveSpeed: tuning.ThrustSpeed,
         turnSpeed: tuning.TurnSpeed,
         riseGravity: 0f,
         fallGravity: 0f,
         maxFallSpeed: 0f,
-        response: tuning.Response,
+        response: tuning.DeclaredResponse,
         sprintMultiplier: tuning.SprintMultiplier,
         moveFrame: tuning.MoveFrame,
         facingSnap: tuning.FacingSnap,
-        moveSpeedEnvelope: tuning.ThrustSpeedEnvelope
+        moveSpeedEnvelope: tuning.ThrustSpeedEnvelope,
+        dynamics: dynamics
     );
     /// <summary>Compiles an authored vehicle motion row to its fixed-point form. The held drift/boost channel names
     /// resolve to ordinals separately, through the world's channel table.</summary>

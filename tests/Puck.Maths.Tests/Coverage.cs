@@ -241,6 +241,7 @@ internal static class Coverage {
         (new CoverRef(Name: "value__", Type: typeof(ResidualTwist)), EnumStorageReason),
         (new CoverRef(Name: "value__", Type: typeof(RuleKind)), EnumStorageReason),
         (new CoverRef(Name: "value__", Type: typeof(DiscreteMeasureCompilationFailure)), EnumStorageReason),
+        (new CoverRef(Name: "value__", Type: typeof(SecondOrderDynamicsBranch)), EnumStorageReason),
         (new CoverRef(Name: "LocallyFinite", Type: typeof(ClosureCertificate)), UnreachedCertificateReason),
 
         // ---- the continued-fraction lenses ----

@@ -1,0 +1,68 @@
+{
+  "schema": "puck.world.def.v1",
+  "documentId": "body-dynamics-canary",
+  "population": { "localSeats": 1 },
+  "simulation": { "rateHz": 240 },
+  "channels": [
+    { "name": "forward", "shape": "Bipolar", "role": "MoveAdvance" },
+    { "name": "strafe", "shape": "Bipolar", "role": "MoveStrafe" },
+    { "name": "turn", "shape": "Bipolar", "role": "Turn" }
+  ],
+  "collision": { "requirements": [], "contactSkin": 0.02, "maxIterations": 4, "maxSlopeDegrees": 60, "gradientProbe": 0 },
+  "dynamics": [
+    { "name": "chase", "f": 0.9549, "zeta": 1, "r": 1 },
+    { "name": "stride", "f": 2.5, "zeta": 1, "r": 0 }
+  ],
+  "views": {
+    "layouts": [],
+    "seatControl": { "yawReference": "World", "minPitch": -0.35, "maxPitch": 1.2 },
+    "seatRig": {
+      "name": "seatChase",
+      "version": "puck.camera.v1",
+      "operations": [
+        { "$type": "orbit", "distance": 5.4626001, "yaw": 0, "pitch": 0.4145069, "pivotOffset": [0, 0, 0] },
+        { "$type": "lookAt", "subject": { "$type": "reference" }, "targetOffset": [0, 1, 0], "worldAxes": false },
+        { "$type": "fov", "fieldOfViewRadians": 0.9599311 },
+        { "$type": "dynamics", "row": "chase" }
+      ]
+    }
+  },
+  "bodyMotionPrograms": [
+    {
+      "name": "traverse",
+      "version": "puck.body-motion.v1",
+      "kind": "Motion",
+      "operations": [
+        "ResolveYawAttitudeAndPlanarFrame",
+        "ComputePlanarTargetVelocity",
+        "ShapePlanarVelocity",
+        "SnapYawToPlanarIntent",
+        "ApplyVerticalGravity",
+        "IntegratePlanarAndVerticalVelocity",
+        "CommitPose"
+      ]
+    }
+  ],
+  "kits": [
+    {
+      "name": "stander",
+      "bodyMotionProgram": "traverse",
+      "motion": {
+        "$type": "grounded",
+        "moveSpeed": 4,
+        "turnSpeed": 2.5,
+        "riseGravity": 28,
+        "fallGravity": 46,
+        "maxFallSpeed": 40,
+        "dynamics": "stride",
+        "sprintMultiplier": 1
+      },
+      "collider": {
+        "$type": "sphere",
+        "radius": 0.5
+      },
+      "bodyContact": "Solid"
+    }
+  ],
+  "defaultSeatKit": "stander"
+}

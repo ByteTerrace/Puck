@@ -1,8 +1,10 @@
 using System.Numerics;
 using Puck.Forge.Authoring;
 using Puck.SdfVm;
+using Puck.SdfVm.Views;
 using Puck.SignedDistance;
 using Puck.Text;
+using Puck.World.Protocol;
 
 namespace Puck.World.Client;
 
@@ -26,6 +28,10 @@ namespace Puck.World.Client;
 /// uses): a pose/scale edit is a cheap property write (the replay clock survives), a creation-content change releases +
 /// recreates (the clock resets), and a departed registration releases its pool slot at the delivery boundary (the
 /// symmetric-release rule).
+/// A body-rooted stamp whose look names a root <c>dynamics</c> row (<see cref="WorldLookMotion.Dynamics"/>) rides a
+/// second-order follower instead of the raw interpolated body pose (<see cref="Puck.SdfVm.Views.SecondOrderFollower3"/>/
+/// <c>Follower4</c>); a part named in <see cref="WorldLookMotion.PartDynamics"/> gets its own position-only follower
+/// chasing the composed (already-followed) root — a secondary lag on top of the root's.
 /// </summary>
 /// <remarks>The pool is emitted on every rebuild with a constant slot count
 /// (<see cref="WorldPlacementPolicy.MaxStampRegistrations"/> × <see cref="SlotsPerPlacement"/>); an unused slot draws a
@@ -46,6 +52,9 @@ public sealed class WorldStampPool {
     );
     private readonly Registration?[] m_pool = new Registration?[WorldPlacementPolicy.MaxStampRegistrations];
     private int m_packedSlotBase = -1;
+    // Latched by Tick, consumed once by the next PackTransforms — the frame delta the pool's root/part followers
+    // step by (accumulates across a Tick called more than once before a pack, mirroring the replay clock above).
+    private float m_pendingDeltaSeconds;
     // The placeholder document an unused/probe slot registers its constant-shape palette against.
     private static readonly CreationDocument EmptyDocument = new(
         Schema: CreationDocument.CurrentSchema,
@@ -61,9 +70,9 @@ public sealed class WorldStampPool {
     /// <param name="BodyIndex">The population entity index whose interpolated pose roots the stamp.</param>
     /// <param name="Creation">The creation whose geometry the body wears.</param>
     /// <param name="Scale">The uniform render scale (a placement's scale, or a look's scale).</param>
-    /// <param name="Cues">The look's cues, or <see langword="null"/> for none.</param>
-    /// <param name="ReplayFrames">Whether the look replays the creation timeline on the render clock.</param>
-    public readonly record struct BodyStamp(int BodyIndex, WorldCreation Creation, float Scale, IReadOnlyList<WorldLookCue>? Cues = null, bool ReplayFrames = false);
+    /// <param name="Motion">The look's motion — cues, timeline replay, and the root/part second-order followers
+    /// (<see cref="WorldLookMotion.Dynamics"/>/<see cref="WorldLookMotion.PartDynamics"/>).</param>
+    public readonly record struct BodyStamp(int BodyIndex, WorldCreation Creation, float Scale, WorldLookMotion Motion);
 
     // One live registration: the resolved creation, its root source (a placement row — static or attached — OR a body
     // index), and the replay cursor state.
@@ -96,6 +105,30 @@ public sealed class WorldStampPool {
         // The row-rooted placement (an ANIMATED or an ATTACHED one), or null for a body-rooted stamp.
         public WorldPlacement? Row;
         public float Scale = 1f;
+
+        // The root position/orientation followers — set only for a body-rooted registration whose look names a root
+        // Motion.Dynamics row (see ApplyMotion; a row-rooted registration never has this true). FollowedPosition/
+        // FollowedOrientation are the values PackTransforms actually rendered this frame: the followers step at most
+        // once per frame, there, so TryBodyPartAuthoredPose/TryShapePosition read the latch instead of re-stepping.
+        public bool HasRootDynamics;
+        // The body's WorldClient.PoseEpoch/EntityAddress this registration's followers last seeded against — -1/
+        // default before the first pack. PackTransforms reseeds both root followers (and every part follower riding
+        // this root) whenever either moves past this: PoseEpoch for a teleport or an over-threshold correction,
+        // EntityAddress for a body index reused by a different inhabitant (a distinct address, even at the SAME
+        // index and creation hash, so a same-content edit never inherits a stale follower position across it).
+        public int RootEpoch = -1;
+        public WorldEntityAddress RootAddress;
+        public SecondOrderResponse RootResponse;
+        public SecondOrderFollower3 RootPositionFollower;
+        public SecondOrderFollower4 RootOrientationFollower;
+        public Vector3 FollowedPosition;
+        public Quaternion FollowedOrientation = Quaternion.Identity;
+        // Per-shape-slot part position followers, resolved from the look's PartDynamics map through Parts —
+        // indexed by shape slot (the same index PackTransforms's per-shape loop and Parts.TryResolve's
+        // transformSlot use), sized once to the fixed per-stamp shape budget.
+        public readonly bool[] PartFollows = new bool[WorldPlacementPolicy.MaxAnimatedStampShapes];
+        public readonly SecondOrderResponse[] PartResponse = new SecondOrderResponse[WorldPlacementPolicy.MaxAnimatedStampShapes];
+        public readonly SecondOrderFollower3[] PartFollower = new SecondOrderFollower3[WorldPlacementPolicy.MaxAnimatedStampShapes];
     }
 
     /// <summary>The whole pool's reserved dynamic-transform slot count — the frame source adds this onto the avatar
@@ -104,7 +137,12 @@ public sealed class WorldStampPool {
     /// <summary>The dynamic-transform slots one registration reserves: its root + its full shape-slot pool.</summary>
     public static int SlotsPerPlacement => (1 + WorldPlacementPolicy.MaxAnimatedStampShapes);
 
-    private static void EmitGroup(SdfProgramBuilder builder, IReadOnlyList<ShapeDocument> shapes, int groupId, int fromIndex, int rootSlot, int[] paletteIds, float placementScale, bool probeWorstCase, float reach) {
+    // follows widens the group's root-anchored cull bound for a member riding its own part follower: the bound
+    // sphere is fixed at the root slot with the creation's static reach, but a followed member's own transform slot
+    // carries the LAGGED world position, which can leave that fixed sphere once the lag exceeds GroupBoundMargin.
+    // Doubling reach is a cull-only cost (no geometry moves), so it is charged only when this registration actually
+    // has a part follower.
+    private static void EmitGroup(SdfProgramBuilder builder, IReadOnlyList<ShapeDocument> shapes, int groupId, int fromIndex, int rootSlot, int[] paletteIds, float placementScale, bool probeWorstCase, float reach, bool follows) {
         var groupNeedsScope = GroupNeedsScope(
             fromIndex: fromIndex,
             groupId: groupId,
@@ -114,7 +152,7 @@ public sealed class WorldStampPool {
         _ = builder.BeginInstanceDynamic(
             slot: rootSlot,
             boundOffset: Vector3.Zero,
-            boundRadius: (reach + GroupBoundMargin)
+            boundRadius: ((follows ? (2f * reach) : reach) + GroupBoundMargin)
         );
 
         if (groupNeedsScope) {
@@ -256,7 +294,11 @@ public sealed class WorldStampPool {
 
         // Pass 2 — blend groups, first-appearance order: ONE dynamic instance anchored on the ROOT slot (the
         // travelling bound), members in document order, wrapped in a field scope when the group needs one (the
-        // Intersection-wipe fix; see the accumulator rule on SdfBlendOp).
+        // Intersection-wipe fix; see the accumulator rule on SdfBlendOp). Resolved once (Reconcile's ApplyMotion
+        // already ran, so live.PartFollows reflects this frame's followers) rather than per group — precise
+        // per-group membership is not worth a second scan since widening a group without a follower only relaxes
+        // its cull, never its geometry.
+        var anyPartFollows = ((live is not null) && Array.IndexOf(array: live.PartFollows, value: true) >= 0);
         Span<int> emittedGroups = stackalloc int[WorldPlacementPolicy.MaxAnimatedStampShapes];
         var emittedCount = 0;
 
@@ -273,6 +315,7 @@ public sealed class WorldStampPool {
             emittedGroups[emittedCount++] = groupId;
             EmitGroup(
                 builder: builder,
+                follows: anyPartFollows,
                 fromIndex: index,
                 groupId: groupId,
                 paletteIds: paletteIds,
@@ -522,11 +565,11 @@ public sealed class WorldStampPool {
             Parts = CreationPartCompiler.Compile(document: stamp.Creation.Document),
             Scale = stamp.Scale,
             FramePoses = new Dictionary<int, FrameTransformDocument>?[((stamp.Creation.Document.Frames?.Count ?? 0) + 1)],
-            Cues = stamp.Cues,
-            Replay = stamp.ReplayFrames,
+            Cues = stamp.Motion.Cues,
+            Replay = stamp.Motion.ReplayFrames,
         };
 
-        if (stamp.Cues is { Count: > 0 } cues) {
+        if (stamp.Motion.Cues is { Count: > 0 } cues) {
             var frames = (stamp.Creation.Document.Frames ?? []);
 
             registration.CueFrames = new int[cues.Count];
@@ -551,6 +594,114 @@ public sealed class WorldStampPool {
         }
 
         return registration;
+    }
+    // Resolves a body-rooted registration's follower response state from its look's Motion against the definition's
+    // declared dynamics rows: HasRootDynamics/RootResponse from Motion.Dynamics, and PartFollows/PartResponse from
+    // Motion.PartDynamics resolved through Parts. A row-rooted registration never calls this (Row-rooted rows carry
+    // no WorldLookMotion), so HasRootDynamics/PartFollows stay at their all-false default for every animated/attached
+    // placement. A dangling row or part id here — never authored, since the validator refuses one at document scope —
+    // simply carries no follower for that entry, mirroring the camera compiler's own dangling-op rule. Called on
+    // every Reconcile (both the same-content-edit branch and right after a fresh RegisterBody), so a live dynamics-
+    // row retune takes effect on the same rebuild while every follower's Value/Velocity/Seeded state survives.
+    private static void ApplyMotion(Registration live, WorldLookMotion motion, IReadOnlyList<WorldDynamicsRow> dynamics) {
+        if (
+            (motion.Dynamics is { } rootRowName) &&
+            (WorldDefinitionRows.FindDynamics(
+            dynamics: dynamics,
+            name: rootRowName
+        ) is { } rootRow)
+        ) {
+            live.HasRootDynamics = true;
+            live.RootResponse = SecondOrderResponse.Create(
+                frequencyHz: rootRow.Frequency,
+                dampingRatio: rootRow.Damping,
+                initialResponse: rootRow.Response
+            );
+        } else {
+            live.HasRootDynamics = false;
+        }
+
+        Array.Clear(array: live.PartFollows);
+
+        if (motion.PartDynamics is not { Count: > 0 } partDynamics) {
+            return;
+        }
+
+        foreach (var (partId, rowName) in partDynamics) {
+            if (
+                !live.Parts.TryResolve(
+                partId: partId,
+                transformSlot: out var shapeSlot
+            ) ||
+                (((uint)shapeSlot) >= ((uint)WorldPlacementPolicy.MaxAnimatedStampShapes)) ||
+                (WorldDefinitionRows.FindDynamics(
+                dynamics: dynamics,
+                name: rowName
+            ) is not { } row)
+            ) {
+                continue;
+            }
+
+            live.PartFollows[shapeSlot] = true;
+            live.PartResponse[shapeSlot] = SecondOrderResponse.Create(
+                frequencyHz: row.Frequency,
+                dampingRatio: row.Damping,
+                initialResponse: row.Response
+            );
+        }
+    }
+    // Steps a body-rooted registration's root followers once (position and, hemisphere-matched, orientation) and
+    // latches the result into FollowedPosition/FollowedOrientation for every other reader this frame.
+    private static void StepRootFollower(Registration live, float deltaSeconds, Vector3 targetPosition, Quaternion targetRotation) {
+        var response = live.RootResponse;
+        var position = live.RootPositionFollower.Step(
+            response: in response,
+            deltaSeconds: deltaSeconds,
+            target: targetPosition
+        );
+        var targetVector = new Vector4(targetRotation.X, targetRotation.Y, targetRotation.Z, targetRotation.W);
+
+        if (
+            live.RootOrientationFollower.Seeded &&
+            (Vector4.Dot(live.RootOrientationFollower.PreviousTarget, targetVector) < 0f)
+        ) {
+            targetVector = -targetVector;
+        }
+
+        var followedVector = live.RootOrientationFollower.Step(
+            response: in response,
+            deltaSeconds: deltaSeconds,
+            target: targetVector
+        );
+
+        live.FollowedPosition = position;
+        live.FollowedOrientation = ((followedVector.LengthSquared() > 1e-12f)
+            ? Quaternion.Normalize(value: new Quaternion(followedVector.X, followedVector.Y, followedVector.Z, followedVector.W))
+            : targetRotation);
+    }
+    // Steps one part's position follower once, in place, and returns the eased world position.
+    private static Vector3 StepPartFollower(Registration live, int shapeSlot, float deltaSeconds, Vector3 target) => live.PartFollower[shapeSlot].Step(
+        response: in live.PartResponse[shapeSlot],
+        deltaSeconds: deltaSeconds,
+        target: target
+    );
+    // The root pose FollowedRootPose falls back to before the first PackTransforms has ever latched one, or for a
+    // registration whose root has no dynamics — the un-followed RootPose, bit for bit.
+    private static (Vector3 Position, Quaternion Rotation, float Scale) FollowedRootPose(Registration live, WorldClient client) {
+        var (position, rotation, scale) = RootPose(
+            client: client,
+            live: live
+        );
+
+        if (!live.HasRootDynamics) {
+            return (position, rotation, scale);
+        }
+
+        return (
+            (live.RootPositionFollower.Seeded ? live.FollowedPosition : position),
+            (live.RootOrientationFollower.Seeded ? live.FollowedOrientation : rotation),
+            scale
+        );
     }
     // The rest before a cue's next self-fire: a uniform draw in min..max from a splitmix of (body, fire count) — the
     // same body blinks the same way on every run, and no two bodies in step. Infinity for a demand-only cue.
@@ -720,6 +871,10 @@ public sealed class WorldStampPool {
     public void PackTransforms(Span<DynamicTransform> transforms, WorldClient client, int slotBase) {
         m_packedSlotBase = slotBase;
 
+        var deltaSeconds = m_pendingDeltaSeconds;
+
+        m_pendingDeltaSeconds = 0f;
+
         for (var index = 0; (index < m_pool.Length); index++) {
             var rootSlot = (slotBase + (index * SlotsPerPlacement));
             var live = m_pool[index];
@@ -756,6 +911,36 @@ public sealed class WorldStampPool {
                 live: live
             );
 
+            if (live.HasRootDynamics) {
+                var body = live.BodyIndex!.Value;
+                var epoch = client.PoseEpoch(index: body);
+                var address = client.EntityAddress(index: body);
+
+                if ((live.RootEpoch != epoch) || (live.RootAddress != address)) {
+                    live.RootPositionFollower.Reseed();
+                    live.RootOrientationFollower.Reseed();
+                    live.RootEpoch = epoch;
+                    live.RootAddress = address;
+
+                    for (var shapeSlot = 0; (shapeSlot < WorldPlacementPolicy.MaxAnimatedStampShapes); shapeSlot++) {
+                        live.PartFollower[shapeSlot].Reseed();
+                    }
+                }
+
+                StepRootFollower(
+                    live: live,
+                    deltaSeconds: deltaSeconds,
+                    targetPosition: rootPosition,
+                    targetRotation: rootRotation
+                );
+                (rootPosition, rootRotation) = (live.FollowedPosition, live.FollowedOrientation);
+            } else {
+                live.RootPositionFollower.Reseed();
+                live.RootOrientationFollower.Reseed();
+                live.FollowedPosition = rootPosition;
+                live.FollowedOrientation = rootRotation;
+            }
+
             transforms[rootSlot] = new DynamicTransform(
                 Orientation: rootRotation,
                 Position: rootPosition
@@ -788,13 +973,23 @@ public sealed class WorldStampPool {
                     ? (pose.Position, pose.Rotation)
                     : (shape.Position, shape.Rotation)
                 );
+                var worldPosition = (rootPosition + Vector3.Transform(
+                    rotation: rootRotation,
+                    value: (position * placementScale)
+                ));
+
+                if (live.PartFollows[shapeIndex]) {
+                    worldPosition = StepPartFollower(
+                        live: live,
+                        shapeSlot: shapeIndex,
+                        deltaSeconds: deltaSeconds,
+                        target: worldPosition
+                    );
+                }
 
                 transforms[slot] = new DynamicTransform(
                     Orientation: Quaternion.Normalize(value: (rootRotation * rotation)),
-                    Position: (rootPosition + Vector3.Transform(
-                        rotation: rootRotation,
-                        value: (position * placementScale)
-                    ))
+                    Position: worldPosition
                 );
             }
         }
@@ -806,8 +1001,10 @@ public sealed class WorldStampPool {
     /// the remaining free slots.</summary>
     /// <param name="placements">The delivered placement rows.</param>
     /// <param name="creations">The delivered creation rows.</param>
+    /// <param name="dynamics">The delivered <c>dynamics</c> rows — resolves each body-rooted registration's root/part
+    /// followers against its look's <see cref="WorldLookMotion.Dynamics"/>/<see cref="WorldLookMotion.PartDynamics"/>.</param>
     /// <param name="bodyStamps">The resolved body-rooted stamps (inhabitants + crowd creation-looks) this frame.</param>
-    public void Reconcile(IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldCreation> creations, IReadOnlyList<BodyStamp> bodyStamps) {
+    public void Reconcile(IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldCreation> creations, IReadOnlyList<WorldDynamicsRow> dynamics, IReadOnlyList<BodyStamp> bodyStamps) {
         // Pass 1 — retire: a registration whose backing row/stamp vanished, went static (lost its frames or its attach
         // facet), or changed creation content releases its slot here; a same-content edit updates in place (clock
         // preserved, and the refreshed Row carries any edited offset).
@@ -829,10 +1026,22 @@ public sealed class WorldStampPool {
                     b: live.Creation.Hash,
                     comparisonType: StringComparison.Ordinal
                 )) {
-                    m_pool[index] = RegisterBody(stamp: present);
+                    var fresh = RegisterBody(stamp: present);
+
+                    m_pool[index] = fresh;
+                    ApplyMotion(
+                        live: fresh,
+                        motion: present.Motion,
+                        dynamics: dynamics
+                    );
                 } else {
                     live.Creation = present.Creation;
                     live.Scale = present.Scale;
+                    ApplyMotion(
+                        live: live,
+                        motion: present.Motion,
+                        dynamics: dynamics
+                    );
                 }
 
                 continue;
@@ -927,14 +1136,24 @@ public sealed class WorldStampPool {
                 continue;
             }
 
-            m_pool[slot] = RegisterBody(stamp: stamp);
+            var fresh = RegisterBody(stamp: stamp);
+
+            m_pool[slot] = fresh;
+            ApplyMotion(
+                live: fresh,
+                motion: stamp.Motion,
+                dynamics: dynamics
+            );
         }
     }
     /// <summary>Advances every live replay cursor on the render clock (hold-style: each frame holds
     /// <see cref="WorldPlacementPolicy.TimelineSecondsPerFrame"/>, looping 1..N; whole crossed frames subtract so a
-    /// hitch lands on the right frame).</summary>
+    /// hitch lands on the right frame), and latches <paramref name="deltaSeconds"/> for the pool's root/part
+    /// followers, stepped once by the next <see cref="PackTransforms"/>.</summary>
     /// <param name="deltaSeconds">Seconds advanced since the previous produced frame.</param>
     public void Tick(float deltaSeconds) {
+        m_pendingDeltaSeconds += deltaSeconds;
+
         foreach (var live in m_pool) {
             if (live is null) {
                 continue;
@@ -1010,16 +1229,27 @@ public sealed class WorldStampPool {
             ? (framePose.Position, framePose.Rotation)
             : (shape.Position, shape.Rotation)
         );
-        var (rootPosition, rootRotation, scale) = RootPose(
+        var (rootPosition, rootRotation, scale) = FollowedRootPose(
             client: client,
             live: live
         );
+        var worldPosition = (rootPosition + Vector3.Transform(
+            rotation: rootRotation,
+            value: (localPosition * scale)
+        ));
+
+        // Read the part follower's latched value (the last PackTransforms step), never re-step it here — a follower
+        // steps at most once per frame.
+        if (
+            (shapeSlot < WorldPlacementPolicy.MaxAnimatedStampShapes) &&
+            live.PartFollows[shapeSlot] &&
+            live.PartFollower[shapeSlot].Seeded
+        ) {
+            worldPosition = live.PartFollower[shapeSlot].Value;
+        }
 
         pose = new SdfAnchor(
-            Position: (rootPosition + Vector3.Transform(
-                rotation: rootRotation,
-                value: (localPosition * scale)
-            )),
+            Position: worldPosition,
             Orientation: Quaternion.Normalize(value: (rootRotation * localRotation))
         );
 
@@ -1124,7 +1354,7 @@ public sealed class WorldStampPool {
             return false;
         }
 
-        var (rootPosition, rootRotation, placementScale) = RootPose(
+        var (rootPosition, rootRotation, placementScale) = FollowedRootPose(
             client: client,
             live: live
         );
@@ -1139,10 +1369,23 @@ public sealed class WorldStampPool {
             frameCursor: live.EffectiveCursor,
             live: live
         );
+        var shapes = (live.Creation.EngineDocument.Shapes ?? []);
 
-        foreach (var shape in (live.Creation.EngineDocument.Shapes ?? [])) {
+        for (var shapeIndex = 0; (shapeIndex < shapes.Count); shapeIndex++) {
+            var shape = shapes[shapeIndex];
+
             if (shape.Id != targetShapeId) {
                 continue;
+            }
+
+            if (
+                (shapeIndex < WorldPlacementPolicy.MaxAnimatedStampShapes) &&
+                live.PartFollows[shapeIndex] &&
+                live.PartFollower[shapeIndex].Seeded
+            ) {
+                position = live.PartFollower[shapeIndex].Value;
+
+                return true;
             }
 
             var local = (((poses is not null) && poses.TryGetValue(

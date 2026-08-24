@@ -152,6 +152,16 @@ public sealed partial class WorldServer {
 
         return null;
     }
+    // The Dynamics twin of FindCellAdvance above, over the SAME preserve-on-scalar-write rule.
+    private static WorldStateDynamics? FindCellDynamics(IReadOnlyList<WorldStateCell> cells, WorldCellName key) {
+        foreach (var cell in cells) {
+            if (cell.Key == key) {
+                return cell.Dynamics;
+            }
+        }
+
+        return null;
+    }
     private static WorldFact Finite(FixedQ4816 value) => new(
         IsForever: false,
         Value: value

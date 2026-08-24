@@ -84,6 +84,9 @@ public enum WorldBodyContactMode : byte {
 /// <param name="RoleOrdinals">The authored ordinals resolved for engine motion roles.</param>
 /// <param name="RoleMask">The compiled per-ordinal role predicate.</param>
 /// <param name="ActionState">The kit's compiled named action-state register file.</param>
+/// <param name="PlanarDynamics">The compiled second-order follower the kit's declared motion model's <c>dynamics</c>
+/// row names, or <see langword="null"/> when it shapes planar velocity through its response table instead
+/// (validation has already refused any other combination by the time this compiles).</param>
 public readonly record struct FixedWorldKit(
     CompiledBodyMotionProgram BodyMotionProgram,
     IReadOnlyDictionary<string, CompiledBodyProducer> Producers,
@@ -97,7 +100,8 @@ public readonly record struct FixedWorldKit(
     int DriftChannelOrdinal,
     RoleChannelOrdinals RoleOrdinals,
     bool[] RoleMask,
-    CompiledActionStateSlot[] ActionState
+    CompiledActionStateSlot[] ActionState,
+    FixedMotionDynamics? PlanarDynamics = null
 ) {
     private static (CompiledActionStateSlot[] Slots, Dictionary<string, int> ByName) CompileActionState(IReadOnlyList<ActionStateSlot> bodyState, IReadOnlyList<ActionStateSlot> identityState) {
         var slots = new List<CompiledActionStateSlot>();
@@ -183,7 +187,11 @@ public readonly record struct FixedWorldKit(
     /// <param name="creations">The creation rows a <see cref="WorldCollider.FromCreation"/> may reference.</param>
     /// <param name="bodyState">The world's body-owned ephemeral state declarations.</param>
     /// <param name="identityState">The world's identity-owned durable state declarations.</param>
-    public static FixedWorldKit Compile(WorldKit kit, WorldChannelTable channels, WorldTargetRegisterTable targets, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, IReadOnlyDictionary<string, BodyMotionProgram> programRows, IReadOnlyList<WorldCreation> creations, IReadOnlyList<ActionStateSlot> bodyState, IReadOnlyList<ActionStateSlot> identityState) {
+    /// <param name="dynamics">The world's declared <c>dynamics</c> rows, resolved against <paramref name="kit"/>'s
+    /// motion model's own declared row name (validation has already refused a dangling name).</param>
+    /// <param name="simulationRateHz">The world's own simulation rate — the step width a resolved dynamics row's
+    /// propagator compiles against (validation has already refused a resolved name at rate 0).</param>
+    public static FixedWorldKit Compile(WorldKit kit, WorldChannelTable channels, WorldTargetRegisterTable targets, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, IReadOnlyDictionary<string, BodyMotionProgram> programRows, IReadOnlyList<WorldCreation> creations, IReadOnlyList<ActionStateSlot> bodyState, IReadOnlyList<ActionStateSlot> identityState, IReadOnlyList<WorldDynamicsRow> dynamics, int simulationRateHz) {
         var actions = new CompiledActionSpec?[ChannelLimits.MaxChannels];
         var thresholds = new FixedQ4816[ChannelLimits.MaxChannels];
         // Every ordinal, not just bound ones — a composition channel's shape is a WORLD property, not a per-kit one,
@@ -276,6 +284,27 @@ public readonly record struct FixedWorldKit(
             thresholds[driftOrdinal] = channels.Threshold(ordinal: driftOrdinal);
         }
 
+        FixedMotionDynamics? planarDynamics = null;
+
+        if (
+            (kit.Motion.DeclaredDynamics is { Length: > 0 } dynamicsName) &&
+            (WorldDefinitionRows.FindDynamics(
+            dynamics: dynamics,
+            name: dynamicsName
+        ) is { } row)
+        ) {
+            var compiled = SecondOrderDynamics.Create(
+                dampingRatio: FixedQ4816.FromDouble(value: row.Damping),
+                frequencyHz: FixedQ4816.FromDouble(value: row.Frequency),
+                initialResponse: FixedQ4816.FromDouble(value: row.Response)
+            );
+
+            planarDynamics = new FixedMotionDynamics(Planar: compiled.Compile(
+                stepTicks: (FixedTickConversion.TicksPerSecond / (ulong)simulationRateHz),
+                ticksPerSecond: FixedTickConversion.TicksPerSecond
+            ));
+        }
+
         return new FixedWorldKit(
             BodyMotionProgram: program,
             Producers: producers,
@@ -292,7 +321,8 @@ public readonly record struct FixedWorldKit(
             DriftChannelOrdinal: driftOrdinal,
             RoleOrdinals: roleOrdinals,
             RoleMask: roleMask,
-            ActionState: actionState
+            ActionState: actionState,
+            PlanarDynamics: planarDynamics
         );
     }
 }

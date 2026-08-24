@@ -272,6 +272,25 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
             select: static server => server.Definition.Looks
         )
     ),
+        ["dynamics"] = new RowSection(
+        RowType: typeof(WorldDynamicsRow),
+        Upsert: Upsert(
+            info: WorldJsonContext.Default.WorldDynamicsRow,
+            toMutation: static (principal, row) => new WorldMutation.UpsertDynamics(
+                Row: row,
+                Principal: principal
+            )
+        ),
+        Remove: RemoveByName(remove: static (principal, name) => new WorldMutation.RemoveDynamics(
+            Name: name,
+            Principal: principal
+        )),
+        Read: ReadRowByKey(
+            info: WorldJsonContext.Default.WorldDynamicsRow,
+            keyOf: static row => row.Name,
+            select: static server => server.Definition.Dynamics
+        )
+    ),
         ["addons"] = new RowSection(
         RowType: typeof(WorldAddonRow),
         Upsert: Upsert(
@@ -640,10 +659,18 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
 
         return builder.Append(value: ']').ToString();
     }
+    // A kit's planar shaping is exactly one of the two mechanisms — echoed alongside the arm so world.kits answers
+    // "how does this kit feel" without a separate lookup.
+    private static string DescribeShaping(WorldMotionModel motion) => ((motion.DeclaredDynamics is { Length: > 0 } row)
+        ? $"shaping=dynamics:{row}"
+        : string.Create(
+        provider: CultureInfo.InvariantCulture,
+        handler: $"shaping=response({motion.DeclaredResponse.Count})"
+    ));
     private static string DescribeMotionArm(WorldMotionModel? motion) => motion switch {
         WorldMotionModel.Grounded grounded => string.Create(
         provider: CultureInfo.InvariantCulture,
-        handler: $"arm=grounded moveSpeed={grounded.MoveSpeed:0.###} turnSpeed={grounded.TurnSpeed:0.###} riseGravity={grounded.RiseGravity:0.###} fallGravity={grounded.FallGravity:0.###} maxFallSpeed={grounded.MaxFallSpeed:0.###}"
+        handler: $"arm=grounded moveSpeed={grounded.MoveSpeed:0.###} turnSpeed={grounded.TurnSpeed:0.###} riseGravity={grounded.RiseGravity:0.###} fallGravity={grounded.FallGravity:0.###} maxFallSpeed={grounded.MaxFallSpeed:0.###} {DescribeShaping(motion: grounded)}"
     ),
         WorldMotionModel.Vehicle vehicle => string.Create(
         provider: CultureInfo.InvariantCulture,
@@ -651,7 +678,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
     ),
         WorldMotionModel.Swim swim => string.Create(
         provider: CultureInfo.InvariantCulture,
-        handler: $"arm=swim thrustSpeed={swim.ThrustSpeed:0.###} buoyancy={swim.Buoyancy:0.###} maxRiseSpeed={swim.MaxRiseSpeed:0.###} maxSinkSpeed={swim.MaxSinkSpeed:0.###}"
+        handler: $"arm=swim thrustSpeed={swim.ThrustSpeed:0.###} buoyancy={swim.Buoyancy:0.###} maxRiseSpeed={swim.MaxRiseSpeed:0.###} maxSinkSpeed={swim.MaxSinkSpeed:0.###} {DescribeShaping(motion: swim)}"
     ),
         _ => "arm=(none)",
     };

@@ -139,6 +139,7 @@ give each type its full contract.
 | `FixedPosition` | `readonly record struct` | The hierarchical world position: three signed 64-bit cell indices plus a centred `FixedVector3` offset, where a cell spans `2²⁰` world units. This is the floating-origin coordinate — position + displacement → position, and position − position → displacement, both exactly. |
 | `FixedRateAccumulator` | `struct` | Exact-tick integration of a Q48.16 per-second rate. The part of the division too small to represent is kept as a remainder across calls, so a constant rate advances by exactly one unit after `ticksPerSecond` one-tick steps. That remainder is authoritative simulation state. |
 | `FixedVector3RateAccumulator` | `struct` | Three independent axes of the same integration under one shared time base, bound once. Four readers, four selective resets. |
+| `SecondOrderDynamics` (with `SecondOrderStep`, `SecondOrderState`/`SecondOrderState3`, `SecondOrderSample`) | `readonly record struct` | A pole-matched second-order response — `Create(f, ζ, r)` derives the coefficients from an authored frequency, damping ratio, and initial response; `Compile`+`Step` advance per tick/frame, `Evaluate`+`Retarget` read a closed form from initial conditions. Q32 authoritative state; a `MathF` float twin lives in `Puck.SdfVm.Views` for presentation-only followers. |
 | `FixedVectorMath` | `internal static` | **Substrate.** The scale-free normalizers and norm helpers that every direction and length operation in the folder routes through: the common power-of-two preconditioner, the exact sums of squares, the restoring per-component division (restoring division is schoolbook long division, one bit at a time), and the `Try…` boundary reports. |
 | `FusedArithmetic` (with `LimbBig`) | `public static` | The public refusing faces provide one-rounding mixed-scale products, three-lane dot products, scaled reciprocals, and the generalized `TryDivideMagnitudeRounded` divider. Their sign-plus-`UInt128` accumulation and wrapping siblings remain internal substrate. `LimbBig`, sharing the file, remains the internal exact signed multi-limb accumulator serving `Algebra/MonogenicAlgebra`'s higher-degree lanes. |
 | `FixedSymmetricSolve` | `public static` | Scale-free 2×2/3×3 symmetric apply, solve, and invert for the effective-mass matrices a rigid-body solver uses. `TryApplySymmetric3`, `TryApplySymmetric2` and `TryInvertSymmetric2` are public; the 2×2/3×3 solve kernels and `TryInvertSymmetric3` stay internal until a consumer needs them. Raw-`long` operands may use any shared caller scale; each output rounds exactly once and every refusing call clears its outputs. |
@@ -761,6 +762,51 @@ The vector form is three independent axes under one shared base: an axis-only
 schedule leaves the other two remainders exactly zero, and the four readers
 (`XRemainder`, `YRemainder`, `ZRemainder`, `TicksPerSecond`) plus
 `FromRemainders` round-trip a snapshot exactly.
+
+---
+
+## `SecondOrderDynamics`
+
+A pole-matched second-order response — `y'' + 2ζω y' + ω² y = ω² x + rζω x'`,
+`ω = 2πf` — for a target that should ease toward, overshoot, or anticipate a
+moving value rather than snap to it. Authors declare only `f` (natural
+frequency, Hz), `ζ` (damping ratio), and `r` (initial response); everything
+else is derived. `Create(frequencyHz, dampingRatio, initialResponse)` derives
+the closed-form coefficients once (an exact rational derivation, `FixedQ4816`
+inputs, refusing a non-positive `frequencyHz` or a negative `dampingRatio` by
+name) and selects the branch by damping: `Branch` is `Underdamped` (`ζ < 1`,
+rings and overshoots), `CriticallyDamped` (`ζ = 1`, the fastest approach with
+no overshoot), or `Overdamped` (`ζ > 1`, slower, still no overshoot). `ζ = 0`
+is admitted and rings forever — there is no floor beyond non-negative.
+
+Two evaluation forms of the same system, both exact matched-Z-transform state
+transitions (never naive Euler):
+
+- **`Compile(stepTicks, ticksPerSecond)` → `SecondOrderStep`, then
+  `Step(state, target, targetVelocity)`** — the per-tick/per-frame advance,
+  for simulation state that is stepped every tick (a kit's planar velocity
+  follower) or a presentation follower stepped every frame (a camera boom, a
+  stamped part). `SecondOrderState`/`SecondOrderState3` carry both raw Q32
+  position and velocity lanes — persist both in snapshots; narrowing to Q16
+  loses the sixteen guard bits that make rest exact. `r` acts through
+  `targetVelocity`, held constant over the step (zero-order hold).
+- **`Evaluate(initialValue, initialVelocity, target, elapsedTicks,
+  ticksPerSecond)` → `SecondOrderSample`** — the closed form from initial
+  conditions, computed lazily on read with no per-tick work, mirroring
+  `WorldStateAdvance`'s epoch-based accumulation. `Retarget(sample, oldTarget,
+  newTarget)` adds the velocity kick a piecewise-constant target change
+  implies, so a rewritten target keeps the sample continuous instead of
+  snapping. `r` is inert in `Evaluate` — the closed form has no history of
+  target motion to react to; it only shapes `Step`'s per-interval response.
+
+Both forms round every returned raw exactly once (ties to even); `Step`
+overflow throws `OverflowException` and leaves the input state untouched. A
+default-initialized `SecondOrderDynamics`/`SecondOrderStep` throws
+`InvalidOperationException` from `Compile`/`Evaluate`/`Retarget` rather than
+computing against unbound coefficients. A float twin
+(`Puck.SdfVm.Views.SecondOrderFollower.cs`, `Puck.SdfVm` project) transcribes
+the identical closed forms in `MathF` for presentation-only followers that
+never feed back into the tick.
 
 ---
 

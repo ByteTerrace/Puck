@@ -593,6 +593,16 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteInt64(value: state.VehicleLatRemainder);
         writer.WriteInt64(value: state.VehicleResidualRemainder);
         writer.WriteInt64(value: state.SwimThrustRampRemainder);
+        writer.WriteInt64(value: state.PlanarFollowerPositionRawX);
+        writer.WriteInt64(value: state.PlanarFollowerPositionRawY);
+        writer.WriteInt64(value: state.PlanarFollowerPositionRawZ);
+        writer.WriteInt64(value: state.PlanarFollowerVelocityRawX);
+        writer.WriteInt64(value: state.PlanarFollowerVelocityRawY);
+        writer.WriteInt64(value: state.PlanarFollowerVelocityRawZ);
+        writer.WriteFixedVector(value: state.PlanarFollowerPreviousTarget);
+        writer.WriteInt64(value: state.VerticalFollowerPositionRaw);
+        writer.WriteInt64(value: state.VerticalFollowerVelocityRaw);
+        writer.WriteFixed(value: state.VerticalFollowerPreviousTarget);
         writer.WriteInt64(value: state.OverlayRemainderX);
         writer.WriteInt64(value: state.OverlayRemainderY);
         writer.WriteInt64(value: state.OverlayRemainderZ);
@@ -703,6 +713,16 @@ public static partial class WorldAuthorityCheckpointCodec {
         var vehicleLatRemainder = reader.ReadInt64();
         var vehicleResidualRemainder = reader.ReadInt64();
         var swimThrustRampRemainder = reader.ReadInt64();
+        var planarFollowerPositionRawX = reader.ReadInt64();
+        var planarFollowerPositionRawY = reader.ReadInt64();
+        var planarFollowerPositionRawZ = reader.ReadInt64();
+        var planarFollowerVelocityRawX = reader.ReadInt64();
+        var planarFollowerVelocityRawY = reader.ReadInt64();
+        var planarFollowerVelocityRawZ = reader.ReadInt64();
+        var planarFollowerPreviousTarget = reader.ReadFixedVector();
+        var verticalFollowerPositionRaw = reader.ReadInt64();
+        var verticalFollowerVelocityRaw = reader.ReadInt64();
+        var verticalFollowerPreviousTarget = reader.ReadFixed();
         var overlayRemainderX = reader.ReadInt64();
         var overlayRemainderY = reader.ReadInt64();
         var overlayRemainderZ = reader.ReadInt64();
@@ -812,6 +832,13 @@ public static partial class WorldAuthorityCheckpointCodec {
             PendingContinuum: pendingContinuum,
             PendingDefaultChannelPress: pendingDefaultChannelPress,
             PendingDefaultChannelValue: pendingDefaultChannelValue,
+            PlanarFollowerPositionRawX: planarFollowerPositionRawX,
+            PlanarFollowerPositionRawY: planarFollowerPositionRawY,
+            PlanarFollowerPositionRawZ: planarFollowerPositionRawZ,
+            PlanarFollowerVelocityRawX: planarFollowerVelocityRawX,
+            PlanarFollowerVelocityRawY: planarFollowerVelocityRawY,
+            PlanarFollowerVelocityRawZ: planarFollowerVelocityRawZ,
+            PlanarFollowerPreviousTarget: planarFollowerPreviousTarget,
             PlanarRampRemainder: planarRampRemainder,
             PlanarVelocity: planarVelocity,
             PreviousChannelBit: previousChannelBit,
@@ -823,6 +850,9 @@ public static partial class WorldAuthorityCheckpointCodec {
             VehicleLongRemainder: vehicleLongRemainder,
             VehiclePitch: vehiclePitch,
             VehicleResidualRemainder: vehicleResidualRemainder,
+            VerticalFollowerPositionRaw: verticalFollowerPositionRaw,
+            VerticalFollowerVelocityRaw: verticalFollowerVelocityRaw,
+            VerticalFollowerPreviousTarget: verticalFollowerPreviousTarget,
             VerticalVelocity: verticalVelocity
         );
     }

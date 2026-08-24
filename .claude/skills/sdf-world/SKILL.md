@@ -253,11 +253,13 @@ is `Views.SdfCameraView.Resolve` (a camera rig pose) — nothing reads
 camera in this codebase used to hand-roll), `FollowRig`/`OrientedFollowRig`,
 `FixedRig`, `FirstPersonRig` — plus the PROGRAM path, which is the one a host
 with authored cameras uses: `SdfCameraProgram.cs` carries the IR
-(`SdfCameraOp`: anchor/offset/lookAt/orbit/smooth/clampPitch/fov/blend,
+(`SdfCameraOp`: anchor/offset/lookAt/orbit/dynamics/clampPitch/fov/blend,
 `SdfCameraProgramSet` as the blend namespace by INDEX), the allocation-free
 `SdfCameraProgramEvaluator`, the `SdfCameraProgramRig` adapter whose
 `Subjects`/`Scalars`/`Look` buffers a host refills per frame, and
-`SdfCameraBoomSmoother`. Every number an op reads is an `SdfCameraScalar` —
+`SdfCameraBoomFollower` — the pole-matched second-order boom ease over
+`Puck.SdfVm.Views.SecondOrderFollower3` (see `Puck.SdfVm/README.md`). Every
+number an op reads is an `SdfCameraScalar` —
 a literal or a per-frame slot — so a host's authored bindings resolve OUTSIDE
 this library and nothing here parses a document. `ViewStack` — the
 hypervisor-identity primitive that absorbed `CameraFeedPool`: `IViewContent`

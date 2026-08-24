@@ -7,7 +7,7 @@ namespace Puck.World.Tests;
 /// <summary>Proves a standing bidder RAISING THEIR OWN BID nets against their own standing escrow — one balance
 /// read, one write, delta-charged — rather than being charged the FULL new amount and then "refunded" the old bid
 /// through a second read of the very cell this compose pass just wrote (which would see the cell's pre-rebase
-/// Advance/EpochTick — <c>Server.WorldServer.RebaseAdvanceEpoch</c> runs AFTER <c>TryCompose</c> — re-applying
+/// Advance/EpochTick — <c>Server.WorldServer.RebaseCellTraits</c> runs AFTER <c>TryCompose</c> — re-applying
 /// elapsed accrual <c>WorldStateReader.TryRead</c> already folded into the first read). Two red-first cases: the
 /// delta-affordability gap (a bidder who can afford the RAISE but not the full new amount was wrongly refused) and
 /// the advancing-cell double-count (an advancing currency cell's elapsed accrual applied twice, minting money out of

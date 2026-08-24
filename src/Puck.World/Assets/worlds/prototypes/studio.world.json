@@ -87,8 +87,8 @@
             "fieldOfViewRadians": 0.7
           },
           {
-            "$type": "smooth",
-            "rate": 12
+            "$type": "dynamics",
+            "row": "portrait"
           }
         ]
       },
@@ -132,8 +132,8 @@
             "fieldOfViewRadians": 0.62
           },
           {
-            "$type": "smooth",
-            "rate": 14
+            "$type": "dynamics",
+            "row": "studio-cam"
           }
         ]
       },
@@ -177,8 +177,8 @@
             "fieldOfViewRadians": 0.62
           },
           {
-            "$type": "smooth",
-            "rate": 14
+            "$type": "dynamics",
+            "row": "studio-cam"
           }
         ]
       },
@@ -222,8 +222,8 @@
             "fieldOfViewRadians": 0.62
           },
           {
-            "$type": "smooth",
-            "rate": 14
+            "$type": "dynamics",
+            "row": "studio-cam"
           }
         ]
       },
@@ -455,28 +455,7 @@
         "riseGravity": 16,
         "fallGravity": 27,
         "maxFallSpeed": 20,
-        "response": [
-          {
-            "engageRate": 10,
-            "releaseRate": 3,
-            "gate": {
-              "$type": "now",
-              "fact": "Rising"
-            }
-          },
-          {
-            "engageRate": 10,
-            "releaseRate": 3,
-            "gate": {
-              "$type": "now",
-              "fact": "Falling"
-            }
-          },
-          {
-            "engageRate": 40,
-            "releaseRate": 48
-          }
-        ],
+        "dynamics": "stride",
         "sprintMultiplier": 1.3,
         "sprintChannel": "run",
         "moveFrame": "World",
@@ -1786,6 +1765,14 @@
       "SmoothUnionContact"
     ]
   },
+  "dynamics": [
+    { "name": "portrait", "f": 1.9099, "zeta": 1, "r": 1 },
+    { "name": "studio-cam", "f": 2.2282, "zeta": 1, "r": 1 },
+    { "name": "body-settle", "f": 3.0, "zeta": 0.55, "r": 0 },
+    { "name": "head-bob", "f": 2.0, "zeta": 0.35, "r": 0 },
+    { "name": "hand-trail", "f": 1.4, "zeta": 0.3, "r": -0.5 },
+    { "name": "stride", "f": 2.5, "zeta": 1, "r": 0 }
+  ],
   "host": {
     "width": 1920,
     "height": 1080,
@@ -1858,7 +1845,13 @@
       "motion": {
         "gaitAmplitude": 0,
         "replayFrames": false,
-        "secondsPerFrame": 0
+        "secondsPerFrame": 0,
+        "dynamics": "body-settle",
+        "partDynamics": {
+          "head": "head-bob",
+          "left-hand": "hand-trail",
+          "right-hand": "hand-trail"
+        }
       }
     }
   ],

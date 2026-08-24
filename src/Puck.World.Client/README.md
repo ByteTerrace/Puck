@@ -81,7 +81,16 @@ root-crossing dependency was the audio director, narrowed to
   the frame source's own input to the audio director's `Publish`.
 - `WorldPlacementStamper.cs`, `WorldStampPool.cs`, `WorldCreationFacets.cs` —
   the document-to-geometry emission path for scene rows and `puck.creation.v1`
-  placements; `WorldSceneEmitter` drives them for the boot world.
+  placements; `WorldSceneEmitter` drives them for the boot world. A
+  body-rooted `BodyStamp` carrying a `WorldLookMotion` with `Dynamics`/
+  `PartDynamics` gets a root `SecondOrderFollower3`/`4` (position/orientation)
+  plus one per-part position follower per named part — the presentation-only
+  float twin of `Puck.Maths.SecondOrderDynamics`, stepped once per frame in
+  `PackTransforms` off a `Tick`-latched delta; `WorldSceneEmitter`'s
+  catalog-avatar-root path carries the identical root follower for a
+  catalog-sourced look. Both reseed on `WorldClient.PoseEpoch` moving (an
+  activation, a teleport, an over-threshold correction) rather than streak a
+  discontinuous pose.
 - `WorldSessionSceneEmitter.cs`, `WorldAdjacencySceneEmitter.cs` — the session
   projection's and adjacency neighbour's own content emission, parallel to
   `WorldSceneEmitter`'s boot-world path.

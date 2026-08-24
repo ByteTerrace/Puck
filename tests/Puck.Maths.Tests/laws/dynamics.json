@@ -1,0 +1,234 @@
+[
+  {
+    "Id": "dynamics.create-constants-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.SecondOrderDynamics", "Name": "Create" },
+      { "Type": "Puck.Maths.SecondOrderDynamics", "Name": "Frequency" },
+      { "Type": "Puck.Maths.SecondOrderDynamics", "Name": "DampingRatio" },
+      { "Type": "Puck.Maths.SecondOrderDynamics", "Name": "InitialResponse" },
+      { "Type": "Puck.Maths.SecondOrderDynamics", "Name": "Branch" },
+      { "Type": "Puck.Maths.SecondOrderDynamics", "Name": "DecayRateRaw" },
+      { "Type": "Puck.Maths.SecondOrderDynamics", "Name": "StiffnessRaw" },
+      { "Type": "Puck.Maths.SecondOrderDynamics", "Name": "OscillationRateRaw" },
+      { "Type": "Puck.Maths.SecondOrderDynamics", "Name": "DampingOverOscillationRaw" },
+      { "Type": "Puck.Maths.SecondOrderDynamics", "Name": "TargetVelocityGainRaw" },
+      { "Type": "Puck.Maths.SecondOrderDynamics", "Name": "RetargetGainRaw" },
+      { "Type": "Puck.Maths.SecondOrderDynamicsBranch", "Name": "Underdamped" },
+      { "Type": "Puck.Maths.SecondOrderDynamicsBranch", "Name": "CriticallyDamped" },
+      { "Type": "Puck.Maths.SecondOrderDynamicsBranch", "Name": "Overdamped" },
+      { "Type": "Puck.Maths.SecondOrderDynamics", "Name": "CoefficientFractionBitCount" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "SecondOrderDynamics.Create's six derived Q32 raws, folded onto the admitted authoring band (f in (0,100] Hz, zeta in [0,16], r in [-4,4])",
+        "Against": "Oracles.DynamicsConstants — the same closed-form omega/decay/target-velocity-gain/retarget-gain formulas re-derived independently in BigInteger, rounded through Oracles.RoundRationalTiesToEven rather than FixedPointRounding.TryRoundRational, and the oscillation rate's square root taken by Oracles.NearestIntegerRoot's bracketed integer search rather than BigIntegerFunctions.SquareRoot's Newton descent",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the branch decision (Underdamped/CriticallyDamped/Overdamped) agrees with the folded damping ratio's own comparison against one",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: the oscillation rate and damping-over-oscillation raws are compared within 1-2 raw rather than bit-exact — the subject and the oracle each carry an internal square root at 128 guard fraction bits through a DIFFERENT nearest-integer-root algorithm, so the two guard-precision approximations can differ by a sub-ULP amount before the shared final Q32 rounding; the damping-over-oscillation check is skipped entirely at CriticallyDamped, where it is not meaningful",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "dynamics.step-vs-evaluate-close-agreement",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.SecondOrderDynamics", "Name": "Compile" },
+      { "Type": "Puck.Maths.SecondOrderDynamics", "Name": "Evaluate" },
+      { "Type": "Puck.Maths.SecondOrderStep", "Name": "Step" },
+      { "Type": "Puck.Maths.SecondOrderState", "Name": "AtRest" },
+      { "Type": "Puck.Maths.SecondOrderState", "Name": "Position" },
+      { "Type": "Puck.Maths.SecondOrderState", "Name": "Velocity" },
+      { "Type": "Puck.Maths.SecondOrderState", "Name": "PositionRaw" },
+      { "Type": "Puck.Maths.SecondOrderState", "Name": "VelocityRaw" },
+      { "Type": "Puck.Maths.SecondOrderSample", "Name": "Value" },
+      { "Type": "Puck.Maths.SecondOrderSample", "Name": "Velocity" },
+      { "Type": "Puck.Maths.SecondOrderSample", "Name": ".ctor" },
+      { "Type": "Puck.Maths.SecondOrderState", "Name": ".ctor" },
+      { "Type": "Puck.Maths.SecondOrderStep", "Name": ".ctor" },
+      { "Type": "Puck.Maths.SecondOrderStep", "Name": "A11Raw" },
+      { "Type": "Puck.Maths.SecondOrderStep", "Name": "A12Raw" },
+      { "Type": "Puck.Maths.SecondOrderStep", "Name": "A21Raw" },
+      { "Type": "Puck.Maths.SecondOrderStep", "Name": "A22Raw" },
+      { "Type": "Puck.Maths.SecondOrderStep", "Name": "StepTicks" },
+      { "Type": "Puck.Maths.SecondOrderStep", "Name": "TicksPerSecond" },
+      { "Type": "Puck.Maths.SecondOrderStep", "Name": "TargetVelocityGainRaw" }
+    ],
+    "Legs": [
+      {
+        "Kind": "InTreeIndependent",
+        "Flavor": "None",
+        "Subject": "a one-tick-per-step walk of the compiled pole-matched propagator (SecondOrderStep.Step) from rest toward a folded target, over f in (0,100] Hz and zeta in [0,16]",
+        "Against": "SecondOrderDynamics.Evaluate at the same elapsed duration — a genuinely separate code path: Compile derives the exact Q32 matrix once via BigInteger scaling-and-squaring/Taylor series (SecondOrderDynamics.Exact), while Evaluate is built at runtime from the public FixedQ4816.Exp2/SinCos kernels and never touches BigInteger",
+        "Shared": "",
+        "Citation": "ENVELOPE: agreement is required within Aem·2^-15 plus float-kernel slack (widened for velocity by a factor of the natural frequency, since the velocity channel carries an extra omega-squared scale), per SecondOrderDynamics.Evaluate's own documented remarks — Evaluate is stated there to be an approximation of the exact propagator, not bit-identical to it. THIS law folds frequency to [0.5, 8] Hz rather than the full (0, 100] Hz authoring band (the upper bound avoids many-cycle phase-rounding divergence over one second at 240 one-tick steps; the lower bound avoids a near-zero decay rate where both sides' rounding noise dominates a genuinely tiny signal) and nudges the damping ratio off the near-critical band |zeta-1| < 1/6 (there the overdamped closed form divides two nearly-equal decay rates by a near-zero sigma, a genuinely different numerical regime this generic bound is not shaped to cover)",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "r is held at zero for this comparison so the check isolates the propagator/closed-form agreement from Evaluate's separate Retarget-only r channel",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "dynamics.critical-and-overdamped-never-overshoot",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.SecondOrderStep", "Name": "Step" },
+      { "Type": "Puck.Maths.SecondOrderState", "Name": "AtRest" },
+      { "Type": "Puck.Maths.SecondOrderState", "Name": "PositionRaw" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "stepping from rest toward a step target at zeta in {1, 1.5, 3, 8}, the position raw never exceeds the target raw at any tick over five seconds at 240 Hz",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "CONTROL: the identical walk at zeta = 0.25 DOES exceed the target at some tick, so the no-overshoot check above is discriminating rather than vacuously true of every follower",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "dynamics.steady-state-exact",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.SecondOrderStep", "Name": "SettleHalfUnitRaw" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "at zeta in {0.4, 1, 2}, stepping from rest toward a step target for ten seconds at 240 Hz reaches EXACTLY SecondOrderState.AtRest(target) — position and velocity raws bit-identical to the rest state, not merely close — and the settled state is a fixed point of one more Step",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "dynamics.initial-response-sign",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.SecondOrderDynamics", "Name": "Retarget" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "from rest, one step toward a target advancing linearly (a nonzero target velocity): the reached value orders strictly y1(r=+1) > y1(r=0) > y1(r=-1)",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "r = 0 derives an EXACTLY zero target-velocity gain and an exactly zero retarget gain — r is inert by construction, not merely small",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "SecondOrderDynamics.Retarget's velocity kick for a positive target jump under r=1",
+        "Against": "the raw derived independently as before-velocity plus one FixedQ4816.RoundProduct rounding of RetargetGainRaw times the target delta, at Q32 — Retarget's own documented formula, checked from outside the member rather than by re-reading its body",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "dynamics.refusals-and-overflow",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.SecondOrderState", "Name": "FromValue" },
+      { "Type": "Puck.Maths.SecondOrderState", "Name": "FromRawBits" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Create refuses f<=0 naming 'frequencyHz' and zeta<0 naming 'dampingRatio'; Compile refuses stepTicks=0 naming 'stepTicks' and ticksPerSecond=0 naming 'ticksPerSecond'; an unbound (default-initialized) SecondOrderDynamics.Compile throws InvalidOperationException; SecondOrderState.FromValue refuses a raw at or past the sixteen guard bits, naming the rejected parameter",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "a Step whose intermediate product leaves the Q32 raw carrier throws OverflowException rather than wrapping",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "dynamics.vector-lanes-independent",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.SecondOrderState3", "Name": "X" },
+      { "Type": "Puck.Maths.SecondOrderState3", "Name": "Y" },
+      { "Type": "Puck.Maths.SecondOrderState3", "Name": "Z" },
+      { "Type": "Puck.Maths.SecondOrderState3", "Name": "AtRest" },
+      { "Type": "Puck.Maths.SecondOrderState3", "Name": "Position" },
+      { "Type": "Puck.Maths.SecondOrderState3", "Name": "Velocity" },
+      { "Type": "Puck.Maths.SecondOrderState3", "Name": "FromValue" },
+      { "Type": "Puck.Maths.SecondOrderState3", "Name": ".ctor" }
+    ],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "Transcription",
+        "Subject": "SecondOrderStep.Step(SecondOrderState3,...) over folded targets and target velocities",
+        "Against": "three independent scalar SecondOrderStep.Step(SecondOrderState,...) calls, one per lane, compared bit for bit after thirty-two ticks",
+        "Shared": "SecondOrderStep.Step(SecondOrderState,FixedQ4816,FixedQ4816) — the vector overload is a straight X, Y, Z sequence of the SAME scalar member the check's own oracle side calls directly, so this witnesses carriage (no cross-lane state) rather than an independently authored oracle",
+        "Citation": "the scalar overload's own coverage (dynamics.critical-and-overdamped-never-overshoot, dynamics.steady-state-exact) is the independent evidence this leg carries forward",
+        "Absolute": ""
+      }
+    ]
+  }
+]

@@ -129,6 +129,15 @@ conservative there. A solid row participates in simulation, which is why
 mutating scene, screen, creation, or placement geometry is a real authority
 widening.
 
+A kit shaping its planar velocity through a `dynamics` row (rather than the
+engage/release response table) carries the follower's Q32 state — position
+and velocity raws, plus the previous commanded target the `r` term needs —
+as ordinary `WorldBody` sim state (`WorldBody.Dynamics.cs`); a swim kit's
+vertical lane carries the scalar counterpart. Both round-trip through
+`TransferState`/`WorldAuthorityCheckpointCodec`
+(`SupportedVersion`, bumped whenever the wire shape changes) alongside every
+other body field.
+
 A disconnected seat or peer does not drop its body on the spot — it PARKS
 (`Entry.Parked`/`ParkedUntilTick`) for `population.reconnectGraceSeconds` (converted to ticks at compile),
 retained pose/state and all, before `ReclaimExpiredParks` tears it down; a

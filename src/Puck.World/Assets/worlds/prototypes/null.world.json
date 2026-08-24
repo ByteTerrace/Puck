@@ -7,35 +7,30 @@
           {
             "alpha": 1,
             "id": "resting",
-            "order": 0,
             "pageId": "base"
           },
           {
             "activeAlpha": 1,
             "alpha": 0.65,
             "id": "lt",
-            "order": 1,
             "pageId": "bbLt"
           },
           {
             "activeAlpha": 1,
             "alpha": 0.65,
             "id": "rt",
-            "order": 2,
             "pageId": "bbRt"
           },
           {
             "activeAlpha": 1,
             "alpha": 0.65,
             "id": "ltrt",
-            "order": 3,
             "pageId": "bbLtRt"
           },
           {
             "activeAlpha": 1,
             "alpha": 0.65,
             "id": "rtlt",
-            "order": 4,
             "pageId": "bbRtLt"
           }
         ],

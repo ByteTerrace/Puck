@@ -78,6 +78,9 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
     private readonly bool[] m_active = new bool[EntityCapacity];
     private readonly bool[] m_seen = new bool[EntityCapacity];
     private readonly RenderErrorEaser[] m_easers = new RenderErrorEaser[EntityCapacity];
+    // Bumped on activation, a Teleport continuity, and an over-threshold Correction snap — every discontinuity a
+    // presentation-side follower (a root/part second-order lag) must reseed across rather than chase.
+    private readonly int[] m_poseEpoch = new int[EntityCapacity];
     // The per-frame resolved render poses (alpha-interpolated + eased) — what the frame source and anchors read.
     private readonly Vector3[] m_renderPosition = new Vector3[EntityCapacity];
     private readonly Quaternion[] m_renderOrientation = new Quaternion[EntityCapacity];
@@ -761,6 +764,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
                 m_previousPosition[index] = entry.Position;
                 m_previousOrientation[index] = entry.Orientation;
                 m_easers[index].Reset();
+                m_poseEpoch[index]++;
             } else {
                 switch (entry.Continuity.Kind) {
                     case EntityContinuityKind.Teleport:
@@ -768,6 +772,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
                         m_previousPosition[index] = entry.Position;
                         m_previousOrientation[index] = entry.Orientation;
                         m_easers[index].Reset();
+                        m_poseEpoch[index]++;
 
                         break;
                     case EntityContinuityKind.Correction: {
@@ -778,6 +783,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
 
                             if (positionError.Length() > m_definition.Motion.MaxSmoothError) {
                                 m_easers[index].Reset();
+                                m_poseEpoch[index]++;
                             } else {
                                 m_easers[index].Begin(
                                     positionError: positionError,
@@ -877,6 +883,11 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
     /// renders an inhabitant's creation geometry (a body-rooted stamp) instead of a catalog avatar.</summary>
     /// <param name="index">The 0-based entity index.</param>
     public string? PlacementId(int index) => m_placementId[index];
+    /// <summary>The entity's pose-discontinuity counter — bumped on activation, a <see cref="EntityContinuityKind.Teleport"/>,
+    /// and an over-threshold <see cref="EntityContinuityKind.Correction"/> snap. A presentation-side second-order
+    /// follower reseeds whenever this changes, so it never chases across a jump.</summary>
+    /// <param name="index">The 0-based entity index.</param>
+    public int PoseEpoch(int index) => m_poseEpoch[index];
     /// <summary>The entity's per-frame render position (interpolated and correction-eased).</summary>
     /// <param name="index">The 0-based entity index.</param>
     public Vector3 Position(int index) => m_renderPosition[index];

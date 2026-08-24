@@ -307,6 +307,7 @@ internal static class Fixtures {
             // The engine ships no rig (Assets/worlds/standard.world.json authors the standard one), and a nonzero
             // census must author a views section, so the fixture carries the standard chase framing itself.
             ViewsRaw: StandardViews,
+            DynamicsRaw: StandardDynamics,
             LooksRaw: [],
             LookAssignmentRaw: new WorldRowAssignment(Sequence: new WorldSequence(Name: WorldSequence.R1, Offset: 129, Step: 0f), Rows: []),
             GrantsRaw: [],
@@ -360,6 +361,14 @@ internal static class Fixtures {
     /// <summary>The placed ball's actual surface radius, in world units — sized to "a few" per
     /// <see cref="GradientUpContactLawTests"/>'s brief, never a raw magic number at the call site.</summary>
     public const float BallSurfaceRadius = 3f;
+    /// <summary>The document's declared <c>dynamics</c> rows, mirroring what
+    /// <c>src/Puck.World/Assets/worlds/standard.world.json</c> authors — <c>chase</c> backs
+    /// <see cref="StandardSeatRig"/>'s boom; <c>probe</c> is spare furniture a law can name without authoring its
+    /// own row.</summary>
+    public static WorldDynamicsRow[] StandardDynamics { get; } = [
+        new WorldDynamicsRow(Name: "chase", Frequency: 0.9549f, Damping: 1f, Response: 1f),
+        new WorldDynamicsRow(Name: "probe", Frequency: 2f, Damping: 1f, Response: 0f),
+    ];
     /// <summary>The standard chase framing, mirroring what <c>src/Puck.World/Assets/worlds/standard.world.json</c>
     /// authors. The engine holds no rig of its own, and a document whose census implies a body is refused for
     /// authoring no <c>views</c>, so a C#-built fixture states the numbers the way a document would.</summary>
@@ -383,7 +392,7 @@ internal static class Fixtures {
                 WorldAxes: false
             ),
             new WorldCameraProgramOp.Fov(FieldOfViewRadians: new BindableScalar(literal: 0.9599311f)),
-            new WorldCameraProgramOp.Smooth(Rate: 6f),
+            new WorldCameraProgramOp.Dynamics(Row: "chase"),
         ]
     );
 

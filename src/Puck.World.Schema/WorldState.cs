@@ -62,7 +62,11 @@ public sealed record WorldStateSection(
 /// quantity or balance, and this field names who minted it. <see langword="null"/> means locally self-minted, the
 /// only value a single-authority world produces today; a federated authority is expected to populate a real issuer
 /// id.</param>
-public sealed record WorldStateCell(WorldCellName Key, long Value = 0, string? Text = null, WorldStateAdvance? Advance = null, string? Provenance = null);
+/// <param name="Dynamics">This cell's own second-order easing trait, or <see langword="null"/> for an ordinary cell
+/// whose value only changes through an explicit write — the keyed counterpart of
+/// <see cref="WorldStateRow.Dynamics"/>, which governs a slot's own cell instead. Legitimate only on a cell whose
+/// <see cref="Key"/> is not <see cref="WorldStateRow.SlotKey"/>.</param>
+public sealed record WorldStateCell(WorldCellName Key, long Value = 0, string? Text = null, WorldStateAdvance? Advance = null, string? Provenance = null, WorldStateDynamics? Dynamics = null);
 /// <summary>
 /// One row of the <c>state</c> section — a named cell or a named collection of cells, addressed by its stable
 /// <see cref="Name"/>. <see cref="Name"/> is the <c>UpsertStateRow</c>/<c>RemoveStateRow</c> key, the
@@ -142,6 +146,11 @@ public sealed record WorldStateCell(WorldCellName Key, long Value = 0, string? T
 /// set when alternative <c>i</c> of that context has been dealt. Lives at the site rather than on the source row,
 /// which lets two sites reference one declared source and deal independently. Null or empty for a site whose source
 /// never deals.</param>
+/// <param name="Dynamics">The row's own (slot-cell) second-order easing trait, or <see langword="null"/> for an
+/// ordinary row whose slot value only changes through an explicit write. See <see cref="WorldStateDynamics"/>.
+/// Legitimate only for <see cref="CellKind.Int"/>/<see cref="CellKind.Fixed"/>, only on a scalar (slot-eligible)
+/// row, and never together with <see cref="Advance"/> or <see cref="Draw"/>. A keyed row's own cells ease
+/// independently through <see cref="WorldStateCell.Dynamics"/> instead.</param>
 public sealed record WorldStateRow(
     WorldCellName Name,
     CellKind Kind,
@@ -155,7 +164,8 @@ public sealed record WorldStateRow(
     WorldStateAdvance? Advance = null,
     WorldDraw? Draw = null,
     long DrawCursor = 0,
-    IReadOnlyList<long>? DrawDecks = null
+    IReadOnlyList<long>? DrawDecks = null,
+    WorldStateDynamics? Dynamics = null
 ) {
     /// <summary>The prefix every engine-minted row or cell name carries, and the one an author may never spell. A
     /// row name starting with it is refused outright (nothing mints a row); a cell key starting with it is refused
@@ -171,6 +181,8 @@ public sealed record WorldStateRow(
 
     /// <summary>Gets a value indicating whether this row declares a <see cref="WorldStateAdvance"/> continuous-accumulation trait.</summary>
     public bool IsAdvancing => (Advance is not null);
+    /// <summary>Gets a value indicating whether this row declares a <see cref="WorldStateDynamics"/> easing trait.</summary>
+    public bool IsEasing => (Dynamics is not null);
     /// <summary>Gets a value indicating whether this row declares a <see cref="WorldDraw"/> — whether it is a draw site.</summary>
     public bool IsDraw => (Draw is not null);
     /// <summary>Gets a value indicating whether this row is keyed — it declares a <see cref="Capacity"/>, carries
@@ -335,6 +347,26 @@ public sealed record WorldStateAdvance(long RateNumerator, long RateDenominator,
                 : (long)raw)));
     }
 }
+/// <summary>
+/// A <see cref="WorldStateCell"/>/<see cref="WorldStateRow"/>'s second-order easing trait: the STORED value stays the
+/// TRUTH (what rules, gates, and comparands read), while a read through <c>Puck.World.WorldStateReader.TryReadEased</c>
+/// computes a second-order follower's current sample from <see cref="Y0"/>/<see cref="V0"/> at <see cref="EpochTick"/>,
+/// chasing the stored value as its target — the closed-form counterpart to <see cref="WorldStateAdvance"/>'s linear
+/// accumulation, no per-tick work either. An explicit write REBASES: the trait's <see cref="Y0"/>/<see cref="V0"/>
+/// become the eased value and velocity computed AT the write's own tick, and <see cref="EpochTick"/> becomes that tick
+/// — the same rebase discipline <see cref="WorldStateAdvance"/>'s own write rule follows, so a retune never jumps.
+/// </summary>
+/// <param name="Row">The referenced <c>dynamics</c> row name; must resolve.</param>
+/// <param name="Y0">The follower's position at <see cref="EpochTick"/> — the eased value observed at the last
+/// rebase, carried in the SAME per-kind encoding as <see cref="WorldStateCell.Value"/> (raw <c>FixedQ4816</c> bits
+/// for a <see cref="CellKind.Fixed"/> row, a whole number for every other kind — see
+/// <c>Puck.World.WorldStateReader.DynamicsRawToFixed</c>). On an int row this rounds the eased value to a whole
+/// unit at every rebase.</param>
+/// <param name="V0">The follower's velocity at <see cref="EpochTick"/>, per second, in the same per-kind encoding
+/// as <see cref="Y0"/>. On an int row this rounds a sub-half-unit-per-second velocity — and so a sub-half-unit
+/// <c>r</c> kick — to zero.</param>
+/// <param name="EpochTick">The server tick <see cref="Y0"/>/<see cref="V0"/> were captured at.</param>
+public sealed record WorldStateDynamics(string Row, long Y0, long V0, long EpochTick = 0);
 /// <summary>How a <see cref="WorldGenerator"/> context's alternatives are consumed — the deck vocabulary. Authored,
 /// never inferred: exhaustion behaviour is a declaration, not a fallback the engine picks.</summary>
 [JsonConverter(typeof(StrictEnumConverter<WorldGeneratorMode>))]

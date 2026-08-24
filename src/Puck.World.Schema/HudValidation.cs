@@ -267,7 +267,8 @@ internal static class HudRowValidation {
     /// <param name="path">The dotted path to name in a thrown message.</param>
     /// <param name="elementIds">The owning panel's id set so far (mutated: the element's id is added on success).</param>
     /// <param name="stateRows">The world's declared <c>state</c> rows by name, or <see langword="null"/> when no such
-    /// context exists (seat scope).</param>
+    /// context exists (seat scope). A <c>state.*</c> token's trailing <c>.$target</c> facet (<see cref="HudBinding.Target"/>)
+    /// resolves against this SAME map — existence, never live value, is what validation checks.</param>
     /// <param name="definition">The owning document, for a Frame element's declared-probe lookup, or
     /// <see langword="null"/> when the caller carries no Frame element.</param>
     /// <param name="cameras">The document's declared <c>cameras[]</c> names, for a Frame element's <c>view</c> arm, or

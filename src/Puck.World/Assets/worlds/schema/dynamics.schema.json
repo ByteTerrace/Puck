@@ -1,0 +1,39 @@
+{
+  "type": [
+    "array",
+    "null"
+  ],
+  "items": {
+    "description": "One named dynamics row \u2014 the t3ssel8r-style second-order \u0022personality\u0022 triple every consumer (a look\u0027s root/part follower, a camera boom, a kit\u0027s planar velocity shaping, a state cell\u0027s eased read) names by Name rather than authoring inline: one mechanism, referenced everywhere a follower is wanted. A world declares none when nothing wants one \u2014 every reference is nullable, so an unauthored world is unchanged.",
+    "type": [
+      "object",
+      "null"
+    ],
+    "properties": {
+      "name": {
+        "description": "The row\u0027s stable name, unique within the section \u2014 the spelling every consumer\u0027s own dynamics/row reference resolves against.",
+        "type": "string"
+      },
+      "f": {
+        "description": "The natural frequency f, Hz. Must be finite and positive; higher is snappier. A value that rounds to zero at Q16, or whose derived oscillation rate is too close to critical to resolve at the Q32 coefficient scale, is refused (see WorldDefinitionValidator.ValidateDynamics).",
+        "type": "number"
+      },
+      "zeta": {
+        "description": "The damping ratio \u03B6 (dimensionless). 0 rings forever; \u003C1 overshoots and rings down; 1 is critically damped (the fastest approach that never overshoots); \u003E1 is overdamped (slower, still no overshoot).",
+        "type": "number"
+      },
+      "r": {
+        "description": "The initial response r (dimensionless). 0 eases in from rest; \u003E0 reacts immediately to the target\u0027s own motion; \u003E1 overshoots the target\u0027s motion before settling; \u003C0 anticipates by initially moving opposite the target\u0027s motion.",
+        "type": "number"
+      }
+    },
+    "required": [
+      "name",
+      "f",
+      "zeta",
+      "r"
+    ],
+    "additionalProperties": false
+  },
+  "default": null
+}

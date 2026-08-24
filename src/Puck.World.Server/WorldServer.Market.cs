@@ -786,7 +786,7 @@ public sealed partial class WorldServer {
     // candidate. English format only. A standing bidder raising their OWN bid is netted against their own standing
     // escrow (one read, one write, delta-charged) rather than charged the full new amount and then "refunded" the
     // old one through a second read of the very cell this compose pass just wrote — that second read would see the
-    // cell's pre-rebase Advance/EpochTick (RebaseAdvanceEpoch runs AFTER TryCompose) and re-apply the elapsed
+    // cell's pre-rebase Advance/EpochTick (RebaseCellTraits runs AFTER TryCompose) and re-apply the elapsed
     // accrual TryRead already folded into the first read, on top of a base that already carries it.
     private static bool TryComposePlaceMarketBid(WorldDefinition current, WorldMutation.PlaceMarketBid mutation, ulong tick, out WorldDefinition candidate, out string reason) {
         candidate = current;
@@ -1114,8 +1114,8 @@ public sealed partial class WorldServer {
 
         return true;
     }
-    // Writes a market fact cell's quantity/balance, preserving whatever Advance/Provenance the cell already carried
-    // (a market move is a value write, never a re-mint) — the SAME base-value-write-preserves-advance rule
+    // Writes a market fact cell's quantity/balance, preserving whatever Advance/Dynamics/Provenance the cell already
+    // carried (a market move is a value write, never a re-mint) — the SAME base-value-write-preserves-trait rule
     // UpsertStateCell's own compose arm follows. Assumes `rowName` already resolved against `rows` (every caller
     // validates existence first); the row's declared envelope (Min/Max/NonNegative) is left to the whole-document
     // revalidation TryApplyMutation runs after compose, exactly like every other state write here.
@@ -1126,11 +1126,13 @@ public sealed partial class WorldServer {
         )!;
         var cellKey = WorldCellName.Parse(candidate: key);
         WorldStateAdvance? existingAdvance = null;
+        WorldStateDynamics? existingDynamics = null;
         string? existingProvenance = null;
 
         foreach (var cell in (row.Cells ?? [])) {
             if (cell.Key == cellKey) {
                 existingAdvance = cell.Advance;
+                existingDynamics = cell.Dynamics;
                 existingProvenance = cell.Provenance;
 
                 break;
@@ -1143,7 +1145,8 @@ public sealed partial class WorldServer {
                 Key: cellKey,
                 Value: value,
                 Advance: existingAdvance,
-                Provenance: existingProvenance
+                Provenance: existingProvenance,
+                Dynamics: existingDynamics
             ),
             keyOf: static (WorldStateCell cell) => cell.Key
         );

@@ -19250,6 +19250,351 @@
       "Reason": "The compiler-generated enum storage field, not authored API."
     },
     {
+      "Id": "Puck.Maths.SecondOrderDynamics.Branch",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.create-constants-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderDynamics.CoefficientFractionBitCount",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.create-constants-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderDynamics.Compile(System.UInt64,System.UInt64)",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.step-vs-evaluate-close-agreement"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderDynamics.Create(Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816)",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.create-constants-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderDynamics.DampingOverOscillationRaw",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.create-constants-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderDynamics.DampingRatio",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.create-constants-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderDynamics.DecayRateRaw",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.create-constants-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderDynamics.Evaluate(Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816,System.UInt64,System.UInt64)",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.step-vs-evaluate-close-agreement"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderDynamics.Frequency",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.create-constants-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderDynamics.InitialResponse",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.create-constants-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderDynamics.OscillationRateRaw",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.create-constants-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderDynamics.Retarget(Puck.Maths.SecondOrderSample,Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816)",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.initial-response-sign"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderDynamics.RetargetGainRaw",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.create-constants-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderDynamics.StiffnessRaw",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.create-constants-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderDynamics.TargetVelocityGainRaw",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.create-constants-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderDynamicsBranch.CriticallyDamped",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.create-constants-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderDynamicsBranch.Overdamped",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.create-constants-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderDynamicsBranch.Underdamped",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.create-constants-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderDynamicsBranch.value__",
+      "State": "waived",
+      "Reason": "The compiler-generated enum storage field, not authored API."
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderSample..ctor(Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816)",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.step-vs-evaluate-close-agreement"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderSample.Value",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.step-vs-evaluate-close-agreement"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderSample.Velocity",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.step-vs-evaluate-close-agreement"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderState..ctor(System.Int64,System.Int64)",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.step-vs-evaluate-close-agreement"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderState.AtRest(Puck.Maths.FixedQ4816)",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.critical-and-overdamped-never-overshoot",
+        "dynamics.step-vs-evaluate-close-agreement"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderState.FromRawBits(System.Int64,System.Int64)",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.refusals-and-overflow"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderState.FromValue(Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816)",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.refusals-and-overflow"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderState.Position",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.step-vs-evaluate-close-agreement"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderState.PositionRaw",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.critical-and-overdamped-never-overshoot",
+        "dynamics.step-vs-evaluate-close-agreement"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderState.Velocity",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.step-vs-evaluate-close-agreement"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderState.VelocityRaw",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.step-vs-evaluate-close-agreement"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderState3..ctor(Puck.Maths.SecondOrderState,Puck.Maths.SecondOrderState,Puck.Maths.SecondOrderState)",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.vector-lanes-independent"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderState3.AtRest(Puck.Maths.FixedVector3)",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.vector-lanes-independent"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderState3.FromValue(Puck.Maths.FixedVector3,Puck.Maths.FixedVector3)",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.vector-lanes-independent"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderState3.Position",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.vector-lanes-independent"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderState3.Velocity",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.vector-lanes-independent"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderState3.X",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.vector-lanes-independent"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderState3.Y",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.vector-lanes-independent"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderState3.Z",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.vector-lanes-independent"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderStep..ctor(System.Int64,System.Int64,System.Int64,System.Int64,System.Int64,System.UInt64,System.UInt64)",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.step-vs-evaluate-close-agreement"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderStep.A11Raw",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.step-vs-evaluate-close-agreement"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderStep.A12Raw",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.step-vs-evaluate-close-agreement"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderStep.A21Raw",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.step-vs-evaluate-close-agreement"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderStep.A22Raw",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.step-vs-evaluate-close-agreement"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderStep.SettleHalfUnitRaw",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.steady-state-exact"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderStep.Step(Puck.Maths.SecondOrderState,Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816)",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.critical-and-overdamped-never-overshoot",
+        "dynamics.step-vs-evaluate-close-agreement"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderStep.Step(Puck.Maths.SecondOrderState3,Puck.Maths.FixedVector3,Puck.Maths.FixedVector3)",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.critical-and-overdamped-never-overshoot",
+        "dynamics.step-vs-evaluate-close-agreement"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderStep.StepTicks",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.step-vs-evaluate-close-agreement"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderStep.TargetVelocityGainRaw",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.step-vs-evaluate-close-agreement"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderStep.TicksPerSecond",
+      "State": "covered",
+      "CoveredBy": [
+        "dynamics.step-vs-evaluate-close-agreement"
+      ]
+    },
+    {
       "Id": "Puck.Maths.SecureRandom.NextUInt()",
       "State": "covered",
       "CoveredBy": [

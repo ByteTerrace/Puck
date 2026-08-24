@@ -24,7 +24,6 @@
           {
             "alpha": 1,
             "id": "resting",
-            "order": 0,
             "pageId": "base"
           }
         ],
@@ -557,6 +556,9 @@
     "maxSlopeDegrees": 60,
     "requirements": []
   },
+  "dynamics": [
+    { "name": "chase", "f": 0.9549, "zeta": 1, "r": 1 }
+  ],
   "host": {
     "presentation": "Windowed",
     "backend": "auto",
@@ -1030,8 +1032,8 @@
           "fieldOfViewRadians": 0.9599311
         },
         {
-          "$type": "smooth",
-          "rate": 6
+          "$type": "dynamics",
+          "row": "chase"
         }
       ],
       "version": "puck.camera.v1"

@@ -18,14 +18,25 @@ namespace Puck.World;
 /// analyzer ceilings.
 /// </summary>
 public sealed class WorldLookCommandModule(IWorldConsoleAuthority authority, IServerLink link) : ICommandModule {
-    // The world.looks census: one row per look, mirroring world.population's per-kit echo.
+    // The world.looks census: one row per look, mirroring world.population's per-kit echo. dyn= names the root
+    // dynamics row when the look authors one; partDyn= is the authored part-follower count.
     private static string DescribeLooks(WorldPopulation population) {
         var rows = population.LookRows;
         var counts = population.ActiveLookCounts();
         var builder = new StringBuilder(value: "[world.looks:");
 
         for (var index = 0; (index < rows.Count); index++) {
+            var motion = rows[index].Motion;
+
             _ = builder.Append(value: $" {rows[index].Name}={DescribeSource(source: rows[index].Source)}:{counts[index]}");
+
+            if (motion.Dynamics is { } dynamicsRow) {
+                _ = builder.Append(value: $" dyn={dynamicsRow}");
+            }
+
+            if (motion.PartDynamics is { Count: > 0 } partDynamics) {
+                _ = builder.Append(value: $" partDyn={partDynamics.Count}");
+            }
         }
 
         return builder.Append(value: ']').ToString();

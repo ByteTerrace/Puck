@@ -105,9 +105,9 @@
           "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpOrbitNullable",
           "description": "Gets the program\u0027s Orbit op, or null."
         },
-        "smoothOp": {
-          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpSmoothNullable",
-          "description": "Gets the program\u0027s Smooth op, or null (rate 0 \u2014 no smoothing \u2014 when absent)."
+        "dynamicsOp": {
+          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpDynamicsNullable",
+          "description": "Gets the program\u0027s Dynamics op, or null."
         }
       },
       "required": [

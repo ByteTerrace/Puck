@@ -84,7 +84,12 @@ only consumer). `Puck.SdfVm.Views` holds the camera-rig shapes
 `ViewStack`, the budgeted round-robin registry for offscreen view content
 (`SdfCameraView`/`WorldSessionView`) with the
 self-reference rule that keeps a screen wired to its own view from
-compounding frame over frame.
+compounding frame over frame. `SdfCameraProgram.cs`'s `dynamics` op names a
+pole-matched second-order response `SdfCameraBoomFollower` applies as the
+seat-rig boom's ease; `Views/SecondOrderFollower.cs` is the presentation-only
+float twin of `Puck.Maths.SecondOrderDynamics` this and every stamped-part
+follower (`Puck.World.Client`) share — document-blind, allocation-free, never
+feeding back into simulation state.
 
 `SdfCameraView.ExportFactory` puts that view's offscreen engine into export
 mode (`SdfWorldEngineOptions.CreateOutputImage` returning an

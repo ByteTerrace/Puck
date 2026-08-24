@@ -5,7 +5,7 @@ namespace Puck.World.Server;
 
 /// <summary>Encodes and decodes a full <see cref="WorldAuthorityCheckpoint"/> over the same bounded
 /// <see cref="WireWriter"/>/<see cref="WireReader"/> discipline every peer decoder in this engine follows: a
-/// <c>"PCKP"</c> magic, a fail-closed <c>u16</c> version (refuses any value other than 2 by name — a checkpoint
+/// <c>"PCKP"</c> magic, a fail-closed <c>u16</c> version (refuses any value other than 3 by name — a checkpoint
 /// carries no compat path), a <c>sha256-64</c> content pin of the whole framed body, then that body — itself a
 /// <c>sha256-64</c> pin of the captured definition JSON followed by the checkpoint's nine sections in the record's
 /// own declared order, each its own length-prefixed block. Journal entries and a buffered
@@ -22,7 +22,7 @@ public static partial class WorldAuthorityCheckpointCodec {
     private const int MaxHashChars = 128;
     private const int MaxSectionBytes = ((64 * 1024) * 1024);
     private const int MaxStringBytes = WireLimits.MaxStringBytes;
-    private const ushort SupportedVersion = 2;
+    private const ushort SupportedVersion = 3;
 
     private delegate T ReadItem<T>(ref WireReader reader);
     private delegate T ReadStructItem<T>(ref WireReader reader) where T : struct;

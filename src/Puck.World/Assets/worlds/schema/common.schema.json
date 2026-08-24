@@ -1253,15 +1253,15 @@
       ],
       "additionalProperties": false
     },
-    "WorldCameraProgramOpSmooth": {
-      "description": "Sets the presentation-only exponential response rate (per second) the resolved eye/target boom eases at; zero disables smoothing. Read by the caller after resolving a frame \u2014 never affects the resolved pose itself. At most one per program.",
+    "WorldCameraProgramOpDynamics": {
+      "description": "Sets the second-order response the resolved eye/target boom eases through. Read by the caller after resolving a frame \u2014 never affects the resolved pose itself. At most one per program.",
       "properties": {
         "$type": {
-          "const": "smooth"
+          "const": "dynamics"
         },
-        "rate": {
-          "description": "The non-negative response rate.",
-          "type": "number"
+        "row": {
+          "description": "The referenced dynamics row name; must resolve.",
+          "type": "string"
         },
         "opcode": {
           "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
@@ -1272,7 +1272,7 @@
         }
       },
       "required": [
-        "rate"
+        "row"
       ],
       "additionalProperties": false
     },
@@ -1389,7 +1389,7 @@
           "$ref": "#/$defs/WorldCameraProgramOpOrbit"
         },
         {
-          "$ref": "#/$defs/WorldCameraProgramOpSmooth"
+          "$ref": "#/$defs/WorldCameraProgramOpDynamics"
         },
         {
           "$ref": "#/$defs/WorldCameraProgramOpClampPitch"
@@ -1640,16 +1640,16 @@
       ],
       "additionalProperties": false
     },
-    "WorldCameraProgramOpSmoothNullable": {
-      "description": "Sets the presentation-only exponential response rate (per second) the resolved eye/target boom eases at; zero disables smoothing. Read by the caller after resolving a frame \u2014 never affects the resolved pose itself. At most one per program.",
+    "WorldCameraProgramOpDynamicsNullable": {
+      "description": "Sets the second-order response the resolved eye/target boom eases through. Read by the caller after resolving a frame \u2014 never affects the resolved pose itself. At most one per program.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
-        "rate": {
-          "description": "The non-negative response rate.",
-          "type": "number"
+        "row": {
+          "description": "The referenced dynamics row name; must resolve.",
+          "type": "string"
         },
         "opcode": {
           "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
@@ -1660,7 +1660,7 @@
         }
       },
       "required": [
-        "rate"
+        "row"
       ],
       "additionalProperties": false
     },
@@ -1708,9 +1708,9 @@
           "$ref": "#/$defs/WorldCameraProgramOpOrbitNullable",
           "description": "Gets the program\u0027s Orbit op, or null."
         },
-        "smoothOp": {
-          "$ref": "#/$defs/WorldCameraProgramOpSmoothNullable",
-          "description": "Gets the program\u0027s Smooth op, or null (rate 0 \u2014 no smoothing \u2014 when absent)."
+        "dynamicsOp": {
+          "$ref": "#/$defs/WorldCameraProgramOpDynamicsNullable",
+          "description": "Gets the program\u0027s Dynamics op, or null."
         }
       },
       "required": [

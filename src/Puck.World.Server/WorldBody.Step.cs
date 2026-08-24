@@ -296,6 +296,28 @@ public sealed partial class WorldBody {
             minimum: -swim.MaxSinkSpeed,
             maximum: swim.MaxRiseSpeed
         );
+
+        if (m_tuning.PlanarDynamics is { Planar: { } planar }) {
+            // scratch.StepTicks can differ from planar.StepTicks for exactly one tick — a world-load/reload swap
+            // recompiles the propagator at the NEW rate but the batch already in flight still advances at its OLD
+            // width (WorldServer.StepCore's own transition-tick posture; see WorldInstanceHost.ShouldStepBoot). The
+            // follower steps through the mismatched width rather than fault on it — a single deterministic tick of
+            // slightly-off physics, the same tolerance every other piece of body state carries across that tick.
+            StepVerticalFollower(
+                step: in planar,
+                target: target,
+                minimum: -swim.MaxSinkSpeed,
+                maximum: swim.MaxRiseSpeed
+            );
+
+            m_submerged = (m_position.Y < m_waterline);
+            m_atSurface = (m_submerged && (((error < FixedQ4816.Zero)
+                ? -error
+                : error) <= swim.FloatDepth));
+
+            return;
+        }
+
         var response = m_tuning.Response;
 
         if (response.Length == 0) {
@@ -1218,13 +1240,20 @@ public sealed partial class WorldBody {
         m_grounded = true;
 
         // A teleport must not carry momentum: drop the ramped planar velocity, its accumulator carries (the grounded
-        // ramp and the vehicle arm's decomposed channels alike), and the response table's recency clocks.
+        // ramp and the vehicle arm's decomposed channels alike), the response table's recency clocks, and the
+        // dynamics followers' own state and previous-target carries.
         m_planarVelocity = default;
         m_planarRampAccumulator.Reset();
         m_vehicleLongAccumulator.Reset();
         m_vehicleLatAccumulator.Reset();
         m_vehicleResidualAccumulator.Reset();
         Array.Clear(array: m_motionRecency);
+        m_planarFollower = default;
+        m_planarPreviousTarget = default;
+        m_planarFollowerSeeded = false;
+        m_verticalFollower = default;
+        m_verticalPreviousTarget = default;
+        m_verticalFollowerSeeded = false;
 
         // The swim carries are momentum and medium facts on the same terms — a warp never carries a dive across, and
         // a body warped out of the water must not read Submerged until the surface stage says so again.
@@ -1442,6 +1471,23 @@ public sealed partial class WorldBody {
         );
 
         m_planarVelocity = transport.Rotate(vector: m_planarVelocity);
+
+        // The follower's own velocity lane is an acceleration direction, not a re-derivable fact — carrying it
+        // through the same transport keeps a live overshoot/anticipation curving with the surface instead of
+        // snapping to whatever the next re-seed (StepPlanarFollower's position sync) happens to leave it pointing.
+        // The position lane is left untouched here: it already tracks m_planarVelocity (rotated above) through that
+        // same re-seed, next step.
+        if (m_tuning.PlanarDynamics is not null) {
+            var rotatedVelocity = transport.Rotate(vector: m_planarFollower.Velocity);
+
+            m_planarFollower = new SecondOrderState3(
+                X: new SecondOrderState(PositionRaw: m_planarFollower.X.PositionRaw, VelocityRaw: (rotatedVelocity.X.Value << 16)),
+                Y: new SecondOrderState(PositionRaw: m_planarFollower.Y.PositionRaw, VelocityRaw: (rotatedVelocity.Y.Value << 16)),
+                Z: new SecondOrderState(PositionRaw: m_planarFollower.Z.PositionRaw, VelocityRaw: (rotatedVelocity.Z.Value << 16))
+            );
+            m_planarPreviousTarget = transport.Rotate(vector: m_planarPreviousTarget);
+        }
+
         m_frame = (transport * m_frame).Normalize();
         m_up = next;
     }
@@ -1804,6 +1850,21 @@ public sealed partial class WorldBody {
     // A body matching no row also snaps (the always-row is optional). The has-input axis — a property of the command,
     // not a body fact — picks the engage (stick deflected) or release (stick centered) rate.
     private FixedVector3 ShapePlanarVelocity(FixedVector3 target, in PlayerIntent intent, ulong stepTicks) {
+        if (m_tuning.PlanarDynamics is { Planar: { } planar }) {
+            // stepTicks can differ from planar.StepTicks for exactly one tick — see the identical note in
+            // ApplyBuoyancyAndSurface.
+            var ceiling = (((m_sprintChannelOrdinal >= 0) && (intent[m_sprintChannelOrdinal] >= m_channelThresholds[m_sprintChannelOrdinal]))
+                ? (ResolveMoveSpeed() * m_tuning.SprintMultiplier)
+                : ResolveMoveSpeed()
+            );
+
+            return StepPlanarFollower(
+                step: in planar,
+                target: target,
+                ceiling: ceiling
+            );
+        }
+
         var response = m_tuning.Response;
 
         if (response.Length == 0) {

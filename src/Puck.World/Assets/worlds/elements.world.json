@@ -2,6 +2,9 @@
   "basis": "puck.world.json",
   "$schema": "puck.world.def.v1.schema.json",
   "documentId": "elements",
+  "dynamics": [
+    { "name": "gauge", "f": 1.5, "zeta": 0.6, "r": 0 }
+  ],
   "creations": [
     {
       "id": "firePit",
@@ -1216,7 +1219,8 @@
         "cells": [
           {
             "key": "0",
-            "value": 300
+            "value": 300,
+            "dynamics": { "row": "gauge", "y0": 0, "v0": 0 }
           },
           {
             "key": "1",
@@ -2969,7 +2973,7 @@
               "height": 0.18
             },
             "style": "Primary",
-            "template": "HP {state.hp.0}"
+            "template": "HP {state.hp.0} / {state.hp.0.$target}"
           },
           {
             "id": "hpGauge",

@@ -48,16 +48,28 @@
                 "description": "The terminal fall speed the descent is clamped to (u/s).",
                 "type": "number"
               },
-              "response": {
-                "description": "The velocity-response table (see MotionResponse) \u2014 it affects the simulation. The empty table snaps planar velocity instantly.",
-                "type": "array",
-                "items": {
-                  "$ref": "./common.schema.json#/$defs/MotionResponse"
-                }
-              },
               "sprintMultiplier": {
                 "description": "The held-sprint speed multiplier, applied while SprintChannel reads held; 1 is a no-op.",
                 "type": "number"
+              },
+              "response": {
+                "description": "The velocity-response table (see MotionResponse) planar velocity converges through, or null (the default) when Dynamics shapes it instead \u2014 exactly one of the two is authored. The empty table snaps planar velocity instantly; DeclaredResponse is the null-coalesced read every caller uses.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "$ref": "./common.schema.json#/$defs/MotionResponse"
+                },
+                "default": null
+              },
+              "dynamics": {
+                "description": "The dynamics row a second-order follower shapes planar velocity through instead of Response, or null (the default) for the response table. Exactly one of the two is authored.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
               },
               "sprintChannel": {
                 "description": "The declared channel name a body reads while held (not edge-triggered \u2014 a continuous multiplier, unlike the press/release ActionSpec vocabulary) to apply SprintMultiplier, or null (the default) for a kit with no sprint capability. Resolved to an ordinal once, alongside every other kit-channel name, by Compile \u2014 an unresolvable name (validator-refused already) reads as \u0022no sprint\u0022 rather than throwing.",
@@ -102,6 +114,23 @@
               "declaredTurnSpeed": {
                 "description": "The declared Turn-channel rate of whichever arm this is, in radians per second at full deflection \u2014 zero for an arm without one. The client\u0027s steer follow keys off this, arm-agnostically.",
                 "type": "number"
+              },
+              "declaredResponse": {
+                "description": "The declared velocity-response table of whichever arm this is (see Response/ Response), null-coalesced to the empty table \u2014 a kit\u0027s authored null and a kit with no planar-shaping arm at all read identically here.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "$ref": "./common.schema.json#/$defs/MotionResponse"
+                }
+              },
+              "declaredDynamics": {
+                "description": "The declared dynamics row name of whichever arm this is (see Dynamics/ Dynamics), or null for an arm shaped by DeclaredResponse instead, or with no planar-shaping arm at all.",
+                "type": [
+                  "string",
+                  "null"
+                ]
               }
             },
             "required": [
@@ -110,7 +139,6 @@
               "riseGravity",
               "fallGravity",
               "maxFallSpeed",
-              "response",
               "sprintMultiplier"
             ],
             "additionalProperties": false
@@ -226,6 +254,23 @@
               "declaredTurnSpeed": {
                 "description": "The declared Turn-channel rate of whichever arm this is, in radians per second at full deflection \u2014 zero for an arm without one. The client\u0027s steer follow keys off this, arm-agnostically.",
                 "type": "number"
+              },
+              "declaredResponse": {
+                "description": "The declared velocity-response table of whichever arm this is (see Response/ Response), null-coalesced to the empty table \u2014 a kit\u0027s authored null and a kit with no planar-shaping arm at all read identically here.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "$ref": "./common.schema.json#/$defs/MotionResponse"
+                }
+              },
+              "declaredDynamics": {
+                "description": "The declared dynamics row name of whichever arm this is (see Dynamics/ Dynamics), or null for an arm shaped by DeclaredResponse instead, or with no planar-shaping arm at all.",
+                "type": [
+                  "string",
+                  "null"
+                ]
               }
             },
             "required": [
@@ -263,13 +308,6 @@
                 "description": "The fraction of ThrustSpeed the vertical channel commands \u2014 swimmers climb and dive slower than they cruise. 1 is fully isotropic thrust.",
                 "type": "number"
               },
-              "response": {
-                "description": "The velocity-response table (see MotionResponse) \u2014 it affects the simulation, read for both the planar and the vertical convergence. The empty table snaps instantly (no drag, no coast); a water feel wants at least an always-row.",
-                "type": "array",
-                "items": {
-                  "$ref": "./common.schema.json#/$defs/MotionResponse"
-                }
-              },
               "buoyancy": {
                 "description": "The medium\u0027s idle vertical drift velocity (u/s, signed) below the bob band: positive drifts the body up toward its float line, negative sinks, zero holds depth. Folded into the commanded thrust target \u2014 see FixedSwimTuning \u2014 never applied as a separate acceleration.",
                 "type": "number"
@@ -293,6 +331,25 @@
               "sprintMultiplier": {
                 "description": "The held-burst speed multiplier applied while SprintChannel reads held; 1 is a no-op. Scales the whole thrust vector, vertical included.",
                 "type": "number"
+              },
+              "response": {
+                "description": "The velocity-response table (see MotionResponse) \u2014 read for both the planar and the vertical convergence \u2014 or null (the default) when Dynamics shapes both instead; exactly one of the two is authored. The empty table snaps instantly (no drag, no coast); a water feel wants at least an always-row. DeclaredResponse is the null-coalesced read every caller uses.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "$ref": "./common.schema.json#/$defs/MotionResponse"
+                },
+                "default": null
+              },
+              "dynamics": {
+                "description": "The dynamics row a second-order follower shapes both the planar and the vertical convergence through instead of Response \u2014 the same seam as Dynamics \u2014 or null (the default) for the response table. Exactly one of the two is authored.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
               },
               "sprintChannel": {
                 "description": "The declared channel name read while held for the burst, or null (the default) for a kit with no burst \u2014 the same resolution path SprintChannel documents.",
@@ -337,13 +394,29 @@
               "declaredTurnSpeed": {
                 "description": "The declared Turn-channel rate of whichever arm this is, in radians per second at full deflection \u2014 zero for an arm without one. The client\u0027s steer follow keys off this, arm-agnostically.",
                 "type": "number"
+              },
+              "declaredResponse": {
+                "description": "The declared velocity-response table of whichever arm this is (see Response/ Response), null-coalesced to the empty table \u2014 a kit\u0027s authored null and a kit with no planar-shaping arm at all read identically here.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "$ref": "./common.schema.json#/$defs/MotionResponse"
+                }
+              },
+              "declaredDynamics": {
+                "description": "The declared dynamics row name of whichever arm this is (see Dynamics/ Dynamics), or null for an arm shaped by DeclaredResponse instead, or with no planar-shaping arm at all.",
+                "type": [
+                  "string",
+                  "null"
+                ]
               }
             },
             "required": [
               "thrustSpeed",
               "turnSpeed",
               "verticalThrustFraction",
-              "response",
               "buoyancy",
               "maxRiseSpeed",
               "maxSinkSpeed",

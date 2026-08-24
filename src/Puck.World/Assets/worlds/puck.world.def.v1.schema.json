@@ -95,6 +95,9 @@
     "lookAssignment": {
       "$ref": "./schema/lookAssignment.schema.json"
     },
+    "dynamics": {
+      "$ref": "./schema/dynamics.schema.json"
+    },
     "grants": {
       "$ref": "./schema/grants.schema.json"
     },

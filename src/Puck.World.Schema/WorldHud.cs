@@ -308,7 +308,8 @@ public enum HudBindingKind : byte {
     /// grammar separator. Whether the row (and, for the cell form, the key) actually resolves to declared document
     /// data is validated separately: <see cref="WorldDefinitionValidator"/> checks world-scope panels against the
     /// document's own <c>state</c> section, while a seat-scope panel, authored independent of any particular world,
-    /// refuses every <c>state.*</c> token instead.</summary>
+    /// refuses every <c>state.*</c> token instead. Either form may carry a trailing <c>.$target</c> facet
+    /// (<see cref="HudBinding.Target"/>) reading the cell's stored truth rather than its live eased value.</summary>
     StateNamed,
 }
 /// <summary>One parsed binding — the kind plus (for a <see cref="HudBindingKind.SeatPositionX"/>/Y/Z kind) the
@@ -320,11 +321,15 @@ public enum HudBindingKind : byte {
 /// <see langword="null"/> for every other kind.</param>
 /// <param name="StateCellKey">The cell key for a <c>state.&lt;row&gt;.&lt;key&gt;</c> token; <see langword="null"/>
 /// for a plain <c>state.&lt;row&gt;</c> token (the row's own slot) and for every other kind.</param>
-public readonly record struct HudBinding(HudBindingKind Kind, int SeatIndex, string? StateName = null, string? StateCellKey = null);
+/// <param name="Target">For a <see cref="HudBindingKind.StateNamed"/> kind, whether the token carried the trailing
+/// <c>.$target</c> facet — the addressed cell's stored TRUTH rather than its live eased value when it carries a
+/// <see cref="WorldStateDynamics"/> trait. <see langword="false"/> for every other kind.</param>
+public readonly record struct HudBinding(HudBindingKind Kind, int SeatIndex, string? StateName = null, string? StateCellKey = null, bool Target = false);
 /// <summary>
 /// The closed v1 HUD binding vocabulary: <c>world.tick</c>, <c>world.fps</c>, <c>seat.&lt;n&gt;.position.{x,y,z}</c>
 /// (1-based seat index, <c>1..</c><see cref="WorldPopulationLimits.LocalSeatCount"/>), <c>population.active</c>,
-/// <c>state.&lt;row&gt;</c>, and <c>state.&lt;row&gt;.&lt;key&gt;</c> (see <see cref="HudBindingKind.StateNamed"/>).
+/// <c>state.&lt;row&gt;</c>, and <c>state.&lt;row&gt;.&lt;key&gt;</c> (see <see cref="HudBindingKind.StateNamed"/>) —
+/// either <c>state.*</c> form may carry a trailing <c>.$target</c> facet (see <see cref="HudBinding.Target"/>).
 /// A token outside this set refuses by name — the same parse both <see cref="WorldDefinitionValidator"/> (load-time)
 /// and the render-side resolver (frame-time) call, so a document can never carry a binding the renderer would
 /// silently treat as unbound.
@@ -336,6 +341,10 @@ public static class HudBindingVocabulary {
     private const string PositionZSuffix = ".position.z";
     private const string SeatPrefix = "seat.";
     private const string StatePrefix = "state.";
+    // The reserved "read truth, not the eased value" facet on a state.* token. A row/cell name can never itself
+    // start with '$' (WorldStateRow.ReservedNamePrefix) outside the one engine-minted slot key, so this suffix can
+    // never collide with an authored row or cell name.
+    private const string TargetFacetSuffix = ".$target";
     private const string WorldFpsToken = "world.fps";
     private const string WorldTickToken = "world.tick";
 
@@ -400,7 +409,8 @@ public static class HudBindingVocabulary {
         // state.<row> binds the row's own slot cell; state.<row>.<key> binds one named cell. Neither a row name nor a
         // cell name can hold a dot (WorldCellName refuses one at document parse), so the FIRST dot after the prefix is
         // always the grammar separator — a second dot in the remainder names no row/key pair this substrate could
-        // ever hold, so it refuses rather than guessing which half is which.
+        // ever hold, so it refuses rather than guessing which half is which. A trailing .$target facet is stripped
+        // before that split runs, so it never competes with the row/key dot.
         if (
             token.StartsWith(
             comparisonType: StringComparison.Ordinal,
@@ -408,14 +418,30 @@ public static class HudBindingVocabulary {
         ) &&
             (token.Length > StatePrefix.Length)
         ) {
-            var rest = token.AsSpan(start: StatePrefix.Length);
+            var isTarget = token.EndsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: TargetFacetSuffix
+            );
+            var bodyEnd = (isTarget
+                ? (token.Length - TargetFacetSuffix.Length)
+                : token.Length);
+
+            if (bodyEnd <= StatePrefix.Length) {
+                return false;
+            }
+
+            var rest = token.AsSpan(
+                start: StatePrefix.Length,
+                length: (bodyEnd - StatePrefix.Length)
+            );
             var dot = rest.IndexOf(value: '.');
 
             if (dot < 0) {
                 binding = new HudBinding(
                     Kind: HudBindingKind.StateNamed,
                     SeatIndex: 0,
-                    StateName: rest.ToString()
+                    StateName: rest.ToString(),
+                    Target: isTarget
                 );
 
                 return true;
@@ -436,7 +462,8 @@ public static class HudBindingVocabulary {
                 Kind: HudBindingKind.StateNamed,
                 SeatIndex: 0,
                 StateName: row.ToString(),
-                StateCellKey: key.ToString()
+                StateCellKey: key.ToString(),
+                Target: isTarget
             );
 
             return true;

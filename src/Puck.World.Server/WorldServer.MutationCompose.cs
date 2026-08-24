@@ -30,7 +30,10 @@ public sealed partial class WorldServer {
         // inhabited row's kit resolution reads the creation's Locomotion, so a creation swap can move a body between
         // kits — all must trigger Rebuild + ReconcileInhabitants. (R13: the third and last edit to this switch.)
         WorldMutation.UpsertPlacement or WorldMutation.RemovePlacement or
-        WorldMutation.UpsertCreation or WorldMutation.RemoveCreation);
+        WorldMutation.UpsertCreation or WorldMutation.RemoveCreation or
+        // A dynamics row retune must recompile every fixed-point table that resolved it (a kit's planar shaping
+        // among them), the same live-recompile rule a motion/collision edit already rides.
+        WorldMutation.UpsertDynamics or WorldMutation.RemoveDynamics);
     // Whether a mutation touches the addons section — the only door WorldAddonRow row content (or document order)
     // moves through OUTSIDE a whole-document rebuild (ApplyRebuild carries its own unconditional prepare, which
     // also covers a channel-table change by restaging the whole host), so a per-row structural diff gated on JUST
@@ -134,22 +137,26 @@ public sealed partial class WorldServer {
     // Everything else, cameras included, applies live on delivery.
     private static bool IsDocumentDefaults(WorldMutation mutation) => (mutation is
         WorldMutation.SetRenderDefaults or WorldMutation.SetPopulationDefaults or WorldMutation.SetHostDefaults);
-    // An EXPLICIT write to an advancing cell — a whole-row UpsertStateRow (which re-bases the row's OWN slot advance
-    // AND every keyed cell's own advance, since it re-declares the whole row), an UpsertStateCell (which re-bases
-    // ONLY the one cell it names — the row's slot advance when that cell IS the slot key, or that cell's own advance
-    // otherwise), or a market mutation (which re-bases every (row, key) cell it actually wrote through
-    // WriteMarketCell — see MarketCellTouches) — re-bases WorldStateAdvance.EpochTick to `tick`, unconditionally
-    // overwriting whatever epoch the write's own payload carried (see WorldStateAdvance's remarks). A market write
-    // that skipped this would let a cell's elapsed accrual apply a second time on its very next read: WriteMarketCell
-    // preserves the pre-write Advance record verbatim (it is a value move, never a re-mint), so the base it installs
-    // already has that accrual baked in — an un-rebased epoch would let the same elapsed span compute again from the
-    // old epoch against the new base. Runs AFTER TryCompose so it sees the row/cell TryCompose just installed, and
-    // BEFORE validation/journal so a rebased epoch is what gets journaled, replayed by world.undo, and read back.
-    // `original` is the document the mutation composed against (before this mutation applied) — market's own touches
-    // need it to resolve a listing's pre-write state (its standing bidder, in particular) since `candidate` already
+    // An EXPLICIT write to a cell carrying WorldStateAdvance or WorldStateDynamics — a whole-row UpsertStateRow
+    // (which re-bases the row's OWN slot trait AND every keyed cell's own trait, since it re-declares the whole
+    // row), an UpsertStateCell (which re-bases ONLY the one cell it names — the row's slot trait when that cell IS
+    // the slot key, or that cell's own trait otherwise), or a market mutation (which re-bases every (row, key) cell
+    // it actually wrote through WriteMarketCell — see MarketCellTouches) — re-bases the trait to `tick`,
+    // unconditionally overwriting whatever epoch the write's own payload carried. An Advance trait's base becomes
+    // exactly the value the write installed (see WorldStateAdvance's remarks); a Dynamics trait's Y0/V0 become the
+    // eased value/velocity the OLD trait would report at this tick plus a Retarget kick for the target's own jump
+    // (see RebaseDynamics) — never the raw write, so the follower keeps chasing from wherever it actually was. A
+    // market write that skipped the Advance half would let a cell's elapsed accrual apply a second time on its very
+    // next read: WriteMarketCell preserves the pre-write trait verbatim (it is a value move, never a re-mint), so
+    // the base it installs already has that accrual baked in — an un-rebased epoch would let the same elapsed span
+    // compute again from the old epoch against the new base. Runs AFTER TryCompose so it sees the row/cell
+    // TryCompose just installed, and BEFORE validation/journal so a rebased trait is what gets journaled, replayed
+    // by world.undo, and read back. `original` is the document the mutation composed against (before this mutation
+    // applied) — a Dynamics rebase needs it to evaluate the OLD trait/target at `tick`, and market's own touches need
+    // it to resolve a listing's pre-write state (its standing bidder, in particular) since `candidate` already
     // reflects the write. A no-op for every other mutation kind, and for a cell (row-level or per-cell) that carries
-    // no advance trait at all.
-    private static WorldDefinition RebaseAdvanceEpoch(WorldDefinition original, WorldDefinition candidate, WorldMutation mutation, ulong tick) {
+    // neither trait.
+    private static WorldDefinition RebaseCellTraits(WorldDefinition original, WorldDefinition candidate, WorldMutation mutation, ulong tick) {
         if (MarketCellTouches(
             mutation: mutation,
             original: original
@@ -157,7 +164,8 @@ public sealed partial class WorldServer {
             var touchedState = candidate.State;
 
             foreach (var touch in touches) {
-                touchedState = RebaseKeyedCellAdvanceEpoch(
+                touchedState = RebaseKeyedCellTraits(
+                    original: original,
                     rows: touchedState,
                     rowName: touch.Row,
                     key: touch.Key,
@@ -175,7 +183,7 @@ public sealed partial class WorldServer {
         }
 
         string? rowName;
-        string? cellKey; // null on a whole-row write (every advancing cell re-bases); the named key on a per-cell write.
+        string? cellKey; // null on a whole-row write (every trait-bearing cell re-bases); the named key on a per-cell write.
 
         switch (mutation) {
             case WorldMutation.UpsertStateRow m:
@@ -197,18 +205,39 @@ public sealed partial class WorldServer {
             return candidate;
         }
 
+        var originalRow = WorldDefinitionRows.FindStateRow(
+            rows: original.State,
+            name: rowName
+        );
         var epoch = unchecked((long)tick);
         var rebasedRow = row;
-
-        if (
-            ((cellKey is null) || string.Equals(
+        var addressesSlot = ((cellKey is null) || string.Equals(
             a: cellKey,
             b: WorldStateRow.SlotKey,
             comparisonType: StringComparison.Ordinal
-        )) &&
-            (row.Advance is { } rowAdvance)
-        ) {
-            rebasedRow = (rebasedRow with { Advance = (rowAdvance with { EpochTick = epoch }) });
+        ));
+
+        if (addressesSlot) {
+            if (row.Advance is { } rowAdvance) {
+                rebasedRow = (rebasedRow with { Advance = (rowAdvance with { EpochTick = epoch }) });
+            }
+
+            if (row.Dynamics is { } rowDynamics) {
+                rebasedRow = (rebasedRow with { Dynamics = RebaseDynamics(
+                    candidateTrait: rowDynamics,
+                    newTarget: (FindCell(
+                        cells: row.Cells,
+                        key: WorldStateRow.SlotKey
+                    )?.Value ?? 0L),
+                    original: original,
+                    originalCell: FindCell(
+                        cells: originalRow?.Cells,
+                        key: WorldStateRow.SlotKey
+                    ),
+                    originalRow: originalRow,
+                    tick: tick
+                ) });
+            }
         }
 
         var cells = (rebasedRow.Cells ?? []);
@@ -218,18 +247,46 @@ public sealed partial class WorldServer {
             var cell = cells[index];
 
             if (
-                (cell.Advance is not { } cellAdvance) ||
-                ((cellKey is not null) && !string.Equals(
+                (cellKey is not null) &&
+                !string.Equals(
                 a: cell.Key.Value,
                 b: cellKey,
                 comparisonType: StringComparison.Ordinal
-            ))
+            )
             ) {
                 continue;
             }
 
+            var advance = cell.Advance;
+            var dynamics = cell.Dynamics;
+            var changed = false;
+
+            if (advance is { } cellAdvance) {
+                advance = (cellAdvance with { EpochTick = epoch });
+                changed = true;
+            }
+
+            if (dynamics is { } cellDynamics) {
+                dynamics = RebaseDynamics(
+                    candidateTrait: cellDynamics,
+                    newTarget: cell.Value,
+                    original: original,
+                    originalCell: FindCell(
+                        cells: originalRow?.Cells,
+                        key: cell.Key
+                    ),
+                    originalRow: originalRow,
+                    tick: tick
+                );
+                changed = true;
+            }
+
+            if (!changed) {
+                continue;
+            }
+
             rebasedCells ??= new List<WorldStateCell>(collection: cells);
-            rebasedCells[index] = (cell with { Advance = (cellAdvance with { EpochTick = epoch }) });
+            rebasedCells[index] = (cell with { Advance = advance, Dynamics = dynamics });
         }
 
         if (rebasedCells is not null) {
@@ -248,12 +305,23 @@ public sealed partial class WorldServer {
             ))
         );
     }
-    // Rebases one keyed cell's WorldStateAdvance.EpochTick to `tick` — the same rebase RebaseAdvanceEpoch's own
+    // Finds a cell by key in a (possibly absent) cell list — the small lookup RebaseCellTraits/RebaseKeyedCellTraits
+    // share to read a PRE-WRITE cell out of `original`.
+    private static WorldStateCell? FindCell(IReadOnlyList<WorldStateCell>? cells, WorldCellName key) {
+        foreach (var cell in (cells ?? [])) {
+            if (cell.Key == key) {
+                return cell;
+            }
+        }
+
+        return null;
+    }
+    // Rebases one keyed cell's Advance/Dynamics trait to `tick` — the same rebase RebaseCellTraits' own
     // UpsertStateCell arm performs on a single named cell, factored out so a market write (which may touch several
     // cells across two rows in one mutation) can apply it per touch without duplicating the clamp-free with-expression
-    // rebuild. A no-op for a cell that carries no advance trait, or a row/key MarketCellTouches named that this
-    // document does not (or no longer) declare.
-    private static IReadOnlyList<WorldStateRow> RebaseKeyedCellAdvanceEpoch(IReadOnlyList<WorldStateRow> rows, WorldCellName rowName, string key, ulong tick) {
+    // rebuild. A no-op for a cell that carries neither trait, or a row/key MarketCellTouches named that this document
+    // does not (or no longer) declare.
+    private static IReadOnlyList<WorldStateRow> RebaseKeyedCellTraits(WorldDefinition original, IReadOnlyList<WorldStateRow> rows, WorldCellName rowName, string key, ulong tick) {
         if (WorldDefinitionRows.FindStateRow(
             name: rowName,
             rows: rows
@@ -267,16 +335,45 @@ public sealed partial class WorldServer {
         for (var index = 0; (index < cells.Count); index++) {
             var cell = cells[index];
 
-            if (
-                (cell.Key != cellKey) ||
-                (cell.Advance is not { } advance)
-            ) {
+            if (cell.Key != cellKey) {
                 continue;
+            }
+
+            if (
+                (cell.Advance is null) &&
+                (cell.Dynamics is null)
+            ) {
+                return rows;
+            }
+
+            var originalRow = WorldDefinitionRows.FindStateRow(
+                rows: original.State,
+                name: rowName
+            );
+            var advance = cell.Advance;
+            var dynamics = cell.Dynamics;
+
+            if (advance is { } a) {
+                advance = (a with { EpochTick = unchecked((long)tick) });
+            }
+
+            if (dynamics is { } d) {
+                dynamics = RebaseDynamics(
+                    candidateTrait: d,
+                    newTarget: cell.Value,
+                    original: original,
+                    originalCell: FindCell(
+                        cells: originalRow?.Cells,
+                        key: cellKey
+                    ),
+                    originalRow: originalRow,
+                    tick: tick
+                );
             }
 
             var rebasedCells = new List<WorldStateCell>(collection: cells);
 
-            rebasedCells[index] = (cell with { Advance = (advance with { EpochTick = unchecked((long)tick) }) });
+            rebasedCells[index] = (cell with { Advance = advance, Dynamics = dynamics });
 
             return Upsert(
                 list: rows,
@@ -286,6 +383,72 @@ public sealed partial class WorldServer {
         }
 
         return rows;
+    }
+    // The write-side counterpart of WorldStateReader.TryEvaluateDynamics: a cell's WorldStateDynamics trait is
+    // rebased, never replaced wholesale, by an explicit write to its own truth value. The trait's Y0/V0 become the
+    // eased sample the OLD trait (against original/originalCell's own PRE-write target) would report AT `tick` —
+    // never the raw write, so the follower keeps chasing from wherever it actually was — plus a Retarget velocity
+    // kick for the target's own jump from the old truth to `newTarget`, both computed through the SAME dynamics row
+    // that produced the sample. A cell that had no PRIOR active trait (originalRow/originalCell absent, or its own
+    // trait unresolvable) keeps whatever Y0/V0 candidateTrait's own payload carries — there is nothing yet to ease
+    // from — and only re-bases the epoch, mirroring WorldStateAdvance's own rebase rule.
+    private static WorldStateDynamics? RebaseDynamics(
+        WorldStateDynamics? candidateTrait,
+        WorldDefinition original,
+        WorldStateRow? originalRow,
+        WorldStateCell? originalCell,
+        long newTarget,
+        ulong tick
+    ) {
+        if (candidateTrait is null) {
+            return null;
+        }
+
+        var epoch = unchecked((long)tick);
+
+        if (
+            (originalRow is null) ||
+            (originalCell is null) ||
+            !WorldStateReader.TryEvaluateDynamics(
+            cell: originalCell,
+            definition: original,
+            row: originalRow,
+            sample: out var sample,
+            tick: tick,
+            trait: out var originalTrait
+        ) ||
+            (WorldDefinitionRows.FindDynamics(
+            dynamics: original.Dynamics,
+            name: originalTrait.Row
+        ) is not { } dynamicsRow)
+        ) {
+            return (candidateTrait with { EpochTick = epoch });
+        }
+
+        var kicked = dynamicsRow.Compiled.Retarget(
+            current: sample,
+            newTarget: WorldStateReader.DynamicsRawToFixed(
+                row: originalRow,
+                raw: newTarget
+            ),
+            oldTarget: WorldStateReader.DynamicsRawToFixed(
+                row: originalRow,
+                raw: originalCell.Value
+            )
+        );
+
+        return new WorldStateDynamics(
+            Row: candidateTrait.Row,
+            Y0: WorldStateReader.DynamicsFixedToRaw(
+                row: originalRow,
+                value: sample.Value
+            ),
+            V0: WorldStateReader.DynamicsFixedToRaw(
+                row: originalRow,
+                value: kicked.Velocity
+            ),
+            EpochTick: epoch
+        );
     }
     // Drop the first row whose key matches — reports whether a row was actually removed.
     private static bool Remove<T, TKey>(IReadOnlyList<T> list, TKey key, Func<T, TKey> keyOf, out IReadOnlyList<T> result) {
@@ -404,6 +567,7 @@ public sealed partial class WorldServer {
         WorldMutation.SetViewDefaults or WorldMutation.UpsertViewLayout or WorldMutation.RemoveViewLayout => WorldSection.Views,
         WorldMutation.SetPlayerDefaults => WorldSection.PlayerDefaults,
         WorldMutation.UpsertLook or WorldMutation.RemoveLook or WorldMutation.SetLookAssignment => WorldSection.Looks,
+        WorldMutation.UpsertDynamics or WorldMutation.RemoveDynamics => WorldSection.Dynamics,
         WorldMutation.UpsertGrant or WorldMutation.RemoveGrant => WorldSection.Grants,
         WorldMutation.UpsertHudPanel or WorldMutation.RemoveHudPanel or WorldMutation.UpsertHudElement or WorldMutation.RemoveHudElement or WorldMutation.SetHudDefaults => WorldSection.Hud,
         // Generate's OBSERVABLE effect is a state write, so it shares the state section's coarse hold; its narrower
@@ -1020,6 +1184,32 @@ public sealed partial class WorldServer {
                 candidate = (current with { LookAssignmentRaw = m.Assignment });
 
                 return true;
+            case WorldMutation.UpsertDynamics m:
+                candidate = (current with {
+                    DynamicsRaw = Upsert(
+                    list: current.Dynamics,
+                    item: m.Row,
+                    keyOf: static row => row.Name
+                ),
+                });
+
+                return true;
+            case WorldMutation.RemoveDynamics m:
+                if (!Remove(
+                    list: current.Dynamics,
+                    key: m.Name,
+                    keyOf: static row => row.Name,
+                    result: out var dynamics
+                )) {
+                    candidate = current;
+                    reason = $"no dynamics row named '{m.Name}'";
+
+                    return false;
+                }
+
+                candidate = (current with { DynamicsRaw = dynamics });
+
+                return true;
             case WorldMutation.UpsertGrant m:
                 candidate = (current with {
                     GrantsRaw = Upsert(
@@ -1361,7 +1551,7 @@ public sealed partial class WorldServer {
                     // the live value is the right operand: the stored cell there is a BASE the row has been accumulating
                     // away from, so adding to it would silently discard every unit gained since the epoch (a regen row
                     // sitting at a live 41 taking a -10 would land on -10, not 31). Add means "add to what a reader
-                    // sees"; RebaseAdvanceEpoch then makes that sum the new base and starts the accumulation again from
+                    // sees"; RebaseCellTraits then makes that sum the new base and starts the accumulation again from
                     // this tick, so the row keeps advancing from the value the author just composed.
                     _ = WorldStateReader.TryRead(
                         definition: current,
@@ -1402,11 +1592,16 @@ public sealed partial class WorldServer {
                         return false;
                     }
 
-                    // UpsertStateCell carries only a scalar VALUE — a cell's own advance RATE is authored only through a
-                    // whole-row UpsertStateRow — so a base-value write here preserves whatever the existing cell already
-                    // declared rather than silently deleting it; RebaseAdvanceEpoch (below TryCompose) then re-bases its
-                    // epoch to this tick, exactly as it already does for a row-level advance's slot cell.
+                    // UpsertStateCell carries only a scalar VALUE — a cell's own advance rate/dynamics reference are
+                    // authored only through a whole-row UpsertStateRow — so a base-value write here preserves
+                    // whatever the existing cell already declared rather than silently deleting it; RebaseCellTraits
+                    // (below TryCompose) then re-bases the preserved trait to this tick, exactly as it already does
+                    // for a row-level trait's slot cell.
                     var existingAdvance = FindCellAdvance(
+                        cells: (row.Cells ?? []),
+                        key: cellKey
+                    );
+                    var existingDynamics = FindCellDynamics(
                         cells: (row.Cells ?? []),
                         key: cellKey
                     );
@@ -1419,7 +1614,8 @@ public sealed partial class WorldServer {
                         item: new WorldStateCell(
                             Key: cellKey,
                             Value: value,
-                            Advance: existingAdvance
+                            Advance: existingAdvance,
+                            Dynamics: existingDynamics
                         ),
                         keyOf: static (WorldStateCell cell) => cell.Key
                     );

@@ -23,6 +23,12 @@ public readonly record struct FixedMotionDefaults(FixedQ4816 MoveSpeed, FixedQ48
 /// <summary>The flattened, fixed-point form of one velocity-response row: the conjunction gate (body-fact predicates
 /// only), and the engage/release convergence rates the ramp integrates through the shared rate accumulator.</summary>
 public readonly record struct FixedMotionResponse(CompiledPredicate[] Gate, FixedQ4816 EngageRate, FixedQ4816 ReleaseRate);
+/// <summary>The one-time fixed-point compilation of a kit's <c>dynamics</c>-row planar shaping — the second-order
+/// follower alternative to <see cref="FixedMotionResponse"/>'s response table, bound to the world's own simulation
+/// step width. <see cref="Planar"/> steps the three-lane planar follower <c>ShapePlanarVelocity</c> reads and, for a
+/// swim kit, the SAME compiled step also drives the one-dimensional vertical lane <c>ApplyBuoyancyAndSurface</c>
+/// reads (one authored row, one compiled propagator, two lane counts) — never a second compile.</summary>
+public readonly record struct FixedMotionDynamics(SecondOrderStep Planar);
 /// <summary>The compiled fixed-point form of an authored motion scalar envelope — the reusable seat-time clamp bound
 /// every overridable motion-arm scalar shares. Authoring validation has already refused <see cref="Max"/> &lt;
 /// <see cref="Min"/> by the time this compiles, so <see cref="Clamp"/> never faults.</summary>
@@ -51,7 +57,8 @@ public readonly record struct FixedMotionTuning(
     FixedQ4816 SprintMultiplier,
     MotionMoveFrame MoveFrame,
     bool FacingSnap,
-    FixedMotionScalarEnvelope? MoveSpeedEnvelope
+    FixedMotionScalarEnvelope? MoveSpeedEnvelope,
+    FixedMotionDynamics? PlanarDynamics = null
 ) {
     /// <summary>Gets the number of recency clocks the response table's recency gates share.</summary>
     public int RecencySlots => ResponseRecencyFacts.Length;

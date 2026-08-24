@@ -6,7 +6,7 @@ namespace Puck.World.Tests;
 
 /// <summary>Proves a market write against an advancing keyed cell (<see cref="WorldStateCell.Advance"/>) rebases the
 /// cell's <see cref="WorldStateAdvance.EpochTick"/> to the applying tick — exactly like an explicit
-/// <see cref="WorldMutation.UpsertStateCell"/> write already does (<c>Server.WorldServer.RebaseAdvanceEpoch</c>).
+/// <see cref="WorldMutation.UpsertStateCell"/> write already does (<c>Server.WorldServer.RebaseCellTraits</c>).
 /// Without the rebase, <c>WriteMarketCell</c> preserves the pre-write epoch verbatim while installing a base that
 /// already has the elapsed accrual baked in, so the very next read applies the same elapsed span a second time.
 /// The exact scenario: base 10, rate 1/tick, epoch 0 — reads 110 at tick 100; a bid spends 10 out of it (installing

@@ -250,6 +250,73 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
         );
     }
     [Fact]
+    public void Dynamics_kit_body_with_nonzero_follower_state_round_trips_structurally() {
+        var document = Fixtures.BuildDocument();
+        var kit = document.Kits[0];
+        var grounded = (WorldMotionModel.Grounded)kit.Motion;
+
+        document = document with {
+            DynamicsRaw = [.. Fixtures.StandardDynamics, new WorldDynamicsRow(Name: "settle", Frequency: 2f, Damping: 1f, Response: 0f)],
+            KitsRaw = [kit with { Motion = grounded with { Response = null, Dynamics = "settle" } }],
+        };
+
+        using var fixture = Fixtures.FreshServer(definition: document);
+
+        _ = fixture.Server.ApplySession(request: new SessionRequest.Join(
+            IdentityName: null,
+            Principal: WorldPrincipal.Seat(slot: 0),
+            Slot: 0,
+            WireProtocolKey: WorldProtocol.WireProtocolKey
+        ));
+
+        var body = fixture.Server.Body(index: 0)!;
+
+        for (var tick = 0; (tick < 24); tick++) {
+            body.SubmitIntent(intent: default(PlayerIntent).WithChannel(ordinal: 0, value: FixedQ4816.One));
+            fixture.Step();
+        }
+
+        var dynamicState = body.CaptureTransferState();
+
+        Assert.True(condition: ((dynamicState.PlanarFollowerPositionRawX | dynamicState.PlanarFollowerPositionRawY | dynamicState.PlanarFollowerPositionRawZ) != 0L), userMessage: "the driven follower must be off rest before this law proves anything");
+
+        Assert.True(condition: fixture.Server.TryCaptureCheckpoint(
+            checkpoint: out var checkpoint,
+            hostRow: SampleHostRow(dynamicState: dynamicState),
+            reason: out var reason
+        ), userMessage: reason);
+        var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint!);
+
+        Assert.True(condition: WorldAuthorityCheckpointCodec.TryDecode(
+            bytes: encoded,
+            checkpoint: out var decoded,
+            reason: out var decodeReason
+        ), userMessage: decodeReason);
+        Assert.True(
+            condition: DeepEqual.Compare(a: checkpoint, b: decoded),
+            userMessage: DeepEqual.LastMismatchPath
+        );
+    }
+    [Fact]
+    public void Version_two_envelope_refuses_by_name() {
+        var checkpoint = CapturedCheckpoint();
+        var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
+        var downgraded = ((byte[])encoded.Clone());
+
+        // The version u16 sits immediately after the 4-byte "PCKP" magic — pin the PRE-follower-state version
+        // literally (2), not an arbitrary corrupt value, to prove the specific old wire shape is refused rather than
+        // silently tolerated by a reader that skips the new fields.
+        downgraded[4] = 2;
+        downgraded[5] = 0;
+
+        Assert.False(condition: WorldAuthorityCheckpointCodec.TryDecode(
+            bytes: downgraded,
+            checkpoint: out _,
+            reason: out var reason
+        ));
+        Assert.Contains(actualString: reason, expectedSubstring: "version 2");
+    }
+    [Fact]
     public async Task Capture_encode_write_load_decode_restore_reaches_an_identical_second_checkpoint() {
         var checkpoint = CapturedCheckpoint();
         var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);

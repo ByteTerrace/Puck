@@ -598,7 +598,7 @@ public static partial class WorldDefinitionValidator {
     }
     // The kit rows (SIM-AFFECTING): name presence/uniqueness, one motion program, producer parameters, actions, and
     // the machine-pad map.
-    private static HashSet<string> ValidateKits(WorldDefinition definition, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, ISet<string> allChannelNames, ISet<string> compositionChannelNames, IReadOnlyDictionary<string, WorldStateRow> stateRows, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, List<string> errors) {
+    private static HashSet<string> ValidateKits(WorldDefinition definition, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, ISet<string> allChannelNames, ISet<string> compositionChannelNames, ISet<string> dynamicsNames, IReadOnlyDictionary<string, WorldStateRow> stateRows, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, List<string> errors) {
         var kitNames = new HashSet<string>(comparer: StringComparer.Ordinal);
         var programRows = BodyMotionProgramRows(programs: definition.BodyMotionPrograms);
         var targetRegisterNames = definition.TargetRegisters.Select(selector: register => register.Name).ToHashSet(comparer: StringComparer.Ordinal);
@@ -657,7 +657,9 @@ public static partial class WorldDefinitionValidator {
                 program: motionProgram,
                 path: $"{path}.motion",
                 channelNames: compositionChannelNames,
+                dynamicsNames: dynamicsNames,
                 hasWater: (definition.Water is not null),
+                simulationRateHz: definition.SimulationRateHz,
                 errors: errors
             );
             ValidateProducerParameters(
@@ -751,7 +753,7 @@ public static partial class WorldDefinitionValidator {
     // the GPU-safety MaxLookScale ceiling, and non-negative motion values — rejecting a zero-hold replay (an infinite
     // loop) and a timeline replay on a catalog source (no timeline to replay) LOUDLY, never silently. Returns the
     // resolved look-name set (a future Inhabit facet resolves its Look against it).
-    private static HashSet<string> ValidateLooks(IReadOnlyList<WorldLook> looks, HashSet<string> creationIds, IReadOnlyList<WorldCreation> creations, List<string> errors) {
+    private static HashSet<string> ValidateLooks(IReadOnlyList<WorldLook> looks, HashSet<string> creationIds, IReadOnlyList<WorldCreation> creations, ISet<string> dynamicsNames, List<string> errors) {
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         for (var index = 0; (index < looks.Count); index++) {
@@ -771,6 +773,7 @@ public static partial class WorldDefinitionValidator {
             }
 
             var isCatalog = false;
+            WorldCreation? resolvedCreation = null;
 
             switch (look.Source) {
                 case WorldLookSource.Catalog catalog:
@@ -793,6 +796,11 @@ public static partial class WorldDefinitionValidator {
                         !creationIds.Contains(item: creation.CreationId)
                     ) {
                         errors.Add(item: $"{path}.source.creationId '{creation.CreationId}' names no creation row.");
+                    } else {
+                        resolvedCreation = WorldDefinitionRows.FindCreation(
+                            creations: creations,
+                            id: creation.CreationId
+                        );
                     }
 
                     break;
@@ -874,6 +882,43 @@ public static partial class WorldDefinitionValidator {
                         errors.Add(item: $"{cuePath} needs both minSeconds and maxSeconds, or neither (a cue that fires only on demand).");
                     } else if ((cue.MinSeconds is { } min) && (cue.MaxSeconds is { } max) && (!float.IsFinite(f: min) || !float.IsFinite(f: max) || (min < 0f) || (max < min))) {
                         errors.Add(item: $"{cuePath} needs 0 <= minSeconds <= maxSeconds, finite.");
+                    }
+                }
+            }
+
+            if (look.Motion.Dynamics is { } lookDynamics) {
+                if (lookDynamics.Length == 0) {
+                    errors.Add(item: $"{path}.motion.dynamics is empty — name a dynamics row or omit it.");
+                } else if (!dynamicsNames.Contains(item: lookDynamics)) {
+                    errors.Add(item: $"{path}.motion.dynamics '{lookDynamics}' names no dynamics row.");
+                }
+            }
+
+            if (look.Motion.PartDynamics is { } partDynamics) {
+                if (isCatalog) {
+                    errors.Add(item: $"{path}.motion.partDynamics cannot be set on a catalog source — a catalog rig exports no parts.");
+                }
+
+                foreach (var (partId, partRow) in partDynamics) {
+                    if (string.IsNullOrWhiteSpace(value: partId)) {
+                        errors.Add(item: $"{path}.motion.partDynamics has an empty part id.");
+
+                        continue;
+                    }
+
+                    if (
+                        !isCatalog &&
+                        (resolvedCreation is { } partCreation) &&
+                        !(partCreation.Document.Parts ?? []).Any(predicate: part => string.Equals(a: part.Id, b: partId, comparisonType: StringComparison.Ordinal))
+                    ) {
+                        errors.Add(item: $"{path}.motion.partDynamics['{partId}'] names no part of creation '{partCreation.Id}'.");
+                    }
+
+                    if (
+                        string.IsNullOrWhiteSpace(value: partRow) ||
+                        !dynamicsNames.Contains(item: partRow)
+                    ) {
+                        errors.Add(item: $"{path}.motion.partDynamics['{partId}'] '{partRow}' names no dynamics row.");
                     }
                 }
             }

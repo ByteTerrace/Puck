@@ -13,14 +13,15 @@ Primary code:
   its subject union. Authoring only: it parses and validates, and knows nothing
   about how a frame resolves.
 - `Puck.SdfVm/Views/SdfCameraProgram.cs` — the compiled IR, the per-frame
-  evaluator, the `ISdfCameraRig` adapter, and the boom smoother. Parses no
-  document and references no `Puck.World*` project.
+  evaluator, the `ISdfCameraRig` adapter, and `SdfCameraBoomFollower` (the
+  second-order boom ease, over `Puck.SdfVm/Views/SecondOrderFollower.cs`'s
+  float twin). Parses no document and references no `Puck.World*` project.
 - `Puck.World.Client/WorldCameraRigCompiler.cs` — the translation: authored ops
   to IR, authored subjects and `state.<row>[.<key>]` bindings to per-frame
   slots this rig refills from the live document.
 - `Puck.World.Schema/WorldSeatLook.cs` — portable input preference.
 - `Puck.World.Client/WorldSeatViewState.cs` — the one live state per occupied
-  seat, including yaw/pitch, the cached compiled rig, and smoothing.
+  seat, including yaw/pitch, the cached compiled rig, and the boom follower.
 - `Puck.World/WorldSeatViewInput.cs` — stateless pointer adapter.
 - `Puck.World.Client/WorldFramePresenter.cs`, `WorldAdjacencySceneEmitter.cs`, and
   `WorldContinuum.cs` — local and neighbouring-authority render callers of the
@@ -51,11 +52,14 @@ states its own:
       { "$type": "orbit", "distance": 5.4626001, "yaw": "state.look.behind", "pitch": 0.4145069, "pivotOffset": [0, 0, 0] },
       { "$type": "lookAt", "subject": { "$type": "reference" }, "targetOffset": [0, 1, 0], "worldAxes": false },
       { "$type": "fov", "fieldOfViewRadians": 0.9599311 },
-      { "$type": "smooth", "rate": 6 }
+      { "$type": "dynamics", "row": "chase" }
     ]
   },
   "layouts": []
 },
+"dynamics": [
+  { "name": "chase", "f": 0.9549, "zeta": 1, "r": 1 }
+],
 "playerDefaults": {
   "seatLook": {
     "yawSensitivity": 0.001,
@@ -173,8 +177,8 @@ never a new engine type. `version` is `puck.camera.v1`; the op-count ceiling is
 | `orbit` | places the eye by orbiting the subject at `distance`/`yaw`/`pitch` about `pivotOffset`. At most one. On `views.seatRig` the seat's live look adds to yaw/pitch; everywhere else the authored angles render unchanged. |
 | `clampPitch` | bounds the pitch a later `orbit` resolves with, live delta included. At most one, and it must precede the orbit. |
 | `fov` | the rendered vertical FOV, radians. Every program needs one (or a `blend` that reaches ones that do). Bindable: a literal, or `state.<row>[.<key>]`. |
-| `smooth` | the exponential boom-ease rate the resolver REPORTS; the caller applies it. Zero is no ease. At most one. |
-| `blend` | lerps two other programs by NAME (eye, target, fov, and smooth rate) at `weight`, itself bindable. At most one. |
+| `dynamics` | names a `dynamics` row (see documents.md); the resolver REPORTS the response, the caller applies it as a second-order boom ease (`SdfCameraBoomFollower`). No op is no ease — the boom passes through untouched. At most one. |
+| `blend` | lerps two other programs by NAME (eye, target, fov, and dynamics — component-wise when both sides are live, otherwise whichever side is live) at `weight`, itself bindable. At most one. |
 
 The blend namespace is the whole document's program table: every
 `cameras[].rig`, plus `views.seatRig` and `views.cameraRig`. A dangling name, a

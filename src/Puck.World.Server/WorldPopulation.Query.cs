@@ -554,7 +554,8 @@ public sealed partial class WorldPopulation {
             collider: kit.Collider,
             maxSmoothError: m_fixedMotion.MaxSmoothError,
             sprintChannelOrdinal: kit.SprintChannelOrdinal,
-            driftChannelOrdinal: kit.DriftChannelOrdinal
+            driftChannelOrdinal: kit.DriftChannelOrdinal,
+            planarDynamics: kit.PlanarDynamics
         ) {
             Profile = profile,
         };

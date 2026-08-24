@@ -212,7 +212,7 @@ public static partial class WorldDefinitionValidator {
     }
     // A kit's full grounded locomotion tuning: speeds, gravity, and the velocity-response table every body
     // integrates under.
-    private static void ValidateGroundedMotion(WorldMotionModel.Grounded tuning, string path, ISet<string> channelNames, List<string> errors) {
+    private static void ValidateGroundedMotion(WorldMotionModel.Grounded tuning, string path, ISet<string> channelNames, ISet<string> dynamicsNames, int simulationRateHz, List<string> errors) {
         RequirePositive(
             value: tuning.MoveSpeed,
             name: $"{path}.moveSpeed",
@@ -238,15 +238,18 @@ public static partial class WorldDefinitionValidator {
             name: $"{path}.maxFallSpeed",
             errors: errors
         );
-        ValidateResponse(
-            response: tuning.Response,
-            path: $"{path}.response",
-            errors: errors
-        );
         RequirePositive(
             value: tuning.SprintMultiplier,
             name: $"{path}.sprintMultiplier",
             errors: errors
+        );
+        ValidatePlanarShaping(
+            dynamics: tuning.Dynamics,
+            dynamicsNames: dynamicsNames,
+            errors: errors,
+            path: path,
+            response: tuning.Response,
+            simulationRateHz: simulationRateHz
         );
 
         // The sprint channel needs the same "must resolve" bar
@@ -304,7 +307,7 @@ public static partial class WorldDefinitionValidator {
     // The kit.motion gate: required (a kit with no declared model is a dead kit), coherent with its body motion
     // program's selected operations (program is null when ValidateKits already refused bodyMotionProgram, in which
     // case coherence has nothing sound to check against), and per-arm valid. A new arm is a new case below.
-    private static void ValidateMotionModel(WorldMotionModel? model, CompiledBodyMotionProgram? program, string path, ISet<string> channelNames, bool hasWater, List<string> errors) {
+    private static void ValidateMotionModel(WorldMotionModel? model, CompiledBodyMotionProgram? program, string path, ISet<string> channelNames, ISet<string> dynamicsNames, bool hasWater, int simulationRateHz, List<string> errors) {
         if (model is null) {
             errors.Add(item: $"{path} is required.");
 
@@ -326,8 +329,10 @@ public static partial class WorldDefinitionValidator {
             case WorldMotionModel.Grounded grounded:
                 ValidateGroundedMotion(
                     channelNames: channelNames,
+                    dynamicsNames: dynamicsNames,
                     errors: errors,
                     path: path,
+                    simulationRateHz: simulationRateHz,
                     tuning: grounded
                 );
 
@@ -344,9 +349,11 @@ public static partial class WorldDefinitionValidator {
             case WorldMotionModel.Swim swim:
                 ValidateSwimMotion(
                     channelNames: channelNames,
+                    dynamicsNames: dynamicsNames,
                     errors: errors,
                     hasWater: hasWater,
                     path: path,
+                    simulationRateHz: simulationRateHz,
                     tuning: swim
                 );
 
@@ -562,19 +569,45 @@ public static partial class WorldDefinitionValidator {
             }
         }
     }
-    // A kit/motion velocity-response table (SIM-AFFECTING): each row's engage/release rates must be positive (a zero
-    // rate never converges — a stuck body, not a feel), each gate is a body-fact-only predicate (the lane-scoped
-    // action-state predicates are rejected by name), and a null (always) gate before the final row makes every
-    // later row unreachable.
-    private static void ValidateResponse(IReadOnlyList<MotionResponse> response, string path, List<string> errors) {
-        // A required-with-no-default constructor parameter the JSON never supplied binds null, not an empty list.
-        // Name the absent section rather than faulting on it.
-        if (response is null) {
-            errors.Add(item: $"{path} is required.");
-
-            return;
+    // A kit's planar shaping: exactly one of the authored velocity-response table or a named dynamics-row
+    // second-order follower — never both, never neither. A dynamics row that resolves needs the world's own
+    // simulation rate to compile its step-width coefficients, so a rate-0 (resident, non-stepping) world refuses a
+    // kit naming one by the same door a dangling name refuses through.
+    private static void ValidatePlanarShaping(IReadOnlyList<MotionResponse>? response, string? dynamics, string path, ISet<string> dynamicsNames, int simulationRateHz, List<string> errors) {
+        if (dynamics is { Length: 0 }) {
+            errors.Add(item: $"{path}.dynamics is empty — name a dynamics row or omit it.");
         }
 
+        var hasResponse = (response is not null);
+        var hasDynamics = (dynamics is { Length: > 0 });
+
+        if (hasResponse && hasDynamics) {
+            errors.Add(item: $"{path} authors both response and dynamics '{dynamics}' — a kit shapes planar velocity through exactly one.");
+        } else if (!hasResponse && !hasDynamics) {
+            errors.Add(item: $"{path} requires exactly one of response or dynamics (neither is authored).");
+        }
+
+        if (hasResponse) {
+            ValidateResponse(
+                response: response!,
+                path: $"{path}.response",
+                errors: errors
+            );
+        }
+
+        if (hasDynamics) {
+            if (!dynamicsNames.Contains(item: dynamics!)) {
+                errors.Add(item: $"{path}.dynamics '{dynamics}' names no dynamics row.");
+            } else if (simulationRateHz <= 0) {
+                errors.Add(item: $"{path}.dynamics '{dynamics}' cannot compile — the world authors no simulation rate (simulation.rateHz), and a follower's coefficients are bound to one step size.");
+            }
+        }
+    }
+    // A velocity-response table (SIM-AFFECTING): each row's engage/release rates must be positive (a zero rate never
+    // converges — a stuck body, not a feel), each gate is a body-fact-only predicate (the lane-scoped action-state
+    // predicates are rejected by name), and a null (always) gate before the final row makes every later row
+    // unreachable.
+    private static void ValidateResponse(IReadOnlyList<MotionResponse> response, string path, List<string> errors) {
         for (var index = 0; (index < response.Count); index++) {
             var row = response[index];
             var rowPath = $"{path}[{index}]";
@@ -633,7 +666,7 @@ public static partial class WorldDefinitionValidator {
     // A kit's full swim locomotion tuning: thrust, medium dynamics, and the shared response/sprint/frame vocabulary.
     // A swim kit in a world without a water section refuses HERE — the medium is the model's whole premise, and a
     // silent dry-world swimmer would integrate against a waterline that does not exist.
-    private static void ValidateSwimMotion(WorldMotionModel.Swim tuning, string path, ISet<string> channelNames, bool hasWater, List<string> errors) {
+    private static void ValidateSwimMotion(WorldMotionModel.Swim tuning, string path, ISet<string> channelNames, ISet<string> dynamicsNames, bool hasWater, int simulationRateHz, List<string> errors) {
         if (!hasWater) {
             errors.Add(item: $"{path} declares a swim model but the world authors no water section.");
         }
@@ -651,11 +684,6 @@ public static partial class WorldDefinitionValidator {
         RequirePositive(
             value: tuning.VerticalThrustFraction,
             name: $"{path}.verticalThrustFraction",
-            errors: errors
-        );
-        ValidateResponse(
-            response: tuning.Response,
-            path: $"{path}.response",
             errors: errors
         );
 
@@ -710,6 +738,15 @@ public static partial class WorldDefinitionValidator {
                 errors: errors
             );
         }
+
+        ValidatePlanarShaping(
+            dynamics: tuning.Dynamics,
+            dynamicsNames: dynamicsNames,
+            errors: errors,
+            path: path,
+            response: tuning.Response,
+            simulationRateHz: simulationRateHz
+        );
     }
     private static void ValidateVehicleMotion(WorldMotionModel.Vehicle tuning, string path, ISet<string> channelNames, List<string> errors) {
         RequirePositive(
@@ -853,7 +890,8 @@ public static partial class WorldDefinitionValidator {
         /// <summary>RiseGravity alone, read as a symmetric bleed rate (<see cref="BodyMotionOp.ApplyVerticalDecay"/>).</summary>
         GravityBleed = 4,
 
-        /// <summary>The velocity-response table (<see cref="BodyMotionOp.ShapePlanarVelocity"/>).</summary>
+        /// <summary>The response table OR the dynamics follower (<see cref="BodyMotionOp.ShapePlanarVelocity"/>) —
+        /// whichever the arm's exactly-one authoring rule admitted.</summary>
         PlanarResponse = 8,
 
         /// <summary>SprintMultiplier/SprintChannel (<see cref="BodyMotionOp.ComputePlanarTargetVelocity"/>).</summary>

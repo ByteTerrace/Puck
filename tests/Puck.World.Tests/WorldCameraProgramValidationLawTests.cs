@@ -58,7 +58,7 @@ public sealed class WorldCameraProgramValidationLawTests {
                 WorldAxes: true
             ),
             Fov(radians: 0.6f),
-            new WorldCameraProgramOp.Smooth(Rate: 3f)
+            new WorldCameraProgramOp.Dynamics(Row: "probe")
         ));
         var round = WorldDefinitionSerialization.Deserialize(utf8Json: WorldDefinitionSerialization.Serialize(definition: document));
 
@@ -73,10 +73,10 @@ public sealed class WorldCameraProgramValidationLawTests {
         Assert.Equal(expected: 6, actual: rig.Operations.Count);
         Assert.Equal(
             actual: rig.Operations.Select(selector: static op => op.Opcode),
-            expected: ["anchor", "clampPitch", "orbit", "lookAt", "fov", "smooth"]
+            expected: ["anchor", "clampPitch", "orbit", "lookAt", "fov", "dynamics"]
         );
         Assert.Equal(expected: 0.5f, actual: rig.OrbitOp!.Pitch.Literal);
-        Assert.Equal(expected: 3f, actual: rig.SmoothOp!.Rate);
+        Assert.Equal(expected: "probe", actual: rig.DynamicsOp!.Row);
         Assert.Equal(expected: new Vector3(x: 1f, y: 2f, z: 3f), actual: ((WorldCameraSubject.WorldPoint)rig.AnchorOp!.Subject).Point.Value);
     }
     [Fact]
@@ -184,12 +184,6 @@ public sealed class WorldCameraProgramValidationLawTests {
         control: Program("probe-rig", new WorldCameraProgramOp.Orbit(Distance: 4f, Yaw: new BindableScalar(literal: 0f), Pitch: new BindableScalar(literal: 0f)), Fov()),
         denied: Program("probe-rig", new WorldCameraProgramOp.Orbit(Distance: 0f, Yaw: new BindableScalar(literal: 0f), Pitch: new BindableScalar(literal: 0f)), Fov()),
         expected: ".distance must be positive and finite"
-    );
-    [Fact]
-    public void ANegativeSmoothRateIsRefusedByName() => Refuses(
-        control: Program("probe-rig", Fov(), new WorldCameraProgramOp.Smooth(Rate: 0f)),
-        denied: Program("probe-rig", Fov(), new WorldCameraProgramOp.Smooth(Rate: -1f)),
-        expected: ".rate must be finite and non-negative"
     );
     [Fact]
     public void ANegativeFocusDistanceIsRefusedByName() => Refuses(

@@ -77,7 +77,18 @@ after `state.` is unambiguous because a row/cell name can never itself hold a
 dot (`WorldCellName`). Refused by name at validation (`UnknownBinding`); an
 empty-string binding reads as unbound rather than refused. The SAME `TryParse`
 serves the validator and the render resolver, so a document can never carry a
-binding the renderer silently treats as unbound. The `seat.<n>.position.*`
+binding the renderer silently treats as unbound.
+
+Either `state.*` form may carry a trailing `.$target` facet —
+`state.<row>.$target` or `state.<row>.<key>.$target` — reading the addressed
+cell's stored TRUTH instead of its live eased value when the cell carries a
+`dynamics` trait (see [documents.md](documents.md)'s `dynamics` trait
+paragraph). `$` marks the engine's own namespace (the same convention
+`$value` already uses for a slot cell's key), so `target` alone — with no
+`$` — parses as an ordinary author-chosen cell key, never the facet; an empty
+row before `.$target` (`state.$target`) refuses. A cell with no `dynamics`
+trait resolves the SAME value through either spelling, since truth and the
+eased read agree when nothing is easing. The `seat.<n>.position.*`
 family resolves its body index through the per-seat PERCEPTION ANCHOR
 (`Client/WorldPerceptionAnchor.cs` — the seat's bound body, slot n-1, or the
 routed body while possessing), the same resolution point the camera anchor
@@ -102,7 +113,11 @@ distinct "cannot verify existence" scope in this codebase today;
 with no such document to check against, but nothing currently calls it that
 way. Render-side, `state.<row>`/`state.<row>.<key>` reads
 `WorldClient.Definition.State` directly (no engine fact backs it — the
-document holds the value): a bound TEXT element renders the resolved cell's
+document holds the value): a cell carrying a `dynamics` trait resolves the
+LIVE eased value (`WorldStateReader.TryReadEased`) unless the token carries
+the `.$target` facet above, in which case it resolves truth
+(`WorldStateReader.TryRead`) exactly like a cell with no trait always does. A
+bound TEXT element renders the resolved cell's
 value; a bound GAUGE element's fraction is `(value − min) / (max − min)`
 clamped to `[0, 1]` off the ROW's OWN `min`/`max` (cells carry no envelope of
 their own) when the row is `int`/`fixed` AND declares BOTH (`WorldStateRow`'s

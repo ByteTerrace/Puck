@@ -1271,6 +1271,9 @@
       "GradientDerivedUp"
     ]
   },
+  "dynamics": [
+    { "name": "chase", "f": 0.9549, "zeta": 1, "r": 1 }
+  ],
   "creations": [
     {
       "document": {
@@ -3244,8 +3247,8 @@
           "fieldOfViewRadians": 0.9599311
         },
         {
-          "$type": "smooth",
-          "rate": 6
+          "$type": "dynamics",
+          "row": "chase"
         }
       ],
       "version": "puck.camera.v1"

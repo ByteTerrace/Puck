@@ -81,7 +81,8 @@ the section list is the `WorldSection` enum in `WorldGrant.cs` (kits,
 screens, cameras, spawns, motion, population, render, addons,
 bindings, creations, placements, authoring, speakers, tunes, patches, audio,
 collision, host, views, looks, grants, hud, state, input hold, rules,
-groups, properties, interactions, player defaults, market, probes). Worlds live as data
+groups, properties, interactions, player defaults, market, probes,
+dynamics). Worlds live as data
 under `../Puck.World/Assets/worlds/`. Four are the four-world charter's whole
 game roster: `nexus` (the overworld hub — a floating island above a field of
 planetoids, and the shipped boot default; carries the `references` section
@@ -100,7 +101,8 @@ frame its MoveAdvance/MoveStrafe channel rows are authored in
 (`channels[].frame`, `ChannelFrame`: `World` raw, `Camera` camera-relative and
 facing its travel, `Heading` body-relative with `Turn` steering — the stick's
 `player.move` is camera-framed by its own definition, so keyboard-in-heading
-beside stick-in-camera is one document), and the seat rig's own `smooth` op. The motion-model union's second arm is
+beside stick-in-camera is one document), and the seat rig's own `dynamics` op
+(a named `dynamics` row shaping the boom ease). The motion-model union's second arm is
 `WorldMotionModel.Vehicle` — anisotropic body-frame drive (longitudinal
 accel/brake/coast, lateral grip/drift, speed-scaled steering, optional pitched
 flight) read by the `ResolveVehicleFrame`/`ShapeVehicleVelocity` operations;
@@ -518,7 +520,7 @@ int/fixed SCALAR row (no `capacity`, no non-empty `cells`) and never beside
 `draw` — a row is an authored-randomness draw site or a continuous accumulator,
 never both. An explicit write (`UpsertStateRow`, or `UpsertStateCell` naming the row's
 own `SlotKey`) RE-BASES: the written value becomes the new base and the epoch
-becomes the tick the write applied at, `WorldServer.RebaseAdvanceEpoch`'s job,
+becomes the tick the write applied at, `WorldServer.RebaseCellTraits`'s job,
 run for both a live apply and `world.undo`'s per-entry replay (keyed off the
 journal entry's own tick) so undo rewinds an advancing row exactly like it
 rewinds a draw site's `drawCursor`. A declared `min`/`max`/`nonNegative` envelope
@@ -581,7 +583,7 @@ table of independently advancing cells sees every cell's LIVE value for
 free — no special case in either method. A per-cell VALUE write
 (`world.state.cell.set`, `UpsertStateCell`) carries no advance payload of its
 own, so it PRESERVES whatever the cell already declared and re-bases its
-epoch to the write's tick — `WorldServer.RebaseAdvanceEpoch`'s widened job,
+epoch to the write's tick — `WorldServer.RebaseCellTraits`'s widened job,
 run for a whole-row `UpsertStateRow` (which re-bases the row's own slot trait
 AND every keyed cell's own trait, since it re-declares the whole row) and for
 a per-cell `UpsertStateCell` (which re-bases only the ONE cell it names) —
@@ -590,6 +592,17 @@ already did for the scalar case. `world.state`'s cell line echoes a cell's
 own trait the same way the row line echoes the row's:
 `advance=<num>/<den>@epoch<n>`. There is no WRAP/modulo mode — an open
 question, not built.
+
+**A row or keyed cell may instead declare `dynamics`** (`WorldStateDynamics`
+— `row`, `y0`, `v0`, `epochTick`), `advance`'s closed-form sibling: mutually
+exclusive with `advance`/`draw`/a bare `value`, naming a `dynamics` section
+row whose pole-matched second-order response `WorldStateReader.TryReadEased`
+evaluates lazily from `(y0, v0)` at the elapsed tick — no per-tick write. The
+stored cell value stays the TRUTH the target; a write rebases the trait
+(`RebaseCellTraits`'s `RebaseDynamics` arm) the same way it rebases `advance`
+— the live eased sample and a `Retarget` velocity kick become the new
+`(y0, v0)` at the writing tick. `world.state` echoes
+`dynamics=<row> y0=<v> v0=<v>@epoch<n> eased=<v>` beside `value=`.
 
 **A keyed `text`-kind row IS the text-table primitive** — an authored, named
 collection of strings (flavor lines, names, phrases) a HUD `Binding` or
@@ -806,6 +819,27 @@ input source `probe.<source>` (`Puck.Input.InputSources.Probe.Axis`); a
 boot-authored only — no `WorldMutation` kind targets it and `world.row.set
 probes` refuses by name enumerating siblings — though it does carry its own
 `WorldSection.Probes` grant subject for a section-scoped hold.
+
+## The `dynamics` section — the second-order personality table
+
+`WorldDynamicsRow` (`WorldDynamics.cs`): named `{name, f, zeta, r}` rows — the
+t3ssel8r-style pole-matched second-order response every follower consumer
+(a look's root/part followers, a camera boom, a grounded/swim kit's planar
+shaping, a `state` cell's eased read) names by `name` rather than authoring
+inline. `f` (Hz, positive), `zeta` (damping ratio, non-negative), and `r`
+(initial response) are validated against `WorldDynamics`' ceilings
+(`MaxFrequencyHz`, `MaxDamping`, `MinResponse`/`MaxResponse`). The section is
+optional and every reference is nullable, so an unauthored world is
+unchanged; every reference resolves through `WorldDefinitionRows.FindDynamics`
+and refuses a dangling name, and removing a still-referenced row is refused
+naming the referrer. `WorldDynamicsRow.Compiled` caches the row's
+`Puck.Maths.SecondOrderDynamics` derivation per row instance
+(`ConditionalWeakTable`) for the HUD's per-frame eased read; every other
+consumer compiles its own follower from the same authored triple. Authored
+with `world.row.set dynamics <row-json>` / `world.row.remove dynamics <name>`;
+read back with `world.dynamics` (`Puck.World.Console`), which reports the
+derived decay/oscillation/k3 constants through the identical fixed-point
+derivation the simulation uses, plus a live reference count.
 
 ## The egress documents — what leaves an authority
 

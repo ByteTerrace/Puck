@@ -6,7 +6,9 @@ of [`Puck.World`](../Puck.World/README.md): `world.grant`/`.revoke`/`.grants`/
 `.why` (`WorldGrantCommandModule`), `world.contributions`
 (`WorldContributionCommandModule` — the contribution-slot read-back; slots are
 authored and filled through `world.row.set placements`, so it carries no
-mutating verb), `world.group.*`/`world.ownership.*`/
+mutating verb), `world.dynamics` (`WorldDynamicsCommandModule` — the
+`dynamics` section's read-back: every row's authored triple, the derived
+fixed-point constants, and its live reference count), `world.group.*`/`world.ownership.*`/
 `world.groups` (`WorldGroupCommandModule`), `world.population.spawn`/
 `world.looks` (`WorldLookCommandModule`), `market.*`/`world.market`
 (`WorldMarketCommandModule`), `world.peers`/`world.projection`

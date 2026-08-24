@@ -75,6 +75,67 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{cellPath}.advance.epochTick {advance.EpochTick} must be non-negative.");
         }
     }
+    /// <summary>Validates a row's authored <see cref="WorldStateDynamics"/> easing trait — the closed-form
+    /// counterpart to <see cref="ValidateAdvance"/>, so shares its scalar-row/exclusivity shape.</summary>
+    private static void ValidateDynamicsTrait(WorldStateRow row, bool numeric, ISet<string> dynamicsNames, string path, List<string> errors) {
+        if (row.Dynamics is not { } dynamics) {
+            return;
+        }
+
+        if (row.Draw is not null) {
+            errors.Add(item: $"{path} ('{row.Name}') declares both draw and dynamics — a row is an authored-randomness draw site or a second-order easing cell, never both.");
+        }
+
+        if (row.Advance is not null) {
+            errors.Add(item: $"{path} ('{row.Name}') declares both advance and dynamics — a row is a linear accumulator or a second-order easing cell, never both.");
+        }
+
+        if (!numeric) {
+            errors.Add(item: $"{path} ('{row.Name}') declares dynamics on a {DescribeKind(kind: row.Kind)} row — only int/fixed rows ease.");
+        }
+
+        if (
+            string.IsNullOrWhiteSpace(value: dynamics.Row) ||
+            !dynamicsNames.Contains(item: dynamics.Row)
+        ) {
+            errors.Add(item: $"{path}.dynamics.row '{dynamics.Row}' names no dynamics row.");
+        }
+
+        if (dynamics.EpochTick < 0) {
+            errors.Add(item: $"{path}.dynamics.epochTick {dynamics.EpochTick} must be non-negative.");
+        }
+
+        // Dynamics is a SCALAR (slot) trait, exactly like Advance — the same slot-eligibility test.
+        var cells = (row.Cells ?? []);
+        var slotEligible = ((row.Capacity is null) && ((cells.Count == 0) || ((cells.Count == 1) && (cells[0].Key == WorldStateRow.SlotKey))));
+
+        if (!slotEligible) {
+            errors.Add(item: $"{path} ('{row.Name}') declares dynamics on a keyed row — dynamics is legitimate only on a scalar (slot) row; a keyed row's own cells ease independently.");
+        }
+    }
+    /// <summary>Validates one cell's own <see cref="WorldStateDynamics"/> — the keyed counterpart of
+    /// <see cref="ValidateDynamicsTrait"/>, governing the opposite shape: a cell inside a table rather than a row's
+    /// own slot.</summary>
+    private static void ValidateCellDynamics(WorldStateRow row, WorldStateCell cell, WorldStateDynamics dynamics, bool numeric, ISet<string> dynamicsNames, string cellPath, List<string> errors) {
+        if (cell.Key == WorldStateRow.SlotKey) {
+            errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares its own dynamics on the reserved slot key — a scalar row's easing trait is authored at the ROW level, never on the cell itself.");
+        }
+
+        if (!numeric) {
+            errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares dynamics on a {DescribeKind(kind: row.Kind)} cell — only int/fixed cells ease.");
+        }
+
+        if (
+            string.IsNullOrWhiteSpace(value: dynamics.Row) ||
+            !dynamicsNames.Contains(item: dynamics.Row)
+        ) {
+            errors.Add(item: $"{cellPath}.dynamics.row '{dynamics.Row}' names no dynamics row.");
+        }
+
+        if (dynamics.EpochTick < 0) {
+            errors.Add(item: $"{cellPath}.dynamics.epochTick {dynamics.EpochTick} must be non-negative.");
+        }
+    }
     /// <summary>Validates a state row's authored <see cref="WorldDraw"/> site — its own shape rules, then the shared
     /// site rule with the row's own envelope as the admissible domain.</summary>
     private static void ValidateDraw(WorldStateRow row, IReadOnlyList<WorldGeneratorRow>? generators, string path, List<string> errors) {
@@ -547,7 +608,7 @@ public static partial class WorldDefinitionValidator {
     // optionally narrowed by an authored Capacity). WorldCellName already refuses an empty/unsafe/dotted row name at
     // JSON parse, so this pass checks only uniqueness. Returns the declared rows by name so ValidateHud can refuse
     // an unknown state.<row>/state.<row>.<key> binding.
-    private static Dictionary<string, WorldStateRow> ValidateState(IReadOnlyList<WorldStateRow> rows, IReadOnlyList<WorldGeneratorRow>? generators, List<string> errors) {
+    private static Dictionary<string, WorldStateRow> ValidateState(IReadOnlyList<WorldStateRow> rows, IReadOnlyList<WorldGeneratorRow>? generators, ISet<string> dynamicsNames, List<string> errors) {
         var byName = new Dictionary<string, WorldStateRow>(comparer: StringComparer.Ordinal);
 
         if (rows is null) {
@@ -675,6 +736,13 @@ public static partial class WorldDefinitionValidator {
                 path: path,
                 row: row
             );
+            ValidateDynamicsTrait(
+                dynamicsNames: dynamicsNames,
+                errors: errors,
+                numeric: numeric,
+                path: path,
+                row: row
+            );
             var effectiveCapacity = Math.Clamp(
                 value: (row.Capacity ?? WorldStateCapacity.MaxCellsPerRow),
                 min: 1,
@@ -726,11 +794,30 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' {reservedReason}.");
                 }
 
+                if (
+                    (cell.Advance is not null) &&
+                    (cell.Dynamics is not null)
+                ) {
+                    errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares both advance and dynamics — a cell is a linear accumulator or a second-order easing cell, never both.");
+                }
+
                 if (cell.Advance is { } cellAdvance) {
                     ValidateCellAdvance(
                         advance: cellAdvance,
                         cell: cell,
                         cellPath: cellPath,
+                        errors: errors,
+                        numeric: numeric,
+                        row: row
+                    );
+                }
+
+                if (cell.Dynamics is { } cellDynamics) {
+                    ValidateCellDynamics(
+                        cell: cell,
+                        cellPath: cellPath,
+                        dynamics: cellDynamics,
+                        dynamicsNames: dynamicsNames,
                         errors: errors,
                         numeric: numeric,
                         row: row

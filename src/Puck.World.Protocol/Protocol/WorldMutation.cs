@@ -666,4 +666,17 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Principal">Always <see cref="WorldPrincipal.World"/> — the engine's own retention sweep.</param>
     [MutationKind(ordinal: 70, section: WorldSection.Market)]
     public sealed record PruneMarketListings(WorldPrincipal Principal) : WorldMutation(Principal);
+    /// <summary>Upserts a dynamics row (whole-row, keyed by name) into the <see cref="WorldSection.Dynamics"/>
+    /// section. Applies live — a kit's planar follower, a camera boom, and a look/state follower all read the
+    /// resolved row fresh on their next compile/step, keeping any live follower state.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Row">The whole dynamics row.</param>
+    [MutationKind(ordinal: 71, section: WorldSection.Dynamics)]
+    public sealed record UpsertDynamics(WorldPrincipal Principal, WorldDynamicsRow Row) : WorldMutation(Principal);
+    /// <summary>Removes a dynamics row by name. Rejected loudly by full-document revalidation while any consumer
+    /// (a look, a kit, a camera program, a state cell) still names it.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Name">The dynamics row name to remove.</param>
+    [MutationKind(ordinal: 72, section: WorldSection.Dynamics)]
+    public sealed record RemoveDynamics(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
 }

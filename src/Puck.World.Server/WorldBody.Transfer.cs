@@ -57,6 +57,16 @@ public sealed partial class WorldBody {
             VehicleLatRemainder: m_vehicleLatAccumulator.Remainder,
             VehicleResidualRemainder: m_vehicleResidualAccumulator.Remainder,
             SwimThrustRampRemainder: m_swimThrustRampAccumulator.Remainder,
+            PlanarFollowerPositionRawX: m_planarFollower.X.PositionRaw,
+            PlanarFollowerPositionRawY: m_planarFollower.Y.PositionRaw,
+            PlanarFollowerPositionRawZ: m_planarFollower.Z.PositionRaw,
+            PlanarFollowerVelocityRawX: m_planarFollower.X.VelocityRaw,
+            PlanarFollowerVelocityRawY: m_planarFollower.Y.VelocityRaw,
+            PlanarFollowerVelocityRawZ: m_planarFollower.Z.VelocityRaw,
+            PlanarFollowerPreviousTarget: m_planarPreviousTarget,
+            VerticalFollowerPositionRaw: m_verticalFollower.PositionRaw,
+            VerticalFollowerVelocityRaw: m_verticalFollower.VelocityRaw,
+            VerticalFollowerPreviousTarget: m_verticalPreviousTarget,
             OverlayRemainderX: m_overlayAccumulator.XRemainder,
             OverlayRemainderY: m_overlayAccumulator.YRemainder,
             OverlayRemainderZ: m_overlayAccumulator.ZRemainder,
@@ -291,6 +301,16 @@ public sealed partial class WorldBody {
             remainder: state.SwimThrustRampRemainder,
             ticksPerSecond: EngineTicksPerSecond
         );
+        m_planarFollower = new SecondOrderState3(
+            X: SecondOrderState.FromRawBits(positionRaw: state.PlanarFollowerPositionRawX, velocityRaw: state.PlanarFollowerVelocityRawX),
+            Y: SecondOrderState.FromRawBits(positionRaw: state.PlanarFollowerPositionRawY, velocityRaw: state.PlanarFollowerVelocityRawY),
+            Z: SecondOrderState.FromRawBits(positionRaw: state.PlanarFollowerPositionRawZ, velocityRaw: state.PlanarFollowerVelocityRawZ)
+        );
+        m_planarPreviousTarget = state.PlanarFollowerPreviousTarget;
+        m_planarFollowerSeeded = true;
+        m_verticalFollower = SecondOrderState.FromRawBits(positionRaw: state.VerticalFollowerPositionRaw, velocityRaw: state.VerticalFollowerVelocityRaw);
+        m_verticalPreviousTarget = state.VerticalFollowerPreviousTarget;
+        m_verticalFollowerSeeded = true;
         m_overlayAccumulator = FixedVector3RateAccumulator.FromRemainders(
             xRemainder: state.OverlayRemainderX,
             yRemainder: state.OverlayRemainderY,
@@ -457,6 +477,11 @@ public sealed partial class WorldBody {
     /// These are frame-independent (a rate of convergence, not a position), unlike the position/rotation/vertical
     /// accumulators excluded below — see this list's own "deliberately re-derived" entry for exactly why that
     /// distinction holds. Kart makes the vehicle trio live for an ordinary seat; Dive makes the swim one live.
+    /// <see cref="PlanarFollowerPositionRawX"/>,Y,Z/<see cref="PlanarFollowerVelocityRawX"/>,Y,Z/
+    /// <see cref="PlanarFollowerPreviousTarget"/>/<see cref="VerticalFollowerPositionRaw"/>/
+    /// <see cref="VerticalFollowerVelocityRaw"/>/<see cref="VerticalFollowerPreviousTarget"/> — a kit shaping planar
+    /// velocity through a <c>dynamics</c> row's own Q32 follower state, for the identical "an abort is not a
+    /// teleport" reason as the ramp accumulators above; live only under such a kit, zero (and inert) otherwise.
     /// <see cref="LaneLatch"/>/<see cref="LaneFactHeld"/>/<see cref="LaneRecency"/> — the per-lane action runtime's
     /// own OnPress pending-latch bit, OnFact previous-evaluation edge bit, and Recently-gate clocks
     /// (<see cref="LaneActionRuntime"/>) — a buffered press awaiting its gate, an OnFact trigger's own edge memory,
@@ -562,6 +587,18 @@ public sealed partial class WorldBody {
     /// <param name="VehicleLatRemainder">The vehicle arm's lateral convergence accumulator's own remainder.</param>
     /// <param name="VehicleResidualRemainder">The vehicle arm's residual convergence accumulator's own remainder.</param>
     /// <param name="SwimThrustRampRemainder">The swim arm's thrust convergence accumulator's own remainder.</param>
+    /// <param name="PlanarFollowerPositionRawX">The planar dynamics follower's X-lane Q32 position raw.</param>
+    /// <param name="PlanarFollowerPositionRawY">The planar dynamics follower's Y-lane Q32 position raw.</param>
+    /// <param name="PlanarFollowerPositionRawZ">The planar dynamics follower's Z-lane Q32 position raw.</param>
+    /// <param name="PlanarFollowerVelocityRawX">The planar dynamics follower's X-lane Q32 velocity raw.</param>
+    /// <param name="PlanarFollowerVelocityRawY">The planar dynamics follower's Y-lane Q32 velocity raw.</param>
+    /// <param name="PlanarFollowerVelocityRawZ">The planar dynamics follower's Z-lane Q32 velocity raw.</param>
+    /// <param name="PlanarFollowerPreviousTarget">The planar dynamics follower's previously-seen target, for the
+    /// next step's ZOH target-velocity derivative.</param>
+    /// <param name="VerticalFollowerPositionRaw">The swim vertical dynamics follower's Q32 position raw.</param>
+    /// <param name="VerticalFollowerVelocityRaw">The swim vertical dynamics follower's Q32 velocity raw.</param>
+    /// <param name="VerticalFollowerPreviousTarget">The swim vertical dynamics follower's previously-seen
+    /// target.</param>
     /// <param name="OverlayRemainderX">The dash overlay accumulator's X-axis remainder.</param>
     /// <param name="OverlayRemainderY">The dash overlay accumulator's Y-axis remainder.</param>
     /// <param name="OverlayRemainderZ">The dash overlay accumulator's Z-axis remainder.</param>
@@ -608,6 +645,16 @@ public sealed partial class WorldBody {
         long VehicleLatRemainder,
         long VehicleResidualRemainder,
         long SwimThrustRampRemainder,
+        long PlanarFollowerPositionRawX,
+        long PlanarFollowerPositionRawY,
+        long PlanarFollowerPositionRawZ,
+        long PlanarFollowerVelocityRawX,
+        long PlanarFollowerVelocityRawY,
+        long PlanarFollowerVelocityRawZ,
+        FixedVector3 PlanarFollowerPreviousTarget,
+        long VerticalFollowerPositionRaw,
+        long VerticalFollowerVelocityRaw,
+        FixedQ4816 VerticalFollowerPreviousTarget,
         long OverlayRemainderX,
         long OverlayRemainderY,
         long OverlayRemainderZ,

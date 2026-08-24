@@ -81,11 +81,11 @@ public sealed partial class WorldServer {
                 return false;
             }
 
-            // An advancing row's epoch re-bases to the ORIGINAL journal tick it was set at, exactly as it did on the
-            // live apply this replays — see RebaseAdvanceEpoch's remarks. Doing this BEFORE revalidation is what lets
-            // world.undo rewind a regen row's accumulation bit-identically, same as it already does for a generator's
-            // $cursor.
-            next = RebaseAdvanceEpoch(
+            // An advancing or easing cell's trait re-bases to the ORIGINAL journal tick it was set at, exactly as it
+            // did on the live apply this replays — see RebaseCellTraits' remarks. Doing this BEFORE revalidation is
+            // what lets world.undo rewind a regen row's accumulation, or a dynamics cell's follower state,
+            // bit-identically, same as it already does for a generator's $cursor.
+            next = RebaseCellTraits(
                 original: candidate,
                 candidate: next,
                 mutation: entry.Mutation,

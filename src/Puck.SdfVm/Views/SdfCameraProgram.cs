@@ -40,6 +40,21 @@ public readonly record struct SdfCameraScalar {
         );
     }
 }
+/// <summary>The pole-matched second-order response an <see cref="SdfCameraOp.Dynamics"/> op sets for the boom to ease
+/// through — the authored triple only. Deriving the propagator from it is <see cref="SecondOrderResponse.Create"/>'s
+/// job, done by whichever component actually eases (<see cref="SdfCameraBoomFollower"/>), never here.</summary>
+/// <param name="Frequency">The natural frequency, in Hz. Non-positive (zero by default) means <see cref="None"/> —
+/// no dynamics authored.</param>
+/// <param name="Damping">The damping ratio (dimensionless).</param>
+/// <param name="Response">The initial response (dimensionless).</param>
+public readonly record struct SdfCameraDynamics(float Frequency, float Damping, float Response) {
+    /// <summary>Gets the "no dynamics authored" value — a program with no <see cref="SdfCameraOp.Dynamics"/> op, or a
+    /// <see cref="SdfCameraOp.Blend"/> of two programs neither of which authors one.</summary>
+    public static SdfCameraDynamics None => default;
+
+    /// <summary>Gets whether this response is live (an authored positive frequency) rather than <see cref="None"/>.</summary>
+    public bool IsLive => (Frequency > 0f);
+}
 /// <summary>
 /// One instruction of a compiled camera program — the pose algebra a rig walks in order every frame. Each op is
 /// trivial and total; a camera behavior is a LIST of these rather than a closed kind union, so a new framing is data
@@ -85,12 +100,13 @@ public abstract record SdfCameraOp {
     /// <paramref name="Yaw"/>/<paramref name="Pitch"/> — an interactive rig sets this; a scripted framing does
     /// not.</param>
     public sealed record Orbit(SdfCameraScalar Distance, SdfCameraScalar Yaw, SdfCameraScalar Pitch, Vector3 PivotOffset, bool AppliesLook) : SdfCameraOp;
-    /// <summary>Sets the exponential response rate (per second) reported as <see cref="SdfCameraPose.SmoothRate"/>;
-    /// zero reports no smoothing. It never moves the resolved pose — the eased result is the CALLER's to apply (see
-    /// <see cref="SdfCameraBoomSmoother"/>), because where in a host's pipeline the ease belongs (before or after that
-    /// host's own re-framing) is the host's contract, not this vocabulary's.</summary>
-    /// <param name="Rate">The non-negative response rate.</param>
-    public sealed record Smooth(SdfCameraScalar Rate) : SdfCameraOp;
+    /// <summary>Sets the second-order response reported as <see cref="SdfCameraPose.Dynamics"/>;
+    /// <see cref="SdfCameraDynamics.None"/> reports no easing. It never moves the resolved pose — the eased result is
+    /// the CALLER's to apply (see <see cref="SdfCameraBoomFollower"/>), because where in a host's pipeline the ease
+    /// belongs (before or after that host's own re-framing) is the host's contract, not this vocabulary's.</summary>
+    /// <param name="Value">The response — a literal, never a per-frame slot: a dynamics row cannot change without
+    /// recompiling its whole holding program, so there is no live-rebind case for a slot to serve.</param>
+    public sealed record Dynamics(SdfCameraDynamics Value) : SdfCameraOp;
     /// <summary>Clamps the effective pitch every later <see cref="Orbit"/> op resolves with — its own pitch plus any
     /// applied look sample — to <c>[MinPitch, MaxPitch]</c>.</summary>
     /// <param name="MinPitch">The minimum pitch, radians.</param>
@@ -100,7 +116,7 @@ public abstract record SdfCameraOp {
     /// <param name="FieldOfViewRadians">The field of view.</param>
     public sealed record Fov(SdfCameraScalar FieldOfViewRadians) : SdfCameraOp;
     /// <summary>Evaluates two other programs of the same <see cref="SdfCameraProgramSet"/> and linearly interpolates
-    /// their resolved eye, target, field of view, and smooth rate.</summary>
+    /// their resolved eye, target, field of view, and dynamics response.</summary>
     /// <param name="ProgramA">The set index resolved at <paramref name="Weight"/> 0.</param>
     /// <param name="ProgramB">The set index resolved at <paramref name="Weight"/> 1.</param>
     /// <param name="Weight">The blend weight, clamped to <c>[0, 1]</c>.</param>
@@ -154,8 +170,9 @@ public readonly record struct SdfCameraLook(float Yaw, float Pitch);
 /// <param name="Eye">The eye position.</param>
 /// <param name="Target">The look-at target.</param>
 /// <param name="FovRadians">The vertical field of view, radians.</param>
-/// <param name="SmoothRate">The response rate the program's <see cref="SdfCameraOp.Smooth"/> reported, or zero.</param>
-public readonly record struct SdfCameraPose(Vector3 Eye, Vector3 Target, float FovRadians, float SmoothRate);
+/// <param name="Dynamics">The response the program's <see cref="SdfCameraOp.Dynamics"/> reported, or
+/// <see cref="SdfCameraDynamics.None"/>.</param>
+public readonly record struct SdfCameraPose(Vector3 Eye, Vector3 Target, float FovRadians, SdfCameraDynamics Dynamics);
 /// <summary>The per-frame inputs a program evaluates against — everything that varies while the compiled ops do
 /// not.</summary>
 public readonly ref struct SdfCameraProgramFrame {
@@ -224,6 +241,24 @@ public static class SdfCameraProgramEvaluator {
         rotation: orientation,
         value: -Vector3.UnitZ
     );
+    // Both live: the blended response itself. One live: that one, unweighted — a blend against a program that
+    // authors none has nothing to interpolate toward, so the live side stands rather than fading toward None (which
+    // is not a smaller response, only an absent one). Neither live: None.
+    private static SdfCameraDynamics BlendDynamics(in SdfCameraDynamics a, in SdfCameraDynamics b, float weight) {
+        if (a.IsLive && b.IsLive) {
+            return new SdfCameraDynamics(
+                Frequency: float.Lerp(amount: weight, value1: a.Frequency, value2: b.Frequency),
+                Damping: float.Lerp(amount: weight, value1: a.Damping, value2: b.Damping),
+                Response: float.Lerp(amount: weight, value1: a.Response, value2: b.Response)
+            );
+        }
+
+        return (a.IsLive
+            ? a
+            : (b.IsLive
+                ? b
+                : SdfCameraDynamics.None));
+    }
     private static SdfCameraPose Evaluate(SdfCameraProgramSet programs, int programIndex, in SdfAnchor reference, in SdfCameraProgramFrame frame, int depth) {
         var table = programs.Programs;
 
@@ -235,7 +270,7 @@ public static class SdfCameraProgramEvaluator {
             return new SdfCameraPose(
                 Eye: reference.Position,
                 FovRadians: OrbitRig.DefaultFieldOfViewRadians,
-                SmoothRate: 0f,
+                Dynamics: SdfCameraDynamics.None,
                 Target: (reference.Position + (Forward(orientation: reference.Orientation) * DefaultFocusDistance))
             );
         }
@@ -246,7 +281,7 @@ public static class SdfCameraProgramEvaluator {
         var target = eye;
         var haveTarget = false;
         var fov = OrbitRig.DefaultFieldOfViewRadians;
-        var smoothRate = 0f;
+        var dynamics = SdfCameraDynamics.None;
         var pitchMin = (-MathF.PI / 2f);
         var pitchMax = (MathF.PI / 2f);
         var operations = program.Operations;
@@ -313,8 +348,8 @@ public static class SdfCameraProgramEvaluator {
                     haveTarget = true;
 
                     break;
-                case SdfCameraOp.Smooth smooth:
-                    smoothRate = smooth.Rate.Resolve(scalars: scalars);
+                case SdfCameraOp.Dynamics dynamicsOp:
+                    dynamics = dynamicsOp.Value;
 
                     break;
                 case SdfCameraOp.ClampPitch clampPitch:
@@ -361,10 +396,10 @@ public static class SdfCameraProgramEvaluator {
                         value1: resolvedA.FovRadians,
                         value2: resolvedB.FovRadians
                     );
-                    smoothRate = float.Lerp(
-                        amount: weight,
-                        value1: resolvedA.SmoothRate,
-                        value2: resolvedB.SmoothRate
+                    dynamics = BlendDynamics(
+                        a: resolvedA.Dynamics,
+                        b: resolvedB.Dynamics,
+                        weight: weight
                     );
                     target = Vector3.Lerp(
                         amount: weight,
@@ -380,7 +415,7 @@ public static class SdfCameraProgramEvaluator {
         return new SdfCameraPose(
             Eye: eye,
             FovRadians: fov,
-            SmoothRate: smoothRate,
+            Dynamics: dynamics,
             Target: (haveTarget
                 ? target
                 : (eye + (Forward(orientation: subject.Orientation) * DefaultFocusDistance)))
@@ -418,15 +453,14 @@ public sealed class SdfCameraProgramRig : ISdfCameraRig {
     public SdfCameraLook Look { get; set; }
     /// <summary>Gets the compiled set this rig resolves.</summary>
     public SdfCameraProgramSet Programs => m_programs;
-    /// <summary>Gets the response rate the last <see cref="Resolve"/> reported (see
-    /// <see cref="SdfCameraOp.Smooth"/>).</summary>
-    public float SmoothRate { get; private set; }
+    /// <summary>Gets the response the last <see cref="Resolve"/> reported (see <see cref="SdfCameraOp.Dynamics"/>).</summary>
+    public SdfCameraDynamics Dynamics { get; private set; }
     /// <summary>Gets the per-frame scalar slots, for the host to fill before resolving.</summary>
     public Span<float> Scalars => m_scalars;
     /// <summary>Gets the per-frame subject poses, for the host to fill before resolving.</summary>
     public Span<SdfAnchor> Subjects => m_subjects;
 
-    /// <summary>Resolves this frame's full pose, including the reported smooth rate.</summary>
+    /// <summary>Resolves this frame's full pose, including the reported dynamics response.</summary>
     /// <param name="anchor">The reference pose.</param>
     /// <param name="clock">The presentation clocks.</param>
     /// <returns>The resolved pose.</returns>
@@ -443,7 +477,7 @@ public sealed class SdfCameraProgramRig : ISdfCameraRig {
             reference: in anchor
         );
 
-        SmoothRate = pose.SmoothRate;
+        Dynamics = pose.Dynamics;
 
         return pose;
     }
@@ -458,49 +492,46 @@ public sealed class SdfCameraProgramRig : ISdfCameraRig {
     }
 }
 /// <summary>
-/// The exponential boom ease an <see cref="SdfCameraOp.Smooth"/> rate drives: the eye's offset from the target lags,
-/// while the target stays exactly where the program put it.
+/// The pole-matched second-order boom ease an <see cref="SdfCameraOp.Dynamics"/> response drives: the eye's offset
+/// from the target lags, while the target stays exactly where the program put it.
 /// </summary>
 /// <remarks>Only the boom eases. Easing absolute eye and target coordinates would give presentation a second,
 /// delayed subject trajectory that disagrees with the rendered one.</remarks>
-public sealed class SdfCameraBoomSmoother {
+public sealed class SdfCameraBoomFollower {
+    private SecondOrderFollower3 m_follower;
+
     /// <summary>Gets the eased boom — the eye's offset from the target.</summary>
-    public Vector3 Boom { get; private set; }
+    public Vector3 Boom => m_follower.Value;
     /// <summary>Gets whether the boom currently holds an eased value rather than needing a fresh seed.</summary>
-    public bool Seeded { get; private set; }
+    public bool Seeded => m_follower.Seeded;
 
     /// <summary>Drops the eased value, so the next <see cref="Apply"/> seeds at that frame's pose — the cut a caller
     /// wants when the framing changes discontinuously.</summary>
-    public void Reseed() => Seeded = false;
+    public void Reseed() => m_follower.Reseed();
     /// <summary>Eases <paramref name="eye"/> toward the boom held from earlier frames.</summary>
-    /// <param name="rate">The exponential response rate per second; zero or less reseeds and passes the pose through
-    /// untouched, bit for bit.</param>
+    /// <param name="dynamics"><see cref="SdfCameraDynamics.None"/> reseeds and passes the pose through untouched,
+    /// bit for bit; a live response drives the ease.</param>
     /// <param name="deltaSeconds">The frame step.</param>
     /// <param name="eye">The resolved eye, eased in place.</param>
     /// <param name="target">The resolved target, read but never moved.</param>
-    public void Apply(float rate, float deltaSeconds, ref Vector3 eye, ref Vector3 target) {
-        if (rate <= 0f) {
-            Seeded = false;
+    public void Apply(in SdfCameraDynamics dynamics, float deltaSeconds, ref Vector3 eye, ref Vector3 target) {
+        if (!dynamics.IsLive) {
+            m_follower.Reseed();
 
             return;
         }
 
-        if (!Seeded) {
-            Boom = (eye - target);
-            Seeded = true;
-        } else {
-            var alpha = (1f - MathF.Exp(x: (-rate * MathF.Max(
-                x: deltaSeconds,
-                y: 0f
-            ))));
+        var response = SecondOrderResponse.Create(
+            dampingRatio: dynamics.Damping,
+            frequencyHz: dynamics.Frequency,
+            initialResponse: dynamics.Response
+        );
+        var boom = m_follower.Step(
+            deltaSeconds: deltaSeconds,
+            response: in response,
+            target: (eye - target)
+        );
 
-            Boom = Vector3.Lerp(
-                amount: alpha,
-                value1: Boom,
-                value2: (eye - target)
-            );
-        }
-
-        eye = (target + Boom);
+        eye = (target + boom);
     }
 }

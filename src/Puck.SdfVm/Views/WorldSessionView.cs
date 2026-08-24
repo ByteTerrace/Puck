@@ -21,7 +21,7 @@ namespace Puck.SdfVm.Views;
 /// <see cref="Resolve"/> calls, zero on the first — and hands that to
 /// <see cref="ISdfFrameSource.CaptureFrame"/>'s <c>deltaSeconds</c>: never the
 /// host's clock (this view's own produce cadence, not the host's per-frame one), so a dressed frame's own
-/// time-based ease (a chase-camera <c>SmoothRate</c>, an accumulated presentation clock) advances across produced
+/// time-based ease (a chase-camera boom follower, an accumulated presentation clock) advances across produced
 /// frames, including the ones this view's round-robin turn skips. <c>interpolationAlpha</c> stays fixed at zero:
 /// the wrapped content carries no live-body pose to interpolate through this general seam — the away-seat dresser
 /// derives its own alpha independently, from the mirror's snapshot-arrival timestamp, never from this

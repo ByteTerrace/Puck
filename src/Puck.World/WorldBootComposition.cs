@@ -329,6 +329,9 @@ internal static class WorldBootComposition {
         // The LOOK verb surface — world.population.spawn (the spawn-policy RMW) and the world.looks census.
         // Authoring a look row goes through world.row.set looks; assignment through world.assign looks.
         services.AddSingleton<ICommandModule, WorldLookCommandModule>();
+        // The DYNAMICS section's census read-back — world.dynamics. Rows are authored through
+        // world.row.set dynamics/world.row.remove dynamics.
+        services.AddSingleton<ICommandModule, WorldDynamicsCommandModule>();
         // The inhabitation + creation-facet READ-BACK surface — world.inhabitants, world.faces,
         // world.attachments, world.portals. The facets themselves are authored through
         // world.row.set placements <json>.

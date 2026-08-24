@@ -22,7 +22,12 @@ selection into its intrinsic host phases), the per-body trigger and action-state
 `CompiledBodyInstruction`, `CompiledActionStateSlot`, `CompiledActionStateEnvelope`),
 and the compiled fixed-point tunings the stages read (`FixedMotionTuning`,
 `FixedVehicleTuning`, `FixedSwimTuning`, `FixedMotionDefaults`,
-`FixedMotionScalarEnvelope`).
+`FixedMotionScalarEnvelope`). A grounded or swim kit shapes its planar
+velocity through exactly one of two compiled forms:
+`FixedMotionTuning.PlanarDynamics` (`FixedMotionDynamics` — a compiled
+`Puck.Maths.SecondOrderDynamics.SecondOrderStep`, a pole-matched second-order
+follower the host steps once per tick) or the engage/release response table
+already compiled into the tuning's velocity-shaping facet — never both.
 
 The translation from an authored world row into these shapes lives with the
 authoring vocabulary, in `Puck.World.Schema` (`BodyMotionProgramFactory`,

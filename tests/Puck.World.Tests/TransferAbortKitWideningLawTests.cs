@@ -396,4 +396,96 @@ public sealed class TransferAbortKitWideningLawTests {
     // the restored value reading IntentSource.Live instead of the captured Idle — proving the law actually
     // discriminates a missing restore rather than trivially passing regardless. Reverted immediately after
     // confirming red; the law suite as committed is the GREEN state.
+
+    private static WorldDynamicsRow Settle => new(Name: "settle", Frequency: 2f, Damping: 1f, Response: 0f);
+
+    [Fact]
+    public void DetachThenRestore_GroundedDynamicsKitBody_PlanarFollowerStateRoundTripsExactly() {
+        var document = Fixtures.BuildDocument();
+        var kit = document.Kits[0];
+        var grounded = (WorldMotionModel.Grounded)kit.Motion;
+
+        document = document with {
+            DynamicsRaw = [.. Fixtures.StandardDynamics, Settle],
+            KitsRaw = [kit with { Motion = grounded with { Response = null, Dynamics = "settle" } }],
+        };
+
+        using var fixture = Fixtures.FreshServer(definition: document);
+        var actor = WorldPrincipal.Seat(slot: 0);
+
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(Principal: actor, Slot: actor.Index, IdentityName: null, WireProtocolKey: WorldProtocol.WireProtocolKey)).Accepted);
+
+        var population = fixture.Server.Population;
+        var body = fixture.Server.Body(index: actor.Index)!;
+
+        // The submitted intent is a one-tick image, consumed by each Advance — resubmitted every tick so the
+        // follower's own previous-target carry (which the SETTLE round trip below proves) stays genuinely nonzero
+        // rather than reverting to the idle (zero) target after the first step.
+        for (var tick = 0; (tick < 24); tick++) {
+            body.SubmitIntent(intent: default(PlayerIntent).WithChannel(ordinal: ForwardOrdinal, value: FixedQ4816.One));
+            fixture.Step();
+        }
+
+        var capturedPosition = body.FixedPosition;
+        var capturedYaw = body.FixedYaw;
+        var capturedState = body.CaptureTransferState();
+
+        // Non-triviality, BEFORE the round trip — driven along the body's own facing (-Z at rest), never assumed to
+        // land on a particular lane.
+        Assert.True(condition: ((capturedState.PlanarFollowerPositionRawX | capturedState.PlanarFollowerPositionRawY | capturedState.PlanarFollowerPositionRawZ) != 0L), userMessage: "the driven planar follower must have moved off rest before capture");
+        Assert.NotEqual(expected: FixedVector3.Zero, actual: capturedState.PlanarFollowerPreviousTarget);
+
+        Assert.True(condition: population.TryDetachSeatForTransfer(slot: actor.Index, profile: out var profile));
+        Assert.True(condition: population.RestoreDetachedSeat(slot: actor.Index, profile: profile, position: capturedPosition, yawRadians: capturedYaw, dynamicState: capturedState));
+
+        var restoredState = fixture.Server.Body(index: actor.Index)!.CaptureTransferState();
+
+        Assert.Equal(expected: capturedState.PlanarFollowerPositionRawX, actual: restoredState.PlanarFollowerPositionRawX);
+        Assert.Equal(expected: capturedState.PlanarFollowerPositionRawY, actual: restoredState.PlanarFollowerPositionRawY);
+        Assert.Equal(expected: capturedState.PlanarFollowerPositionRawZ, actual: restoredState.PlanarFollowerPositionRawZ);
+        Assert.Equal(expected: capturedState.PlanarFollowerVelocityRawX, actual: restoredState.PlanarFollowerVelocityRawX);
+        Assert.Equal(expected: capturedState.PlanarFollowerVelocityRawY, actual: restoredState.PlanarFollowerVelocityRawY);
+        Assert.Equal(expected: capturedState.PlanarFollowerVelocityRawZ, actual: restoredState.PlanarFollowerVelocityRawZ);
+        Assert.Equal(expected: capturedState.PlanarFollowerPreviousTarget, actual: restoredState.PlanarFollowerPreviousTarget);
+    }
+    [Fact]
+    public void DetachThenRestore_SwimDynamicsKitBody_VerticalFollowerStateRoundTripsExactly() {
+        var document = BuildSwimKitDocument();
+        var kit = document.Kits[0];
+        var swim = (WorldMotionModel.Swim)kit.Motion;
+
+        document = document with {
+            DynamicsRaw = [.. Fixtures.StandardDynamics, Settle],
+            KitsRaw = [kit with { Motion = swim with { Response = null, Dynamics = "settle" } }],
+        };
+
+        using var fixture = Fixtures.FreshServer(definition: document);
+        var actor = WorldPrincipal.Seat(slot: 0);
+
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(Principal: actor, Slot: actor.Index, IdentityName: null, WireProtocolKey: WorldProtocol.WireProtocolKey)).Accepted);
+
+        var population = fixture.Server.Population;
+        var body = fixture.Server.Body(index: actor.Index)!;
+
+        for (var tick = 0; (tick < 24); tick++) {
+            body.SubmitIntent(intent: default(PlayerIntent).WithChannel(ordinal: ForwardOrdinal, value: FixedQ4816.One).WithChannel(ordinal: UpOrdinal, value: FixedQ4816.One));
+            fixture.Step(); // both the planar and the vertical follower rise toward their commanded targets under the SAME compiled propagator.
+        }
+
+        var capturedPosition = body.FixedPosition;
+        var capturedYaw = body.FixedYaw;
+        var capturedState = body.CaptureTransferState();
+
+        Assert.NotEqual(expected: 0L, actual: capturedState.VerticalFollowerPositionRaw);
+        Assert.NotEqual(expected: FixedQ4816.Zero, actual: capturedState.VerticalFollowerPreviousTarget);
+
+        Assert.True(condition: population.TryDetachSeatForTransfer(slot: actor.Index, profile: out var profile));
+        Assert.True(condition: population.RestoreDetachedSeat(slot: actor.Index, profile: profile, position: capturedPosition, yawRadians: capturedYaw, dynamicState: capturedState));
+
+        var restoredState = fixture.Server.Body(index: actor.Index)!.CaptureTransferState();
+
+        Assert.Equal(expected: capturedState.VerticalFollowerPositionRaw, actual: restoredState.VerticalFollowerPositionRaw);
+        Assert.Equal(expected: capturedState.VerticalFollowerVelocityRaw, actual: restoredState.VerticalFollowerVelocityRaw);
+        Assert.Equal(expected: capturedState.VerticalFollowerPreviousTarget, actual: restoredState.VerticalFollowerPreviousTarget);
+    }
 }

@@ -912,9 +912,9 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
 
         // The chase boom eases only while the seat frames through its own chase rig — a camera control application
         // resolves through views.cameraRig, whose framing is the possessed body's own pose and must not lag it. The
-        // rate is the one the program's smooth op just reported; zero passes eye/target through bit for bit.
-        view.Smooth(
-            rate: chase.SmoothRate,
+        // response is the one the program's dynamics op just reported; None passes eye/target through bit for bit.
+        view.Follow(
+            dynamics: chase.Dynamics,
             enabled: ReferenceEquals(
                 objA: rig,
                 objB: chase
@@ -1183,8 +1183,10 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         m_client.UpdateRenderPoses(alpha: interpolationAlpha);
 
         // Advance the animated-placement replay cursors on the render clock (hold-style — transforms move; the
-        // program itself never rebuilds for a timeline step).
+        // program itself never rebuilds for a timeline step), and latch the same delta for the scene's own
+        // catalog-avatar root followers (WorldSceneEmitter.PackDynamicTransforms consumes it once).
         m_animator.Tick(deltaSeconds: deltaSeconds);
+        m_emitter.Tick(deltaSeconds: deltaSeconds);
 
         ReconcileDelivery();
         return m_composed.CaptureFrame(

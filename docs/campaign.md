@@ -51,6 +51,15 @@ schema in this repository carries a v2, and none is planned. Supergreen holds: z
 breaking change edits the v1 shape in place and updates every internal caller in the same change, never
 a parallel version or a compatibility shim.
 
+**Second-order "personality" is one document section, referenced by every follower.** A world declares
+named pole-matched second-order responses (t3ssel8r's `f`/`ζ`/`r` vocabulary) once, in `dynamics`, and
+four independent consumers — a look's root/part followers, a camera boom, a grounded/swim kit's planar
+shaping, a `state` cell's eased read — name a row rather than each inventing its own ease. The matched
+Z-transform state transition is transcribed into exactly two homes: `Puck.Maths` (fixed-point, simulation
+state) and `Puck.SdfVm.Views` (a `MathF` twin, presentation-only, never fed back into the tick) — never a
+third derivation. Falsifiable by `world.dynamics` on any world authoring the section and the `dynamics`
+law family in `tests/Puck.Maths.Tests`.
+
 ## Where the campaign actually is
 
 **Do not trust this section's vintage — re-run the checks.** Each claim below names the check that

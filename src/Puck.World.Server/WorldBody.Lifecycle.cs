@@ -130,11 +130,11 @@ public sealed partial class WorldBody {
     // arm compiles STRAIGHT into the shared m_tuning slots (WorldMotionTuningFactory.Compile(WorldMotionModel.Swim) maps
     // ThrustSpeed/ThrustSpeedEnvelope onto MoveSpeed/MoveSpeedEnvelope) — no fork, so the grounded-shaped resolve is
     // already arm-correct for swim; only the swim-specific half (buoyancy, float depth, ...) needs its own record.
-    private void SetTuning(WorldMotionModel motion) {
+    private void SetTuning(WorldMotionModel motion, FixedMotionDynamics? planarDynamics = null) {
         switch (motion) {
             case WorldMotionModel.Grounded grounded:
                 m_motionArm = CompiledMotionArm.Grounded;
-                m_tuning = WorldMotionTuningFactory.Compile(tuning: grounded);
+                m_tuning = WorldMotionTuningFactory.Compile(tuning: grounded, dynamics: planarDynamics);
                 m_vehicleTuning = default;
                 m_swimTuning = null;
                 break;
@@ -147,14 +147,13 @@ public sealed partial class WorldBody {
                     RiseGravity: vehicle.RiseGravity,
                     FallGravity: vehicle.FallGravity,
                     MaxFallSpeed: vehicle.MaxFallSpeed,
-                    Response: [],
                     SprintMultiplier: 1f
                 ));
                 m_swimTuning = null;
                 break;
             case WorldMotionModel.Swim swim:
                 m_motionArm = CompiledMotionArm.Swim;
-                m_tuning = WorldMotionTuningFactory.Compile(tuning: swim);
+                m_tuning = WorldMotionTuningFactory.Compile(tuning: swim, dynamics: planarDynamics);
                 m_vehicleTuning = default;
                 m_swimTuning = WorldMotionTuningFactory.CompileSwim(tuning: swim);
                 break;
@@ -418,8 +417,11 @@ public sealed partial class WorldBody {
     /// for a kit with no sprint capability.</param>
     /// <param name="driftChannelOrdinal">The ordinal <see cref="WorldMotionModel.Vehicle.DriftChannel"/> resolved to,
     /// or <c>-1</c> for a kit that cannot drift.</param>
-    public void RecompileKit(WorldMotionModel motion, CompiledActionSpec?[]? actions, FixedQ4816[]? actionThresholds, ChannelShape[]? actionShapes, bool[]? roleMask, RoleChannelOrdinals roleOrdinals, CompiledActionStateSlot[]? actionState, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedWorldCollider? collider, FixedQ4816 maxSmoothError, int sprintChannelOrdinal = -1, int driftChannelOrdinal = -1) {
-        SetTuning(motion: motion);
+    /// <param name="planarDynamics">The kit's compiled second-order follower
+    /// (<see cref="FixedWorldKit.PlanarDynamics"/>), or <see langword="null"/> when the kit shapes planar velocity
+    /// through its response table instead.</param>
+    public void RecompileKit(WorldMotionModel motion, CompiledActionSpec?[]? actions, FixedQ4816[]? actionThresholds, ChannelShape[]? actionShapes, bool[]? roleMask, RoleChannelOrdinals roleOrdinals, CompiledActionStateSlot[]? actionState, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedWorldCollider? collider, FixedQ4816 maxSmoothError, int sprintChannelOrdinal = -1, int driftChannelOrdinal = -1, FixedMotionDynamics? planarDynamics = null) {
+        SetTuning(motion: motion, planarDynamics: planarDynamics);
         CopyChannelBindings(
             actionShapes: actionShapes,
             actionThresholds: actionThresholds,

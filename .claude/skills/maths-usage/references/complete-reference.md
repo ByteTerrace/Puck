@@ -100,6 +100,7 @@ carries it back whenever it is still below one.
 | A forward-mode sensitivity | `FixedDual<FixedQ4816>` (`FixedDual.Variable` seeds it) |
 | Rate → quantity over ticks, with no drift | `FixedRateAccumulator` / `FixedVector3RateAccumulator` — the sub-unit division remainder carries across calls, and **is authoritative snapshot state** |
 | To interpolate or clamp | `FixedQ4816.Lerp` / `.Clamp`, `FixedVector2.Lerp` / `FixedVector3.Lerp`, `FixedQuaternion.Slerp`, `FixedRigidTransform.ScLerp`. Never a hand-rolled `a + (b − a)·t` |
+| A pole-matched second-order response (a target that eases, overshoots, or anticipates rather than snapping) | `SecondOrderDynamics` (`FixedPoint/SecondOrderDynamics.cs`) — `Create(f, ζ, r)` derives the coefficients once, `Compile(stepTicks, ticksPerSecond)` gives a `SecondOrderStep` for a per-tick/per-frame `Step`, `Evaluate(y0, v0, target, elapsedTicks, ticksPerSecond)` is the closed form for a lazily-read state cell. A float twin (`Puck.SdfVm.Views.SecondOrderFollower.cs`) exists for presentation-only followers (camera booms, stamped parts); never feed it back into simulation state |
 
 Products in this family are **fused**: the whole expression accumulates exactly
 and the result rounds once per returned component. Do not decompose one into

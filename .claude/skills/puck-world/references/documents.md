@@ -72,39 +72,44 @@ unauthored default), `radius`, `selfOnly`) redacts snapshot ENTRIES per sink at
 
 ## `puck.world.def.v1`
 
-`WorldDefinition` is one aggregate record — 33 REQUIRED positional section
-members in declaration (= canonical-write) order: `Motion`, `SpawnPoints`,
-`Render`, `Screens`, `Cameras`, `Population`, `PlayerDefaults`, `Channels`,
-`TargetRegisters`, `BodyMotionPrograms`, `Kits`, `DefaultSeatKit`,
-`Assignment`, `Addons`, `BindingOverlays`, `Storage`, `Creations`,
-`Placements`, `Authoring`, `Speakers`, `Tunes`, `Patches`, `Audio`,
-`Collision`, `Host`, `Views`, `Looks`, `LookAssignment`, `Links`, `Grants`,
-`Hud`, `State`, `InputHold` (its own type, `WorldInputHoldAuthoring`, is the
-AUTHORED seconds shape — `WorldDefinition.CompiledInputHold` is the compiled
-ticks form runtime code consumes; see `WorldInputHoldSettings`'s remarks) —
-plus 17 trailing OPTIONAL members (each `[JsonIgnore(Condition =
-WhenWritingNull)]` with a `= null` default, so an existing document declaring
-none of them round-trips unchanged): `Rules` (see below), `Identity`,
-`Groups`, `Properties`, `Interactions`, `Generation`, `Generators`, `Water`
-(the standing-water medium — one waterline `level`; null IS the dry world;
-`WorldWater.cs`), `References`, `Portals`, `Simulation`, `Destinations`
-(`WorldDestinations.cs`), `Admission` (`Protocol/WorldAdmission.cs`, the one
-trust list every ingress crosses — key-bearing rows for the TCP identity door,
-keyless `federatedAuthority` rows for travellers an authenticated authority
-hands over; deny-by-default, an absent/empty section admits neither), `Market` (`WorldMarketSection`, `WorldMarket.cs` — the local
-auction house's config and live listing ledger; null IS today's no-market
-behavior, falling back to `WorldMarketSection.Empty`), `Adjacencies`
-(`WorldAdjacencies.cs` — invisible reciprocal authority boundaries; null
-names no seamless neighbours), `Text` (`TextFontCatalogDefinition` — the
-named, hash-pinned world-space font catalog; null declares no fonts), and
-`Metadata` (`WorldMetadataSection`, `WorldMetadata.cs` — author-facing
-`title`/`description`/`authors`/`tags` plus a free-form `custom` bag; nothing
-in the engine reads or dispatches on it, and it is distinct from `Extensions`
-below, which exists to catch a misspelled top-level section name rather than
-to hold content) — plus `Schema`
-and the `[JsonExtensionData]` `Extensions` bag. There is no `Wander`/`Scene`
-member and no `WorldSceneRow` type any more — both retired; scenery is
-authored through `Placements` now.
+`WorldDefinition` is one aggregate record whose positional section members are
+now ALL optional — every one carries `[JsonIgnore(Condition =
+WhenWritingNull)]` and a `= null` default, so a document declaring none of
+them still parses, and each section's own resolving accessor (the plain-named
+property beside the `…Raw` constructor parameter) answers its own documented
+ABSENT behavior. There is no longer a required/optional split to enumerate by
+count; declaration (= canonical-write) order is still the contract a
+`with`-expression or a new member's insertion point must respect. Reading
+selectively: `Motion`, `SpawnPoints`, `Render`, `Screens`, `Cameras`,
+`Population`, `PlayerDefaults`, `Channels`, `TargetRegisters`,
+`BodyMotionPrograms`, `Kits`, `DefaultSeatKit`, `Assignment`, `Addons`,
+`BindingOverlays`, `Storage`, `Creations`, `Placements`, `Authoring`,
+`Speakers`, `Tunes`, `Patches`, `Audio`, `Collision`, `Host`, `Views`,
+`Looks`, `LookAssignment`, `Dynamics` (see below), `Grants`, `Hud`, `State`,
+`InputHold` (its own type, `WorldInputHoldAuthoring`, is the AUTHORED seconds
+shape — `WorldDefinition.CompiledInputHold` is the compiled ticks form
+runtime code consumes; see `WorldInputHoldSettings`'s remarks), `Rules` (see
+below), `Identity`, `Groups`, `Properties`, `Interactions`, `Generation`,
+`Generators`, `Water` (the standing-water medium — one waterline `level`;
+null IS the dry world; `WorldWater.cs`), `References`, `Portals`,
+`Simulation`, `Destinations` (`WorldDestinations.cs`), `Admission`
+(`Protocol/WorldAdmission.cs`, the one trust list every ingress crosses —
+key-bearing rows for the TCP identity door, keyless `federatedAuthority` rows
+for travellers an authenticated authority hands over; deny-by-default, an
+absent/empty section admits neither), `Market` (`WorldMarketSection`,
+`WorldMarket.cs` — the local auction house's config and live listing ledger;
+null IS today's no-market behavior, falling back to
+`WorldMarketSection.Empty`), `Adjacencies` (`WorldAdjacencies.cs` — invisible
+reciprocal authority boundaries; null names no seamless neighbours), `Text`
+(`TextFontCatalogDefinition` — the named, hash-pinned world-space font
+catalog; null declares no fonts), and `Metadata` (`WorldMetadataSection`,
+`WorldMetadata.cs` — author-facing `title`/`description`/`authors`/`tags`
+plus a free-form `custom` bag; nothing in the engine reads or dispatches on
+it, and it is distinct from `Extensions` below, which exists to catch a
+misspelled top-level section name rather than to hold content) — plus
+`Schema` and the `[JsonExtensionData]` `Extensions` bag. There is no
+`Wander`/`Scene` member and no `WorldSceneRow` type any more — both retired;
+scenery is authored through `Placements` now.
 
 The topology/timing members carry facts that are BOOT-AUTHORED ONLY —
 none has a `WorldSection` axis or a `MutationKind` ordinal, so nothing
@@ -160,11 +165,12 @@ mutates them in session and no grant subject names them:
   `$drop`/`$replace` refuses at validation, and a JSON `null` under a key in
   a delta deletes the inherited key rather than storing a literal null.
 
-The `WorldSection` enum (`Protocol/WorldGrant.cs`, 31 members, declared
+The `WorldSection` enum (`Protocol/WorldGrant.cs`, 32 members, declared
 order): `Kits, Screens, Cameras, Spawns, Motion, Population, Render, Addons,
 Bindings, Creations, Placements, Authoring, Speakers, Tunes, Patches, Audio,
-Collision, Host, Views, Looks, Links, Grants, Hud, State, InputHold, Rules,
-Groups, Properties, Interactions, PlayerDefaults, Market`. It is the grant subject vocabulary
+Collision, Host, Views, Looks, Grants, Hud, State, InputHold, Rules,
+Groups, Properties, Interactions, PlayerDefaults, Market, Probes, Dynamics`.
+It is the grant subject vocabulary
 (`section:<name>`) and the mutation dispatch axis — narrower than
 `WorldDefinition`'s own member list above: `Channels`,
 `TargetRegisters`, `BodyMotionPrograms`, `Storage`, `Identity`,
@@ -175,7 +181,9 @@ names also differ — `SpawnPoints`/`BindingOverlays`/`LookAssignment`/
 `Kits` respectively; `PlayerDefaults` dispatches through
 `WorldMutation.SetPlayerDefaults`, and `Market` through the
 `CreateMarketListing`/`PlaceMarketBid`/`BuyoutMarketListing`/
-`CancelMarketListing`/`SettleMarketListing` family).
+`CancelMarketListing`/`SettleMarketListing` family). `Probes` is boot-authored
+only — no `WorldMutation` kind targets it, so the section-scoped grant hold is
+its whole authority surface.
 
 `rules` (`WorldRule`, `Puck.World.Schema/WorldRules.cs`) is the OPTIONAL
 world-scoped rule section — the SAME `ActionPredicate`/`ActionEffect`/
@@ -340,6 +348,35 @@ Omitting both is a declared-but-empty row.
     "envelope":{"$type":"set","values":[0,1,2]}}]
 }
 ```
+
+### `dynamics` — the personality table
+
+`WorldDynamicsRow` (`WorldDynamics.cs`): named rows of `{name, f, zeta, r}` —
+a t3ssel8r-style pole-matched second-order response every follower consumer
+names by `name` rather than authoring inline, so one row can drive a look's
+root/part followers, a camera boom, a kit's planar shaping, and a state cell's
+eased read at once. `f` (Hz, positive, finite, ≤ `WorldDynamics.MaxFrequencyHz`
+100) is the natural frequency; `zeta` (≥ 0, ≤ `WorldDynamics.MaxDamping` 16) is
+the damping ratio — `0` rings forever, `<1` overshoots and rings down, `1` is
+critically damped, `>1` is overdamped; `r` (`WorldDynamics.MinResponse`..
+`WorldDynamics.MaxResponse`, ∓4) is the initial response — `0` eases in from
+rest, `>0` reacts immediately to the target's own motion, `>1` overshoots the
+target's motion before settling, `<0` anticipates. The section is OPTIONAL and
+every reference to a row is nullable, so an unauthored world is unchanged.
+Every consumer resolves a name through `WorldDefinitionRows.FindDynamics` and
+refuses a dangling one by name (`'{name}' names no dynamics row.`); removing a
+still-referenced row is refused the same way, naming the referrer. Authored
+with `world.row.set dynamics {"name":"chase","f":0.9549,"zeta":1,"r":1}` /
+`world.row.remove dynamics <name>`; read back with `world.dynamics`, which
+reports every row's authored triple, the derived decay/oscillation/k3
+constants through the SAME fixed-point derivation
+(`Puck.Maths.SecondOrderDynamics.Create`) the simulation compiles from, and a
+live reference count across cameras, looks, look parts, kits, and state.
+Consumers: a look's `motion.dynamics`/`motion.partDynamics` (root and per-part
+followers), a camera program's `dynamics` op (the boom ease), a grounded/swim
+kit's `motion.dynamics` (planar velocity shaping — exactly one of `dynamics`
+or the engage/release `response` table, never both, never neither), and a
+`state` row/cell's `dynamics` trait (the eased read, above).
 
 ### `fields` — the lattice (scalar fields, reactions, field-derived geometry)
 
@@ -514,7 +551,7 @@ mirrors its positive twin rather than flooring the signed quantity (`-1/3` over
 43 ticks subtracts 14, not 15). Legitimate only on an int/fixed SCALAR
 (slot-eligible) row, never beside `draw`/`capacity`/a non-empty `cells`
 array. An explicit write RE-BASES (base=written value, epoch=this tick,
-unconditionally — `Server.WorldServer.RebaseAdvanceEpoch`, which also runs
+unconditionally — `Server.WorldServer.RebaseCellTraits`, which also runs
 inside `world.undo`'s per-entry replay, keyed off each journal entry's own
 tick, so undo restores `(base, epoch)` bit-exactly). A declared `min`/`max`/
 `nonNegative` CLAMPS the computed value every read without rewriting the stored
@@ -550,6 +587,33 @@ wildcard — the SAME subject for the whole-row pair (`UpsertStateRow`/
 narrower authority than any other section (see [mutations.md](mutations.md)
 and [authority.md](authority.md)).
 
+A row or a keyed cell may instead declare `dynamics` (`WorldStateDynamics`,
+`{row, y0, v0, epochTick}`) — a LIVING trait, mutually exclusive with
+`advance`/`draw`/a slot-row's own bare `value` shape the same way `advance`
+already is. `row` names a `dynamics` section row (below); `y0`/`v0` are the
+follower's initial position/velocity (velocity per second), riding the SAME
+per-kind encoding an ordinary cell value takes — raw `FixedQ4816` bits for a
+`fixed` row, a whole number for `int` — authored the same spelling too (a
+decimal string for `fixed`, a plain number for `int`). On an int row this
+rounds the eased value and velocity to whole units at every rebase. The
+stored `Value`/cell value remains the TRUTH —
+rules, grants, and `world.state`'s `value=` column read it unchanged. A write
+REBASES the trait: the live eased sample at the applying tick becomes the new
+`(y0, v0)`, `v0` additionally taking a `Retarget` velocity kick sized by the
+truth's own jump (so the follower keeps chasing continuously through a
+mid-flight rewrite rather than snapping), and `epochTick` moves to that tick
+— the closed-form counterpart of `advance`'s own rebase, applied at the same
+compose site. The eased value is read LAZILY, on demand
+(`WorldStateReader.TryReadEased`), through
+`Puck.Maths.SecondOrderDynamics.Evaluate` — no per-tick write, no journal
+entry, so a `dynamics` cell costs nothing between reads. `world.state`'s row
+and cell lines report the authored trait and its live `eased=` value beside
+`value=`; the HUD's `state.<row>[.<key>]` binding reads the SAME eased value,
+while an explicit trailing `.$target` facet reads truth (see
+[hud.md](hud.md)). `world.save` settles a `dynamics` trait the identical way
+it settles `advance`: `y0`/`v0` become the live eased sample at the saved
+tick and `epochTick` projects to `0`, so a reloaded session keeps easing with
+no freeze.
 
 World/owned-world ids (`Server/WorldOwnedWorlds.cs`) and `world.instance.start`
 names are `WorldSafeName` (the same `WorldSafeName.cs`) — the reserved-character
@@ -650,7 +714,18 @@ only by the swim-only ops). Grounded carries the jump-kit constants
 (rise/fall gravity, the velocity-response table); Vehicle carries its own
 drive constants above; Swim carries thrust/turn speed, buoyancy, the
 rise/sink clamp, and its own response table (gated on `AtSurface`, not
-`Grounded`). All three arms share `SprintMultiplier`/`SprintChannel` — a HELD
+`Grounded`). Grounded and Swim additionally shape their planar (Swim: thrust-plane)
+velocity through exactly ONE of two mechanisms — the engage/release
+`Response` table (`MotionResponse` rows, gated on movement regime) or a named
+`Dynamics` row (a pole-matched second-order follower — see the `dynamics`
+section above); a kit authoring both, or neither, refuses by name
+(`WorldDefinitionValidator.ValidatePlanarShaping`). `Dynamics` compiles once
+per kit (`WorldKit.Compile`) against the world's own `simulation.rateHz` —
+a world authoring no simulation rate cannot compile one and refuses by name.
+The follower's state lives in `WorldBody` as ordinary sim state, included in
+whatever the body snapshot/checkpoint covers; changing which mechanism a kit
+uses, or retuning a live `dynamics` row, is expected to change replay hashes.
+All three arms share `SprintMultiplier`/`SprintChannel` — a HELD
 (not edge-triggered) channel that scales the commanded planar (or, for Swim,
 thrust) speed while it reads held, default `1`/`null` (no sprint) —
 Vehicle's `BoostChannel` rides the SAME held-multiplier ordinal seam under a
@@ -751,10 +826,12 @@ conform would refuse the exact past-the-cap retune the envelope exists to
 catch.
 
 `views.seatRig` is a `WorldCameraProgram` — an ordered op list, not a kind
-union (see views.md for the op table). Its `smooth` op reports a rate the
-CALLER applies as a presentation-only ease on the boom, the same
-`WorldAnchor.Group.SmoothRate` shape reused for a seat's own chase framing; a
-program with no `smooth` op reports zero, the unsmoothed snap.
+union (see views.md for the op table). Its `dynamics` op names a `dynamics`
+row (above) whose second-order response the CALLER applies as a
+presentation-only ease on the boom; a program with no `dynamics` op passes
+the boom through with no ease — a different mechanism from
+`WorldAnchor.Group.SmoothRate`'s exponential ease, which is unrelated and
+still authored separately for a group-centroid establishing shot.
 
 ## The validator — the one thick gate
 
@@ -822,7 +899,7 @@ reserved derived-face band (`WorldPlacementPolicy.DerivedFaceBase` +
   (`none`/`testPattern`/`machine`/`camera`/`view`/`capture`/`console`/`qr`),
   `WorldLookSource`, `WorldSpawnPolicy`, `WorldAnchor`
   (`entity`/`entityLeaf`/`placement`/`group`), `WorldCameraProgramOp`
-  (`anchor`/`offset`/`lookAt`/`orbit`/`smooth`/`clampPitch`/`fov`/`blend`) and
+  (`anchor`/`offset`/`lookAt`/`orbit`/`dynamics`/`clampPitch`/`fov`/`blend`) and
   `WorldCameraSubject` (`reference`/`placement`/`worldPoint`), `WorldSpeakerSource`
   (`none`/`machine`/`tune`/`synth`), `WorldStateRow`
   (`int`/`fixed`/`bool`/`text`). `$type` failures do NOT all surface as

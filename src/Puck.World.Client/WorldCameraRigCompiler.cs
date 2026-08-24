@@ -13,9 +13,9 @@ public interface IWorldCameraProgramRig : ISdfCameraRig {
     /// <summary>Gets or sets the group spread an authored <see cref="WorldCameraProgramOp.Offset.SpreadPullback"/>
     /// widens by. Inert for a program authoring no pullback.</summary>
     float Spread { get; set; }
-    /// <summary>Gets the response rate the last resolve reported (the program's
-    /// <see cref="WorldCameraProgramOp.Smooth"/> rate, or zero).</summary>
-    float SmoothRate { get; }
+    /// <summary>Gets the response the last resolve reported (the program's
+    /// <see cref="WorldCameraProgramOp.Dynamics"/>, or <see cref="SdfCameraDynamics.None"/>).</summary>
+    SdfCameraDynamics Dynamics { get; }
 
     /// <summary>Repoints this rig's document reads at the current live document.</summary>
     /// <param name="definition">The current document.</param>
@@ -210,8 +210,20 @@ public static class WorldCameraRigCompiler {
                         ));
 
                         break;
-                    case WorldCameraProgramOp.Smooth smooth:
-                        operations.Add(item: new SdfCameraOp.Smooth(Rate: SdfCameraScalar.FromLiteral(value: smooth.Rate)));
+                    case WorldCameraProgramOp.Dynamics dynamicsOp:
+                        // A row a mid-mutation document no longer declares emits no op, the same rule Blend's
+                        // dangling-name case follows below — the validator refuses a dangling row at author time, so
+                        // this can only transiently miss during a live document swap.
+                        if (WorldDefinitionRows.FindDynamics(
+                            dynamics: definition.Dynamics,
+                            name: dynamicsOp.Row
+                        ) is { } row) {
+                            operations.Add(item: new SdfCameraOp.Dynamics(Value: new SdfCameraDynamics(
+                                Frequency: row.Frequency,
+                                Damping: row.Damping,
+                                Response: row.Response
+                            )));
+                        }
 
                         break;
                     case WorldCameraProgramOp.ClampPitch clampPitch:
@@ -319,7 +331,7 @@ public static class WorldCameraRigCompiler {
             get => m_rig.Look;
             set => m_rig.Look = value;
         }
-        public float SmoothRate => m_rig.SmoothRate;
+        public SdfCameraDynamics Dynamics => m_rig.Dynamics;
         public float Spread { get; set; }
 
         public void Retarget(WorldDefinition definition) {

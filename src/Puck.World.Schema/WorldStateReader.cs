@@ -300,4 +300,173 @@ public static class WorldStateReader {
 
         return true;
     }
+    /// <summary>Resolves one (row, key) pair the same way <see cref="TryRead"/> does, except a cell carrying a
+    /// <see cref="WorldStateDynamics"/> easing trait reads its EASED value at <paramref name="tick"/>
+    /// (<see cref="TryEvaluateDynamics"/>) rather than its stored truth — the read the HUD's plain
+    /// <c>state.&lt;row&gt;[.&lt;key&gt;]</c> binding takes; a rule gate, an arithmetic write's operand, and the
+    /// <c>.$target</c> HUD facet all keep reading <see cref="TryRead"/>'s truth instead. A cell with no trait, or one
+    /// whose trait names a <c>dynamics</c> row this document no longer declares (live only mid-tick — every other
+    /// door refuses a dangling reference at author time), reads bit-identically to <see cref="TryRead"/>.</summary>
+    /// <param name="definition">The document to read.</param>
+    /// <param name="rowName">The state row's name.</param>
+    /// <param name="key">The cell key inside the row, or <see langword="null"/> for the row's slot cell.</param>
+    /// <param name="tick">The tick this read is answering as of.</param>
+    /// <param name="row">The named row, or <see langword="null"/> when the section declares none by that name.</param>
+    /// <param name="rawValue">The addressed cell's live eased raw value, or <see langword="null"/> when the row
+    /// declares no cell under that key.</param>
+    /// <param name="text">The addressed cell's text payload (<see cref="CellKind.Text"/> rows only, never eased), or
+    /// <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when the row resolved.</returns>
+    public static bool TryReadEased(
+        WorldDefinition definition,
+        string rowName,
+        string? key,
+        ulong tick,
+        [NotNullWhen(true)] out WorldStateRow? row,
+        out long? rawValue,
+        out string? text
+    ) {
+        if (!TryRead(
+            definition: definition,
+            key: key,
+            rawValue: out rawValue,
+            row: out row,
+            rowName: rowName,
+            text: out text,
+            tick: tick
+        )) {
+            return false;
+        }
+
+        if (rawValue is not long) {
+            return true;
+        }
+
+        var target = (key ?? WorldStateRow.SlotKey.Value);
+        WorldStateCell? cell = null;
+
+        foreach (var candidate in (row.Cells ?? [])) {
+            if (string.Equals(
+                a: candidate.Key,
+                b: target,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                cell = candidate;
+
+                break;
+            }
+        }
+
+        if (
+            (cell is { } resolvedCell) &&
+            TryEvaluateDynamics(
+            cell: resolvedCell,
+            definition: definition,
+            row: row,
+            sample: out var sample,
+            tick: tick,
+            trait: out _
+        )
+        ) {
+            rawValue = row.ClampToEnvelope(value: DynamicsFixedToRaw(
+                row: row,
+                value: sample.Value
+            ));
+        }
+
+        return true;
+    }
+    /// <summary>Evaluates <paramref name="cell"/>'s <see cref="WorldStateDynamics"/> easing trait — the row's own
+    /// <see cref="WorldStateRow.Dynamics"/> for the slot cell, else <paramref name="cell"/>'s own
+    /// <see cref="WorldStateCell.Dynamics"/> — at <paramref name="tick"/>, chasing the cell's own stored value
+    /// (<see cref="WorldStateCell.Value"/>) as the follower's target. The one evaluation site every reader
+    /// (<see cref="TryReadEased"/>) and the mutation compose rebase share, so a rebased trait and an eased read are
+    /// always computed the identical way.</summary>
+    /// <param name="definition">The document to resolve the trait's referenced <c>dynamics</c> row against.</param>
+    /// <param name="row">The carrying row (for its <see cref="CellKind"/> and simulation rate).</param>
+    /// <param name="cell">The addressed cell.</param>
+    /// <param name="tick">The tick to evaluate at.</param>
+    /// <param name="trait">The resolved trait, or <see langword="null"/> when this cell carries none, the document
+    /// authors no simulation rate, or the trait names a <c>dynamics</c> row this document no longer declares.</param>
+    /// <param name="sample">The evaluated value/velocity, or <see langword="default"/> when <paramref name="trait"/>
+    /// is <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when a trait resolved and was evaluated.</returns>
+    public static bool TryEvaluateDynamics(
+        WorldDefinition definition,
+        WorldStateRow row,
+        WorldStateCell cell,
+        ulong tick,
+        [NotNullWhen(true)] out WorldStateDynamics? trait,
+        out SecondOrderSample sample
+    ) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+        ArgumentNullException.ThrowIfNull(argument: row);
+        ArgumentNullException.ThrowIfNull(argument: cell);
+
+        trait = (((cell.Key == WorldStateRow.SlotKey)
+            ? row.Dynamics
+            : null) ?? cell.Dynamics);
+        sample = default;
+
+        if (trait is null) {
+            return false;
+        }
+
+        if (
+            (definition.SimulationRateHz <= 0) ||
+            (WorldDefinitionRows.FindDynamics(
+            dynamics: definition.Dynamics,
+            name: trait.Row
+        ) is not { } dynamicsRow)
+        ) {
+            trait = null;
+
+            return false;
+        }
+
+        var epoch = ((trait.EpochTick < 0L)
+            ? 0UL
+            : (ulong)trait.EpochTick);
+        var elapsed = ((tick > epoch)
+            ? (tick - epoch)
+            : 0UL);
+
+        sample = dynamicsRow.Compiled.Evaluate(
+            elapsedTicks: elapsed,
+            initialValue: DynamicsRawToFixed(
+                row: row,
+                raw: trait.Y0
+            ),
+            initialVelocity: DynamicsRawToFixed(
+                row: row,
+                raw: trait.V0
+            ),
+            target: DynamicsRawToFixed(
+                row: row,
+                raw: cell.Value
+            ),
+            ticksPerSecond: (ulong)definition.SimulationRateHz
+        );
+
+        return true;
+    }
+    /// <summary>Converts a <see cref="WorldStateRow"/>-kind raw value — a <see cref="WorldStateCell.Value"/>, or a
+    /// <see cref="WorldStateDynamics.Y0"/>/<see cref="WorldStateDynamics.V0"/>, which ride the identical per-kind
+    /// encoding — into the continuous quantity a follower computes in.</summary>
+    /// <param name="row">The carrying row, for its <see cref="CellKind"/>.</param>
+    /// <param name="raw">The raw value.</param>
+    /// <returns>Raw <c>FixedQ4816</c> bits reinterpreted for <see cref="CellKind.Fixed"/>; <paramref name="raw"/>
+    /// lifted as a whole number for every other kind.</returns>
+    public static FixedQ4816 DynamicsRawToFixed(WorldStateRow row, long raw) => ((row.Kind == CellKind.Fixed)
+        ? FixedQ4816.FromRawBits(value: raw)
+        : FixedQ4816.FromInteger(value: raw));
+    /// <summary>The inverse of <see cref="DynamicsRawToFixed"/> — narrows a continuous value back to the row's own
+    /// raw encoding: exact for <see cref="CellKind.Fixed"/>, nearest whole number (ties to even) for every other
+    /// kind.</summary>
+    /// <param name="row">The carrying row, for its <see cref="CellKind"/>.</param>
+    /// <param name="value">The continuous value.</param>
+    /// <returns>The row-kind-encoded raw value.</returns>
+    public static long DynamicsFixedToRaw(WorldStateRow row, FixedQ4816 value) => ((row.Kind == CellKind.Fixed)
+        ? value.Value
+        : (FixedQ4816.Round(value: value).Value >> FixedQ4816.FractionBitCount));
 }
