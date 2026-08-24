@@ -1,0 +1,25 @@
+{
+  "schema": "puck.sdf.v1",
+  "materials": [
+    { "albedo": [0.70, 0.62, 0.22], "specular": 0.35, "shininess": 28 },
+    { "albedo": [0.30, 0.55, 0.85], "specular": 0.25, "shininess": 18 }
+  ],
+  "ops": [
+    { "op": "reset" },
+    { "op": "translate", "offset": [-1.8, 1.0, 3.5] },
+    { "op": "push", "blend": "union" },
+    { "op": "sphere", "radius": 0.7, "material": 0 },
+    { "op": "noiseDisplace", "frequency": 1.2, "amplitude": 0.18, "octaves": 3, "gain": 0.5, "lacunarity": 2.0, "seed": 42 },
+    { "op": "pop" },
+
+    { "op": "reset" },
+    { "op": "translate", "offset": [1.8, 0.3, 3.5] },
+    { "op": "push", "blend": "union" },
+    { "op": "cellJitter", "spacing": [0.9, 0.9, 0.9], "jitter": 0.2, "seed": 77, "tumble": 0.3, "flavor": "white" },
+    { "op": "sphere", "radius": 0.25, "material": 1 },
+    { "op": "reset" },
+    { "op": "translate", "offset": [1.8, 0.3, 3.5] },
+    { "op": "box", "halfExtents": [1.2, 0.9, 1.2], "material": 1, "blend": "intersection" },
+    { "op": "pop" }
+  ]
+}
