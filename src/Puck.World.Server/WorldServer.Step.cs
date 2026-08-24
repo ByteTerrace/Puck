@@ -857,6 +857,7 @@ public sealed partial class WorldServer {
             engageEdges: engageEdges
         );
         m_population.ResolveDynamicContacts();
+        m_population.ResolveTethers();
         m_population.CompleteStep(tick: tick);
         foreach (var designation in m_population.DesignationOutputs) {
             _ = ApplyDesignationCore(

@@ -592,6 +592,44 @@ public sealed partial class WorldPopulation {
             }
         }
     }
+    /// <summary>Resolves every attached tether after every body has integrated and dynamic contacts have resolved —
+    /// the same "late correction over the whole population's current-tick pose" slot <see cref="ResolveDynamicContacts"/>
+    /// occupies, so a body-anchored tether reads its anchor's just-advanced pose rather than one tick stale. One-way by
+    /// construction: <see cref="WorldBody.SolveTether"/> only ever writes the tethered body, never the anchor — an
+    /// anchor body whose own entry is inactive or out of range this tick leaves its tethered body's rope untouched
+    /// rather than snapping it to a stale or garbage point.</summary>
+    public void ResolveTethers() {
+        for (var index = 0; (index < Capacity); index++) {
+            if (m_entries[index] is not { Active: true, Body: { TetherLength: not null } body }) {
+                continue;
+            }
+
+            FixedVector3 anchor;
+
+            if (body.TetherAnchorBodyIndex is { } anchorIndex) {
+                if (
+                    (anchorIndex >= Capacity) ||
+                    (m_entries[anchorIndex] is not { Active: true, Body: { } anchorBody })
+                ) {
+                    continue;
+                }
+
+                var anchorOrientation = anchorBody.FixedOrientation;
+                var anchorPosition = anchorBody.FixedPosition;
+                var localOffset = body.TetherAnchorPointOrLocalOffset;
+
+                anchor = FixedTetherConstraint.ResolveAnchor(
+                    anchorOrientation: in anchorOrientation,
+                    anchorPosition: in anchorPosition,
+                    localOffset: in localOffset
+                );
+            } else {
+                anchor = body.TetherAnchorPointOrLocalOffset;
+            }
+
+            body.SolveTether(anchor: anchor);
+        }
+    }
     /// <summary>Looks up a declared body motion program by name — the same table every kit's <see cref="WorldBody"/>
     /// resolves against, exposed so a caller (the <c>player.motion</c> switch door) can validate coherence before
     /// asking a body to switch.</summary>

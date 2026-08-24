@@ -163,6 +163,21 @@ point rather than one per manifold at a shared centroid. The default
 coefficient is zero, so a caller that never sets it sees no tangential
 resistance.
 
+## 🪢 The tether constraint
+
+`FixedTetherConstraint` is a distance-CAP (never a distance-PIN) constraint
+between a body and a resolved anchor point: a no-op — bit for bit — while the
+body sits inside the rope's length, and, once taut, a closed-form projection
+that removes only the outward radial velocity component and leaves every
+tangential component untouched, so a swing's momentum and a wall-kick's
+redirect emerge from ordinary integration rather than being scripted. One-way
+by construction (the anchor is taken by `in` and never written), so a
+body-anchored rope is resolved by having the caller pass that body's CURRENT
+pose through `FixedTetherConstraint.ResolveAnchor` each tick. `Reel` changes
+the rope length at a caller-supplied rate, clamped to a caller-supplied floor,
+through the same `FixedRateAccumulator` discipline the rest of this library's
+per-tick rates use.
+
 ## 🚀 Basic use
 
 ```csharp
