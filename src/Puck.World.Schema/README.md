@@ -100,7 +100,7 @@ row (`SprintMultiplier`/`SprintChannel`, `MoveFrame`/`FacingSnap`), the
 frame its MoveAdvance/MoveStrafe channel rows are authored in
 (`channels[].frame`, `ChannelFrame`: `World` raw, `Camera` camera-relative and
 facing its travel, `Heading` body-relative with `Turn` steering — the stick's
-`body.move` is camera-framed by its own definition, so keyboard-in-heading
+`player.move` is camera-framed by its own definition, so keyboard-in-heading
 beside stick-in-camera is one document), and the seat rig's own `dynamics` op
 (a named `dynamics` row shaping the boom ease). The motion-model union's second arm is
 `WorldMotionModel.Vehicle` — anisotropic body-frame drive (longitudinal
@@ -256,12 +256,12 @@ from published engine state — on the `(family, state)` pair, a later layer
 overriding in place and new keys appending). The engine names no group: it
 publishes facts (`roster`, `engagement`, `layout`) and the document's `contexts` rows say which
 group each selects; a seat with no matching row resolves in the first row's
-group, and `body.bind` lands on the seat's active group's resting page.
+group, and `player.bind` lands on the seat's active group's resting page.
 The merged document compiles once per change through the binding stack in
 `Puck.Commands` (`BindingProfile.Compile` — deliberately public and shared,
 never copied here), and there is exactly one consumer of the compiled result,
 so no second authoring grammar or dispatch path exists. The live `help` text
-of `body.bind` and `body.bindings` documents the console surface.
+of `player.bind` and `player.bindings` documents the console surface.
 
 ## The HUD document
 

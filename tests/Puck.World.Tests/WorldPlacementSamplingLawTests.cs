@@ -13,7 +13,7 @@ namespace Puck.World.Tests;
 public sealed class WorldPlacementSamplingLawTests {
     private static WorldPlacement Placement(WorldDistributionRegion region) => new(
         Id: "field",
-        CreationId: "marker",
+        PrototypeId: "marker",
         Position: new DocumentVector3(value: Vector3.Zero),
         YawDegrees: 0f,
         Scale: 1f,

@@ -208,7 +208,7 @@ device image (ordinals 6+ only; movement rides `Intent`).
 
 Per-entity intent sources: `IntentSource` = `Live`, `Idle`, `Wander`,
 `Attend`; the per-tick merge rule is tape > submitted > producer > zero,
-with `player.press` always overlaying.
+with `body.press` always overlaying.
 
 ## Admission test
 

@@ -373,8 +373,8 @@ seat consent needed or consulted; a genuinely untrusted contributor's deltas
 (`Peer` today) are admitted per ordinal only where `reach.Meet(ceilings.Support)`
 contains it — no consent authored means the delta is refused AT STAGING and
 never reaches the fold. Only the THIRD (pooled) branch latches
-`m_untrustedAcceptedMask`, so `player.channels` can prove the pool ran;
-`player.channels`'s `trusted=[...]`/`untrusted=[...]` contributor tags follow
+`m_untrustedAcceptedMask`, so `body.channels` can prove the pool ran;
+`body.channels`'s `trusted=[...]`/`untrusted=[...]` contributor tags follow
 the SAME three-way split (a document-mounted addon now lists under
 `trusted=[...]`).
 
@@ -454,7 +454,7 @@ once-per-episode stderr line. Decode is NOT metered — it happens at
 - Read-backs: `world.grants [principal]` (echoes rows with `(x)` exclusive,
   `budget:`, `channels:0x…`, per-ordinal ceilings), `world.why <principal>
   <capability> <subject>` (allowed/denied + which rule + detail),
-  `player.channels [player]` (per-declared-channel fold breakdown; the
+  `body.channels [player]` (per-declared-channel fold breakdown; the
   ceiling prints only when this tick's contribution set actually reached
   that ordinal through the untrusted path — proof the fold RAN, not that a
   grant exists; honest refusals for inactive or non-occupied bodies).

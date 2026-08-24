@@ -151,7 +151,7 @@ parse (`WorldRuleRefusal.ParkedChannelMalformed` on a bad spelling).
 every currently-parked entity: `body:<n> remaining=<ticks> deadline=<tick>
 [profile=<name>] pos=(x, z) yaw=d°`. Empty when nothing is parked. This is the
 `$parked:` channel's own read-back, and the cheapest way to prove a park
-retained pose/state without fighting `player.where`'s `PlayerRoster.IsJoined`
+retained pose/state without fighting `body.where`'s `PlayerRoster.IsJoined`
 gate (see the gotcha below).
 
 ## Authoring reconnect POLICY over the primitive — "everything else is rules"
@@ -180,10 +180,10 @@ the grace window (not merely the leave itself) is what the rules above ride.
 
 - **`player.leave` clears the CLIENT roster slot regardless of server-side
   park.** `PlayerRoster.Leave` sets `m_slots[slot] = null` unconditionally, so
-  `player.where <n>`/`player.channels <n>`/etc. (which gate on
+  `body.where <n>`/`body.channels <n>`/etc. (which gate on
   `PlayerRoster.IsJoined`) report "not joined" for a parked seat even though
   the SERVER still holds its body. Use `world.parked` to read a parked body's
-  pose/state; use `player.where` only AFTER a resuming re-Join (which
+  pose/state; use `body.where` only AFTER a resuming re-Join (which
   re-populates the client slot via `PlayerRoster.Fill`).
 - **Player 1 (slot 0) never leaves** (`PlayerRoster.Leave` refuses `slot <= 0`)
   — pick slot 2..4 for any leave/park/resume script.

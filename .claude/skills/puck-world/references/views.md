@@ -19,7 +19,7 @@ Primary code:
 - `Puck.World.Client/WorldCameraRigCompiler.cs` — the translation: authored ops
   to IR, authored subjects and `state.<row>[.<key>]` bindings to per-frame
   slots this rig refills from the live document.
-- `Puck.World.Schema/WorldSeatLook.cs` — portable input preference.
+- `Puck.World.Schema/WorldSeatCameraFeel.cs` — portable input preference.
 - `Puck.World.Client/WorldSeatViewState.cs` — the one live state per occupied
   seat, including yaw/pitch, the cached compiled rig, and the boom follower.
 - `Puck.World/WorldSeatViewInput.cs` — stateless pointer adapter.
@@ -102,11 +102,11 @@ A joined identity's preference travels; otherwise the routed world's default
 applies. Neither can override the routed world's `seatControl`.
 
 Motion input is a separate, generic toggled mode. The standard profile binds
-`LT → North` to `player.motion.controls`, and `gamepad.gyro` to
-`player.motion.angular`. Each North press toggles the mode; it remains active
+`LT → North` to `body.motion.controls`, and `gamepad.gyro` to
+`body.motion.angular`. Each North press toggles the mode; it remains active
 after the buttons release. The command is intentionally not gyro-named so a
 later orientation/tilt-to-move adapter can share it. `LT → RB → LB` explicitly
-submits the same `player.state.cell.toggle look behind 0 3.14159265` line as
+submits the same `body.state.cell.toggle look behind 0 3.14159265` line as
 `LT → LB`, toggling the `state.look.behind` yaw bound above; the shorter `LT + RB`
 chord holds `player.look.free`: right-stick
 yaw/pitch continues to orbit the camera, but yaw does not write body heading

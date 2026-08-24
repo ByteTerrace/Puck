@@ -117,7 +117,7 @@ Client code never mutates local state before the server's verdict
 **Add a read-back.** Do not land a new decision surface without a verb that
 echoes it, in the same change — a decision nothing can echo can only be
 asserted through downstream inference. `world.why`, `world.grants`,
-`player.channels`, `world.hud`, `world.status`, `world.addons`,
+`body.channels`, `world.hud`, `world.status`, `world.addons`,
 `world.refusals`, `world.binding-bar` are the pattern.
 
 **Keep parsing strict and sweep shipped worlds.** Refuse unmapped JSON members by name on
@@ -184,8 +184,9 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   UTF-8 — but BOM-LESS (`[System.Text.UTF8Encoding]::new($false)`): a
   BOM'd pin writes its preamble into the piped stdin and silently corrupts
   the FIRST command.
-- **Indexing**: `world.grant body:<n>` is a 0-based entity index; `player.*`
-  verbs are 1-based. `body:1` is "player 2".
+- **Indexing**: `body.*` verbs and `world.grant body:<n>` address the 0-based
+  entity index (0..127); seat-scoped `player.*` verbs (join/leave/assign/mode/
+  bind/…) stay 1-based seat numbers. `body:1` is seat 2's entity.
 - Scenery boulders HAVE collision — zero displacement with no refusal means
   the physical path, not a dead command. A zero-input boot drifts p1
   slightly (~(-0.04, 0, -0.82) over ~300 ticks) — do not assert exact rest
@@ -274,7 +275,7 @@ add-a-kind procedure: [references/mutations.md](references/mutations.md).
 | HUD schema caps, overlay reservation arithmetic, bands/`replace`, bindings, HUD verbs | [references/hud.md](references/hud.md) |
 | Camera rigs, world-owned `views.seatControl`, portable `playerDefaults.seatLook`, the seat-owned movement/render/read-back state, pointer/cursor stack, radial action menu, layouts, and `world.row.set views.*`/`view.override` verbs | [references/views.md](references/views.md) |
 | Invisible reciprocal boundaries, derived overlap/corner peers, frame isometries, generation-addressed authority routes, reserve/commit handoff, action continuity, neighbour contact, seam liveness (`livenessGraceSeconds`, the `$link:` reserved rule channel, `world.links`), and the five-authority quilt | [references/adjacency-and-federation.md](references/adjacency-and-federation.md) |
-| `player.engage`, control applications (the (target, kit) set a principal holds; capture as own-body membership), the kit pad map, server-internal merged pads, possession's co-drive path, machines | [references/engagement.md](references/engagement.md) |
+| `body.engage`, control applications (the (target, kit) set a principal holds; capture as own-body membership), the kit pad map, server-internal merged pads, possession's co-drive path, machines | [references/engagement.md](references/engagement.md) |
 | Join/leave (local seat and peer), park-with-grace, the `$parked:` reserved rule channel, body-resume's identity match rule | [references/session-lifecycle.md](references/session-lifecycle.md) |
 | The replay tape: format/re-key, capture scope, pose hash, verify semantics, receipts | [references/replay.md](references/replay.md) |
 | Addon rows, the prepare/commit mount transaction, pump points, channels, fuel, ABI verdicts, `world.row.set addons`/`.remove` | [references/addons.md](references/addons.md) |
@@ -287,9 +288,9 @@ choosing fixed-point primitives on sim value paths.
 
 ## Boundaries worth knowing
 
-- `WorldPopulationLimits.CapacityCeiling` is 128 (the largest authored
+- `WorldBodiesLimits.CapacityCeiling` is 128 (the largest authored
   `population.capacity` the validator admits), and `WorldClient.EntityCapacity`
-  is SINGLE-SOURCED from it (`= WorldPopulationLimits.CapacityCeiling`, the F3
+  is SINGLE-SOURCED from it (`= WorldBodiesLimits.CapacityCeiling`, the F3
   reconciliation 2026-08-06) — so the validator's admitted capacity and the
   client's fixed per-entity view arrays are the SAME number by construction; the
   old gap where a document could author past the client bound, validate, and boot

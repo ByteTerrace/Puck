@@ -197,7 +197,7 @@ the exact seam `generate` proved, never a new door), `upsertHudPanel`/
 `removeHudPanel` (a world-scoped HUD row) and `upsertPlacement`/`removePlacement`
 (a placement row); the rest read or write per-body state (velocity/impulse/
 designate/timer) and are refused BY NAME by `WorldRuleCompiler`. `pose` is the
-rule-side `player.pose`: `{"$type":"pose","key":"<body>","spawnPoint":"<id>"}` or
+rule-side `body.pose`: `{"$type":"pose","key":"<body>","spawnPoint":"<id>"}` or
 `position` + `yawDegrees`/`pitchDegrees`/`rollDegrees` (exactly one of the two),
 applied through `WorldBody.Pose` as the world's own act — no `WorldMutation`, no
 journal, and deliberately outside the `gatesDrive` check, which is what lets a
@@ -487,7 +487,7 @@ ordinal) and is XOR-by-presence against `host.backend`;
 **Domains narrow STATICALLY** against the site's own envelope, the census
 coherence sum, and every reachable backend token — so a roll can never decide
 whether the world boots. `population.capacityDraw` is TEMPORARILY floored at
-`WorldPopulationLimits.CapacityCeiling` (128) because `world.population` crashes
+`WorldBodiesLimits.CapacityCeiling` (128) because `world.population` crashes
 below it; that collapses its domain to a single value until the population lane
 lifts the floor.
 
@@ -1280,7 +1280,7 @@ strictly (unknown states refused, the name may not collide with a built-in
 family or the `state:` prefix). A state whose `target` is `"camera"` composes the camera control application:
 the seat possesses its authored `camera-seat-<slot>` inhabited placement
 through the ordinary Engage door, its own body intent diverting to
-`player.control`'s idle contract, and its view resolving through
+`body.control`'s idle contract, and its view resolving through
 `views.cameraRig` (see views.md). `player.camera [seat]` is the bindable
 no-token toggle onto the same state. Compile refuses a malformed/duplicate row or
 an undeclared group; the vocabulary gate refuses an unadmitted family/state —
@@ -1362,7 +1362,7 @@ zone, and neutral-grace duration.
 
 ## Capacity constants
 
-- `WorldPopulationLimits` (`Puck.World.Schema`): `CapacityCeiling = 128`,
+- `WorldBodiesLimits` (`Puck.World.Schema`): `CapacityCeiling = 128`,
   `LocalSeatCount = 4` (indices 0–3) — single-sourced against
   `WorldClient.EntityCapacity` (the F3 reconciliation, 2026-08-06; see
   [SKILL.md](../SKILL.md)'s "Boundaries" section). There is no

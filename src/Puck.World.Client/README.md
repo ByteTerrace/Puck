@@ -79,7 +79,7 @@ root-crossing dependency was the audio director, narrowed to
   the numbers cross the layering as constructor data, never restated.
 - `WorldSeatCameraPose.cs` — one seat's resolved listener-policy camera pose,
   the frame source's own input to the audio director's `Publish`.
-- `WorldPlacementStamper.cs`, `WorldStampPool.cs`, `WorldCreationFacets.cs` —
+- `WorldPlacementStamper.cs`, `WorldStampPool.cs`, `WorldPrototypeFacets.cs` —
   the document-to-geometry emission path for scene rows and `puck.creation.v1`
   placements; `WorldSceneEmitter` drives them for the boot world. A
   body-rooted `BodyStamp` carrying a `WorldLookMotion` with `Dynamics`/
@@ -127,7 +127,7 @@ root-crossing dependency was the audio director, narrowed to
   published per-seat viewport + camera a pointer consumer reads.
 - `WorldTextCatalog.cs` — deterministic glyph-atlas generation for a
   world-authored font.
-- `WorldCameraRigCompiler.cs`, `WorldAnchorGeometry.cs`, `WorldAvatarCatalog.cs`,
+- `WorldCameraRigCompiler.cs`, `WorldAnchorGeometry.cs`, `WorldRigCatalog.cs`,
   `WorldScreenTextDecal.cs` — the camera-program translation, static
   placement/shape anchor geometry, the avatar instance layout, and screen decal
   text.
@@ -153,7 +153,7 @@ root-crossing dependency was the audio director, narrowed to
   default ⊕ world overlays ⊕ profile bindings ⊕ live session rebinds, and the
   context-derivation state machine that picks a seat's active group. Besides
   the built-in roster/engagement/layout families and a world's own AUTHORED
-  `seatModes` families (`WorldSeatModeFamily`, flipped by `body.mode`), a
+  `seatModes` families (`WorldSeatModeFamily`, flipped by `player.mode`), a
   `state:<row>` family reads the routed world's scalar value or the
   controlled body's keyed value, allowing gameplay-rule state writes to swap
   whole control groups.
@@ -164,7 +164,7 @@ root-crossing dependency was the audio director, narrowed to
   `AddonSourceVocabulary.TryResolve`) nine root `*CommandModule` classes in
   `Puck.World` forward their own declarations to, single-sourced here since
   the binding-authoring files above cannot reference those root types.
-- `PlayerAssignmentCommand.cs` — the shared `body.assign` definition and
+- `PlayerAssignmentCommand.cs` — the shared `player.assign` definition and
   outcome narration over `PlayerRoster`; the root module registers this exact
   definition and command-level laws drive it through `CommandRegistry`.
 
@@ -187,7 +187,7 @@ root-crossing dependency was the audio director, narrowed to
 ## Verifying
 
 Client behavior is verified by running the game and looking, plus the console
-read-backs that echo client state (`world.players`, `body.bindings`,
-`screen.state`, `body.mode`). See
+read-backs that echo client state (`world.players`, `player.bindings`,
+`screen.state`, `player.mode`). See
 [`../Puck.World/README.md`](../Puck.World/README.md) for the run recipe and
 console contract.

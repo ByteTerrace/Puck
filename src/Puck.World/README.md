@@ -84,10 +84,10 @@ VOCABULARY itself must be identical in every shape — the document validators
 check a world's `bindingOverlays`
 against whatever this composition registers, so a genuinely presentation-only
 verb (`world.fps`/`.gpu`/`render*`/`view*`, audio, recording) refuses as
-UNKNOWN over headless stdin, while `body.mode` (and the fly camera
+UNKNOWN over headless stdin, while `player.mode` (and the fly camera
 application it can activate) is CORE-registered (nothing in its dependency
 chain is GPU-typed), terminal-owned `console` is
-registered beside `quit`, and `world.screenshot`/`body.wheel.*` are
+registered beside `quit`, and `world.screenshot`/`player.wheel.*` are
 CORE-registered too but resolve their presentation dependency as OPTIONAL and
 refuse BY NAME at use instead of going unregistered — a headless boot that
 left a stock wheel sector unregistered would refuse the SAME boot document a
@@ -107,9 +107,9 @@ Nexus seats use standard third-person action semantics: left stick moves in the
 live logical camera plane while preserving heading (lateral input strafes, and
 holding forward while turning bends the trajectory with the view); right
 stick yaw turns the upright character through `FaceX`/`FaceZ`, while both axes
-orbit/look and never write `Turn`. Authors can pair `body.move` with
-`body.look` for movement-facing/free-orbit alternatives, or use
-`body.move.strafe` with `body.look.steer` for the standard action scheme.
+orbit/look and never write `Turn`. Authors can pair `player.move` with
+`player.look` for movement-facing/free-orbit alternatives, or use
+`player.move.strafe` with `player.look.steer` for the standard action scheme.
 Pressing the left stick toggles the `run` channel; West and Left Shift retain
 hold-to-run behavior. Holding LT and pressing the left stick toggles autorun
 through the `forward` channel; the chord consumes that press, so it does not
@@ -127,7 +127,7 @@ A context family named `state:<row>` reads that declared world-state row: a
 scalar row publishes one value to every seat, while a keyed row reads the
 controlled body's entity-index cell. Ordinary rule `setState`/`addState`
 effects therefore switch mappings through the same validated, replayed state
-pipeline as the rest of gameplay. `body.bindings` reports the published
+pipeline as the rest of gameplay. `player.bindings` reports the published
 state, matched group, and precedence winner. A missing row contributes no match,
 which keeps portable profile layers usable across worlds. When the winning group
 changes, held commands and chord/page latches from the old group are cleared.
@@ -155,8 +155,8 @@ Facts a script needs:
   never entering the simulation) or `Simulation`-routed (applied on the fixed
   tick). The stdin drain barrier holds a following `Immediate` read until the
   pending simulation traffic applies, so a scripted write-then-read pair
-  (`world.row.set` then `world.status`, `body.bind` then
-  `body.bindings`) needs no polling. `WorldConsoleWaitGate.cs` and
+  (`world.row.set` then `world.status`, `player.bind` then
+  `player.bindings`) needs no polling. `WorldConsoleWaitGate.cs` and
   `world.wait` are the explicit waits.
 - **Ordering.** Within one stdin batch, submissions apply in FIFO order
   across kinds — a grant before a command is visible to that command. The
@@ -191,8 +191,8 @@ Facts a script needs:
   machine host is core state that boots and steps in every shape, and the
   binder is CORE too, since `world.faces`/`body.engage` read its bound/
   no-signal state even headless — every server-safe command module including
-  `ScreenCommandModule`, and the camera control application (the `body.mode`
-  and `body.camera` verbs) — for command-vocabulary parity: a world's binding document commits
+  `ScreenCommandModule`, and the camera control application (the `player.mode`
+  and `player.camera` verbs) — for command-vocabulary parity: a world's binding document commits
   that vocabulary in every boot shape, and the validator checks it against what
   the shape registers) vs. everything genuinely presentation-only (the GPU host,
   render root, overlays, the audio device, gamepads). `WorldUiCommandModule`
@@ -266,7 +266,7 @@ Facts a script needs:
   genuinely presentation-only (unregistered headless); `WorldUiCommandModule.cs`
   and `WorldWheelCommandModule.cs` are core-registered but refuse by name at
   use when their presentation dependency is absent. Terminal-owned `console`
-  is registered in every boot shape; `body.wheel.*` are the rows a world's
+  is registered in every boot shape; `player.wheel.*` are the rows a world's
   own wheel-hold page binds.
 - `WorldDefinitionLoader.cs` — resolves and validates the boot world
   document; `RecordingDocumentSource.cs` does the same for
@@ -410,7 +410,7 @@ and within what radius).
 hardware.** Each enumerated device gets a reconnect-stable `InputDeviceId`
 (`InputDeviceId.FromKey` over the platform's device id) and a roster token
 (`camera<N>` by first-seen order, beside `keyboard1`/`gamepad<N>`) —
-`world.devices` lists every device and the seat it drives; `body.assign
+`world.devices` lists every device and the seat it drives; `player.assign
 camera<N> <slot>` moves one between occupied seats, but refuses an empty target
 because a passive sensor cannot create player presence. A newly seen camera
 attaches to the lowest occupied, camera-less slot by default (seat 1 first); it
@@ -437,7 +437,7 @@ consumers: camera-bound screen slots (`ScreenSlot.CameraSeat`/
 elements naming a camera; the richest requested profile wins when more than
 one consumer names the same pair. Nothing is declared once and remembered —
 `screen.source <i> camera …` moving away from a camera, `screen.eject`, a HUD
-panel losing its `Frame` element, and `body.assign` reseating a device all
+panel losing its `Frame` element, and `player.assign` reseating a device all
 resolve within the same one-publish seam: the next produced frame's demand
 recompute drops what is no longer wanted and picks up what changed, closing a
 device's graph once none of its feeds are demanded any more (lazily reopened
@@ -757,7 +757,7 @@ dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/
 
 `Assets/worlds/brio-seats.world.json` (basis `brio-probe.world.json`) declares
 two local seats to exercise seat-relative instancing directly: run it
-windowed, join a second, console-only seat (`body.join 1`), and
+windowed, join a second, console-only seat (`player.join 1`), and
 `probe.status` shows two instances, `head@1` (the machine's own BRIO,
 default-seated at boot) running and `head@2` idle with a no-camera-assigned
 fault — a second local seat with no camera of its own, never a crash or a

@@ -95,7 +95,7 @@ routed body while possessing), the same resolution point the camera anchor
 pose and the audio listener derive through, so all three follow a possession
 anchor swap together, published every tick by `WorldSeatContextSync.Publish`
 off the SAME grant-table Control-route read the `engagement` context family
-already performs (see [engagement.md](engagement.md)); `player.where` echoes
+already performs (see [engagement.md](engagement.md)); `body.where` echoes
 the anchor (`anchor=body:<n>`, 0-based) for local seats.
 
 A `state.<row>`/`state.<row>.<key>` binding's EXISTENCE — the row, and for the
@@ -201,7 +201,7 @@ INSTANCE built from an `OverlayCapacity` — the host's declared counts
 `HudElementsPerSeatPanel`). `Puck.Overlays` restates no World number: the
 composition root (`WorldBootComposition`'s one `new UnifiedOverlayNode`)
 supplies `Puck.World.Client.WorldOverlayCapacity.FromSchema()` — `Seats =
-WorldPopulationLimits.LocalSeatCount`, the four HUD ceilings from
+WorldBodiesLimits.LocalSeatCount`, the four HUD ceilings from
 `WorldHudCapacity` (`MaxSeatPanels` is the seat-panel count). Render costs stay
 the writers' own (`HudWriter.GaugeElementCost`, `HudWriter.TextRunChars`, the
 per-seat writers' caps — the `CursorWriter` discipline). The runtime guard is

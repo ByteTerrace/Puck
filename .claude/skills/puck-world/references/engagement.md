@@ -24,7 +24,7 @@ storage), `WorldMachineHost.cs`,
 - `WorldScreenRoute.EngageChannel` — the context-sensitive button
 - `Dissolve` — three outcomes, no repair
 - The one fold
-- `player.engage` grammar
+- `body.engage` grammar
 - Replay visibility
 - Machines: server-authoritative
 - Read-backs
@@ -123,7 +123,7 @@ once at boot) from the SAME `Applications` loopback read that publishes the
 `engagement` context family — one read, two derived facts, never a second
 grant-table query. A set that RETAINS its own-body application never swaps the
 anchor: the seat is still driving its own avatar. A screen application never
-swaps it either. `player.where`'s `anchor=body:<n>` echo is the read-back (see
+swaps it either. `body.where`'s `anchor=body:<n>` echo is the read-back (see
 [hud.md](hud.md) for the `seat.<n>.position.*` consumer). Deliberately NOT
 swapped by possession: the body-index-band presentation classifications
 (`WorldSceneEmitter`'s footstep cue and seats-always-cast soft-shadow gates, both
@@ -243,9 +243,9 @@ landing in `ApplyIntentSubmission`/`StageContribution` under the EXACT SAME
 Drive-gated co-drive path an addon or a co-driving seat already uses. No second
 write path for possession.
 
-## `player.engage` grammar
+## `body.engage` grammar
 
-`player.engage <screen>|screen:<n>|body:<n> [player] [capture:on|off]`. The
+`body.engage <screen>|screen:<n>|body:<n> [player] [capture:on|off]`. The
 bare-integer form is a screen index; `body:<n>`/`screen:<n>` reuse
 `GrantSubject.TryParse`'s own grammar (the same tokens `world.grant`/
 `world.revoke` accept). `capture:on|off`, when present, is ALWAYS the trailing
@@ -253,7 +253,7 @@ token, and maps to `ComposeControl.Exclusive` — on drops the own-body
 application, off retains it. A body target skips every screen-only policy check
 (engageable, auto-insert, machine presence, engage radius); it only needs a live
 body at that index. The player defaults to 1 and is bounded to 1..128.
-`player.disengage [player]` submits `DissolveControl`.
+`body.disengage [player]` submits `DissolveControl`.
 
 ## Replay visibility
 
@@ -286,7 +286,7 @@ facade over the host. Screen index IS machine identity for screen-hosted machine
 `screen.insert`/`.eject`/`.select`/`.options`/`.link`/`.unlink` submit a
 `WorldScreenOp` through the ordered submission domain
 (`IServerLink.SubmitScreenOp`), applied SYNCHRONOUSLY like `Command`/`Grant`/
-`Revoke` (never buffered — a `player.engage` auto-insert precheck submits a
+`Revoke` (never buffered — a `body.engage` auto-insert precheck submits a
 `Select` immediately ahead of the `ComposeControl` that follows it in the same
 batch, and the second submission must observe the first's effect). Both `Insert`
 AND `Select` (when the entry resolves to a Machine row) are CAS-pinned identically
@@ -317,14 +317,14 @@ synchronously in the ordered domain. The `screen.state`, `screen.peek`, and
 `screen.state`/`world.screens` tag a mirrored participant `p<n>(mirror)` (both
 read `WorldEngagement.PlayersOn(screenIndex)`,
 `IReadOnlyList<(int Display, bool Capture)>` — `Capture` is derived from own-body
-membership). `player.channels` prints an
+membership). `body.channels` prints an
 `applications=<target>[/<kit>](mask=0x…),…` segment ahead of the per-channel fold
 breakdown; the own-body member is listed like any other, so its ABSENCE (capture)
 is legible rather than inferred.
 
 ## Verifying
 
-Run the game; drive `player.engage <target> [player] [capture:on|off]` with a
+Run the game; drive `body.engage <target> [player] [capture:on|off]` with a
 control pair: an actor holding `Control` over the target succeeds, a revoked
 actor refuses loudly. For possession, grant Drive over the target body first
 (`world.grant seatN drive body:<n>`) — Control alone moves nothing. Exercising
@@ -347,6 +347,6 @@ frozen at boot, so `world.row.set screens` followed by a same-session
 `screen.insert` refuses `no screen 0 declared` even after the mutation echoes
 applied. Boot with the screen already declared (a scratch world copy, or
 `screen.insert` alone against a world that ships one), warp within
-`engageRadius`, `player.press <channel>` — assert `screen.state` reads
+`engageRadius`, `body.press <channel>` — assert `screen.state` reads
 `engaged=p<n>` and `world.contacts <n>` stays `grounded=true` (no jump); warp
 away, press again — assert `world.contacts` reads `grounded=false` instead.

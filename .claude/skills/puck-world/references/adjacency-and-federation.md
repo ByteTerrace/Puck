@@ -187,10 +187,10 @@ action state by declared name rather than document-local ordinal:
   cooldown, charge, or other gameplay meaning.
 
 The bridge is why holding jump across a handoff remains one physical hold
-rather than release-then-press. `player.press`, `player.channels`,
-`player.state`, `player.targets`, `world.contacts`, and `player.where` follow
+rather than release-then-press. `body.press`, `body.channels`,
+`body.state`, `body.targets`, `world.contacts`, and `body.where` follow
 the same seat route after a crossing, and so do the seat-routed document
-writes `player.row.set`/`player.state.cell.set` — the `world.row.set`/
+writes `player.row.set`/`body.state.cell.set` — the `world.row.set`/
 `world.state.cell.set` grammars submitted through the seat's current
 authority (`WorldFederatedServerLink.SubmitWorldMutation` → the federation
 `Routed` lane → `WorldForwardedAuthority.TryApplySubmission`, where the

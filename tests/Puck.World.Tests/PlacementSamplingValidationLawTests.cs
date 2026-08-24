@@ -12,7 +12,7 @@ namespace Puck.World.Tests;
 /// both validate. Each arm is a denial paired with a control differing in exactly one authored field.
 /// </summary>
 public sealed class PlacementSamplingValidationLawTests {
-    private const string CreationId = "marker";
+    private const string PrototypeId = "marker";
     private const string PlacementId = "field";
 
     private static void AssertValidates(WorldDefinition definition) {
@@ -34,10 +34,10 @@ public sealed class PlacementSamplingValidationLawTests {
             expectedSubstring: needle
         );
     }
-    private static WorldCreation Creation() {
+    private static WorldPrototype Creation() {
         var document = new CreationDocument(
             Schema: CreationDocument.CurrentSchema,
-            Name: CreationId,
+            Name: PrototypeId,
             Palette: null,
             Shapes: [
                 new ShapeDocument(
@@ -57,11 +57,11 @@ public sealed class PlacementSamplingValidationLawTests {
         );
         var canonical = CreationCanonicalizer.Canonicalize(
             document: document,
-            source: CreationId
+            source: PrototypeId
         );
 
-        return new WorldCreation(
-            Id: CreationId,
+        return new WorldPrototype(
+            Id: PrototypeId,
             Document: canonical.Document,
             HashRaw: canonical.Hash
         );
@@ -74,7 +74,7 @@ public sealed class PlacementSamplingValidationLawTests {
             PlacementRowsRaw = [
                 new WorldPlacement(
                     Id: PlacementId,
-                    CreationId: CreationId,
+                    PrototypeId: PrototypeId,
                     Position: new DocumentVector3(value: Vector3.Zero),
                     YawDegrees: 0f,
                     Scale: 1f,

@@ -256,7 +256,7 @@ seam.
 
 The nexus is a single authority with no adjacencies — it is not stitched into the quilt. Two facts
 decided that against the earlier quilt-as-nexus shape: `WorldAdjacencyBands.ProjectionCapacity` times
-`WorldAvatarCatalog.Capacity` overruns `SdfProgramBuilder.MaxInstances` at the island's four vertical
+`WorldRigCatalog.Capacity` overruns `SdfProgramBuilder.MaxInstances` at the island's four vertical
 seams plus their derived corners, so `quilt-island` cannot compose a window at all; and the corner
 worlds' `up` boundaries sit at y = 2, so anything standing above a corner's own ground transfers off it
 immediately. The four ground corner authorities plus `quilt-island` stay what they were — adjacency and
