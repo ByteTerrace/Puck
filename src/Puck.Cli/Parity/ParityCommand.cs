@@ -243,7 +243,7 @@ internal static class ParityCommand {
 
         // A real paired controller can claim seat 1 and drive it before the first authored command lands; clearing
         // it here keeps every leg's fenced pose the document's own rest pose, not whatever a stray input produced.
-        script.AppendLine(value: "player.stop 1");
+        script.AppendLine(value: "body.stop 0");
 
         foreach (var command in setupCommands) {
             script.AppendLine(value: command);
