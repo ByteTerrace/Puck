@@ -60,6 +60,25 @@ state) and `Puck.SdfVm.Views` (a `MathF` twin, presentation-only, never fed back
 third derivation. Falsifiable by `world.dynamics` on any world authoring the section and the `dynamics`
 law family in `tests/Puck.Maths.Tests`.
 
+**Injection draws on state rows only; fields fold into state as lattice rows.** The draw facet's one
+home is `WorldStateRow.Draw`; `bodies.capacityRow`/`host.backendRow` are boot-time reads of an
+already-resolved row rather than sites of their own, and nothing settles-and-clears any more — a
+boot-drawn row is the persisted evidence, re-read on every fresh load, never a value that becomes
+indistinguishable from an authored literal. A `state.lattices` topology plus a `lattice` trait on
+ordinary `fixed` rows is the field/terrain primitive, not a sibling section: `rect`/`noise`/`scatter`
+paint seeds a row deterministically (integer-hash + Q48.16, seeded from `generation.worldSeed`), and
+`diffuse`/`decay`/`transform`/`emit`/`expose` reactions evolve it each `stepEveryTicks`, every reaction
+scalar a literal or a `{"row": "name"}` read fresh per step — a season or weather-intensity row
+modulates chemistry live with no new reaction kind. `world.budget` reads the derived cost every
+authorable feature with a price now folds into (render program words/instances against their frozen
+envelope, the Lipschitz step scale, the lattice's per-step reaction cost, the state row count) — a
+decision's price stays legible instead of a silent frame tax. The document vocabulary moved with it:
+`kits`/`looks`/`placements` are dealt-row sections (`{rows, assignment}`/`{rows, policy}`, authoring
+dissolved into placements' own policy block); `prototypes` (`prototypeId` references) replaces
+`creations`; `bodies` replaces `population`; `seatDefaults`/`seatCameraFeel` replace
+`playerDefaults`/`seatLook`. `elements.world.json` is the worked example: a `rect`-painted fuel forest
+beside an ice glacier, burning and melting on the folded spelling.
+
 ## Where the campaign actually is
 
 **Do not trust this section's vintage — re-run the checks.** Each claim below names the check that
@@ -76,7 +95,7 @@ come back.
 | Every world authors per-body action logic | the same documents' `actions` lanes carry `predicates`/`effects`; a quilt variant inherits its base's lanes through `basis` instead of repeating them |
 | **No shipped world authors WORLD-SCOPE rules** — none carries a `rules` or `interactions` section; the two scenario documents under `Assets/scenarios/` do | the same read; `rules.schema.json` and `interactions.schema.json` both exist |
 | Similar worlds compose instead of redefining everything — the five quilts are `basis` deltas over the `quilt-base` template | read any `quilt-*.world.json`'s `basis` member; `world.status` echoes `basis <path>`; `tests/Puck.World.Tests/DocumentBasisLawTests.cs` |
-| A camera reading reaches per-tick input and a presentation parameter — the `ir-blob` probe's `x` lands as seat 1's `turn` channel and its `luminance` drives `sdf-film-grain.intensity` | windowed on the BRIO: `(sleep 8; echo probe.status; echo 'player.channels 1'; echo wire.errors; sleep 3) \| dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/brio-probe.world.json --exit-after-seconds 16` — `probe.status` echoes `state=running tier=gpu`, its `axis head-x … captured=<v>` equals `player.channels`' `turn … h=<v>`, `parameter … writes=` is positive, `wire.errors: 0`; hardware-free: the same verbs against `brio-probe-track.world.json --headless` (the recorded `Assets/probes/tracks/brio-head.probe-track.json` drives the axis; parameter writes stay 0 headless by design); `tests/Puck.Platform.Windows.Tests/ProbeKernelTests.cs` proves the kernel's numbers on a synthetic frame |
+| A camera reading reaches per-tick input and a presentation parameter — the `ir-blob` probe's `x` lands as seat 1's `turn` channel and its `luminance` drives `sdf-film-grain.intensity` | windowed on the BRIO: `(sleep 8; echo probe.status; echo 'body.channels 0'; echo wire.errors; sleep 3) \| dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/brio-probe.world.json --exit-after-seconds 16` — `probe.status` echoes `state=running tier=gpu`, its `axis head-x … captured=<v>` equals `body.channels`' `turn … h=<v>`, `parameter … writes=` is positive, `wire.errors: 0`; hardware-free: the same verbs against `brio-probe-track.world.json --headless` (the recorded `Assets/probes/tracks/brio-head.probe-track.json` drives the axis; parameter writes stay 0 headless by design); `tests/Puck.Platform.Windows.Tests/ProbeKernelTests.cs` proves the kernel's numbers on a synthetic frame |
 
 **The foundation is complete and overshot.** Three motion arms (grounded, vehicle, swim); the portal
 lane end to end — step into a frame and the whole party transfers, all-or-nothing across capacity
@@ -334,7 +353,7 @@ proven the same way from all three documents. The resolver that assembles a corn
 document over a cryptographically verified attestation over a plain one, first-of-kind winning — only
 the first two ever complete a corner, and a plain, unverified attestation never does. Snapshot delivery
 carries a per-observer
-`population.disclosure` policy applied at the output hub's sink boundary, defaulting to disclose-all.
+`bodies.disclosure` policy applied at the output hub's sink boundary, defaulting to disclose-all.
 Read them back with `world.projection`, `world.peers`, and `world.admission`.
 
 **A world names a cross-owner neighbour without reaching its storage directly.** Worlds ARE users, so
@@ -353,7 +372,7 @@ vouching root, checked against the document's authored `admission` trust list; n
 involved. A verified peer is then admitted straight to a population body. Still open, in order:
 destination/session resolution on the wire, an unembodied
 session authority (no session principal exists for observation without embodiment — which is also
-why a narrowed `population.disclosure` delivers a remote observer nothing until one of its travelers
+why a narrowed `bodies.disclosure` delivers a remote observer nothing until one of its travelers
 lands), and only then optional body reservation/allocation. With them: issuer-qualified
 GROUP/document claims (only per-identity entries exist), entry reservations and idempotent handoff
 tokens over the wire fenced by epochs/leases and durable commit records, hydrate/suspend/migrate for
@@ -422,7 +441,7 @@ What survives them, as work rather than prose:
   included — but `replay.verify` still proves the pose trajectory only: the hash covers no document,
   grant-table, or HUD state, and delivered neighbour CONTENT stays untaped.
 - **Unverified, check before scheduling** — session-lever routing (`world.volume`, the render levers,
-  `world.save`); a screen route's pad kit and channel masks (document-only, no `player.engage` override
+  `world.save`); a screen route's pad kit and channel masks (document-only, no `body.engage` override
   for the mask); whether fuel is still the only stop for a spinning guest.
 - **Navigation.** The decision worth keeping: navigation derives walkability from the SDF a world
   already authors, and adopts Puck's existing quantize-once boundary rather than inventing one — the
