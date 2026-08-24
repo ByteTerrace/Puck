@@ -7,19 +7,24 @@ using System.Text.Json.Nodes;
 namespace Puck.Cli.Parity;
 
 /// <summary><c>puck parity --generate</c> — regenerates the pattern-world corpus under <c>tests/Puck.Parity/</c>.
-/// Each world is <c>dive.world.json</c>'s skeleton with water removed and the grounded stack from
-/// <c>jump.world.json</c> layered over it, one pattern creation/placement per world, and the shipped
-/// <c>standard.world.json</c> as its basis (re-spelled relative to the corpus directory). A creation's canonical
-/// hash cannot be derived here (the validator's canonicalizer is out of reach from this project) so it is supplied
-/// via <c>--hashes id=hex64,...</c>, defaulting an unlisted id to the all-zero placeholder the validator's own
-/// refusal then names the real value for.</summary>
+/// Each world layers directly over the shipped <c>puck.basis.json</c> (re-spelled relative to the corpus directory,
+/// two levels under the repository root): a flat solid ground plane so the local seat's body has something to stand
+/// on, an own <c>text</c> catalog (the basis's own font is spelled relative to ITS directory, unreachable from here,
+/// so this door drops it and authors the corpus's own JetBrains Mono atlas — every basis-inherited <c>pip</c> avatar
+/// carries a <c>textRuns</c> engraving that needs SOME resolvable catalog even on a pattern that authors none of its
+/// own), and one <c>prototypes</c>/<c>placements</c> pair per pattern. A creation's canonical hash cannot be derived
+/// here (the validator's canonicalizer is out of reach from this project) so it is supplied via
+/// <c>--hashes id=hex64,...</c>; an unlisted id's creation carries no <c>hash</c> member at all, which
+/// <c>WorldCreation.Hash</c> resolves to the hash computed from its own document at load — no placeholder, no
+/// refusal.</summary>
 internal static class ParityCorpusGenerator {
     private const string FontSource = "fonts/JetBrainsMono-Regular.ttf";
+    // Two levels under the repository root (tests/Puck.Parity/*.world.json) to the shipped basis.
+    private const string BasisPath = "../../src/Puck.World/Assets/worlds/puck.basis.json";
+    private const string SchemaPath = "../../src/Puck.World/Assets/worlds/puck.world.def.v1.schema.json";
 
     public static IReadOnlyList<string> Generate(string repositoryRoot, IReadOnlyDictionary<string, string> hashes) {
         var target = Path.Combine(path1: repositoryRoot, path2: "tests", path3: "Puck.Parity");
-        var sourcePath = Path.Combine(paths: [repositoryRoot, "src", "Puck.World", "Assets", "worlds", "dive.world.json"]);
-        var groundedPath = Path.Combine(paths: [repositoryRoot, "src", "Puck.World", "Assets", "worlds", "jump.world.json"]);
         var patterns = new (string Name, PatternData Data)[] {
             ("parity-gradient", Gradient()),
             ("parity-edges", Edges()),
@@ -32,9 +37,7 @@ internal static class ParityCorpusGenerator {
         Directory.CreateDirectory(path: target);
 
         foreach (var (name, data) in patterns) {
-            var sourceWorld = JsonNode.Parse(json: File.ReadAllText(path: sourcePath, encoding: Encoding.UTF8))!.AsObject();
-            var grounded = JsonNode.Parse(json: File.ReadAllText(path: groundedPath, encoding: Encoding.UTF8))!.AsObject();
-            var world = Build(hashes: hashes, name: name, pattern: data, grounded: grounded, target: target, world: sourceWorld);
+            var world = Build(hashes: hashes, name: name, pattern: data, target: target);
             var path = Path.Combine(path1: target, path2: $"{name}.world.json");
 
             File.WriteAllText(path: path, contents: (world.ToJsonString(options: WriteOptions) + "\n"), encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
@@ -52,84 +55,18 @@ internal static class ParityCorpusGenerator {
         WriteIndented = true,
     };
 
-    private static JsonObject Build(string name, PatternData pattern, IReadOnlyDictionary<string, string> hashes, JsonObject world, JsonObject grounded, string target) {
-        world.Remove(propertyName: "water");
-
-        // The whole grounded stack travels together: the programs' target register and the kits' action state rows
-        // are as much part of it as the kits themselves.
-        foreach (var section in new[] { "channels", "bodyMotionPrograms", "kits", "defaultSeatKit", "targetRegisters", "state" }) {
-            world[section] = grounded[section]!.DeepClone();
-        }
-
-        // Both path members are spelled relative to the corpus directory, two levels under the repository root.
-        world["basis"] = "../../src/Puck.World/Assets/worlds/standard.world.json";
-        world["$schema"] = "../../src/Puck.World/Assets/worlds/puck.world.def.v1.schema.json";
-        world["documentId"] = name;
-
-        var spawnPoints = new JsonArray();
-
-        for (var i = 0; (i < 4); i++) {
-            spawnPoints.Add(value: new JsonObject {
-                ["id"] = $"seat-{(i + 1)}",
-                ["position"] = new JsonArray(((JsonNode)(3 * i)), ((JsonNode)0), ((JsonNode)10)),
-            });
-        }
-        world["spawnPoints"] = spawnPoints;
-
-        var population = world["population"]!.AsObject();
-
-        // Four seats plus the camera body seatModes' camera state possesses.
-        population["capacity"] = 5;
-        population["networkPlayers"] = 0;
-        ((JsonObject)population["distribution"]!["region"]!)["sampleCount"] = 1;
-
-        world["cameras"] = new JsonArray();
-        world["references"] = new JsonArray();
-        world["destinations"] = new JsonArray();
-
+    private static JsonObject Build(string name, PatternData pattern, IReadOnlyDictionary<string, string> hashes, string target) {
         var document = new JsonObject {
             ["schema"] = "puck.creation.v1",
             ["name"] = name,
             ["palette"] = pattern.Palette,
             ["shapes"] = pattern.Shapes,
-            ["frames"] = null,
-            ["chains"] = null,
-            ["cameras"] = null,
-            ["behavior"] = null,
         };
 
         if (pattern.TextRuns is { } textRuns) {
             document["textRuns"] = textRuns;
         }
 
-        if (pattern.Text) {
-            world["text"] = new JsonObject {
-                ["defaultFont"] = "body",
-                ["fonts"] = new JsonArray(new JsonObject {
-                    ["name"] = "body",
-                    ["source"] = FontSource,
-                    ["hash"] = FontHash(target: target),
-                    ["codePointRanges"] = new JsonArray("U+0020-U+007E"),
-                    ["pixelSize"] = 48,
-                    ["distanceRange"] = 8,
-                }),
-            };
-        }
-
-        if (pattern.Screens is { } screens) {
-            world["screens"] = screens;
-        }
-
-        if (pattern.RenderExtensions is { } renderExtensions) {
-            // The skeleton inherits its render section from the basis, so a pattern that authors an extension is
-            // the row that has to introduce one.
-            var render = ((world["render"] as JsonObject) ?? new JsonObject());
-
-            render["extensions"] = renderExtensions;
-            world["render"] = render;
-        }
-
-        var seatKit = ((string)world["defaultSeatKit"]!)!;
         var creation = new JsonObject {
             ["id"] = name,
             ["document"] = document,
@@ -140,69 +77,85 @@ internal static class ParityCorpusGenerator {
             creation["hash"] = pinned;
         }
 
-        world["creations"] = new JsonArray(creation, CameraBodyCreation());
-        world["placements"] = new JsonArray(
-            new JsonObject {
-                ["id"] = name,
-                ["creationId"] = name,
-                ["position"] = new JsonArray(((JsonNode)0), ((JsonNode)0), ((JsonNode)3)),
-                ["yawDegrees"] = 0,
-                ["scale"] = 1.25,
-                ["distribution"] = null,
-                ["mirror"] = null,
-                ["solid"] = new JsonObject { ["margin"] = 0 },
+        var world = new JsonObject {
+            ["basis"] = BasisPath,
+            ["$schema"] = SchemaPath,
+            ["documentId"] = name,
+            ["schema"] = "puck.world.def.v1",
+            ["text"] = TextCatalog(target: target),
+            ["prototypes"] = new JsonArray(creation, GroundCreation()),
+            ["placements"] = new JsonObject {
+                ["rows"] = new JsonArray(
+                    new JsonObject {
+                        ["id"] = name,
+                        ["prototypeId"] = name,
+                        ["position"] = Vec3(x: 0, y: 0, z: 6),
+                        ["yawDegrees"] = 0,
+                        ["scale"] = 1.25,
+                        ["solid"] = new JsonObject { ["margin"] = 0 },
+                    },
+                    GroundPlacement()
+                ),
             },
-            // Behind the seat spawns at z = 10, so the pattern the two backends compare stays the only geometry in
-            // frame. The basis authors a camera-targeting seat mode, which owes a "camera-seat-" inhabited row.
-            CameraSeatPlacement(kit: seatKit, z: 14)
-        );
+        };
+
+        if (pattern.Screens is { } screens) {
+            world["screens"] = screens;
+        }
+
+        if (pattern.RenderExtensions is { } renderExtensions) {
+            // The basis's own "render" section (cycle/lighting/sky) merges member-wise with this one — a pattern
+            // that authors an extension is the row that has to introduce one; nothing else about lighting needs
+            // restating here.
+            world["render"] = new JsonObject { ["extensions"] = renderExtensions };
+        }
 
         return world;
     }
+    // The basis spells its own default font relative to ITS OWN directory (src/Puck.World/Assets/worlds/fonts/…),
+    // unreachable two directories away, and every world inherits the basis's "pip" avatar prototype, whose own
+    // textRuns engraving needs SOME resolvable catalog even on a pattern that authors none of its own — so every
+    // corpus world drops the inherited "inter" font row and authors its own atlas over the corpus-local copy.
+    private static JsonObject TextCatalog(string target) => new() {
+        ["defaultFont"] = "body",
+        ["fonts"] = new JsonArray(
+            new JsonObject { ["name"] = "inter", ["$drop"] = true },
+            new JsonObject {
+                ["name"] = "body",
+                ["source"] = FontSource,
+                ["hash"] = FontHash(target: target),
+                ["codePointRanges"] = new JsonArray("U+0020-U+007E"),
+                ["pixelSize"] = 48,
+                ["distanceRange"] = 8,
+            }
+        ),
+    };
     // AssetContentHash: sha256-64/{16 lowercase hex} = the digest's first 8 bytes read little-endian.
-    // The camera body the basis's camera-targeting seat mode possesses: one small sphere, hash-free (an unhashed
-    // creation is not pinned, so it needs no --hashes entry).
-    private static JsonObject CameraBodyCreation() => new() {
-        ["id"] = "camera-body",
+    // A flat solid plane at the world origin — the basis alone declares no scenery, so a world that authors nothing
+    // else here free-falls its own local seat forever; every corpus world needs this floor regardless of pattern.
+    private static JsonObject GroundCreation() => new() {
+        ["id"] = "ground",
         ["document"] = new JsonObject {
             ["schema"] = "puck.creation.v1",
-            ["name"] = "camera-body",
-            ["palette"] = new JsonArray(new JsonObject {
-                ["color"] = "#5EEBE0",
-                ["emissive"] = 0.25,
-                ["specular"] = 0.2,
-                ["shininess"] = 12,
-            }),
+            ["name"] = "ground",
+            ["palette"] = new JsonArray(new JsonObject { ["color"] = "state.colors.substrate" }),
             ["shapes"] = new JsonArray(Shape(
                 id: 0,
                 material: 0,
-                name: "lens",
+                name: "surface",
                 position: (0, 0, 0),
-                scale: (0.18, 0.18, 0.18),
-                type: "Sphere"
+                scale: (1, 1, 1),
+                type: "Plane"
             )),
-            ["frames"] = null,
-            ["chains"] = null,
-            ["cameras"] = null,
-            ["behavior"] = null,
         },
     };
-    private static JsonObject CameraSeatPlacement(string kit, double z) => new() {
-        ["id"] = "camera-seat-0",
-        ["creationId"] = "camera-body",
-        ["position"] = new JsonArray(((JsonNode)0), ((JsonNode)1.5), ((JsonNode)z)),
+    private static JsonObject GroundPlacement() => new() {
+        ["id"] = "ground",
+        ["prototypeId"] = "ground",
+        ["position"] = Vec3(x: 0, y: 0, z: 0),
         ["yawDegrees"] = 0,
         ["scale"] = 1,
-        ["inhabit"] = new JsonObject {
-            ["count"] = 1,
-            ["kit"] = kit,
-            ["source"] = "Live",
-            ["look"] = null,
-            ["distribution"] = new JsonObject {
-                ["region"] = new JsonObject { ["$type"] = "disc", ["radius"] = 0.01 },
-                ["fill"] = new JsonObject { ["name"] = "additive", ["offset"] = 0, ["step"] = 0.618034 },
-            },
-        },
+        ["solid"] = new JsonObject { ["margin"] = 0 },
     };
     private static string FontHash(string target) {
         var bytes = File.ReadAllBytes(path: Path.Combine(path1: target, path2: FontSource));
@@ -212,7 +165,7 @@ internal static class ParityCorpusGenerator {
         return $"sha256-64/{prefix:x16}";
     }
 
-    private sealed record PatternData(JsonArray Palette, JsonArray Shapes, JsonArray? TextRuns = null, bool Text = false, JsonArray? Screens = null, JsonArray? RenderExtensions = null);
+    private sealed record PatternData(JsonArray Palette, JsonArray Shapes, JsonArray? TextRuns = null, JsonArray? Screens = null, JsonArray? RenderExtensions = null);
 
     // Gradients are where benign cross-backend codegen noise clusters: smooth-blend seams, curved normals, and
     // broad specular falloff, with no hard edges.
@@ -326,7 +279,6 @@ internal static class ParityCorpusGenerator {
                 ["material"] = 3,
             },
         ],
-        Text: true,
         Screens: [
             new JsonObject {
                 ["index"] = 0,

@@ -1,0 +1,154 @@
+{
+  "basis": "../../src/Puck.World/Assets/worlds/puck.basis.json",
+  "$schema": "../../src/Puck.World/Assets/worlds/puck.world.def.v1.schema.json",
+  "documentId": "parity-fields",
+  "schema": "puck.world.def.v1",
+  "text": {
+    "defaultFont": "body",
+    "fonts": [
+      {
+        "name": "inter",
+        "$drop": true
+      },
+      {
+        "name": "body",
+        "source": "fonts/JetBrainsMono-Regular.ttf",
+        "hash": "sha256-64/3e0b55917e0dfde6",
+        "codePointRanges": [
+          "U+0020-U+007E"
+        ],
+        "pixelSize": 48,
+        "distanceRange": 8
+      }
+    ]
+  },
+  "prototypes": [
+    {
+      "id": "ground",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "ground",
+        "palette": [
+          {
+            "color": "state.colors.substrate"
+          }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "material": 0,
+            "name": "surface",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1,
+              1,
+              1
+            ],
+            "smooth": 0,
+            "type": "Plane",
+            "blend": "Union"
+          }
+        ]
+      }
+    }
+  ],
+  "placements": {
+    "rows": [
+      {
+        "id": "ground",
+        "prototypeId": "ground",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "solid": {
+          "margin": 0
+        }
+      }
+    ]
+  },
+  "state": {
+    "world": [
+      {
+        "name": "moss",
+        "kind": "fixed",
+        "lattice": {
+          "topology": "world",
+          "initial": 0,
+          "min": 0,
+          "max": 1,
+          "heightScale": 0.6,
+          "color": "#3F7A3A",
+          "paint": [
+            {
+              "$type": "rect",
+              "value": 1,
+              "minX": -8,
+              "minZ": 2,
+              "maxX": -1,
+              "maxZ": 12
+            }
+          ]
+        }
+      },
+      {
+        "name": "frost",
+        "kind": "fixed",
+        "lattice": {
+          "topology": "world",
+          "initial": 0,
+          "min": 0,
+          "max": 1,
+          "heightScale": 0.9,
+          "color": "#D8F1FF",
+          "paint": [
+            {
+              "$type": "rect",
+              "value": 1,
+              "minX": 1,
+              "minZ": 2,
+              "maxX": 8,
+              "maxZ": 12
+            },
+            {
+              "$type": "noise",
+              "value": 0.35,
+              "frequency": 4,
+              "threshold": 0.5,
+              "octaves": 3,
+              "seed": 11
+            }
+          ]
+        }
+      }
+    ],
+    "lattices": [
+      {
+        "name": "world",
+        "origin": [
+          -8,
+          0,
+          0
+        ],
+        "cellSize": 0.25,
+        "width": 64,
+        "depth": 48,
+        "layers": 1,
+        "stepEveryTicks": 8
+      }
+    ]
+  }
+}

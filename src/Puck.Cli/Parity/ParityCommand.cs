@@ -17,14 +17,16 @@ internal static class ParityCommand {
     private static readonly TimeSpan SuiteBudget = TimeSpan.FromSeconds(value: 600);
     // The authored pattern corpus: each entry stresses one contract slice on purpose, so a divergence names the
     // slice that moved instead of "the game looked different". The shipped default world rides along as the one
-    // integration entry (null path = no --world override).
-    private static readonly (string Name, string? WorldPath)[] Corpus = [
-        ("gradient", "tests/Puck.Parity/parity-gradient.world.json"),
-        ("edges", "tests/Puck.Parity/parity-edges.world.json"),
-        ("modifiers", "tests/Puck.Parity/parity-modifiers.world.json"),
-        ("glyphs", "tests/Puck.Parity/parity-glyphs.world.json"),
-        ("film-grain", "tests/Puck.Parity/parity-film-grain.world.json"),
-        ("shipped", null),
+    // integration entry (null path = no --world override). SetupCommands run before the fence, in order — the
+    // fields entry uses this to compose its puck.sdf.v1 companion document (world.sdf.load) ahead of the wait.
+    private static readonly (string Name, string? WorldPath, string[] SetupCommands)[] Corpus = [
+        ("gradient", "tests/Puck.Parity/parity-gradient.world.json", []),
+        ("edges", "tests/Puck.Parity/parity-edges.world.json", []),
+        ("modifiers", "tests/Puck.Parity/parity-modifiers.world.json", []),
+        ("glyphs", "tests/Puck.Parity/parity-glyphs.world.json", []),
+        ("film-grain", "tests/Puck.Parity/parity-film-grain.world.json", []),
+        ("fields", "tests/Puck.Parity/parity-fields.world.json", ["world.sdf.load {root}/tests/Puck.Parity/parity-fields.sdf.json"]),
+        ("shipped", null, []),
     ];
 
     public static int Run(string[] args) {
@@ -56,20 +58,25 @@ internal static class ParityCommand {
         }
 
         var entries = Corpus
-            .Select(selector: entry => (entry.Name, WorldPath: ((entry.WorldPath is null) ? null : Path.Combine(path1: repositoryRoot, path2: entry.WorldPath))))
+            .Select(selector: entry => (
+                entry.Name,
+                WorldPath: ((entry.WorldPath is null) ? null : Path.Combine(path1: repositoryRoot, path2: entry.WorldPath)),
+                SetupCommands: entry.SetupCommands.Select(selector: command => ResolveSetupCommand(command: command, repositoryRoot: repositoryRoot)).ToArray()
+            ))
             .ToList();
 
         if (extraWorldPath is not null) {
-            entries.Add(item: ("extra", extraWorldPath));
+            entries.Add(item: ("extra", extraWorldPath, []));
         }
 
-        foreach (var (name, worldPath) in entries) {
+        foreach (var (name, worldPath, setupCommands) in entries) {
             foreach (var backend in ((string[])["vulkan", "directx"])) {
                 var leg = RunLeg(
                     artifact: artifact,
                     backend: backend,
                     entry: name,
                     runDirectory: runDirectory,
+                    setupCommands: setupCommands,
                     suiteClock: suiteClock,
                     worldPath: worldPath
                 );
@@ -82,7 +89,7 @@ internal static class ParityCommand {
 
         var frames = new Dictionary<string, PngImage>(comparer: StringComparer.Ordinal);
 
-        foreach (var (name, _) in entries) {
+        foreach (var (name, _, _) in entries) {
             foreach (var backend in ((string[])["vulkan", "directx"])) {
                 if (!TryDecode(runDirectory: runDirectory, name: FrameName(backend: backend, entry: name), image: out var image)) {
                     return 2;
@@ -94,7 +101,7 @@ internal static class ParityCommand {
 
         var failed = false;
 
-        foreach (var (name, _) in entries) {
+        foreach (var (name, _, _) in entries) {
             var left = frames[$"{name}-vulkan"];
             var right = frames[$"{name}-directx"];
 
@@ -187,6 +194,7 @@ internal static class ParityCommand {
 
         return true;
     }
+    private static string ResolveSetupCommand(string command, string repositoryRoot) => command.Replace(oldValue: "{root}", newValue: repositoryRoot.Replace(newChar: '/', oldChar: '\\'));
     private static string Describe(ParityVerdict verdict) =>
         $"mean {verdict.MeanDelta.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)} LSB, diff {(verdict.DiffFraction * 100.0).ToString(format: "0.##", provider: CultureInfo.InvariantCulture)}%, max {verdict.MaxDelta}";
     private static string FrameName(string entry, string backend) => $"{entry}-{backend}.png";
@@ -229,11 +237,22 @@ internal static class ParityCommand {
     }
     // Boots one windowed leg on the named backend and arms one screenshot at a fenced simulation moment.
     // Returns 0 with the frame written, or 2 with the refusal already reported.
-    private static int RunLeg(string artifact, string backend, string entry, string runDirectory, Stopwatch suiteClock, string? worldPath) {
+    private static int RunLeg(string artifact, string backend, string entry, string runDirectory, string[] setupCommands, Stopwatch suiteClock, string? worldPath) {
         var frame = FrameName(backend: backend, entry: entry);
         var script = new StringBuilder();
 
-        script.AppendLine(value: "world.wait 60");
+        // A real paired controller can claim seat 1 and drive it before the first authored command lands; clearing
+        // it here keeps every leg's fenced pose the document's own rest pose, not whatever a stray input produced.
+        script.AppendLine(value: "player.stop 1");
+
+        foreach (var command in setupCommands) {
+            script.AppendLine(value: command);
+        }
+
+        // Generous relative to the old 60-tick fence: a shared/loaded machine's first composed frame after a cold
+        // pipeline build can still be mid-render past 2 seconds of simulated wait, which reads as a false parity
+        // divergence (a partially-drawn frame against a fully-drawn one) rather than a real cross-backend one.
+        script.AppendLine(value: "world.wait 240");
         script.AppendLine(value: $"world.screenshot {Path.Combine(path1: runDirectory, path2: frame).Replace(newChar: '/', oldChar: '\\')}");
         script.AppendLine(value: "world.wait 30");
         // Runner-owned completion: follows every authored line, so the exact-count check below proves the whole
@@ -259,10 +278,10 @@ internal static class ParityCommand {
                     artifact,
                     .. ((worldPath is null) ? [] : new[] { "--world", worldPath }),
                     "--backend", backend,
-                    // Generous relative to the ~2 seconds of authored fences: a cold boot spends several seconds
+                    // Generous relative to the ~9 seconds of authored fences: a cold boot spends several seconds
                     // compiling shaders before the first tick, and the closing wire.errors must still land inside
                     // the window.
-                    "--exit-after-seconds", "20",
+                    "--exit-after-seconds", "30",
                     "--state-dir", Path.Combine(path1: runDirectory, path2: $"state-{entry}-{backend}"),
                     "--headless", "false",
                 ],
@@ -375,9 +394,9 @@ internal static class ParityCommand {
                   --generate             regenerate tests/Puck.Parity/*.world.json from their pattern definitions
                   --hashes id=hex64,...  pin a regenerated creation's canonical hash (see tests/Puck.Parity/README.md)
 
-                For every corpus entry — the targeted pattern worlds under tests/Puck.Parity/
-                (gradient, edges, modifiers) and the shipped default world — this boots the real
-                Puck.World windowed twice, once per backend, screenshots the same fenced simulation
+                For every corpus entry — the authored pattern worlds under tests/Puck.Parity/ and the
+                shipped default world — this boots the real Puck.World windowed twice, once per
+                backend, screenshots the same fenced simulation
                 moment in each run, and compares the backend pair under the relaxed parity envelope
                 (benign ±1-LSB shader-codegen noise passes; a missing, relocated, or recolored region
                 fails). Two different patterns from the same backend must FAIL the envelope — a
