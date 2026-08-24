@@ -1605,7 +1605,7 @@
   "placements": [
     {
       "id": "boulder-1",
-      "creationId": "boulder-1",
+      "prototypeId": "boulder-1",
       "position": [
         -1.2,
         0.72,
@@ -1621,7 +1621,7 @@
     },
     {
       "id": "boulder-2",
-      "creationId": "boulder-2",
+      "prototypeId": "boulder-2",
       "position": [
         0.6,
         0.88,
@@ -1637,7 +1637,7 @@
     },
     {
       "id": "boulder-3",
-      "creationId": "boulder-3",
+      "prototypeId": "boulder-3",
       "position": [
         1.9,
         0.48,
@@ -1653,7 +1653,7 @@
     },
     {
       "id": "boulder-4",
-      "creationId": "boulder-4",
+      "prototypeId": "boulder-4",
       "position": [
         -0.3,
         0.38,
@@ -1669,7 +1669,7 @@
     },
     {
       "id": "boulder-5",
-      "creationId": "boulder-5",
+      "prototypeId": "boulder-5",
       "position": [
         2.4,
         0.62,
@@ -1685,7 +1685,7 @@
     },
     {
       "id": "ground",
-      "creationId": "ground",
+      "prototypeId": "ground",
       "position": [
         0,
         0,

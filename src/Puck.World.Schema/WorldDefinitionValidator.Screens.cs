@@ -832,7 +832,7 @@ public static partial class WorldDefinitionValidator {
     // A seat's control feel (PRESENTATION-ONLY, REQUIRED): pointer sensitivities, stick look rate, and gyro response
     // finite and non-negative. The member itself is required — an absent row is refused by the caller before this
     // runs, never silently defaulted.
-    private static void ValidateSeatLook(WorldSeatLook seatLook, string path, List<string> errors) {
+    private static void ValidateSeatLook(WorldSeatCameraFeel seatLook, string path, List<string> errors) {
         RequireNonNegative(
             value: seatLook.YawSensitivity,
             name: $"{path}.yawSensitivity",

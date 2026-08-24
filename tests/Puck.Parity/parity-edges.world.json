@@ -684,7 +684,7 @@
   "placements": [
     {
       "id": "parity-edges",
-      "creationId": "parity-edges",
+      "prototypeId": "parity-edges",
       "position": [
         0,
         0,
@@ -700,7 +700,7 @@
     },
     {
       "id": "camera-seat-0",
-      "creationId": "camera-body",
+      "prototypeId": "camera-body",
       "position": [
         0,
         1.5,

@@ -45,7 +45,7 @@ internal sealed partial class WorldScreenBinder {
     public bool HasEngine(string engineId) => m_machines.HasEngine(engineId: engineId);
     /// <summary>Returns whether a machine is currently booted on the screen index — a facade over
     /// <see cref="Server.WorldMachineHost.HasMachine"/> (authoritative server state), reachable through the same
-    /// reference every existing caller (<c>PlayerCommandModule</c>'s <c>player.engage</c>) already held.</summary>
+    /// reference every existing caller (<c>PlayerCommandModule</c>'s <c>body.engage</c>) already held.</summary>
     /// <param name="index">The engine screen-surface index.</param>
     public bool HasMachine(int index) => m_machines.HasMachine(index: index);
     /// <summary>Returns the cable link a screen currently belongs to — a facade over <see cref="Server.WorldMachineHost.LinkOf"/>.</summary>

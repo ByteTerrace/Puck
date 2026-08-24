@@ -41,7 +41,7 @@ public enum WorldEditEchoKind {
     /// <summary>A target-register designation outcome.</summary>
     Designation,
 
-    /// <summary>A body motion program switch outcome (<c>player.motion</c>).</summary>
+    /// <summary>A body motion program switch outcome (<c>body.motion</c>).</summary>
     BodyMotion,
 }
 /// <summary>One edit-boundary outcome echoed beside the loud stderr line — the payload of
@@ -114,13 +114,13 @@ public sealed partial class WorldServer : IWorldServerHost {
     // because the alternative is a per-tick resize on the hot path to improve a diagnostic. A second submission naming
     // an entity already written this tick by a DIFFERENT principal is a genuine conflict between two distinct Drive
     // grants over one body — Step reports it loudly rather than letting the later one silently overwrite the earlier.
-    private int[] m_tickWrittenEntity = new int[WorldPopulationLimits.LocalSeatCount];
-    private WorldPrincipal[] m_tickWrittenPrincipal = new WorldPrincipal[WorldPopulationLimits.LocalSeatCount];
+    private int[] m_tickWrittenEntity = new int[WorldBodiesLimits.LocalSeatCount];
+    private WorldPrincipal[] m_tickWrittenPrincipal = new WorldPrincipal[WorldBodiesLimits.LocalSeatCount];
     // Whether the matching m_tickWrittenEntity slot saw a SECOND, different-principal write THIS tick — read once the
     // whole drain AND the addon contributions have finished (see Step) to settle m_contended for real, since which
     // submission a queue happens to dequeue first says nothing about whether the body was genuinely contended for the
     // tick as a whole.
-    private bool[] m_tickCollided = new bool[WorldPopulationLimits.LocalSeatCount];
+    private bool[] m_tickCollided = new bool[WorldBodiesLimits.LocalSeatCount];
     // --- The co-driving contribution set (fed to FixedContributionFold below) ---
     // A contribution can only ever land on a HUMAN-OCCUPIED body (WorldPopulation.IsHumanOccupied gates it — an
     // unoccupied body is a bot at full authority, applied directly in ApplyIntentSubmission, and never reaches this
@@ -132,10 +132,10 @@ public sealed partial class WorldServer : IWorldServerHost {
     // indexed `(seat * ChannelLimits.MaxChannels) + ordinal`. There is NO per-tick ceiling accumulator: the pool
     // ceiling is one number per (seat, channel) read straight off the seat's own grant row
     // (WorldGrants.PoolCeilings), never derived from whichever contributors happened to land this tick.
-    private readonly PlayerIntent[] m_ownerBase = new PlayerIntent[WorldPopulationLimits.LocalSeatCount];
-    private readonly PlayerIntent[] m_ownerHeld = new PlayerIntent[WorldPopulationLimits.LocalSeatCount];
-    private readonly bool[] m_hasOwnerBase = new bool[WorldPopulationLimits.LocalSeatCount];
-    private readonly bool[] m_hasContribution = new bool[WorldPopulationLimits.LocalSeatCount];
+    private readonly PlayerIntent[] m_ownerBase = new PlayerIntent[WorldBodiesLimits.LocalSeatCount];
+    private readonly PlayerIntent[] m_ownerHeld = new PlayerIntent[WorldBodiesLimits.LocalSeatCount];
+    private readonly bool[] m_hasOwnerBase = new bool[WorldBodiesLimits.LocalSeatCount];
+    private readonly bool[] m_hasContribution = new bool[WorldBodiesLimits.LocalSeatCount];
     // Every staged delta was already bounded to |d| <= One at the pump. FixedContributionFold records the exact
     // generic Int64 accumulator boundary; World's concrete set is far smaller: untrusted terms are mounted Wasmtime
     // instances (memory exhausts around 2^20), while trusted co-driving seats number at most LocalSeatCount - 1.
@@ -143,8 +143,8 @@ public sealed partial class WorldServer : IWorldServerHost {
     // do not enter either sum today. With One = 2^16 (FixedQ4816) and at most ~2^20 untrusted terms, a completed sum
     // peaks near 2^36, so it stays roughly twenty-seven binary orders below Int64 overflow without a hot-path
     // checked/saturating add.
-    private readonly long[] m_untrustedSum = new long[(WorldPopulationLimits.LocalSeatCount * ChannelLimits.MaxChannels)];
-    private readonly long[] m_trustedSum = new long[(WorldPopulationLimits.LocalSeatCount * ChannelLimits.MaxChannels)];
+    private readonly long[] m_untrustedSum = new long[(WorldBodiesLimits.LocalSeatCount * ChannelLimits.MaxChannels)];
+    private readonly long[] m_trustedSum = new long[(WorldBodiesLimits.LocalSeatCount * ChannelLimits.MaxChannels)];
     // This tick's contributed HELD-device image per (seat, channel) — a non-owner's composition act (see
     // WorldAddonRuntime.Submit's HeldChannels), accumulated by WorldChannelTable.ComposeHeld's shape-aware rule: a
     // unipolar/binary channel maxes across contributors (an overlay of {0, One} bits — old ActionLanes OR, no ceiling
@@ -152,14 +152,14 @@ public sealed partial class WorldServer : IWorldServerHost {
     // RAW and UNCLAMPED here (see StageContribution) — clamping per contributor would make the result depend on
     // arrival order, so the one clamp is deferred to FoldChannelContributions, where this accumulator is finally
     // combined with the owning seat's own held value.
-    private readonly long[] m_contributedHeld = new long[(WorldPopulationLimits.LocalSeatCount * ChannelLimits.MaxChannels)];
+    private readonly long[] m_contributedHeld = new long[(WorldBodiesLimits.LocalSeatCount * ChannelLimits.MaxChannels)];
     // Per (seat, ordinal): whether THIS TICK's contribution set actually reached this channel through the UNTRUSTED
     // (pooled) path — independent of the numeric sum, which a cancelling pair of contributions can net to zero while
-    // the pool was still genuinely exercised. Gates player.channels' ceiling report (FoldChannelContributions): an
+    // the pool was still genuinely exercised. Gates body.channels' ceiling report (FoldChannelContributions): an
     // authored ceiling nobody exercised this tick must read back as "no ceiling in force," never as the number on
     // paper. Reset per seat by ClearContribution once the fold has read it.
-    private readonly ChannelHeldMask[] m_untrustedAcceptedMask = new ChannelHeldMask[WorldPopulationLimits.LocalSeatCount];
-    // --- player.channels read-back (the Puck.Maths fold primitive retains none of this itself;
+    private readonly ChannelHeldMask[] m_untrustedAcceptedMask = new ChannelHeldMask[WorldBodiesLimits.LocalSeatCount];
+    // --- body.channels read-back (the Puck.Maths fold primitive retains none of this itself;
     // without it the verification walk could only infer a contribution's effect from displacement across ticks) ---
     // The fold accumulates and clears m_untrustedSum/m_trustedSum/m_contributedHeld above every tick (the hot path pays
     // nothing extra to KEEP them); everything below is written only at the same two sites that already write a body
@@ -167,19 +167,19 @@ public sealed partial class WorldServer : IWorldServerHost {
     // write), while WorldBody retains the later held-overlay inputs/result directly on NextIntent's existing join path.
     // There is never a new tick-wide scan. NEVER cleared blind at tick start — a seat with no traffic THIS tick still
     // answers with its last settled write, exactly like m_ownerBase's own raw persistence above. Diagnostic only: read
-    // by player.channels alone, off every hashed path, and never fed back into a fold (a read-back must never change
+    // by body.channels alone, off every hashed path, and never fed back into a fold (a read-back must never change
     // what it observes).
-    private readonly PlayerIntent[] m_channelReadBase = new PlayerIntent[WorldPopulationLimits.LocalSeatCount];   // h
-    private readonly PlayerIntent[] m_channelReadFolded = new PlayerIntent[WorldPopulationLimits.LocalSeatCount]; // what SubmitIntent received
+    private readonly PlayerIntent[] m_channelReadBase = new PlayerIntent[WorldBodiesLimits.LocalSeatCount];   // h
+    private readonly PlayerIntent[] m_channelReadFolded = new PlayerIntent[WorldBodiesLimits.LocalSeatCount]; // what SubmitIntent received
     // Per (seat, ordinal): the pool ceiling in force for the last write that touched this channel (0 = no untrusted
     // contributor reached it; a consent row nobody exercised this write is honestly "no ceiling in force," not the
     // ceiling on paper), and whether the untrusted pool step actually bound the value (Evaluate's poolClamped output).
-    private readonly long[] m_channelReadCeiling = new long[(WorldPopulationLimits.LocalSeatCount * ChannelLimits.MaxChannels)];
-    private readonly bool[] m_channelReadClamped = new bool[(WorldPopulationLimits.LocalSeatCount * ChannelLimits.MaxChannels)];
-    private readonly WorldPrincipal[] m_channelReadContributor = new WorldPrincipal[(WorldPopulationLimits.LocalSeatCount * MaxReadContributorsPerSeat)];
-    private readonly bool[] m_channelReadContributorTrusted = new bool[(WorldPopulationLimits.LocalSeatCount * MaxReadContributorsPerSeat)];
-    private readonly ChannelHeldMask[] m_channelReadContributorMask = new ChannelHeldMask[(WorldPopulationLimits.LocalSeatCount * MaxReadContributorsPerSeat)];
-    private readonly int[] m_channelReadContributorCount = new int[WorldPopulationLimits.LocalSeatCount];
+    private readonly long[] m_channelReadCeiling = new long[(WorldBodiesLimits.LocalSeatCount * ChannelLimits.MaxChannels)];
+    private readonly bool[] m_channelReadClamped = new bool[(WorldBodiesLimits.LocalSeatCount * ChannelLimits.MaxChannels)];
+    private readonly WorldPrincipal[] m_channelReadContributor = new WorldPrincipal[(WorldBodiesLimits.LocalSeatCount * MaxReadContributorsPerSeat)];
+    private readonly bool[] m_channelReadContributorTrusted = new bool[(WorldBodiesLimits.LocalSeatCount * MaxReadContributorsPerSeat)];
+    private readonly ChannelHeldMask[] m_channelReadContributorMask = new ChannelHeldMask[(WorldBodiesLimits.LocalSeatCount * MaxReadContributorsPerSeat)];
+    private readonly int[] m_channelReadContributorCount = new int[WorldBodiesLimits.LocalSeatCount];
     // A human-readable description of m_base's origin — world.reset's read-back rule ("the completion echo names
     // what was reset to"). Set at construction (the boot document), replaced by Compact (world.save — "the last
     // world.save") and by ApplyRebuild's Load/Reload arm (a new base replaces the old one, exactly like a swap
@@ -369,7 +369,7 @@ public sealed partial class WorldServer : IWorldServerHost {
     public string AuthorityIdentity { get; }
     /// <summary>Gets the derived-face screen slots this instance's boot document reserved. The presentation binder
     /// registers exactly that band up front and the render provider key set is frozen there, so a live edit may lower
-    /// <see cref="WorldAuthoringDefaults.DerivedFaceScreens"/> but never raise it past this — a raise is refused by
+    /// <see cref="WorldPlacementPolicyDefaults.DerivedFaceScreens"/> but never raise it past this — a raise is refused by
     /// name, in the same family as the boot-allocated population capacity, rather than seating faces at indices no
     /// renderer holds.</summary>
     public int BootDerivedFaceScreens { get; }

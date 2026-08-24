@@ -158,18 +158,18 @@ public sealed class ArrivalAdmissionMintAtomicityLawTests {
             PeerAdmission: true,
             Members: [new WorldTransferReservationMember(
                 Principal: WorldPrincipal.Console,
-                PreferredSlot: WorldPopulationLimits.LocalSeatCount,
+                PreferredSlot: WorldBodiesLimits.LocalSeatCount,
                 Identity: null,
                 Source: IntentSource.Live,
                 BodyColor: default,
                 CatalogRig: 4,
-                Mobility: new WorldMobilityIdentity(Incarnation: new WorldEntityAddress(Authority: "origin/world", Generation: 7, Index: WorldPopulationLimits.LocalSeatCount), Epoch: 0))]);
+                Mobility: new WorldMobilityIdentity(Incarnation: new WorldEntityAddress(Authority: "origin/world", Generation: 7, Index: WorldBodiesLimits.LocalSeatCount), Epoch: 0))]);
     private static WorldDefinition TransferPopulationDocument() {
         var document = Fixtures.BuildDocument();
 
         return document with {
             PopulationRaw = document.Population with {
-                CapacityRaw = (WorldPopulationLimits.LocalSeatCount + 2),
+                CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 2),
                 NetworkPlayers = 2,
             },
             Admission = [Fixtures.AnyAuthorityArrivals()],

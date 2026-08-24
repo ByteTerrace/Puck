@@ -11,7 +11,7 @@
     ],
     "properties": {
       "name": {
-        "description": "The channel\u0027s unique, non-empty name \u2014 the vocabulary key every binding, player.press, kit Actions entry, and the addon wire resolve against.",
+        "description": "The channel\u0027s unique, non-empty name \u2014 the vocabulary key every binding, body.press, kit Actions entry, and the addon wire resolve against.",
         "type": "string"
       },
       "shape": {

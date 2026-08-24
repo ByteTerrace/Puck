@@ -509,7 +509,7 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
             if (
                 (WorldDefinitionRows.FindCreation(
                 creations: definition.Creations,
-                id: placement.CreationId
+                id: placement.PrototypeId
             ) is not { } creation) ||
                 (creation.Document.Behavior?.Sounds is not { Count: > 0 } sounds)
             ) {

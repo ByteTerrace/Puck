@@ -19,8 +19,13 @@
         "type": "object",
         "properties": {
           "source": {
-            "$ref": "./common.schema.json#/$defs/WorldGeneratorSource",
             "description": "Which draw shape this source fires.",
+            "enum": [
+              "Markov",
+              "UniformRange",
+              "WeightedNumeric",
+              "StreamDraw"
+            ],
             "default": "Markov"
           },
           "start": {
@@ -37,13 +42,72 @@
             "default": 1
           },
           "contexts": {
-            "$ref": "./common.schema.json#/$defs/WorldGeneratorContextList",
             "description": "Markov only: the declared contexts, at least one, uniquely keyed.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "description": "One named context of a WorldGenerator \u2014 the state the walk may be sitting in and the weighted alternatives it may pick while there. A context declaring NO alternatives is TERMINAL: reaching it ends the emission.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "key": {
+                  "description": "The stable context key, unique within the generator.",
+                  "type": "string"
+                },
+                "alternatives": {
+                  "description": "The weighted alternatives out of this context, or empty for a terminal context.",
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "description": "One weighted alternative of a WorldGeneratorContext: the token it emits, its relative weight, and the context the walk moves into after it is picked. The authored Next is what makes this a real Markov process rather than a bag of independent draws \u2014 the context key is the process state, so an author folds exactly as much history into it as the chain needs.",
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "token": {
+                        "description": "The opaque game-authored token this alternative emits. The engine never interprets it; it is space-joined with the emission\u0027s other tokens and written into the target text cell. Bounded by MaxTokenLength.",
+                        "type": "string"
+                      },
+                      "weight": {
+                        "description": "The alternative\u0027s positive relative weight. At least one alternative in a context must carry a non-zero weight.",
+                        "type": "integer"
+                      },
+                      "next": {
+                        "description": "The context the walk moves into after this alternative is picked. Must name a declared Key; naming a context that declares NO alternatives ends the emission (a terminal is a context with nothing to say, never a reserved token spelling).",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "token",
+                      "weight",
+                      "next"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "default": null
+                }
+              },
+              "required": [
+                "key"
+              ],
+              "additionalProperties": false
+            },
             "default": null
           },
           "mode": {
-            "$ref": "./common.schema.json#/$defs/WorldGeneratorMode",
             "description": "Markov only: how alternatives are consumed (see WorldGeneratorMode).",
+            "enum": [
+              "WithReplacement",
+              "WithoutReplacement",
+              "ReshuffleOnExhaustion"
+            ],
             "default": "WithReplacement"
           },
           "rangeMin": {
@@ -63,8 +127,33 @@
             "default": null
           },
           "weighted": {
-            "$ref": "./common.schema.json#/$defs/WorldGeneratorWeightedNumericList",
             "description": "WeightedNumeric only: the weighted numeric outcomes, at least one, at least one carrying a non-zero weight.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "description": "One numeric outcome of a WeightedNumeric source: the raw value it writes and its relative weight \u2014 the numeric twin of WorldGeneratorAlternative, minus Token (nothing to join into text) and Next (a numeric draw is one terminal pick, never a walk).",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "value": {
+                  "description": "The raw value this outcome writes on selection (a plain integer for Int, raw FixedQ4816 bits for Fixed).",
+                  "type": "integer"
+                },
+                "weight": {
+                  "description": "The outcome\u0027s relative weight, fed straight to Puck.Maths.WeightedSampler\u0027s exact ulong overload. At least one outcome must carry a non-zero weight.",
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "value",
+                "weight"
+              ],
+              "additionalProperties": false
+            },
             "default": null
           }
         },

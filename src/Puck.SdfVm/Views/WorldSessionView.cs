@@ -148,7 +148,7 @@ public sealed class WorldSessionView : IViewContent, IDisposable {
     /// <c>ProgramChanged</c>-gated <c>UploadProgram</c> call <see cref="SdfEngineNode"/>'s live-node path already
     /// makes, and the parity <see cref="SdfCameraView.Resolve"/>'s own <c>Rebuild</c>/<c>ProgramRevision</c> check
     /// establishes for a camera view's shared host program. A destination mutation the composed frame source folds
-    /// into a rebuilt <c>SdfProgram</c> — an avatar joining (<c>WorldAvatarCatalog.Emit</c> skips an inactive
+    /// into a rebuilt <c>SdfProgram</c> — an avatar joining (<c>WorldRigCatalog.Emit</c> skips an inactive
     /// avatar's instance entirely, so it does not exist in the program until this upload runs), a placement change —
     /// now reaches this view's own offscreen engine the same produced frame the dresser reports it in.</para>
     /// <para><b>Capacity-growth recovery.</b> <see cref="EnsureEngine"/> probes its worst-case capacity from

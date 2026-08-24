@@ -28,10 +28,10 @@ public static class WorldEntityPartResolver {
 
         var look = client.Look(index: entityIndex);
 
-        if (!WorldAvatarCatalog.TryPartOffset(
+        if (!WorldRigCatalog.TryPartOffset(
             avatar: entityIndex,
             partId: partId,
-            rig: WorldAvatarCatalog.RigFor(
+            rig: WorldRigCatalog.RigFor(
                 look: look,
                 catalogRig: client.CatalogRig(index: entityIndex)
             ),
@@ -77,10 +77,10 @@ public static class WorldEntityPartResolver {
 
         var look = client.Look(index: entityIndex);
 
-        return WorldAvatarCatalog.TryPartPose(
+        return WorldRigCatalog.TryPartPose(
             avatar: entityIndex,
             partId: partId,
-            rig: WorldAvatarCatalog.RigFor(
+            rig: WorldRigCatalog.RigFor(
                 look: look,
                 catalogRig: client.CatalogRig(index: entityIndex)
             ),
@@ -111,10 +111,10 @@ public static class WorldEntityPartResolver {
 
         var look = client.Look(index: entityIndex);
 
-        return WorldAvatarCatalog.TryPartPose(
+        return WorldRigCatalog.TryPartPose(
             avatar: entityIndex,
             partId: partId,
-            rig: WorldAvatarCatalog.RigFor(
+            rig: WorldRigCatalog.RigFor(
                 look: look,
                 catalogRig: client.CatalogRig(index: entityIndex)
             ),

@@ -57,7 +57,7 @@ public abstract record SessionRequest(WorldPrincipal Principal) {
 /// <param name="RosterEcho">The roster read-back string, printed verbatim (may be empty).</param>
 /// <param name="Reason">The rejection reason, or the empty string when <paramref name="Accepted"/> is <see langword="true"/>.</param>
 public readonly record struct SessionReply(bool Accepted, int AssignedIndex, string RosterEcho, string Reason);
-/// <summary>A read-back request a client sends the server (<c>player.where</c>, <c>world.players</c>, the pose portion of
+/// <summary>A read-back request a client sends the server (<c>body.where</c>, <c>world.players</c>, the pose portion of
 /// <c>screen.state</c>): the server composes the answer string authoritatively so the client prints a byte-identical
 /// echo.</summary>
 public abstract record WorldQuery {
@@ -66,10 +66,10 @@ public abstract record WorldQuery {
     /// with the closed query union so a transport/server does not need access to its intentionally internal leaves.</summary>
     /// <returns>The query's observation subject.</returns>
     public GrantSubject ObservationSubject() => this switch {
-        PlayerWhere where => GrantSubject.Body(index: (where.Index - 1)),
-        PlayerChannels channels => GrantSubject.Body(index: (channels.Index - 1)),
-        PlayerState state => GrantSubject.Body(index: (state.Index - 1)),
-        PlayerTargets targets => GrantSubject.Body(index: (targets.Index - 1)),
+        PlayerWhere where => GrantSubject.Body(index: where.Index),
+        PlayerChannels channels => GrantSubject.Body(index: channels.Index),
+        PlayerState state => GrantSubject.Body(index: state.Index),
+        PlayerTargets targets => GrantSubject.Body(index: targets.Index),
         Contacts contacts => GrantSubject.Body(index: (contacts.Index - 1)),
         ScreenState screen => GrantSubject.Screen(index: screen.ScreenIndex),
         Properties { BodyIndex: int bodyIndex } => GrantSubject.Body(index: bodyIndex),
@@ -79,13 +79,13 @@ public abstract record WorldQuery {
         _ => GrantSubject.All,
     };
 
-    /// <summary>The full 6DOF pose read-back for one entity (<c>player.where</c>).</summary>
-    /// <param name="Index">The 1-based player display index.</param>
+    /// <summary>The full 6DOF pose read-back for one entity (<c>body.where</c>).</summary>
+    /// <param name="Index">The 0-based body index.</param>
     public sealed record PlayerWhere(int Index) : WorldQuery;
-    /// <summary>The channel decision read-back for one entity (<c>player.channels</c>) — per declared channel, the
+    /// <summary>The channel decision read-back for one entity (<c>body.channels</c>) — per declared channel, the
     /// folded value, the owning seat's base, the later held overlay and composed result, every contributor tagged by
     /// principal, and the pool ceiling/clamp state (see <c>Server.WorldServer.Answer</c>).</summary>
-    /// <param name="Index">The 1-based player display index.</param>
+    /// <param name="Index">The 0-based body index.</param>
     public sealed record PlayerChannels(int Index) : WorldQuery;
 
     /// <summary>The roster glance across every local seat (<c>world.players</c>).</summary>
@@ -98,12 +98,12 @@ public abstract record WorldQuery {
     /// equalized maximum.</summary>
     public sealed record InputHolds : WorldQuery;
     /// <summary>The named action-state register file for one entity.</summary>
-    /// <param name="Index">The 1-based player display index.</param>
+    /// <param name="Index">The 0-based body index.</param>
     public sealed record PlayerState(int Index) : WorldQuery;
     /// <summary>Every authored world rule: its mode, its gate's own predicates, and its effects.</summary>
     public sealed record Rules : WorldQuery;
     /// <summary>Every authored target register and the latest designation refusal for one entity.</summary>
-    /// <param name="Index">The 1-based player display index.</param>
+    /// <param name="Index">The 0-based body index.</param>
     public sealed record PlayerTargets(int Index) : WorldQuery;
     /// <summary>The grounded/contact witnesses for one generation-routed entity.</summary>
     /// <param name="Index">The authority-local, 1-based entity display index.</param>

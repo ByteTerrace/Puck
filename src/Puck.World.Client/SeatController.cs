@@ -253,7 +253,7 @@ public sealed class SeatController {
     /// its own reference for speeds, assigned over the session wire.</summary>
     public WorldIdentity? Profile { get; set; }
     /// <summary>The seat's client-side intent-source copy (matches the server body's; both are written by
-    /// <c>player.control</c>).</summary>
+    /// <c>body.control</c>).</summary>
     public IntentSource Source => m_source;
 
     private static FixedQ4816 ClampedRaw(ReadOnlySpan<long> raw, int ordinal) => ((ordinal >= 0)
@@ -348,7 +348,7 @@ public sealed class SeatController {
     }
     /// <summary>Releases every held movement contribution and live-held composition channel. Called when a
     /// possession/engagement latch transitions, when the keyboard leaves this seat (a still-down key's release edge
-    /// routes to the keyboard's new slot, so the source would walk forever), and by <c>player.stop</c>'s seat half.</summary>
+    /// routes to the keyboard's new slot, so the source would walk forever), and by <c>body.stop</c>'s seat half.</summary>
     public void ReleaseAllHeld() {
         // A single Clear covers both movement and composition holds — a still-down Space would otherwise stick the
         // jump channel held, exactly the hazard clearing only the movement set would reintroduce.
@@ -401,7 +401,7 @@ public sealed class SeatController {
             Value: move
         );
     }
-    /// <summary>Sets the client-side intent-source copy — <c>player.control</c>'s seat half (the server body's axis is
+    /// <summary>Sets the client-side intent-source copy — <c>body.control</c>'s seat half (the server body's axis is
     /// written by the same command). A transition drops the live device holds via <see cref="ReleaseAllHeld"/>, so
     /// nothing leaks through a source switch or bursts when Live returns. A no-op if the source is unchanged.</summary>
     /// <param name="source">The intent source to latch.</param>

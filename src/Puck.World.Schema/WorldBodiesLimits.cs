@@ -3,7 +3,7 @@ namespace Puck.World;
 /// <summary>
 /// Engine representation bounds for authored population tables.
 /// </summary>
-public static class WorldPopulationLimits {
+public static class WorldBodiesLimits {
     /// <summary>The largest authored population table the engine will allocate — single-sourced against
     /// <c>Puck.World.Client.WorldClient.EntityCapacity</c>, the client's own fixed per-entity view arrays
     /// (<c>Puck.World.Schema</c> cannot name that type, so the reference runs the other way: the client's constant

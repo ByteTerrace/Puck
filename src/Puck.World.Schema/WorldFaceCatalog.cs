@@ -142,7 +142,7 @@ public sealed class WorldFaceCatalog {
                 (placement is null) ||
                 (WorldDefinitionRows.FindCreation(
                 creations: definition.Creations,
-                id: placement.CreationId
+                id: placement.PrototypeId
             ) is not { } creation)
             ) {
                 continue;
@@ -308,7 +308,7 @@ public sealed class WorldFaceCatalog {
                 (placement is null) ||
                 (WorldDefinitionRows.FindCreation(
                 creations: definition.Creations,
-                id: placement.CreationId
+                id: placement.PrototypeId
             ) is not { } creation)
             ) {
                 continue;

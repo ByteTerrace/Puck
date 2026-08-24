@@ -128,7 +128,7 @@ public sealed class WorldSeatViewState {
             return Wrap(radians: (m_yaw + bodyYaw));
         }
     }
-    public void Nudge(Vector2 input, float yawScale, float pitchScale, WorldSeatLook preference, WorldViewDefaults views) {
+    public void Nudge(Vector2 input, float yawScale, float pitchScale, WorldSeatCameraFeel preference, WorldViewDefaults views) {
         ArgumentNullException.ThrowIfNull(argument: preference);
         ArgumentNullException.ThrowIfNull(argument: views);
 

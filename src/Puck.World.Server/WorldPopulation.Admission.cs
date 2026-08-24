@@ -264,7 +264,7 @@ public sealed partial class WorldPopulation {
             rollRadians: FixedQ4816.Zero
         );
         // Seats default Live and are never touched by population operations; producer state is seeded so a later
-        // player.control producer:<name> uses the same deterministic path as a peer.
+        // body.control producer:<name> uses the same deterministic path as a peer.
         ClearDesignations(entry: entry);
         SeedSeatWander(slot: slot);
         entry.Body = body;
@@ -1211,7 +1211,7 @@ public sealed partial class WorldPopulation {
     /// <summary>Sets the peer intent-source default and sweeps every peer (4..127) to it — last-writer-wins, so a
     /// per-entity source (a possession, an earlier flip) does not survive the global. Seats are never touched.
     /// Render-inert: it reshapes only the intent producers, so it does not bump the revision. A live
-    /// <c>player.fly</c> tape still drives regardless.</summary>
+    /// <c>body.fly</c> tape still drives regardless.</summary>
     /// <param name="source">The intent source to store and sweep.</param>
     /// <param name="refusal">The named refusal when an assigned kit does not declare the producer.</param>
     /// <returns><see langword="true"/> when every peer kit admits the source.</returns>

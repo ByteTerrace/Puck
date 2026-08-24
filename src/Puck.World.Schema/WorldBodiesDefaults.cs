@@ -5,7 +5,7 @@ using Puck.World.Protocol;
 namespace Puck.World;
 
 /// <summary>Whether a local seat activates automatically at boot (<see cref="Eager"/>) or waits for a claim
-/// (<see cref="OnDemand"/>) — the per-seat authored policy <see cref="WorldPopulationDefaults.SeatActivation"/>
+/// (<see cref="OnDemand"/>) — the per-seat authored policy <see cref="WorldBodiesDefaults.SeatActivation"/>
 /// declares. Both doors converge on the identical <c>Server.WorldPopulation.ActivateSeat</c> call through the same
 /// <c>SessionRequest.Join</c>/<c>WorldServer.ApplySession</c> session-join seam regardless of which policy admitted
 /// the seat — a seat activated on demand (<c>player.join</c>, or a controller's own hot-plug first touch via
@@ -48,7 +48,7 @@ public enum SeatActivationPolicy : byte {
 /// per-observer snapshot disclosure policy (default null = <see cref="WorldObserverDisclosure.Default"/>,
 /// disclose-all) — read through <see cref="ObserverDisclosure"/>, applied at the output hub's sink boundary, never
 /// inside the tick, so it changes what an observer is told and never what the simulation computes.</remarks>
-public readonly record struct WorldPopulationDefaults(
+public readonly record struct WorldBodiesDefaults(
     // ABSENT semantics below hold for every raw field: the document declares only what it wants to state; a raw
     // field's resolved sibling property (same name, no "Raw" suffix) is what every consumer reads.
     [property: JsonPropertyName("localSeats"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? LocalSeatsRaw = null,
@@ -77,10 +77,10 @@ public readonly record struct WorldPopulationDefaults(
     /// checks stay permissive exactly once and exact on the post-resolve revalidation.</summary>
     [JsonIgnore]
     public int Capacity => (CapacityRaw ?? ((CapacityRow is not null)
-        ? WorldPopulationLimits.CapacityCeiling
+        ? WorldBodiesLimits.CapacityCeiling
         : (LocalSeats + NetworkPlayers)));
     /// <summary>Gets the inert census — zero local seats, zero capacity, no simulated peers.</summary>
-    public static WorldPopulationDefaults Default { get; } = new();
+    public static WorldBodiesDefaults Default { get; } = new();
     /// <summary>Gets the boot intent-source template every network stand-in wakes on — ABSENT resolves to
     /// <see cref="IntentSource.Idle"/>.</summary>
     [JsonIgnore]
@@ -91,7 +91,7 @@ public readonly record struct WorldPopulationDefaults(
     [JsonIgnore]
     public WorldDistribution Distribution => (DistributionRaw ?? WorldDistribution.Default);
     /// <summary>Gets the number of reserved local-seat slots this world declares (0..the host's seat ceiling,
-    /// <see cref="WorldPopulationLimits.LocalSeatCount"/>) — ABSENT resolves to <see cref="SeatSpawnsRaw"/>'s row
+    /// <see cref="WorldBodiesLimits.LocalSeatCount"/>) — ABSENT resolves to <see cref="SeatSpawnsRaw"/>'s row
     /// count when authored, else 0. This is the document's own declaration; every "exactly N local seats" rule
     /// (seat activation count, seat spawn count, the census floor) reads this instead of a fixed constant.</summary>
     [JsonIgnore]

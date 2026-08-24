@@ -160,7 +160,7 @@ public sealed partial class WorldPopulation {
     // starts at the authored spawn point or the world origin and lets contact geometry settle it.
     private static CompiledBodyProducer? SeedProducer(in FixedWorldKit kit) =>
         kit.Producers.Values.FirstOrDefault(predicate: producer => producer.Program.Contains(operation: BodyMotionOp.ProduceWanderIntent));
-    // Seed a seat's wander-producer dynamics from its slot alone (no RNG) — the parameters player.control producer:<name>
+    // Seed a seat's wander-producer dynamics from its slot alone (no RNG) — the parameters body.control producer:<name>
     // steers by, parallel to the independently authored peer variation. A seat has no wander spawn/color seeding — the
     // definition spawns it and its profile colors it.
     private void SeedSeatWander(int slot, bool resetPhase = true) {
@@ -418,7 +418,7 @@ public sealed partial class WorldPopulation {
     }
 
     /// <summary>Advances every active simulated stand-in by one sub-step: a named producer runs before motion, then
-    /// every peer body integrates. A live <c>player.fly</c> tape or
+    /// every peer body integrates. A live <c>body.fly</c> tape or
     /// a submitted intent overrides the producer per the merge rule; an <see cref="IntentSource.Idle"/> peer holds
     /// still between tape segments yet its tapes still play. The local seats are advanced separately by
     /// <see cref="AdvanceSeats"/>.</summary>

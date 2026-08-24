@@ -1224,11 +1224,11 @@ public sealed partial class WorldInstanceHost {
             }
 
             // The accepted transfer echoes its full decision on STDOUT — departed source seat, arrived target seat,
-            // the transfer id, and the arrival pose read from the target's OWN snapshot (PlayerWhere is 1-based,
-            // hence TargetSlot + 1) — so a caller reads the outcome here rather than inferring it from a later
-            // world.instance.seats.
+            // the transfer id, and the arrival pose read from the target's OWN snapshot (PlayerWhere.Index is the
+            // 0-based body index, identical to TargetSlot) — so a caller reads the outcome here rather than
+            // inferring it from a later world.instance.seats.
             var arrival = ((targetAuthority.Local is { } localTarget)
-                ? localTarget.Server.Answer(query: new WorldQuery.PlayerWhere(Index: (member.TargetSlot + 1)))
+                ? localTarget.Server.Answer(query: new WorldQuery.PlayerWhere(Index: member.TargetSlot))
                 : new QueryAnswer(Text: $"remote authority {targetAuthority.Remote!.Endpoint} body:{member.TargetSlot}")
             );
 
@@ -1453,10 +1453,10 @@ public sealed partial class WorldInstanceHost {
         WorldSubmissionPayload.Session { Value: SessionRequest.Join join } => new WorldSubmissionPayload.Session(Value: join with { Slot = bodyIndex }),
         WorldSubmissionPayload.Session { Value: SessionRequest.Leave leave } => new WorldSubmissionPayload.Session(Value: leave with { Slot = bodyIndex }),
         WorldSubmissionPayload.Session { Value: SessionRequest.SetIdentity identity } => new WorldSubmissionPayload.Session(Value: identity with { Slot = bodyIndex }),
-        WorldSubmissionPayload.Query { Value: WorldQuery.PlayerWhere } => new WorldSubmissionPayload.Query(Value: new WorldQuery.PlayerWhere(Index: (bodyIndex + 1))),
-        WorldSubmissionPayload.Query { Value: WorldQuery.PlayerChannels } => new WorldSubmissionPayload.Query(Value: new WorldQuery.PlayerChannels(Index: (bodyIndex + 1))),
-        WorldSubmissionPayload.Query { Value: WorldQuery.PlayerState } => new WorldSubmissionPayload.Query(Value: new WorldQuery.PlayerState(Index: (bodyIndex + 1))),
-        WorldSubmissionPayload.Query { Value: WorldQuery.PlayerTargets } => new WorldSubmissionPayload.Query(Value: new WorldQuery.PlayerTargets(Index: (bodyIndex + 1))),
+        WorldSubmissionPayload.Query { Value: WorldQuery.PlayerWhere } => new WorldSubmissionPayload.Query(Value: new WorldQuery.PlayerWhere(Index: bodyIndex)),
+        WorldSubmissionPayload.Query { Value: WorldQuery.PlayerChannels } => new WorldSubmissionPayload.Query(Value: new WorldQuery.PlayerChannels(Index: bodyIndex)),
+        WorldSubmissionPayload.Query { Value: WorldQuery.PlayerState } => new WorldSubmissionPayload.Query(Value: new WorldQuery.PlayerState(Index: bodyIndex)),
+        WorldSubmissionPayload.Query { Value: WorldQuery.PlayerTargets } => new WorldSubmissionPayload.Query(Value: new WorldQuery.PlayerTargets(Index: bodyIndex)),
         WorldSubmissionPayload.Query { Value: WorldQuery.Contacts } => new WorldSubmissionPayload.Query(Value: new WorldQuery.Contacts(Index: (bodyIndex + 1))),
         WorldSubmissionPayload.Query { Value: WorldQuery.Properties properties } when (properties.BodyIndex is not null) => new WorldSubmissionPayload.Query(Value: properties with { BodyIndex = bodyIndex }),
         _ => payload,

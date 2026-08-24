@@ -29,7 +29,7 @@ public sealed class WorldFrameProducerLawTests {
             },
         };
         var population = document.Population with {
-            CapacityRaw = (WorldPopulationLimits.LocalSeatCount + 1),
+            CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 1),
             NetworkPlayers = 1,
             DefaultPeerSourceRaw = IntentSource.Producer(name: "wander"),
             DistributionRaw = new WorldDistribution(
@@ -40,7 +40,7 @@ public sealed class WorldFrameProducerLawTests {
         using var fixture = Fixtures.FreshServer(definition: document with { KitRowsRaw = [kit], PopulationRaw = population });
 
         Assert.Equal(expected: 1, actual: fixture.Server.Population.SetSimulatedCount(count: 1));
-        var body = fixture.Server.Population.EntryBody(index: WorldPopulationLimits.LocalSeatCount)!;
+        var body = fixture.Server.Population.EntryBody(index: WorldBodiesLimits.LocalSeatCount)!;
         var start = body.FixedPosition;
 
         for (var tick = 0; (tick < 240); tick++) {

@@ -18,7 +18,7 @@ namespace Puck.World;
 /// <param name="HashRaw">The SHA-256 hex64 of the document's canonical bytes (<see cref="Puck.Assets.Documents.CanonicalDocument{TDocument}.Hash"/>
 /// on the canonical result the compose boundary produces). ABSENT resolves to the hash computed from
 /// <paramref name="Document"/> at load — an author never writes a content hash by hand; see <see cref="Hash"/>.</param>
-public sealed record WorldCreation(
+public sealed record WorldPrototype(
     DocumentIdentifier Id,
     CreationDocument Document,
     [property: JsonPropertyName("hash"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? HashRaw = null
@@ -28,7 +28,7 @@ public sealed record WorldCreation(
     /// <summary>Gets <see cref="Document"/> converted once from the author frame to the engine frame
     /// (<see cref="Puck.Forge.Authoring.CreationFrame.ToEngine"/>) — every render, collision, and anchor consumer
     /// reads this, never <see cref="Document"/>, which stays the author's own bytes (what <see cref="Hash"/> pins).
-    /// Cached on first read since <see cref="WorldCreation"/> rows are replaced, not mutated, on edit.</summary>
+    /// Cached on first read since <see cref="WorldPrototype"/> rows are replaced, not mutated, on edit.</summary>
     [JsonIgnore]
     public CreationDocument EngineDocument => (m_engineDocument ??= Puck.Forge.Authoring.CreationFrame.ToEngine(document: Document));
     /// <summary>Gets the SHA-256 hex64 of <see cref="Document"/>'s canonical bytes — <see cref="HashRaw"/> when
@@ -55,7 +55,7 @@ public sealed record WorldPlacementMirror(DocumentVector3 Normal, float Offset);
 /// inhabits the world's kit row named "swim". Neither resolving is a loud rejection naming every kit the world
 /// declares.</param>
 /// <param name="Look">The <see cref="WorldLook.Name"/> the bodies wear, or null to wear an implicit creation look on
-/// this placement's own <c>CreationId</c>.</param>
+/// this placement's own <c>PrototypeId</c>.</param>
 /// <param name="Source">The live, idle, or named producer source the bodies wake on.</param>
 /// <param name="Count">How many bodies, bounded by the world's authored peer capacity.</param>
 /// <param name="Distribution">The region and deterministic fill sequence that place the bodies relative to the
@@ -141,7 +141,7 @@ public sealed record WorldPlacementAttach(int BodyIndex, DocumentVector3 LocalOf
 /// boundary, never written to the document).
 /// </summary>
 /// <param name="Id">The row's stable string id (its mutation address).</param>
-/// <param name="CreationId">The referenced <see cref="WorldCreation.Id"/> (must resolve; removal of a referenced
+/// <param name="PrototypeId">The referenced <see cref="WorldPrototype.Id"/> (must resolve; removal of a referenced
 /// creation rejects loudly).</param>
 /// <param name="Position">The stamp position, world space. Inert (still validated and stored, but read by nothing —
 /// neither the resolve nor the renderer) when <paramref name="Attach"/> is set: the row's live position is the resolved
@@ -183,7 +183,7 @@ public sealed record WorldPlacementAttach(int BodyIndex, DocumentVector3 LocalOf
 /// row shows and for how long, never its transform.</param>
 public sealed record WorldPlacement(
     string Id,
-    [property: JsonPropertyName("prototypeId")] string CreationId,
+    string PrototypeId,
     DocumentVector3 Position,
     float YawDegrees,
     float Scale,

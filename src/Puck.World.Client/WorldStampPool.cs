@@ -67,7 +67,7 @@ public sealed class WorldStampPool {
     /// <param name="Scale">The uniform render scale (a placement's scale, or a look's scale).</param>
     /// <param name="Motion">The look's motion — cues, timeline replay, and the root/part second-order followers
     /// (<see cref="WorldLookMotion.Dynamics"/>/<see cref="WorldLookMotion.PartDynamics"/>).</param>
-    public readonly record struct BodyStamp(int BodyIndex, WorldCreation Creation, float Scale, WorldLookMotion Motion);
+    public readonly record struct BodyStamp(int BodyIndex, WorldPrototype Creation, float Scale, WorldLookMotion Motion);
 
     // One live registration: the resolved creation, its root source (a placement row — static or attached — OR a body
     // index), and the replay cursor state.
@@ -77,7 +77,7 @@ public sealed class WorldStampPool {
         // WITHOUT owning its look or its part namespace.
         public int? BodyIndex;
         public float Clock;
-        public required WorldCreation Creation;
+        public required WorldPrototype Creation;
         public int FrameCursor;
         // Cue state: the look's cues, each cue's timeline frame (1-based cursor, 0 = unresolved), when each next
         // self-fires on the cue clock, its fire count (the draw's seed), and the cue frame holding now (0 = none).
@@ -541,7 +541,7 @@ public sealed class WorldStampPool {
     // Whether a placement row renders through THIS pool rather than as a static stamp: an animated creation (a replayed
     // timeline) or an attached row (a live body root). The exact complement of WorldPlacementStamper.IsStaticStamp for a
     // non-inhabited row — an inhabited row roots through the body-stamp census instead.
-    private static bool PoolRooted(WorldPlacement row, WorldCreation creation) =>
+    private static bool PoolRooted(WorldPlacement row, WorldPrototype creation) =>
         (WorldPlacementStamper.IsAnimated(creation: creation) || (row.Attach is not null));
     private static int[] ProbePalette(SdfProgramBuilder builder) {
         var ids = new int[CreationDocument.PaletteSize];
@@ -720,7 +720,7 @@ public sealed class WorldStampPool {
             seed: (uint)(live.BodyIndex ?? 0)
         ));
     }
-    private static Registration RegisterRow(WorldPlacement row, WorldCreation creation) => new() {
+    private static Registration RegisterRow(WorldPlacement row, WorldPrototype creation) => new() {
         Key = row.Id,
         Row = row,
         Creation = creation,
@@ -792,7 +792,7 @@ public sealed class WorldStampPool {
     /// <param name="definition">The live definition a registration's state-bound palette color resolves against.</param>
     /// <param name="probeWorstCase">Emit the worst-case form for capacity measurement (never rendered).</param>
     /// <param name="maxPlacementScale">Live-consumed: the placement scale envelope's ceiling
-    /// (<see cref="WorldAuthoringDefaults.MaxPlacementScale"/>), read fresh at every call — it only feeds spatial-cull
+    /// (<see cref="WorldPlacementPolicyDefaults.MaxPlacementScale"/>), read fresh at every call — it only feeds spatial-cull
     /// bound radii here, never a word-capacity term, so re-reading it live cannot desync the frozen probe.</param>
     /// <param name="slotBase">The pool's first dynamic-transform slot — the same value the matching
     /// <see cref="PackTransforms"/> call packs against. Supplied by the owning emitter (which derives it from its own
@@ -848,7 +848,7 @@ public sealed class WorldStampPool {
             // An attached row whose body is not active contributes nothing this frame — the presentation mirror of
             // WorldPlacementAttachment.TryResolve's inactive-body verdict (which world.attachments echoes by reason).
             // The registration keeps its slot: occupancy changes tick to tick and a rebuild is not owed for one. The
-            // range test is a belt-and-braces guard, not a live gap: WorldPopulationLimits.CapacityCeiling is
+            // range test is a belt-and-braces guard, not a live gap: WorldBodiesLimits.CapacityCeiling is
             // WorldClient.EntityCapacity, so the document validator's bound on population.capacity already keeps
             // every body index inside this client's view — this stays as the one place that still checks it
             // directly rather than trusting an upstream invariant transitively.
@@ -970,7 +970,7 @@ public sealed class WorldStampPool {
     /// <param name="dynamics">The delivered <c>dynamics</c> rows — resolves each body-rooted registration's root/part
     /// followers against its look's <see cref="WorldLookMotion.Dynamics"/>/<see cref="WorldLookMotion.PartDynamics"/>.</param>
     /// <param name="bodyStamps">The resolved body-rooted stamps (inhabitants + crowd creation-looks) this frame.</param>
-    public void Reconcile(IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldCreation> creations, IReadOnlyList<WorldDynamicsRow> dynamics, IReadOnlyList<BodyStamp> bodyStamps) {
+    public void Reconcile(IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<WorldDynamicsRow> dynamics, IReadOnlyList<BodyStamp> bodyStamps) {
         // Diff-by-stable-key, shared by both root kinds a slot can hold (KeyedReconciler.Reconcile): the entry's
         // current row resolves the fate — gone releases the slot, changed content releases+recreates, otherwise the
         // entry updates in place (clock preserved, and the refreshed Row/Creation carries any edited offset).
@@ -978,7 +978,7 @@ public sealed class WorldStampPool {
             bodyIndex: entry.BodyIndex!.Value,
             bodyStamps: bodyStamps
         );
-        (WorldPlacement Row, WorldCreation Creation)? TryFindPoolRootedRow(Registration entry) {
+        (WorldPlacement Row, WorldPrototype Creation)? TryFindPoolRootedRow(Registration entry) {
             if (
                 (WorldDefinitionRows.FindPlacement(
                 placements: placements,
@@ -986,7 +986,7 @@ public sealed class WorldStampPool {
             ) is not { } presentRow) ||
                 (WorldDefinitionRows.FindCreation(
                 creations: creations,
-                id: presentRow.CreationId
+                id: presentRow.PrototypeId
             ) is not { } presentCreation) ||
                 !PoolRooted(
                 creation: presentCreation,
@@ -1062,7 +1062,7 @@ public sealed class WorldStampPool {
             if (
                 (WorldDefinitionRows.FindCreation(
                 creations: creations,
-                id: placement.CreationId
+                id: placement.PrototypeId
             ) is not { } creation) ||
                 !PoolRooted(
                 creation: creation,

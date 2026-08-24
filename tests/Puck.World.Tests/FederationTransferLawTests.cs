@@ -707,7 +707,7 @@ public sealed class FederationTransferLawTests {
         writer.WriteInt32(value: 19);
         writer.WriteUInt64(value: 210UL);
         writer.WriteString(value: "destination/world");
-        writer.WriteInt32(value: (WorldPopulationLimits.CapacityCeiling + 1));
+        writer.WriteInt32(value: (WorldBodiesLimits.CapacityCeiling + 1));
 
         Assert.False(condition: WorldFederationCodec.TryDecodeSnapshot(body: writer.ToArray(), snapshot: out _, failure: out var failure));
         Assert.Equal(expected: WireRefusal.CountOutOfRange, actual: failure.Refusal);
@@ -747,7 +747,7 @@ public sealed class FederationTransferLawTests {
 
         writer.WriteString(value: "source/world");
         writer.WriteUInt64(value: 7UL);
-        writer.WriteInt32(value: (WorldPopulationLimits.CapacityCeiling + 1));
+        writer.WriteInt32(value: (WorldBodiesLimits.CapacityCeiling + 1));
 
         Assert.False(condition: WorldFederationCodec.TryDecodeCommit(body: writer.ToArray(), defaults: defaults, sourceAuthority: out _, transferId: out _, members: out _, failure: out var overCounted));
         Assert.Equal(expected: WireRefusal.CountOutOfRange, actual: overCounted.Refusal);
@@ -807,7 +807,7 @@ public sealed class FederationTransferLawTests {
 
         return document with {
             PopulationRaw = document.Population with {
-                CapacityRaw = (WorldPopulationLimits.LocalSeatCount + 2),
+                CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 2),
                 NetworkPlayers = 2,
             },
             Admission = [Fixtures.AnyAuthorityArrivals()],

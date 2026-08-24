@@ -127,7 +127,7 @@ internal static class HostRoundtripFixture {
         return (host, rowA, rowB, machineId, transferId);
     }
     /// <summary>The peer-range counterpart of <see cref="BuildCommittedScenario"/>: the crossing seat lands in the
-    /// PEER range (<see cref="WorldPopulationLimits.LocalSeatCount"/>) rather than a local seat, so the destination's own
+    /// PEER range (<see cref="WorldBodiesLimits.LocalSeatCount"/>) rather than a local seat, so the destination's own
     /// entry captures <c>IsRemoteHuman</c> and restores PARKED (<c>WorldPopulation.Restore</c>'s own rule) — the
     /// divergence <see cref="WorldAuthorityCheckpointHostRoundtripLawTests"/>'s scenario (i) remarks name as the
     /// reason a peer-range crossing is not what that law drives. A caller resumes the destination's parked entry
@@ -146,12 +146,12 @@ internal static class HostRoundtripFixture {
         );
         var document = Fixtures.BuildDocument() with {
             PopulationRaw = Fixtures.BuildDocument().Population with {
-                CapacityRaw = (WorldPopulationLimits.LocalSeatCount + 1),
+                CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 1),
                 NetworkPlayers = 1,
             },
             Admission = [Fixtures.AnyAuthorityArrivals()],
         };
-        const int peerSlot = WorldPopulationLimits.LocalSeatCount;
+        const int peerSlot = WorldBodiesLimits.LocalSeatCount;
         var rowA = HostRow.Build(definition: document, name: "row-a");
         var rowB = HostRow.Build(definition: document, name: "row-b");
 

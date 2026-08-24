@@ -86,7 +86,7 @@ public enum WorldSection : byte {
     Placements,
 
     /// <summary>The editor/authoring policy row — headroom, placement scale envelope, candidate targeting,
-    /// the sole-editor layout split, and the drag-preview deadline (see <see cref="WorldAuthoringDefaults"/>).</summary>
+    /// the sole-editor layout split, and the drag-preview deadline (see <see cref="WorldPlacementPolicyDefaults"/>).</summary>
     Authoring,
 
     /// <summary>The placeable speaker rows (the audio arc) — targeted by <c>WorldMutation.UpsertSpeaker</c> /
@@ -244,7 +244,7 @@ public enum GrantSubjectKind : byte {
     /// narrowing beneath one: <c>Server.WorldServer.TryAdmitMutation</c>'s section gate is a disjunction, so a
     /// section holder still reaches every row and a row holder reaches no other. The id may name a row that does not
     /// exist yet (creating it is the granted act), so it is shape-checked — non-blank, and not a
-    /// <c>state.&lt;row&gt;</c> reference, since <see cref="WorldCreation.Id"/> resolves one to a different string —
+    /// <c>state.&lt;row&gt;</c> reference, since <see cref="WorldPrototype.Id"/> resolves one to a different string —
     /// never bound-checked against the live document.</remarks></summary>
     Creation,
 

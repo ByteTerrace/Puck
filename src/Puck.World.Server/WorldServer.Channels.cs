@@ -102,7 +102,7 @@ public sealed partial class WorldServer {
                     // The read-back's ceiling in force is poolCeiling ONLY when this tick's contribution set actually
                     // reached this ordinal through the untrusted (pooled) path (m_untrustedAcceptedMask) — an authored
                     // ceiling the seat has on file but nobody exercised THIS write reads back as "no ceiling in
-                    // force," never as the number on paper, so player.channels can prove the fold ran rather than
+                    // force," never as the number on paper, so body.channels can prove the fold ran rather than
                     // just that a grant exists.
                     var poolReached = untrustedAccepted.Contains(ordinal: ordinal);
 
@@ -248,7 +248,7 @@ public sealed partial class WorldServer {
     //     WorldAddonRuntime.FoldActs; a per-channel miss is a quieter refinement of the same "requested, not
     //     received" shape, not a second refusal channel. An ordinal accepted through the POOLED branch alone marks
     //     m_untrustedAcceptedMask, regardless of the delta's own value — a cancelling pair of contributors must
-    //     still read back as "the pool was reached," never as "nothing happened" (player.channels' ceiling report).
+    //     still read back as "the pool was reached," never as "nothing happened" (body.channels' ceiling report).
     private void StageContribution(int bodyIndex, WorldPrincipal principal, in IntentSubmission submission) {
         var isConsoleOrSeat = (principal.Kind is PrincipalKind.Console or PrincipalKind.Seat);
         var isAddon = (principal.Kind == PrincipalKind.Addon);

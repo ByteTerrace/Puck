@@ -3,15 +3,15 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public sealed partial class WorldServer {
-    // Whether any surviving row still names `creationId` — the pre-check the retraction runs before submitting a
+    // Whether any surviving row still names `prototypeId` — the pre-check the retraction runs before submitting a
     // RemoveCreation, so a shared creation is left alone instead of driving a loud refusal the sweep would repeat
     // every tick. RemoveCreation's own compose arm re-checks placements; looks are covered by whole-document
     // revalidation, and are checked here for the same pre-filter reason.
-    private static bool IsCreationReferenced(WorldDefinition definition, string creationId) {
+    private static bool IsCreationReferenced(WorldDefinition definition, string prototypeId) {
         foreach (var placement in definition.Placements) {
             if (string.Equals(
-                a: placement.CreationId,
-                b: creationId,
+                a: placement.PrototypeId,
+                b: prototypeId,
                 comparisonType: StringComparison.Ordinal
             )) {
                 return true;
@@ -21,7 +21,7 @@ public sealed partial class WorldServer {
                 (placement.Contribution is { } contribution) &&
                 string.Equals(
                 a: contribution.SlotCreationId,
-                b: creationId,
+                b: prototypeId,
                 comparisonType: StringComparison.Ordinal
             )
             ) {
@@ -33,8 +33,8 @@ public sealed partial class WorldServer {
             if (
                 (look.Source is WorldLookSource.Creation creationLook) &&
                 string.Equals(
-                a: creationLook.CreationId.Value,
-                b: creationId,
+                a: creationLook.PrototypeId.Value,
+                b: prototypeId,
                 comparisonType: StringComparison.Ordinal
             )
             ) {
@@ -58,7 +58,7 @@ public sealed partial class WorldServer {
             tick: tick
         );
     }
-    // Retraction: the host's frame stands, the piece goes. One UpsertPlacement re-points creationId back at the
+    // Retraction: the host's frame stands, the piece goes. One UpsertPlacement re-points prototypeId back at the
     // authored slotCreationId and clears the stamped half, and — only when nothing else still names it — one
     // RemoveCreation releases the contributed row. Both are ordinary mutations, so world.undo puts the piece back.
     //
@@ -76,7 +76,7 @@ public sealed partial class WorldServer {
             return;
         }
 
-        var retired = placement.CreationId;
+        var retired = placement.PrototypeId;
         var contributor = contribution.Contributor;
 
         if (!TryApplyMutation(
@@ -84,9 +84,9 @@ public sealed partial class WorldServer {
             correlationId: 0,
             mutation: new WorldMutation.UpsertPlacement(
                 Placement: (placement with {
-                CreationId = contribution.SlotCreationId,
-                Contribution = (contribution with { Contributor = null, RetractDeadlineTick = null }),
-            }),
+                    PrototypeId = contribution.SlotCreationId,
+                    Contribution = (contribution with { Contributor = null, RetractDeadlineTick = null }),
+                }),
                 Principal: WorldPrincipal.World
             ),
             preMetered: false,
@@ -104,7 +104,7 @@ public sealed partial class WorldServer {
             comparisonType: StringComparison.Ordinal
         ) ||
             IsCreationReferenced(
-            creationId: retired,
+            prototypeId: retired,
             definition: m_definition
         )
         ) {
@@ -158,7 +158,7 @@ public sealed partial class WorldServer {
                 var carried = (existing?.Contribution?.Contributor);
                 var carriedDeadline = (existing?.Contribution?.RetractDeadlineTick);
                 var fills = !string.Equals(
-                    a: incoming.CreationId,
+                    a: incoming.PrototypeId,
                     b: submitted.SlotCreationId,
                     comparisonType: StringComparison.Ordinal
                 );
@@ -176,7 +176,7 @@ public sealed partial class WorldServer {
 
                 incoming = (incoming with { Contribution = (submitted with { Contributor = carried, RetractDeadlineTick = carriedDeadline }) });
             } else if (existing?.Contribution is { Contributor: { } occupant }) {
-                reason = $"placement '{incoming.Id}' is a contribution slot filled by {occupant.Describe()} — retract it (re-point creationId at its slotCreationId) before dropping the facet";
+                reason = $"placement '{incoming.Id}' is a contribution slot filled by {occupant.Describe()} — retract it (re-point prototypeId at its slotCreationId) before dropping the facet";
 
                 return false;
             }

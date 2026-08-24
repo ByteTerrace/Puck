@@ -62,7 +62,7 @@ namespace Puck.World;
 // otherwise resolve to one generated accessor for both (SYSLIB1031). Naming this arm explicitly keeps both.
 [JsonSerializable(typeof(WorldCameraSubject.Placement), TypeInfoPropertyName = "WorldCameraSubjectPlacement")]
 // The seat rig's input-policy sibling; this entry exposes the typed accessor world.view.look deserializes through.
-[JsonSerializable(typeof(WorldSeatLook))]
+[JsonSerializable(typeof(WorldSeatCameraFeel))]
 [JsonSerializable(typeof(WorldSeatViewControl))]
 [JsonSerializable(typeof(WorldViewDefaults))]
 [JsonSerializable(typeof(WorldViewLayout))]
@@ -78,10 +78,10 @@ namespace Puck.World;
 // The creation/placement rows (the world.row.set creations / world.row.set placements payload shapes). The embedded
 // puck.creation.v1 document rides CreationDocumentJsonConverter — its OWN canonical serializer — never this context's
 // member policies (see the converter's remarks).
-[JsonSerializable(typeof(WorldCreation))]
+[JsonSerializable(typeof(WorldPrototype))]
 [JsonSerializable(typeof(WorldPlacement))]
 // The editor/authoring policy row (the world.row.set authoring payload shape).
-[JsonSerializable(typeof(WorldAuthoringDefaults))]
+[JsonSerializable(typeof(WorldPlacementPolicyDefaults))]
 // The contact-solver tuning (the world.row.set collision payload shape) and the velocity-response array (a kit row's
 // own, via world.row.set kits). Both are also reachable from WorldDefinition/WorldMotionModel already; these entries
 // expose the typed accessors.
@@ -143,7 +143,7 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldHostDefaults))]
 // The LOOK rows (the world.row.set looks payload shape + the document `looks`/`lookAssignment` sections). The polymorphic
 // look-source derived types carry explicit TypeInfoPropertyName entries so the source-gen simple names never collide
-// with WorldCreation / other "Catalog"/"Creation" nouns (SYSLIB1031), following the WorldSpeaker precedent above.
+// with WorldPrototype / other "Catalog"/"Creation" nouns (SYSLIB1031), following the WorldSpeaker precedent above.
 [JsonSerializable(typeof(WorldLook))]
 [JsonSerializable(typeof(WorldLookSource.Catalog), TypeInfoPropertyName = "WorldLookSourceCatalog")]
 [JsonSerializable(typeof(WorldLookSource.Creation), TypeInfoPropertyName = "WorldLookSourceCreation")]
@@ -1515,7 +1515,7 @@ internal sealed class WorldPrincipalJsonConverter : JsonConverter<WorldPrincipal
     }
 }
 /// <summary>
-/// Bridges an embedded <see cref="Puck.Forge.Authoring.CreationDocument"/> (a <see cref="WorldCreation.Document"/>) through
+/// Bridges an embedded <see cref="Puck.Forge.Authoring.CreationDocument"/> (a <see cref="WorldPrototype.Document"/>) through
 /// the creation contract's own serializer shape (<see cref="Puck.Assets.Documents.DocumentJsonOptions.Shared"/> — member
 /// order, string enums, and the Vector2/Vector3/Quaternion array converters) instead of this context's
 /// policies, so the inline-canonical embed carries exactly the member vocabulary

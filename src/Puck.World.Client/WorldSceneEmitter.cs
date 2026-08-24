@@ -52,7 +52,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
     private readonly WorldStampPool m_animator;
     private readonly IWorldAudioCueSink m_audio;
     private readonly int m_authoringHeadroomPlacements;
-    // BOOT-CONSUMED authoring policy (WorldAuthoringDefaults): captured ONCE at construction from the boot definition's
+    // BOOT-CONSUMED authoring policy (WorldPlacementPolicyDefaults): captured ONCE at construction from the boot definition's
     // Authoring row — never re-read live. These feed the frozen render-envelope probe (screen-slot/
     // placement-instance reservation), so a later SetAuthoringDefaults mutation is journaled but cannot retroactively
     // grow a running session's capacity floor; it narrates "next boot" honestly.
@@ -70,10 +70,10 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
     private readonly WorldTextCatalog m_text;
 
     // The CURRENT derived-face screen ROWS (creation faces derived from placements x creations) — threaded in from
-    // WorldFramePresenter.ReconcileDelivery's ONE WorldCreationFacets.Derive call each delivery via ObserveDelivery,
+    // WorldFramePresenter.ReconcileDelivery's ONE WorldPrototypeFacets.Derive call each delivery via ObserveDelivery,
     // NEVER re-derived here: the geometry this emitter composes and the binder's bound sources must read the SAME
     // set or a face's slab and its bound texture could disagree about which placement it belongs to. Seeded at
-    // construction to the reserved-band PLACEHOLDER rows (WorldCreationFacets.ReservedFaceSlots — the identical
+    // construction to the reserved-band PLACEHOLDER rows (WorldPrototypeFacets.ReservedFaceSlots — the identical
     // shape WorldBootComposition's own boot registration uses), so the ONE construction-time capacity probe (which
     // runs before any delivery can land — see SdfCompositionFrameSource's ctor) reserves program-word/instance
     // capacity for the derived band by construction, exactly like every other worst-case branch this type owns.
@@ -85,28 +85,28 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
     private int m_slotBase;
 
     // Per-frame scratch reused to keep packing allocation-free: movement-driven gait state per avatar.
-    private readonly float[] m_avatarGaitPhases = new float[WorldAvatarCatalog.Capacity];
-    private readonly Vector3[] m_avatarPreviousPositions = new Vector3[WorldAvatarCatalog.Capacity];
-    private readonly bool[] m_avatarPoseSeeded = new bool[WorldAvatarCatalog.Capacity];
-    private readonly WorldEntityAddress[] m_avatarMotionAddresses = new WorldEntityAddress[WorldAvatarCatalog.Capacity];
+    private readonly float[] m_avatarGaitPhases = new float[WorldRigCatalog.Capacity];
+    private readonly Vector3[] m_avatarPreviousPositions = new Vector3[WorldRigCatalog.Capacity];
+    private readonly bool[] m_avatarPoseSeeded = new bool[WorldRigCatalog.Capacity];
+    private readonly WorldEntityAddress[] m_avatarMotionAddresses = new WorldEntityAddress[WorldRigCatalog.Capacity];
     // The live program's avatar geometry and its transform pack share this rebuild-latched appearance image. This
     // closes the delivery-thread gap where a reused slot could otherwise pack a new rig into old compiled geometry.
-    private readonly int[] m_emittedAvatarRigs = new int[WorldAvatarCatalog.Capacity];
-    private readonly float[] m_emittedAvatarScales = new float[WorldAvatarCatalog.Capacity];
-    private readonly float[] m_emittedAvatarGaitAmplitudes = new float[WorldAvatarCatalog.Capacity];
+    private readonly int[] m_emittedAvatarRigs = new int[WorldRigCatalog.Capacity];
+    private readonly float[] m_emittedAvatarScales = new float[WorldRigCatalog.Capacity];
+    private readonly float[] m_emittedAvatarGaitAmplitudes = new float[WorldRigCatalog.Capacity];
     // The creation-STAMP census, refreshed at each rebuild: the body-rooted stamps handed to the pool, plus the
     // per-entity flag the pack/emit path reads to skip the catalog avatar (the body renders its creation instead).
     private readonly List<WorldStampPool.BodyStamp> m_bodyStamps = new();
-    private readonly bool[] m_rendersAsStamp = new bool[WorldAvatarCatalog.Capacity];
+    private readonly bool[] m_rendersAsStamp = new bool[WorldRigCatalog.Capacity];
 
     // The catalog-look root follower: a NON-stamp-rendered avatar (a Catalog-sourced look, or a Creation look the
     // stamp pool had no free slot for) whose look names a root Motion.Dynamics row lags the whole avatar toward its
     // raw interpolated pose instead of drawing it directly — resolved once per rebuild (Compose, beside the rig/scale/
     // gait arrays above), stepped once per produced frame (PackDynamicTransforms) from the Tick-latched delta.
-    private readonly bool[] m_avatarFollows = new bool[WorldAvatarCatalog.Capacity];
-    private readonly SecondOrderResponse[] m_avatarResponse = new SecondOrderResponse[WorldAvatarCatalog.Capacity];
-    private readonly SecondOrderFollower3[] m_avatarPositionFollower = new SecondOrderFollower3[WorldAvatarCatalog.Capacity];
-    private readonly SecondOrderFollower4[] m_avatarOrientationFollower = new SecondOrderFollower4[WorldAvatarCatalog.Capacity];
+    private readonly bool[] m_avatarFollows = new bool[WorldRigCatalog.Capacity];
+    private readonly SecondOrderResponse[] m_avatarResponse = new SecondOrderResponse[WorldRigCatalog.Capacity];
+    private readonly SecondOrderFollower3[] m_avatarPositionFollower = new SecondOrderFollower3[WorldRigCatalog.Capacity];
+    private readonly SecondOrderFollower4[] m_avatarOrientationFollower = new SecondOrderFollower4[WorldRigCatalog.Capacity];
     // The last PoseEpoch(index) this emitter observed, per avatar — a jump within the same entity address (a
     // teleport, an over-threshold correction) reseeds the follower exactly like an address change does, so the boom
     // never streaks the follower across the jump. -1 (never observed) reseeds on the first frame.
@@ -114,7 +114,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
     private float m_pendingDeltaSeconds;
 
     private static int[] NewPoseEpochs() {
-        var epochs = new int[WorldAvatarCatalog.Capacity];
+        var epochs = new int[WorldRigCatalog.Capacity];
 
         Array.Fill(array: epochs, value: -1);
 
@@ -161,8 +161,8 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
         // for the construction-time capacity probe (SdfCompositionFrameSource's ctor runs it synchronously, before
         // WorldFramePresenter can ever reconcile a delivery), so the probe reserves this band's word/instance cost even
         // though no delivery has landed yet.
-        m_derivedFaceRows = WorldCreationFacets.ReservedFaceSlots(
-            derivedFaceBase: WorldCreationFacets.DerivedFaceBase,
+        m_derivedFaceRows = WorldPrototypeFacets.ReservedFaceSlots(
+            derivedFaceBase: WorldPrototypeFacets.DerivedFaceBase,
             derivedFaceScreens: m_derivedFaceScreens
         );
 
@@ -184,7 +184,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
 
     /// <summary>The frozen transform-slot count this emitter declares: every leaf in the all-128 avatar catalog plus
     /// the reserved creation-stamp pool, in that order.</summary>
-    public int DynamicSlotCount => (WorldAvatarCatalog.DynamicTransformCapacity + WorldStampPool.DynamicSlotCount);
+    public int DynamicSlotCount => (WorldRigCatalog.DynamicTransformCapacity + WorldStampPool.DynamicSlotCount);
     /// <summary>Always <see langword="true"/>: this emitter's material palette is its own. Sole tenancy makes this
     /// true; the scope makes it structural, so a positional stride this
     /// scene grows later (a wallpaper fold or polar repeat over a sculpted creation) can only ever recolor materials
@@ -202,15 +202,15 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // own body + accent material (cheap constant words), so a recolor is data, not a resize. `placementProbe` replaces
     // the static stamps with the reserved worst case (the construction probe only); the animated pool and the avatars
     // follow `probeWorstCase` (worst case for both the construction probe AND the apply-time measure).
-    private void Compose(SdfProgramBuilder builder, IReadOnlyList<WorldScreen> screens, IReadOnlyList<WorldScreen> derivedFaces, IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldCreation> creations, bool probeWorstCase, bool placementProbe, float maxPlacementScale, int slotBase) {
+    private void Compose(SdfProgramBuilder builder, IReadOnlyList<WorldScreen> screens, IReadOnlyList<WorldScreen> derivedFaces, IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldPrototype> creations, bool probeWorstCase, bool placementProbe, float maxPlacementScale, int slotBase) {
         var client = m_client;
         // The per-avatar body + accent materials, allocated up front so the catalog emitter is a straight builder chain.
         // A local seat's colors come from its seated profile (a pending seat renders a desaturated candidate); a stand-in's
         // from its snapshot palette. A color change bumps the revision and rebuilds; a settings-only edit does not.
-        var avatarBodyMaterials = new int[WorldAvatarCatalog.Capacity];
-        var avatarAccentMaterials = new int[WorldAvatarCatalog.Capacity];
+        var avatarBodyMaterials = new int[WorldRigCatalog.Capacity];
+        var avatarAccentMaterials = new int[WorldRigCatalog.Capacity];
 
-        for (var index = 0; (index < WorldAvatarCatalog.Capacity); index++) {
+        for (var index = 0; (index < WorldRigCatalog.Capacity); index++) {
             var bodyColor = (TryPresentedAppearance(
                 bodyColor: out var presentedColor,
                 catalogRig: out _,
@@ -233,7 +233,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
         // (Right × Up). The material sentinel the overload assigns needs no palette entry.
         //
         // TWO SOURCES, ONE EMISSION PATH: `screens` (the document's declared rows, padded with authoring headroom)
-        // and `derivedFaces` (the reserved-band rows a creation's own faces resolve to — see WorldCreationFacets;
+        // and `derivedFaces` (the reserved-band rows a creation's own faces resolve to — see WorldPrototypeFacets;
         // WorldFramePresenter threads the SAME derived set here that it hands the screen binder, so the geometry a
         // derived face's slab occupies and the source the binder samples for it can never disagree about which
         // placement it belongs to). Both index ranges are disjoint by construction (WithAuthoringHeadroom skips the
@@ -284,16 +284,16 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
             definition: client.Definition,
             probeWorstCase: probeWorstCase,
             maxPlacementScale: maxPlacementScale,
-            slotBase: (slotBase + WorldAvatarCatalog.DynamicTransformCapacity),
+            slotBase: (slotBase + WorldRigCatalog.DynamicTransformCapacity),
             textCatalog: m_text.Catalog
         );
 
         // The view's active avatars: 12..20 independently animated leaves and 60..100 authored VM instructions
         // each. The probe emits every catalog range at unit scale (the frozen worst case); a live build emits only
         // active ranges, each sourcing its LOOK's pinned rig and uniform scale (both clamped so the frozen per-entity
-        // slot capacity is never exceeded — see WorldAvatarCatalog.Emit's remarks).
+        // slot capacity is never exceeded — see WorldRigCatalog.Emit's remarks).
         if (!probeWorstCase) {
-            for (var index = 0; (index < WorldAvatarCatalog.Capacity); index++) {
+            for (var index = 0; (index < WorldRigCatalog.Capacity); index++) {
                 var hasPresented = TryPresentedAppearance(
                     bodyColor: out _,
                     catalogRig: out var presentedRig,
@@ -312,7 +312,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 // A Creation look's body renders through the stamp pool (its catalog avatar parks at the composed
                 // ParkPosition), so RigFor's Creation-look fallback is reached here only as the pool-pressure
                 // fallback — a body a full stamp pool starved renders as a catalog avatar rather than vanishing.
-                m_emittedAvatarRigs[index] = WorldAvatarCatalog.RigFor(
+                m_emittedAvatarRigs[index] = WorldRigCatalog.RigFor(
                     catalogRig: catalogRig,
                     look: look
                 );
@@ -333,7 +333,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
             }
         }
 
-        WorldAvatarCatalog.Emit(
+        WorldRigCatalog.Emit(
             builder: builder,
             isActive: IsAvatarPresented,
             bodyMaterials: avatarBodyMaterials,
@@ -378,7 +378,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
 
         var definition = m_client.Definition;
 
-        for (var index = 0; (index < WorldAvatarCatalog.Capacity); index++) {
+        for (var index = 0; (index < WorldRigCatalog.Capacity); index++) {
             if (
                 !m_client.IsActive(index: index) ||
                 (ResolveStampCreation(
@@ -407,14 +407,14 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 return null;
             }
 
-            var creationId = ((look.Source is WorldLookSource.Creation inhabitLook)
-                ? inhabitLook.CreationId.Value
-                : placement.CreationId
+            var prototypeId = ((look.Source is WorldLookSource.Creation inhabitLook)
+                ? inhabitLook.PrototypeId.Value
+                : placement.PrototypeId
             );
 
             return ((WorldDefinitionRows.FindCreation(
                 creations: definition.Creations,
-                id: creationId
+                id: prototypeId
             ) is { } creation)
                 ? new WorldStampPool.BodyStamp(
                     BodyIndex: index,
@@ -429,7 +429,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
         if (look.Source is WorldLookSource.Creation crowdLook) {
             return ((WorldDefinitionRows.FindCreation(
                 creations: definition.Creations,
-                id: crowdLook.CreationId
+                id: crowdLook.PrototypeId
             ) is { } creation)
                 ? new WorldStampPool.BodyStamp(
                     BodyIndex: index,
@@ -499,7 +499,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
     }
     private bool TryTravelingRoute(int index, out WorldAuthorityRoute route) {
         if (
-            (((uint)index) < WorldPopulationLimits.LocalSeatCount) &&
+            (((uint)index) < WorldBodiesLimits.LocalSeatCount) &&
             m_client.Roster.IsJoined(slot: index)
         ) {
             route = m_continuum.Route(slot: index);
@@ -514,7 +514,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
     //
     // FREE means neither authored NOR reserved: the derived-face band belongs to the binder's boot-reserved
     // placeholders, which no authored screen may claim either (WorldDefinitionValidator refuses one, through the SAME
-    // WorldCreationFacets.IsReservedFaceIndex test). A first-fit scan that knew only the authored set would, with
+    // WorldPrototypeFacets.IsReservedFaceIndex test). A first-fit scan that knew only the authored set would, with
     // enough authored screens, hand a headroom slab an index the derived-face registration also uses. There is no
     // narrowing fallback: a headroom count the free indices cannot satisfy is a document the boot envelope cannot
     // honour, and silently reserving fewer slots than asked only moves the failure to the runtime UpsertScreen that
@@ -531,7 +531,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
         var authored = used.Count;
 
         for (var index = 0; (index < SdfProgramBuilder.MaxScreenSurfaces); index++) {
-            if (WorldCreationFacets.IsReservedFaceIndex(
+            if (WorldPrototypeFacets.IsReservedFaceIndex(
                 derivedFaceScreens: m_derivedFaceScreens,
                 index: index
             )) {
@@ -541,7 +541,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
 
         padded.AddRange(collection: WorldScreenHeadroom.Reserve(
             authoredCount: authored,
-            derivedFaceBase: WorldCreationFacets.DerivedFaceBase,
+            derivedFaceBase: WorldPrototypeFacets.DerivedFaceBase,
             derivedFaceScreens: m_derivedFaceScreens,
             headroomCount: m_authoringHeadroomScreens,
             usedIndices: used
@@ -649,12 +649,12 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
         );
     }
     /// <summary>Re-points this emitter's derived-face screen rows at the same set <see cref="WorldFramePresenter"/>
-    /// just derived and handed the screen binder — never re-derived here (see <see cref="WorldCreationFacets.Derive"/>'s
+    /// just derived and handed the screen binder — never re-derived here (see <see cref="WorldPrototypeFacets.Derive"/>'s
     /// one call site), so the slab geometry this emitter composes and the binder's bound sources can never disagree
     /// about which face belongs to which placement. Call at the delivery boundary (a definition-revision move).</summary>
     /// <param name="definition">The delivered definition.</param>
     /// <param name="derivedFaces">This delivery's derived-face screen rows — always exactly
-    /// <c>authoring.derivedFaceScreens</c> entries (<see cref="WorldCreationFacets.Derive"/> pads the reserved range
+    /// <c>authoring.derivedFaceScreens</c> entries (<see cref="WorldPrototypeFacets.Derive"/> pads the reserved range
     /// with placeholders), composed alongside <paramref name="definition"/>'s own declared screens on every
     /// subsequent rebuild until the next delivery.</param>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> or <paramref name="derivedFaces"/> is
@@ -682,7 +682,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
         // The catalog addresses its own ranges from 0; the slice makes the host-assigned base the origin.
         var avatars = slots.Slice(
             start: context.SlotBase,
-            length: WorldAvatarCatalog.DynamicTransformCapacity
+            length: WorldRigCatalog.DynamicTransformCapacity
         );
         var deltaSeconds = m_pendingDeltaSeconds;
 
@@ -696,10 +696,10 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
         // while the source seat's own (now-idle) body keeps casting because it is still a local seat's body.
         // CastsSoftShadow false suppresses the entry from the soft-shadow march only (it still renders and
         // self-lights). Radius 0 => only the seats cast; a large radius => everyone casts.
-        Span<Vector3> joinedSeats = stackalloc Vector3[WorldPopulationLimits.LocalSeatCount];
+        Span<Vector3> joinedSeats = stackalloc Vector3[WorldBodiesLimits.LocalSeatCount];
         var joinedSeatCount = 0;
 
-        for (var seat = 0; (seat < WorldPopulationLimits.LocalSeatCount); seat++) {
+        for (var seat = 0; (seat < WorldBodiesLimits.LocalSeatCount); seat++) {
             var body = m_anchor.PerceivedBody(slot: seat);
 
             if (TryPresentedPose(
@@ -714,7 +714,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
 
         var crowdRadiusSquared = (m_settings.ShadowCrowdRadius * m_settings.ShadowCrowdRadius);
 
-        for (var index = 0; (index < WorldAvatarCatalog.Capacity); index++) {
+        for (var index = 0; (index < WorldRigCatalog.Capacity); index++) {
             if (!TryPresentedPose(
                 address: out var address,
                 index: index,
@@ -726,7 +726,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 continue;
             }
 
-            var castsSoftShadow = ((index < WorldPopulationLimits.LocalSeatCount) || WithinCrowd(
+            var castsSoftShadow = ((index < WorldBodiesLimits.LocalSeatCount) || WithinCrowd(
                 position: position,
                 seats: joinedSeats[..joinedSeatCount],
                 radiusSquared: crowdRadiusSquared
@@ -766,7 +766,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 // unpossessed, and the source seat's own idle body (still index-banded, still not walking) stays
                 // silent too; only the raw index band decides who can ever fire this cue.
                 if (
-                    (index < WorldPopulationLimits.LocalSeatCount) &&
+                    (index < WorldBodiesLimits.LocalSeatCount) &&
                     (((int)(m_avatarGaitPhases[index] / MathF.PI)) > ((int)(previousPhase / MathF.PI)))
                 ) {
                     m_audio.SubmitCue(
@@ -807,7 +807,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
             // A creation-STAMP body (inhabitant / crowd creation-look) renders its creation through the stamp pool, so
             // its catalog avatar packs HIDDEN below the floor (culled) — the "never black, never vanished" degradation
             // is gone: the body shows its actual creation geometry instead.
-            WorldAvatarCatalog.PackTransforms(
+            WorldRigCatalog.PackTransforms(
                 avatar: index,
                 rootPosition: (m_rendersAsStamp[index]
                 ? context.ParkPosition
@@ -827,7 +827,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
         m_animator.PackTransforms(
             transforms: slots,
             client: m_client,
-            slotBase: (context.SlotBase + WorldAvatarCatalog.DynamicTransformCapacity),
+            slotBase: (context.SlotBase + WorldRigCatalog.DynamicTransformCapacity),
             parkPosition: context.ParkPosition
         );
     }

@@ -187,7 +187,7 @@ public sealed class RowScopedGrantLawTests {
     /// no-op would look identical and the law could not fail.</summary>
     private static WorldMutation.UpsertPlacement SlotUpsert(float scale, string row = SlotRow) => new(
         Placement: new WorldPlacement(
-            CreationId: HostRow,
+            PrototypeId: HostRow,
             Id: row,
             Position: new Vector3(
                 x: 12f,

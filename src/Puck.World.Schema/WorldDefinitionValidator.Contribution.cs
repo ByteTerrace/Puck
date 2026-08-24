@@ -6,10 +6,10 @@ public static partial class WorldDefinitionValidator {
     // The contribution facet (see WorldPlacementContribution): the authored half is the host's offer, the stamped half
     // is the engine's. Both halves are checked here so a hand-authored file and a live UpsertPlacement candidate refuse
     // through the same code — the compose arm's own refusals are the earlier, verb-named half of the same rules.
-    private static void ValidateContribution(WorldPlacementContribution contribution, WorldPlacement placement, WorldDefinition definition, HashSet<string> creationIds, string path, List<string> errors) {
+    private static void ValidateContribution(WorldPlacementContribution contribution, WorldPlacement placement, WorldDefinition definition, HashSet<string> prototypeIds, string path, List<string> errors) {
         RequireDeclared(
             value: contribution.SlotCreationId,
-            declaredSet: creationIds,
+            declaredSet: prototypeIds,
             path: path,
             field: "slotCreationId",
             rowNoun: "creation",
@@ -62,11 +62,11 @@ public static partial class WorldDefinitionValidator {
             }
 
             if (string.Equals(
-                a: placement.CreationId,
+                a: placement.PrototypeId,
                 b: contribution.SlotCreationId,
                 comparisonType: StringComparison.Ordinal
             )) {
-                errors.Add(item: $"{path} is filled by {contributor.Describe()} but its creationId still reads slotCreationId '{contribution.SlotCreationId}' — a filled slot shows the contributed creation.");
+                errors.Add(item: $"{path} is filled by {contributor.Describe()} but its prototypeId still reads slotCreationId '{contribution.SlotCreationId}' — a filled slot shows the contributed creation.");
             }
         } else {
             if (contribution.RetractDeadlineTick is { } orphanDeadline) {
@@ -74,11 +74,11 @@ public static partial class WorldDefinitionValidator {
             }
 
             if (!string.Equals(
-                a: placement.CreationId,
+                a: placement.PrototypeId,
                 b: contribution.SlotCreationId,
                 comparisonType: StringComparison.Ordinal
             )) {
-                errors.Add(item: $"{path} carries no contributor but its creationId '{placement.CreationId}' is not its slotCreationId '{contribution.SlotCreationId}' — an unfilled slot shows its own slot creation.");
+                errors.Add(item: $"{path} carries no contributor but its prototypeId '{placement.PrototypeId}' is not its slotCreationId '{contribution.SlotCreationId}' — an unfilled slot shows its own slot creation.");
             }
         }
     }

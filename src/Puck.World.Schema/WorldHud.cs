@@ -327,7 +327,7 @@ public enum HudBindingKind : byte {
 public readonly record struct HudBinding(HudBindingKind Kind, int SeatIndex, string? StateName = null, string? StateCellKey = null, bool Target = false);
 /// <summary>
 /// The closed v1 HUD binding vocabulary: <c>world.tick</c>, <c>world.fps</c>, <c>seat.&lt;n&gt;.position.{x,y,z}</c>
-/// (1-based seat index, <c>1..</c><see cref="WorldPopulationLimits.LocalSeatCount"/>), <c>population.active</c>,
+/// (1-based seat index, <c>1..</c><see cref="WorldBodiesLimits.LocalSeatCount"/>), <c>population.active</c>,
 /// <c>state.&lt;row&gt;</c>, and <c>state.&lt;row&gt;.&lt;key&gt;</c> (see <see cref="HudBindingKind.StateNamed"/>) —
 /// either <c>state.*</c> form may carry a trailing <c>.$target</c> facet (see <see cref="HudBinding.Target"/>).
 /// A token outside this set refuses by name — the same parse both <see cref="WorldDefinitionValidator"/> (load-time)
@@ -525,7 +525,7 @@ public static class HudBindingVocabulary {
 
         if (
             (seatIndex < 1) ||
-            (seatIndex > WorldPopulationLimits.LocalSeatCount)
+            (seatIndex > WorldBodiesLimits.LocalSeatCount)
         ) {
             return false;
         }

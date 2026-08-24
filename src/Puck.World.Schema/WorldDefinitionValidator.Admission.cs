@@ -333,7 +333,7 @@ public static partial class WorldDefinitionValidator {
         }
         // A row-scoped Mutate subject is deliberately NOT bound-checked against the live creations/placements rows:
         // authoring a row that does not exist yet is the act a contribution slot grants. Its shape is still checked,
-        // by the same rule the live grant door applies (Server.WorldGrants.Conflicts) — WorldCreation.Id is a
+        // by the same rule the live grant door applies (Server.WorldGrants.Conflicts) — WorldPrototype.Id is a
         // DocumentIdentifier, so a `state.` token there names a reference whose resolved value is some other string;
         // WorldPlacement.Id is a plain literal, which is why the reference rule is creation-only.
         if (subject.Kind is GrantSubjectKind.Creation or GrantSubjectKind.Placement) {

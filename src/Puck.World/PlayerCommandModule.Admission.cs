@@ -188,7 +188,7 @@ internal sealed partial class PlayerCommandModule {
         // rather than the boot form's either-order profile-then-slot convenience, which seat.enter never had.
         if (instanceTarget.Instance is { } instance) {
             if (instanceTarget.EffectiveCount is (< 1 or > 2)) {
-                return CommandResult.Error(output: $"[player.join: instance-targeted form expects <slot> [identity], before instance:<name> — slot is 1..{WorldPopulationLimits.LocalSeatCount}]");
+                return CommandResult.Error(output: $"[player.join: instance-targeted form expects <slot> [identity], before instance:<name> — slot is 1..{WorldBodiesLimits.LocalSeatCount}]");
             }
 
             if (
@@ -197,9 +197,9 @@ internal sealed partial class PlayerCommandModule {
                 value: out var instanceSlot
             ) ||
                 (instanceSlot < 1) ||
-                (instanceSlot > WorldPopulationLimits.LocalSeatCount)
+                (instanceSlot > WorldBodiesLimits.LocalSeatCount)
             ) {
-                return CommandResult.Error(output: $"[player.join: instance-targeted <slot> must be an integer 1..{WorldPopulationLimits.LocalSeatCount}]");
+                return CommandResult.Error(output: $"[player.join: instance-targeted <slot> must be an integer 1..{WorldBodiesLimits.LocalSeatCount}]");
             }
 
             var instanceIdentity = ((instanceTarget.EffectiveCount == 2)
@@ -317,7 +317,7 @@ internal sealed partial class PlayerCommandModule {
 
         if (instanceTarget.Instance is { } instance) {
             if (instanceTarget.EffectiveCount != 1) {
-                return CommandResult.Error(output: $"[player.leave: instance-targeted form expects <slot>, before instance:<name> — slot is 1..{WorldPopulationLimits.LocalSeatCount}]");
+                return CommandResult.Error(output: $"[player.leave: instance-targeted form expects <slot>, before instance:<name> — slot is 1..{WorldBodiesLimits.LocalSeatCount}]");
             }
 
             if (
@@ -326,9 +326,9 @@ internal sealed partial class PlayerCommandModule {
                 value: out var instanceSlot
             ) ||
                 (instanceSlot < 1) ||
-                (instanceSlot > WorldPopulationLimits.LocalSeatCount)
+                (instanceSlot > WorldBodiesLimits.LocalSeatCount)
             ) {
-                return CommandResult.Error(output: $"[player.leave: instance-targeted <slot> must be an integer 1..{WorldPopulationLimits.LocalSeatCount}]");
+                return CommandResult.Error(output: $"[player.leave: instance-targeted <slot> must be an integer 1..{WorldBodiesLimits.LocalSeatCount}]");
             }
 
             if (m_instances.TryFindFollowedRosterSlot(

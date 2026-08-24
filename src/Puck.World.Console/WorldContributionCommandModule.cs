@@ -41,7 +41,7 @@ public sealed class WorldContributionCommandModule(IWorldConsoleAuthority author
             _ = builder.Append(value: " slot '").Append(value: placement.Id).Append(value: '\'')
                 .Append(value: " tenure=").Append(value: contribution.Tenure)
                 .Append(value: " slotCreation=").Append(value: contribution.SlotCreationId)
-                .Append(value: " creation=").Append(value: placement.CreationId)
+                .Append(value: " creation=").Append(value: placement.PrototypeId)
                 .Append(value: (contribution.IsFilled
                 ? " state=filled"
                 : " state=empty"

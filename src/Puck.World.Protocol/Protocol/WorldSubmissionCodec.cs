@@ -859,7 +859,7 @@ public static class WorldSubmissionCodec {
             PrincipalKind.Seat => ((principal.Index >= 0) && (principal.Name is null) && (principal.Generation == 0)),
             PrincipalKind.Console => ((principal.Index == 0) && (principal.Name is null) && (principal.Generation == 0)),
             PrincipalKind.Addon => ((principal.Index == 0) && !string.IsNullOrEmpty(value: principal.Name) && (principal.Generation == 0)),
-            PrincipalKind.Peer => (WorldPopulationLimits.IsPeerIndex(index: principal.Index) && (principal.Name is null) && (principal.Generation > 0)),
+            PrincipalKind.Peer => (WorldBodiesLimits.IsPeerIndex(index: principal.Index) && (principal.Name is null) && (principal.Generation > 0)),
             PrincipalKind.Document => (documentAllowed && (principal.Index == 0) && !string.IsNullOrEmpty(value: principal.Name) && (principal.Generation == 0)),
             // Group's shape mirrors Addon's (Index 0, a non-empty Name carrying the id, Generation 0) but is valid
             // UNCONDITIONALLY — never gated behind documentAllowed — because unlike Document a group IS a real live
@@ -873,7 +873,7 @@ public static class WorldSubmissionCodec {
             : Fail(
                 WorldCodecRefusal.PrincipalShapeInvalid,
                 (principal.Kind, documentAllowed) switch {
-                    (PrincipalKind.Peer, _) when !WorldPopulationLimits.IsPeerIndex(index: principal.Index) => $"Peer principal index {principal.Index} is outside {WorldPopulationLimits.LocalSeatCount}..{(WorldPopulationLimits.CapacityCeiling - 1)}",
+                    (PrincipalKind.Peer, _) when !WorldBodiesLimits.IsPeerIndex(index: principal.Index) => $"Peer principal index {principal.Index} is outside {WorldBodiesLimits.LocalSeatCount}..{(WorldBodiesLimits.CapacityCeiling - 1)}",
                     (PrincipalKind.Document, false) => $"{principal.Describe()} cannot ACT — a document is written to, never a submitter; its capability is authored as a grant ROW with world.grant.set, which the cross-document write-back channel reads off the owner's document",
                     // The World principal is refused on BOTH sides of this rule, for two DIFFERENT reasons — one message
                     // each, because the shared one told a console-typed `world.grant.set world …` that it was an

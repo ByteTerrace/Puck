@@ -49,7 +49,7 @@ internal static class WorldAddonMutationDecoder {
     private static readonly string[] InputHoldMembers = ["ceilingTicks", "lowerAfterTicks", "defaultTicks", "equalizeByDefault", "participants"];
     private static readonly string[] InputHoldParticipantMembers = ["bodyIndex", "ticks", "equalized"];
     // The placement rows — the FULL WorldPlacement wire shape (every facet), plus each facet's own object shape.
-    private static readonly string[] PlacementMembers = ["id", "creationId", "position", "yawDegrees", "scale", "distribution", "mirror", "emission", "solid", "inhabit", "faceSources", "region", "attach"];
+    private static readonly string[] PlacementMembers = ["id", "prototypeId", "position", "yawDegrees", "scale", "distribution", "mirror", "emission", "solid", "inhabit", "faceSources", "region", "attach"];
     private static readonly string[] RemovePlacementMembers = ["id"];
     private static readonly string[] DistributionMembers = ["region", "fill"];
     private static readonly string[] DiscRegionMembers = ["$type", "radius", "sampleCount"];
@@ -1499,10 +1499,10 @@ internal static class WorldAddonMutationDecoder {
             members: members,
             name: "id"
         );
-        var creationId = RequireString(
+        var prototypeId = RequireString(
             context: "UpsertPlacement",
             members: members,
-            name: "creationId"
+            name: "prototypeId"
         );
         var position = RequireVector3(
             context: "UpsertPlacement",
@@ -1618,7 +1618,7 @@ internal static class WorldAddonMutationDecoder {
 
         var placement = new WorldPlacement(
             Attach: attach,
-            CreationId: creationId,
+            PrototypeId: prototypeId,
             Distribution: distribution,
             Emission: emission,
             FaceSources: faceSources,

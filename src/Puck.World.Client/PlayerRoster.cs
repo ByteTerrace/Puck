@@ -169,7 +169,7 @@ public enum JoinResult {
 /// </remarks>
 public sealed partial class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolver {
     /// <summary>The maximum number of local participants — a quad viewport's worth (the server table's seat count).</summary>
-    public const int MaxSlots = WorldPopulationLimits.LocalSeatCount;
+    public const int MaxSlots = WorldBodiesLimits.LocalSeatCount;
     /// <summary>The <see cref="DriveTarget"/> sentinel for "drives nothing": a claimed slot whose principal has never
     /// once resolved a concrete driven body (e.g. a replay device holding no Drive grant at all — the shape rule in
     /// <c>WorldGrants</c> lets a principal outside the trust boundary hold only a concrete
@@ -1324,8 +1324,10 @@ public sealed partial class PlayerRoster : IInputSlotResolver, ICommandPrincipal
             );
             (IntentSource Source, string Pose)? live = null;
 
+            // WorldQuery.PlayerWhere.Index is the 0-based body index — identical to slot for a local seat, so no
+            // display-number conversion is needed here (the body.* verb family's addressing convention).
             m_link.Query(
-                query: new WorldQuery.PlayerWhere(Index: DisplayNumber(slot: slot)),
+                query: new WorldQuery.PlayerWhere(Index: slot),
                 completion: answer => live = (answer.Payload as (IntentSource Source, string Pose)?)
             );
 

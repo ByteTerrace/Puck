@@ -1,88 +1,152 @@
 {
   "type": [
-    "array",
+    "object",
     "null"
   ],
-  "items": {
-    "description": "One placement instance row \u2014 a creation asset stamped into the world by reference: transform \u002B facets as data, addressed by its stable Id. A placement whose creation carries timeline frames is animated: it replays client-side on the render clock through the reserved dynamic-transform pool (distribution/mirror facets are static-stamp-only and reject on an animated row). A placement carrying an Inhabit facet is a live population body rather than furniture (see WorldPlacementInhabit); its declared creation eyes derive WorldCamera feeds and its declared faces derive screens (both at the delivery boundary, never written to the document).",
-    "type": [
-      "object",
-      "null"
-    ],
-    "properties": {
-      "id": {
-        "description": "The row\u0027s stable string id (its mutation address).",
-        "type": "string"
+  "properties": {
+    "rows": {
+      "description": "The placements, in order.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "One placement instance row \u2014 a creation asset stamped into the world by reference: transform \u002B facets as data, addressed by its stable Id. A placement whose creation carries timeline frames is animated: it replays client-side on the render clock through the reserved dynamic-transform pool (distribution/mirror facets are static-stamp-only and reject on an animated row). A placement carrying an Inhabit facet is a live population body rather than furniture (see WorldPlacementInhabit); its declared creation eyes derive WorldCamera feeds and its declared faces derive screens (both at the delivery boundary, never written to the document).",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "id": {
+            "description": "The row\u0027s stable string id (its mutation address).",
+            "type": "string"
+          },
+          "prototypeId": {
+            "description": "The referenced Id (must resolve; removal of a referenced creation rejects loudly).",
+            "type": "string"
+          },
+          "position": {
+            "description": "The stamp position, world space. Inert (still validated and stored, but read by nothing \u2014 neither the resolve nor the renderer) when Attach is set: the row\u0027s live position is the resolved attachment, never this authored one."
+          },
+          "yawDegrees": {
+            "description": "The stamp yaw about \u002BY, degrees. Same attach caveat as Position.",
+            "type": "number"
+          },
+          "scale": {
+            "description": "The uniform stamp scale (clamped to the placement policy envelope by validation).",
+            "type": "number"
+          },
+          "distribution": {
+            "$ref": "./common.schema.json#/$defs/WorldDistribution",
+            "description": "The placement distribution, or null for a single copy. Static placements currently accept a lattice region with a none fill. Refused together with Attach.",
+            "default": null
+          },
+          "mirror": {
+            "$ref": "./common.schema.json#/$defs/WorldPlacementMirror",
+            "description": "The authored local reflection plane, or null for no reflected copy. Refused together with Attach.",
+            "default": null
+          },
+          "emission": {
+            "$ref": "./common.schema.json#/$defs/WorldEmission",
+            "description": "The placement\u0027s emission facet (a synth voice the stamp itself makes \u2014 see WorldEmission), or null for silent. Under Distribution the emission binds to the placement root only. Omitted from the wire when null. Composes with Attach: an attached row\u0027s source point rides the resolved live pose (Client.WorldStampPool.TryShapePosition) instead of the row\u0027s static position, and an inactive carrier silences the emitter rather than leaving it at a stale point.",
+            "default": null
+          },
+          "solid": {
+            "$ref": "./common.schema.json#/$defs/WorldSolid",
+            "description": "The placement\u0027s solidity facet (see WorldSolid). Both contact providers compile the creation\u0027s emitted shapes; analytic collision uses per-primitive colliders, including exact half-spaces for planes. Omitted from the wire when null. Composes with Attach under the analytic provider only (WorldColliderSet.RefreshAttached recomputes an attached row\u0027s colliders every tick from the resolved live pose); still refused together under the field provider, which compiles every solid row\u0027s geometry once into one SDF program and never rebuilds it per tick.",
+            "default": null
+          },
+          "inhabit": {
+            "$ref": "./common.schema.json#/$defs/WorldPlacementInhabit",
+            "description": "The inhabit facet (null = decoration), binding the row to live population bodies. Omitted from the wire when null. Refused together with Attach \u2014 a row cannot both spawn its own driven bodies and ride another body\u0027s pose.",
+            "default": null
+          },
+          "faceSources": {
+            "$ref": "./common.schema.json#/$defs/WorldPlacementFaceList",
+            "description": "Per-instance overrides of the creation\u0027s declared faces (null = every face shows its declared default). Omitted from the wire when null. Orthogonal to Attach (a content selector, not a transform) \u2014 composes freely, like every other facet that now tracks the dynamic pose.",
+            "default": null
+          },
+          "region": {
+            "$ref": "./common.schema.json#/$defs/WorldPlacementRegion",
+            "description": "The placement\u0027s region facet (see WorldPlacementRegion) \u2014 a named volume the world-events feed watches for body enter/exit, or null for none. Omitted from the wire when null. Composes with Attach: an attached row\u0027s sensing sphere centers on the resolved live pose (Server.WorldEventFeed.CollectRegions) instead of the row\u0027s static position \u2014 see WorldPlacementRegion\u0027s own remarks.",
+            "default": null
+          },
+          "attach": {
+            "$ref": "./common.schema.json#/$defs/WorldPlacementAttach",
+            "description": "The placement\u0027s attach facet (see WorldPlacementAttach) \u2014 binds the row\u0027s resolved world pose to a live population body, or null for a static/authored transform (the default, unchanged behavior). Omitted from the wire when null.",
+            "default": null
+          },
+          "contribution": {
+            "$ref": "./common.schema.json#/$defs/WorldPlacementContribution",
+            "description": "The placement\u0027s contribution facet (see WorldPlacementContribution) \u2014 marks the row a host-authored slot a federation partner fills, or null for an ordinary placement. Omitted from the wire when null. Composes with every other facet: the facet governs which creation the row shows and for how long, never its transform.",
+            "default": null
+          }
+        },
+        "required": [
+          "id",
+          "prototypeId",
+          "position",
+          "yawDegrees",
+          "scale"
+        ],
+        "additionalProperties": false
       },
-      "creationId": {
-        "description": "The referenced Id (must resolve; removal of a referenced creation rejects loudly).",
-        "type": "string"
-      },
-      "position": {
-        "description": "The stamp position, world space. Inert (still validated and stored, but read by nothing \u2014 neither the resolve nor the renderer) when Attach is set: the row\u0027s live position is the resolved attachment, never this authored one."
-      },
-      "yawDegrees": {
-        "description": "The stamp yaw about \u002BY, degrees. Same attach caveat as Position.",
-        "type": "number"
-      },
-      "scale": {
-        "description": "The uniform stamp scale (clamped to the placement policy envelope by validation).",
-        "type": "number"
-      },
-      "distribution": {
-        "$ref": "./common.schema.json#/$defs/WorldDistribution",
-        "description": "The placement distribution, or null for a single copy. Static placements currently accept a lattice region with a none fill. Refused together with Attach.",
-        "default": null
-      },
-      "mirror": {
-        "$ref": "./common.schema.json#/$defs/WorldPlacementMirror",
-        "description": "The authored local reflection plane, or null for no reflected copy. Refused together with Attach.",
-        "default": null
-      },
-      "emission": {
-        "$ref": "./common.schema.json#/$defs/WorldEmission",
-        "description": "The placement\u0027s emission facet (a synth voice the stamp itself makes \u2014 see WorldEmission), or null for silent. Under Distribution the emission binds to the placement root only. Omitted from the wire when null. Composes with Attach: an attached row\u0027s source point rides the resolved live pose (Client.WorldStampPool.TryShapePosition) instead of the row\u0027s static position, and an inactive carrier silences the emitter rather than leaving it at a stale point.",
-        "default": null
-      },
-      "solid": {
-        "$ref": "./common.schema.json#/$defs/WorldSolid",
-        "description": "The placement\u0027s solidity facet (see WorldSolid). Both contact providers compile the creation\u0027s emitted shapes; analytic collision uses per-primitive colliders, including exact half-spaces for planes. Omitted from the wire when null. Composes with Attach under the analytic provider only (WorldColliderSet.RefreshAttached recomputes an attached row\u0027s colliders every tick from the resolved live pose); still refused together under the field provider, which compiles every solid row\u0027s geometry once into one SDF program and never rebuilds it per tick.",
-        "default": null
-      },
-      "inhabit": {
-        "$ref": "./common.schema.json#/$defs/WorldPlacementInhabit",
-        "description": "The inhabit facet (null = decoration), binding the row to live population bodies. Omitted from the wire when null. Refused together with Attach \u2014 a row cannot both spawn its own driven bodies and ride another body\u0027s pose.",
-        "default": null
-      },
-      "faceSources": {
-        "$ref": "./common.schema.json#/$defs/WorldPlacementFaceList",
-        "description": "Per-instance overrides of the creation\u0027s declared faces (null = every face shows its declared default). Omitted from the wire when null. Orthogonal to Attach (a content selector, not a transform) \u2014 composes freely, like every other facet that now tracks the dynamic pose.",
-        "default": null
-      },
-      "region": {
-        "$ref": "./common.schema.json#/$defs/WorldPlacementRegion",
-        "description": "The placement\u0027s region facet (see WorldPlacementRegion) \u2014 a named volume the world-events feed watches for body enter/exit, or null for none. Omitted from the wire when null. Composes with Attach: an attached row\u0027s sensing sphere centers on the resolved live pose (Server.WorldEventFeed.CollectRegions) instead of the row\u0027s static position \u2014 see WorldPlacementRegion\u0027s own remarks.",
-        "default": null
-      },
-      "attach": {
-        "$ref": "./common.schema.json#/$defs/WorldPlacementAttach",
-        "description": "The placement\u0027s attach facet (see WorldPlacementAttach) \u2014 binds the row\u0027s resolved world pose to a live population body, or null for a static/authored transform (the default, unchanged behavior). Omitted from the wire when null.",
-        "default": null
-      },
-      "contribution": {
-        "$ref": "./common.schema.json#/$defs/WorldPlacementContribution",
-        "description": "The placement\u0027s contribution facet (see WorldPlacementContribution) \u2014 marks the row a host-authored slot a federation partner fills, or null for an ordinary placement. Omitted from the wire when null. Composes with every other facet: the facet governs which creation the row shows and for how long, never its transform.",
-        "default": null
-      }
+      "default": null
     },
-    "required": [
-      "id",
-      "creationId",
-      "position",
-      "yawDegrees",
-      "scale"
-    ],
-    "additionalProperties": false
+    "policy": {
+      "description": "The live-placement policy \u2014 ABSENT resolves to Absent.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "authoringHeadroomScreens": {
+          "description": "Boot-consumed. The extra screen slots the probe reserves, bounded by the engine\u0027s MaxScreenSurfaces ceiling.",
+          "type": "integer"
+        },
+        "authoringHeadroomPlacements": {
+          "description": "Boot-consumed. The placement rows of headroom the probe reserves beyond the boot placements (see Client.WorldPlacementStamper.StaticStampInstances).",
+          "type": "integer"
+        },
+        "minPlacementScale": {
+          "description": "Live-consumed. The placement uniform-scale envelope\u0027s floor \u2014 a pure validator bound, revalidated on every placement mutation.",
+          "type": "number"
+        },
+        "maxPlacementScale": {
+          "description": "Live-consumed. The placement uniform-scale envelope\u0027s ceiling \u2014 also the worst-case scale Client.WorldStampPool\u0027s probe bound-radius reads (bound radius is spatial-cull metadata, never a word-capacity term, so re-reading it live every build cannot desync the frozen capacity floor).",
+          "type": "number"
+        },
+        "candidateRadius": {
+          "description": "Live-consumed. The proximity-candidate radius (world units) around a seat\u0027s editor focus point \u2014 cycling never walks the whole world (the explicit candidate policy).",
+          "type": "number"
+        },
+        "candidateCap": {
+          "description": "Live-consumed. The candidate-count cap: at most this many nearest in-radius rows enter the cycle ring.",
+          "type": "integer"
+        },
+        "previewDeadlineFrames": {
+          "description": "Live-consumed. The drag preview channel\u0027s missing-response fallback: a released overlay with no definition delivery after this many produced frames drops honestly.",
+          "type": "integer"
+        },
+        "derivedFaceScreens": {
+          "description": "Boot-consumed. The derived screen slots the binder reserves at boot for creation faces (a face declared by a placement\u0027s creation, lit by a feed), registered at [Client.WorldPrototypeFacets.DerivedFaceBase, DerivedFaceBase \u002B this). Bounded so the range stays inside the engine screen table.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "authoringHeadroomScreens",
+        "authoringHeadroomPlacements",
+        "minPlacementScale",
+        "maxPlacementScale",
+        "candidateRadius",
+        "candidateCap",
+        "previewDeadlineFrames",
+        "derivedFaceScreens"
+      ],
+      "additionalProperties": false,
+      "default": null
+    }
   },
+  "additionalProperties": false,
   "default": null
 }

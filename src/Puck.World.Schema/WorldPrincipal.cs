@@ -234,7 +234,7 @@ public readonly record struct WorldPrincipal(PrincipalKind Kind, int Index, stri
                 provider: CultureInfo.InvariantCulture,
                 result: out var peer
             ) ||
-                !WorldPopulationLimits.IsPeerIndex(index: peer) ||
+                !WorldBodiesLimits.IsPeerIndex(index: peer) ||
                 !int.TryParse(
                 s: remainder[(separator + 1)..],
                 style: NumberStyles.Integer,

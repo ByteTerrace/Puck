@@ -70,7 +70,7 @@ internal static class WorldBootComposition {
         // The per-seat PERCEPTION ANCHOR — the one body index all seat-relative presentation (camera eye, audio
         // listener, seat.<n>.position.* HUD bindings, crowd soft-shadow centers) derives from; today always the
         // seat's bound body (pure indirection — a future route-target swap moves the anchor here, in one place).
-        // CORE: the HUD binding resolver and player.where's anchor echo consume it in every boot shape;
+        // CORE: the HUD binding resolver and body.where's anchor echo consume it in every boot shape;
         // presentation's frame source and scene emitter reach the same singleton.
         services.AddSingleton<WorldPerceptionAnchor>();
         // The speech clock every speech path stamps (chat today) and every Speaking predicate / RecentSpeaker
@@ -254,8 +254,8 @@ internal static class WorldBootComposition {
         // delivery re-points a slot that already exists — the render provider key set is frozen at boot) —
         // shared by WorldMachineHost and WorldScreenBinder below so BOTH see the identical index set.
         static IReadOnlyList<WorldScreen> ExpandedScreens(WorldDefinition definition) =>
-            [.. definition.Screens, .. WorldCreationFacets.ReservedFaceSlots(
-                    derivedFaceBase: WorldCreationFacets.DerivedFaceBase,
+            [.. definition.Screens, .. WorldPrototypeFacets.ReservedFaceSlots(
+                    derivedFaceBase: WorldPrototypeFacets.DerivedFaceBase,
                     derivedFaceScreens: definition.Authoring.DerivedFaceScreens
                 )];
 
@@ -272,7 +272,7 @@ internal static class WorldBootComposition {
         // The screen binder — owns the declared screens' CPU-fed GPU sources (test patterns, the shared webcam,
         // window captures) and READS Server.WorldMachineHost's outputs for a machine-owning index (it no longer
         // boots, steps, or owns a machine itself — see WorldMachineHost's own remarks). CORE (not presentation-only)
-        // because WorldPlacementCommandModule's world.faces and PlayerCommandModule's player.engage both read its
+        // because WorldPlacementCommandModule's world.faces and PlayerCommandModule's body.engage both read its
         // bound/no-signal state. ConfigureViews (the offscreen jumbotron pool) is ONLY ever called from
         // presentation-only code (the render-root factory) — a headless boot constructs the binder as pure state and
         // never GPU-wires it, so no capture device or GPU-side texture is ever touched.

@@ -8,7 +8,7 @@ namespace Puck.World;
 internal sealed partial class PlayerCommandModule {
     private CommandResult StateHandler(CommandContext context, WireArgs args) {
         if (args.Count > 1) {
-            return CommandResult.Error(output: "[player.state: expected at most 1 value — an optional player index]");
+            return CommandResult.Error(output: "[body.state: expected at most 1 value — an optional body index]");
         }
 
         if (TryRoutedSeatQuery(
@@ -22,7 +22,7 @@ internal sealed partial class PlayerCommandModule {
         var (player, index, error) = ResolveTarget(
             args: in args,
             requiredCount: 0,
-            verb: "player.state"
+            verb: "body.state"
         );
         if (player is null) {
             return CommandResult.Error(output: error!);
@@ -43,7 +43,7 @@ internal sealed partial class PlayerCommandModule {
             (args.Count < 2) ||
             (args.Count > 3)
         ) {
-            return CommandResult.Error(output: "[player.state-load: expected <name> <counter-value|timer-seconds> [player]]");
+            return CommandResult.Error(output: "[body.state-load: expected <name> <counter-value|timer-seconds> [body]]");
         }
         if (
             !args.TryFloat(
@@ -52,13 +52,13 @@ internal sealed partial class PlayerCommandModule {
         ) ||
             !float.IsFinite(f: authored)
         ) {
-            return CommandResult.Error(output: "[player.state-load: value must be finite]");
+            return CommandResult.Error(output: "[body.state-load: value must be finite]");
         }
 
         var (player, index, error) = ResolveTarget(
             args: in args,
             requiredCount: 2,
-            verb: "player.state-load"
+            verb: "body.state-load"
         );
         if (player is null) {
             return CommandResult.Error(output: error!);
@@ -74,19 +74,19 @@ internal sealed partial class PlayerCommandModule {
             timerTicks: out _,
             value: out _
         )) {
-            return CommandResult.Error(output: $"[player.state-load: state '{name}' names no declared slot]");
+            return CommandResult.Error(output: $"[body.state-load: state '{name}' names no declared slot]");
         }
         if (lifetime != ActionStateLifetime.Durable) {
-            return CommandResult.Error(output: $"[player.state-load: state '{name}' is ephemeral]");
+            return CommandResult.Error(output: $"[body.state-load: state '{name}' is ephemeral]");
         }
         if (!playerWritable) {
-            return CommandResult.Error(output: $"[player.state-load: state '{name}' is not player-writable]");
+            return CommandResult.Error(output: $"[body.state-load: state '{name}' is not player-writable]");
         }
         if (
             (kind == ActionStateKind.Timer) &&
             (authored < 0f)
         ) {
-            return CommandResult.Error(output: "[player.state-load: timer seconds must be non-negative]");
+            return CommandResult.Error(output: "[body.state-load: timer seconds must be non-negative]");
         }
 
         var value = ((kind == ActionStateKind.Counter)
@@ -105,14 +105,14 @@ internal sealed partial class PlayerCommandModule {
 
         m_link.SubmitCommand(command: new WorldCommand.LoadDurableState(
             Principal: context.ActingPrincipal(),
-            EntityIndex: (index - 1),
+            EntityIndex: index,
             Tick: tick,
             Values: [value]
         ));
 
         return Echoed(
             args: in args,
-            handler: $"[player.state-load: p{index} {name} staged for tick {tick}]"
+            handler: $"[body.state-load: body:{index} {name} staged for tick {tick}]"
         );
     }
 }

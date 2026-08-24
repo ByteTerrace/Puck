@@ -3868,180 +3868,11 @@
         "reconnectGraceSeconds": {
           "type": "number"
         },
-        "capacityDraw": {
+        "capacityRow": {
           "type": [
-            "object",
+            "string",
             "null"
-          ],
-          "properties": {
-            "source": {
-              "description": "The declared source to draw from, by name \u2014 or null when Generator inlines one.",
-              "default": null,
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "generator": {
-              "description": "An inline anonymous source \u2014 or null when Source names a declared one.",
-              "type": [
-                "object",
-                "null"
-              ],
-              "properties": {
-                "source": {
-                  "description": "Which draw shape this source fires.",
-                  "enum": [
-                    "Markov",
-                    "UniformRange",
-                    "WeightedNumeric",
-                    "StreamDraw"
-                  ],
-                  "default": "Markov"
-                },
-                "start": {
-                  "description": "Markov only: the context every emission begins from. Must name a declared context.",
-                  "default": null,
-                  "type": [
-                    "string",
-                    "null"
-                  ]
-                },
-                "bound": {
-                  "description": "Markov only: the maximum tokens one emission may draw before refusing by name, 1..MaxEmissionBound. Left at DefaultBound by a numeric source.",
-                  "type": "integer",
-                  "default": 1
-                },
-                "contexts": {
-                  "description": "Markov only: the declared contexts, at least one, uniquely keyed.",
-                  "type": [
-                    "array",
-                    "null"
-                  ],
-                  "items": {
-                    "description": "One named context of a WorldGenerator \u2014 the state the walk may be sitting in and the weighted alternatives it may pick while there. A context declaring NO alternatives is TERMINAL: reaching it ends the emission.",
-                    "type": [
-                      "object",
-                      "null"
-                    ],
-                    "properties": {
-                      "key": {
-                        "description": "The stable context key, unique within the generator.",
-                        "type": "string"
-                      },
-                      "alternatives": {
-                        "description": "The weighted alternatives out of this context, or empty for a terminal context.",
-                        "type": [
-                          "array",
-                          "null"
-                        ],
-                        "items": {
-                          "description": "One weighted alternative of a WorldGeneratorContext: the token it emits, its relative weight, and the context the walk moves into after it is picked. The authored Next is what makes this a real Markov process rather than a bag of independent draws \u2014 the context key is the process state, so an author folds exactly as much history into it as the chain needs.",
-                          "type": [
-                            "object",
-                            "null"
-                          ],
-                          "properties": {
-                            "token": {
-                              "description": "The opaque game-authored token this alternative emits. The engine never interprets it; it is space-joined with the emission\u0027s other tokens and written into the target text cell. Bounded by MaxTokenLength.",
-                              "type": "string"
-                            },
-                            "weight": {
-                              "description": "The alternative\u0027s positive relative weight. At least one alternative in a context must carry a non-zero weight.",
-                              "type": "integer"
-                            },
-                            "next": {
-                              "description": "The context the walk moves into after this alternative is picked. Must name a declared Key; naming a context that declares NO alternatives ends the emission (a terminal is a context with nothing to say, never a reserved token spelling).",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "token",
-                            "weight",
-                            "next"
-                          ],
-                          "additionalProperties": false
-                        },
-                        "default": null
-                      }
-                    },
-                    "required": [
-                      "key"
-                    ],
-                    "additionalProperties": false
-                  },
-                  "default": null
-                },
-                "mode": {
-                  "description": "Markov only: how alternatives are consumed (see WorldGeneratorMode).",
-                  "enum": [
-                    "WithReplacement",
-                    "WithoutReplacement",
-                    "ReshuffleOnExhaustion"
-                  ],
-                  "default": "WithReplacement"
-                },
-                "rangeMin": {
-                  "description": "UniformRange only: the closed range\u0027s inclusive lower bound \u2014 both bounds present or neither. Raw-encoded per the destination site\u0027s CellKind (raw FixedQ4816 bits for a fixed site) \u2014 unlike a site row\u0027s own min/max, which a fixed row authors as decimal text, since a source is not bound to one site and cannot know the kind it will write.",
-                  "type": [
-                    "integer",
-                    "null"
-                  ],
-                  "default": null
-                },
-                "rangeMax": {
-                  "description": "UniformRange only: the inclusive upper bound, same encoding as RangeMin.",
-                  "type": [
-                    "integer",
-                    "null"
-                  ],
-                  "default": null
-                },
-                "weighted": {
-                  "description": "WeightedNumeric only: the weighted numeric outcomes, at least one, at least one carrying a non-zero weight.",
-                  "type": [
-                    "array",
-                    "null"
-                  ],
-                  "items": {
-                    "description": "One numeric outcome of a WeightedNumeric source: the raw value it writes and its relative weight \u2014 the numeric twin of WorldGeneratorAlternative, minus Token (nothing to join into text) and Next (a numeric draw is one terminal pick, never a walk).",
-                    "type": [
-                      "object",
-                      "null"
-                    ],
-                    "properties": {
-                      "value": {
-                        "description": "The raw value this outcome writes on selection (a plain integer for Int, raw FixedQ4816 bits for Fixed).",
-                        "type": "integer"
-                      },
-                      "weight": {
-                        "description": "The outcome\u0027s relative weight, fed straight to Puck.Maths.WeightedSampler\u0027s exact ulong overload. At least one outcome must carry a non-zero weight.",
-                        "type": "integer"
-                      }
-                    },
-                    "required": [
-                      "value",
-                      "weight"
-                    ],
-                    "additionalProperties": false
-                  },
-                  "default": null
-                }
-              },
-              "additionalProperties": false,
-              "default": null
-            },
-            "timing": {
-              "description": "When this site draws and whether it may be redrawn (see WorldDrawTiming).",
-              "enum": [
-                "Boot",
-                "TickPeriod",
-                "Event"
-              ],
-              "default": "Boot"
-            }
-          },
-          "additionalProperties": false
+          ]
         },
         "disclosure": {
           "type": [
@@ -4175,7 +4006,7 @@
           "type": "number",
           "default": 0
         },
-        "seatLook": {
+        "seatCameraFeel": {
           "type": [
             "object",
             "null"
@@ -4269,7 +4100,7 @@
         ],
         "properties": {
           "name": {
-            "description": "The channel\u0027s unique, non-empty name \u2014 the vocabulary key every binding, player.press, kit Actions entry, and the addon wire resolve against.",
+            "description": "The channel\u0027s unique, non-empty name \u2014 the vocabulary key every binding, body.press, kit Actions entry, and the addon wire resolve against.",
             "type": "string"
           },
           "shape": {
@@ -5197,13 +5028,13 @@
                   "$type": {
                     "const": "fromCreation"
                   },
-                  "creationId": {
+                  "prototypeId": {
                     "description": "The referenced Id.",
                     "type": "string"
                   }
                 },
                 "required": [
-                  "creationId"
+                  "prototypeId"
                 ],
                 "additionalProperties": false
               }
@@ -6510,7 +6341,7 @@
         "additionalProperties": false
       }
     },
-    "creations": {
+    "prototypes": {
       "description": "The embedded creation documents rendering resolves shapes from.",
       "type": "array",
       "items": {
@@ -6557,7 +6388,7 @@
             "description": "The row\u0027s stable string id (its mutation address).",
             "type": "string"
           },
-          "creationId": {
+          "prototypeId": {
             "description": "The referenced Id (must resolve; removal of a referenced creation rejects loudly).",
             "type": "string"
           },
@@ -6679,7 +6510,7 @@
                 ]
               },
               "look": {
-                "description": "The Name the bodies wear, or null to wear an implicit creation look on this placement\u0027s own CreationId.",
+                "description": "The Name the bodies wear, or null to wear an implicit creation look on this placement\u0027s own PrototypeId.",
                 "type": [
                   "string",
                   "null"
@@ -7210,7 +7041,7 @@
         },
         "required": [
           "id",
-          "creationId",
+          "prototypeId",
           "position",
           "yawDegrees",
           "scale"
@@ -7658,7 +7489,7 @@
       "description": "The tune assets.",
       "type": "array",
       "items": {
-        "description": "One tune asset row \u2014 a whole puck.audio.v1 document embedded inline-canonical with its identity hash pinned beside it (the same hash-pin/canonicalize contract as WorldCreation): the compose boundary canonicalizes on upsert through AudioCanonicalizer and rejects a hash the pipeline did not itself compute; the validator re-verifies the pin on every candidate; world.save re-canonicalizes. The hash doubles as the runtime restart discriminator: a content change restarts the tune\u0027s headless host, a rename does not.",
+        "description": "One tune asset row \u2014 a whole puck.audio.v1 document embedded inline-canonical with its identity hash pinned beside it (the same hash-pin/canonicalize contract as WorldPrototype): the compose boundary canonicalizes on upsert through AudioCanonicalizer and rejects a hash the pipeline did not itself compute; the validator re-verifies the pin on every candidate; world.save re-canonicalizes. The hash doubles as the runtime restart discriminator: a content change restarts the tune\u0027s headless host, a rename does not.",
         "type": [
           "object",
           "null"
@@ -7688,7 +7519,7 @@
       "description": "The synth patch assets.",
       "type": "array",
       "items": {
-        "description": "One synth-patch asset row \u2014 a whole puck.synth.v1 document embedded inline-canonical with its identity hash pinned beside it via SynthPatchCanonicalizer, the same pin/restart contract as WorldCreation; see WorldTune for the shared pin/restart semantics.",
+        "description": "One synth-patch asset row \u2014 a whole puck.synth.v1 document embedded inline-canonical with its identity hash pinned beside it via SynthPatchCanonicalizer, the same pin/restart contract as WorldPrototype; see WorldTune for the shared pin/restart semantics.",
         "type": [
           "object",
           "null"
@@ -8085,7 +7916,7 @@
             ],
             "anyOf": [
               {
-                "description": "The procedural humanoid catalog (WorldAvatarCatalog) \u2014 one look source among others.",
+                "description": "The procedural humanoid catalog (WorldRigCatalog) \u2014 one look source among others.",
                 "properties": {
                   "$type": {
                     "const": "catalog"
@@ -8104,18 +7935,18 @@
                 "additionalProperties": false
               },
               {
-                "description": "A sculpted creation worn by the body \u2014 resolved against the world\u0027s WorldCreation rows.",
+                "description": "A sculpted creation worn by the body \u2014 resolved against the world\u0027s WorldPrototype rows.",
                 "properties": {
                   "$type": {
                     "const": "creation"
                   },
-                  "creationId": {
+                  "prototypeId": {
                     "description": "The referenced Id, authored literally or through a Text state cell; it must resolve at validation.",
                     "type": "string"
                   }
                 },
                 "required": [
-                  "creationId"
+                  "prototypeId"
                 ],
                 "additionalProperties": false
               }
@@ -9670,8 +9501,7 @@
                     "type": "string"
                   },
                   "rate": {
-                    "description": "The fraction per step, in [0, 1].",
-                    "type": "number"
+                    "description": "The fraction per step, in [0, 1]."
                   }
                 },
                 "required": [
@@ -9691,8 +9521,7 @@
                     "type": "string"
                   },
                   "rate": {
-                    "description": "The fraction per step, in [0, 1].",
-                    "type": "number"
+                    "description": "The fraction per step, in [0, 1]."
                   }
                 },
                 "required": [
@@ -9733,8 +9562,7 @@
                           ]
                         },
                         "value": {
-                          "description": "The constant compared against.",
-                          "type": "number"
+                          "description": "The scalar compared against (literal or state-row reference)."
                         }
                       },
                       "required": [
@@ -9767,8 +9595,7 @@
                           ]
                         },
                         "value": {
-                          "description": "The constant written or added; the result clamps to the field\u0027s range.",
-                          "type": "number"
+                          "description": "The constant written or added; the result clamps to the field\u0027s range."
                         }
                       },
                       "required": [
@@ -9801,8 +9628,7 @@
                     "type": "string"
                   },
                   "amount": {
-                    "description": "The amount per step; the cell clamps to the field\u0027s range.",
-                    "type": "number"
+                    "description": "The amount per step; the cell clamps to the field\u0027s range."
                   }
                 },
                 "required": [
@@ -9834,8 +9660,7 @@
                     ]
                   },
                   "value": {
-                    "description": "The constant compared against.",
-                    "type": "number"
+                    "description": "The constant compared against."
                   },
                   "row": {
                     "description": "The keyed int state row written, keyed by body index.",
@@ -9861,46 +9686,131 @@
             "null"
           ],
           "items": {
-            "description": "One initial fill: every cell whose XZ centre lies in the rectangle takes Value.",
+            "description": "One initial fill of a lattice row, applied in order over the row\u0027s initial. Every kind decides per CELL with integer hashes and Q48.16 arithmetic only, so a fill is bit-identical on every machine and backend -- lattice values are simulation state. The Field member is compile-stamped from the carrying row (see Compile) and omitted in the document.",
             "type": [
               "object",
               "null"
             ],
-            "properties": {
-              "field": {
-                "description": "The field painted.",
-                "type": "string"
-              },
-              "value": {
-                "description": "The value written.",
-                "type": "number"
-              },
-              "minX": {
-                "description": "The rectangle\u0027s least X, world units.",
-                "type": "number"
-              },
-              "minZ": {
-                "description": "The rectangle\u0027s least Z, world units.",
-                "type": "number"
-              },
-              "maxX": {
-                "description": "The rectangle\u0027s greatest X, world units.",
-                "type": "number"
-              },
-              "maxZ": {
-                "description": "The rectangle\u0027s greatest Z, world units.",
-                "type": "number"
-              }
-            },
             "required": [
-              "field",
-              "value",
-              "minX",
-              "minZ",
-              "maxX",
-              "maxZ"
+              "$type"
             ],
-            "additionalProperties": false
+            "anyOf": [
+              {
+                "description": "Every cell whose XZ centre lies in the rectangle takes Value.",
+                "properties": {
+                  "$type": {
+                    "const": "rect"
+                  },
+                  "value": {
+                    "description": "The value written.",
+                    "type": "number"
+                  },
+                  "minX": {
+                    "description": "The rectangle\u0027s least X, world units.",
+                    "type": "number"
+                  },
+                  "minZ": {
+                    "description": "The rectangle\u0027s least Z, world units.",
+                    "type": "number"
+                  },
+                  "maxX": {
+                    "description": "The rectangle\u0027s greatest X, world units.",
+                    "type": "number"
+                  },
+                  "maxZ": {
+                    "description": "The rectangle\u0027s greatest Z, world units.",
+                    "type": "number"
+                  },
+                  "field": {
+                    "description": "Gets the filled row\u0027s name -- compile-stamped, never authored inside a trait.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "value",
+                  "minX",
+                  "minZ",
+                  "maxX",
+                  "maxZ"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "description": "Patchy fill: fixed-point hash-lattice fBm over the CELL INDEX decides each cell. Where the octave sum n (in [0, 1]) reaches Threshold, the cell takes Value \u00B7 (n \u2212 Threshold) / (1 \u2212 Threshold) -- a smooth patch interior rising to the full value. The hash folds the fill\u0027s Seed with the world seed (the generation section\u0027s reroll lever), and every blend runs in Q48.16, so two boots of one document at one seed are bit-identical.",
+                "properties": {
+                  "$type": {
+                    "const": "noise"
+                  },
+                  "value": {
+                    "description": "The peak value written inside a patch.",
+                    "type": "number"
+                  },
+                  "frequency": {
+                    "description": "Lattice cells per noise cell reciprocal -- noise-cell edge in CELLS (e.g. 8 = one noise cell spans 8 lattice cells). At least 1.",
+                    "type": "integer"
+                  },
+                  "threshold": {
+                    "description": "The patch admission level in [0, 1); higher = sparser patches.",
+                    "type": "number",
+                    "default": 0.5
+                  },
+                  "octaves": {
+                    "description": "Octave count, 1..4.",
+                    "type": "integer",
+                    "default": 3
+                  },
+                  "seed": {
+                    "description": "The hash seed, folded with the world seed.",
+                    "type": "integer",
+                    "default": 0
+                  },
+                  "field": {
+                    "description": "Gets the filled row\u0027s name -- compile-stamped, never authored inside a trait.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "value",
+                  "frequency"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "description": "Scattered discs: one jittered point per Spacing-cell block (integer-hash offset), and every cell within Radius cells of a point takes Value -- the CPU boot-fill sibling of the renderer\u0027s CellJitter scatter.",
+                "properties": {
+                  "$type": {
+                    "const": "scatter"
+                  },
+                  "value": {
+                    "description": "The value written inside each disc.",
+                    "type": "number"
+                  },
+                  "spacing": {
+                    "description": "The scatter block edge in CELLS (at least 2).",
+                    "type": "integer"
+                  },
+                  "radius": {
+                    "description": "The disc radius in CELLS (at least 1; must leave the disc inside its block\u0027s jitter envelope, refused otherwise).",
+                    "type": "integer",
+                    "default": 1
+                  },
+                  "seed": {
+                    "description": "The hash seed, folded with the world seed.",
+                    "type": "integer",
+                    "default": 0
+                  },
+                  "field": {
+                    "description": "Gets the filled row\u0027s name -- compile-stamped, never authored inside a trait.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "value",
+                  "spacing"
+                ],
+                "additionalProperties": false
+              }
+            ]
           },
           "default": null
         }
@@ -10390,7 +10300,7 @@
                               "description": "The row\u0027s stable string id (its mutation address).",
                               "type": "string"
                             },
-                            "creationId": {
+                            "prototypeId": {
                               "description": "The referenced Id (must resolve; removal of a referenced creation rejects loudly).",
                               "type": "string"
                             },
@@ -10444,7 +10354,7 @@
                           },
                           "required": [
                             "id",
-                            "creationId",
+                            "prototypeId",
                             "position",
                             "yawDegrees",
                             "scale"
@@ -10483,7 +10393,7 @@
                       "additionalProperties": false
                     },
                     {
-                      "description": "Teleports one body to a pose \u2014 the rule-side spelling of the player.pose verb, world scope only (refused at body scope). Like Save it submits no WorldMutation: a pose is body state, not document state, so nothing composes, validates, or journals, and a replay reproduces it by re-firing the same rule. Applied as the world\u0027s own act through WorldBody.Pose, deliberately outside the drive-admission gate: a body whose gatesDrive row reads nonzero is a body a rule still needs to move (a dead body back to its spawn). The client sees the same teleport continuity a player.pose produces.",
+                      "description": "Teleports one body to a pose \u2014 the rule-side spelling of the body.pose verb, world scope only (refused at body scope). Like Save it submits no WorldMutation: a pose is body state, not document state, so nothing composes, validates, or journals, and a replay reproduces it by re-firing the same rule. Applied as the world\u0027s own act through WorldBody.Pose, deliberately outside the drive-admission gate: a body whose gatesDrive row reads nonzero is a body a rule still needs to move (a dead body back to its spawn). The client sees the same teleport continuity a body.pose produces.",
                       "properties": {
                         "$type": {
                           "const": "pose"
@@ -10842,7 +10752,7 @@
     "defaultSeatKit",
     "assignment",
     "bindingOverlays",
-    "creations",
+    "prototypes",
     "placements",
     "speakers",
     "tunes",

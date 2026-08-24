@@ -1,7 +1,7 @@
 {
   "schema": "puck.world.def.v1",
   "documentId": "body-dynamics-canary",
-  "population": { "localSeats": 1 },
+  "bodies": { "localSeats": 1 },
   "simulation": { "rateHz": 240 },
   "channels": [
     { "name": "forward", "shape": "Bipolar", "role": "MoveAdvance" },
@@ -43,26 +43,28 @@
       ]
     }
   ],
-  "kits": [
-    {
-      "name": "stander",
-      "bodyMotionProgram": "traverse",
-      "motion": {
-        "$type": "grounded",
-        "moveSpeed": 4,
-        "turnSpeed": 2.5,
-        "riseGravity": 28,
-        "fallGravity": 46,
-        "maxFallSpeed": 40,
-        "dynamics": "stride",
-        "sprintMultiplier": 1
-      },
-      "collider": {
-        "$type": "sphere",
-        "radius": 0.5
-      },
-      "bodyContact": "Solid"
-    }
-  ],
+  "kits": {
+    "rows": [
+      {
+        "name": "stander",
+        "bodyMotionProgram": "traverse",
+        "motion": {
+          "$type": "grounded",
+          "moveSpeed": 4,
+          "turnSpeed": 2.5,
+          "riseGravity": 28,
+          "fallGravity": 46,
+          "maxFallSpeed": 40,
+          "dynamics": "stride",
+          "sprintMultiplier": 1
+        },
+        "collider": {
+          "$type": "sphere",
+          "radius": 0.5
+        },
+        "bodyContact": "Solid"
+      }
+    ]
+  },
   "defaultSeatKit": "stander"
 }

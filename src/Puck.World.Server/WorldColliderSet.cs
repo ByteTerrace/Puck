@@ -39,11 +39,11 @@ internal sealed class WorldColliderSet : IContactField {
     // Every ATTACHED solid row (Attach + Solid both set — refused only under the FIELD provider, see the validator):
     // its geometry cannot join m_colliders above because its origin/yaw are not the row's static authored transform,
     // they are a live body's pose. RefreshAttached recomputes m_attachedColliders from these once per tick.
-    private readonly IReadOnlyList<(WorldPlacement Placement, WorldCreation Creation)> m_attachedRows;
+    private readonly IReadOnlyList<(WorldPlacement Placement, WorldPrototype Creation)> m_attachedRows;
     private readonly FixedStaticCollider[] m_colliders;
     private readonly FixedStaticContactSolver m_solver;
 
-    private WorldColliderSet(FixedStaticCollider[] colliders, FixedWorldCollision tuning, IReadOnlyList<(WorldPlacement Placement, WorldCreation Creation)> attachedRows) {
+    private WorldColliderSet(FixedStaticCollider[] colliders, FixedWorldCollision tuning, IReadOnlyList<(WorldPlacement Placement, WorldPrototype Creation)> attachedRows) {
         m_colliders = colliders;
         m_attachedRows = attachedRows;
         m_solver = new FixedStaticContactSolver(
@@ -91,7 +91,7 @@ internal sealed class WorldColliderSet : IContactField {
                 (placement.Solid is null) ||
                 (WorldDefinitionRows.FindCreation(
                 creations: definition.Creations,
-                id: placement.CreationId
+                id: placement.PrototypeId
             ) is not { } creation)
             ) {
                 continue;
@@ -203,7 +203,7 @@ internal sealed class WorldColliderSet : IContactField {
 
         var tuning = FixedWorldCollision.Compile(collision: collision);
         var colliders = new List<FixedStaticCollider>();
-        var attachedRows = new List<(WorldPlacement Placement, WorldCreation Creation)>();
+        var attachedRows = new List<(WorldPlacement Placement, WorldPrototype Creation)>();
         var spheres = 0;
         var boxes = 0;
         var planes = 0;
@@ -236,7 +236,7 @@ internal sealed class WorldColliderSet : IContactField {
                 (placement.Solid is not { } solid) ||
                 (WorldDefinitionRows.FindCreation(
                 creations: definition.Creations,
-                id: placement.CreationId
+                id: placement.PrototypeId
             ) is not { } creation)
             ) {
                 continue;

@@ -13,7 +13,7 @@ namespace Puck.World.Tests;
 public sealed class WorldLookDynamicsLawTests {
     private static WorldDynamicsRow Chase => new(Name: "chase", Frequency: 1f, Damping: 1f, Response: 0f);
 
-    private static WorldCreation BuildPartedCreation() {
+    private static WorldPrototype BuildPartedCreation() {
         var shape = new ShapeDocument(
             Id: 1,
             Name: "head",
@@ -36,13 +36,13 @@ public sealed class WorldLookDynamicsLawTests {
         );
         var canonical = CreationCanonicalizer.Canonicalize(document: document, source: "parted");
 
-        return new WorldCreation(Id: "parted", Document: canonical.Document, HashRaw: canonical.Hash);
+        return new WorldPrototype(Id: "parted", Document: canonical.Document, HashRaw: canonical.Hash);
     }
 
     private static WorldDefinition WithPartedCreation(WorldLookMotion motion) => Fixtures.BuildDocument() with {
         DynamicsRaw = [Chase],
         CreationsRaw = [BuildPartedCreation()],
-        LookRowsRaw = [new WorldLook(Name: "avatar", Source: new WorldLookSource.Creation(CreationId: "parted"), Scale: 1f, Motion: motion)],
+        LookRowsRaw = [new WorldLook(Name: "avatar", Source: new WorldLookSource.Creation(PrototypeId: "parted"), Scale: 1f, Motion: motion)],
     };
 
     [Fact]

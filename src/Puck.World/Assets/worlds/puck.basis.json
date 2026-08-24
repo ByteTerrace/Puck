@@ -859,7 +859,7 @@
                   ]
                 },
                 {
-                  "command": "player.where",
+                  "command": "body.where",
                   "id": "where",
                   "sources": [
                     "gamepad.buttonWest"

@@ -603,7 +603,7 @@
   "placements": [
     {
       "id": "parity-gradient",
-      "creationId": "parity-gradient",
+      "prototypeId": "parity-gradient",
       "position": [
         0,
         0,
@@ -619,7 +619,7 @@
     },
     {
       "id": "camera-seat-0",
-      "creationId": "camera-body",
+      "prototypeId": "camera-body",
       "position": [
         0,
         1.5,

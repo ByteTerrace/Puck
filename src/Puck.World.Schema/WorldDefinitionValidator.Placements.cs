@@ -9,13 +9,13 @@ namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
     // The creation's Locomotion token, resolved as a kit name (the creator's rule; null when the creation/token is absent).
-    private static string? ResolveLocomotionKit(WorldDefinition definition, string creationId) {
+    private static string? ResolveLocomotionKit(WorldDefinition definition, string prototypeId) {
         foreach (var creation in definition.Creations) {
             if (
                 (creation is not null) &&
                 string.Equals(
                 a: creation.Id,
-                b: creationId,
+                b: prototypeId,
                 comparisonType: StringComparison.Ordinal
             )
             ) {
@@ -39,7 +39,7 @@ public static partial class WorldDefinitionValidator {
     // Placement resolves its row and, when ShapeId is present, that the id
     // names a real shape in the referenced placement's creation document, the same rule
     // Puck.Forge.Authoring.CreationCameraDocument enforces.
-    private static void ValidateAnchor(WorldAnchor anchor, IReadOnlyList<WorldPlacement> placements, HashSet<string> placementIds, IReadOnlyList<WorldCreation> creations, int populationCapacity, string path, List<string> errors) {
+    private static void ValidateAnchor(WorldAnchor anchor, IReadOnlyList<WorldPlacement> placements, HashSet<string> placementIds, IReadOnlyList<WorldPrototype> creations, int populationCapacity, string path, List<string> errors) {
         switch (anchor) {
             case null:
                 errors.Add(item: $"{path} is required.");
@@ -86,7 +86,7 @@ public static partial class WorldDefinitionValidator {
                         ? null
                         : WorldDefinitionRows.FindCreation(
                             creations: creations,
-                            id: row.CreationId
+                            id: row.PrototypeId
                         )
                     );
 
@@ -123,8 +123,8 @@ public static partial class WorldDefinitionValidator {
 
                 break;
             case WorldAnchor.Seat seat:
-                if ((seat.Number is { } number) && ((number < 1) || (number > WorldPopulationLimits.LocalSeatCount))) {
-                    errors.Add(item: $"{path}.number {number} is outside 1..{WorldPopulationLimits.LocalSeatCount}.");
+                if ((seat.Number is { } number) && ((number < 1) || (number > WorldBodiesLimits.LocalSeatCount))) {
+                    errors.Add(item: $"{path}.number {number} is outside 1..{WorldBodiesLimits.LocalSeatCount}.");
                 }
 
                 if ((seat.PartId is { } seatPart) && string.IsNullOrWhiteSpace(value: seatPart)) {
@@ -163,10 +163,10 @@ public static partial class WorldDefinitionValidator {
     }
     // The editor/authoring policy row: every field finite/positive with a sane ceiling. The BOOT-CONSUMED
     // headroom fields are additionally capped against the engine's own limits — see
-    // WorldAuthoringDefaults' remarks for which fields are boot-consumed vs. live-consumed — so a bad authored value
+    // WorldPlacementPolicyDefaults' remarks for which fields are boot-consumed vs. live-consumed — so a bad authored value
     // can never reach a boot's frozen render-envelope probe (a live-consumed field's bad value is caught the same
     // way, on every mutation, since the validator re-runs on every composed candidate).
-    private static void ValidateAuthoring(WorldAuthoringDefaults authoring, List<string> errors) {
+    private static void ValidateAuthoring(WorldPlacementPolicyDefaults authoring, List<string> errors) {
         RequireIntRange(
             value: authoring.AuthoringHeadroomScreens,
             min: 0,
@@ -230,7 +230,7 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
     }
-    private static void ValidateCollider(WorldCollider? collider, IReadOnlyList<WorldCreation> creations, string path, List<string> errors) {
+    private static void ValidateCollider(WorldCollider? collider, IReadOnlyList<WorldPrototype> creations, string path, List<string> errors) {
         if (collider is null) {
             return;
         }
@@ -277,26 +277,26 @@ public static partial class WorldDefinitionValidator {
                 break;
             case WorldCollider.FromCreation fromCreation:
                 if (
-                    string.IsNullOrWhiteSpace(value: fromCreation.CreationId) ||
+                    string.IsNullOrWhiteSpace(value: fromCreation.PrototypeId) ||
                     (WorldDefinitionRows.FindCreation(
                     creations: creations,
-                    id: fromCreation.CreationId
+                    id: fromCreation.PrototypeId
                 ) is not { } creation)
                 ) {
-                    errors.Add(item: $"{path}.creationId '{fromCreation.CreationId}' names no creation row.");
+                    errors.Add(item: $"{path}.prototypeId '{fromCreation.PrototypeId}' names no creation row.");
                     break;
                 }
 
                 var shapes = (creation.Document.Shapes ?? []);
                 if (shapes.Count < 1) {
-                    errors.Add(item: $"{path} creation '{fromCreation.CreationId}' emits no body-collider volumes.");
+                    errors.Add(item: $"{path} creation '{fromCreation.PrototypeId}' emits no body-collider volumes.");
                 } else if (shapes.Count > WorldCollider.MaxVolumes) {
-                    errors.Add(item: $"{path} creation '{fromCreation.CreationId}' emits {shapes.Count} volumes, exceeding the {WorldCollider.MaxVolumes}-volume body-collider ceiling.");
+                    errors.Add(item: $"{path} creation '{fromCreation.PrototypeId}' emits {shapes.Count} volumes, exceeding the {WorldCollider.MaxVolumes}-volume body-collider ceiling.");
                 }
 
                 for (var index = 0; (index < shapes.Count); index++) {
                     if (shapes[index].Type == SdfSolidPrimitive.Plane) {
-                        errors.Add(item: $"{path} creation '{fromCreation.CreationId}' shape {index} is an unbounded plane, not a finite body volume.");
+                        errors.Add(item: $"{path} creation '{fromCreation.PrototypeId}' shape {index} is an unbounded plane, not a finite body volume.");
                     }
                 }
                 break;
@@ -310,7 +310,7 @@ public static partial class WorldDefinitionValidator {
     // through CreationCanonicalizer (the ONE pipeline — never a re-implementation), the hash pin (the carried
     // hash must equal the canonical hash — a tampered/corrupt row rejects loudly), and the per-stamp shape budget
     // (word-exact ceiling). Returns the resolved id set for the placement gate.
-    private static HashSet<string> ValidateCreations(WorldDefinition definition, IReadOnlyList<WorldCreation> creations, HashSet<string> fontNames, bool hasTextCatalog, List<string> errors) {
+    private static HashSet<string> ValidateCreations(WorldDefinition definition, IReadOnlyList<WorldPrototype> creations, HashSet<string> fontNames, bool hasTextCatalog, List<string> errors) {
         var ids = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         if (creations is null) {
@@ -417,7 +417,7 @@ public static partial class WorldDefinitionValidator {
         return ids;
     }
     // The per-instance face overrides: each names a declared creation face, no duplicate face names.
-    private static void ValidateFaceSources(WorldDefinition definition, IReadOnlyList<WorldPlacementFace>? faceSources, WorldPlacement placement, IReadOnlyList<WorldCreation> creations, WorldFaceCatalog faces, ValidationScope scope, string path, List<string> errors) {
+    private static void ValidateFaceSources(WorldDefinition definition, IReadOnlyList<WorldPlacementFace>? faceSources, WorldPlacement placement, IReadOnlyList<WorldPrototype> creations, WorldFaceCatalog faces, ValidationScope scope, string path, List<string> errors) {
         if (faceSources is not { Count: > 0 } sources) {
             return;
         }
@@ -428,7 +428,7 @@ public static partial class WorldDefinitionValidator {
 
         var creation = WorldDefinitionRows.FindCreation(
             creations: creations,
-            id: placement.CreationId
+            id: placement.PrototypeId
         );
         var faceNames = new HashSet<string>(comparer: StringComparer.Ordinal);
 
@@ -453,7 +453,7 @@ public static partial class WorldDefinitionValidator {
             }
 
             if (!faceNames.Contains(item: source.Face)) {
-                errors.Add(item: $"{facePath}.face '{source.Face}' names no declared face on creation '{placement.CreationId}'.");
+                errors.Add(item: $"{facePath}.face '{source.Face}' names no declared face on creation '{placement.PrototypeId}'.");
             }
 
             if (!seen.Add(item: source.Face)) {
@@ -502,7 +502,7 @@ public static partial class WorldDefinitionValidator {
                 } else if (placement.Inhabit is not null) {
                     errors.Add(item: $"{facePath}.portal sits on an INHABITED placement — its stamp rides a live body's pose rather than the row's authored transform, so the door's frame would be stale every tick; move the door onto a static placement.");
                 } else if (creation is { Document.Frames.Count: > 0 }) {
-                    errors.Add(item: $"{facePath}.portal sits on an ANIMATED placement (creation '{placement.CreationId}' carries timeline frames) — a replaying stamp's surface moves on the render clock while the derived frame does not; move the door onto a static placement.");
+                    errors.Add(item: $"{facePath}.portal sits on an ANIMATED placement (creation '{placement.PrototypeId}' carries timeline frames) — a replaying stamp's surface moves on the render clock while the derived frame does not; move the door onto a static placement.");
                 }
 
                 // The derived face itself: its shape kind must open an aperture (WorldFaceApertures), and its frame
@@ -541,7 +541,7 @@ public static partial class WorldDefinitionValidator {
     private static void ValidateInhabit(WorldPlacementInhabit inhabit, WorldPlacement placement, string path, WorldDefinition definition, HashSet<string> kitNames, HashSet<string> lookNames, List<string> errors) {
         var resolvedKit = (inhabit.Kit ?? ResolveLocomotionKit(
             definition: definition,
-            creationId: placement.CreationId
+            prototypeId: placement.PrototypeId
         ));
 
         if (
@@ -759,7 +759,7 @@ public static partial class WorldDefinitionValidator {
     // the GPU-safety MaxLookScale ceiling, and non-negative motion values — rejecting a zero-hold replay (an infinite
     // loop) and a timeline replay on a catalog source (no timeline to replay) LOUDLY, never silently. Returns the
     // resolved look-name set (a future Inhabit facet resolves its Look against it).
-    private static HashSet<string> ValidateLooks(IReadOnlyList<WorldLook> looks, HashSet<string> creationIds, IReadOnlyList<WorldCreation> creations, ISet<string> dynamicsNames, List<string> errors) {
+    private static HashSet<string> ValidateLooks(IReadOnlyList<WorldLook> looks, HashSet<string> prototypeIds, IReadOnlyList<WorldPrototype> creations, ISet<string> dynamicsNames, List<string> errors) {
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         for (var index = 0; (index < looks.Count); index++) {
@@ -781,7 +781,7 @@ public static partial class WorldDefinitionValidator {
             );
 
             var isCatalog = false;
-            WorldCreation? resolvedCreation = null;
+            WorldPrototype? resolvedCreation = null;
 
             switch (look.Source) {
                 case WorldLookSource.Catalog catalog:
@@ -800,14 +800,14 @@ public static partial class WorldDefinitionValidator {
                     break;
                 case WorldLookSource.Creation creation:
                     if (
-                        string.IsNullOrWhiteSpace(value: creation.CreationId) ||
-                        !creationIds.Contains(item: creation.CreationId)
+                        string.IsNullOrWhiteSpace(value: creation.PrototypeId) ||
+                        !prototypeIds.Contains(item: creation.PrototypeId)
                     ) {
-                        errors.Add(item: $"{path}.source.creationId '{creation.CreationId}' names no creation row.");
+                        errors.Add(item: $"{path}.source.prototypeId '{creation.PrototypeId}' names no creation row.");
                     } else {
                         resolvedCreation = WorldDefinitionRows.FindCreation(
                             creations: creations,
-                            id: creation.CreationId
+                            id: creation.PrototypeId
                         );
                     }
 
@@ -858,7 +858,7 @@ public static partial class WorldDefinitionValidator {
 
             if (look.Motion.Cues is { } cues) {
                 var frames = ((!isCatalog && (look.Source is WorldLookSource.Creation cueCreation))
-                    ? WorldDefinitionRows.FindCreation(creations: creations, id: cueCreation.CreationId)?.Document.Frames
+                    ? WorldDefinitionRows.FindCreation(creations: creations, id: cueCreation.PrototypeId)?.Document.Frames
                     : null
                 );
 
@@ -947,8 +947,8 @@ public static partial class WorldDefinitionValidator {
     // scale envelope, the lattice distribution's positive counts and finite steps, the mirror plane, and the animated-row
     // constraints (static-only facets; the reserved replay-pool ceiling, word-exact). Returns the resolved id set for
     // the anchor-union gate (a WorldAnchor.Placement resolves against it).
-    private static HashSet<string> ValidatePlacements(IReadOnlyList<WorldPlacement> placements, WorldDefinition definition, WorldAuthoringDefaults authoring, bool requiresField, ValidationScope scope, List<string> errors) {
-        var creationIds = scope.CreationIds;
+    private static HashSet<string> ValidatePlacements(IReadOnlyList<WorldPlacement> placements, WorldDefinition definition, WorldPlacementPolicyDefaults authoring, bool requiresField, ValidationScope scope, List<string> errors) {
+        var prototypeIds = scope.PrototypeIds;
         var lookNames = scope.LookNames;
         var kitNames = scope.KitNames;
         var patchIds = scope.PatchIds;
@@ -997,10 +997,10 @@ public static partial class WorldDefinitionValidator {
             );
 
             RequireDeclared(
-                value: placement.CreationId,
-                declaredSet: creationIds,
+                value: placement.PrototypeId,
+                declaredSet: prototypeIds,
                 path: path,
-                field: "creationId",
+                field: "prototypeId",
                 rowNoun: "creation",
                 errors: errors
             );
@@ -1069,7 +1069,7 @@ public static partial class WorldDefinitionValidator {
 
                 if (WorldDefinitionRows.FindCreation(
                     creations: creations,
-                    id: placement.CreationId
+                    id: placement.PrototypeId
                 ) is { } solidCreation) {
                     // A shape carrying domain ops compiles one collider PER EXPANDED COPY, so the ceiling counts the
                     // expansion, not the authored shape count. A fold with no rigid-copy expansion has no contact
@@ -1085,7 +1085,7 @@ public static partial class WorldDefinitionValidator {
                             frames: out var solidFrames,
                             refusal: out var solidRefusal
                         )) {
-                            errors.Add(item: $"{path}.solid names creation '{placement.CreationId}', whose shape {solidShape.Id} carries {solidRefusal} — a solid row needs contact geometry for every copy its fold draws.");
+                            errors.Add(item: $"{path}.solid names creation '{placement.PrototypeId}', whose shape {solidShape.Id} carries {solidRefusal} — a solid row needs contact geometry for every copy its fold draws.");
 
                             continue;
                         }
@@ -1127,7 +1127,7 @@ public static partial class WorldDefinitionValidator {
             // pool — single copy only (pattern/mirror are static-stamp facets), and at most the reserved pool count.
             var isAnimated = (WorldDefinitionRows.FindCreation(
                 creations: creations,
-                id: placement.CreationId
+                id: placement.PrototypeId
             ) is { Document.Frames.Count: > 0 });
 
             if (isAnimated) {
@@ -1276,7 +1276,7 @@ public static partial class WorldDefinitionValidator {
             if (placement.Contribution is { } slotContribution) {
                 ValidateContribution(
                     contribution: slotContribution,
-                    creationIds: creationIds,
+                    prototypeIds: prototypeIds,
                     definition: definition,
                     errors: errors,
                     path: $"{path}.contribution",
@@ -1347,7 +1347,7 @@ public static partial class WorldDefinitionValidator {
         if (portal.Capacity is { } capacity) {
             RequireIntRange(
                 errors: errors,
-                max: WorldPopulationLimits.CapacityCeiling,
+                max: WorldBodiesLimits.CapacityCeiling,
                 min: 1,
                 name: $"{path}.capacity",
                 value: capacity

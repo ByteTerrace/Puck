@@ -123,7 +123,7 @@ public sealed class WorldIdentity {
     /// That is also the answer BEFORE a profile has been delivered for a seat, which is the same
     /// answer whether the profile is about to arrive in-process or across a link: nothing here assumes an identity
     /// document can only be built locally.</remarks>
-    public WorldSeatLook? SeatLook { get; set; }
+    public WorldSeatCameraFeel? SeatLook { get; set; }
     /// <summary>Gets the turn speed.</summary>
     /// <exception cref="ArgumentOutOfRangeException">The assigned value is not finite and positive.</exception>
     public float TurnSpeed {

@@ -4,7 +4,7 @@
     "null"
   ],
   "items": {
-    "description": "One tune asset row \u2014 a whole puck.audio.v1 document embedded inline-canonical with its identity hash pinned beside it (the same hash-pin/canonicalize contract as WorldCreation): the compose boundary canonicalizes on upsert through AudioCanonicalizer and rejects a hash the pipeline did not itself compute; the validator re-verifies the pin on every candidate; world.save re-canonicalizes. The hash doubles as the runtime restart discriminator: a content change restarts the tune\u0027s headless host, a rename does not.",
+    "description": "One tune asset row \u2014 a whole puck.audio.v1 document embedded inline-canonical with its identity hash pinned beside it (the same hash-pin/canonicalize contract as WorldPrototype): the compose boundary canonicalizes on upsert through AudioCanonicalizer and rejects a hash the pipeline did not itself compute; the validator re-verifies the pin on every candidate; world.save re-canonicalizes. The hash doubles as the runtime restart discriminator: a content change restarts the tune\u0027s headless host, a rename does not.",
     "type": [
       "object",
       "null"

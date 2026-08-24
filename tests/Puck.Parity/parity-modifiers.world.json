@@ -642,7 +642,7 @@
   "placements": [
     {
       "id": "parity-modifiers",
-      "creationId": "parity-modifiers",
+      "prototypeId": "parity-modifiers",
       "position": [
         0,
         0,
@@ -658,7 +658,7 @@
     },
     {
       "id": "camera-seat-0",
-      "creationId": "camera-body",
+      "prototypeId": "camera-body",
       "position": [
         0,
         1.5,

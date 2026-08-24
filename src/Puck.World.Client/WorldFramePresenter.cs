@@ -65,7 +65,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     // The continuum maps every routed authority pose into this frame. The ordinary seat viewport/camera path then
     // treats a local and transferred traveler identically instead of creating an away-view presentation system.
     private readonly WorldContinuum m_continuum;
-    // BOOT-CONSUMED: the reserved derived-face screen count (WorldAuthoringDefaults.DerivedFaceScreens) — the binder's
+    // BOOT-CONSUMED: the reserved derived-face screen count (WorldPlacementPolicyDefaults.DerivedFaceScreens) — the binder's
     // frozen derived-face slot range, re-pointed live at each delivery.
     private readonly int m_derivedFaceScreens;
     // The seat's published mode state — whether views.cameraRig frames it instead of views.seatRig, read during dress.
@@ -285,7 +285,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
                 innerException: capacity,
                 message: $"the composed render scene exceeds the engine's {capacity.Limit}-{capacity.Capacity} ceiling — "
                     + $"{definition.Placements.Count} placement row(s), {definition.Screens.Count} screen(s), "
-                    + $"population {WorldAvatarCatalog.Capacity} rigs, and "
+                    + $"population {WorldRigCatalog.Capacity} rigs, and "
                     + $"{WorldAdjacencyBands.ProjectionCapacity(definition: definition)} adjacency band(s) at "
                     + $"{WorldAdjacencyGeometry.MaximumPlacementsPerBand} solid(s) + {WorldAdjacencyGeometry.MaximumEntitiesPerBand} "
                     + $"body(ies) each. Author fewer rows, or fewer adjacency edges (a band is reserved for every direct "
@@ -464,9 +464,9 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
                 placements: definition.Placements
             );
 
-            var facets = WorldCreationFacets.Derive(
+            var facets = WorldPrototypeFacets.Derive(
                 definition: definition,
-                derivedFaceBase: WorldCreationFacets.DerivedFaceBase,
+                derivedFaceBase: WorldPrototypeFacets.DerivedFaceBase,
                 derivedFaceScreens: definition.Authoring.DerivedFaceScreens
             );
 
@@ -497,9 +497,9 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         // Derive the creation facets: a creation's eyes become cameras on WorldAnchor.Placement, its faces
         // become screens at the reserved derived range. Cameras concatenate onto the document rows; the reserved
         // face range re-points the boot-registered slots. Never written to the document — recomputed each delivery.
-        var facets = WorldCreationFacets.Derive(
+        var facets = WorldPrototypeFacets.Derive(
             definition: m_client.Definition,
-            derivedFaceBase: WorldCreationFacets.DerivedFaceBase,
+            derivedFaceBase: WorldPrototypeFacets.DerivedFaceBase,
             derivedFaceScreens: m_derivedFaceScreens
         );
 
@@ -533,7 +533,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         m_screenDecalCache.Clear();
         // The SAME facets.Faces the binder just reconciled its sources against, threaded to the emitter so the
         // ScreenSlab geometry it composes and the binder's bound sources never disagree about which face maps to
-        // which placement — one WorldCreationFacets.Derive call per delivery, never two.
+        // which placement — one WorldPrototypeFacets.Derive call per delivery, never two.
         m_emitter.ObserveDelivery(
             definition: m_client.Definition,
             derivedFaces: facets.Faces
@@ -1165,7 +1165,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         // Simulation has already advanced on the launcher's exact fixed ticks; the client view holds the two latest
         // snapshot poses. Each active entry's render pose is Lerp(previous tick → current, alpha) plus any eased
         // server-correction offset, so above the fixed-step rate the crowd glides instead of stepping; a frame that banked zero
-        // sub-steps holds a stable lerp (previous == current), no snap-back. Presentation only: every player.where
+        // sub-steps holds a stable lerp (previous == current), no snap-back. Presentation only: every body.where
         // still reads the authoritative sim pose server-side.
         m_client.UpdateRenderPoses(alpha: interpolationAlpha);
 

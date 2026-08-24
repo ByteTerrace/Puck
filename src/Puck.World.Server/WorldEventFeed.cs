@@ -88,7 +88,7 @@ public sealed class WorldEventFeed {
     // Per-adjacency link liveness, keyed by the authored adjacency row name (the same "identity is the name, never a
     // reorderable ordinal" rule m_regionOccupancy follows).
     private readonly Dictionary<string, LinkState> m_links = new(comparer: StringComparer.Ordinal);
-    private readonly bool[] m_seatOccupied = new bool[WorldPopulationLimits.LocalSeatCount];
+    private readonly bool[] m_seatOccupied = new bool[WorldBodiesLimits.LocalSeatCount];
     // Pairwise overlap state, keyed by the ascending (a, b) body-index pair. A HashSet rather than a dense bitset —
     // the active population is small in practice and this is human/gameplay-cadence data, not a hot allocation path
     // once warmed (Add/Remove/Contains do not allocate on an already-sized set).
@@ -455,7 +455,7 @@ public sealed class WorldEventFeed {
         }
     }
     private void CollectSeats(WorldPopulation population) {
-        for (var seat = 0; (seat < WorldPopulationLimits.LocalSeatCount); seat++) {
+        for (var seat = 0; (seat < WorldBodiesLimits.LocalSeatCount); seat++) {
             _ = EmitTransition(
                 latch: ref m_seatOccupied[seat],
                 now: population.IsHumanOccupied(bodyIndex: seat),

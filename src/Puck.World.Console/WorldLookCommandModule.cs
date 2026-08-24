@@ -44,7 +44,7 @@ public sealed class WorldLookCommandModule(IWorldConsoleAuthority authority, ISe
     private static string DescribeSource(WorldLookSource source) => source switch {
         WorldLookSource.Catalog { Index: { } catalogIndex } => $"catalog(index {catalogIndex})",
         WorldLookSource.Catalog => "catalog(index-derived)",
-        WorldLookSource.Creation creation => $"creation({creation.CreationId})",
+        WorldLookSource.Creation creation => $"creation({creation.PrototypeId})",
         _ => "unknown",
     };
     private static WorldDistribution? ParseDistribution(in WireArgs args, out string error) {

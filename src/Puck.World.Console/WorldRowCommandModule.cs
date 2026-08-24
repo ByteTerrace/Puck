@@ -197,9 +197,9 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         )
     ),
         ["creations"] = new RowSection(
-        RowType: typeof(WorldCreation),
+        RowType: typeof(WorldPrototype),
         Upsert: Upsert(
-            info: WorldJsonContext.Default.WorldCreation,
+            info: WorldJsonContext.Default.WorldPrototype,
             toMutation: static (principal, creation) => new WorldMutation.UpsertCreation(
                 Creation: creation,
                 Principal: principal
@@ -210,7 +210,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
             Principal: principal
         )),
         Read: ReadRowByKey(
-            info: WorldJsonContext.Default.WorldCreation,
+            info: WorldJsonContext.Default.WorldPrototype,
             keyOf: static row => row.Id,
             select: static server => server.Definition.Creations
         )
@@ -491,9 +491,9 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         )
     ),
         ["authoring"] = new RowSection(
-        RowType: typeof(WorldAuthoringDefaults),
+        RowType: typeof(WorldPlacementPolicyDefaults),
         Upsert: Upsert(
-            info: WorldJsonContext.Default.WorldAuthoringDefaults,
+            info: WorldJsonContext.Default.WorldPlacementPolicyDefaults,
             toMutation: static (principal, authoring) => new WorldMutation.SetAuthoringDefaults(
                 Authoring: authoring,
                 Principal: principal
@@ -501,7 +501,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         ),
         Remove: null,
         Read: ReadRow(
-            info: WorldJsonContext.Default.WorldAuthoringDefaults,
+            info: WorldJsonContext.Default.WorldPlacementPolicyDefaults,
             select: static server => server.Definition.Authoring
         )
     ),
@@ -621,9 +621,9 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
     ),
         ["playerDefaults.seatLook"] = new RowSection(
         ReadsLiveDocument: true,
-        RowType: typeof(WorldSeatLook),
+        RowType: typeof(WorldSeatCameraFeel),
         Upsert: Upsert(
-            info: WorldJsonContext.Default.WorldSeatLook,
+            info: WorldJsonContext.Default.WorldSeatCameraFeel,
             toMutation: static (server, principal, look) => new WorldMutation.SetPlayerDefaults(
                 Principal: principal,
                 Defaults: (server.Definition.PlayerDefaults with { SeatLookRaw = look })
@@ -631,7 +631,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         ),
         Remove: null,
         Read: ReadRow(
-            info: WorldJsonContext.Default.WorldSeatLook,
+            info: WorldJsonContext.Default.WorldSeatCameraFeel,
             select: static server => server.Definition.PlayerDefaults.SeatLook
         )
     ),

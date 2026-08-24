@@ -15,19 +15,19 @@ world.wait 5
 world.grant addon:channelwalk drive body:0 budget:60 channels:trigger
 world.grant seat1 drive body:0 channels:trigger ceiling:0.75
 world.wait 60
-player.channels 1
+body.channels 1
 # ticks_since_drive ~510 (early inside the press window). Expect: trigger composed=1(65536), clamped=no.
 # The ceiling does NOT bite here, and that is the point of this pair rather than a failure: a Binary
 # composition act arrives as a held-channel press, never as an intent delta, so the pool arithmetic is
 # handed nothing to clamp. See README "Finding 2" for the call sites. This script and h-below-threshold
 # read IDENTICALLY on either side of the ceiling; that identity IS the observation.
 world.wait 450
-player.channels 1
+body.channels 1
 # ticks_since_drive ~560 (still inside the window, ~150 ticks later): expect the IDENTICAL folded=1 reading —
 # steady, not flickering or re-firing.
 world.wait 40
-player.channels 1
+body.channels 1
 # ticks_since_drive ~810 (past the press window close): expect folded=0 again — the falling edge.
 world.wait 300
-player.channels 1
+body.channels 1
 world.grants seat1

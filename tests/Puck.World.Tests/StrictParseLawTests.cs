@@ -38,11 +38,11 @@ public sealed class StrictParseLawTests {
     }
     [Fact]
     public void MissingSeatLook_ParsesCleanAndResolvesToTheInertDefault() {
-        // A seat's control feel is now optional: absence parses clean and resolves to WorldSeatLook.Default
+        // A seat's control feel is now optional: absence parses clean and resolves to WorldSeatCameraFeel.Default
         // (zero sensitivity, the drag disarmed) rather than refusing.
         var definition = WorldDefinitionSerialization.Deserialize(utf8Json: Fixtures.MissingSeatLookBytes());
 
-        Assert.Equal(expected: WorldSeatLook.Default, actual: definition.PlayerDefaults.SeatLook);
+        Assert.Equal(expected: WorldSeatCameraFeel.Default, actual: definition.PlayerDefaults.SeatLook);
     }
     [Fact]
     public void MissingRequiredConstructorMember_RefusesByName() {

@@ -49,9 +49,9 @@ public sealed class CreationAuthorFrameLawTests {
             Frames: null,
             TextRuns: [faceRun]);
         var canonical = CreationCanonicalizer.Canonicalize(document: document, source: "faced");
-        var creation = new WorldCreation(Id: "faced", Document: canonical.Document, HashRaw: canonical.Hash);
+        var creation = new WorldPrototype(Id: "faced", Document: canonical.Document, HashRaw: canonical.Hash);
 
-        // The render conversion: the same function WorldCreation.EngineDocument caches for every stamp/collision
+        // The render conversion: the same function WorldPrototype.EngineDocument caches for every stamp/collision
         // consumer.
         var engineRun = CreationFrame.ToEngine(document: canonical.Document).TextRuns![0];
 
@@ -60,7 +60,7 @@ public sealed class CreationAuthorFrameLawTests {
         var source = Fixtures.BuildGradientUpDocument(gradientUp: false);
         var definition = source with {
             CreationsRaw = [creation],
-            PlacementRowsRaw = [new WorldPlacement(Id: "faced", CreationId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f))],
+            PlacementRowsRaw = [new WorldPlacement(Id: "faced", PrototypeId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f))],
         };
 
         Assert.True(condition: WorldSolidField.TryBuild(definition: definition, built: out var field, reason: out var reason), userMessage: reason);
@@ -94,12 +94,12 @@ public sealed class CreationAuthorFrameLawTests {
             Shapes: [capsule],
             Frames: null);
         var canonical = CreationCanonicalizer.Canonicalize(document: document, source: "cap");
-        var creation = new WorldCreation(Id: "cap", Document: canonical.Document, HashRaw: canonical.Hash);
+        var creation = new WorldPrototype(Id: "cap", Document: canonical.Document, HashRaw: canonical.Hash);
 
         var source = Fixtures.BuildGradientUpDocument(gradientUp: false);
         var definition = source with {
             CreationsRaw = [creation],
-            PlacementRowsRaw = [new WorldPlacement(Id: "cap", CreationId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f))],
+            PlacementRowsRaw = [new WorldPlacement(Id: "cap", PrototypeId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f))],
         };
 
         Assert.True(condition: WorldSolidField.TryBuild(definition: definition, built: out var field, reason: out var reason), userMessage: reason);
@@ -142,7 +142,7 @@ public sealed class CreationAuthorFrameLawTests {
             Shapes: [sphere],
             Frames: null);
         var canonical = CreationCanonicalizer.Canonicalize(document: document, source: "symmetric-eye");
-        var creation = new WorldCreation(Id: "symmetric-eye", Document: canonical.Document, HashRaw: canonical.Hash);
+        var creation = new WorldPrototype(Id: "symmetric-eye", Document: canonical.Document, HashRaw: canonical.Hash);
         var enginePosition = creation.EngineDocument.Shapes![0].Position;
         // A point on the sphere's +Y pole — offset perpendicular to the fold's X normal, so reflecting it across X
         // (the same reflection the fold applies) lands squarely on the mirrored copy's own +Y pole too.
@@ -170,7 +170,7 @@ public sealed class CreationAuthorFrameLawTests {
         var source = Fixtures.BuildGradientUpDocument(gradientUp: false);
         var definition = source with {
             CreationsRaw = [creation],
-            PlacementRowsRaw = [new WorldPlacement(Id: "symmetric-eye", CreationId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f))],
+            PlacementRowsRaw = [new WorldPlacement(Id: "symmetric-eye", PrototypeId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f))],
         };
 
         Assert.True(condition: WorldSolidField.TryBuild(definition: definition, built: out var field, reason: out var reason), userMessage: reason);

@@ -13,7 +13,7 @@ namespace Puck.World;
 /// are frozen across population rebuilds: activating/deactivating an avatar changes which ranges are emitted, never
 /// the dynamic-transform identity of an existing avatar.
 /// </summary>
-public static class WorldAvatarCatalog {
+public static class WorldRigCatalog {
     private const int InstructionsPerLeaf = 5;
     private const float LeafBoundRadius = 0.42f;
     private const int MaxLeafCount = 20;
@@ -81,7 +81,7 @@ public static class WorldAvatarCatalog {
     ]);
     private static readonly AvatarRange[] Ranges;
 
-    static WorldAvatarCatalog() {
+    static WorldRigCatalog() {
         Ranges = new AvatarRange[Capacity];
         IdentityHashes = new ulong[Capacity];
         var leaves = new List<AvatarLeaf>(capacity: (Capacity * 24));

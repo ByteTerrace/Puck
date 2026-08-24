@@ -14,7 +14,7 @@ namespace Puck.World.Tests;
 /// <para>Each arm pairs a denial with a control differing in exactly one authored number.</para>
 /// </summary>
 public sealed class AuthoredShapeAdmissionLawTests {
-    private const string CreationId = "probe";
+    private const string PrototypeId = "probe";
 
     private static ShapeDocument Shape(SdfSolidPrimitive type, Vector3 scale, IReadOnlyList<ShapeDomainOp>? domain = null) =>
         new(
@@ -33,7 +33,7 @@ public sealed class AuthoredShapeAdmissionLawTests {
     private static CreationDocument Document(ShapeDocument shape) =>
         new(
             Schema: CreationDocument.CurrentSchema,
-            Name: CreationId,
+            Name: PrototypeId,
             Palette: null,
             Shapes: [shape],
             Frames: null
@@ -66,7 +66,7 @@ public sealed class AuthoredShapeAdmissionLawTests {
                 scale: Vector3.One,
                 type: SdfSolidPrimitive.Sphere
             ))),
-            source: CreationId
+            source: PrototypeId
         );
 
         return (source with {
@@ -76,8 +76,8 @@ public sealed class AuthoredShapeAdmissionLawTests {
                 : []),
             }),
             CreationsRaw = [
-                new WorldCreation(
-                    Id: CreationId,
+                new WorldPrototype(
+                    Id: PrototypeId,
                     Document: (canonicalize
                     ? canonical.Document
                     : (canonical.Document with { Shapes = [shape] })),
@@ -86,8 +86,8 @@ public sealed class AuthoredShapeAdmissionLawTests {
             ],
             PlacementRowsRaw = [
                 new WorldPlacement(
-                    Id: CreationId,
-                    CreationId: CreationId,
+                    Id: PrototypeId,
+                    PrototypeId: PrototypeId,
                     Position: Vector3.Zero,
                     YawDegrees: 0f,
                     Scale: 1f,

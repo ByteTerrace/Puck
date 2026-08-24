@@ -49,7 +49,7 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
             provider: CultureInfo.InvariantCulture,
             handler: $"box half=({box.HalfExtents.X:0.##},{box.HalfExtents.Y:0.##},{box.HalfExtents.Z:0.##}) rotation=({box.Rotation.X:0.##},{box.Rotation.Y:0.##},{box.Rotation.Z:0.##},{box.Rotation.W:0.##})"
         ),
-            WorldCollider.FromCreation fromCreation => $"fromCreation creation={fromCreation.CreationId}",
+            WorldCollider.FromCreation fromCreation => $"fromCreation creation={fromCreation.PrototypeId}",
             _ => throw new ArgumentOutOfRangeException(
             paramName: nameof(collider),
             actualValue: collider,
@@ -199,7 +199,7 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
                 var submissions = link;
                 var authorityIndex = index;
 
-                if (index <= WorldPopulationLimits.LocalSeatCount) {
+                if (index <= WorldBodiesLimits.LocalSeatCount) {
                     var route = seatRouter.Route(slot: (index - 1));
 
                     submissions = route.Endpoint.Submissions;

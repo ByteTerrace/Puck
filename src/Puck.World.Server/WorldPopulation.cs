@@ -46,7 +46,7 @@ internal enum PopulationKind {
 /// (<see cref="WorldBody.SubmitIntent"/>) and calls <see cref="WorldBody.Advance"/>;
 /// <see cref="AdvanceSeats"/> advances the seat bodies from the intents the client submitted this tick. Poses flow out
 /// of the sim, never in: the only outside writes into a body are the server-authoritative spawn at activation and the
-/// command wire (<c>player.pose</c> / <c>fly</c> / <c>stop</c>). A live <c>player.fly</c> tape overrides
+/// command wire (<c>body.pose</c> / <c>fly</c> / <c>stop</c>). A live <c>body.fly</c> tape overrides
 /// the submitted intent (tape &gt; submitted in the intent merge).
 /// </para>
 /// <para>
@@ -124,7 +124,7 @@ public sealed partial class WorldPopulation {
     public WorldTargetRegisterTable TargetRegisters => m_targets;
     /// <summary>Gets this world's reserved local-seat count — the document's own <c>population.localSeats</c>
     /// declaration, always at the front of the entity table, up to the host's seat ceiling
-    /// (<see cref="WorldPopulationLimits.LocalSeatCount"/>).</summary>
+    /// (<see cref="WorldBodiesLimits.LocalSeatCount"/>).</summary>
     public int LocalSeatCount { get; private set; }
 
     private readonly Entry[] m_entries;
@@ -356,14 +356,14 @@ public sealed partial class WorldPopulation {
         public string IdentityDomain { get; set; } = string.Empty;
         public string IdentitySubject { get; set; } = string.Empty;
         public string DesignationRefusal { get; set; } = string.Empty;
-        // The most recent player.motion refusal reason (empty on the last switch's success) — the synchronous
+        // The most recent body.motion refusal reason (empty on the last switch's success) — the synchronous
         // submitter's read-back so an honest immediate echo never has to guess the outcome.
         public string MotionRefusal { get; set; } = string.Empty;
-        // The most recent player.stop refusal reason (empty on success) and outcome (released/cleared counts) —
+        // The most recent body.stop refusal reason (empty on success) and outcome (released/cleared counts) —
         // ALWAYS written together (see NoteStopOutcome/NoteStopRefusal) so the pair can never desync into a
         // refusal note pointing at stale success counts or vice versa.
         public string StopRefusal { get; set; } = string.Empty;
-        // The most recent player.press refusal reason (empty on success — timed or untimed alike, they share this
+        // The most recent body.press refusal reason (empty on success — timed or untimed alike, they share this
         // one slot) and the timed path's outcome (effective hold + which cap decided it) — ALWAYS written together,
         // the same pairing discipline as StopRefusal/StopOutcome above.
         public string PressRefusal { get; set; } = string.Empty;

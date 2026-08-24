@@ -133,7 +133,7 @@ public abstract record WorldSpeaker(
 }
 /// <summary>
 /// One tune asset row — a whole <c>puck.audio.v1</c> document embedded inline-canonical with its identity hash
-/// pinned beside it (the same hash-pin/canonicalize contract as <see cref="WorldCreation"/>): the compose boundary
+/// pinned beside it (the same hash-pin/canonicalize contract as <see cref="WorldPrototype"/>): the compose boundary
 /// canonicalizes on upsert through <see cref="AudioCanonicalizer"/> and rejects a hash the pipeline did not itself compute; the
 /// validator re-verifies the pin on every candidate; <c>world.save</c> re-canonicalizes. The hash doubles as the
 /// runtime restart discriminator: a content change restarts the tune's headless host, a rename does not.
@@ -146,7 +146,7 @@ public sealed record WorldTune(string Id, AudioDocument Document, string Hash);
 /// <summary>
 /// One synth-patch asset row — a whole <c>puck.synth.v1</c> document embedded inline-canonical with its identity
 /// hash pinned beside it via <see cref="SynthPatchCanonicalizer"/>, the same pin/restart contract as
-/// <see cref="WorldCreation"/>; see <see cref="WorldTune"/> for the shared pin/restart semantics.
+/// <see cref="WorldPrototype"/>; see <see cref="WorldTune"/> for the shared pin/restart semantics.
 /// </summary>
 /// <param name="Id">The row's stable string id — its mutation address; referenced by
 /// <see cref="WorldSpeakerSource.Synth"/> and by <see cref="WorldEmission.PatchId"/> facets.</param>

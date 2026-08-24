@@ -1,7 +1,7 @@
 {
   "id": "body-dynamics",
   "title": "A kit's dynamics-row planar shaping drives real movement, and authoring both response and dynamics refuses",
-  "binding": "The positive leg boots a minimal fixture whose one kit shapes planar velocity through a dynamics row (f=2.5, zeta=1, r=0) instead of a response table, confirms world.kits echoes shaping=dynamics:stride, drives a player.fly forward segment, and asserts the settled pose after it plays out — proving the follower genuinely integrated real displacement, not merely validated. The discriminating leg re-authors the SAME kit live through world.row.set kits, this time carrying BOTH response and dynamics on the SAME motion model; the mutation is refused by the exactly-one-of-response-or-dynamics rule, and a follow-up world.kits shows the kit unchanged — proving the refused mutation never applied.",
+  "binding": "The positive leg boots a minimal fixture whose one kit shapes planar velocity through a dynamics row (f=2.5, zeta=1, r=0) instead of a response table, confirms world.kits echoes shaping=dynamics:stride, drives a body.fly forward segment, and asserts the settled pose after it plays out — proving the follower genuinely integrated real displacement, not merely validated. The discriminating leg re-authors the SAME kit live through world.row.set kits, this time carrying BOTH response and dynamics on the SAME motion model; the mutation is refused by the exactly-one-of-response-or-dynamics rule, and a follow-up world.kits shows the kit unchanged — proving the refused mutation never applied.",
   "bootShape": "headless",
   "requirements": [],
   "seconds": 6,
@@ -13,11 +13,11 @@
     "commands": [
       { "verb": "world.status", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.kits", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "player.where", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "body.where", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "player.fly", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "body.fly", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
-      { "verb": "player.where", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "body.where", "occurrence": 2, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" }
     ],
     "expect": [

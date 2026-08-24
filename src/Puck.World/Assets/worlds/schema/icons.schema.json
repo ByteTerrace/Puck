@@ -4,7 +4,7 @@
     "null"
   ],
   "properties": {
-    "icons": {
+    "rows": {
       "description": "The icon rows.",
       "type": [
         "array",

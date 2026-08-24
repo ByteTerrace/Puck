@@ -29,7 +29,7 @@ public sealed record WorldDefinition(
     [property: JsonPropertyName("render"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderDefaults? RenderRaw = null,
     [property: JsonPropertyName("screens"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldScreen>? ScreensRaw = null,
     [property: JsonPropertyName("cameras"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldCamera>? CamerasRaw = null,
-    [property: JsonPropertyName("bodies"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPopulationDefaults? PopulationRaw = null,
+    [property: JsonPropertyName("bodies"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldBodiesDefaults? PopulationRaw = null,
     [property: JsonPropertyName("seatDefaults"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlayerDefaults? PlayerDefaultsRaw = null,
     [property: JsonPropertyName("channels"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldChannel>? ChannelsRaw = null,
     [property: JsonPropertyName("targetRegisters"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldTargetRegister>? TargetRegistersRaw = null,
@@ -39,7 +39,7 @@ public sealed record WorldDefinition(
     [property: JsonPropertyName("addons"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldAddonRow>? AddonsRaw = null,
     [property: JsonPropertyName("bindingOverlays"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldBindingOverlay>? BindingOverlaysRaw = null,
     [property: JsonPropertyName("storage"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldStorageDefaults? StorageRaw = null,
-    [property: JsonPropertyName("prototypes"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldCreation>? CreationsRaw = null,
+    [property: JsonPropertyName("prototypes"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldPrototype>? CreationsRaw = null,
     [property: JsonPropertyName("placements"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementsSection? PlacementsRaw = null,
     [property: JsonPropertyName("speakers"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldSpeaker>? SpeakersRaw = null,
     [property: JsonPropertyName("tunes"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldTune>? TunesRaw = null,
@@ -111,7 +111,7 @@ public sealed record WorldDefinition(
     public IReadOnlyList<WorldPlacement>? PlacementRowsRaw { get => PlacementsRaw?.Rows; init => PlacementsRaw = ((PlacementsRaw ?? new WorldPlacementsSection()) with { Rows = value }); }
     /// <summary>Gets or initializes the placement policy through the placements section (see <see cref="KitRowsRaw"/>).</summary>
     [JsonIgnore]
-    public WorldAuthoringDefaults? AuthoringRaw { get => PlacementsRaw?.Policy; init => PlacementsRaw = ((PlacementsRaw ?? new WorldPlacementsSection()) with { Policy = value }); }
+    public WorldPlacementPolicyDefaults? AuthoringRaw { get => PlacementsRaw?.Policy; init => PlacementsRaw = ((PlacementsRaw ?? new WorldPlacementsSection()) with { Policy = value }); }
     /// <summary>Gets the kit→entity assignment policy — ABSENT resolves to <see cref="WorldRowAssignment.Default"/>.</summary>
     [JsonIgnore]
     public WorldRowAssignment Assignment => (KitsRaw?.Assignment ?? WorldRowAssignment.Default);
@@ -119,10 +119,10 @@ public sealed record WorldDefinition(
     /// (silent); the standard values are authored in <c>standard.world.json</c>.</summary>
     [JsonIgnore]
     public WorldAudioDefaults Audio => (AudioRaw ?? WorldAudioDefaults.Absent);
-    /// <summary>Gets the editor/authoring policy row — ABSENT resolves to <see cref="WorldAuthoringDefaults.Absent"/>
+    /// <summary>Gets the editor/authoring policy row — ABSENT resolves to <see cref="WorldPlacementPolicyDefaults.Absent"/>
     /// (no headroom, no editing); the standard policy is authored in <c>standard.world.json</c>.</summary>
     [JsonIgnore]
-    public WorldAuthoringDefaults Authoring => (PlacementsRaw?.Policy ?? WorldAuthoringDefaults.Absent);
+    public WorldPlacementPolicyDefaults Authoring => (PlacementsRaw?.Policy ?? WorldPlacementPolicyDefaults.Absent);
     /// <summary>Gets the basis document this file layers over, as a file path resolved against this document's own
     /// directory — the document-composition member (see <c>WorldDocumentBasis</c>). A file naming a basis is a
     /// delta: it authors only what differs, inheriting every omitted member from the (recursively composed) basis
@@ -167,7 +167,7 @@ public sealed record WorldDefinition(
     public WorldInputHoldSettings CompiledInputHold => InputHold.Compile(ratePerSecond: ((uint)SimulationRateHz));
     /// <summary>Gets the creation asset rows — ABSENT resolves to none.</summary>
     [JsonIgnore]
-    public IReadOnlyList<WorldCreation> Creations => (CreationsRaw ?? []);
+    public IReadOnlyList<WorldPrototype> Creations => (CreationsRaw ?? []);
     /// <summary>Gets the kit row (by name) every seat body constructs from — ABSENT resolves to the sole declared
     /// kit's name when exactly one kit is declared, else empty (nothing to derive; a document that also declares
     /// local seats then refuses by name for naming no kit row).</summary>
@@ -249,18 +249,18 @@ public sealed record WorldDefinition(
     /// <see cref="WorldPlayerDefaults.Default"/>.</summary>
     [JsonIgnore]
     public WorldPlayerDefaults PlayerDefaults => (PlayerDefaultsRaw ?? WorldPlayerDefaults.Default);
-    /// <summary>Gets the local/network census — ABSENT resolves to <see cref="WorldPopulationDefaults.Default"/>
-    /// (zero local seats, zero capacity — see <see cref="WorldPopulationDefaults"/>'s own ABSENT semantics for every
+    /// <summary>Gets the local/network census — ABSENT resolves to <see cref="WorldBodiesDefaults.Default"/>
+    /// (zero local seats, zero capacity — see <see cref="WorldBodiesDefaults"/>'s own ABSENT semantics for every
     /// nested field).</summary>
     [JsonIgnore]
-    public WorldPopulationDefaults Population => (PopulationRaw ?? WorldPopulationDefaults.Default);
-    /// <summary>Gets the compiled form of <see cref="WorldPopulationDefaults.ReconnectGraceSeconds"/> — a
+    public WorldBodiesDefaults Population => (PopulationRaw ?? WorldBodiesDefaults.Default);
+    /// <summary>Gets the compiled form of <see cref="WorldBodiesDefaults.ReconnectGraceSeconds"/> — a
     /// <see cref="CompiledTickDuration"/>, the unit <c>Server.WorldPopulation</c> actually consumes. Not a raw tick
     /// count: at <see cref="SimulationRateHz"/> 0 a positive authored grace has no tick mapping at all
     /// (<see cref="CompiledTickDuration.Never"/> — a disconnected body parks forever rather than tearing down
     /// immediately), which a raw <see langword="int"/> could not distinguish from an authored-disabled zero grace
     /// (<see cref="CompiledTickDuration.IsZero"/>, the immediate-teardown case, unaffected by the rate). Lives here
-    /// rather than on <see cref="WorldPopulationDefaults"/> itself because compiling a duration needs
+    /// rather than on <see cref="WorldBodiesDefaults"/> itself because compiling a duration needs
     /// <see cref="SimulationRateHz"/>, which only the whole document can supply — see
     /// <see cref="SimulationRateHz"/>'s remarks. Read once at construction/rebuild, like the rest of
     /// <see cref="Population"/> — a live edit takes effect on the next disconnect, never retroactively on an
@@ -356,7 +356,7 @@ public sealed record WorldDefinition(
     /// The seam every simulation-tick-scoped duration on this
     /// document compiles through (see <see cref="PopulationReconnectGraceTicks"/>, <see cref="CompiledInputHold"/>):
     /// computed here, on the fully-parsed aggregate, rather than threaded as a parameter to each sub-section's own
-    /// converter, because a sub-section (e.g. <see cref="WorldPopulationDefaults"/>, a struct) has no reference back to
+    /// converter, because a sub-section (e.g. <see cref="WorldBodiesDefaults"/>, a struct) has no reference back to
     /// the document that carries both it and the rate, and the rate itself is just another sibling property in the same
     /// JSON object being parsed — there is no ordering guarantee that would let a nested converter see it first. A
     /// caller that already holds a <see cref="WorldDefinition"/> reads this property directly; nothing threads a raw
@@ -366,7 +366,7 @@ public sealed record WorldDefinition(
     /// <summary>Gets the named spawn poses seats and population policies reference — ABSENT resolves to empty,
     /// EXCEPT that a spawn-point id of <see cref="WorldSpawnPointDefaults.ImplicitOriginId"/> is always resolvable:
     /// when this document authors no <c>spawnPoints</c> section at all, one implicit point at world-space zero is
-    /// added under that id — the point <see cref="WorldPopulationDefaults.SeatSpawns"/>' own absence derivation
+    /// added under that id — the point <see cref="WorldBodiesDefaults.SeatSpawns"/>' own absence derivation
     /// addresses. A document that authors its own <c>spawnPoints</c> (even an explicit empty list) gets no implicit
     /// point; a seat spawn naming one it does not declare then refuses by name like any other dangling reference.</summary>
     [JsonIgnore]

@@ -198,7 +198,7 @@ public sealed class CommandRegistry {
 
         // The wire's own control verb, beside help: `wire.ack [on|quiet]` reports or flips the acknowledgement mode.
         m_wireAckCommand = new Command(
-            description: "Sets or reports the stdin acknowledgement mode: wire.ack [on|quiet] — `on` (default) echoes every accepted command; `quiet` drops the success acks of side-effecting verbs (errors and query verbs like player.where still echo); no argument reports the current mode.",
+            description: "Sets or reports the stdin acknowledgement mode: wire.ack [on|quiet] — `on` (default) echoes every accepted command; `quiet` drops the success acks of side-effecting verbs (errors and query verbs like body.where still echo); no argument reports the current mode.",
             name: WireAckCommandName
         ) {
             m_wireAckArgument,

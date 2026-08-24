@@ -11,7 +11,7 @@ namespace Puck.World.Server;
 /// One authoritative entity body: a full 6DOF pose (a free position and a <see cref="System.Numerics.Quaternion"/>
 /// attitude) advanced from a single merged <see cref="PlayerIntent"/> every host-owned fixed simulation step under its
 /// its compiled fixed-phase body motion program. A scripted tape of
-/// timed segments (a <c>player.fly</c> command) takes precedence while a segment is live; with the
+/// timed segments (a <c>body.fly</c> command) takes precedence while a segment is live; with the
 /// tape empty the per-tick submitted intent drives instead (a seat's device image or an authored producer,
 /// via <see cref="SubmitIntent"/>). Replaying the same tape reproduces the same run. Every entity in the server's table
 /// owns its own <see cref="WorldBody"/>; a driver (client, AI, replay, console) may only produce the intent — poses
@@ -46,7 +46,7 @@ public sealed partial class WorldBody {
     // The construction-validated program table and the program this body executes.
     private IReadOnlyDictionary<string, CompiledBodyMotionProgram> m_bodyMotionPrograms;
     private PlayerIntent m_channelReadComposed;
-    // player.channels' post-fold read-back: the held overlay NextIntent actually admitted and the result after composing
+    // body.channels' post-fold read-back: the held overlay NextIntent actually admitted and the result after composing
     // it with the resolved movement tier. Written on that existing join path, retained after the one-tick input images
     // clear, and never read by simulation — diagnostic only, with no allocation and no feedback into either fold.
     private PlayerIntent m_channelReadHeld;
@@ -88,7 +88,7 @@ public sealed partial class WorldBody {
 
     private ulong? m_continuumConsumedThroughEngineTick;
     private ulong m_durableInputTick;
-    // The screen-engagement route latch (disengaged by default). Set by player.engage/disengage. While engaged the
+    // The screen-engagement route latch (disengaged by default). Set by body.engage/disengage. While engaged the
     // resolved intent is DIVERTED to the bound screen's machine instead of the avatar: Advance captures it into
     // m_engagedIntent and holds the avatar idle (no pose integration). ORTHOGONAL to m_source — engagement decides
     // where the intent GOES (avatar vs machine), the intent-source axis decides what FILLS it.
@@ -103,7 +103,7 @@ public sealed partial class WorldBody {
     // (only composition ordinals are meaningful there — a button down until its release edge; one-tick, republished
     // each submission), m_pendingDefaultChannelPress/m_pendingDefaultChannelValue hold argument-less taps until Advance
     // can derive their duration from its host step, and m_channelTimers/m_channelTimerValues are materialized timed
-    // presses (player.press, reaching ANY ordinal including movement roles) that read held until their per-ordinal
+    // presses (body.press, reaching ANY ordinal including movement roles) that read held until their per-ordinal
     // auto-release timer drains. m_previousChannelBit is the previous sub-step's threshold-crossing bit per ordinal —
     // the model reads it to detect a rising (fire) and release (cut) edge, generalizing the old ActionLanes OR/XOR.
     private PlayerIntent m_heldChannels;
@@ -320,7 +320,7 @@ public sealed partial class WorldBody {
     private int m_sprintChannelOrdinal = -1;
     private FixedVector3RateAccumulator m_overlayAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
     // The intent-source axis (Live by default; a peer takes the population's stored default at activation). Set by
-    // player.control / the peer sweep. See IntentSource for the merge rule this selects.
+    // body.control / the peer sweep. See IntentSource for the merge rule this selects.
     private IntentSource m_source = IntentSource.Live;
     // Sub-Q48.16 integration state. Per-second velocity/rate numerators are divided by the exact engine time base;
     // these signed remainders carry the discarded tails into later steps instead of losing them every fixed update.
@@ -331,7 +331,7 @@ public sealed partial class WorldBody {
     private FixedRateAccumulator m_contactUpTurnAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
     private FixedRateAccumulator m_upTurnAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
     private FixedRateAccumulator m_verticalVelocityAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
-    // The canonical orientation — the full 6DOF attitude the renderer, the camera rigs, and player.where all read. Under
+    // The canonical orientation — the full 6DOF attitude the renderer, the camera rigs, and body.where all read. Under
     // grounded it mirrors m_yaw (pitch = roll = 0); under free it is the integrated body-frame attitude and m_yaw is
     // ignored. The model constrains how it is written, never its shape.
     private FixedQuaternion m_orientation = FixedQuaternion.Identity;

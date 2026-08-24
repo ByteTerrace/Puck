@@ -180,27 +180,27 @@ public sealed partial class WorldBody {
             handler: $"pos=({position.X:0.00}, {position.Z:0.00}) yaw={CompassDegrees(radians: EulerRadians().Yaw):0}°"
         );
     }
-    /// <summary>Formats the standalone <c>player.where</c> echo — the bracket-tagged, index-prefixed line a piped run
+    /// <summary>Formats the standalone <c>body.where</c> echo — the bracket-tagged, index-prefixed line a piped run
     /// asserts against — as the full 6DOF pose:
-    /// <c>[player.where: p{N} pos=(x.xx, y.yy, z.zz) yaw=ddd° pitch=ddd° roll=ddd°]</c>. One format always. A grounded
+    /// <c>[body.where: body:{N} pos=(x.xx, y.yy, z.zz) yaw=ddd° pitch=ddd° roll=ddd°]</c>. One format always. A grounded
     /// entity keeps a canonical level orientation — <c>pitch=0 roll=0</c> — while <c>y</c> is its resolved ground foot
     /// point (<c>0.00</c> on the flat plane, following the contact field where solids lift it). The bare planar
     /// fragment is <see cref="DescribePose"/>.</summary>
-    /// <param name="index">The 1-based player display index to tag the line with.</param>
-    /// <returns>The full bracketed <c>player.where</c> echo line.</returns>
+    /// <param name="index">The 0-based body index to tag the line with.</param>
+    /// <returns>The full bracketed <c>body.where</c> echo line.</returns>
     public string DescribeWhere(int index) {
         var (yaw, pitch, roll) = EulerRadians();
         var position = m_position.ToVector3();
 
         return string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"[player.where: p{index} pos=({position.X:0.00}, {position.Y:0.00}, {position.Z:0.00}) yaw={CompassDegrees(radians: yaw):0}° pitch={CompassDegrees(radians: pitch):0}° roll={CompassDegrees(radians: roll):0}°]"
+            handler: $"[body.where: body:{index} pos=({position.X:0.00}, {position.Y:0.00}, {position.Z:0.00}) yaw={CompassDegrees(radians: yaw):0}° pitch={CompassDegrees(radians: pitch):0}° roll={CompassDegrees(radians: roll):0}°]"
         );
     }
     /// <summary>Enqueues a timed scripted segment onto the tape: while it is live it drives the avatar with
     /// <paramref name="intent"/>, overriding the held keys (or, on a population entry, its wander), for
     /// <paramref name="seconds"/> of advance time. All six channels are clamped to <c>[-1, 1]</c> — the planar three
-    /// three leave the 6DOF three at their zero default, and <c>player.fly</c>'s full six carry all of them.
+    /// three leave the 6DOF three at their zero default, and <c>body.fly</c>'s full six carry all of them.
     /// A non-positive duration is ignored.</summary>
     /// <param name="intent">The intent the segment holds while live.</param>
     /// <param name="seconds">How long (advance seconds) the segment drives before it expires.</param>
@@ -304,7 +304,7 @@ public sealed partial class WorldBody {
         m_pendingDefaultChannelPress[ordinal] = true;
         m_pendingDefaultChannelValue[ordinal] = value;
     }
-    /// <summary>Presses a channel for a timed auto-release — the scripted/wire path (<c>player.press</c>), reaching
+    /// <summary>Presses a channel for a timed auto-release — the scripted/wire path (<c>body.press</c>), reaching
     /// any ordinal: the channel reads held at <paramref name="value"/> for <paramref name="holdSeconds"/> of sim time
     /// (clamped to the row's authored ceiling and the <see cref="MaxActionHoldSeconds"/> engine backstop), decremented
     /// per sub-step, then releases
@@ -316,7 +316,7 @@ public sealed partial class WorldBody {
     /// channel mid a long throttle hold takes effect immediately instead of being swallowed by the throttle's
     /// remaining ticks (see <see cref="MergeLaneTimer"/>, shared with <see cref="MaterializeDefaultLanePresses"/> so
     /// the timed and untimed press paths can never drift onto two different rules). Independent of the movement
-    /// tape, so <c>player.fly … ; player.press jump</c> jumps a runner mid-segment. A non-positive (or NaN) hold is
+    /// tape, so <c>body.fly … ; body.press jump</c> jumps a runner mid-segment. A non-positive (or NaN) hold is
     /// ignored outright — it never touches the lane timer at all, so it cannot cancel a genuine in-flight hold on the
     /// same ordinal under the different-value rule above. Unlike the device-held channel image (see
     /// <see cref="SetHeldChannels"/>), this wire path overlays under every <see cref="IntentSource"/>. N simultaneous
@@ -328,7 +328,7 @@ public sealed partial class WorldBody {
     /// <param name="value">The raw fixed-point value to hold the channel at.</param>
     /// <param name="holdSeconds">How long (sim seconds) the channel reads held before auto-releasing.</param>
     /// <param name="authoredMaximum">The deciding Drive grant row's compiled timed-press ceiling.</param>
-    /// <returns>The effective hold (in sim seconds) and which cap, if any, decided it — <c>player.press</c>'s
+    /// <returns>The effective hold (in sim seconds) and which cap, if any, decided it — <c>body.press</c>'s
     /// synchronous read-back, so its echo can name a silent truncation instead of assuming the request was
     /// honored.</returns>
     public PressOutcome PressChannel(int ordinal, FixedQ4816 value, float holdSeconds, FixedQ4816 authoredMaximum) {
@@ -401,7 +401,7 @@ public sealed partial class WorldBody {
     /// the body motion program. The body keeps its pose, velocity, tape, source, and engagement; only the compiled feel
     /// changes. The action runtime resets because it is bound to the old binding and named-state shapes, and an
     /// incompatible program switch re-pins the pose exactly as
-    /// <c>player.motion</c> does (a no-op when unchanged).</summary>
+    /// <c>body.motion</c> does (a no-op when unchanged).</summary>
     /// <param name="motion">The kit's authored motion model.</param>
     /// <param name="actions">The kit's compiled per-ordinal action bindings.</param>
     /// <param name="actionThresholds">The kit's per-ordinal binary crossing thresholds, parallel to <paramref name="actions"/>.</param>
@@ -458,7 +458,7 @@ public sealed partial class WorldBody {
     /// <see cref="EntityContinuityKind.Correction"/> so the client eases its render error to zero over
     /// <paramref name="seconds"/>. Snap escape: if the position error exceeds
     /// the world's <see cref="WorldMotionDefaults.MaxSmoothError"/> the snapshot reports a plain teleport instead, so a huge
-    /// correction pops. Easing is client presentation state only — the sim never reads it and <c>player.where</c>
+    /// correction pops. Easing is client presentation state only — the sim never reads it and <c>body.where</c>
     /// never includes it.</summary>
     /// <param name="x">The authoritative world X coordinate.</param>
     /// <param name="z">The authoritative world Z coordinate.</param>
@@ -565,7 +565,7 @@ public sealed partial class WorldBody {
         m_hasTransferHeldChannels = false;
         m_heldChannels = channels;
     }
-    /// <summary>Sets the intent-source axis — <c>player.control</c>'s write and the peer sweep's per-entity half. A
+    /// <summary>Sets the intent-source axis — <c>body.control</c>'s write and the peer sweep's per-entity half. A
     /// transition drops the staged transient input images (the submitted, producer, and held-lane images), so a stale
     /// image cannot leak across the switch and nothing bursts when a source returns; a seat's client half drops its own
     /// held device state in the same command. The tape and any wire-timed lane press are untouched. A no-op if the
@@ -597,18 +597,18 @@ public sealed partial class WorldBody {
         m_hasProducerIntent = true;
     }
     /// <summary>Clears every intent producer this body owns: drops the whole tape, the staged transient input images,
-    /// every in-flight timed press (<c>player.press</c> hold), and any not-yet-materialized argument-less tap staged
+    /// every in-flight timed press (<c>body.press</c> hold), and any not-yet-materialized argument-less tap staged
     /// by <see cref="PressChannel(int, FixedQ4816)"/> (see <see cref="MaterializeDefaultLanePresses"/>) — on role and
     /// composition ordinals alike, in every one of these three forms. Not an instantaneous halt — an in-flight jump
     /// arc still resolves under gravity and lands, and the ramped planar velocity decays to rest through the
-    /// response table rather than snapping to zero. This is the <c>player.stop</c> panic verb's server half; the
+    /// response table rather than snapping to zero. This is the <c>body.stop</c> panic verb's server half; the
     /// client seat drops its held device state in the same command. Unlike <see cref="SetIntentSource"/>/
     /// <see cref="SetEngaged"/>'s shared <see cref="ClearTransientInput"/> call, which deliberately leaves a timed
     /// press running across a source/engagement transition (that hold still belongs to whichever target now owns
     /// the intent — see its own remarks), Stop is the panic verb: a 60-second throttle hold left ticking after it
     /// would make "keys released" a lie.</summary>
     /// <returns>How many held channels were released and how many timed presses — materialized or still pending —
-    /// were cancelled. The synchronous read-back <c>player.stop</c>'s handler quotes in its echo.</returns>
+    /// were cancelled. The synchronous read-back <c>body.stop</c>'s handler quotes in its echo.</returns>
     public StopOutcome Stop() {
         ClearTape();
 
@@ -632,7 +632,7 @@ public sealed partial class WorldBody {
                 m_channelTimerValues[ordinal] = default;
             }
 
-            // A player.press with no holdSeconds hasn't materialized into a lane timer yet (MaterializeDefaultLanePresses
+            // A body.press with no holdSeconds hasn't materialized into a lane timer yet (MaterializeDefaultLanePresses
             // only runs at the next Advance) — panic-verb totality means this pending tap is cleared too, and counted
             // the same as an already-materialized one.
             if (m_pendingDefaultChannelPress[ordinal]) {
@@ -692,10 +692,10 @@ public sealed partial class WorldBody {
     /// <summary>Gets the body motion program this player currently executes.</summary>
     public string BodyMotionProgram => m_bodyMotionProgram.Name;
     /// <summary>Gets the last intent after the admitted held overlay composed with the movement tier, retained only for
-    /// <c>player.channels</c>.</summary>
+    /// <c>body.channels</c>.</summary>
     public PlayerIntent ChannelReadComposed => m_channelReadComposed;
     /// <summary>Gets the held-channel overlay admitted by the last <see cref="Advance"/>, retained only for
-    /// <c>player.channels</c>.</summary>
+    /// <c>body.channels</c>.</summary>
     public PlayerIntent ChannelReadHeld => m_channelReadHeld;
     /// <summary>Gets the kit-authored body volumes, or <see langword="null"/> for a volumeless kit.</summary>
     public FixedWorldCollider? Collider => m_collider;
@@ -775,7 +775,7 @@ public sealed partial class WorldBody {
     /// <see langword="null"/> before a profile is assigned, in which case the tuning's default rates apply.</summary>
     public WorldIdentity? Profile { get; set; }
     /// <summary>Gets what fills this entity's intent gaps between tape segments — the per-entity axis (the
-    /// <c>player.control</c> verb's read/write). <see cref="IntentSource.Live"/> by default; see
+    /// <c>body.control</c> verb's read/write). <see cref="IntentSource.Live"/> by default; see
     /// <see cref="IntentSource"/> for the merge rule.</summary>
     public IntentSource Source => m_source;
     /// <summary>Gets a value indicating whether the body's origin is below the waterline as of the swim model's last
@@ -786,7 +786,7 @@ public sealed partial class WorldBody {
     /// Under the grounded model this returns the authoritative heading scalar <c>m_yaw</c> directly (the orientation is a
     /// pure yaw rotation built from it, so decomposing it back out would be a redundant round-trip on the hot wander
     /// path). Under the free model, where the full attitude is authoritative and <c>m_yaw</c> is inert, it is the yaw
-    /// component of <see cref="Orientation"/>. The <c>player.where</c> read-back and <see cref="DescribePose"/> decompose
+    /// component of <see cref="Orientation"/>. The <c>body.where</c> read-back and <see cref="DescribePose"/> decompose
     /// the canonical orientation directly, bypassing this property.</summary>
     public float Yaw => ((float)((double)FixedYaw));
 
