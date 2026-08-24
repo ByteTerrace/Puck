@@ -103,6 +103,19 @@ that field through `Puck.Maths`'s `IFieldEvaluator` and `IWorldQuery`. That is
 why neither this library nor a distance-field library needs to reference the
 other.
 
+`FixedSurfaceQuery` is the nearest-surface-point primitive over the same
+collider vocabulary — the analytic anchor query climbing (surface attach) and
+grappling (tether anchor selection) both resolve against, distinct from
+`TryGetPush`'s depenetration-only contract. `TryNearest` returns the closest
+point, outward normal, owning collider identity, and distance within a
+caller-supplied reach across two spans (`FixedSurfaceColliderSource.Static`/
+`.Dynamic`, mirroring `FixedStaticContactSolver.Resolve`'s split), ranked by
+distance then a `(Source, ColliderIndex)` tie-break. `TryNearestDirected` is
+the aim-assist cone variant for grapple targeting: candidates are filtered to
+a caller-supplied max distance and half-angle around an aim direction, then
+ranked by angular deviation before distance. Every reach, max distance, and
+half-angle is caller-supplied; nothing here derives one from a document.
+
 `FixedRigidSolver` owns canonical contact ordering, persistent manifold slots,
 warm starting, speculative activation, bounded deep-overlap recovery, soft
 constraints formed at the substep width, and a fixed iteration budget. Geometry
@@ -250,6 +263,8 @@ thread-safe**.
   `FixedStaticCollider`, `FixedContactPush`.
 - **The contact seam** — `IContactField`, `ContactResolution`,
   `FixedStaticContactSolver`, `FixedFieldContactSolver`.
+- **Surface-attach query** — `FixedSurfaceQuery`, `FixedSurfaceAttachCandidate`,
+  `FixedSurfaceColliderSource`.
 - **Rigid solver** — `FixedRigidSolver`, `FixedContactCandidate`.
 - **Multi-body coupling** — `FixedTwoBodyKernel`, `FixedTwoBodyContact`,
   `FixedPairManifoldSlotTable`, `FixedRigidWorld` (shape only, not wired into
