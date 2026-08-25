@@ -75,4 +75,19 @@ public static class SnapshotDivergence {
 
         return null;
     }
+
+    /// <summary>Looks up the section named <paramref name="name"/> in <paramref name="sections"/> — the by-name
+    /// counterpart to the by-offset lookup a divergence localizer uses when perturbing a specific known component.</summary>
+    /// <param name="sections">The section table to search.</param>
+    /// <param name="name">The section name to find.</param>
+    /// <exception cref="InvalidOperationException">No section named <paramref name="name"/> exists.</exception>
+    public static SnapshotSection FindSectionByName(IReadOnlyList<SnapshotSection> sections, string name) {
+        foreach (var section in sections) {
+            if (section.Name == name) {
+                return section;
+            }
+        }
+
+        throw new InvalidOperationException(message: $"snapshot has no '{name}' section");
+    }
 }

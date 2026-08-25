@@ -45,11 +45,11 @@ var gamesRoot = ResolveRoot(
     variable: "PUCK_AGB_GAMES"
 );
 var stages = PostStages.Create()
-    .Where(predicate: stage => TierMatches(
+    .Where(predicate: stage => PostStageFilters.TierMatches(
     stage: stage,
     tierFilter: tierFilter
 ))
-    .Where(predicate: stage => NameMatches(
+    .Where(predicate: stage => PostStageFilters.NameMatches(
     nameFilter: nameFilter,
     stage: stage
 ))
@@ -110,14 +110,3 @@ static string? ResolveRoot(string[] args, string flag, string variable) {
         ? fromEnvironment
         : null);
 }
-static bool TierMatches(IPostStage<PostContext> stage, string? tierFilter) =>
-    (string.IsNullOrEmpty(value: tierFilter) || string.Equals(
-    a: stage.Tier.ToString(),
-    b: tierFilter,
-    comparisonType: StringComparison.OrdinalIgnoreCase
-));
-static bool NameMatches(IPostStage<PostContext> stage, string? nameFilter) =>
-    (string.IsNullOrEmpty(value: nameFilter) || stage.Name.Contains(
-    comparisonType: StringComparison.OrdinalIgnoreCase,
-    value: nameFilter
-));

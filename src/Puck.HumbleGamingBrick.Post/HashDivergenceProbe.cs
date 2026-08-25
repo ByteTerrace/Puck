@@ -234,7 +234,7 @@ internal static class HashDivergenceProbe {
     // observable change is the one flipped byte — a surgical, deterministic divergence for testing the localizer.
     private static void Perturb(Machine machine) {
         var snapshot = machine.Snapshot();
-        var section = FindSectionByName(
+        var section = SnapshotDivergence.FindSectionByName(
             sections: snapshot.Sections,
             name: PerturbSectionName
         );
@@ -246,15 +246,6 @@ internal static class HashDivergenceProbe {
         );
 
         machine.Restore(snapshot: poked);
-    }
-    private static SnapshotSection FindSectionByName(IReadOnlyList<SnapshotSection> sections, string name) {
-        foreach (var section in sections) {
-            if (section.Name == name) {
-                return section;
-            }
-        }
-
-        throw new InvalidOperationException(message: $"snapshot has no '{name}' section");
     }
     // Advances a machine until its master clock reaches an absolute cumulative cycle target (a no-op when already past
     // it). It steps atomic instructions (or bare T-cycles with no bus master) rather than Machine.Run, because Run's
