@@ -92,8 +92,10 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
     private readonly byte[] m_backgroundFifoColor = new byte[FifoSize];
 
     private readonly Framebuffer m_framebuffer;
-    private readonly IInterruptController m_interrupts;
-    private readonly IKey1 m_key1;
+    // Concrete-typed: InterruptController and Key1Component each have exactly one production implementation and are
+    // never substituted, so the per-dot render path's calls devirtualize (mirrors SystemBus's own collaborators).
+    private readonly InterruptController m_interrupts;
+    private readonly Key1Component m_key1;
     private readonly SystemMemory m_memory;
 
     private readonly byte[] m_objectColorRam = new byte[ColorRamSize];
@@ -227,7 +229,7 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
     /// <param name="header">The cartridge header, which selects Color-native or compatibility rendering and steers the
     /// boot ROM's handoff (the frame position it leaves, and the compatibility palettes it assigns).</param>
     /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
-    public Ppu(IInterruptController interrupts, SystemMemory memory, Framebuffer framebuffer, MachineConfiguration configuration, IKey1 key1, PpuTimingParameters timing, CartridgeHeader header) {
+    public Ppu(InterruptController interrupts, SystemMemory memory, Framebuffer framebuffer, MachineConfiguration configuration, Key1Component key1, PpuTimingParameters timing, CartridgeHeader header) {
         ArgumentNullException.ThrowIfNull(argument: interrupts);
         ArgumentNullException.ThrowIfNull(argument: memory);
         ArgumentNullException.ThrowIfNull(argument: framebuffer);

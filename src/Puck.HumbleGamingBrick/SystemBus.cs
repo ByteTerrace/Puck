@@ -16,26 +16,31 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
     // The two ROM windows' byte spans (0x0000-0x3FFF and 0x4000-0x7FFF, each 16 KiB) the derived cache resolves.
     private const int RomWindowByteCount = 0x4000;
 
-    private readonly IApu m_apu;
+    // Sub-collaborator fields hold the sole concrete implementation of each interface (mirroring ComponentClock's own
+    // fixed-composition fields), so every ReadByte/WriteByte call — the hottest site on the bus — is a direct sealed
+    // call instead of an interface dispatch. ISystemBus itself stays interface-typed at the Sm83 seam because
+    // Sm83SstBus is a real second implementation there; none of these sub-components are ever substituted (only
+    // ISystemBus is, by Sm83SstHarness), so sealing them is total.
+    private readonly ApuComponent m_apu;
     private readonly byte[]? m_bootRom;
     private readonly ICartridgeSlot m_cartridgeSlot;
-    private readonly IHdma m_hdma;
-    private readonly IInfrared m_infrared;
-    private readonly IInterruptController m_interrupts;
+    private readonly HdmaController m_hdma;
+    private readonly InfraredPort m_infrared;
+    private readonly InterruptController m_interrupts;
     private readonly byte[] m_ioRegisters;
-    private readonly IJoypad m_joypad;
-    private readonly IKey1 m_key1;
+    private readonly JoypadComponent m_joypad;
+    private readonly Key1Component m_key1;
     private readonly SystemMemory m_memory;
-    private readonly IOamDma m_oamDma;
-    private readonly IPpu m_ppu;
-    private readonly ISerial m_serial;
+    private readonly OamDmaController m_oamDma;
+    private readonly Ppu m_ppu;
+    private readonly SerialComponent m_serial;
 
     // Mutable so a LIVE device swap re-gates the Color I/O page: with this false, every color register write (palette
     // RAM, KEY1, HDMA, VRAM/WRAM bank selects, PCM ports) is already dropped by the existing `if (m_supportsColor)`
     // guards and reads return 0xFF — sealing off Color hardware after a demote with no per-register change.
     private bool m_supportsColor;
 
-    private readonly ITimer m_timer;
+    private readonly TimerComponent m_timer;
 
     // The FF50 latch: the boot ROM overlay is readable until the first nonzero write, which unmaps it for the life of
     // the machine (only a reset — a fresh machine — brings it back). A machine configured without a boot ROM starts
@@ -69,7 +74,7 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
     /// <param name="timer">The divider/timer block backing DIV, TIMA, TMA, and TAC.</param>
     /// <param name="configuration">The machine configuration, which gates Color-only registers.</param>
     /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
-    public SystemBus(IApu apu, ICartridgeSlot cartridgeSlot, IHdma hdma, IInfrared infrared, IInterruptController interrupts, IJoypad joypad, IKey1 key1, SystemMemory memory, IOamDma oamDma, IPpu ppu, ISerial serial, ITimer timer, MachineConfiguration configuration) {
+    public SystemBus(ApuComponent apu, ICartridgeSlot cartridgeSlot, HdmaController hdma, InfraredPort infrared, InterruptController interrupts, JoypadComponent joypad, Key1Component key1, SystemMemory memory, OamDmaController oamDma, Ppu ppu, SerialComponent serial, TimerComponent timer, MachineConfiguration configuration) {
         ArgumentNullException.ThrowIfNull(argument: apu);
         ArgumentNullException.ThrowIfNull(argument: cartridgeSlot);
         ArgumentNullException.ThrowIfNull(argument: hdma);

@@ -21,10 +21,12 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
 
     private readonly ISystemBus m_bus;
     private readonly ComponentClock m_componentClock;
-    private readonly IHdma m_hdma;
-    private readonly IInterruptController m_interrupts;
-    private readonly IJoypad m_joypad;
-    private readonly IKey1 m_key1;
+    // Concrete-typed like SystemBus's own collaborators: each interface below has exactly one production
+    // implementation, and only ISystemBus is ever substituted (Sm83SstHarness's SST bus), so these calls devirtualize.
+    private readonly HdmaController m_hdma;
+    private readonly InterruptController m_interrupts;
+    private readonly JoypadComponent m_joypad;
+    private readonly Key1Component m_key1;
 
     // Mutable so a LIVE device swap re-gates the only live model read (ExecuteStop: color arms a KEY1 speed switch,
     // monochrome halts). The boot register handoff (SeedPostBootState, incl. the AGB inc-b probe) stays construction-only.
@@ -58,7 +60,7 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
     /// <param name="header">The cartridge header, which steers the Color boot ROM's register handoff for a monochrome
     /// cartridge (the compatibility-mode path leaves different values than a Color game).</param>
     /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
-    public Sm83(ISystemBus bus, IInterruptController interrupts, ComponentClock componentClock, IKey1 key1, IHdma hdma, IJoypad joypad, MachineConfiguration configuration, CartridgeHeader header) {
+    public Sm83(ISystemBus bus, InterruptController interrupts, ComponentClock componentClock, Key1Component key1, HdmaController hdma, JoypadComponent joypad, MachineConfiguration configuration, CartridgeHeader header) {
         ArgumentNullException.ThrowIfNull(argument: bus);
         ArgumentNullException.ThrowIfNull(argument: interrupts);
         ArgumentNullException.ThrowIfNull(argument: componentClock);
