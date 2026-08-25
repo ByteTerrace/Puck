@@ -40,6 +40,7 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
         var authored = server.Definition.Gravity;
         var compiled = population.CompiledGravity;
         var statistics = population.GravityStatistics;
+        var areaStatistics = population.GravityAreaStatistics;
         var uniform = authored.UniformAcceleration;
         var sources = new List<string>();
 
@@ -78,10 +79,36 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
             val1: 0,
             val2: (statistics.BodyCount - compiled.Attractors.Length)
         );
+        var areaRows = new List<string>();
+
+        for (var compiledOrder = 0; (compiledOrder < compiled.Areas.Length); compiledOrder++) {
+            var area = compiled.Areas[compiledOrder];
+            var authoredArea = authored.Areas![area.AuthoredIndex];
+            var bounds = authoredArea.Bounds switch {
+                WorldGravityAreaBounds.SphereBounds sphere => $"sphere(r={sphere.Radius:0.#####})",
+                WorldGravityAreaBounds.BoxBounds box => $"box(half=({box.HalfExtents.X:0.#####},{box.HalfExtents.Y:0.#####},{box.HalfExtents.Z:0.#####}))",
+                _ => "unknown",
+            };
+            var acceleration = authoredArea.Acceleration switch {
+                WorldGravityAreaAcceleration.Directional directional => $"directional({directional.Value.X:0.#####},{directional.Value.Y:0.#####},{directional.Value.Z:0.#####})",
+                WorldGravityAreaAcceleration.Radial radial => $"radial({radial.Magnitude:0.#####})",
+                _ => "unknown",
+            };
+            var ride = ((area.Attach is { } attach)
+                ? $"body:{attach.BodyIndex}"
+                : "static"
+            );
+
+            areaRows.Add(item: $"#{area.AuthoredIndex}:{area.PlacementId}/priority={area.Priority}/mode={area.Mode}/{bounds}/{acceleration}/ride={ride}/order={compiledOrder}");
+        }
+        var areaDescription = ((areaRows.Count == 0)
+            ? "none"
+            : string.Join(separator: ",", values: areaRows)
+        );
 
         return string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"[world.gravity: solver {authored.Solver} uniform=({uniform.X:0.#####},{uniform.Y:0.#####},{uniform.Z:0.#####}) G={authored.GravitationalConstant:0.#####} softening={authored.SofteningLength:0.#####} | sources {sourceRows} | compiled={compiled.Attractors.Length} static source(s) last targets={targetCount} nodes={statistics.TreeNodeCount} exact={statistics.ExactSourceEvaluations} approximate={statistics.ApproximatedNodeEvaluations} represented={statistics.ApproximatedSourceCount} m2m={statistics.MultipoleToMultipoleTranslations} m2l={statistics.MultipoleToLocalTranslations} l2l={statistics.LocalToLocalTranslations} local={statistics.LocalExpansionEvaluations} deferred={statistics.DeferredLocalExpansionEvaluations}]"
+            handler: $"[world.gravity: solver {authored.Solver} uniform=({uniform.X:0.#####},{uniform.Y:0.#####},{uniform.Z:0.#####}) G={authored.GravitationalConstant:0.#####} softening={authored.SofteningLength:0.#####} | sources {sourceRows} | areas {areaDescription} | compiled={compiled.Attractors.Length} static source(s), {compiled.Areas.Length} area(s) last globalTargets={targetCount} nodes={statistics.TreeNodeCount} exact={statistics.ExactSourceEvaluations} approximate={statistics.ApproximatedNodeEvaluations} represented={statistics.ApproximatedSourceCount} m2m={statistics.MultipoleToMultipoleTranslations} m2l={statistics.MultipoleToLocalTranslations} l2l={statistics.LocalToLocalTranslations} local={statistics.LocalExpansionEvaluations} deferred={statistics.DeferredLocalExpansionEvaluations} areaTargets={areaStatistics.TargetCount} areaActive={areaStatistics.ActiveAreaCount} areaEvaluations={areaStatistics.EvaluationCount} areaMatches={areaStatistics.MatchCount}]"
         );
     }
     private static string DescribeAssignment(WorldRowAssignment assignment) =>

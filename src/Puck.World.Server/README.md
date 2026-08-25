@@ -52,6 +52,22 @@ barrier (see the console section of
 typed completions (`WorldSubmissionResult`), and deliveries fan out through
 `WorldOutputHub.cs`, which supports multiple subscribed sinks.
 
+## Gravity fields
+
+`WorldGravityField` is the one authoritative gravity evaluator. It gathers
+bodies in stable entity order, runs the selected global solver once, adds the
+uniform acceleration, then folds matching compiled local areas in stable
+priority/authored order. Local areas remain fixed-point and placement-relative:
+static rows use authored pose, while attached rows refresh through
+`WorldPlacementAttachment.TryResolve` before the tick's solve. Per-entity
+participation is separate from vector magnitude, so a zero Replace, exact
+cancellation, or radial center suppresses kit fallback, while a body outside
+every area in an areas-only document retains it. The same participation verdict
+gates field-owned up/contact-normal behavior when a body crosses an area edge.
+`gravitationalConstant > 0` runs the global body-source solve even with no
+static attractors. Composition additions saturate per Q48.16 component instead
+of wrapping, and a later Replace remains an ordinary assignment.
+
 **Mutations, the journal, and undo.** A `WorldMutation` applies by composing a
 candidate document, revalidating the WHOLE document through
 `WorldDefinitionValidator`, and only then swapping, journaling, and rebuilding
@@ -109,6 +125,17 @@ disagree about the value. `expose` writes land through the ordinary
 a bypass. Cell values are checkpointed (`WorldFieldCheckpoint`) and delivered
 as `FieldCells` deltas on the snapshot (`FieldsFull` on a primer) — never
 document rows, so nothing journals them directly.
+
+`WorldFieldLattice` receives the complete `WorldFieldsSection` companion plus
+the already-compiled `WorldFieldProgram`: the companion remains authoritative
+for topology, cadence, paint, and presentation, while the typed program is the
+one executable reaction IR. `StepFields` reads and writes reaction state by
+`WorldStateHandle`, not by repeating row-name lookup. A whole-document rebuild
+may replace compatible reactions in place without resetting cells, deltas,
+revision, or checkpoint shape; adding/removing a lattice or changing topology,
+cadence, or a field envelope refuses and asks for a host restart. The
+`world.fields` read-back includes installed node order, dependency edges, and
+cell/body pass counts.
 
 ## Simulation authority
 

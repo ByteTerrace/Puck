@@ -152,67 +152,165 @@ public static partial class WorldDefinitionValidator {
             );
         }
 
-        if (gravity.Points is not { Count: > 0 } points) {
+        if (gravity.Points is { Count: > 0 } points) {
+            if (!(gravity.GravitationalConstant > 0f)) {
+                errors.Add(item: "gravity.gravitationalConstant must be positive when gravity.points declares a source.");
+            }
+
+            for (var index = 0; (index < points.Count); index++) {
+                var point = points[index];
+                var path = $"gravity.points[{index}]";
+
+                if (point is null) {
+                    errors.Add(item: $"{path} is required.");
+
+                    continue;
+                }
+
+                if (string.IsNullOrWhiteSpace(value: point.PlacementId)) {
+                    errors.Add(item: $"{path}.placementId is required.");
+                } else {
+                    if (!seen.Add(item: point.PlacementId)) {
+                        errors.Add(item: $"{path}.placementId duplicates gravity source '{point.PlacementId}'.");
+                    }
+
+                    if (WorldDefinitionRows.FindPlacement(
+                        id: point.PlacementId,
+                        placements: placements
+                    ) is null) {
+                        errors.Add(item: $"{path}.placementId '{point.PlacementId}' resolves to no placement.");
+                    }
+                }
+
+                RequirePositive(
+                    value: point.SurfaceGravity,
+                    name: $"{path}.surfaceGravity",
+                    errors: errors
+                );
+                RequirePositive(
+                    value: point.ReferenceRadius,
+                    name: $"{path}.referenceRadius",
+                    errors: errors
+                );
+
+                if (
+                    float.IsFinite(f: point.SurfaceGravity) &&
+                    (point.SurfaceGravity > 0f) &&
+                    float.IsFinite(f: point.ReferenceRadius) &&
+                    (point.ReferenceRadius > 0f) &&
+                    float.IsFinite(f: gravity.GravitationalConstant) &&
+                    (gravity.GravitationalConstant > 0f) &&
+                    float.IsFinite(f: gravity.SofteningLength) &&
+                    (gravity.SofteningLength > 0f) &&
+                    !FixedWorldGravity.TryCompilePointMass(
+                        gravitationalConstant: gravity.GravitationalConstant,
+                        mass: out _,
+                        point: point,
+                        softeningLength: gravity.SofteningLength
+                    )
+                ) {
+                    errors.Add(item: $"{path} cannot lower its surfaceGravity/referenceRadius promise through gravity's Q48.16 Plummer kernel without underflow or overflow.");
+                }
+            }
+        }
+
+        if (gravity.Areas is not { } areas) {
             return;
         }
 
-        if (!(gravity.GravitationalConstant > 0f)) {
-            errors.Add(item: "gravity.gravitationalConstant must be positive when gravity.points declares a source.");
+        if (areas.Count > WorldGravityCapacity.MaxAreas) {
+            errors.Add(item: $"gravity.areas declares {areas.Count} rows, past the {WorldGravityCapacity.MaxAreas}-row cap.");
         }
 
-        for (var index = 0; (index < points.Count); index++) {
-            var point = points[index];
-            var path = $"gravity.points[{index}]";
+        for (var index = 0; (index < areas.Count); index++) {
+            var area = areas[index];
+            var path = $"gravity.areas[{index}]";
 
-            if (point is null) {
+            if (area is null) {
                 errors.Add(item: $"{path} is required.");
 
                 continue;
             }
 
-            if (string.IsNullOrWhiteSpace(value: point.PlacementId)) {
-                errors.Add(item: $"{path}.placementId is required.");
-            } else {
-                if (!seen.Add(item: point.PlacementId)) {
-                    errors.Add(item: $"{path}.placementId duplicates gravity source '{point.PlacementId}'.");
-                }
+            WorldPlacement? placement = null;
 
-                if (WorldDefinitionRows.FindPlacement(
-                    id: point.PlacementId,
-                    placements: placements
-                ) is null) {
-                    errors.Add(item: $"{path}.placementId '{point.PlacementId}' resolves to no placement.");
-                }
+            if (string.IsNullOrWhiteSpace(value: area.PlacementId)) {
+                errors.Add(item: $"{path}.placementId is required.");
+            } else if ((placement = WorldDefinitionRows.FindPlacement(
+                id: area.PlacementId,
+                placements: placements
+            )) is null) {
+                errors.Add(item: $"{path}.placementId '{area.PlacementId}' resolves to no placement.");
             }
 
-            RequirePositive(
-                value: point.SurfaceGravity,
-                name: $"{path}.surfaceGravity",
-                errors: errors
-            );
-            RequirePositive(
-                value: point.ReferenceRadius,
-                name: $"{path}.referenceRadius",
-                errors: errors
-            );
+            if (!Enum.IsDefined(value: area.Mode)) {
+                errors.Add(item: $"{path}.mode '{area.Mode}' is not defined.");
+            }
+
+            switch (area.Bounds) {
+                case WorldGravityAreaBounds.SphereBounds sphere:
+                    RequirePositive(
+                        value: sphere.Radius,
+                        name: $"{path}.bounds.radius",
+                        errors: errors
+                    );
+                    break;
+                case WorldGravityAreaBounds.BoxBounds box:
+                    RequirePositive(
+                        value: box.HalfExtents.X,
+                        name: $"{path}.bounds.halfExtents[0]",
+                        errors: errors
+                    );
+                    RequirePositive(
+                        value: box.HalfExtents.Y,
+                        name: $"{path}.bounds.halfExtents[1]",
+                        errors: errors
+                    );
+                    RequirePositive(
+                        value: box.HalfExtents.Z,
+                        name: $"{path}.bounds.halfExtents[2]",
+                        errors: errors
+                    );
+                    break;
+                case null:
+                    errors.Add(item: $"{path}.bounds is required.");
+                    break;
+                default:
+                    errors.Add(item: $"{path}.bounds has an unsupported shape.");
+                    break;
+            }
+
+            switch (area.Acceleration) {
+                case WorldGravityAreaAcceleration.Directional directional:
+                    if (!IsFinite(value: directional.Value)) {
+                        errors.Add(item: $"{path}.acceleration.value must contain finite coordinates.");
+                    }
+                    break;
+                case WorldGravityAreaAcceleration.Radial radial:
+                    RequirePositive(
+                        value: radial.Magnitude,
+                        name: $"{path}.acceleration.magnitude",
+                        errors: errors
+                    );
+                    break;
+                case null:
+                    errors.Add(item: $"{path}.acceleration is required.");
+                    break;
+                default:
+                    errors.Add(item: $"{path}.acceleration has an unsupported shape.");
+                    break;
+            }
 
             if (
-                float.IsFinite(f: point.SurfaceGravity) &&
-                (point.SurfaceGravity > 0f) &&
-                float.IsFinite(f: point.ReferenceRadius) &&
-                (point.ReferenceRadius > 0f) &&
-                float.IsFinite(f: gravity.GravitationalConstant) &&
-                (gravity.GravitationalConstant > 0f) &&
-                float.IsFinite(f: gravity.SofteningLength) &&
-                (gravity.SofteningLength > 0f) &&
-                !FixedWorldGravity.TryCompilePointMass(
-                    gravitationalConstant: gravity.GravitationalConstant,
-                    mass: out _,
-                    point: point,
-                    softeningLength: gravity.SofteningLength
+                (placement is not null) &&
+                !FixedWorldGravityArea.TryCompile(
+                    area: area,
+                    authoredIndex: index,
+                    compiled: out _,
+                    placement: placement
                 )
             ) {
-                errors.Add(item: $"{path} cannot lower its surfaceGravity/referenceRadius promise through gravity's Q48.16 Plummer kernel without underflow or overflow.");
+                errors.Add(item: $"{path} cannot lower its placement-relative bounds and acceleration through the Q48.16 evaluator without underflow or overflow.");
             }
         }
     }

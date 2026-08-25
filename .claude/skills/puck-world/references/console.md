@@ -103,9 +103,12 @@ Three echo models — do not conflate them:
 `world.gravity` is the gravity decision's Immediate read-back: it echoes the
 authored solver, uniform acceleration, shared constant/softening, explicit-mass
 sources, point/planet presets with their deterministically derived masses, and
-the last solver's structural work counters. `world.budget` repeats the static
-source count and last exact/approximate evaluation counts so gravity authoring
-does not create a silent per-tick price. Neither verb mutates the field.
+bounded local areas in their compiled priority/authored-order fold (bound,
+directional/radial effect, Combine/Replace, and static/attached ride), plus the
+last solver and area structural work counters. `world.budget` repeats the static
+source count, declared areas per target, last exact/approximate evaluations, and
+last area checks/matches so gravity authoring does not create a silent per-tick
+price. Neither verb mutates the field.
 
 `wire.ack [on|quiet]`: quiet drops SUCCESSFUL echoes of verbs registered
 `ackOnly: true` (flood-friendly); errors and answer-bearing verbs always

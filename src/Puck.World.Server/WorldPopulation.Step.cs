@@ -393,6 +393,7 @@ public sealed partial class WorldPopulation {
             return;
         }
 
+        gravity.RefreshAttachedAreas(population: this);
         m_gravityTargets.Clear();
 
         for (var index = 0; (index < Capacity); index++) {

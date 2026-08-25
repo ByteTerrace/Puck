@@ -514,6 +514,20 @@ public sealed partial class WorldServer {
             return false;
         }
 
+        if (!m_population.CanInstallFields(
+            definition: candidate,
+            reason: out var fieldReason
+        )) {
+            RejectRebuild(
+                connectionId: connectionId,
+                correlationId: correlationId,
+                reason: fieldReason!,
+                verb: verb
+            );
+
+            return false;
+        }
+
         // A rebuild rebuilds the field wholesale (loud rejection on an unsupported solid, definition unchanged) —
         // same as a whole-document swap always has.
         if (!TryBuildSolids(
@@ -817,6 +831,12 @@ public sealed partial class WorldServer {
         // later intent drain reads it (Install always runs before the intents loop within one Step).
         m_grants.SyncState(definition: definition);
 
+        // Field reactions are a compiled runtime product even when the mutation does not require a population
+        // rebuild. A compatible replacement swaps the typed plan in place and retains every lattice cell.
+        if (!rebuildPopulation) {
+            m_population.InstallFields(definition: definition);
+        }
+
         // Reconcile the machine host to the (possibly changed) screens section on EVERY install — cheap (a
         // dictionary diff over a handful of declared screens), and the one choke point every screen-affecting
         // mutation AND every whole-document rebuild both pass through. The host reports which indices it removed;
@@ -1070,6 +1090,20 @@ public sealed partial class WorldServer {
                 correlationId: correlationId,
                 mutation: mutation,
                 reason: capacityReason
+            );
+
+            return false;
+        }
+
+        if (!m_population.CanInstallFields(
+            definition: candidate,
+            reason: out var fieldReason
+        )) {
+            Reject(
+                connectionId: connectionId,
+                correlationId: correlationId,
+                mutation: mutation,
+                reason: fieldReason!
             );
 
             return false;

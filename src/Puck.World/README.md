@@ -805,7 +805,8 @@ monotonic for a large instance field — read both `world.gpu` and `world.fps`
 at the intended population and view layout. `world.budget` is the DERIVED cost
 sheet, not a lever: the live render program's packed words/instances against
 their frozen envelopes, the Lipschitz step scale and march multiplier, the
-field lattice's per-step reaction cost and cadence, and the state row count —
+field lattice program's node/cadence counts and exact full-cell/body-slot pass
+costs, and the state row count —
 how an authored choice's price becomes legible instead of a silent frame tax.
 
 Two document sections author the scene's lighting instead of a verb, re-read

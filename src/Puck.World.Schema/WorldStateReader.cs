@@ -46,6 +46,51 @@ namespace Puck.World;
 /// pays only what <see cref="Puck.Maths.DiscreteMeasure"/>'s exact rational allocation costs for its magnitude.</para>
 /// </remarks>
 public static class WorldStateReader {
+    /// <summary>Resolves one world-owned row by its compiled typed handle without a row-name scan.</summary>
+    /// <param name="definition">The document to read.</param>
+    /// <param name="catalog">The document's current state catalog.</param>
+    /// <param name="handle">A world-lane handle minted by <paramref name="catalog"/>.</param>
+    /// <param name="key">The cell key, or <see langword="null"/> for the slot cell.</param>
+    /// <param name="tick">The tick this read answers as of.</param>
+    /// <param name="row">The resolved row.</param>
+    /// <param name="rawValue">The addressed live raw value, or <see langword="null"/> when absent.</param>
+    /// <param name="text">The addressed text payload, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when the row resolves.</returns>
+    /// <exception cref="ArgumentException"><paramref name="catalog"/> is not the definition's current catalog, or
+    /// <paramref name="handle"/> does not address a world-owned row in it.</exception>
+    public static bool TryReadHandle(
+        WorldDefinition definition,
+        WorldStateCatalog catalog,
+        WorldStateHandle handle,
+        string? key,
+        ulong tick,
+        [NotNullWhen(true)] out WorldStateRow? row,
+        out long? rawValue,
+        out string? text
+    ) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+        ArgumentNullException.ThrowIfNull(argument: catalog);
+
+        if (!ReferenceEquals(objA: definition.StateCatalog, objB: catalog)) {
+            throw new ArgumentException(message: "The state catalog is not current for this definition.", paramName: nameof(catalog));
+        }
+
+        if (
+            !catalog.TryGetDescriptor(handle: handle, descriptor: out var descriptor) ||
+            (descriptor.Ownership != WorldStateOwnershipLane.World) ||
+            ((uint)descriptor.LaneOrdinal >= (uint)definition.State.Count) ||
+            (definition.State[descriptor.LaneOrdinal] is not { } resolved) ||
+            !string.Equals(a: resolved.Name, b: descriptor.Name, comparisonType: StringComparison.Ordinal)
+        ) {
+            throw new ArgumentException(message: "The state handle does not address a current world-owned row.", paramName: nameof(handle));
+        }
+
+        row = resolved;
+        ReadCell(row: row, key: key, tick: tick, rawValue: out rawValue, text: out text);
+
+        return true;
+    }
+
     /// <summary>Finds the winning cell's key over a keyed row under <paramref name="op"/>
     /// (<see cref="WorldStateReduceOp.Max"/> or <see cref="WorldStateReduceOp.Min"/>), resolving each candidate
     /// cell's value through this same per-(row, key) seam as <see cref="TryRead"/> rather than walking the row's
@@ -270,6 +315,14 @@ public static class WorldStateReader {
             return false;
         }
 
+        ReadCell(row: row, key: key, tick: tick, rawValue: out rawValue, text: out text);
+
+        return true;
+    }
+
+    private static void ReadCell(WorldStateRow row, string? key, ulong tick, out long? rawValue, out string? text) {
+        rawValue = null;
+        text = null;
         var target = (key ?? WorldStateRow.SlotKey.Value);
 
         foreach (var candidate in (row.Cells ?? [])) {
@@ -298,7 +351,6 @@ public static class WorldStateReader {
             }
         }
 
-        return true;
     }
     /// <summary>Resolves one (row, key) pair the same way <see cref="TryRead"/> does, except a cell carrying a
     /// <see cref="WorldStateDynamics"/> easing trait reads its EASED value at <paramref name="tick"/>

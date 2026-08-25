@@ -334,12 +334,41 @@ underflow or overflow before the server boots. The compiled source order is
 explicit attractors followed by points, each in authored order.
 
 The `gravitationalConstant` may remain zero for a uniform-only field, but must
-be positive when `points` is nonempty. A placement may appear in only one source
+be positive when `points` is nonempty. A positive constant also activates the
+global body-to-body solve when no static source is authored: bodies remain both
+sources and targets, and a lone body participates with the solver's zero answer
+rather than silently falling back to kit gravity. A placement may appear in only one source
 row across both spellings. Point authoring never reads a placement's solid or
 SDF: its transform locates the source, while geometry and acceleration remain
 separate decisions. `world.gravity` reads authored values, derived point masses,
 and the last solver work counters back; `world.budget` includes the static
 source count and last evaluation counts.
+
+Optional `areas` add bounded local influences without introducing another
+physics system. Each row rides a placement and declares `priority`, explicit
+`Combine` or `Replace`, an analytic `$type` bound (`sphere` with `radius`, or a
+yaw-local `box` with `halfExtents`), and an acceleration `$type`: `directional`
+with a placement-local vector, or `radial` with a constant magnitude toward the
+placement origin. Bounds include their boundary and scale with the placement;
+directional vectors rotate with its yaw. When the placement carries `attach`,
+the area follows the same authoritative fixed-point body pose as its region,
+analytic collider, and emission. An inactive carrier contributes no area.
+
+For each body, the runtime starts with uniform plus the existing global solve,
+then folds matching areas in ascending `(priority, authored row index)` order.
+`Combine` adds; `Replace` assigns, so a higher-priority or later equal-priority
+Replace wins. A zero directional Replace deliberately authors a zero-G pocket,
+and exact cancellation or the center of a radial area remains an authored zero
+answer rather than falling back to kit gravity. In an areas-only world, a body
+outside every area does not participate and retains the kit fallback. The cap is
+64 areas; `world.gravity` echoes the compiled order and last area checks/matches,
+and `world.budget` reports declared areas per target plus those live counters.
+Every global/uniform/area addition saturates componentwise at the Q48.16 extrema
+rather than wrapping direction; a later Replace still resets the accumulated value.
+
+These bounds stay analytic by design. An arbitrary SDF-bounded influence needs
+a deliberate cross-project asset/query contract; per-body masks belong at that
+same future extension seam. Neither is inferred from placement geometry today.
 
 ## The `metadata` section — free-form author-facing facts
 
@@ -510,7 +539,13 @@ cached non-serialized door: unrelated definition edits and value-only state
 updates preserve compatible program handles, while a field declaration or
 reaction-program change creates a replacement. This is the shared reaction
 boundary an editor, inspector, scheduler, and future runtime lowering consume;
-nodes own no hidden state or random stream.
+nodes own no hidden state or random stream. The authoritative lattice executes
+those nodes directly; it does not recompile reaction rows into a private
+second form. A live reaction-only replacement installs a new compatible
+program without reseeding cells, while topology, cadence, or field-envelope
+changes refuse with restart guidance rather than attempting an implicit cell
+migration. `world.fields` appends the installed node order, dependency edges,
+and cell/body pass counts to its ordinary lattice statistics.
 
 A row with `heightScale` IS geometry: its value raises a solid column above the
 lattice origin (unioned with the authored solids for contact) that the
@@ -520,8 +555,9 @@ eight-row primer fits the federation wire's 32 MiB frame), `MaxFields` 8,
 `MaxExtent` 1024 per axis, `MaxLayers` 128, `MaxSurfaceCells` 126 (a
 height-bearing row's XZ footprint, and the cross-layer sum where several
 layers raise), `MaxReactions` 64, `MaxTransformTerms` 64, `MaxPaint` 256. Read
-back with `world.fields`; the per-step cost (cell count × reaction count ×
-cadence) folds into `world.budget`.
+back with `world.fields`; the exact structural cost (cell count × compiled
+full-cell passes, plus body capacity × body passes, at the authored cadence)
+folds into `world.budget`.
 
 ## Authored randomness: SOURCE x SITE x MOMENT
 

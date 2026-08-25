@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using Puck.Maths;
 using Puck.World.Protocol;
 
@@ -15,7 +16,7 @@ public sealed class WorldFieldLattice {
     private readonly int m_depth;
     private readonly List<int> m_deltas = [];
     private readonly bool[][] m_deltaDirty;
-    private readonly WorldFieldsSection m_document;
+    private WorldFieldsSection m_document;
     private readonly FixedQ4816[] m_heightScale;
     private readonly int m_layers;
     private readonly FixedQ4816 m_bodyCouplingCeiling;
@@ -23,7 +24,7 @@ public sealed class WorldFieldLattice {
     private readonly FixedQ4816[] m_min;
     private readonly string[] m_names;
     private readonly FixedVector3 m_origin;
-    private readonly CompiledReaction[] m_reactions;
+    private WorldFieldProgram m_program;
     private readonly FixedQ4816[] m_scratch;
     private readonly int m_stepEveryTicks;
     private readonly FixedQ4816[][] m_values;
@@ -35,18 +36,6 @@ public sealed class WorldFieldLattice {
     /// <param name="Raw">The raw values, one array per declared field.</param>
     public sealed record WorldFieldCheckpoint(IReadOnlyList<long[]> Raw);
 
-    private readonly record struct CompiledCondition(int Field, WorldFieldComparison Comparison, CompiledScalar Value);
-    private readonly record struct CompiledWrite(int Field, WorldFieldWriteOp Op, CompiledScalar Value);
-    private readonly record struct CompiledReaction(
-        WorldReaction Kind,
-        int Field,
-        CompiledScalar Rate,
-        CompiledCondition[] When,
-        CompiledWrite[] Then,
-        string? Row,
-        WorldFieldComparison Comparison,
-        CompiledScalar Value
-    );
     // A reaction scalar compiled once: the literal in Q48.16, or the scalar state row it reads at each step. An
     // unwritten referenced slot reads 0 (the row's slot cell is minted by its first write), so a row-gated reaction
     // is inert until something writes the row.
@@ -61,10 +50,28 @@ public sealed class WorldFieldLattice {
         );
     }
 
-    public WorldFieldLattice(WorldFieldsSection document, ulong worldSeed = 0UL) {
+    /// <summary>Creates the live lattice from its complete topology/paint companion and the authoritative compiled
+    /// reaction program. The constructor never recompiles authored reactions.</summary>
+    /// <param name="document">The complete companion owning topology, cadence, paint, and presentation.</param>
+    /// <param name="program">The typed reaction program compiled from <paramref name="document"/>.</param>
+    /// <param name="worldSeed">The deterministic paint seed.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="document"/> or <paramref name="program"/> is
+    /// null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="program"/> was compiled from incompatible field or
+    /// reaction declarations.</exception>
+    public WorldFieldLattice(WorldFieldsSection document, WorldFieldProgram program, ulong worldSeed = 0UL) {
         ArgumentNullException.ThrowIfNull(argument: document);
+        ArgumentNullException.ThrowIfNull(argument: program);
+
+        if (!program.MatchesProgram(document: document)) {
+            throw new ArgumentException(
+                message: "The field program does not represent the companion document's field declarations and reactions.",
+                paramName: nameof(program)
+            );
+        }
 
         m_document = document;
+        m_program = program;
         m_width = document.Lattice.Width;
         m_depth = document.Lattice.Depth;
         m_layers = document.Lattice.Layers;
@@ -76,7 +83,7 @@ public sealed class WorldFieldLattice {
         );
         m_stepEveryTicks = document.Lattice.StepEveryTicks;
 
-        var fields = document.Fields;
+        var fields = program.Fields;
 
         m_names = new string[fields.Count];
         m_min = new FixedQ4816[fields.Count];
@@ -90,13 +97,13 @@ public sealed class WorldFieldLattice {
             var row = fields[field];
 
             m_names[field] = row.Name;
-            m_min[field] = FixedQ4816.FromDouble(value: row.Min);
-            m_max[field] = FixedQ4816.FromDouble(value: row.Max);
-            m_heightScale[field] = FixedQ4816.FromDouble(value: row.HeightScale);
+            m_min[field] = row.Minimum;
+            m_max[field] = row.Maximum;
+            m_heightScale[field] = row.HeightScale;
             m_values[field] = new FixedQ4816[CellCount];
             m_deltaDirty[field] = new bool[CellCount];
 
-            var initial = FixedQ4816.FromDouble(value: row.Initial);
+            var initial = row.Initial;
 
             Array.Fill(
                 array: m_values[field],
@@ -134,117 +141,50 @@ public sealed class WorldFieldLattice {
                     );
                     continue;
                 case WorldLatticeFill.Rect paint: {
-            var value = Clamp(
-                field: field,
-                value: FixedQ4816.FromDouble(value: paint.Value)
-            );
-            var minX = FixedQ4816.FromDouble(value: paint.MinX);
-            var maxX = FixedQ4816.FromDouble(value: paint.MaxX);
-            var minZ = FixedQ4816.FromDouble(value: paint.MinZ);
-            var maxZ = FixedQ4816.FromDouble(value: paint.MaxZ);
-            var half = (m_cellSize / FixedQ4816.FromInteger(value: 2));
+                        var value = Clamp(
+                            field: field,
+                            value: FixedQ4816.FromDouble(value: paint.Value)
+                        );
+                        var minX = FixedQ4816.FromDouble(value: paint.MinX);
+                        var maxX = FixedQ4816.FromDouble(value: paint.MaxX);
+                        var minZ = FixedQ4816.FromDouble(value: paint.MinZ);
+                        var maxZ = FixedQ4816.FromDouble(value: paint.MaxZ);
+                        var half = (m_cellSize / FixedQ4816.FromInteger(value: 2));
 
-            for (var z = 0; (z < m_depth); z++) {
-                var centreZ = ((m_origin.Z + (m_cellSize * FixedQ4816.FromInteger(value: z))) + half);
+                        for (var z = 0; (z < m_depth); z++) {
+                            var centreZ = ((m_origin.Z + (m_cellSize * FixedQ4816.FromInteger(value: z))) + half);
 
-                if (
-                    (centreZ < minZ) ||
-                    (centreZ > maxZ)
-                ) {
-                    continue;
-                }
+                            if (
+                                (centreZ < minZ) ||
+                                (centreZ > maxZ)
+                            ) {
+                                continue;
+                            }
 
-                for (var x = 0; (x < m_width); x++) {
-                    var centreX = ((m_origin.X + (m_cellSize * FixedQ4816.FromInteger(value: x))) + half);
+                            for (var x = 0; (x < m_width); x++) {
+                                var centreX = ((m_origin.X + (m_cellSize * FixedQ4816.FromInteger(value: x))) + half);
 
-                    if (
-                        (centreX < minX) ||
-                        (centreX > maxX)
-                    ) {
-                        continue;
+                                if (
+                                    (centreX < minX) ||
+                                    (centreX > maxX)
+                                ) {
+                                    continue;
+                                }
+
+                                for (var y = 0; (y < m_layers); y++) {
+                                    m_values[field][CellIndex(x: x, y: y, z: z)] = value;
+                                }
+                            }
+                        }
+                        break;
                     }
-
-                    for (var y = 0; (y < m_layers); y++) {
-                        m_values[field][CellIndex(x: x, y: y, z: z)] = value;
-                    }
-                }
-            }
-                    break;
-                }
             }
         }
 
-        var reactions = (document.Reactions ?? []);
-
-        m_reactions = new CompiledReaction[reactions.Count];
-
-        for (var index = 0; (index < reactions.Count); index++) {
-            m_reactions[index] = reactions[index] switch {
-                WorldReaction.Diffuse diffuse => new CompiledReaction(
-                Kind: diffuse,
-                Field: FieldIndex(name: diffuse.Field),
-                Rate: CompiledScalar.Compile(scalar: diffuse.Rate),
-                When: [],
-                Then: [],
-                Row: null,
-                Comparison: default,
-                Value: default
-            ),
-                WorldReaction.Decay decay => new CompiledReaction(
-                Kind: decay,
-                Field: FieldIndex(name: decay.Field),
-                Rate: CompiledScalar.Compile(scalar: decay.Rate),
-                When: [],
-                Then: [],
-                Row: null,
-                Comparison: default,
-                Value: default
-            ),
-                WorldReaction.Transform transform => new CompiledReaction(
-                Kind: transform,
-                Field: -1,
-                Rate: default,
-                When: (transform.When ?? []).Select(selector: c => new CompiledCondition(
-                    Field: FieldIndex(name: c.Field),
-                    Comparison: c.Comparison,
-                    Value: CompiledScalar.Compile(scalar: c.Value)
-                )).ToArray(),
-                Then: (transform.Then ?? []).Select(selector: w => new CompiledWrite(
-                    Field: FieldIndex(name: w.Field),
-                    Op: w.Op,
-                    Value: CompiledScalar.Compile(scalar: w.Value)
-                )).ToArray(),
-                Row: null,
-                Comparison: default,
-                Value: default
-            ),
-                WorldReaction.Emit emit => new CompiledReaction(
-                Kind: emit,
-                Field: FieldIndex(name: emit.Field),
-                Rate: CompiledScalar.Compile(scalar: emit.Amount),
-                When: [],
-                Then: [],
-                Row: emit.Tag,
-                Comparison: default,
-                Value: default
-            ),
-                WorldReaction.Expose expose => new CompiledReaction(
-                Kind: expose,
-                Field: FieldIndex(name: expose.Field),
-                Rate: default,
-                When: [],
-                Then: [],
-                Row: expose.Row,
-                Comparison: expose.Comparison,
-                Value: CompiledScalar.Compile(scalar: expose.Value)
-            ),
-                _ => throw new InvalidOperationException(message: $"fields.reactions[{index}] is an unknown reaction kind."),
-            };
-        }
     }
 
     /// <summary>Gets the declared reaction count.</summary>
-    public int ReactionCount => m_reactions.Length;
+    public int ReactionCount => m_program.Nodes.Count;
     /// <summary>Gets the declared step cadence in simulation ticks.</summary>
     public int StepEveryTicks => m_stepEveryTicks;
     /// <summary>Gets the lattice's cell count (width × layers × depth).</summary>
@@ -253,12 +193,108 @@ public sealed class WorldFieldLattice {
     public FixedQ4816 CellSize => m_cellSize;
     /// <summary>Gets the authored section.</summary>
     public WorldFieldsSection Document => m_document;
+    /// <summary>Gets the authoritative typed reaction program currently executed by <see cref="Step"/>.</summary>
+    public WorldFieldProgram Program => m_program;
     /// <summary>Gets the number of declared fields.</summary>
     public int FieldCount => m_values.Length;
     /// <summary>Gets the lattice's minimum corner.</summary>
     public FixedVector3 Origin => m_origin;
     /// <summary>Gets a counter that moves on every cell write.</summary>
     public int Revision => m_revision;
+
+    /// <summary>Describes the exact structural field-program work performed on one cadence step.</summary>
+    /// <param name="activeBodyCount">The number of active body slots.</param>
+    /// <param name="bodyCapacity">The body-table capacity every body node scans.</param>
+    /// <returns>The node, cadence, cell-visit, and body-slot-visit cost line.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The counts are negative or <paramref name="activeBodyCount"/>
+    /// exceeds <paramref name="bodyCapacity"/>.</exception>
+    public string DescribeCost(int activeBodyCount, int bodyCapacity) {
+        if (
+            (activeBodyCount < 0) ||
+            (bodyCapacity < 0) ||
+            (activeBodyCount > bodyCapacity)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(activeBodyCount),
+                message: "Active body count must be within the body-table capacity."
+            );
+        }
+
+        var cellVisits = checked(((long)CellCount * m_program.CellPassCount));
+        var bodySlotVisits = checked(((long)bodyCapacity * m_program.BodyPassCount));
+
+        return $"lattice {m_program.Nodes.Count} node(s) every {m_stepEveryTicks} tick(s): {CellCount} cell(s) x {m_program.CellPassCount} pass(es) = {cellVisits} cell visit(s); bodies {activeBodyCount}/{bodyCapacity} active/capacity x {m_program.BodyPassCount} pass(es) = {bodySlotVisits} slot visit(s)";
+    }
+
+    /// <summary>Checks whether a replacement companion/program pair can be installed without reallocating or
+    /// reseeding cell storage. Reaction-only, colour, and paint changes are compatible; topology, cadence, and field
+    /// envelope changes require a host restart.</summary>
+    /// <param name="document">The candidate complete companion.</param>
+    /// <param name="program">The candidate typed reaction program.</param>
+    /// <param name="reason">The named incompatibility on refusal; otherwise <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when the pair can replace the live program without migrating cells.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="document"/> or <paramref name="program"/> is
+    /// null.</exception>
+    public bool CanInstallProgram(WorldFieldsSection document, WorldFieldProgram program, out string? reason) {
+        ArgumentNullException.ThrowIfNull(argument: document);
+        ArgumentNullException.ThrowIfNull(argument: program);
+
+        if (!program.MatchesProgram(document: document)) {
+            reason = "the compiled field program does not match the candidate field declarations and reactions";
+
+            return false;
+        }
+
+        if (
+            (document.Lattice != m_document.Lattice) ||
+            (program.Fields.Count != m_program.Fields.Count)
+        ) {
+            reason = "the field lattice topology or cadence differs from the live allocation; restart the host to load it";
+
+            return false;
+        }
+
+        for (var index = 0; (index < program.Fields.Count); index++) {
+            var current = m_program.Fields[index];
+            var candidate = program.Fields[index];
+
+            if (
+                !string.Equals(a: current.Name, b: candidate.Name, comparisonType: StringComparison.Ordinal) ||
+                (current.Initial != candidate.Initial) ||
+                (current.Minimum != candidate.Minimum) ||
+                (current.Maximum != candidate.Maximum) ||
+                (current.HeightScale != candidate.HeightScale)
+            ) {
+                reason = $"field declaration {index} differs from the live allocation; restart the host to load it";
+
+                return false;
+            }
+        }
+
+        reason = null;
+
+        return true;
+    }
+
+    /// <summary>Installs a compatible replacement reaction program while retaining every live cell, pending delta,
+    /// revision, and checkpoint shape.</summary>
+    /// <param name="document">The replacement complete companion.</param>
+    /// <param name="program">The replacement typed reaction program.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="document"/> or <paramref name="program"/> is
+    /// null.</exception>
+    /// <exception cref="InvalidOperationException">The pair requires a live lattice allocation migration.</exception>
+    public void InstallProgram(WorldFieldsSection document, WorldFieldProgram program) {
+        if (!CanInstallProgram(
+            document: document,
+            program: program,
+            reason: out var reason
+        )) {
+            throw new InvalidOperationException(message: reason);
+        }
+
+        m_document = document;
+        m_program = program;
+    }
 
     private static bool Holds(WorldFieldComparison comparison, FixedQ4816 value, FixedQ4816 expected) => comparison switch {
         WorldFieldComparison.Equal => (value == expected),
@@ -652,42 +688,42 @@ public sealed class WorldFieldLattice {
     /// <param name="tick">The simulation tick.</param>
     /// <param name="bodyCount">The entity-table capacity; bodies are visited by index.</param>
     /// <param name="bodyPosition">Resolves an active body's position, or <see langword="null"/> for an inactive slot.</param>
-    /// <param name="readTag">Reads a keyed int state row's cell for a body index (0 when absent).</param>
-    /// <param name="writeTag">Writes a keyed int state row's cell for a body index.</param>
+    /// <param name="readTag">Reads a typed keyed int state row's cell for a body index (0 when absent).</param>
+    /// <param name="writeTag">Writes a typed keyed int state row's cell for a body index.</param>
     /// <param name="readScalar">Reads a scalar fixed-kind state row's slot cell for a row-referenced reaction
     /// scalar (0 when absent or unwritten); <see langword="null"/> resolves every reference to 0.</param>
-    public void Step(ulong tick, int bodyCount, Func<int, FixedVector3?> bodyPosition, Func<string, int, long> readTag, Action<string, int, long> writeTag, Func<string, FixedQ4816>? readScalar = null) {
+    public void Step(ulong tick, int bodyCount, Func<int, FixedVector3?> bodyPosition, Func<WorldStateHandle, int, long> readTag, Action<WorldStateHandle, int, long> writeTag, Func<WorldStateHandle, FixedQ4816>? readScalar = null) {
         if ((tick % ((ulong)m_stepEveryTicks)) != 0UL) {
             return;
         }
 
         var scalars = (readScalar ?? (static _ => FixedQ4816.Zero));
 
-        foreach (var reaction in m_reactions) {
-            switch (reaction.Kind) {
-                case WorldReaction.Diffuse:
+        foreach (var reaction in m_program.Nodes) {
+            switch (reaction) {
+                case WorldFieldNode.Diffuse diffuse:
                     StepDiffuse(
-                        rate: ClampRate(rate: reaction.Rate.Resolve(readScalar: scalars)),
-                        reaction: in reaction
+                        field: diffuse.Field.Ordinal,
+                        rate: ClampRate(rate: Resolve(input: diffuse.Rate, readScalar: scalars))
                     );
                     break;
-                case WorldReaction.Decay:
+                case WorldFieldNode.Decay decay:
                     StepDecay(
-                        rate: ClampRate(rate: reaction.Rate.Resolve(readScalar: scalars)),
-                        reaction: in reaction
+                        field: decay.Field.Ordinal,
+                        rate: ClampRate(rate: Resolve(input: decay.Rate, readScalar: scalars))
                     );
                     break;
-                case WorldReaction.Transform:
+                case WorldFieldNode.Transform transform:
                     StepTransform(
                         readScalar: scalars,
-                        reaction: in reaction
+                        reaction: transform
                     );
                     break;
-                case WorldReaction.Emit:
+                case WorldFieldNode.Emit emit:
                     for (var body = 0; (body < bodyCount); body++) {
                         if (
                             (bodyPosition(arg: body) is not { } position) ||
-                            (readTag(arg1: reaction.Row!, arg2: body) == 0L) ||
+                            (readTag(arg1: emit.Tag, arg2: body) == 0L) ||
                             !TryBodyCellOf(
                             position: in position,
                             cell: out var cell
@@ -698,17 +734,17 @@ public sealed class WorldFieldLattice {
 
                         Write(
                             cell: cell,
-                            field: reaction.Field,
+                            field: emit.Field.Ordinal,
                             value: AddClamped(
-                                field: reaction.Field,
-                                x: m_values[reaction.Field][cell],
-                                y: reaction.Rate.Resolve(readScalar: scalars)
+                                field: emit.Field.Ordinal,
+                                x: m_values[emit.Field.Ordinal][cell],
+                                y: Resolve(input: emit.Amount, readScalar: scalars)
                             )
                         );
                     }
 
                     break;
-                case WorldReaction.Expose:
+                case WorldFieldNode.Expose expose:
                     for (var body = 0; (body < bodyCount); body++) {
                         if (bodyPosition(arg: body) is not { } position) {
                             continue;
@@ -718,13 +754,13 @@ public sealed class WorldFieldLattice {
                             position: in position,
                             cell: out var cell
                         ) && Holds(
-                            comparison: reaction.Comparison,
-                            expected: reaction.Value.Resolve(readScalar: scalars),
-                            value: m_values[reaction.Field][cell]
+                            comparison: expose.Comparison,
+                            expected: Resolve(input: expose.Value, readScalar: scalars),
+                            value: m_values[expose.Field.Ordinal][cell]
                         ));
 
                         writeTag(
-                            arg1: reaction.Row!,
+                            arg1: expose.Row,
                             arg2: body,
                             arg3: (exposed
                                 ? 1L
@@ -736,12 +772,16 @@ public sealed class WorldFieldLattice {
             }
         }
     }
+    private static FixedQ4816 Resolve(WorldFieldScalarInput input, Func<WorldStateHandle, FixedQ4816> readScalar) => (input.IsState
+        ? readScalar(arg: input.State)
+        : input.Literal
+    );
     private static FixedQ4816 ClampRate(FixedQ4816 rate) => ((rate < FixedQ4816.Zero)
         ? FixedQ4816.Zero
         : ((rate > FixedQ4816.One) ? FixedQ4816.One : rate)
     );
-    private void StepDiffuse(in CompiledReaction reaction, FixedQ4816 rate) {
-        var values = m_values[reaction.Field];
+    private void StepDiffuse(int field, FixedQ4816 rate) {
+        var values = m_values[field];
 
         Array.Copy(
             sourceArray: values,
@@ -772,15 +812,15 @@ public sealed class WorldFieldLattice {
 
                     Write(
                         cell: cell,
-                        field: reaction.Field,
+                        field: field,
                         value: (current + ((mean - current) * rate))
                     );
                 }
             }
         }
     }
-    private void StepDecay(in CompiledReaction reaction, FixedQ4816 rate) {
-        var values = m_values[reaction.Field];
+    private void StepDecay(int field, FixedQ4816 rate) {
+        var values = m_values[field];
 
         for (var cell = 0; (cell < values.Length); cell++) {
             var current = values[cell];
@@ -791,22 +831,22 @@ public sealed class WorldFieldLattice {
 
             Write(
                 cell: cell,
-                field: reaction.Field,
+                field: field,
                 value: (current - (current * rate))
             );
         }
     }
-    private void StepTransform(in CompiledReaction reaction, Func<string, FixedQ4816> readScalar) {
+    private void StepTransform(WorldFieldNode.Transform reaction, Func<WorldStateHandle, FixedQ4816> readScalar) {
         // Row-referenced terms resolve ONCE per step, before the cell loop — a season row's value is a step-wide
         // constant, never a per-cell read.
         var whenValues = new FixedQ4816[reaction.When.Length];
         var thenValues = new FixedQ4816[reaction.Then.Length];
 
         for (var index = 0; (index < reaction.When.Length); index++) {
-            whenValues[index] = reaction.When[index].Value.Resolve(readScalar: readScalar);
+            whenValues[index] = Resolve(input: reaction.When[index].Value, readScalar: readScalar);
         }
         for (var index = 0; (index < reaction.Then.Length); index++) {
-            thenValues[index] = reaction.Then[index].Value.Resolve(readScalar: readScalar);
+            thenValues[index] = Resolve(input: reaction.Then[index].Value, readScalar: readScalar);
         }
 
         for (var cell = 0; (cell < CellCount); cell++) {
@@ -818,7 +858,7 @@ public sealed class WorldFieldLattice {
                 if (!Holds(
                     comparison: condition.Comparison,
                     expected: whenValues[index],
-                    value: m_values[condition.Field][cell]
+                    value: m_values[condition.Field.Ordinal][cell]
                 )) {
                     holds = false;
                     break;
@@ -834,11 +874,11 @@ public sealed class WorldFieldLattice {
 
                 Write(
                     cell: cell,
-                    field: write.Field,
+                    field: write.Field.Ordinal,
                     value: ((write.Op == WorldFieldWriteOp.Add)
                         ? AddClamped(
-                            field: write.Field,
-                            x: m_values[write.Field][cell],
+                            field: write.Field.Ordinal,
+                            x: m_values[write.Field.Ordinal][cell],
                             y: thenValues[index]
                         )
                         : thenValues[index])
@@ -981,10 +1021,37 @@ public sealed class WorldFieldLattice {
             ));
         }
 
+        var plan = new StringBuilder();
+
+        for (var index = 0; (index < m_program.Nodes.Count); index++) {
+            if (index > 0) {
+                plan.Append(',');
+            }
+
+            plan.Append(index).Append(':').Append(m_program.Nodes[index] switch {
+                WorldFieldNode.Diffuse => "diffuse",
+                WorldFieldNode.Decay => "decay",
+                WorldFieldNode.Transform => "transform",
+                WorldFieldNode.Emit => "emit",
+                WorldFieldNode.Expose => "expose",
+                _ => "unknown",
+            });
+        }
+
+        var dependencies = new StringBuilder();
+
+        foreach (var dependency in m_program.Dependencies) {
+            if (dependencies.Length > 0) {
+                dependencies.Append(',');
+            }
+
+            dependencies.Append(dependency.Before.Ordinal).Append('>').Append(dependency.After.Ordinal);
+        }
+
         return $"lattice {m_width}x{m_layers}x{m_depth} @ {(double)m_cellSize} every {m_stepEveryTicks} ticks: {string.Join(
             separator: " | ",
             values: parts
-        )}";
+        )} | plan nodes={m_program.Nodes.Count} cellPasses={m_program.CellPassCount} bodyPasses={m_program.BodyPassCount} order=[{plan}] dependencies=[{dependencies}]";
     }
 }
 /// <summary>A contact field over a <see cref="WorldFieldLattice"/>'s height columns: the signed distance to the union

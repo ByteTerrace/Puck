@@ -85,8 +85,128 @@
       },
       "default": null
     },
+    "areas": {
+      "description": "Bounded placement-relative influences evaluated after the global solve. Absent means none.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "A bounded local gravity influence riding a placement\u0027s resolved transform.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "placementId": {
+            "description": "The placement whose position, yaw, scale, and optional body attachment the area follows.",
+            "type": "string"
+          },
+          "priority": {
+            "description": "The deterministic composition priority. Lower values apply first; authored order breaks ties, so a later equal-priority row applies later.",
+            "type": "integer"
+          },
+          "mode": {
+            "description": "Whether the matching area\u0027s acceleration combines with or replaces the accumulated answer.",
+            "enum": [
+              "Combine",
+              "Replace"
+            ]
+          },
+          "bounds": {
+            "description": "The placement-relative analytic bound. Boundary points are included.",
+            "type": "object",
+            "required": [
+              "$type"
+            ],
+            "anyOf": [
+              {
+                "description": "A sphere centered on the riding placement.",
+                "properties": {
+                  "$type": {
+                    "const": "sphere"
+                  },
+                  "radius": {
+                    "description": "The positive placement-local radius, multiplied by the placement\u0027s scale.",
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "radius"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "description": "A yaw-oriented box centered on the riding placement.",
+                "properties": {
+                  "$type": {
+                    "const": "box"
+                  },
+                  "halfExtents": {
+                    "description": "The positive placement-local half extents, multiplied by the placement\u0027s scale."
+                  }
+                },
+                "required": [
+                  "halfExtents"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "acceleration": {
+            "description": "The placement-relative acceleration form.",
+            "type": "object",
+            "required": [
+              "$type"
+            ],
+            "anyOf": [
+              {
+                "description": "A placement-local acceleration vector, rotated by the placement\u0027s resolved yaw.",
+                "properties": {
+                  "$type": {
+                    "const": "directional"
+                  },
+                  "value": {
+                    "description": "The acceleration vector in world units per second squared. Zero is admitted so Replace can author a zero-gravity pocket."
+                  }
+                },
+                "required": [
+                  "value"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "description": "A constant-magnitude acceleration directed toward the placement origin.",
+                "properties": {
+                  "$type": {
+                    "const": "radial"
+                  },
+                  "magnitude": {
+                    "description": "The positive acceleration magnitude in world units per second squared.",
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "magnitude"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "required": [
+          "placementId",
+          "priority",
+          "mode",
+          "bounds",
+          "acceleration"
+        ],
+        "additionalProperties": false
+      },
+      "default": null
+    },
     "isActive": {
-      "description": "Gets a value indicating whether this field can produce a nonzero acceleration.",
+      "description": "Gets a value indicating whether the section declares an active global or bounded local field.",
       "type": "boolean"
     }
   },

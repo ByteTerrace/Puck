@@ -114,8 +114,8 @@ public sealed record WorldPlacementGrip(bool Climbable);
 /// <list type="bullet">
 /// <item><description>the authoritative answer is fixed point — the body's fixed-point pose composed with this
 /// facet's authored (float, quantized at resolution like every other placement field) offset, by
-/// <c>Puck.World.Server.WorldPlacementAttachment.TryResolve</c>, on demand: <c>world.attachments</c> is its only
-/// caller today, so it runs when a reader asks rather than on a schedule;</description></item>
+/// <c>Puck.World.Server.WorldPlacementAttachment.TryResolve</c>, on demand by <c>world.attachments</c> and once per
+/// tick by attached local gravity areas;</description></item>
 /// <item><description>the rendered pose is presentation float — the same composition over the client's
 /// interpolated body pose, packed every frame by <c>Client.WorldStampPool</c>, which is what makes an attached row
 /// visibly ride its body as smoothly as the body itself. An attached row draws through that reserved stamp pool and
@@ -125,6 +125,7 @@ public sealed record WorldPlacementGrip(bool Climbable);
 /// Region, solid (under the analytic contact provider), and emission were once refused on the same row as this one
 /// because each read the row's own static transform — all three now read the same resolved dynamic pose instead
 /// (<c>Server.WorldEventFeed.CollectRegions</c>, <c>Server.WorldColliderSet.RefreshAttached</c>,
+/// <c>Server.WorldGravityField.RefreshAttachedAreas</c>,
 /// <c>Client.WorldStampPool.TryShapePosition</c>/<c>RootPose</c>), so a region's aura, an analytic collider's
 /// hitbox, and an emission's voice all track the carrier: an equipped item's sensing sphere, hitbox, or source point
 /// rides the body it is attached to. What stays refused: distribution/mirror (static-stamp-only, the same rule an

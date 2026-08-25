@@ -197,14 +197,19 @@ public abstract record WorldFieldNode(
 /// of an existing reaction, with no hidden mutable state or random stream. Runtime values remain in lane-specific
 /// stores, document cells, and lattice cells; the state catalog describes their types and addresses only.</remarks>
 public sealed class WorldFieldProgram {
+    // Kept only as an immutable compatibility witness for the reaction-owned inputs. The live lattice must keep
+    // receiving its complete companion document: HasSameProgram deliberately ignores origin, cell size, cadence,
+    // colour, and paint, so this snapshot is never a topology or initialization source.
+    private readonly WorldFieldsSection m_programSource;
     private readonly object m_identity;
     private readonly WorldFieldDescriptor[] m_fields;
     private readonly ReadOnlyCollection<WorldFieldDescriptor> m_readOnlyFields;
     private readonly ReadOnlyCollection<WorldFieldDependency> m_readOnlyDependencies;
     private readonly ReadOnlyCollection<WorldFieldNode> m_readOnlyNodes;
 
-    private WorldFieldProgram(object identity, WorldStateCatalog stateCatalog, WorldFieldDescriptor[] fields, WorldFieldNode[] nodes, int cellCount) {
+    private WorldFieldProgram(object identity, WorldStateCatalog stateCatalog, WorldFieldsSection programSource, WorldFieldDescriptor[] fields, WorldFieldNode[] nodes, int cellCount) {
         m_identity = identity;
+        m_programSource = programSource;
         StateCatalog = stateCatalog;
         m_fields = fields;
         m_readOnlyFields = Array.AsReadOnly(array: fields);
@@ -355,10 +360,23 @@ public sealed class WorldFieldProgram {
         return new WorldFieldProgram(
             identity: identity,
             stateCatalog: state,
+            programSource: document,
             fields: fields,
             nodes: nodes,
             cellCount: checked((document.Lattice.Width * document.Lattice.Depth) * document.Lattice.Layers)
         );
+    }
+
+    /// <summary>Determines whether a complete companion composite still carries exactly the field declarations and
+    /// ordered reactions represented by this program. Topology placement, cadence, colour, and paint remain owned by
+    /// the companion and therefore do not participate.</summary>
+    /// <param name="document">The complete companion composite to inspect.</param>
+    /// <returns><see langword="true"/> when the companion's program-owned inputs match.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="document"/> is null.</exception>
+    public bool MatchesProgram(WorldFieldsSection document) {
+        ArgumentNullException.ThrowIfNull(argument: document);
+
+        return m_programSource.HasSameProgram(other: document);
     }
 
     private static WorldFieldNode CompileDiffuse(WorldReaction.Diffuse reaction, WorldFieldNodeHandle handle, int index, Func<string, int, WorldFieldHandle> field, Func<WorldLatticeScalar, int, WorldFieldScalarInput> scalar) {

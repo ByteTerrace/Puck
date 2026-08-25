@@ -63,6 +63,42 @@ public sealed class WorldStateCatalogLawTests {
     }
 
     [Fact]
+    public void TypedReaderUsesTheLaneOrdinalAndRefusesAStaleCatalogOrHandle() {
+        var section = BuildSection();
+        var rows = section.World!.ToArray();
+        rows[0] = rows[0] with { Cells = [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 7L)] };
+        var definition = new WorldDefinition(StateRaw: section with { World = rows });
+        var catalog = definition.StateCatalog;
+
+        Assert.True(condition: catalog.TryResolve(lane: WorldStateOwnershipLane.World, name: "score", handle: out var score));
+        Assert.True(condition: WorldStateReader.TryReadHandle(
+            definition: definition,
+            catalog: catalog,
+            handle: score,
+            key: null,
+            tick: 0UL,
+            row: out var row,
+            rawValue: out var raw,
+            text: out _
+        ));
+        Assert.Equal(expected: "score", actual: row.Name);
+        Assert.Equal(expected: 7L, actual: raw);
+
+        var foreign = WorldStateCatalog.Compile(section: definition.StateRaw);
+
+        Assert.Throws<ArgumentException>(testCode: () => WorldStateReader.TryReadHandle(
+            definition: definition,
+            catalog: foreign,
+            handle: score,
+            key: null,
+            tick: 0UL,
+            row: out _,
+            rawValue: out _,
+            text: out _
+        ));
+    }
+
+    [Fact]
     public void WorldDefinition_StateCatalog_RecompilesWhenAWithExpressionReplacesState() {
         var original = new WorldDefinition(StateRaw: BuildSection());
         var originalCatalog = original.StateCatalog;

@@ -76,10 +76,7 @@ public sealed partial class WorldPopulation {
 
         // Field state exists independently of the selected contact/target provider. A world may use its lattice only
         // for reactions, exposure rows, snapshots, or rendering and still owes the same authoritative state.
-        m_fields ??= ((definition.Fields is { } fieldsSection)
-            ? new WorldFieldLattice(document: fieldsSection, worldSeed: (definition.Generation?.WorldSeed ?? 0UL))
-            : null
-        );
+        InstallFields(definition: definition);
 
         if (
             (derivedSolids is null) &&
@@ -123,6 +120,79 @@ public sealed partial class WorldPopulation {
         // The remote admission cap moves with the live document (a swap can raise or lower networkPlayers); the running
         // census count is re-clamped against it by ReconcileInhabitants' trailing SetSimulatedCount.
         m_remoteCap = definition.Population.NetworkPlayers;
+    }
+
+    /// <summary>Checks whether the candidate's field runtime can replace the live reaction plan while preserving
+    /// the boot-allocated lattice cells.</summary>
+    /// <param name="definition">The candidate definition.</param>
+    /// <param name="reason">The named incompatibility on refusal; otherwise <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when the candidate can retain the live field allocation.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is null.</exception>
+    public bool CanInstallFields(WorldDefinition definition, out string? reason) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        if (!m_fieldsCompiled) {
+            reason = null;
+
+            return true;
+        }
+
+        var document = definition.Fields;
+        var program = definition.FieldProgram;
+
+        if ((document is null) != (program is null)) {
+            reason = "the definition's field composite and compiled program disagree";
+
+            return false;
+        }
+
+        if ((m_fields is null) != (document is null)) {
+            reason = "adding or removing the live field lattice changes its allocation; restart the host to load it";
+
+            return false;
+        }
+
+        if (m_fields is null) {
+            reason = null;
+
+            return true;
+        }
+
+        return m_fields.CanInstallProgram(
+            document: document!,
+            program: program!,
+            reason: out reason
+        );
+    }
+
+    /// <summary>Installs the candidate's compatible field companion/program pair, preserving live cell state.</summary>
+    /// <param name="definition">The candidate definition.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is null.</exception>
+    /// <exception cref="InvalidOperationException">The candidate changes the live field allocation.</exception>
+    public void InstallFields(WorldDefinition definition) {
+        if (!CanInstallFields(
+            definition: definition,
+            reason: out var reason
+        )) {
+            throw new InvalidOperationException(message: reason);
+        }
+
+        if (!m_fieldsCompiled) {
+            m_fields = ((definition.Fields is { } document)
+                ? new WorldFieldLattice(
+                    document: document,
+                    program: (definition.FieldProgram ?? throw new InvalidOperationException(message: "The field composite has no compiled program.")),
+                    worldSeed: (definition.Generation?.WorldSeed ?? 0UL)
+                )
+                : null
+            );
+            m_fieldsCompiled = true;
+        } else if (m_fields is { } fields) {
+            fields.InstallProgram(
+                document: definition.Fields!,
+                program: definition.FieldProgram!
+            );
+        }
     }
     private static FixedSpawnPoint[] CompileSeatSpawns(IReadOnlyList<WorldSpawnPoint> spawnPoints, IReadOnlyList<string> seatSpawns) {
         var compiled = new FixedSpawnPoint[seatSpawns.Count];
@@ -394,8 +464,17 @@ public sealed partial class WorldPopulation {
     /// <param name="solids">The server's pre-built SDF contact field for the field provider (built once at apply time so
     /// a runtime edit never rebuilds it twice), or <see langword="null"/> under the analytic provider.</param>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The candidate changes the boot-allocated field lattice shape,
+    /// topology, cadence, or field envelope.</exception>
     public void Rebuild(WorldDefinition definition, WorldSolidField? solids) {
         ArgumentNullException.ThrowIfNull(argument: definition);
+
+        if (!CanInstallFields(
+            definition: definition,
+            reason: out var fieldReason
+        )) {
+            throw new InvalidOperationException(message: fieldReason);
+        }
 
         m_seatSpawns = CompileSeatSpawns(
             spawnPoints: definition.SpawnPoints,

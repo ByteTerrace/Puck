@@ -1355,12 +1355,13 @@ public sealed partial class WorldBody {
             // the old surface against a rotated up reads part of it as climbing, and the write-back below stores that
             // as ballistic velocity: on a sphere that is a launch, and the faster the body runs the harder it is
             // thrown off.
-            // Only where the world authors a solved field: without one the up axis has a single source already (world
-            // +Y, or the field provider's own per-sample gradient) and adopting a measured contact normal on top would
-            // make it wobble, which a marginal handoff — an adjacency seam strip — cannot absorb.
+            // Only where this body participates in an authored solved field: outside every area in an area-only world
+            // the up axis has a single source already (world +Y, or the field provider's own per-sample gradient), and
+            // adopting a measured contact normal on top would make it wobble, which a marginal handoff — an adjacency
+            // seam strip — cannot absorb.
             if (
                 m_grounded &&
-                (m_gravityField is { IsActive: true }) &&
+                TrySolvedGravity(acceleration: out _) &&
                 (contactResolution.GroundNormal != FixedVector3.Zero)
             ) {
                 // BOUNDED, for the same reason the field's axis is: a measured normal is continuous only where the
@@ -1457,8 +1458,9 @@ public sealed partial class WorldBody {
     // authors that requirement); a degenerate field query leaves the held value
     // untouched rather than snapping to something arbitrary. Only a collider-bearing kit with a field pays the query;
     // everything else keeps +Y, so the flat world never calls TryUp and integrates byte-identically.
-    // A body's own solved acceleration this tick, or false when the world authors no field, this body took no part,
-    // or the field cancelled to zero at its position (a Lagrange point between equal attractors).
+    // A body's own authored-field answer this tick, or false when the world authors no field or this body matched no
+    // local area in an area-only field. True does NOT imply a nonzero vector: Replace can author a zero-G pocket,
+    // Combine can cancel exactly, and a radial contribution is zero at its own centre.
     private bool TrySolvedGravity(out FixedVector3 acceleration) {
         acceleration = FixedVector3.Zero;
 
@@ -1476,7 +1478,7 @@ public sealed partial class WorldBody {
 
         magnitude = acceleration.Length;
 
-        return (magnitude > FixedQ4816.Zero);
+        return true;
     }
     // Moving the up axis rotates the frame the planar velocity lives in, so the velocity has to be carried with it.
     // Re-reading a stored tangent vector in a rotated frame is not the same motion: on a curved surface the component
@@ -1598,7 +1600,7 @@ public sealed partial class WorldBody {
         // velocity one way and then the other until the body simply stops making progress.
         if (
             m_grounded &&
-            (m_gravityField is { IsActive: true }) &&
+            TrySolvedGravity(acceleration: out _) &&
             (m_up != FixedVector3.Zero)
         ) {
             return m_up;

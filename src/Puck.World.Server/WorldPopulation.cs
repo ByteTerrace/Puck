@@ -170,6 +170,7 @@ public sealed partial class WorldPopulation {
     private WorldSolidField? m_targetField;
     private FixedQ4816? m_waterline;
     private WorldFieldLattice? m_fields;
+    private bool m_fieldsCompiled;
     // The compiled climb/grapple policy every live body reads its attach/detach/reel channel ordinals and grip/rope
     // tuning from. Recompiled by CompileFixedTables beside every other sim-affecting table and handed to each live
     // body the same way the contact field/gravity/waterline are (see the SetAttachmentPolicy call sites).
@@ -183,6 +184,8 @@ public sealed partial class WorldPopulation {
     public FixedWorldGravity CompiledGravity => (m_gravityField?.Compiled ?? FixedWorldGravity.Inert);
     /// <summary>Gets the last gravity solve's deterministic structural work counters.</summary>
     public GravitySolveStatistics GravityStatistics => (m_gravityField?.Statistics ?? default);
+    /// <summary>Gets the last bounded-local-gravity evaluation counters.</summary>
+    public WorldGravityAreaStatistics GravityAreaStatistics => (m_gravityField?.AreaStatistics ?? default);
 
     private WorldPlayerDefaults m_playerDefaults = null!;
     private WorldPopulationVariation m_peerVariation = null!;

@@ -130,6 +130,26 @@ public sealed partial class WorldServer {
             kept.Add(item: entry);
         }
 
+        // Field storage is boot allocated. Prove the final replay result can retain the live lattice before building
+        // or swapping any other derived runtime product; InstallFields is then an infallible compatible plan swap.
+        if (!m_population.CanInstallFields(
+            definition: candidate,
+            reason: out var undoFieldReason
+        )) {
+            var refusal = $"undo refused: restored field runtime is incompatible — {undoFieldReason}";
+
+            Console.Error.WriteLine(value: $"[world.undo: {refusal}]");
+            EchoTap?.Invoke(obj: new WorldEditEcho(
+                Message: refusal,
+                Rejected: true,
+                Kind: WorldEditEchoKind.Mutation,
+                ConnectionId: connectionId,
+                CorrelationId: correlationId
+            ));
+
+            return false;
+        }
+
         // The full replay validated every entry above, so this rebuild is expected to succeed; still checked and
         // still loud on failure rather than installing a half-built field, for the same reason the loop above refuses
         // rather than tolerates: no step here is allowed to half-apply.

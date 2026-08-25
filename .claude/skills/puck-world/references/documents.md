@@ -133,10 +133,25 @@ mutates them in session and no grant subject names them:
   positive `gravitationalConstant` only when `points` is nonempty, and refuses
   a placement duplicated across the two source spellings. Compilation keeps
   explicit attractors first and point presets second, preserving authored order
-  within each. A source reads only its placement transform — never its SDF or
+  within each. A positive constant activates body-to-body gravity even with no
+  static sources; a lone body participates with a zero global answer. A source reads only its placement transform — never its SDF or
   solidity. Read back authored/derived values and last deterministic solver
   work with `world.gravity`; `world.budget` echoes the source and evaluation
-  price.
+  price. Optional `areas` are the bounded-local layer over that SAME answer:
+  each rides a placement, declares a priority and explicit `Combine`/`Replace`,
+  an inclusive analytic `sphere` or yaw-local `box` bound (scaled by the
+  placement), and either a placement-local `directional` vector or constant-
+  magnitude inward `radial` acceleration. Static rows use authored pose;
+  attached rows use `WorldPlacementAttachment.TryResolve` each tick and
+  contribute nothing while their carrier is inactive. The fixed fold begins
+  with uniform + global solved gravity, then applies areas ascending by
+  `(priority, authored index)`; later equal-priority rows therefore apply later.
+  A matching zero Replace, exact cancellation, or radial center is participating
+  authored zero-G; outside every area in an areas-only field retains kit fallback.
+  Global + uniform + Combine composition saturates componentwise at Q48.16
+  extrema rather than wrapping, while a later Replace resets the fold.
+  Capped at 64 rows. Arbitrary SDF bounds and per-body masks are the future
+  asset/query extension seam, not implicit geometry-derived gravity.
 - **`Portals`** (`WorldPortals.cs`) — `WorldPortalsSection(WorldPortalDefaults
   PortalDefaults)`, whose `travel` is `Party` (the traveling seat's whole
   active local-seat party) or `Body` (one seat). It is the world-scope default
@@ -435,6 +450,13 @@ remains the one authoring home. `WorldDefinition.FieldProgram` is the cached,
 non-serialized door. It retains compatible handles across unrelated definition
 edits and value-only state updates, and replaces them when field or reaction
 program inputs change.
+The authoritative `WorldFieldLattice` executes this program directly beside
+the complete companion composite; it never lowers the authored reaction rows
+again. Compatible live reaction edits replace the program while preserving
+cell values, deltas, revision, and checkpoint shape. A lattice presence,
+topology, cadence, or field-envelope change is an allocation change and
+refuses live with restart guidance. `world.fields` reports the installed node
+order, dependency edges, and pass counts after its cell statistics.
 `layers: 1` is a ground lattice; more layers is a voxel volume and costs
 proportionally. A lattice carries at most 262,144 cells so a full eight-field
 primer (eight lattice rows) remains inside the federation frame; when any row has `heightScale`,
@@ -1005,7 +1027,8 @@ current model.
   body's own frame. It derives TWICE off the one authored facet: the
   authoritative fixed-point resolve
   (`Server/WorldPlacementAttachment.TryResolve`, called on demand by
-  `world.attachments`, its only caller), and the rendered pose —
+  `world.attachments` and every active tick for attached gravity areas), and
+  the rendered pose —
   presentation float over the client's INTERPOLATED body pose, packed every
   frame by `Client/WorldStampPool.cs`. Riding the interpolated pose is what
   keeps an attached row as smooth as its body; reading the authoritative

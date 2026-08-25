@@ -22,17 +22,20 @@ public sealed partial class WorldServer {
             bodyPosition: index => Body(index: index)?.FixedPosition,
             readTag: (row, body) => ReadTagCell(
                 body: body,
+                catalog: lattice.Program.StateCatalog,
                 row: row,
                 tick: tick
             ),
             tick: tick,
             writeTag: (row, body, value) => WriteTagCell(
                 body: body,
+                catalog: lattice.Program.StateCatalog,
                 row: row,
                 tick: tick,
                 value: value
             ),
             readScalar: row => ReadScalarSlot(
+                catalog: lattice.Program.StateCatalog,
                 row: row,
                 tick: tick
             )
@@ -40,6 +43,21 @@ public sealed partial class WorldServer {
     }
     // A reaction scalar's row read: the named row's SLOT cell as Q48.16 raw bits (0 when the row or its slot cell
     // does not exist yet — the slot is minted by its first write).
+    private FixedQ4816 ReadScalarSlot(WorldStateCatalog catalog, WorldStateHandle row, ulong tick) => ((WorldStateReader.TryReadHandle(
+        catalog: catalog,
+        definition: m_definition,
+        handle: row,
+        key: WorldStateRow.SlotKey,
+        tick: tick,
+        row: out _,
+        rawValue: out var raw,
+        text: out _
+    ) && (raw is { } value))
+        ? FixedQ4816.FromRawBits(value: value)
+        : FixedQ4816.Zero
+    );
+    // Placement response traits are authored outside the field reaction program and therefore retain their named
+    // scalar seam; reaction execution itself always uses the typed overload above.
     private FixedQ4816 ReadScalarSlot(string row, ulong tick) => ((WorldStateReader.TryRead(
         definition: m_definition,
         rowName: row,
@@ -52,9 +70,10 @@ public sealed partial class WorldServer {
         ? FixedQ4816.FromRawBits(value: value)
         : FixedQ4816.Zero
     );
-    private long ReadTagCell(string row, int body, ulong tick) => ((WorldStateReader.TryRead(
+    private long ReadTagCell(WorldStateCatalog catalog, WorldStateHandle row, int body, ulong tick) => ((WorldStateReader.TryReadHandle(
+        catalog: catalog,
         definition: m_definition,
-        rowName: row,
+        handle: row,
         key: body.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
         tick: tick,
         row: out _,
@@ -64,9 +83,10 @@ public sealed partial class WorldServer {
         ? value
         : 0L
     );
-    private void WriteTagCell(string row, int body, long value, ulong tick) {
+    private void WriteTagCell(WorldStateCatalog catalog, WorldStateHandle row, int body, long value, ulong tick) {
         if (ReadTagCell(
             body: body,
+            catalog: catalog,
             row: row,
             tick: tick
         ) == value) {
@@ -76,7 +96,7 @@ public sealed partial class WorldServer {
         _ = TryApplyMutation(
             mutation: new WorldMutation.UpsertStateCell(
                 Principal: WorldPrincipal.World,
-                Row: row,
+                Row: catalog[row].Name,
                 Key: body.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
                 Value: value,
                 Kind: WorldDocumentWriteKind.Set

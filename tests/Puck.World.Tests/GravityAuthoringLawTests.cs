@@ -3,7 +3,9 @@ using System.Text;
 using System.Text.Json.Nodes;
 
 using Puck.Assets.Documents;
+using Puck.Hosting;
 using Puck.Maths;
+using Puck.World.Protocol;
 using Puck.World.Server;
 
 using Xunit;
@@ -18,16 +20,48 @@ public sealed class GravityAuthoringLawTests {
     private static WorldGravity PointGravity(
         float gravitationalConstant = 45f,
         IReadOnlyList<WorldGravityAttractor>? attractors = null,
+        IReadOnlyList<WorldGravityArea>? areas = null,
         IReadOnlyList<WorldGravityPoint>? points = null,
         DocumentVector3? uniform = null
     ) => new(
         Attractors: (attractors ?? []),
+        Areas: areas,
         GravitationalConstant: gravitationalConstant,
         Points: points,
         SofteningLength: 0.5f,
         Solver: WorldGravitySolver.Pairwise,
         Uniform: uniform
     );
+    private static WorldDefinition AttachedAreaDefinition(bool zeroAcceleration = false) {
+        var source = Fixtures.BuildGradientUpDocument(gradientUp: false);
+        var placement = Assert.Single(collection: source.Placements) with {
+            Scale = 2f,
+            Attach = new WorldPlacementAttach(
+                BodyIndex: 0,
+                LocalOffset: new Vector3(x: 0f, y: 2f, z: 0f),
+                LocalYawDegrees: 90f
+            ),
+            Solid = null,
+        };
+
+        return source with {
+            PlacementsRaw = source.PlacementsRaw! with { Rows = [placement] },
+            PopulationRaw = source.Population with { ReconnectGraceSeconds = 0f },
+            GravityRaw = PointGravity(
+                gravitationalConstant: 0f,
+                areas: [new WorldGravityArea(
+                    PlacementId: "ball",
+                    Priority: 0,
+                    Mode: WorldGravityAreaMode.Replace,
+                    Bounds: new WorldGravityAreaBounds.SphereBounds(Radius: 1f),
+                    Acceleration: new WorldGravityAreaAcceleration.Directional(Value: (zeroAcceleration
+                        ? Vector3.Zero
+                        : new Vector3(x: 4f, y: 0f, z: 0f)
+                    ))
+                )]
+            ),
+        };
+    }
 
     [Fact]
     public void PointPreset_LowersThroughTheSoftenedKernelToItsSurfacePromise() {
@@ -190,4 +224,443 @@ public sealed class GravityAuthoringLawTests {
             comparisonType: StringComparison.Ordinal
         );
     }
+
+    [Fact]
+    public void LocalAreas_FoldGlobalThenAscendingPriorityAndAuthoredTieOrder() {
+        var definition = WithGravity(gravity: PointGravity(
+            gravitationalConstant: 0f,
+            uniform: new DocumentVector3(value: new Vector3(x: 0f, y: -10f, z: 0f)),
+            areas: [
+                new WorldGravityArea(
+                    PlacementId: "ball",
+                    Priority: 0,
+                    Mode: WorldGravityAreaMode.Combine,
+                    Bounds: new WorldGravityAreaBounds.SphereBounds(Radius: 20f),
+                    Acceleration: new WorldGravityAreaAcceleration.Directional(Value: new Vector3(x: 2f, y: 0f, z: 0f))
+                ),
+                new WorldGravityArea(
+                    PlacementId: "ball",
+                    Priority: 10,
+                    Mode: WorldGravityAreaMode.Replace,
+                    Bounds: new WorldGravityAreaBounds.SphereBounds(Radius: 20f),
+                    Acceleration: new WorldGravityAreaAcceleration.Directional(Value: new Vector3(x: 0f, y: 1f, z: 0f))
+                ),
+                new WorldGravityArea(
+                    PlacementId: "ball",
+                    Priority: 10,
+                    Mode: WorldGravityAreaMode.Combine,
+                    Bounds: new WorldGravityAreaBounds.SphereBounds(Radius: 20f),
+                    Acceleration: new WorldGravityAreaAcceleration.Directional(Value: new Vector3(x: 0f, y: 0f, z: 3f))
+                ),
+            ]
+        ));
+        var field = CompileField(definition: definition, capacity: 1);
+
+        field.Solve(targets: [Target(entityIndex: 0, x: 0, y: 0, z: 0)]);
+
+        Assert.True(condition: field.TryAcceleration(entityIndex: 0, acceleration: out var acceleration));
+        Assert.Equal(expected: FixedQ4816.Zero, actual: acceleration.X);
+        Assert.Equal(expected: FixedQ4816.One, actual: acceleration.Y);
+        Assert.Equal(expected: FixedQ4816.FromInteger(value: 3), actual: acceleration.Z);
+        Assert.Equal(expected: [0, 1, 2], actual: field.Compiled.Areas.Select(selector: area => area.AuthoredIndex));
+    }
+
+    [Fact]
+    public void LocalArea_BoundaryIsInclusive_AndAreaOnlyOutsideBodyDoesNotParticipate() {
+        var definition = WithGravity(gravity: PointGravity(
+            gravitationalConstant: 0f,
+            areas: [new WorldGravityArea(
+                PlacementId: "ball",
+                Priority: 0,
+                Mode: WorldGravityAreaMode.Combine,
+                Bounds: new WorldGravityAreaBounds.SphereBounds(Radius: 5f),
+                Acceleration: new WorldGravityAreaAcceleration.Directional(Value: new Vector3(x: 0f, y: -2f, z: 0f))
+            )]
+        ));
+        var field = CompileField(definition: definition, capacity: 2);
+        var justOutside = FixedQ4816.FromRawBits(value: (FixedQ4816.FromInteger(value: 5).Value + 1L));
+
+        field.Solve(targets: [
+            Target(entityIndex: 0, x: 5, y: 0, z: 0),
+            new WorldGravityTarget(EntityIndex: 1, Position: new FixedVector3(X: justOutside, Y: FixedQ4816.Zero, Z: FixedQ4816.Zero), Mass: FixedQ4816.Zero),
+        ]);
+
+        Assert.True(condition: field.TryAcceleration(entityIndex: 0, acceleration: out var boundary));
+        Assert.Equal(expected: FixedQ4816.FromInteger(value: -2), actual: boundary.Y);
+        Assert.False(condition: field.TryAcceleration(entityIndex: 1, acceleration: out _));
+        Assert.Equal(expected: 2, actual: field.AreaStatistics.TargetCount);
+        Assert.Equal(expected: 2, actual: field.AreaStatistics.EvaluationCount);
+        Assert.Equal(expected: 1, actual: field.AreaStatistics.MatchCount);
+    }
+
+    [Fact]
+    public void BoxArea_EvaluatesMembershipInThePlacementsYawLocalFrame() {
+        var source = Fixtures.BuildGradientUpDocument(gradientUp: false);
+        var placement = Assert.Single(collection: source.Placements) with {
+            Scale = 1f,
+            YawDegrees = 90f,
+        };
+        var definition = source with {
+            PlacementsRaw = source.PlacementsRaw! with { Rows = [placement] },
+            GravityRaw = PointGravity(
+                gravitationalConstant: 0f,
+                areas: [new WorldGravityArea(
+                    PlacementId: "ball",
+                    Priority: 0,
+                    Mode: WorldGravityAreaMode.Replace,
+                    Bounds: new WorldGravityAreaBounds.BoxBounds(HalfExtents: new Vector3(x: 1f, y: 1f, z: 3f)),
+                    Acceleration: new WorldGravityAreaAcceleration.Directional(Value: new Vector3(x: 0f, y: -4f, z: 0f))
+                )]
+            ),
+        };
+        var field = CompileField(definition: definition, capacity: 2);
+
+        field.Solve(targets: [
+            Target(entityIndex: 0, x: 2, y: 0, z: 0),
+            Target(entityIndex: 1, x: 0, y: 0, z: 2),
+        ]);
+
+        Assert.True(condition: field.TryAcceleration(entityIndex: 0, acceleration: out _));
+        Assert.False(condition: field.TryAcceleration(entityIndex: 1, acceleration: out _));
+    }
+
+    [Fact]
+    public void ZeroReplace_CancellationAndRadialCentreRemainParticipatingZeroAnswers() {
+        static WorldGravityArea Area(WorldGravityAreaMode mode, WorldGravityAreaAcceleration acceleration) => new(
+            PlacementId: "ball",
+            Priority: 0,
+            Mode: mode,
+            Bounds: new WorldGravityAreaBounds.SphereBounds(Radius: 10f),
+            Acceleration: acceleration
+        );
+
+        var zeroReplace = CompileField(definition: WithGravity(gravity: PointGravity(
+            gravitationalConstant: 0f,
+            areas: [Area(mode: WorldGravityAreaMode.Replace, acceleration: new WorldGravityAreaAcceleration.Directional(Value: Vector3.Zero))]
+        )), capacity: 1);
+        var cancellation = CompileField(definition: WithGravity(gravity: PointGravity(
+            gravitationalConstant: 0f,
+            uniform: new DocumentVector3(value: new Vector3(x: 0f, y: -4f, z: 0f)),
+            areas: [Area(mode: WorldGravityAreaMode.Combine, acceleration: new WorldGravityAreaAcceleration.Directional(Value: new Vector3(x: 0f, y: 4f, z: 0f)))]
+        )), capacity: 1);
+        var radialCentre = CompileField(definition: WithGravity(gravity: PointGravity(
+            gravitationalConstant: 0f,
+            areas: [Area(mode: WorldGravityAreaMode.Replace, acceleration: new WorldGravityAreaAcceleration.Radial(Magnitude: 8f))]
+        )), capacity: 1);
+
+        foreach (var field in new[] { zeroReplace, cancellation, radialCentre }) {
+            Assert.True(condition: field.IsActive);
+            field.Solve(targets: [Target(entityIndex: 0, x: 0, y: 0, z: 0)]);
+
+            Assert.True(condition: field.TryAcceleration(entityIndex: 0, acceleration: out var acceleration));
+            Assert.Equal(expected: FixedVector3.Zero, actual: acceleration);
+        }
+    }
+
+    [Fact]
+    public void ZeroReplaceSuppressesKitGravity_WhileAnOutsideAreaBodyKeepsFallbackGravity() {
+        static WorldDefinition Definition(float radius) => WithGravity(gravity: PointGravity(
+            gravitationalConstant: 0f,
+            areas: [new WorldGravityArea(
+                PlacementId: "ball",
+                Priority: 0,
+                Mode: WorldGravityAreaMode.Replace,
+                Bounds: new WorldGravityAreaBounds.SphereBounds(Radius: radius),
+                Acceleration: new WorldGravityAreaAcceleration.Directional(Value: Vector3.Zero)
+            )]
+        ));
+        using var inside = Fixtures.FreshServer(definition: Definition(radius: 1000f));
+        using var outside = Fixtures.FreshServer(definition: Definition(radius: 1f));
+        var actor = WorldPrincipal.Seat(slot: 0);
+
+        Assert.True(condition: inside.Server.ApplySession(request: new SessionRequest.Join(actor, actor.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+        Assert.True(condition: outside.Server.ApplySession(request: new SessionRequest.Join(actor, actor.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+        inside.Server.Population.EntryBody(index: 0)!.Pose(x: 0f, y: 100f, z: 0f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+        outside.Server.Population.EntryBody(index: 0)!.Pose(x: 0f, y: 100f, z: 0f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+
+        for (var tick = 0; (tick < 12); tick++) {
+            inside.Step();
+            outside.Step();
+        }
+
+        Assert.Equal(expected: FixedQ4816.FromInteger(value: 100), actual: inside.Server.Population.EntryBody(index: 0)!.FixedPosition.Y);
+        Assert.True(condition: outside.Server.Population.EntryBody(index: 0)!.FixedPosition.Y < FixedQ4816.FromInteger(value: 100));
+
+        inside.Server.Population.EntryBody(index: 0)!.Pose(x: 2000f, y: 100f, z: 0f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+        for (var tick = 0; (tick < 12); tick++) {
+            inside.Step();
+        }
+
+        Assert.True(condition: inside.Server.Population.EntryBody(index: 0)!.FixedPosition.Y < FixedQ4816.FromInteger(value: 100));
+    }
+
+    [Fact]
+    public void LocalArea_RidesTheExistingAuthoritativePlacementAttachmentPose() {
+        var definition = AttachedAreaDefinition();
+        using var fixture = Fixtures.FreshServer(definition: definition);
+        var actor = WorldPrincipal.Seat(slot: 0);
+
+        fixture.Step();
+        Assert.Equal(expected: 0, actual: fixture.Server.Population.GravityAreaStatistics.ActiveAreaCount);
+
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(actor, actor.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+        fixture.Server.Population.EntryBody(index: 0)!.Pose(x: 100f, y: 100f, z: 100f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+
+        for (var tick = 0; (tick < 12); tick++) {
+            fixture.Step();
+        }
+
+        Assert.Equal(expected: 1, actual: fixture.Server.Population.GravityAreaStatistics.ActiveAreaCount);
+        Assert.Equal(expected: 1, actual: fixture.Server.Population.GravityAreaStatistics.MatchCount);
+        Assert.Equal(expected: FixedQ4816.FromInteger(value: 100), actual: fixture.Server.Population.EntryBody(index: 0)!.FixedPosition.X);
+        Assert.NotEqual(expected: FixedQ4816.FromInteger(value: 100), actual: fixture.Server.Population.EntryBody(index: 0)!.FixedPosition.Z);
+
+        fixture.Server.Population.DeactivateSeat(slot: 0, tick: 100UL);
+        fixture.Step();
+
+        Assert.Equal(expected: 0, actual: fixture.Server.Population.GravityAreaStatistics.ActiveAreaCount);
+    }
+
+    [Fact]
+    public void AttachedArea_CheckpointRestoreContinuesBitIdenticallyOnTheNextSolve() {
+        using var fixture = Fixtures.FreshServer(definition: AttachedAreaDefinition(zeroAcceleration: true));
+        var actor = WorldPrincipal.Seat(slot: 0);
+
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(actor, actor.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+        fixture.Server.Population.EntryBody(index: 0)!.Pose(x: 100f, y: 100f, z: 100f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+        for (var tick = 0; (tick < 8); tick++) {
+            fixture.Step();
+        }
+
+        Assert.True(condition: fixture.Server.TryCaptureCheckpoint(
+            checkpoint: out var checkpoint,
+            hostRow: new WorldAuthorityHostRowCheckpoint(
+                AnnouncedCrossingHolds: [],
+                AppliedTransferHighWater: null,
+                AppliedTransferIds: [],
+                ElapsedEngineTicks: 0,
+                ForwardedBodies: [],
+                FreshCounter: 0,
+                InDoubtTransfers: [],
+                IsPaused: false,
+                NextTransferId: 1,
+                PortalOccupancy: [],
+                Retained: false,
+                ScheduleAccumulatorTicks: 0,
+                SeededArrivals: []
+            ),
+            reason: out var refusal
+        ), userMessage: refusal);
+        var restoredDefinition = WorldDefinitionSerialization.Deserialize(utf8Json: checkpoint!.Server.DefinitionJson);
+        using var machines = new WorldMachineHost(engines: [], screens: restoredDefinition.Screens);
+        var profiles = new WorldOwnedWorlds(
+            directory: Directory.CreateTempSubdirectory(prefix: "puck-gravity-checkpoint-").FullName,
+            machineId: Guid.NewGuid(),
+            template: restoredDefinition
+        );
+        var (restored, _) = WorldServer.FromCheckpoint(
+            checkpoint: checkpoint,
+            instanceIdentity: "gravity-area",
+            machines: machines,
+            profiles: profiles
+        );
+        var nextTick = fixture.Server.NextInputTick;
+        var elapsed = 0UL;
+
+        Assert.Equal(expected: WorldReplaySnapshot.HashState(population: fixture.Server.Population), actual: WorldReplaySnapshot.HashState(population: restored.Population));
+
+        for (var step = 0; (step < 12); step++) {
+            elapsed = checked((elapsed + Fixtures.StepTicks));
+            var context = new FixedStepContext(ElapsedTicks: elapsed, StepTicks: Fixtures.StepTicks, Tick: nextTick);
+
+            fixture.Server.Step(context: in context);
+            restored.Step(context: in context);
+            nextTick++;
+
+            Assert.Equal(expected: WorldReplaySnapshot.HashState(population: fixture.Server.Population), actual: WorldReplaySnapshot.HashState(population: restored.Population));
+            Assert.Equal(expected: fixture.Server.Population.GravityAreaStatistics, actual: restored.Population.GravityAreaStatistics);
+        }
+    }
+
+    [Fact]
+    public void LocalAreas_RoundTripTheirUnionShapes_WhileAbsenceKeepsTheMemberOmitted() {
+        var absentBytes = WorldDefinitionSerialization.Serialize(definition: WithGravity(gravity: PointGravity(gravitationalConstant: 0f)));
+
+        Assert.DoesNotContain(
+            expectedSubstring: "\"areas\"",
+            actualString: Encoding.UTF8.GetString(bytes: absentBytes),
+            comparisonType: StringComparison.Ordinal
+        );
+
+        var definition = WithGravity(gravity: PointGravity(
+            gravitationalConstant: 0f,
+            areas: [
+                new WorldGravityArea(
+                    PlacementId: "ball",
+                    Priority: -2,
+                    Mode: WorldGravityAreaMode.Combine,
+                    Bounds: new WorldGravityAreaBounds.BoxBounds(HalfExtents: new Vector3(x: 1f, y: 2f, z: 3f)),
+                    Acceleration: new WorldGravityAreaAcceleration.Directional(Value: new Vector3(x: 0f, y: -9.81f, z: 0f))
+                ),
+                new WorldGravityArea(
+                    PlacementId: "ball",
+                    Priority: 4,
+                    Mode: WorldGravityAreaMode.Replace,
+                    Bounds: new WorldGravityAreaBounds.SphereBounds(Radius: 10f),
+                    Acceleration: new WorldGravityAreaAcceleration.Radial(Magnitude: 3f)
+                ),
+            ]
+        ));
+        var roundTrip = WorldDefinitionSerialization.Deserialize(utf8Json: WorldDefinitionSerialization.Serialize(definition: definition));
+
+        Assert.IsType<WorldGravityAreaBounds.BoxBounds>(@object: roundTrip.Gravity.Areas![0].Bounds);
+        Assert.IsType<WorldGravityAreaAcceleration.Directional>(@object: roundTrip.Gravity.Areas[0].Acceleration);
+        Assert.IsType<WorldGravityAreaBounds.SphereBounds>(@object: roundTrip.Gravity.Areas[1].Bounds);
+        Assert.IsType<WorldGravityAreaAcceleration.Radial>(@object: roundTrip.Gravity.Areas[1].Acceleration);
+    }
+
+    [Fact]
+    public void LocalAreaValidationRefusesNullRowsAndUnrepresentableLoweringByIndexedPath() {
+        var definition = WithGravity(gravity: PointGravity(
+            gravitationalConstant: 0f,
+            areas: [new WorldGravityArea(
+                PlacementId: "ball",
+                Priority: 0,
+                Mode: WorldGravityAreaMode.Replace,
+                Bounds: new WorldGravityAreaBounds.SphereBounds(Radius: float.MaxValue),
+                Acceleration: new WorldGravityAreaAcceleration.Radial(Magnitude: float.Epsilon)
+            )]
+        ));
+
+        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: definition, reason: out var reason));
+        Assert.Contains(expectedSubstring: "gravity.areas[0] cannot lower", actualString: reason, comparisonType: StringComparison.Ordinal);
+
+        var node = JsonNode.Parse(json: Encoding.UTF8.GetString(bytes: WorldDefinitionSerialization.Serialize(definition: WithGravity(gravity: PointGravity(
+            gravitationalConstant: 0f,
+            areas: [new WorldGravityArea(
+                PlacementId: "ball",
+                Priority: 0,
+                Mode: WorldGravityAreaMode.Combine,
+                Bounds: new WorldGravityAreaBounds.SphereBounds(Radius: 1f),
+                Acceleration: new WorldGravityAreaAcceleration.Directional(Value: Vector3.Zero)
+            )]
+        )))))!.AsObject();
+        node["gravity"]!["areas"]!.AsArray()[0] = null;
+        var exception = Assert.Throws<InvalidDataException>(testCode: () => WorldDefinitionSerialization.Deserialize(utf8Json: Encoding.UTF8.GetBytes(s: node.ToJsonString())));
+
+        Assert.Contains(expectedSubstring: "gravity.areas[0] is required", actualString: exception.Message, comparisonType: StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PositiveGlobalConstant_SolvesBodyOnlySources_AndParticipatesAtZeroWithOneBody() {
+        var definition = WithGravity(gravity: PointGravity(gravitationalConstant: 45f));
+        var oneBody = CompileField(definition: definition, capacity: 1);
+
+        oneBody.Solve(targets: [new WorldGravityTarget(
+            EntityIndex: 0,
+            Position: FixedVector3.Zero,
+            Mass: FixedQ4816.FromInteger(value: 10)
+        )]);
+
+        Assert.True(condition: oneBody.TryAcceleration(entityIndex: 0, acceleration: out var loneAcceleration));
+        Assert.Equal(expected: FixedVector3.Zero, actual: loneAcceleration);
+
+        var twoBodies = CompileField(definition: definition, capacity: 2);
+        twoBodies.Solve(targets: [
+            new WorldGravityTarget(EntityIndex: 0, Position: new FixedVector3(X: FixedQ4816.FromInteger(value: -10), Y: FixedQ4816.Zero, Z: FixedQ4816.Zero), Mass: FixedQ4816.FromInteger(value: 10)),
+            new WorldGravityTarget(EntityIndex: 1, Position: new FixedVector3(X: FixedQ4816.FromInteger(value: 10), Y: FixedQ4816.Zero, Z: FixedQ4816.Zero), Mass: FixedQ4816.FromInteger(value: 10)),
+        ]);
+
+        Assert.True(condition: twoBodies.TryAcceleration(entityIndex: 0, acceleration: out var left));
+        Assert.True(condition: twoBodies.TryAcceleration(entityIndex: 1, acceleration: out var right));
+        Assert.True(condition: left.X > FixedQ4816.Zero);
+        Assert.Equal(expected: left.X, actual: -right.X);
+        Assert.Equal(expected: 2, actual: twoBodies.Statistics.BodyCount);
+    }
+
+    [Fact]
+    public void BodyOnlyGlobalSolve_ComposesWithMatchingLocalArea() {
+        var definition = WithGravity(gravity: PointGravity(
+            gravitationalConstant: 45f,
+            areas: [new WorldGravityArea(
+                PlacementId: "ball",
+                Priority: 0,
+                Mode: WorldGravityAreaMode.Combine,
+                Bounds: new WorldGravityAreaBounds.SphereBounds(Radius: 20f),
+                Acceleration: new WorldGravityAreaAcceleration.Directional(Value: new Vector3(x: 0f, y: -3f, z: 0f))
+            )]
+        ));
+        var field = CompileField(definition: definition, capacity: 2);
+
+        field.Solve(targets: [
+            new WorldGravityTarget(EntityIndex: 0, Position: new FixedVector3(X: FixedQ4816.FromInteger(value: -5), Y: FixedQ4816.Zero, Z: FixedQ4816.Zero), Mass: FixedQ4816.FromInteger(value: 10)),
+            new WorldGravityTarget(EntityIndex: 1, Position: new FixedVector3(X: FixedQ4816.FromInteger(value: 5), Y: FixedQ4816.Zero, Z: FixedQ4816.Zero), Mass: FixedQ4816.FromInteger(value: 10)),
+        ]);
+
+        Assert.True(condition: field.TryAcceleration(entityIndex: 0, acceleration: out var left));
+        Assert.True(condition: left.X > FixedQ4816.Zero);
+        Assert.Equal(expected: FixedQ4816.FromInteger(value: -3), actual: left.Y);
+        Assert.Equal(expected: 2, actual: field.AreaStatistics.MatchCount);
+    }
+
+    [Fact]
+    public void LocalAreaComposition_SaturatesInsteadOfWrapping_AndReplaceResetsTheFold() {
+        const float Huge = 100_000_000_000_000f;
+        var uniformCombine = CompileField(definition: WithGravity(gravity: PointGravity(
+            gravitationalConstant: 0f,
+            uniform: new DocumentVector3(value: new Vector3(x: Huge, y: 0f, z: 0f)),
+            areas: [new WorldGravityArea(
+                PlacementId: "ball",
+                Priority: 0,
+                Mode: WorldGravityAreaMode.Combine,
+                Bounds: new WorldGravityAreaBounds.SphereBounds(Radius: 10f),
+                Acceleration: new WorldGravityAreaAcceleration.Directional(Value: new Vector3(x: Huge, y: 0f, z: 0f))
+            )]
+        )), capacity: 1);
+        var replaceThenCombine = CompileField(definition: WithGravity(gravity: PointGravity(
+            gravitationalConstant: 0f,
+            areas: [
+                new WorldGravityArea(
+                    PlacementId: "ball",
+                    Priority: 0,
+                    Mode: WorldGravityAreaMode.Replace,
+                    Bounds: new WorldGravityAreaBounds.SphereBounds(Radius: 10f),
+                    Acceleration: new WorldGravityAreaAcceleration.Directional(Value: new Vector3(x: Huge, y: 0f, z: 0f))
+                ),
+                new WorldGravityArea(
+                    PlacementId: "ball",
+                    Priority: 1,
+                    Mode: WorldGravityAreaMode.Combine,
+                    Bounds: new WorldGravityAreaBounds.SphereBounds(Radius: 10f),
+                    Acceleration: new WorldGravityAreaAcceleration.Directional(Value: new Vector3(x: Huge, y: 0f, z: 0f))
+                ),
+            ]
+        )), capacity: 1);
+
+        foreach (var field in new[] { uniformCombine, replaceThenCombine }) {
+            field.Solve(targets: [Target(entityIndex: 0, x: 0, y: 0, z: 0)]);
+
+            Assert.True(condition: field.TryAcceleration(entityIndex: 0, acceleration: out var acceleration));
+            Assert.Equal(expected: FixedQ4816.MaxValue, actual: acceleration.X);
+        }
+    }
+
+    private static WorldGravityField CompileField(WorldDefinition definition, int capacity) {
+        Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(definition: definition, reason: out var reason), userMessage: reason);
+
+        return new WorldGravityField(
+            capacity: capacity,
+            compiled: FixedWorldGravity.Compile(gravity: definition.Gravity, placements: definition.Placements)
+        );
+    }
+
+    private static WorldGravityTarget Target(int entityIndex, int x, int y, int z) => new(
+        EntityIndex: entityIndex,
+        Position: new FixedVector3(
+            X: FixedQ4816.FromInteger(value: x),
+            Y: FixedQ4816.FromInteger(value: y),
+            Z: FixedQ4816.FromInteger(value: z)
+        ),
+        Mass: FixedQ4816.Zero
+    );
 }

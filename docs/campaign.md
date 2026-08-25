@@ -73,9 +73,13 @@ modulates chemistry live with no new reaction kind. The compiled reaction form i
 over that same spelling — stable field/state handles, fixed-point scalar inputs, ordered nodes,
 immutable read/write sets and their dependency DAG, and exact cell/body work classes — consumed
 beside the full topology/paint/display composite so editors and schedulers share the runtime's
-vocabulary instead of growing a parallel graph format. `world.budget` reads the derived cost every
+vocabulary instead of growing a parallel graph format; the authoritative lattice executes that
+program directly, and reaction-only live edits replace it without reseeding compatible cell state.
+Topology, cadence, and field-envelope changes remain restart-required allocation changes rather
+than implicit migrations. `world.budget` reads the derived cost every
 authorable feature with a price now folds into (render program words/instances against their frozen
-envelope, the Lipschitz step scale, the lattice's per-step reaction cost, the state row count) — a
+envelope, the Lipschitz step scale, the lattice's exact full-cell/body-slot pass cost, the state row
+count) — a
 decision's price stays legible instead of a silent frame tax. The document vocabulary moved with it:
 `kits`/`looks`/`placements` are dealt-row sections (`{rows, assignment}`/`{rows, policy}`, authoring
 dissolved into placements' own policy block); `prototypes` (`prototypeId` references) replaces
@@ -90,6 +94,16 @@ reference radius. The latter lowers deterministically through the same softened
 fixed-point kernel the server solves; it does not infer force from a solid or
 SDF gradient. `world.gravity` exposes the authored promise, derived mass, and
 last solve work, while `world.budget` carries the source/evaluation price.
+Bounded local `areas` now ride static or body-attached placements: inclusive
+sphere and yaw-local box bounds choose directional or inward-radial acceleration,
+then fold over the global answer by deterministic priority/authored order with
+explicit Combine/Replace. This is sufficient for a room, ship interior, local
+planet influence, or a deliberate zero-G pocket without coupling acceleration
+to SDF geometry. Arbitrary SDF volume bounds and per-body masks remain the next
+explicit query/asset seam rather than an inferred shortcut.
+The same global kernel now honors body-only systems when no static source is
+authored, and every fixed-point composition addition saturates rather than
+wrapping across an extreme.
 
 ## Where the campaign actually is
 
@@ -103,7 +117,7 @@ come back.
 | Claim | The check |
 |---|---|
 | Every shipped world document boots | `dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/<name>.world.json --exit-after-seconds 2`, audit STDERR — exit code 0 is NOT success (the only bracketed lines are the by-design `world.screen … recursion refused` notices for session mirrors) |
-| The nexus authors a floating island, five planetoids, four portals, dark arcade cabinet | read `src/Puck.World/Assets/worlds/nexus.world.json`'s `placements` — `island` and `planetoid-*` plus `arcade-cabinet` and `dive-portal`/`kart-portal`/`jump-portal`/`studio-portal` |
+| The nexus authors a floating island, five planetoids, four portals, dark arcade cabinet | read `src/Puck.World/Assets/worlds/prototypes/nexus.world.json`'s `placements` — `island` and `planetoid-*` plus `arcade-cabinet` and `dive-portal`/`kart-portal`/`jump-portal`/`studio-portal` |
 | Every world authors per-body action logic | the same documents' `actions` lanes carry `predicates`/`effects`; a quilt variant inherits its base's lanes through `basis` instead of repeating them |
 | **No shipped world authors WORLD-SCOPE rules** — none carries a `rules` or `interactions` section; the two scenario documents under `Assets/scenarios/` do | the same read; `rules.schema.json` and `interactions.schema.json` both exist |
 | Similar worlds compose instead of redefining everything — the five quilts are `basis` deltas over the `quilt-base` template | read any `quilt-*.world.json`'s `basis` member; `world.status` echoes `basis <path>`; `tests/Puck.World.Tests/DocumentBasisLawTests.cs` |
