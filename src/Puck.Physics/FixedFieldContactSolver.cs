@@ -60,14 +60,12 @@ public sealed class FixedFieldContactSolver(
     // geometry reaches it. The claim depends on every call site gating this to a confirmed, non-interior
     // penetration (0 <= distance < minimum) before the gradient tap that can degenerate; all three call sites
     // (ResolveSphere, ResolveBox, ResolveCore) share that gate.
-    private void ApplyDegeneratePush(ref FixedVector3 position, in FixedVector3 velocity, FixedQ4816 penetration, FixedVector3 up) {
-        var direction = (-velocity).Normalize();
-
-        if (direction == FixedVector3.Zero) {
-            direction = up;
-        }
-
-        position += (direction * penetration);
+    private static void ApplyDegeneratePush(ref FixedVector3 position, in FixedVector3 velocity, FixedQ4816 penetration, FixedVector3 up) {
+        position += FixedContactPushMath.ComputeDegenerate(
+            penetration: penetration,
+            up: up,
+            velocity: in velocity
+        ).PositionDelta;
     }
     // Extraction push for a single embedded center (distance < 0, already confirmed by the caller's TryDistance —
     // this method pays only the direction gradient tap). Direction is the center's own gradient; a degenerate
@@ -97,52 +95,44 @@ public sealed class FixedFieldContactSolver(
             velocity -= (direction * into);
         }
     }
+    // world.contacts' obstruction witness tracks only a NON-walkable push (a wall, not the ground/a ramp) — a
+    // standing body re-resolves its ground contact every solver iteration, so an unconditional "last push" would
+    // have the ground overwrite a genuine wall push from an earlier iteration in the SAME tick and hide it again.
     private void ApplyPush(ref FixedVector3 position, ref FixedVector3 velocity, FixedVector3 normal,
         FixedQ4816 penetration, FixedVector3 up, ref bool grounded, ref FixedVector3 lastNormal, ref FixedVector3 groundNormal) {
-        position += (normal * penetration);
-
-        var walkable = (FixedVector3.Dot(
-            left: normal,
-            right: up
-        ) >= m_groundedThreshold);
-
-        if (walkable) {
-            grounded = true;
-            groundNormal = normal;
-        } else {
-            // world.contacts' obstruction witness tracks only a NON-walkable push (a wall, not the ground/a ramp) —
-            // a standing body re-resolves its ground contact every solver iteration, so an unconditional "last push"
-            // would have the ground overwrite a genuine wall push from an earlier iteration in the SAME tick and
-            // hide it again.
-            lastNormal = normal;
-        }
-
-        var into = FixedVector3.Dot(
-            left: velocity,
-            right: normal
+        FixedContactPushMath.Commit(
+            grounded: ref grounded,
+            groundNormal: ref groundNormal,
+            lastNormal: ref lastNormal,
+            position: ref position,
+            trial: FixedContactPushMath.ComputeOrdinary(
+                groundedThreshold: m_groundedThreshold,
+                normal: normal,
+                penetration: penetration,
+                up: up,
+                velocity: in velocity
+            ),
+            velocity: ref velocity
         );
-
-        if (into < FixedQ4816.Zero) {
-            velocity -= (normal * into);
-        }
     }
     // Commits a trial computed by TrialResolveSphere: applies its position/velocity deltas, latches grounded if
     // the trial says so (a one-way latch — never cleared, matching ApplyPush), and records the obstruction witness
     // exactly like ApplyPush's else-branch — only when the trial was non-walkable AND carries a measured normal
     // (never for a degenerate-gradient trial, matching ApplyDegeneratePush's silence on lastNormal).
     private static void CommitSpherePush(ref FixedVector3 position, ref FixedVector3 velocity, ref bool grounded, ref FixedVector3 lastNormal, ref FixedVector3 groundNormal, in SphereResolveTrial trial) {
-        position += trial.PositionDelta;
-        velocity += trial.VelocityDelta;
-
-        if (trial.Grounded) {
-            grounded = true;
-
-            if (trial.Normal is { } walkableNormal) {
-                groundNormal = walkableNormal;
-            }
-        } else if (trial.Normal is { } normal) {
-            lastNormal = normal;
-        }
+        FixedContactPushMath.Commit(
+            grounded: ref grounded,
+            groundNormal: ref groundNormal,
+            lastNormal: ref lastNormal,
+            position: ref position,
+            trial: new FixedContactPushMath.Trial(
+                Grounded: trial.Grounded,
+                Normal: trial.Normal,
+                PositionDelta: trial.PositionDelta,
+                VelocityDelta: trial.VelocityDelta
+            ),
+            velocity: ref velocity
+        );
     }
     // Capsule extraction — the opposing-face straddle escape: a capsule can land with both spheres inside one
     // solid, straddling its Y-midplane, not only via a non-swept teleport but any live geometry mutation that
@@ -697,8 +687,8 @@ public sealed class FixedFieldContactSolver(
     // Computes the would-be ordinary push for a sphere center already confirmed not embedded (distance >= 0, sampled
     // by the caller) without applying it to position/velocity/grounded: the caller samples the other center at the
     // position this trial's PositionDelta would produce if committed, and only actually commits (CommitSpherePush)
-    // once that second sample proves clean. The arithmetic below is a byte-for-byte mirror of
-    // ApplyPush/ApplyDegeneratePush — a change to either of those two methods must be mirrored here too.
+    // once that second sample proves clean. Built from the same FixedContactPushMath calls ApplyPush and
+    // ApplyDegeneratePush use, so the two can never drift from this uncommitted path.
     private SphereResolveTrial TrialResolveSphere(FixedVector3 center, in FixedVector3 velocity, FixedQ4816 radius, FixedVector3 up, FixedQ4816 distance) {
         var minimum = (radius + m_skin);
 
@@ -708,46 +698,31 @@ public sealed class FixedFieldContactSolver(
 
         var coord = FixedPosition.FromLocal(local: center);
         var penetration = (minimum - distance);
-
-        if (!m_field.TryFieldGradient(
+        var trial = (m_field.TryFieldGradient(
             epsilon: m_gradientProbe,
             gradient: out var normal,
             position: coord
-        )) {
-            var direction = (-velocity).Normalize();
-
-            if (direction == FixedVector3.Zero) {
-                direction = up;
-            }
-
-            return new SphereResolveTrial(
-                Pushed: true,
-                PositionDelta: (direction * penetration),
-                VelocityDelta: FixedVector3.Zero,
-                Grounded: false,
-                Normal: null
-            );
-        }
-
-        var grounded = (FixedVector3.Dot(
-            left: normal,
-            right: up
-        ) >= m_groundedThreshold);
-        var into = FixedVector3.Dot(
-            left: velocity,
-            right: normal
-        );
-        var velocityDelta = ((into < FixedQ4816.Zero)
-            ? -(normal * into)
-            : FixedVector3.Zero
+        )
+            ? FixedContactPushMath.ComputeOrdinary(
+                groundedThreshold: m_groundedThreshold,
+                normal: normal,
+                penetration: penetration,
+                up: up,
+                velocity: in velocity
+            )
+            : FixedContactPushMath.ComputeDegenerate(
+                penetration: penetration,
+                up: up,
+                velocity: in velocity
+            )
         );
 
         return new SphereResolveTrial(
-            Grounded: grounded,
-            Normal: normal,
-            PositionDelta: (normal * penetration),
+            Grounded: trial.Grounded,
+            Normal: trial.Normal,
+            PositionDelta: trial.PositionDelta,
             Pushed: true,
-            VelocityDelta: velocityDelta
+            VelocityDelta: trial.VelocityDelta
         );
     }
 
@@ -958,8 +933,8 @@ public sealed class FixedFieldContactSolver(
 
     // The uncommitted outcome of an ordinary (confirmed non-embedded) sphere push — see TrialResolveSphere. Pushed
     // is false for a clean miss (distance >= minimum); the deltas are meaningless in that case and left default.
-    // Normal mirrors ApplyPush's measured surface normal and is null exactly when the degenerate-gradient branch
-    // (ApplyDegeneratePush's mirror) ran — CommitSpherePush reads it to record the obstruction witness the same way
-    // ApplyPush does, never fabricating a normal for a degenerate push.
+    // Normal is null exactly when FixedContactPushMath.ComputeDegenerate produced the trial — CommitSpherePush reads
+    // it to record the obstruction witness the same way ApplyPush does, never fabricating a normal for a degenerate
+    // push.
     private readonly record struct SphereResolveTrial(bool Pushed, FixedVector3 PositionDelta, FixedVector3 VelocityDelta, bool Grounded, FixedVector3? Normal);
 }

@@ -493,7 +493,7 @@ internal static class CoreSurfaceClaims {
 
         // Compute, against the canonical published FNV-1a 64-bit vectors. The empty span must return the offset basis
         // rather than zero, which is the one value a fold that forgot to prime itself would produce.
-        Assert.Equal(expected: 0xCBF29CE484222325UL, actual: Fnv1aHash.Compute(values: []));
+        Assert.Equal(expected: 0xCBF29CE484222325UL, actual: Fnv1aHash.Compute(values: ReadOnlySpan<byte>.Empty));
         Assert.Equal(expected: 0xAF63DC4C8601EC8CUL, actual: Fnv1aHash.Compute(values: "a"u8));
         Assert.Equal(expected: 0xAF63DF4C8601F1A5UL, actual: Fnv1aHash.Compute(values: "b"u8));
         Assert.Equal(expected: 0xAF63DE4C8601EFF2UL, actual: Fnv1aHash.Compute(values: "c"u8));

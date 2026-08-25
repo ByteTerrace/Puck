@@ -133,6 +133,7 @@ public static class FusedArithmetic {
     /// <param name="left">The left factor.</param>
     /// <param name="right">The right factor.</param>
     /// <returns>The signed product.</returns>
+    /// <remarks>This <see cref="Int128"/> form has measured faster than a <c>Math.BigMul</c>-based rewrite; re-measure before replacing it.</remarks>
     internal static (bool Negative, UInt128 Magnitude) Product(long left, long right) {
         var product = (((Int128)left) * right);
 

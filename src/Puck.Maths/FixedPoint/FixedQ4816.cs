@@ -407,56 +407,23 @@ public readonly partial record struct FixedQ4816(long Value)
     /// <param name="x">The multiplicand.</param>
     /// <param name="y">The multiplier.</param>
     /// <returns>The rounded product <c><paramref name="x"/> × <paramref name="y"/></c>.</returns>
-    public static FixedQ4816 operator *(FixedQ4816 x, FixedQ4816 y) {
-        // The raw product is X·Y·2^32; divide by 2^16 and round to nearest, ties to even. Rounding the magnitude
-        // and re-applying the sign equals rounding the signed value (the integer neighbors share parity).
-        // Measured 2026-07 (.NET 10): this Int128 form is ~2x faster than both Math.BigMul rewrites; re-measure
-        // before replacing.
-        var product = (((Int128)x.Value) * y.Value);
-        var negative = (product < Int128.Zero);
-        var magnitude = ((UInt128)(negative
-            ? -product
-            : product));
-        var truncated = ((ulong)(magnitude >> FractionBitCount));
-        var remainder = ((ulong)magnitude) & FractionBitMask;
-
-        truncated = FixedPointRounding.RoundToNearestTiesToEven(
-            distanceToNext: ((1UL << FractionBitCount) - remainder),
-            distanceToTruncated: remainder,
-            truncated: truncated
-        );
-
-        var result = ((long)truncated);
-
-        return new(Value: (negative
-            ? unchecked(-result)
-            : result));
-    }
+    public static FixedQ4816 operator *(FixedQ4816 x, FixedQ4816 y) =>
+        new(Value: SignedFixedPointArithmetic.Multiply(
+            x: x.Value,
+            y: y.Value,
+            fractionBitCount: FractionBitCount
+        ));
     /// <summary>Multiplies two values in fixed point, rounding to nearest with ties to even and throwing when the rounded result is not representable.</summary>
     /// <param name="x">The multiplicand.</param>
     /// <param name="y">The multiplier.</param>
     /// <returns>The rounded product <c><paramref name="x"/> × <paramref name="y"/></c>.</returns>
     /// <exception cref="OverflowException">The rounded product is outside the representable range.</exception>
-    public static FixedQ4816 operator checked *(FixedQ4816 x, FixedQ4816 y) {
-        var product = (((Int128)x.Value) * y.Value);
-        var negative = (product < Int128.Zero);
-        var magnitude = ((UInt128)(negative
-            ? -product
-            : product));
-        var roundedMagnitude = (magnitude >> FractionBitCount);
-        var remainder = ((ulong)magnitude) & FractionBitMask;
-
-        roundedMagnitude = FixedPointRounding.RoundToNearestTiesToEven(
-            distanceToNext: ((((UInt128)1UL) << FractionBitCount) - remainder),
-            distanceToTruncated: remainder,
-            truncated: roundedMagnitude
-        );
-
-        return new(Value: SignedFixedPointArithmetic.FromCheckedMagnitude(
-            magnitude: roundedMagnitude,
-            negative: negative
+    public static FixedQ4816 operator checked *(FixedQ4816 x, FixedQ4816 y) =>
+        new(Value: SignedFixedPointArithmetic.MultiplyChecked(
+            x: x.Value,
+            y: y.Value,
+            fractionBitCount: FractionBitCount
         ));
-    }
     /// <summary>Divides <paramref name="x"/> by <paramref name="y"/> in fixed point, rounding the result to nearest with ties to even and wrapping on overflow.</summary>
     /// <param name="x">The dividend.</param>
     /// <param name="y">The divisor.</param>

@@ -1,50 +1,31 @@
-using System.Security.Cryptography;
 using System.Text.Json;
 using Puck.Assets.Documents;
 using Puck.Attestation;
+using Puck.Attestation.Tests;
 using Puck.Launcher.Release;
 
 namespace Puck.Launcher.Tests.Release;
 
 /// <summary>A minted throwaway root/issuing/subject signing chain plus the helpers to sign a
-/// <see cref="ReleaseManifest"/> claim under it — the law suite's own twin of the pattern
-/// <c>Puck.Attestation.Tests</c>' internal <c>AttestationTestSupport</c> establishes, kept local since that helper
-/// is not visible outside its own assembly.</summary>
+/// <see cref="ReleaseManifest"/> claim under it, built on <see cref="AttestationTestSupport"/>'s shared
+/// key-minting and two-hop chain-signing helpers.</summary>
 internal sealed class ReleaseChainFixture {
     public const long Epoch = 1_700_000_000L;
 
-    private readonly ECDsa m_issuingKey;
-    private readonly byte[] m_issuingSpki;
-    private readonly KeyId m_issuingId;
-    private readonly ECDsa m_rootKey;
-    private readonly byte[] m_rootSpki;
-    private readonly ECDsa m_subjectKey;
-    private readonly byte[] m_subjectSpki;
-    private readonly KeyId m_subjectId;
+    private readonly DomainKeys m_keys;
 
     public readonly IAttestationCodec Codec = new CborAttestationCodec();
-    public readonly KeyId RootId;
-    public readonly string Subject;
+    public KeyId RootId => m_keys.RootId;
+    public string Subject => m_keys.Subject;
 
     public ReleaseChainFixture(string subject = "puck.world") {
-        Subject = subject;
-        m_rootKey = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);
-        m_rootSpki = m_rootKey.ExportSubjectPublicKeyInfo();
-        RootId = KeyId.ForRoot(algorithm: AttestationAlgorithms.EcdsaP256Sha256, subjectPublicKeyInfo: m_rootSpki);
-
-        m_issuingKey = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);
-        m_issuingSpki = m_issuingKey.ExportSubjectPublicKeyInfo();
-        m_issuingId = KeyId.ForIssuing(algorithm: AttestationAlgorithms.EcdsaP256Sha256, domain: RootId.Domain, subjectPublicKeyInfo: m_issuingSpki);
-
-        m_subjectKey = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);
-        m_subjectSpki = m_subjectKey.ExportSubjectPublicKeyInfo();
-        m_subjectId = KeyId.ForSubject(algorithm: AttestationAlgorithms.EcdsaP256Sha256, domain: RootId.Domain, subject: subject, subjectPublicKeyInfo: m_subjectSpki);
+        m_keys = AttestationTestSupport.MintDomainKeys(subject: subject);
     }
 
     public ReleaseTrustAnchor TrustAnchor => new(
         Algorithm: AttestationAlgorithms.EcdsaP256Sha256,
         Domain: RootId.Domain,
-        PublicKeySubjectPublicKeyInfoBase64: Convert.ToBase64String(inArray: m_rootSpki)
+        PublicKeySubjectPublicKeyInfoBase64: Convert.ToBase64String(inArray: m_keys.RootSpki)
     );
 
     public TrustList BuildTrustList(TimeSpan replayHorizon) => new(
@@ -56,26 +37,7 @@ internal sealed class ReleaseChainFixture {
     /// sequenced bearer release claim, returning the fully signed manifest.</summary>
     public ReleaseManifest Sign(ReleaseManifest document, ulong sequence, long notBefore, long notAfter) {
         var canonical = ReleaseCanonicalizer.Canonicalize(document: document);
-        var rootToIssuing = AttestationSigner.SignKeyBinding(
-            codec: Codec,
-            domain: RootId.Domain,
-            notAfter: notAfter,
-            notBefore: notBefore,
-            signerAlgorithm: AttestationAlgorithms.EcdsaP256Sha256,
-            signerKey: m_rootKey,
-            targetId: m_issuingId,
-            targetSubjectPublicKeyInfo: m_issuingSpki
-        );
-        var issuingToSubject = AttestationSigner.SignKeyBinding(
-            codec: Codec,
-            domain: RootId.Domain,
-            notAfter: notAfter,
-            notBefore: notBefore,
-            signerAlgorithm: AttestationAlgorithms.EcdsaP256Sha256,
-            signerKey: m_issuingKey,
-            targetId: m_subjectId,
-            targetSubjectPublicKeyInfo: m_subjectSpki
-        );
+        var chain = AttestationTestSupport.BuildChain(codec: Codec, keys: m_keys, notAfter: notAfter, notBefore: notBefore);
         var claim = AttestationSigner.SignClaim(
             audience: null,
             claimBytes: canonical.Bytes,
@@ -86,13 +48,13 @@ internal sealed class ReleaseChainFixture {
             purpose: AttestationReleaseVerifier.Purpose,
             sequence: sequence,
             signerAlgorithm: AttestationAlgorithms.EcdsaP256Sha256,
-            signerKey: m_subjectKey,
+            signerKey: m_keys.SubjectSigningKey,
             subject: Subject
         );
         var signature = new ReleaseSignature(
             Chain: [
-                Convert.ToBase64String(inArray: Codec.EncodeAttestation(attestation: rootToIssuing)),
-                Convert.ToBase64String(inArray: Codec.EncodeAttestation(attestation: issuingToSubject)),
+                Convert.ToBase64String(inArray: Codec.EncodeAttestation(attestation: chain.RootToIssuing)),
+                Convert.ToBase64String(inArray: Codec.EncodeAttestation(attestation: chain.IssuingToSubject)),
             ],
             Claim: Convert.ToBase64String(inArray: Codec.EncodeAttestation(attestation: claim))
         );

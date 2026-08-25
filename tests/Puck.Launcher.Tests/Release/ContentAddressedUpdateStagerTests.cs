@@ -7,13 +7,9 @@ namespace Puck.Launcher.Tests.Release;
 /// <summary>Laws over <see cref="ContentAddressedUpdateStager"/>: hash re-verification refuses a bad file, and a
 /// file already in the content-addressed cache is never re-fetched.</summary>
 public sealed class ContentAddressedUpdateStagerTests : IDisposable {
-    private readonly string m_root = Path.Combine(path1: Path.GetTempPath(), path2: $"puck-launcher-stager-tests-{Guid.NewGuid():n}");
+    private readonly TempStagingRoot m_root = new();
 
-    public void Dispose() {
-        if (Directory.Exists(path: m_root)) {
-            Directory.Delete(path: m_root, recursive: true);
-        }
-    }
+    public void Dispose() => m_root.Dispose();
 
     private sealed class RecordingReleaseSource(IReadOnlyDictionary<string, byte[]> files) : IReleaseSource {
         public readonly List<string> Requested = [];
@@ -52,8 +48,8 @@ public sealed class ContentAddressedUpdateStagerTests : IDisposable {
         var content = "a"u8.ToArray();
         var wrongHash = $"sha256/{new string(c: '0', count: 64)}";
         var source = new RecordingReleaseSource(files: new Dictionary<string, byte[]> { [wrongHash] = content });
-        var cache = new ContentAddressedStore(root: Path.Combine(path1: m_root, path2: "objects"));
-        var stager = new ContentAddressedUpdateStager(cache: cache, cacheRoot: m_root, source: source);
+        var cache = new ContentAddressedStore(root: Path.Combine(path1: m_root.RootPath, path2: "objects"));
+        var stager = new ContentAddressedUpdateStager(cache: cache, cacheRoot: m_root.RootPath, source: source);
         var manifest = ManifestFor(version: "1.0.0", file: new ReleasePayloadFile(Path: "a.dll", Hash: wrongHash, Size: content.Length));
 
         var result = await stager.StageAsync(cancellationToken: TestContext.Current.CancellationToken, manifest: manifest, rid: "win-x64");
@@ -66,8 +62,8 @@ public sealed class ContentAddressedUpdateStagerTests : IDisposable {
         var content = "shared bytes"u8.ToArray();
         var hash = $"sha256/{ContentAddressedStore.ComputeHash(content: content)}";
         var source = new RecordingReleaseSource(files: new Dictionary<string, byte[]> { [hash] = content });
-        var cache = new ContentAddressedStore(root: Path.Combine(path1: m_root, path2: "objects"));
-        var stager = new ContentAddressedUpdateStager(cache: cache, cacheRoot: m_root, source: source);
+        var cache = new ContentAddressedStore(root: Path.Combine(path1: m_root.RootPath, path2: "objects"));
+        var stager = new ContentAddressedUpdateStager(cache: cache, cacheRoot: m_root.RootPath, source: source);
         var file = new ReleasePayloadFile(Path: "shared.dll", Hash: hash, Size: content.Length);
 
         var first = await stager.StageAsync(cancellationToken: TestContext.Current.CancellationToken, manifest: ManifestFor(file: file, version: "1.0.0"), rid: "win-x64");

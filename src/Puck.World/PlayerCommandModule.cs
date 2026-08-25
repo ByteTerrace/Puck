@@ -37,9 +37,6 @@ namespace Puck.World;
 /// "next free slot"/either-order profile-then-slot convenience does not apply there.</para>
 /// </remarks>
 internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopulation population, WorldScreenBinder screens, WorldDefinition definition, IServerLink link, WorldServer server, WorldPerceptionAnchor anchor, WorldClient client, Func<InputRouter> router, WorldInstanceHost instances, WorldSeatBindings seatBindings, WorldSeatAuthorityRouter seatRouter) : ICommandModule {
-    // The reserved trailing token an instance-addressed drive-a-player verb carries — see TryStripInstanceToken.
-    private const string InstanceTokenPrefix = "instance:";
-
     public const string AssignCommand = Puck.World.Client.PlayerCommandNames.AssignCommand;
     /// <summary>The keyboard-claim command (Keyboard F1..F4, press edge). The target slot rides the binding's Axis1D
     /// value as a 1-based player number, the clean scalar constant a binding carries.</summary>
@@ -394,10 +391,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
 
         if (
             (count == 0) ||
-            !args[(count - 1)].StartsWith(
-            comparisonType: StringComparison.OrdinalIgnoreCase,
-            value: InstanceTokenPrefix
-        )
+            !WorldArgs.IsInstanceToken(token: args[(count - 1)])
         ) {
             target = new InstanceTarget(
                 EffectiveCount: count,
@@ -408,35 +402,14 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
             return true;
         }
 
-        var name = args[(count - 1)][InstanceTokenPrefix.Length..].ToString();
-
-        if (string.IsNullOrWhiteSpace(value: name)) {
-            target = default;
-            error = CommandResult.Error(output: $"[{verb}: instance: must name a running instance — see world.instance.status]");
-
-            return false;
-        }
-
-        if (string.Equals(
-            a: name,
-            b: WorldInstanceHost.BootInstanceName,
-            comparisonType: StringComparison.Ordinal
+        if (!WorldArgs.TryResolveInstance(
+            token: args[(count - 1)],
+            verb: verb,
+            instances: m_instances,
+            instance: out var instance,
+            error: out error
         )) {
             target = default;
-            error = CommandResult.Error(output: $"[{verb}: '{WorldInstanceHost.BootInstanceName}' is the world this process booted with — omit instance: to address it]");
-
-            return false;
-        }
-
-        if (
-            !m_instances.TryGet(
-            instance: out var instance,
-            name: name
-        ) ||
-            (instance is null)
-        ) {
-            target = default;
-            error = CommandResult.Error(output: $"[{verb}: no instance named '{name}' — see world.instance.status]");
 
             return false;
         }
@@ -452,11 +425,10 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
     // Splices ` instance:<name>` just inside a bracketed echo's closing ']' — the same surgery WithPerceptionAnchor
     // uses for anchor=body:<n>, reused here because an instance-targeted read has no perception anchor to report but
     // still owes the caller which instance answered.
-    private static string WithInstanceTag(string text, string instanceName) =>
-        (text.EndsWith(value: ']')
-            ? $"{text[..^1]} instance:{instanceName}]"
-            : text
-        );
+    private static string WithInstanceTag(string text, string instanceName) => WorldArgs.SpliceTag(
+        text: text,
+        tag: $"instance:{instanceName}"
+    );
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {

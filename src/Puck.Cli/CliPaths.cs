@@ -42,10 +42,15 @@ internal static class CliPaths {
     // probe; the working directory covers an executable invoked from elsewhere in a checkout.
     private static string? Discover() =>
         (Ascend(start: AppContext.BaseDirectory) ?? Ascend(start: Environment.CurrentDirectory));
-    private static string? Ascend(string start) {
+    private static string? Ascend(string start) =>
+        AscendUntil(start: start, probe: static directory => (File.Exists(path: Path.Combine(path1: directory.FullName, path2: "Puck.slnx")) ? directory.FullName : null));
+
+    // The marker walk every verb that ascends from a start directory shares: try `probe` at `start`, then each
+    // parent in turn, stopping at the first non-null result (or the file system root).
+    public static string? AscendUntil(string start, Func<DirectoryInfo, string?> probe) {
         for (var directory = new DirectoryInfo(path: start); (directory is not null); directory = directory.Parent) {
-            if (File.Exists(path: Path.Combine(path1: directory.FullName, path2: "Puck.slnx"))) {
-                return directory.FullName;
+            if (probe(directory) is { } match) {
+                return match;
             }
         }
 

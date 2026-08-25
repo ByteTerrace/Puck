@@ -21,5 +21,8 @@
         <!-- StubDecisionTableTests exercises the stub's pure selection policy directly — a Test-kind project may
              reference any ranked project regardless of row, and the stub's own closure stays empty. -->
         <ProjectReference Include="..\..\src\Puck.Launcher.Stub\Puck.Launcher.Stub.csproj" />
+        <!-- ReleaseChainFixture mints its throwaway signing chain through AttestationTestSupport's shared
+             key-minting/chain-signing helpers — a terminal-to-terminal edge between two Test-kind projects. -->
+        <ProjectReference Include="..\Puck.Attestation.Tests\Puck.Attestation.Tests.csproj" />
     </ItemGroup>
 </Project>

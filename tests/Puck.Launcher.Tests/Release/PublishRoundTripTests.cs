@@ -9,18 +9,15 @@ namespace Puck.Launcher.Tests.Release;
 /// <see cref="AttestationReleaseVerifier"/> — the dry-run verb itself never signs (see
 /// <c>Puck.Cli.Publish.PublishCommand</c>).</summary>
 public sealed class PublishRoundTripTests : IDisposable {
-    private readonly string m_root = Path.Combine(path1: Path.GetTempPath(), path2: $"puck-launcher-publish-tests-{Guid.NewGuid():n}");
+    private readonly TempStagingRoot m_root = new();
 
-    public void Dispose() {
-        if (Directory.Exists(path: m_root)) {
-            Directory.Delete(path: m_root, recursive: true);
-        }
-    }
+    public void Dispose() => m_root.Dispose();
+
     [Fact]
     public async Task UnsignedDryRunTree_VerifiesOnceSigned_ByAThrowawayChain() {
         // The exact walk PublishCommand performs: hash each payload file into the same objects/ tree
         // DirectoryReleaseSource reads.
-        var objectsStore = new ContentAddressedStore(root: m_root);
+        var objectsStore = new ContentAddressedStore(root: m_root.RootPath);
         var fileBytes = "puck.world payload byte content"u8.ToArray();
         var hash = objectsStore.Put(content: fileBytes);
         var unsigned = new ReleaseManifest(
@@ -38,12 +35,12 @@ public sealed class PublishRoundTripTests : IDisposable {
         );
         var fixture = new ReleaseChainFixture();
         var signed = fixture.Sign(document: unsigned, notAfter: (ReleaseChainFixture.Epoch + 3600), notBefore: ReleaseChainFixture.Epoch, sequence: 1);
-        var channelDirectory = Path.Combine(path1: m_root, path2: "stable");
+        var channelDirectory = Path.Combine(path1: m_root.RootPath, path2: "stable");
 
         Directory.CreateDirectory(path: channelDirectory);
         File.WriteAllBytes(path: Path.Combine(path1: channelDirectory, path2: "manifest.json"), bytes: ReleaseChainFixture.ToWireBytes(manifest: signed));
 
-        var source = new DirectoryReleaseSource(root: m_root);
+        var source = new DirectoryReleaseSource(root: m_root.RootPath);
         var fetch = await source.TryGetLatestManifestAsync(cancellationToken: TestContext.Current.CancellationToken, channel: "stable");
 
         Assert.True(condition: fetch.Found, userMessage: fetch.RefusalReason);

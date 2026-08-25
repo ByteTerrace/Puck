@@ -12,6 +12,7 @@ internal static class ParityManifestLoader {
     private const string ManifestSchema = "puck.parity.manifest.v1";
     private const int DefaultTileSize = 16;
     private const int MaxDepth = 16;
+    private static readonly Func<string, Exception> Refusal = static message => new ParityDocumentRefusal(message: message);
 
     public static bool TryLoadManifest(string path, out ParityManifest manifest, out string error) {
         manifest = null!;
@@ -19,19 +20,19 @@ internal static class ParityManifestLoader {
 
         try {
             using var document = ParseDocument(path: path);
-            var root = RequireObject(element: document.RootElement, context: "manifest root");
+            var root = CliStrictJson.RequireObject(element: document.RootElement, context: "manifest root", refusal: Refusal);
 
-            RequireOnlyMembers(element: root, context: "manifest root", "schema", "backend", "world", "captures");
+            CliStrictJson.RequireOnlyMembers(element: root, context: "manifest root", unknownMemberDetail: "strict documents refuse fields the comparator does not read.", refusal: Refusal, "schema", "backend", "world", "captures");
             RequireSchema(context: "manifest", element: root, expected: ManifestSchema);
 
-            var backend = ReadRequiredString(context: "manifest", element: root, member: "backend");
+            var backend = CliStrictJson.ReadRequiredString(context: "manifest", element: root, member: "backend", refusal: Refusal);
 
             if ((backend != "vulkan") && (backend != "directx")) {
                 throw new ParityDocumentRefusal(message: $"manifest backend '{backend}' is invalid; use exactly 'vulkan' or 'directx'.");
             }
 
-            var world = ReadRequiredString(context: "manifest", element: root, member: "world");
-            var capturesElement = ReadRequiredArray(context: "manifest", element: root, member: "captures");
+            var world = CliStrictJson.ReadRequiredString(context: "manifest", element: root, member: "world", refusal: Refusal);
+            var capturesElement = CliStrictJson.ReadRequiredArray(context: "manifest", element: root, member: "captures", refusal: Refusal);
 
             if (capturesElement.GetArrayLength() == 0) {
                 throw new ParityDocumentRefusal(message: "manifest captures is empty; a manifest with no scheduled captures proves nothing.");
@@ -73,9 +74,9 @@ internal static class ParityManifestLoader {
 
         try {
             using var document = ParseDocument(path: path);
-            var root = RequireObject(element: document.RootElement, context: "contract root");
+            var root = CliStrictJson.RequireObject(element: document.RootElement, context: "contract root", refusal: Refusal);
 
-            RequireOnlyMembers(element: root, context: "contract root", "schema", "tileSize", "stations");
+            CliStrictJson.RequireOnlyMembers(element: root, context: "contract root", unknownMemberDetail: "strict documents refuse fields the comparator does not read.", refusal: Refusal, "schema", "tileSize", "stations");
             RequireSchema(context: "contract", element: root, expected: ContractSchema);
 
             var tileSize = DefaultTileSize;
@@ -86,7 +87,7 @@ internal static class ParityManifestLoader {
                 }
             }
 
-            var stationsElement = ReadRequiredObject(context: "contract", element: root, member: "stations");
+            var stationsElement = CliStrictJson.ReadRequiredObject(context: "contract", element: root, member: "stations", refusal: Refusal);
             var stations = new Dictionary<string, ParityStationContract>(comparer: StringComparer.Ordinal);
 
             foreach (var property in stationsElement.EnumerateObject()) {
@@ -116,13 +117,13 @@ internal static class ParityManifestLoader {
     }
 
     private static ParityManifestCapture ReadCapture(JsonElement element, string context) {
-        var row = RequireObject(context: context, element: element);
+        var row = CliStrictJson.RequireObject(context: context, element: element, refusal: Refusal);
 
-        RequireOnlyMembers(element: row, context: context, "station", "tick", "frame", "stateHash", "census", "cameraInside");
+        CliStrictJson.RequireOnlyMembers(element: row, context: context, unknownMemberDetail: "strict documents refuse fields the comparator does not read.", refusal: Refusal, "station", "tick", "frame", "stateHash", "census", "cameraInside");
 
-        var station = ReadRequiredString(context: context, element: row, member: "station");
+        var station = CliStrictJson.ReadRequiredString(context: context, element: row, member: "station", refusal: Refusal);
         var tick = ReadRequiredUInt64(context: context, element: row, member: "tick");
-        var stateHash = ReadRequiredString(context: context, element: row, member: "stateHash");
+        var stateHash = CliStrictJson.ReadRequiredString(context: context, element: row, member: "stateHash", refusal: Refusal);
 
         if (!IsStateHash(value: stateHash)) {
             throw new ParityDocumentRefusal(message: $"{context} stateHash '{stateHash}' is not 16 lower-case hex digits.");
@@ -144,8 +145,8 @@ internal static class ParityManifestLoader {
             throw new ParityDocumentRefusal(message: $"{context} cameraInside is false, so frame and census are required.");
         }
 
-        var frame = ReadRequiredString(context: context, element: row, member: "frame");
-        var census = ReadCensus(context: context, element: ReadRequiredObject(context: context, element: row, member: "census"));
+        var frame = CliStrictJson.ReadRequiredString(context: context, element: row, member: "frame", refusal: Refusal);
+        var census = ReadCensus(context: context, element: CliStrictJson.ReadRequiredObject(context: context, element: row, member: "census", refusal: Refusal));
 
         return new ParityManifestCapture(Station: station, Tick: tick, StateHash: stateHash, CameraInside: false, Frame: frame, Census: census);
     }
@@ -163,17 +164,17 @@ internal static class ParityManifestLoader {
         return census;
     }
     private static ParityStationContract ReadStationContract(JsonElement element, string context) {
-        var row = RequireObject(context: context, element: element);
+        var row = CliStrictJson.RequireObject(context: context, element: element, refusal: Refusal);
 
-        RequireOnlyMembers(element: row, context: context, "tileMeanDelta", "tileMaxDelta", "censusFloor");
+        CliStrictJson.RequireOnlyMembers(element: row, context: context, unknownMemberDetail: "strict documents refuse fields the comparator does not read.", refusal: Refusal, "tileMeanDelta", "tileMaxDelta", "censusFloor");
 
-        var tileMeanDelta = ReadRequiredFiniteDouble(context: context, element: row, member: "tileMeanDelta");
+        var tileMeanDelta = CliStrictJson.ReadRequiredFiniteNumber(context: context, element: row, member: "tileMeanDelta", descriptor: "finite number", refusal: Refusal);
 
         if (tileMeanDelta < 0) {
             throw new ParityDocumentRefusal(message: $"{context} tileMeanDelta must be zero or greater.");
         }
 
-        var tileMaxDelta = ReadRequiredInt32(context: context, element: row, member: "tileMaxDelta");
+        var tileMaxDelta = CliStrictJson.ReadRequiredInt32(context: context, element: row, member: "tileMaxDelta", refusal: Refusal);
 
         if (tileMaxDelta < 0) {
             throw new ParityDocumentRefusal(message: $"{context} tileMaxDelta must be zero or greater.");
@@ -182,7 +183,7 @@ internal static class ParityManifestLoader {
         var censusFloor = new Dictionary<string, long>(comparer: StringComparer.Ordinal);
 
         if (row.TryGetProperty(propertyName: "censusFloor", value: out var censusFloorElement)) {
-            foreach (var property in RequireObject(context: $"{context} censusFloor", element: censusFloorElement).EnumerateObject()) {
+            foreach (var property in CliStrictJson.RequireObject(context: $"{context} censusFloor", element: censusFloorElement, refusal: Refusal).EnumerateObject()) {
                 if ((property.Value.ValueKind != JsonValueKind.Number) || !property.Value.TryGetInt64(value: out var floor) || (floor < 0)) {
                     throw new ParityDocumentRefusal(message: $"{context} censusFloor.{property.Name} must be a non-negative integer minimum.");
                 }
@@ -194,56 +195,14 @@ internal static class ParityManifestLoader {
         return new ParityStationContract(CensusFloor: censusFloor, TileMaxDelta: tileMaxDelta, TileMeanDelta: tileMeanDelta);
     }
     private static void RequireSchema(JsonElement element, string context, string expected) {
-        var schema = ReadRequiredString(context: context, element: element, member: "schema");
+        var schema = CliStrictJson.ReadRequiredString(context: context, element: element, member: "schema", refusal: Refusal);
 
         if (!string.Equals(a: schema, b: expected, comparisonType: StringComparison.Ordinal)) {
             throw new ParityDocumentRefusal(message: $"{context} schema '{schema}' is not '{expected}'.");
         }
     }
-    private static JsonDocument ParseDocument(string path) {
-        var document = JsonDocument.Parse(
-            utf8Json: File.ReadAllBytes(path: path),
-            options: new JsonDocumentOptions { AllowTrailingCommas = false, CommentHandling = JsonCommentHandling.Disallow, MaxDepth = MaxDepth }
-        );
-
-        if (TryFindDuplicateMember(element: document.RootElement, path: "$", duplicate: out var duplicate)) {
-            document.Dispose();
-
-            throw new ParityDocumentRefusal(message: $"duplicate JSON member '{duplicate}' is ambiguous; the comparator must see one value.");
-        }
-
-        return document;
-    }
-    private static bool TryFindDuplicateMember(JsonElement element, string path, out string duplicate) {
-        if (element.ValueKind == JsonValueKind.Object) {
-            var names = new HashSet<string>(comparer: StringComparer.Ordinal);
-
-            foreach (var property in element.EnumerateObject()) {
-                if (!names.Add(item: property.Name)) {
-                    duplicate = $"{path}.{property.Name}";
-
-                    return true;
-                }
-                if (TryFindDuplicateMember(element: property.Value, path: $"{path}.{property.Name}", duplicate: out duplicate)) {
-                    return true;
-                }
-            }
-        } else if (element.ValueKind == JsonValueKind.Array) {
-            var index = 0;
-
-            foreach (var item in element.EnumerateArray()) {
-                if (TryFindDuplicateMember(element: item, path: $"{path}[{index}]", duplicate: out duplicate)) {
-                    return true;
-                }
-
-                index++;
-            }
-        }
-
-        duplicate = string.Empty;
-
-        return false;
-    }
+    private static JsonDocument ParseDocument(string path) =>
+        CliStrictJson.ParseStrict(path: path, maxDepth: MaxDepth, duplicateDetail: "the comparator must see one value.", refusal: Refusal);
     private static bool IsStateHash(string value) {
         if (value.Length != 16) {
             return false;
@@ -256,29 +215,6 @@ internal static class ParityManifestLoader {
         }
 
         return true;
-    }
-    private static JsonElement RequireObject(JsonElement element, string context) {
-        if (element.ValueKind != JsonValueKind.Object) {
-            throw new ParityDocumentRefusal(message: $"{context} must be an object.");
-        }
-
-        return element;
-    }
-    private static void RequireOnlyMembers(JsonElement element, string context, params string[] allowed) {
-        var names = new HashSet<string>(collection: allowed, comparer: StringComparer.Ordinal);
-
-        foreach (var property in element.EnumerateObject()) {
-            if (!names.Contains(item: property.Name)) {
-                throw new ParityDocumentRefusal(message: $"{context} contains unknown member '{property.Name}'; strict documents refuse fields the comparator does not read.");
-            }
-        }
-    }
-    private static string ReadRequiredString(JsonElement element, string member, string context) {
-        if (!element.TryGetProperty(propertyName: member, value: out var value) || (value.ValueKind != JsonValueKind.String) || string.IsNullOrWhiteSpace(value: value.GetString())) {
-            throw new ParityDocumentRefusal(message: $"{context} {member} is required and must be non-blank.");
-        }
-
-        return value.GetString()!;
     }
     private static bool ReadRequiredBool(JsonElement element, string member, string context) {
         if (!element.TryGetProperty(propertyName: member, value: out var value) || ((value.ValueKind != JsonValueKind.True) && (value.ValueKind != JsonValueKind.False))) {
@@ -293,34 +229,6 @@ internal static class ParityManifestLoader {
         }
 
         return result;
-    }
-    private static int ReadRequiredInt32(JsonElement element, string member, string context) {
-        if (!element.TryGetProperty(propertyName: member, value: out var value) || (value.ValueKind != JsonValueKind.Number) || !value.TryGetInt32(value: out var result)) {
-            throw new ParityDocumentRefusal(message: $"{context} {member} must be a finite in-range integer.");
-        }
-
-        return result;
-    }
-    private static double ReadRequiredFiniteDouble(JsonElement element, string member, string context) {
-        if (!element.TryGetProperty(propertyName: member, value: out var value) || (value.ValueKind != JsonValueKind.Number) || !value.TryGetDouble(value: out var result) || !double.IsFinite(d: result)) {
-            throw new ParityDocumentRefusal(message: $"{context} {member} must be a finite number.");
-        }
-
-        return result;
-    }
-    private static JsonElement ReadRequiredArray(JsonElement element, string member, string context) {
-        if (!element.TryGetProperty(propertyName: member, value: out var value) || (value.ValueKind != JsonValueKind.Array)) {
-            throw new ParityDocumentRefusal(message: $"{context} {member} is required and must be an array.");
-        }
-
-        return value;
-    }
-    private static JsonElement ReadRequiredObject(JsonElement element, string member, string context) {
-        if (!element.TryGetProperty(propertyName: member, value: out var value)) {
-            throw new ParityDocumentRefusal(message: $"{context} {member} is required and must be an object.");
-        }
-
-        return RequireObject(context: $"{context} {member}", element: value);
     }
 
     private sealed class ParityDocumentRefusal(string message) : Exception(message: message);

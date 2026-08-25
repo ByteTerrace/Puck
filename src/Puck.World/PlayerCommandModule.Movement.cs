@@ -924,12 +924,14 @@ internal sealed partial class PlayerCommandModule {
     private string WithPerceptionAnchor(string text, int index, bool refused) {
         if (
             refused ||
-            !IsSeat(index: index) ||
-            !text.EndsWith(value: ']')
+            !IsSeat(index: index)
         ) {
             return text;
         }
 
-        return $"{text[..^1]} anchor=body:{m_anchor.PerceivedBody(slot: index)}]";
+        return WorldArgs.SpliceTag(
+            text: text,
+            tag: $"anchor=body:{m_anchor.PerceivedBody(slot: index)}"
+        );
     }
 }

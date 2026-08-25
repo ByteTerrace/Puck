@@ -139,4 +139,31 @@ internal static class SignedFixedPointArithmetic {
             : y
         );
     }
+    /// <summary>Multiplies two signed raws at the supplied fixed-point split, rounding to nearest with ties to even
+    /// and wrapping the rounded product to the signed carrier.</summary>
+    internal static long Multiply(long x, long y, int fractionBitCount) =>
+        FusedArithmetic.ScaleProductSum(
+            value: FusedArithmetic.Product(
+                left: x,
+                right: y
+            ),
+            shift: -fractionBitCount
+        );
+    /// <summary>Multiplies two signed raws at the supplied fixed-point split, rounding to nearest with ties to even
+    /// and throwing when the rounded product leaves the signed carrier.</summary>
+    internal static long MultiplyChecked(long x, long y, int fractionBitCount) {
+        var product = FusedArithmetic.Product(
+            left: x,
+            right: y
+        );
+        var scaled = FusedArithmetic.ScaleMagnitudeToNearest(
+            magnitude: product.Magnitude,
+            shift: -fractionBitCount
+        );
+
+        return FromCheckedMagnitude(
+            magnitude: scaled.Magnitude,
+            negative: product.Negative
+        );
+    }
 }

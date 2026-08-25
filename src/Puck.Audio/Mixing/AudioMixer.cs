@@ -48,6 +48,30 @@ public sealed class MachineBlockSource(IAudioMachine machine) : IAudioBlockSourc
 /// Zero steady-state allocation: every scratch and table is preallocated at construction.
 /// </summary>
 public sealed class AudioMixer {
+    // Linear coefficient ramp in Q32: prev → target across the block, one add per frame — the setup and per-frame
+    // advance AccumulateMono and AccumulateStereoTap share, differing only in where each reads its sample from.
+    private struct Q32GainRamp {
+        private long m_currentLeft;
+        private long m_currentRight;
+        private readonly long m_stepLeft;
+        private readonly long m_stepRight;
+
+        internal Q32GainRamp(int frames, int previousLeft, int previousRight, int targetLeft, int targetRight) {
+            m_currentLeft = (((long)previousLeft) << 16);
+            m_currentRight = (((long)previousRight) << 16);
+            m_stepLeft = (((((long)targetLeft) - previousLeft) << 16) / frames);
+            m_stepRight = (((((long)targetRight) - previousRight) << 16) / frames);
+        }
+
+        // Advances one frame and returns this frame's Q16 left/right gains.
+        internal void Advance(out long gainLeftQ16, out long gainRightQ16) {
+            m_currentLeft += m_stepLeft;
+            m_currentRight += m_stepRight;
+            gainLeftQ16 = (m_currentLeft >> 16);
+            gainRightQ16 = (m_currentRight >> 16);
+        }
+    }
+
     private const int CenterPanQ16 = 46341;
     private const long ClipKneeDivisor = (27L << 26);
     // Soft-clip constants: knee start H, knee width W = 3G, ceiling H + G = 32767; divisor 27·2^26 = G/W³ inverted.
@@ -193,20 +217,24 @@ public sealed class AudioMixer {
         );
     }
     private static void AccumulateMono(int frames, Span<int> left, int previousLeft, int previousRight, Span<int> right, ReadOnlySpan<int> source, int targetLeft, int targetRight) {
-        // Linear coefficient ramp in Q32: prev → target across the block, one add per frame.
-        var currentLeft = (((long)previousLeft) << 16);
-        var currentRight = (((long)previousRight) << 16);
-        var stepLeft = (((((long)targetLeft) - previousLeft) << 16) / frames);
-        var stepRight = (((((long)targetRight) - previousRight) << 16) / frames);
+        var ramp = new Q32GainRamp(
+            frames: frames,
+            previousLeft: previousLeft,
+            previousRight: previousRight,
+            targetLeft: targetLeft,
+            targetRight: targetRight
+        );
 
         for (var n = 0; (n < frames); n++) {
-            currentLeft += stepLeft;
-            currentRight += stepRight;
+            ramp.Advance(
+                gainLeftQ16: out var gainLeftQ16,
+                gainRightQ16: out var gainRightQ16
+            );
 
             var sample = ((long)source[n]);
 
-            left[n] += ((int)((sample * (currentLeft >> 16)) >> 16));
-            right[n] += ((int)((sample * (currentRight >> 16)) >> 16));
+            left[n] += ((int)((sample * gainLeftQ16) >> 16));
+            right[n] += ((int)((sample * gainRightQ16) >> 16));
         }
     }
     private static void AccumulateStereoTap(
@@ -221,14 +249,19 @@ public sealed class AudioMixer {
         int targetLeft,
         int targetRight
     ) {
-        var currentLeft = (((long)previousLeft) << 16);
-        var currentRight = (((long)previousRight) << 16);
-        var stepLeft = (((((long)targetLeft) - previousLeft) << 16) / frames);
-        var stepRight = (((((long)targetRight) - previousRight) << 16) / frames);
+        var ramp = new Q32GainRamp(
+            frames: frames,
+            previousLeft: previousLeft,
+            previousRight: previousRight,
+            targetLeft: targetLeft,
+            targetRight: targetRight
+        );
 
         for (var n = 0; (n < frames); n++) {
-            currentLeft += stepLeft;
-            currentRight += stepRight;
+            ramp.Advance(
+                gainLeftQ16: out var gainLeftQ16,
+                gainRightQ16: out var gainRightQ16
+            );
 
             if (n >= pulledFrames) {
                 continue; // Underrun tail: silence, but the ramp still advances (no step on refill).
@@ -240,8 +273,8 @@ public sealed class AudioMixer {
                 _ => ((source[(2 * n)] + source[((2 * n) + 1)]) / 2),
             });
 
-            left[n] += ((int)((sample * (currentLeft >> 16)) >> 16));
-            right[n] += ((int)((sample * (currentRight >> 16)) >> 16));
+            left[n] += ((int)((sample * gainLeftQ16) >> 16));
+            right[n] += ((int)((sample * gainRightQ16) >> 16));
         }
     }
     private static void ComputePan(in AudioListener listener, long dxRaw, long dzRaw, out int panLeftQ16, out int panRightQ16) {

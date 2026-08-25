@@ -487,60 +487,30 @@ internal sealed class WorldPlacementCommandModule(WorldServer server, WorldPopul
             return false;
         }
 
-        if (!args[0].StartsWith(
-            comparisonType: StringComparison.OrdinalIgnoreCase,
-            value: InstanceTokenPrefix
-        )) {
+        if (!WorldArgs.IsInstanceToken(token: args[0])) {
             instance = null;
             error = CommandResult.Error(output: $"[{verb}: unrecognized '{args[0]}' — expected [instance:<name>]]");
 
             return false;
         }
 
-        var name = args[0][InstanceTokenPrefix.Length..].ToString();
-
-        if (string.IsNullOrWhiteSpace(value: name)) {
-            instance = null;
-            error = CommandResult.Error(output: $"[{verb}: instance: must name a running instance — see world.instance.status]");
-
-            return false;
-        }
-
-        if (string.Equals(
-            a: name,
-            b: WorldInstanceHost.BootInstanceName,
-            comparisonType: StringComparison.Ordinal
-        )) {
-            instance = null;
-            error = CommandResult.Error(output: $"[{verb}: '{WorldInstanceHost.BootInstanceName}' is the world this process booted with — omit instance: to address it]");
-
-            return false;
-        }
-
-        if (
-            !instances.TryGet(
-            instance: out var resolved,
-            name: name
-        ) ||
-            (resolved is null)
-        ) {
-            instance = null;
-            error = CommandResult.Error(output: $"[{verb}: no instance named '{name}' — see world.instance.status]");
-
-            return false;
-        }
-
-        instance = resolved;
-        error = null;
-
-        return true;
+        return WorldArgs.TryResolveInstance(
+            token: args[0],
+            verb: verb,
+            instances: instances,
+            instance: out instance,
+            error: out error
+        );
     }
     // Splices ` instance:<name>` just inside a bracketed echo's closing ']' — the same surgery
     // PlayerCommandModule.WithInstanceTag uses, so a script can tell which instance answered. A no-op for the boot
     // instance (null): its own echoes carry no tag.
     private static string WithInstanceTag(string text, WorldInstance? instance) =>
-        (((instance is not null) && text.EndsWith(value: ']'))
-            ? $"{text[..^1]} instance:{instance.Name}]"
+        ((instance is not null)
+            ? WorldArgs.SpliceTag(
+                text: text,
+                tag: $"instance:{instance.Name}"
+            )
             : text
         );
 
@@ -575,10 +545,7 @@ internal sealed class WorldPlacementCommandModule(WorldServer server, WorldPopul
                     return new CommandResult(Output: DescribeFaces());
                 }
 
-                if (args[0].StartsWith(
-                    comparisonType: StringComparison.OrdinalIgnoreCase,
-                    value: InstanceTokenPrefix
-                )) {
+                if (WorldArgs.IsInstanceToken(token: args[0])) {
                     return CommandResult.Error(output: "[world.faces: no instance-addressed form — screens are the boot instance's own; see world.inhabitants/world.attachments/world.portals/world.destinations for instance:<name>]");
                 }
 
@@ -666,8 +633,4 @@ internal sealed class WorldPlacementCommandModule(WorldServer server, WorldPopul
             }
         );
     }
-
-    // The reserved trailing token every instance-addressed read-back in this module shares — the same spelling
-    // PlayerCommandModule.TryStripInstanceToken and WorldRateCommandModule establish.
-    private const string InstanceTokenPrefix = "instance:";
 }

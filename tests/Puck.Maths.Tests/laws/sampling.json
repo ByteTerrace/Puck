@@ -1369,5 +1369,48 @@
         "Absolute": ""
       }
     ]
+  },
+  {
+    "Id": "sampling.pcg3d-lattice-noise-reference-and-corners",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.Pcg3dLatticeNoise",
+        "Name": "Pcg3d"
+      },
+      {
+        "Type": "Puck.Maths.Pcg3dLatticeNoise",
+        "Name": "ValueNoise01"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Pcg3d over the full 6³ edge cross product and 256 drawn triples",
+        "Against": "the identical Jarzynski & Olano mix, formed independently in BigInteger with the 2³² carrier reduction taken EXPLICITLY at every step",
+        "Shared": "",
+        "Citation": "the subject relies on the carrier's own unchecked uint wrap to perform the reduction; the reference never wraps implicitly. Different route, exact on both sides, so the substrate condition does not arise",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ValueNoise01 stays inside its documented [0, 1) band over 256 drawn cell/noise-edge/seed combinations",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedUpstream",
+        "Subject": "ValueNoise01 at 108 exact cell-corner coordinates (nx, nz both 0..5, noise-cell edge 1, 7 or 16)",
+        "Against": "the corner extraction FixedQ4816.FromRawBits(Pcg3d(nx, nz, seed).X >> 16), formed directly against the PUBLIC Pcg3d rather than through ValueNoise01's own private corner step",
+        "Shared": "the public Pcg3d hash: at a whole-cell boundary the quintic fade is exactly zero on both axes so the bilinear blend collapses onto the near corner, tying the two public members together rather than checking either against an outside reference",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
   }
 ]

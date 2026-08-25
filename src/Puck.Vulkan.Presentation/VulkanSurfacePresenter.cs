@@ -34,11 +34,6 @@ public sealed class VulkanSurfacePresenter : ISurfacePresenter, IPresentSurfaceR
         m_surfaceTransferFactory = surfaceTransferFactory;
     }
 
-    private static GpuPixelFormat ToGpuFormat(SurfaceFormat format) => format switch {
-        SurfaceFormat.B8G8R8A8Unorm => GpuPixelFormat.B8G8R8A8Unorm,
-        SurfaceFormat.R8G8B8A8Unorm => GpuPixelFormat.R8G8B8A8Unorm,
-        _ => throw new InvalidOperationException(message: "The surface format has no Vulkan readback mapping."),
-    };
     private void ReleaseCaptureResources() {
         m_captureReadback?.Dispose();
         m_captureReadback = null;
@@ -101,7 +96,7 @@ public sealed class VulkanSurfacePresenter : ISurfacePresenter, IPresentSurfaceR
             deviceContext: m_renderer,
             surface: surface,
             surfaceTransferFactory: m_surfaceTransferFactory,
-            toGpuFormat: ToGpuFormat
+            toGpuFormat: GpuPixelFormats.FromSurfaceFormat
         );
     }
     /// <inheritdoc/>

@@ -439,20 +439,10 @@ internal static class ReferencesCommand {
 
         return null;
     }
-    private static string? Ascend(string start) {
-        for (var directory = new DirectoryInfo(path: start); (directory is not null); directory = directory.Parent) {
-            // .slnx first, .sln as the fallback. Extensions are compared exactly rather than by wildcard,
-            // because a "*.sln" pattern also matches ".slnx" on Windows.
-            var candidate = (FirstWithExtension(directory: directory, extension: ".slnx")
-                ?? FirstWithExtension(directory: directory, extension: ".sln"));
-
-            if (candidate is not null) {
-                return candidate;
-            }
-        }
-
-        return null;
-    }
+    // .slnx first, .sln as the fallback. Extensions are compared exactly rather than by wildcard, because a
+    // "*.sln" pattern also matches ".slnx" on Windows.
+    private static string? Ascend(string start) =>
+        CliPaths.AscendUntil(start: start, probe: static directory => (FirstWithExtension(directory: directory, extension: ".slnx") ?? FirstWithExtension(directory: directory, extension: ".sln")));
     private static string? FirstWithExtension(DirectoryInfo directory, string extension) {
         try {
             return directory.EnumerateFiles()
