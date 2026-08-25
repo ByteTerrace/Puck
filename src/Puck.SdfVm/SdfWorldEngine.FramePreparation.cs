@@ -168,18 +168,8 @@ public sealed partial class SdfWorldEngine {
             words[word] |= (((uint)UpscaleSharpnessQ(view: frame.Views[index])) << shift);
         }
     }
-    private static double[] CrossDouble(double[] left, double[] right) => [
-        ((left[1] * right[2]) - (left[2] * right[1])),
-        ((left[2] * right[0]) - (left[0] * right[2])),
-        ((left[0] * right[1]) - (left[1] * right[0])),
-    ];
     private bool IsChildSlot(int slot) =>
         (0u != (m_childMask & (1u << slot)));
-    private static double[] NormalizeDouble(double[] vector) {
-        var length = Math.Sqrt(d: (((vector[0] * vector[0]) + (vector[1] * vector[1])) + (vector[2] * vector[2])));
-
-        return [(vector[0] / length), (vector[1] / length), (vector[2] / length)];
-    }
     // Pack each moving entity's rigid transform into the dynamic-transform scratch — 2 float4 per slot: position.xyz
     // (+ pad) then the orientation quaternion (xyzw) — for upload into the buffer SDF_OP_TRANSFORM_DYNAMIC indexes by
     // slot. An empty list is only valid for a program with no dynamic slots (PrepareFrame throws otherwise); it still
@@ -343,36 +333,45 @@ public sealed partial class SdfWorldEngine {
     // bitangent's Z for the default sun, so double precision keeps the default-sun path bit-identical.
     private static void PackSunFrame(SdfFrame frame, Span<float> floats) {
         var sunBase = ((MaxScreenSurfaces + 8) * 4);
-        double[] sun = [frame.SunDirection.X, frame.SunDirection.Y, frame.SunDirection.Z];
-        var length = Math.Sqrt(d: (((sun[0] * sun[0]) + (sun[1] * sun[1])) + (sun[2] * sun[2])));
+        double sunX = frame.SunDirection.X, sunY = frame.SunDirection.Y, sunZ = frame.SunDirection.Z;
+        var length = Math.Sqrt(d: (((sunX * sunX) + (sunY * sunY)) + (sunZ * sunZ)));
 
         if (length <= 0d) {
             // A zero/degenerate direction has no frame to build. Fall back to the pinned default rather than uploading
             // NaNs into every shading term on the frame.
-            sun = [0.51343602f, 0.79349202f, 0.32673201f];
-            length = Math.Sqrt(d: (((sun[0] * sun[0]) + (sun[1] * sun[1])) + (sun[2] * sun[2])));
+            sunX = 0.51343602f; sunY = 0.79349202f; sunZ = 0.32673201f;
+            length = Math.Sqrt(d: (((sunX * sunX) + (sunY * sunY)) + (sunZ * sunZ)));
         }
 
-        sun = [(sun[0] / length), (sun[1] / length), (sun[2] / length)];
+        sunX /= length; sunY /= length; sunZ /= length;
 
         // tangent = normalize(Z x sun), bitangent = normalize(sun x tangent) — the construction the pasted literals
         // came from. A sun parallel to +Z degenerates the first cross, so fall back to the X axis there.
-        var reference = ((Math.Abs(value: sun[2]) > 0.9999d)
-            ? new double[] { 1d, 0d, 0d }
-            : [0d, 0d, 1d]
-        );
-        var tangent = NormalizeDouble(vector: CrossDouble(
-            left: reference,
-            right: sun
-        ));
-        var bitangent = NormalizeDouble(vector: CrossDouble(
-            left: sun,
-            right: tangent
-        ));
+        double referenceX, referenceY, referenceZ;
 
-        floats[(sunBase + 0)] = ((float)sun[0]); floats[(sunBase + 1)] = ((float)sun[1]); floats[(sunBase + 2)] = ((float)sun[2]); floats[(sunBase + 3)] = frame.SunWeight;
-        floats[(sunBase + 4)] = ((float)tangent[0]); floats[(sunBase + 5)] = ((float)tangent[1]); floats[(sunBase + 6)] = ((float)tangent[2]); floats[(sunBase + 7)] = frame.AmbientBase;
-        floats[(sunBase + 8)] = ((float)bitangent[0]); floats[(sunBase + 9)] = ((float)bitangent[1]); floats[(sunBase + 10)] = ((float)bitangent[2]); floats[(sunBase + 11)] = frame.AmbientHemisphere;
+        if (Math.Abs(value: sunZ) > 0.9999d) {
+            referenceX = 1d; referenceY = 0d; referenceZ = 0d;
+        } else {
+            referenceX = 0d; referenceY = 0d; referenceZ = 1d;
+        }
+
+        var tangentX = ((referenceY * sunZ) - (referenceZ * sunY));
+        var tangentY = ((referenceZ * sunX) - (referenceX * sunZ));
+        var tangentZ = ((referenceX * sunY) - (referenceY * sunX));
+        var tangentLength = Math.Sqrt(d: (((tangentX * tangentX) + (tangentY * tangentY)) + (tangentZ * tangentZ)));
+
+        tangentX /= tangentLength; tangentY /= tangentLength; tangentZ /= tangentLength;
+
+        var bitangentX = ((sunY * tangentZ) - (sunZ * tangentY));
+        var bitangentY = ((sunZ * tangentX) - (sunX * tangentZ));
+        var bitangentZ = ((sunX * tangentY) - (sunY * tangentX));
+        var bitangentLength = Math.Sqrt(d: (((bitangentX * bitangentX) + (bitangentY * bitangentY)) + (bitangentZ * bitangentZ)));
+
+        bitangentX /= bitangentLength; bitangentY /= bitangentLength; bitangentZ /= bitangentLength;
+
+        floats[(sunBase + 0)] = ((float)sunX); floats[(sunBase + 1)] = ((float)sunY); floats[(sunBase + 2)] = ((float)sunZ); floats[(sunBase + 3)] = frame.SunWeight;
+        floats[(sunBase + 4)] = ((float)tangentX); floats[(sunBase + 5)] = ((float)tangentY); floats[(sunBase + 6)] = ((float)tangentZ); floats[(sunBase + 7)] = frame.AmbientBase;
+        floats[(sunBase + 8)] = ((float)bitangentX); floats[(sunBase + 9)] = ((float)bitangentY); floats[(sunBase + 10)] = ((float)bitangentZ); floats[(sunBase + 11)] = frame.AmbientHemisphere;
         floats[(sunBase + 12)] = frame.SunColor.X; floats[(sunBase + 13)] = frame.SunColor.Y; floats[(sunBase + 14)] = frame.SunColor.Z; floats[(sunBase + 15)] = 0f;
         floats[(sunBase + 16)] = frame.AmbientColor.X; floats[(sunBase + 17)] = frame.AmbientColor.Y; floats[(sunBase + 18)] = frame.AmbientColor.Z; floats[(sunBase + 19)] = 0f;
     }
