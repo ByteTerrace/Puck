@@ -9,7 +9,7 @@ public sealed partial class SdfProgramBuilder {
     /// a distance-level field — text as real world geometry (marchable, liftable, blendable, and with
     /// <see cref="SdfBlendOp.Subtraction"/> engravable into any surface). The glyph is the atlas letter where the atlas
     /// is bound (the world-lit render) and the conservative extruded cell box everywhere else. Most callers use
-    /// <see cref="Text(FontAtlas, string, Vector3, Vector3, Vector3, float, int, SdfBlendOp, float, float, TextLayoutOptions, int?)"/>, which
+    /// <see cref="Text(FontAtlas, string, Vector3, Vector3, Vector3, float, int, SdfBlendOp, float, float, TextLayoutOptions, int?, TextLayoutResult?)"/>, which
     /// bakes these arguments from a laid-out string; this primitive is the one-cell seam.
     /// <para>The cell must map with uniform scale — <paramref name="halfWidth"/>/<paramref name="halfHeight"/>
     /// proportional to the atlas cell's texel width/height — for the field to stay 1-Lipschitz (factor 1, no step
@@ -107,12 +107,18 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="dynamicSlot">A dynamic-transform slot each glyph's chain rides (<see cref="TransformDynamic"/>
     /// after its <see cref="ResetPoint"/>), so the whole run follows the slot's per-frame pose;
     /// <see langword="null"/> = a static run in world space.</param>
+    /// <param name="precomputedLayout">A <see cref="TextLayoutResult"/> already computed for this exact
+    /// (<paramref name="atlas"/>, <paramref name="text"/>, <paramref name="worldEmHeight"/>, <paramref name="layout"/>)
+    /// — reused instead of laying the run out again (<see cref="TextLayout.Layout(FontAtlas, string, TextLayoutOptions, float)"/>
+    /// is a pure function of those four inputs, so a caller that already computed it for the same call — measuring
+    /// reach, say — gets a bit-identical result either way). The caller is responsible for keeping it in sync;
+    /// <see langword="null"/> (the default) lays the run out fresh, exactly as before this parameter existed.</param>
     /// <exception cref="ArgumentNullException"><paramref name="atlas"/> or <paramref name="text"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="worldEmHeight"/> is not finite and greater than
     /// zero, <paramref name="origin"/> or <paramref name="extrudeHalfDepth"/> is not finite, <paramref name="right"/>
     /// and <paramref name="up"/> are not orthogonal, or <paramref name="blend"/> is not a defined
     /// <see cref="SdfBlendOp"/>.</exception>
-    public SdfProgramBuilder Text(FontAtlas atlas, string text, Vector3 origin, Vector3 right, Vector3 up, float worldEmHeight, int material, SdfBlendOp blend = SdfBlendOp.Union, float extrudeHalfDepth = 0.1f, float smooth = 0f, TextLayoutOptions? layout = null, int? dynamicSlot = null) {
+    public SdfProgramBuilder Text(FontAtlas atlas, string text, Vector3 origin, Vector3 right, Vector3 up, float worldEmHeight, int material, SdfBlendOp blend = SdfBlendOp.Union, float extrudeHalfDepth = 0.1f, float smooth = 0f, TextLayoutOptions? layout = null, int? dynamicSlot = null, TextLayoutResult? precomputedLayout = null) {
         ArgumentNullException.ThrowIfNull(atlas);
         ArgumentNullException.ThrowIfNull(text);
 
@@ -185,12 +191,12 @@ public sealed partial class SdfProgramBuilder {
             m43: 0f,
             m44: 1f
         ));
-        var laidOut = new TextLayout().Layout(
+        var laidOut = (precomputedLayout ?? new TextLayout().Layout(
             atlas: atlas,
             options: (layout ?? TextLayoutOptions.Default),
             text: text,
             scale: worldEmHeight
-        );
+        ));
         var atlasWidth = ((float)atlas.Width);
         var atlasHeight = ((float)atlas.Height);
 

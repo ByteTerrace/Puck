@@ -89,12 +89,28 @@ public static class WorldPlacementStamper {
         );
     }
     private static void EmitPlacement(SdfProgramBuilder builder, CreationDocument creation, int[] paletteIds, WorldPlacement placement, PackedFontAtlasCatalog? textCatalog, ulong worldSeed) {
+        // Laid out ONCE here (rather than once for the reach measure below plus once per pattern/scatter instance
+        // inside the visitor's EmitText call) — TextLayout.Layout is a pure function of (atlas, text, scale,
+        // options), all fixed for this whole EmitPlacement call, so every reader below shares this one result.
+        var hasText = (
+            (textCatalog is not null) &&
+            (creation.TextRuns is { Count: > 0 })
+        );
+        var textLayouts = (hasText
+            ? CreationStampEmitter.LayoutTextRuns(
+                document: creation,
+                fontFor: textCatalog!.Resolve,
+                scale: placement.Scale
+            )
+            : null
+        );
         var reach = CreationStampEmitter.RenderReach(
             document: creation,
             scale: placement.Scale,
             fontFor: ((textCatalog is { } catalog)
             ? name => catalog.Resolve(name: name)
-            : null)
+            : null),
+            textLayouts: textLayouts
         );
         var rotation = Quaternion.CreateFromAxisAngle(
             axis: Vector3.UnitY,
@@ -129,10 +145,7 @@ public static class WorldPlacementStamper {
                     placementRotation: rotation,
                     reflectionNormal: instance.ReflectionNormal
                 );
-                if (
-                    (textCatalog is not null) &&
-                    (creation.TextRuns is { Count: > 0 })
-                ) {
+                if (hasText) {
                     CreationStampEmitter.EmitText(
                         builder: builder,
                         document: creation,
@@ -142,12 +155,13 @@ public static class WorldPlacementStamper {
                             Scale: placement.Scale,
                             ReflectionNormal: instance.ReflectionNormal
                         ),
-                        fontFor: textCatalog.Resolve,
+                        fontFor: textCatalog!.Resolve,
                         materialFor: run => paletteIds[Math.Clamp(
                             value: (run.Material ?? 0),
                             max: (paletteIds.Length - 1),
                             min: 0
-                        )]
+                        )],
+                        textLayouts: textLayouts
                     );
                 }
                 if (scoped) {

@@ -35,6 +35,10 @@ public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
 
     private OverlayHudFrame m_frame;
     private bool m_hasFrame;
+    // Reused across every ComposeTemplate call (single-threaded on the window-pump thread, like every writer here) so
+    // only genuine capacity growth allocates — its high-water mark stabilizes after the first few frames' widest
+    // template, rather than a fresh empty builder paying the grow-copy sequence back up on every call.
+    private readonly System.Text.StringBuilder m_templateBuilder = new();
 
     /// <summary>Initializes a new instance of the <see cref="HudWriter"/> class.</summary>
     /// <param name="source">The HUD structure source.</param>
@@ -60,7 +64,7 @@ public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
     // validator already refused an unknown one before it could reach a live document, so an empty substitution keeps
     // the frame drawing rather than standing in for a refusal that belongs upstream.
     private string ComposeTemplate(ReadOnlySpan<OverlayHudTemplateSegment> segments) {
-        var builder = new System.Text.StringBuilder();
+        var builder = m_templateBuilder.Clear();
 
         for (var index = 0; (index < segments.Length); index++) {
             var segment = segments[index];

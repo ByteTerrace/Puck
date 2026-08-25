@@ -95,6 +95,12 @@ public sealed class WorldStampPool {
         public int EffectiveCursor => ((CueFrame > 0) ? CueFrame : FrameCursor);
         // Memoized per-frame shape-id → pose index (a pure derivation of the immutable document).
         public Dictionary<int, FrameTransformDocument>?[] FramePoses = [];
+        // The last text-run layout EmitOne computed for this registration's creation, and the scale it was computed
+        // at (see ResolveTextLayouts) — null until the first hasText call. A creation-content change never reuses
+        // this: Reconcile swaps in a brand-new Registration rather than mutating this one when the content hash
+        // moves, so a stale layout can never survive onto different text.
+        public TextLayoutResult[]? CachedTextLayouts;
+        public float CachedTextLayoutScale;
         public required string Key;
         public required AuthoredPartTable Parts;
         // The row-rooted placement (an ANIMATED or an ATTACHED one), or null for a body-rooted stamp.
@@ -208,6 +214,26 @@ public sealed class WorldStampPool {
             ? maxPlacementScale
             : (live?.Scale ?? 1f)
         );
+        // Text stays inside the probed envelope by trading capacity the validator already reserved: glyphs charge the
+        // same 48-shape stamp budget the boxes do (CreationDocument.StampShapeCount), each glyph chain is shorter than
+        // the probe's full-modifier shape chain, and the one text instance takes the place of the last parked
+        // placeholder (guaranteed parked, because a text-carrying creation has at most 47 shapes).
+        var hasText = (!probeWorstCase && (textCatalog is not null) &&
+            (document is { TextRuns.Count: > 0 }) && (shapes.Count < WorldPlacementPolicy.MaxAnimatedStampShapes));
+        // Cached on the surviving Registration (hasText implies live is not null — document came from live.Creation),
+        // keyed by the scale it was computed for: Reconcile only swaps in a fresh Registration when the creation's
+        // content hash moves (see isRecreateRequired), so a same-content rebuild reuses last rebuild's layout, and a
+        // resolved-scale change (a body look's scale edit; see Reconcile's update callback) still recomputes because
+        // the cached scale no longer matches.
+        var textLayouts = (hasText
+            ? ResolveTextLayouts(
+                live: live!,
+                document: document!,
+                fontFor: textCatalog!.Resolve,
+                scale: placementScale
+            )
+            : null
+        );
         var reach = ((probeWorstCase || (document is null))
             ? (2.5f * maxPlacementScale)
             : CreationStampEmitter.RenderReach(
@@ -215,15 +241,10 @@ public sealed class WorldStampPool {
                 scale: placementScale,
                 fontFor: ((textCatalog is { } catalog)
                 ? name => catalog.Resolve(name: name)
-                : null)
+                : null),
+                textLayouts: textLayouts
             )
         );
-        // Text stays inside the probed envelope by trading capacity the validator already reserved: glyphs charge the
-        // same 48-shape stamp budget the boxes do (CreationDocument.StampShapeCount), each glyph chain is shorter than
-        // the probe's full-modifier shape chain, and the one text instance takes the place of the last parked
-        // placeholder (guaranteed parked, because a text-carrying creation has at most 47 shapes).
-        var hasText = (!probeWorstCase && (textCatalog is not null) &&
-            (document is { TextRuns.Count: > 0 }) && (shapes.Count < WorldPlacementPolicy.MaxAnimatedStampShapes));
 
         // Pass 1 — ungrouped shapes and unused slots: one tight dynamic instance per shape slot; parked when absent
         // (the beam cull skips it with one branch). The probe stays fully active with the full modifier envelope.
@@ -337,10 +358,33 @@ public sealed class WorldStampPool {
                 dynamicSlot: rootSlot,
                 scale: placementScale,
                 fontFor: textCatalog!.Resolve,
-                materialFor: run => paletteIds[((run.Material ?? 0) % paletteIds.Length)]
+                materialFor: run => paletteIds[((run.Material ?? 0) % paletteIds.Length)],
+                textLayouts: textLayouts
             );
             _ = builder.EndInstance();
         }
+    }
+    // The Registration-cached text layout for hasText's (document, scale): a cache hit when the last layout this
+    // registration computed still matches the scale being rendered this call, a fresh CreationStampEmitter.LayoutTextRuns
+    // otherwise (also the first call — CachedTextLayouts starts null on every freshly registered/recreated instance).
+    private static TextLayoutResult[] ResolveTextLayouts(Registration live, CreationDocument document, float scale, Func<string?, FontAtlas> fontFor) {
+        if (
+            (live.CachedTextLayouts is { } cached) &&
+            (live.CachedTextLayoutScale == scale)
+        ) {
+            return cached;
+        }
+
+        var layouts = CreationStampEmitter.LayoutTextRuns(
+            document: document,
+            fontFor: fontFor,
+            scale: scale
+        );
+
+        live.CachedTextLayouts = layouts;
+        live.CachedTextLayoutScale = scale;
+
+        return layouts;
     }
     // One shape's emission: ResetPoint + TransformDynamic + [domain ops + static local pose, OR the per-shape slot's
     // own pre-composed pose] + [twist/bend point ops] + the scaled primitive + [dilate/onion field ops, scoped
