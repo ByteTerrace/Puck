@@ -101,10 +101,13 @@ public static partial class WorldDefinitionValidator {
                 }
 
                 if (placement?.Badge is { } badge) {
-                    if (badge.Count != 2) {
-                        errors.Add(item: $"{slotPath}.badge needs exactly [x, y].");
-                    } else if (!float.IsFinite(f: badge[0]) || !float.IsFinite(f: badge[1]) || (MathF.Abs(x: badge[0]) > 1f) || (MathF.Abs(x: badge[1]) > 1f)) {
-                        errors.Add(item: $"{slotPath}.badge [{badge[0]}, {badge[1]}] is outside [-1, 1] on an axis.");
+                    switch (ValidateBadge(badge: badge)) {
+                        case BadgeValidity.WrongCount:
+                            errors.Add(item: $"{slotPath}.badge needs exactly [x, y].");
+                            break;
+                        case BadgeValidity.OutOfRange:
+                            errors.Add(item: $"{slotPath}.badge [{badge[0]}, {badge[1]}] is outside [-1, 1] on an axis.");
+                            break;
                     }
                 }
             }
@@ -192,7 +195,7 @@ public static partial class WorldDefinitionValidator {
                             errors.Add(item: $"{piecePath}.at needs finite [x, y] pitches.");
                         }
 
-                        if ((piece.Badge is { } badge) && ((badge.Count != 2) || !float.IsFinite(f: badge[0]) || !float.IsFinite(f: badge[1]) || (MathF.Abs(x: badge[0]) > 1f) || (MathF.Abs(x: badge[1]) > 1f))) {
+                        if ((piece.Badge is { } badge) && (ValidateBadge(badge: badge) != BadgeValidity.Valid)) {
                             errors.Add(item: $"{piecePath}.badge needs [x, y] within [-1, 1].");
                         }
                     }
@@ -304,6 +307,25 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
+    }
+    // A badge's failure mode, so a caller can pick its own wording per case while sharing the underlying rule.
+    private enum BadgeValidity {
+        Valid,
+        WrongCount,
+        OutOfRange
+    }
+    // Shared badge rule: exactly two elements, both finite, each within [-1, 1] — the same [x, y] offset shape used
+    // by a slot placement and a bank piece.
+    private static BadgeValidity ValidateBadge(IReadOnlyList<float> badge) {
+        if (badge.Count != 2) {
+            return BadgeValidity.WrongCount;
+        }
+
+        if (!float.IsFinite(f: badge[0]) || !float.IsFinite(f: badge[1]) || (MathF.Abs(x: badge[0]) > 1f) || (MathF.Abs(x: badge[1]) > 1f)) {
+            return BadgeValidity.OutOfRange;
+        }
+
+        return BadgeValidity.Valid;
     }
     private static void RequireOptionalFinite(float? value, string name, List<string> errors) {
         if (value is { } authored) {
