@@ -111,7 +111,7 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
         for (var iteration = 0; (iteration < iterations); iteration++) {
             var pushed = false;
 
-            foreach (var volume in volumes) {
+            foreach (ref readonly var volume in volumes) {
                 pushed |= Sweep(
                     colliders: colliders,
                     groundNormal: ref groundNormal,

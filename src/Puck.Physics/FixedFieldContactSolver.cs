@@ -223,7 +223,7 @@ public sealed class FixedFieldContactSolver(
         return true;
     }
     private bool ResolveBox(ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation,
-        in FixedBodyColliderVolume volume, FixedVector3 up, ref bool grounded, ref bool extracted, ref FixedVector3 lastNormal, ref FixedVector3 groundNormal) {
+        in FixedBodyColliderVolume volume, FixedQ4816 conservativeMinimum, FixedVector3 up, ref bool grounded, ref bool extracted, ref FixedVector3 lastNormal, ref FixedVector3 groundNormal) {
         var center = (position + orientation.Rotate(vector: volume.Center));
         var coord = FixedPosition.FromLocal(local: center);
 
@@ -237,9 +237,9 @@ public sealed class FixedFieldContactSolver(
 
         // The tight per-normal support needs the gradient tap, which has not run yet — pre-screen against the
         // orientation-independent worst case (Cauchy-Schwarz: no unit normal projects the half-extents past their
-        // vector length) so a clean miss never pays for a gradient sample.
-        var conservativeMinimum = (volume.HalfExtents.Length + m_skin);
-
+        // vector length) so a clean miss never pays for a gradient sample. conservativeMinimum (HalfExtents.Length +
+        // m_skin) is invariant across every relaxation iteration for this volume, so Resolve hoists it into a
+        // once-per-call buffer instead of re-running the fixed-point sqrt on every pass.
         if (distance >= conservativeMinimum) {
             return false;
         }
@@ -768,6 +768,16 @@ public sealed class FixedFieldContactSolver(
         var grounded = false;
         var groundNormal = FixedVector3.Zero;
         var lastNormal = FixedVector3.Zero;
+        // Box conservative bounds are invariant across every iteration below (same volume.HalfExtents, same m_skin),
+        // so the fixed-point sqrt behind FixedVector3.Length runs once per box volume here instead of once per
+        // iteration per box volume; non-box slots stay unread.
+        Span<FixedQ4816> boxConservativeMinimum = stackalloc FixedQ4816[volumes.Length];
+
+        for (var index = 0; (index < volumes.Length); index++) {
+            if (volumes[index].Kind == FixedBodyColliderKind.Box) {
+                boxConservativeMinimum[index] = (volumes[index].HalfExtents.Length + m_skin);
+            }
+        }
 
         for (var iteration = 0; (iteration < m_iterations); iteration++) {
             // A field authoring its own up samples it HERE, per iteration and at the body's current position: that is
@@ -789,8 +799,9 @@ public sealed class FixedFieldContactSolver(
             // pass. A skipped volume is re-classified next iteration against wherever the claiming volume moved
             // the body.
             var extracted = false;
+            var volumeIndex = 0;
 
-            foreach (var volume in volumes) {
+            foreach (ref readonly var volume in volumes) {
                 pushed |= volume.Kind switch {
                     FixedBodyColliderKind.Sphere => ResolveSphere(
                     groundNormal: ref groundNormal,
@@ -817,6 +828,7 @@ public sealed class FixedFieldContactSolver(
                     volume: in volume
                 ),
                     FixedBodyColliderKind.Box => ResolveBox(
+                    conservativeMinimum: boxConservativeMinimum[volumeIndex],
                     extracted: ref extracted,
                     groundNormal: ref groundNormal,
                     grounded: ref grounded,
@@ -829,6 +841,7 @@ public sealed class FixedFieldContactSolver(
                 ),
                     _ => throw new InvalidOperationException(message: $"Unknown body collider kind {volume.Kind}."),
                 };
+                volumeIndex++;
             }
 
             if (!pushed) {
