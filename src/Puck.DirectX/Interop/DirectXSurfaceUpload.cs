@@ -109,7 +109,7 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
     /// <exception cref="ObjectDisposedException">The instance has been disposed.</exception>
     /// <exception cref="ArgumentException"><paramref name="pixels"/> does not exactly match the tightly packed extent, or a dimension is zero.</exception>
     /// <exception cref="DirectXException">A Direct3D 12 call failed.</exception>
-    public void Upload(ReadOnlySpan<byte> pixels, uint width, uint height, DirectXPixelFormat format) {
+    public void Upload(ReadOnlySpan<byte> pixels, uint width, uint height, GpuPixelFormat format) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this
@@ -132,7 +132,7 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
             throw new ArgumentException(message: "Texture dimensions must be non-zero.");
         }
 
-        var dxgiFormat = ToDxgiFormat(format: format);
+        var dxgiFormat = DirectXGpuFormats.ToDxgiFormat(gpuPixelFormat: format);
         var packedRowBytes = checked((int)(width * FormatByteSize(format: dxgiFormat)));
 
         if (pixels.Length < (packedRowBytes * height)) {
@@ -253,17 +253,6 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
             _ => throw new ArgumentOutOfRangeException(
                 actualValue: format,
                 message: "The pixel format has no known byte size.",
-                paramName: nameof(format)
-            ),
-        };
-    }
-    private static DXGI_FORMAT ToDxgiFormat(DirectXPixelFormat format) {
-        return format switch {
-            DirectXPixelFormat.B8G8R8A8Unorm => DXGI_FORMAT.DXGI_FORMAT_B8G8R8A8_UNORM,
-            DirectXPixelFormat.R8G8B8A8Unorm => DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM,
-            _ => throw new ArgumentOutOfRangeException(
-                actualValue: format,
-                message: "The pixel format has no DXGI mapping.",
                 paramName: nameof(format)
             ),
         };

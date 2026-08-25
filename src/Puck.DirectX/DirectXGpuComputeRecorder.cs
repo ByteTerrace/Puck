@@ -476,13 +476,9 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
     }
     private static DirectXCommandBufferState DecodeState(nint commandBufferHandle) =>
         ((DirectXCommandBufferState)GCHandle.FromIntPtr(value: commandBufferHandle).Target!);
-    private static D3D12_RESOURCE_STATES ToResourceState(GpuImageLayout layout) {
-        return layout switch {
-            GpuImageLayout.ShaderReadOnly => D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
-            // The cross-backend handoff state: a shared resource must rest in COMMON for a foreign device to open it.
-            GpuImageLayout.External => D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON,
-            // General and Undefined both resolve to the compute read/write state (the kernel's working layout).
-            _ => D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-        };
-    }
+    private static D3D12_RESOURCE_STATES ToResourceState(GpuImageLayout layout) =>
+        // General and Undefined both resolve to the compute read/write state (the kernel's working layout).
+        DirectXGpuFormats.TryToResourceState(layout: layout, resourceState: out var resourceState)
+            ? resourceState
+            : D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
 }

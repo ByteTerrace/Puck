@@ -13,7 +13,7 @@ namespace Puck.DirectX;
 /// Implements <see cref="IGpuSurfaceTransferFactory"/> for Direct3D 12 by creating adapter wrappers over
 /// <see cref="DirectXSurfaceUpload"/> and the inline readback and import helpers. Each wrapper downcasts
 /// <see cref="IGpuDeviceContext"/> to <see cref="IDirectXDeviceContext"/> at call time and converts
-/// <see cref="GpuPixelFormat"/> constants to <c>DXGI_FORMAT</c> / <see cref="DirectXPixelFormat"/> values.
+/// <see cref="GpuPixelFormat"/> constants to <c>DXGI_FORMAT</c> values.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed class DirectXGpuSurfaceTransferFactory : IGpuSurfaceTransferFactory {
@@ -211,16 +211,13 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
     // byte-for-byte; General names storage images whose D3D12 resource state is UNORDERED_ACCESS.
     private void RecordCopyCommandList(ID3D12Device* device, nint sourceImageHandle, GpuPixelFormat format, uint width, uint height, GpuImageLayout sourceLayout, out nint commandAllocator, out nint commandList) {
         var dxgiFormat = DirectXGpuFormats.ToDxgiFormat(gpuPixelFormat: format);
-        var sourceState = sourceLayout switch {
-            GpuImageLayout.External => D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON,
-            GpuImageLayout.General => D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-            GpuImageLayout.ShaderReadOnly => D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
-            _ => throw new ArgumentOutOfRangeException(
+        var sourceState = DirectXGpuFormats.TryToResourceState(layout: sourceLayout, resourceState: out var resourceState)
+            ? resourceState
+            : throw new ArgumentOutOfRangeException(
                 paramName: nameof(sourceLayout),
                 actualValue: sourceLayout,
                 message: "Readback requires an External, General, or ShaderReadOnly source image."
-            ),
-        };
+            );
 
         device->CreateCommandAllocator(
             ppCommandAllocator: out var ca,
@@ -378,13 +375,11 @@ file sealed class DirectXGpuSurfaceUpload(DirectXSurfaceUpload upload) : IGpuSur
         uint width,
         uint height
     ) {
-        var dxFormat = DirectXGpuFormats.ToDirectXPixelFormat(gpuPixelFormat: format);
-
         upload.Upload(
             pixels: pixels.Span,
             width: width,
             height: height,
-            format: dxFormat
+            format: format
         );
 
         if (m_currentToken.IsAllocated) {
