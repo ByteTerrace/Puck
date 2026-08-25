@@ -81,7 +81,8 @@ public sealed record WorldDefinition(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldJudgeRow>? Judges = null,
     [property: JsonPropertyName("seatModes"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldSeatModeFamily>? SeatModesRaw = null,
     [property: JsonPropertyName("probes"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldProbe>? ProbesRaw = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCapturesSection? Captures = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCapturesSection? Captures = null,
+    [property: JsonPropertyName("attachment"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldAttachmentSection? AttachmentRaw = null
 ) {
     /// <summary>The document schema version. A loader rejects any other value; the canonical writer always emits it.</summary>
     public const string SchemaVersion = "puck.world.def.v1";
@@ -89,6 +90,10 @@ public sealed record WorldDefinition(
     /// <summary>Gets the data-side addon descriptors — ABSENT resolves to none.</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldAddonRow> Addons => (AddonsRaw ?? []);
+    /// <summary>Gets the climb/grapple authoring surface — ABSENT resolves to <see cref="WorldAttachmentSection.Absent"/>
+    /// (disabled; no attach channel reaches any body). The engine holds no attachment policy of its own.</summary>
+    [JsonIgnore]
+    public WorldAttachmentSection Attachment => (AttachmentRaw ?? WorldAttachmentSection.Absent);
     /// <summary>Gets the runtime lattice composite compiled from the state section's topology and lattice-shaped
     /// rows, or <see langword="null"/> when the state section declares no lattice. The state section is the single
     /// authored source; this accessor is the engine's compiled view of it.</summary>

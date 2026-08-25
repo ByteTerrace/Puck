@@ -66,45 +66,71 @@ public sealed partial class WorldBody {
             // integration, so the snapshot holds it stable). The action track below still advances, so a timed press
             // drains identically whether the intent drives the avatar or the route target.
         } else {
-            // moveSpeed goes through ResolveMoveSpeed's per-arm dispatch — grounded reads the rate live off the
-            // seated profile every frame (an identity.motion edit is real-time; a profileless stand-in falls back to the
-            // tuning's speed), clamped by the kit's own authored MoveSpeedEnvelope when declared; vehicle
-            // deliberately never reads the profile and instead clamps the kit's OWN TopSpeed through its
-            // TopSpeedEnvelope. Either arm, the clamp lands BEFORE ExecuteProgram ever sees the value, so the sim
-            // never observes an unclamped speed, and EffectiveMoveSpeed's read-back echo performs the SAME resolve.
-            // No envelope (the default) is a no-op clamp elided entirely: today's behavior, byte-identical.
-            var moveSpeed = ResolveMoveSpeed();
-            var turnSpeed = (Profile?.FixedTurnSpeed ?? m_tuning.TurnSpeed);
-
-            ExecuteProgram(
-                designationOutputs: designationOutputs,
-                effectOutputs: effectOutputs,
-                effectTargets: effectTargets,
-                entityIndex: entityIndex,
-                generatorInvocations: generatorInvocations,
-                intent: intent,
-                judgeInvocations: judgeInvocations,
-                moveSpeed: moveSpeed,
-                stepTicks: stepTicks,
-                turnSpeed: turnSpeed
+            // The attachment surface reads its own attach/detach/reel channels directly (never through the kit's
+            // action table — see WorldBody.Attachment.cs), so it runs here, ahead of the mode dispatch below, on
+            // the SAME "intent reaches the avatar" gate as everything else in this branch. A detach that fires this
+            // tick falls through to the ordinary ExecuteProgram path below in the SAME tick, already carrying the
+            // momentum Detach wrote into the vertical/planar channels.
+            ProcessAttachmentIntent(
+                intent: in intent,
+                stepTicks: stepTicks
+            );
+            ProcessReel(
+                intent: in intent,
+                stepTicks: stepTicks
             );
 
-            // The timed impulse overlay rides after the selected program, through its own accumulator.
-            if (m_overlayRemaining > 0) {
-                var overlayTicks = Math.Min(
-                    val1: stepTicks,
-                    val2: m_overlayRemaining
+            if (m_attachmentMode == WorldBodyAttachmentMode.Climb) {
+                // Climb REPLACES the ordinary program dispatch entirely: grounding/gravity are suspended for as
+                // long as the grip holds, and the body moves in the gripped surface's tangent plane instead —
+                // see AdvanceClimb's own remarks. Grapple takes the opposite path (falls through below unchanged):
+                // gravity stays on and the kit's own program keeps integrating; WorldPopulation.ResolveTethers
+                // clamps the result to the rope AFTER every body this tick has advanced.
+                AdvanceClimb(
+                    intent: in intent,
+                    stepTicks: stepTicks
+                );
+            } else {
+                // moveSpeed goes through ResolveMoveSpeed's per-arm dispatch — grounded reads the rate live off the
+                // seated profile every frame (an identity.motion edit is real-time; a profileless stand-in falls back to the
+                // tuning's speed), clamped by the kit's own authored MoveSpeedEnvelope when declared; vehicle
+                // deliberately never reads the profile and instead clamps the kit's OWN TopSpeed through its
+                // TopSpeedEnvelope. Either arm, the clamp lands BEFORE ExecuteProgram ever sees the value, so the sim
+                // never observes an unclamped speed, and EffectiveMoveSpeed's read-back echo performs the SAME resolve.
+                // No envelope (the default) is a no-op clamp elided entirely: today's behavior, byte-identical.
+                var moveSpeed = ResolveMoveSpeed();
+                var turnSpeed = (Profile?.FixedTurnSpeed ?? m_tuning.TurnSpeed);
+
+                ExecuteProgram(
+                    designationOutputs: designationOutputs,
+                    effectOutputs: effectOutputs,
+                    effectTargets: effectTargets,
+                    entityIndex: entityIndex,
+                    generatorInvocations: generatorInvocations,
+                    intent: intent,
+                    judgeInvocations: judgeInvocations,
+                    moveSpeed: moveSpeed,
+                    stepTicks: stepTicks,
+                    turnSpeed: turnSpeed
                 );
 
-                m_position += m_overlayAccumulator.Integrate(
-                    elapsedTicks: overlayTicks,
-                    ratePerSecond: m_overlayVelocity
-                );
-                m_overlayRemaining -= overlayTicks;
+                // The timed impulse overlay rides after the selected program, through its own accumulator.
+                if (m_overlayRemaining > 0) {
+                    var overlayTicks = Math.Min(
+                        val1: stepTicks,
+                        val2: m_overlayRemaining
+                    );
 
-                if (m_overlayRemaining == 0) {
-                    m_overlayVelocity = default;
-                    m_overlayAccumulator.Reset();
+                    m_position += m_overlayAccumulator.Integrate(
+                        elapsedTicks: overlayTicks,
+                        ratePerSecond: m_overlayVelocity
+                    );
+                    m_overlayRemaining -= overlayTicks;
+
+                    if (m_overlayRemaining == 0) {
+                        m_overlayVelocity = default;
+                        m_overlayAccumulator.Reset();
+                    }
                 }
             }
         }

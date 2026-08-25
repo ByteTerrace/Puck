@@ -20,6 +20,22 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
         format: "0.#####",
         provider: CultureInfo.InvariantCulture
     );
+    // The WORLD-level attachment read-back: the world default grip policy and every tuning field, resolved-vs-authored
+    // side by side. body.attachment answers the per-body question (mode/anchor/rope); this answers "what did the
+    // document decide".
+    private string DescribeAttachmentPolicy() {
+        var authored = server.Definition.Attachment;
+        var compiled = population.CompiledAttachment;
+
+        if (!authored.Enabled) {
+            return "[world.attach-policy: attachment disabled — no attach/detach/reel channel reaches any body]";
+        }
+
+        return string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"[world.attach-policy: enabled defaultGrip={authored.DefaultGrip} climbReach={authored.ClimbReach:0.#####} climbSpeed={authored.ClimbSpeed:0.#####} gripCost={authored.GripCost:0.#####} grappleMaxDistance={authored.GrappleMaxDistance:0.#####} grappleAssistHalfAngleDegrees={authored.GrappleAssistHalfAngleDegrees:0.#####} reelRate={authored.ReelRate:0.#####} reelInFloor={authored.ReelInFloor:0.#####} releaseMomentumScale={authored.ReleaseMomentumScale:0.#####} | channels attach={(authored.AttachChannel ?? "none")}(ordinal={compiled.AttachChannelOrdinal}) detach={(authored.DetachChannel ?? "none")}(ordinal={compiled.DetachChannelOrdinal}) reel={(authored.ReelChannel ?? "none")}(ordinal={compiled.ReelChannelOrdinal})]"
+        );
+    }
     private string DescribeGravity() {
         var authored = server.Definition.Gravity;
         var compiled = population.CompiledGravity;
@@ -170,6 +186,15 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.attach-policy",
+            description: "Reads the authored/compiled climb-grapple attachment section back (Immediate): the world default grip policy, every reach/speed/cost/rope/reel/release tuning field, and each attach/detach/reel channel name with its resolved ordinal. 'attachment disabled' when the world authors no attachment section (today's behavior, unchanged). body.attachment answers the per-body question this does not — mode, anchor, rope length.",
+            handler: (_, args) => ((args.Count == 0)
+                ? new CommandResult(Output: DescribeAttachmentPolicy())
+                : CommandResult.Error(output: $"[world.attach-policy: unrecognized '{args[0]}' — expected no arguments]")),
+            routing: CommandRouting.Immediate
+        );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.gravity",

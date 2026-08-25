@@ -34,6 +34,10 @@ public sealed partial class WorldPopulation {
         }
         m_bodyMotionPrograms = programs;
         m_channels = WorldChannelTable.Compile(channels: definition.Channels);
+        m_fixedAttachment = FixedWorldAttachment.Compile(
+            channels: m_channels,
+            section: definition.Attachment
+        );
         m_targetRows = definition.TargetRegisters;
         m_targets = WorldTargetRegisterTable.Compile(
             registers: definition.TargetRegisters,
@@ -488,6 +492,7 @@ public sealed partial class WorldPopulation {
             body.SetContactField(field: m_contactField);
             body.SetGravityField(field: m_gravityField);
             body.SetWaterline(level: m_waterline);
+            body.SetAttachmentPolicy(policy: m_fixedAttachment);
         }
 
         m_revision++;
