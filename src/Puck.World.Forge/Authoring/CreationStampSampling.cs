@@ -5,59 +5,14 @@ namespace Puck.Forge.Authoring;
 /// <summary>
 /// Deterministic hash-lattice placement sampling — the document-neutral engine behind a placement distribution's
 /// Noise/Scatter regions (see <c>Puck.World.WorldDistributionRegion.Noise</c>/<c>.Scatter</c>), resolving the
-/// placement-local instance offsets a static placement multiplies into. Mirrors
-/// <c>Puck.World.Server.WorldFieldLattice</c>'s Noise/Scatter field fills EXACTLY — the same integer PCG3D mix, the
-/// same quintic-smoothed value noise, the same Q48.16 arithmetic throughout, and the same seed fold against the
-/// world seed — so a scattered stand of trees and a patchy field paint agree on what "the same seed" means. Every
-/// decision is integer/fixed-point; no float ever enters the admission or position math (placements feed colliders,
-/// which are simulation state). KEEP the hash mix IN SYNC with <c>WorldFieldLattice.Pcg3d</c> and
-/// <c>sdfPcg3d</c> (<c>Assets/Shaders/Sdf/sdf-vm.hlsli</c>).
+/// placement-local instance offsets a static placement multiplies into. Routes through
+/// <see cref="Pcg3dLatticeNoise"/> — the same integer PCG3D mix, the same quintic-smoothed value noise, the same
+/// Q48.16 arithmetic throughout as <c>Puck.World.Server.WorldFieldLattice</c>'s Noise/Scatter field fills — so a
+/// scattered stand of trees and a patchy field paint agree on what "the same seed" means. Every decision is
+/// integer/fixed-point; no float ever enters the admission or position math (placements feed colliders, which are
+/// simulation state).
 /// </summary>
 public static class CreationStampSampling {
-    // Integer PCG3D (Jarzynski & Olano) — see WorldFieldLattice.Pcg3d's own remark. Forge cannot reference
-    // Puck.World.Server (the reverse dependency direction), so this is a deliberate, small, bit-identical copy —
-    // the same convention ShaderIsa.Pcg3d already keeps for its own layer.
-    private static (uint X, uint Y, uint Z) Pcg3d(uint x, uint y, uint z) {
-        unchecked {
-            x = ((x * 1664525u) + 1013904223u);
-            y = ((y * 1664525u) + 1013904223u);
-            z = ((z * 1664525u) + 1013904223u);
-            x += (y * z); y += (z * x); z += (x * y);
-            x ^= (x >> 16); y ^= (y >> 16); z ^= (z >> 16);
-            x += (y * z); y += (z * x); z += (x * y);
-
-            return (x, y, z);
-        }
-    }
-    // A corner's [0, 1) value in Q48.16 — the hash's top 16 bits ARE the fractional ticks.
-    private static FixedQ4816 Corner01(uint cellX, uint cellZ, uint seed) => FixedQ4816.FromRawBits(value: (long)(Pcg3d(x: cellX, y: cellZ, z: seed).X >> 16));
-    // Quintic fade 6t^5-15t^4+10t^3 in Q48.16 — exact for t in [0, 1].
-    private static FixedQ4816 Quintic(FixedQ4816 t) {
-        var t2 = (t * t);
-        var t3 = (t2 * t);
-
-        return (t3 * (((t * ((t * FixedQ4816.FromInteger(value: 6)) - FixedQ4816.FromInteger(value: 15)))) + FixedQ4816.FromInteger(value: 10)));
-    }
-    private static FixedQ4816 Lerp(FixedQ4816 a, FixedQ4816 b, FixedQ4816 t) => (a + ((b - a) * t));
-    // One octave of 2D value noise over the placement-local CELL INDEX (XZ), Q48.16 throughout.
-    private static FixedQ4816 ValueNoise01(int cellX, int cellZ, int noiseCells, uint seed) {
-        var nx = (cellX / noiseCells);
-        var nz = (cellZ / noiseCells);
-        var fx = (FixedQ4816.FromInteger(value: (cellX - (nx * noiseCells))) / FixedQ4816.FromInteger(value: noiseCells));
-        var fz = (FixedQ4816.FromInteger(value: (cellZ - (nz * noiseCells))) / FixedQ4816.FromInteger(value: noiseCells));
-        var ux = Quintic(t: fx);
-        var uz = Quintic(t: fz);
-        var c00 = Corner01(cellX: (uint)nx, cellZ: (uint)nz, seed: seed);
-        var c10 = Corner01(cellX: (uint)(nx + 1), cellZ: (uint)nz, seed: seed);
-        var c01 = Corner01(cellX: (uint)nx, cellZ: (uint)(nz + 1), seed: seed);
-        var c11 = Corner01(cellX: (uint)(nx + 1), cellZ: (uint)(nz + 1), seed: seed);
-
-        return Lerp(
-            a: Lerp(a: c00, b: c10, t: ux),
-            b: Lerp(a: c01, b: c11, t: ux),
-            t: uz
-        );
-    }
     private static FixedQ4816 GridHalfExtent(FixedQ4816 cellSize, int count) => ((cellSize * FixedQ4816.FromInteger(value: count)) / FixedQ4816.FromInteger(value: 2));
     private static uint FoldSeed(uint seed, ulong worldSeed) => unchecked((uint)(seed ^ (uint)worldSeed ^ (uint)(worldSeed >> 32)));
 
@@ -108,7 +63,7 @@ public static class CreationStampSampling {
 
         for (var bz = 0; (bz < blocksZ); bz++) {
             for (var bx = 0; (bx < blocksX); bx++) {
-                var h = Pcg3d(
+                var h = Pcg3dLatticeNoise.Pcg3d(
                     x: unchecked((uint)bx),
                     y: unchecked((uint)bz),
                     z: hashSeed
@@ -159,7 +114,7 @@ public static class CreationStampSampling {
                 var cells = frequency;
 
                 for (var octave = 0; (octave < effectiveOctaves); octave++) {
-                    total += (amplitude * ValueNoise01(
+                    total += (amplitude * Pcg3dLatticeNoise.ValueNoise01(
                         cellX: x,
                         cellZ: z,
                         noiseCells: Math.Max(val1: 1, val2: cells),

@@ -176,7 +176,7 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
     // on an identity change — the fresh id re-enters the mixer from silence) and fire the arrival trigger for
     // synth-fed rows (the v1 trigger policy in the type remarks).
     private void Admit(EmitterPlan plan, string signatureToken) {
-        var signature = Fnv64(text: signatureToken);
+        var signature = Fnv1aHash.Compute(values: signatureToken);
         var arrived = true;
 
         if (m_registry.TryGetValue(
@@ -211,7 +211,7 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
             // spatializes; a voice gain here would double-scale.
             SubmitTrigger(
                 patchId: patchId,
-                seed: Fnv64(text: plan.Key) ^ signature,
+                seed: Fnv1aHash.Compute(values: plan.Key) ^ signature,
                 gainQ16: 65536,
                 emitterId: plan.Id
             );
@@ -688,15 +688,6 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
         }
 
         return null;
-    }
-    private static ulong Fnv64(string text) {
-        var hash = Fnv1aHash.Create();
-
-        foreach (var character in text) {
-            hash.Add(value: ((uint)character));
-        }
-
-        return hash.Value;
     }
     private static int GainQ16(float gain) => ((int)FixedQ4816.FromDouble(value: gain).Value);
     private bool HasPatch(string patchId) {
@@ -1608,7 +1599,7 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
                 // repeated cues of one event get distinct noise streams.
                 SubmitTrigger(
                     patchId: row.PatchId,
-                    seed: Fnv64(text: eventToken) ^ ++m_cueOrdinal,
+                    seed: Fnv1aHash.Compute(values: eventToken) ^ ++m_cueOrdinal,
                     gainQ16: 65536,
                     emitterId: id
                 );

@@ -8297,6 +8297,13 @@
       ]
     },
     {
+      "Id": "Puck.Maths.Fnv1aHash.Compute(System.ReadOnlySpan<System.Char>)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.fnv1a-published-vector"
+      ]
+    },
+    {
       "Id": "Puck.Maths.Fnv1aHash.Create()",
       "State": "covered",
       "CoveredBy": [
@@ -12271,6 +12278,20 @@
       "CoveredBy": [
         "sampling.gaussian-moments-cdf-tail-at-scale",
         "sampling.pcg-reference-vector-and-state"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Pcg3dLatticeNoise.Pcg3d(System.UInt32,System.UInt32,System.UInt32)",
+      "State": "covered",
+      "CoveredBy": [
+        "sampling.pcg3d-lattice-noise-reference-and-corners"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Pcg3dLatticeNoise.ValueNoise01(System.Int32,System.Int32,System.Int32,System.UInt32)",
+      "State": "covered",
+      "CoveredBy": [
+        "sampling.pcg3d-lattice-noise-reference-and-corners"
       ]
     },
     {

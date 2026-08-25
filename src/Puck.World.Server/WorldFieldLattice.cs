@@ -546,49 +546,6 @@ public sealed class WorldFieldLattice {
     /// <summary>Gets the lattice's layer count.</summary>
     public int Layers => m_layers;
 
-    // Integer PCG3D (Jarzynski & Olano) — the SAME mixing the renderer's sdfPcg3d uses, so cell decisions are
-    // bit-identical everywhere integers are. KEEP IN SYNC with sdfPcg3d in Assets/Shaders/Sdf/sdf-vm.hlsli.
-    private static (uint X, uint Y, uint Z) Pcg3d(uint x, uint y, uint z) {
-        unchecked {
-            x = ((x * 1664525u) + 1013904223u);
-            y = ((y * 1664525u) + 1013904223u);
-            z = ((z * 1664525u) + 1013904223u);
-            x += (y * z); y += (z * x); z += (x * y);
-            x ^= (x >> 16); y ^= (y >> 16); z ^= (z >> 16);
-            x += (y * z); y += (z * x); z += (x * y);
-
-            return (x, y, z);
-        }
-    }
-    // A corner's [0, 1) value in Q48.16: the hash's top 16 bits ARE the fractional ticks — integer in, integer out.
-    private static FixedQ4816 Corner01(uint cellX, uint cellZ, uint seed) => FixedQ4816.FromRawBits(value: (long)(Pcg3d(x: cellX, y: cellZ, z: seed).X >> 16));
-    // Quintic fade 6t⁵−15t⁴+10t³ in Q48.16 — the CPU twin of the renderer's blend, exact for t in [0, 1].
-    private static FixedQ4816 Quintic(FixedQ4816 t) {
-        var t2 = (t * t);
-        var t3 = (t2 * t);
-
-        return (t3 * (((t * ((t * FixedQ4816.FromInteger(value: 6)) - FixedQ4816.FromInteger(value: 15)))) + FixedQ4816.FromInteger(value: 10)));
-    }
-    private static FixedQ4816 Lerp(FixedQ4816 a, FixedQ4816 b, FixedQ4816 t) => (a + ((b - a) * t));
-    // One octave of 2D value noise over the lattice CELL INDEX (XZ; layers share the column), Q48.16 throughout.
-    private static FixedQ4816 ValueNoise01(int cellX, int cellZ, int noiseCells, uint seed) {
-        var nx = (cellX / noiseCells);
-        var nz = (cellZ / noiseCells);
-        var fx = (FixedQ4816.FromInteger(value: (cellX - (nx * noiseCells))) / FixedQ4816.FromInteger(value: noiseCells));
-        var fz = (FixedQ4816.FromInteger(value: (cellZ - (nz * noiseCells))) / FixedQ4816.FromInteger(value: noiseCells));
-        var ux = Quintic(t: fx);
-        var uz = Quintic(t: fz);
-        var c00 = Corner01(cellX: (uint)nx, cellZ: (uint)nz, seed: seed);
-        var c10 = Corner01(cellX: (uint)(nx + 1), cellZ: (uint)nz, seed: seed);
-        var c01 = Corner01(cellX: (uint)nx, cellZ: (uint)(nz + 1), seed: seed);
-        var c11 = Corner01(cellX: (uint)(nx + 1), cellZ: (uint)(nz + 1), seed: seed);
-
-        return Lerp(
-            a: Lerp(a: c00, b: c10, t: ux),
-            b: Lerp(a: c01, b: c11, t: ux),
-            t: uz
-        );
-    }
     private void ApplyNoiseFill(int field, WorldLatticeFill.Noise fill, ulong worldSeed) {
         var value = Clamp(
             field: field,
@@ -608,7 +565,7 @@ public sealed class WorldFieldLattice {
                 var cells = fill.Frequency;
 
                 for (var octave = 0; (octave < fill.Octaves); octave++) {
-                    total += (amplitude * ValueNoise01(
+                    total += (amplitude * Pcg3dLatticeNoise.ValueNoise01(
                         cellX: x,
                         cellZ: z,
                         noiseCells: System.Math.Max(val1: 1, val2: cells),
@@ -658,7 +615,7 @@ public sealed class WorldFieldLattice {
                     for (var dx = -1; (!hit && (dx <= 1)); dx++) {
                         var bx = (blockX + dx);
                         var bz = (blockZ + dz);
-                        var h = Pcg3d(
+                        var h = Pcg3dLatticeNoise.Pcg3d(
                             x: unchecked((uint)bx),
                             y: unchecked((uint)bz),
                             z: seed

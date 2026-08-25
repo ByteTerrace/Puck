@@ -57,6 +57,18 @@ public struct Fnv1aHash {
 
         return hash.Value;
     }
+    /// <summary>Computes the 64-bit FNV-1a hash of a UTF-16 char span, folding each char as a 32-bit value.</summary>
+    /// <param name="values">The chars to hash.</param>
+    /// <returns>The hash value.</returns>
+    public static ulong Compute(ReadOnlySpan<char> values) {
+        var hash = Create();
+
+        foreach (var character in values) {
+            hash.Add(value: (uint)character);
+        }
+
+        return hash.Value;
+    }
     /// <summary>Creates an accumulator primed with the FNV-1a offset basis.</summary>
     /// <returns>A ready-to-fold accumulator.</returns>
     public static Fnv1aHash Create() =>
