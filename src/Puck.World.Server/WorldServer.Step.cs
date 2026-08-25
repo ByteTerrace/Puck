@@ -1072,27 +1072,17 @@ public sealed partial class WorldServer {
     /// scripted tape segment (<c>body.fly</c>/<c>EnqueueSegment</c>) is refused by the same fact a raw per-tick
     /// channel submission is.</remarks>
     public GrantVerdict ApplyIntentSubmission(WorldBody body, in IntentSubmission submission) {
-        if (TryDriveGateVerdict(
+        var gated = TryDriveGateVerdict(
             bodyIndex: submission.EntityIndex,
-            verdict: out var gated
-        )) {
-            if (!m_driveDenied[submission.EntityIndex]) {
-                Console.Error.WriteLine(value: $"[world.grant denied: {gated.DescribeRefusal(
-                    actor: submission.Principal,
-                    dropped: "intent dropped, body idle",
-                    subject: $"body:{submission.EntityIndex}",
-                    verb: "drive"
-                )}]");
-                m_driveDenied[submission.EntityIndex] = true;
-            }
-
-            return gated;
-        }
-
-        var verdict = m_grants.Allows(
-            principal: submission.Principal,
-            capability: WorldCapability.Drive,
-            subject: GrantSubject.Body(index: submission.EntityIndex)
+            verdict: out var gatedVerdict
+        );
+        var verdict = (gated
+            ? gatedVerdict
+            : m_grants.Allows(
+                principal: submission.Principal,
+                capability: WorldCapability.Drive,
+                subject: GrantSubject.Body(index: submission.EntityIndex)
+            )
         );
 
         if (!verdict.IsAllowed) {
