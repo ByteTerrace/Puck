@@ -80,6 +80,11 @@
             "$ref": "./common.schema.json#/$defs/WorldPlacementContribution",
             "description": "The placement\u0027s contribution facet (see WorldPlacementContribution) \u2014 marks the row a host-authored slot a federation partner fills, or null for an ordinary placement. Omitted from the wire when null. Composes with every other facet: the facet governs which creation the row shows and for how long, never its transform.",
             "default": null
+          },
+          "grip": {
+            "$ref": "./common.schema.json#/$defs/WorldPlacementGrip",
+            "description": "The placement\u0027s grip facet (see WorldPlacementGrip) \u2014 overrides the world\u0027s default climb policy for this row\u0027s compiled surface(s), or null to inherit the world default. Omitted from the wire when null. Requires Solid (validated).",
+            "default": null
           }
         },
         "required": [

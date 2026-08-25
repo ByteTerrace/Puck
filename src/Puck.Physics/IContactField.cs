@@ -54,6 +54,41 @@ public interface IContactField {
     /// <param name="up">The unit up axis on return.</param>
     /// <returns><see langword="true"/> when an up axis is available.</returns>
     bool TryUp(in FixedVector3 position, out FixedVector3 up);
+    /// <summary>Finds the nearest CLIMBABLE surface point within reach — the climb-attach query
+    /// (<see cref="FixedSurfaceQuery.TryNearest"/> gated by whichever climbability policy this provider composed at
+    /// build time). The default declines: only a provider that actually holds a climbable surface vocabulary
+    /// overrides this, so a field-quality world's bodies simply find no attach candidate rather than approximate
+    /// one.</summary>
+    /// <param name="probe">The world-space point to search from (a body's own position).</param>
+    /// <param name="reach">The non-negative maximum distance a result may sit from <paramref name="probe"/>.</param>
+    /// <param name="candidate">The nearest climbable surface point within reach, or <see langword="default"/> when
+    /// none qualifies.</param>
+    /// <param name="grantedByOverride">Whether a per-surface override (rather than the provider's own default grip
+    /// policy) is what made <paramref name="candidate"/> climbable. Meaningless when this returns
+    /// <see langword="false"/>.</param>
+    /// <returns><see langword="true"/> when a qualifying climbable surface exists.</returns>
+    bool TryNearestClimbableSurface(in FixedVector3 probe, FixedQ4816 reach, out FixedSurfaceAttachCandidate candidate, out bool grantedByOverride) {
+        candidate = default;
+        grantedByOverride = false;
+
+        return false;
+    }
+    /// <summary>Finds the best grapple anchor candidate along an aim direction — the directed attach query
+    /// (<see cref="FixedSurfaceQuery.TryNearestDirected"/>), independent of any climbability policy: a grapple
+    /// anchors to any surface within the cone, climbable or not. The default declines, matching
+    /// <see cref="TryNearestClimbableSurface"/>.</summary>
+    /// <param name="origin">The world-space aim origin (a body's own position).</param>
+    /// <param name="direction">The aim direction; need not be pre-normalized.</param>
+    /// <param name="maxDistance">The non-negative maximum distance a candidate's surface point may sit from
+    /// <paramref name="origin"/> — also the tether's rope length at attach.</param>
+    /// <param name="assistHalfAngle">The non-negative aim-assist cone half-angle, radians.</param>
+    /// <param name="candidate">The best anchor candidate, or <see langword="default"/> when none qualifies.</param>
+    /// <returns><see langword="true"/> when a qualifying candidate exists.</returns>
+    bool TryNearestSurfaceAlongDirection(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, FixedQ4816 assistHalfAngle, out FixedSurfaceAttachCandidate candidate) {
+        candidate = default;
+
+        return false;
+    }
 }
 /// <summary>The outcome of one <see cref="IContactField.Resolve"/> call — the grounded verdict every integrator
 /// consults, plus the last resolved non-walkable contact's surface normal. The normal is read-back only: it feeds no

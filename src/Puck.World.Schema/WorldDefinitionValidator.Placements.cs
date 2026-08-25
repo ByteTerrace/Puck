@@ -1223,6 +1223,16 @@ public static partial class WorldDefinitionValidator {
                 }
             }
 
+            // The GRIP facet overrides the world's default climb policy for this row's compiled surface(s) (see
+            // WorldPlacementGrip) — meaningful only alongside a solidity facet, since nothing else compiles a
+            // collider for the override to apply to.
+            if (
+                (placement.Grip is not null) &&
+                (placement.Solid is null)
+            ) {
+                errors.Add(item: $"{path}.grip requires .solid — a placement with no solidity facet compiles no collider for a grip override to apply to.");
+            }
+
             // The ATTACH facet binds the row's resolved pose to a live population body (see WorldPlacementAttach).
             // BodyIndex uses the same 0-based entity indexing as WorldAnchor.Entity and the body:<n> grant subject —
             // never the 1-based player.* seat number. Region, Solid (analytic contact provider), and Emission all

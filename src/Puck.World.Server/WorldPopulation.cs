@@ -170,7 +170,13 @@ public sealed partial class WorldPopulation {
     private WorldSolidField? m_targetField;
     private FixedQ4816? m_waterline;
     private WorldFieldLattice? m_fields;
+    // The compiled climb/grapple policy every live body reads its attach/detach/reel channel ordinals and grip/rope
+    // tuning from. Recompiled by CompileFixedTables beside every other sim-affecting table and handed to each live
+    // body the same way the contact field/gravity/waterline are (see the SetAttachmentPolicy call sites).
+    private FixedWorldAttachment m_fixedAttachment = FixedWorldAttachment.Absent;
 
+    /// <summary>Gets the compiled climb/grapple policy for read-back (<c>world.attach-policy</c>).</summary>
+    public FixedWorldAttachment CompiledAttachment => m_fixedAttachment;
     /// <summary>Gets the field lattice, when the world declares a <c>fields</c> section.</summary>
     public WorldFieldLattice? Fields => m_fields;
     /// <summary>Gets the compiled gravity declaration for read-back.</summary>

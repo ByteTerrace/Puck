@@ -7218,6 +7218,24 @@
             ],
             "additionalProperties": false,
             "default": null
+          },
+          "grip": {
+            "description": "The placement\u0027s grip facet (see WorldPlacementGrip) \u2014 overrides the world\u0027s default climb policy for this row\u0027s compiled surface(s), or null to inherit the world default. Omitted from the wire when null. Requires Solid (validated).",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "climbable": {
+                "description": "Whether this row\u0027s compiled surface(s) are climbable, overriding the world default.",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "climbable"
+            ],
+            "additionalProperties": false,
+            "default": null
           }
         },
         "required": [
@@ -10536,6 +10554,10 @@
                             },
                             "contribution": {
                               "$ref": "#/properties/placements/items/properties/contribution",
+                              "default": null
+                            },
+                            "grip": {
+                              "$ref": "#/properties/placements/items/properties/grip",
                               "default": null
                             }
                           },

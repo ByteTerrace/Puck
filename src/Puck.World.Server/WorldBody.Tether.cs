@@ -40,7 +40,7 @@ public sealed partial class WorldBody {
     /// <param name="minLength">The floor a reel-in clamps to. Must be non-negative.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="minLength"/> is negative, or
     /// <paramref name="length"/> is less than <paramref name="minLength"/>.</exception>
-    internal void SetTetherToWorldPoint(FixedVector3 anchor, FixedQ4816 length, FixedQ4816 minLength) {
+    public void SetTetherToWorldPoint(FixedVector3 anchor, FixedQ4816 length, FixedQ4816 minLength) {
         m_tether = new FixedTetherConstraint(
             length: length,
             minLength: minLength
@@ -57,7 +57,7 @@ public sealed partial class WorldBody {
     /// <param name="minLength">The floor a reel-in clamps to. Must be non-negative.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="bodyIndex"/> is negative, <paramref name="minLength"/>
     /// is negative, or <paramref name="length"/> is less than <paramref name="minLength"/>.</exception>
-    internal void SetTetherToBody(int bodyIndex, FixedVector3 localOffset, FixedQ4816 length, FixedQ4816 minLength) {
+    public void SetTetherToBody(int bodyIndex, FixedVector3 localOffset, FixedQ4816 length, FixedQ4816 minLength) {
         ArgumentOutOfRangeException.ThrowIfNegative(
             value: bodyIndex,
             paramName: nameof(bodyIndex)
@@ -71,7 +71,7 @@ public sealed partial class WorldBody {
         m_tetherAnchorPointOrLocalOffset = localOffset;
     }
     /// <summary>Detaches this body's tether. A no-op when none is attached.</summary>
-    internal void ClearTether() {
+    public void ClearTether() {
         m_tether = null;
         m_tetherAnchorBodyIndex = -1;
         m_tetherAnchorPointOrLocalOffset = FixedVector3.Zero;
@@ -81,7 +81,7 @@ public sealed partial class WorldBody {
     /// tick's reel — see <see cref="FixedTetherConstraint.Reel"/>.</summary>
     /// <param name="ratePerSecond">The signed rate the rope length changes at.</param>
     /// <param name="elapsedTicks">The number of engine ticks this call advances.</param>
-    internal void ReelTether(FixedQ4816 ratePerSecond, ulong elapsedTicks) {
+    public void ReelTether(FixedQ4816 ratePerSecond, ulong elapsedTicks) {
         if (m_tether is not { } tether) {
             return;
         }

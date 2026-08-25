@@ -31,6 +31,7 @@ public sealed partial class WorldPopulation {
         body.SetContactField(field: m_contactField);
         body.SetGravityField(field: m_gravityField);
         body.SetWaterline(level: m_waterline);
+        body.SetAttachmentPolicy(policy: m_fixedAttachment);
 
         var spawn = InhabitantSpawn(
             placement: placement,
@@ -90,6 +91,7 @@ public sealed partial class WorldPopulation {
         player.SetContactField(field: m_contactField);
         player.SetGravityField(field: m_gravityField);
         player.SetWaterline(level: m_waterline);
+        player.SetAttachmentPolicy(policy: m_fixedAttachment);
 
         player.Pose(
             position: entry.SpawnPosition,
@@ -254,6 +256,7 @@ public sealed partial class WorldPopulation {
         body.SetContactField(field: m_contactField);
         body.SetGravityField(field: m_gravityField);
         body.SetWaterline(level: m_waterline);
+        body.SetAttachmentPolicy(policy: m_fixedAttachment);
 
         var spawnPoint = m_seatSpawns[slot];
 
@@ -848,6 +851,7 @@ public sealed partial class WorldPopulation {
         body.SetContactField(field: m_contactField);
         body.SetGravityField(field: m_gravityField);
         body.SetWaterline(level: m_waterline);
+        body.SetAttachmentPolicy(policy: m_fixedAttachment);
         body.Pose(
             position: position,
             yawRadians: yawRadians,

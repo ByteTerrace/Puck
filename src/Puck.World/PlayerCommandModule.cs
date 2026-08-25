@@ -336,7 +336,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
     // Text mutations enter the same tick snapshots as physical input. Read-only inspection stays immediate so an
     // operator can inspect the last completed tick even while no simulation step is currently due.
     private static CommandDefinition Route(CommandDefinition command) =>
-        ((command.Name is "body.where" or "player.sticks" or "body.channels" or "body.state")
+        ((command.Name is "body.where" or "player.sticks" or "body.channels" or "body.state" or "body.attachment")
             ? command
             : command with { Routing = CommandRouting.Simulation }
         );
@@ -480,6 +480,10 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
         }
 
         foreach (var command in ModeVerbs()) {
+            yield return Route(command: command);
+        }
+
+        foreach (var command in AttachmentVerbs()) {
             yield return Route(command: command);
         }
     }
