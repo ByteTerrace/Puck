@@ -7,13 +7,10 @@ namespace Puck.Launcher.Tests.Release;
 /// <summary>Laws over the build-time placeholder trust anchor: a composition root that has not yet pinned a real
 /// release-signing chain must refuse every manifest, never crash importing the placeholder's (empty) key bytes.</summary>
 public sealed class PlaceholderReleaseVerifierTests : IDisposable {
-    private readonly string m_root = Path.Combine(path1: Path.GetTempPath(), path2: $"puck-launcher-placeholder-tests-{Guid.NewGuid():n}");
+    private readonly TempStagingRoot m_root = new();
 
-    public void Dispose() {
-        if (Directory.Exists(path: m_root)) {
-            Directory.Delete(path: m_root, recursive: true);
-        }
-    }
+    public void Dispose() => m_root.Dispose();
+
     [Fact]
     public void ReleaseTrustAnchor_Placeholder_IsRecognizedByDomainAlone() {
         Assert.True(condition: ReleaseTrustAnchor.Placeholder.IsPlaceholder);
@@ -58,12 +55,12 @@ public sealed class PlaceholderReleaseVerifierTests : IDisposable {
         services.AddSelfUpdate(
             options: new UpdateOptions(
                 App: "puck.world",
-                CacheRoot: m_root,
+                CacheRoot: m_root.RootPath,
                 Channel: "stable",
                 InstalledVersion: "0.0.0",
                 TrustAnchor: ReleaseTrustAnchor.Placeholder
             ),
-            releaseSource: new DirectoryReleaseSource(root: Path.Combine(path1: m_root, path2: "release"))
+            releaseSource: new DirectoryReleaseSource(root: Path.Combine(path1: m_root.RootPath, path2: "release"))
         );
 
         var verifier = services.BuildServiceProvider().GetRequiredService<IReleaseVerifier>();
