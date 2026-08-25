@@ -389,7 +389,7 @@ public static partial class WorldDefinitionValidator {
                 return;
         }
     }
-    internal static void ValidateOverlayPredicate(OverlayPredicate? predicate, string path, List<string> errors, WorldDefinition? definition = null) {
+    internal static void ValidateOverlayPredicate(OverlayPredicate? predicate, string path, List<string> errors, WorldDefinition? definition = null, IReadOnlyDictionary<string, WorldStateRow>? stateRows = null) {
         switch (predicate) {
             case null:
                 return;
@@ -440,7 +440,12 @@ public static partial class WorldDefinitionValidator {
                 )) {
                     errors.Add(item: $"{path}.binding '{state.Binding}' must be spelled state.<row>[.<key>].");
                 } else if (definition is not null) {
-                    var row = definition.State.FirstOrDefault(predicate: candidate => string.Equals(a: candidate.Name.ToString(), b: stateRow, comparisonType: StringComparison.Ordinal));
+                    // stateRows is the SAME name-keyed map ValidateState builds once per whole-document validate
+                    // (threaded down from ValidateCore); falling back to a scan of definition.State keeps this
+                    // correct for a caller that has definition but not the map.
+                    var row = ((stateRows is not null)
+                        ? (stateRows.TryGetValue(key: stateRow, value: out var mappedRow) ? mappedRow : null)
+                        : definition.State.FirstOrDefault(predicate: candidate => string.Equals(a: candidate.Name.ToString(), b: stateRow, comparisonType: StringComparison.Ordinal)));
 
                     if (row is null) {
                         errors.Add(item: $"{path}.binding '{state.Binding}' names no declared state row.");
@@ -495,7 +500,8 @@ public static partial class WorldDefinitionValidator {
                         definition: definition,
                         errors: errors,
                         path: $"{path}.predicates[{index}]",
-                        predicate: all.Predicates![index]
+                        predicate: all.Predicates![index],
+                        stateRows: stateRows
                     );
                 }
 
@@ -506,7 +512,8 @@ public static partial class WorldDefinitionValidator {
                         definition: definition,
                         errors: errors,
                         path: $"{path}.predicates[{index}]",
-                        predicate: any.Predicates![index]
+                        predicate: any.Predicates![index],
+                        stateRows: stateRows
                     );
                 }
 
@@ -516,7 +523,8 @@ public static partial class WorldDefinitionValidator {
                     definition: definition,
                     errors: errors,
                     path: $"{path}.predicate",
-                    predicate: not.Predicate
+                    predicate: not.Predicate,
+                    stateRows: stateRows
                 );
 
                 return;
@@ -1373,7 +1381,8 @@ public static partial class WorldDefinitionValidator {
                             definition: definition,
                             errors: errors,
                             path: $"{candidatePath}.when",
-                            predicate: candidate.When
+                            predicate: candidate.When,
+                            stateRows: stateRows
                         );
                     }
                 }

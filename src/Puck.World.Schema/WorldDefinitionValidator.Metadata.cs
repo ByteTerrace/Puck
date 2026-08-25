@@ -596,13 +596,15 @@ public static partial class WorldDefinitionValidator {
             definition: (isIdentityScope ? null : definition),
             errors: errors,
             path: "hud.defaults.visible",
-            predicate: hud.Defaults?.Visible
+            predicate: hud.Defaults?.Visible,
+            stateRows: stateRows
         );
         ValidateHudVisible(
             definition: (isIdentityScope ? null : definition),
             errors: errors,
             path: "hud.defaults.cursor.visible",
-            predicate: hud.Defaults?.Cursor?.Visible
+            predicate: hud.Defaults?.Cursor?.Visible,
+            stateRows: stateRows
         );
 
         if (panels.Count > maxPanels) {
@@ -668,7 +670,8 @@ public static partial class WorldDefinitionValidator {
                 definition: (isIdentityScope ? null : definition),
                 errors: errors,
                 path: $"{panelPath}.visible",
-                predicate: panel.Visible
+                predicate: panel.Visible,
+                stateRows: stateRows
             );
 
             foreach (var element in panel.Elements) {
@@ -1478,14 +1481,15 @@ public static partial class WorldDefinitionValidator {
     }
     // A malformed visible predicate is a hud.validate verdict like every other HUD refusal; identity scope passes no
     // definition, so subject and state references are admitted unresolved there.
-    private static void ValidateHudVisible(OverlayPredicate? predicate, string path, WorldDefinition? definition, List<string> errors) {
+    private static void ValidateHudVisible(OverlayPredicate? predicate, string path, WorldDefinition? definition, List<string> errors, IReadOnlyDictionary<string, WorldStateRow>? stateRows = null) {
         var predicateErrors = new List<string>();
 
         ValidateOverlayPredicate(
             definition: definition,
             errors: predicateErrors,
             path: path,
-            predicate: predicate
+            predicate: predicate,
+            stateRows: stateRows
         );
 
         if (predicateErrors.Count > 0) {
