@@ -550,18 +550,18 @@ float worldSkyCloudSpinAngle() { return 0.0; }
 float worldSkyCloudCurl() { return 0.0; }
 #endif
 
-static const int MaxSteps = 160;
-static const float MaxDistance = 60.0;
+static const int MaxSteps = 128;
+static const float MaxDistance = 40.0;
 static const float SurfaceEpsilon = 0.001;
 static const float SphereTraceOmega = 1.2; // Keinert over-relaxation factor (1 = plain sphere tracing; [1, 2))
-static const int ConeMarchSteps = 96;
+static const int ConeMarchSteps = 56;
 static const float ConeNear = 0.02;
 static const float ConeEpsilon = 0.002;
 // Four-bound teleport (Larsson "The Gunk"): after the beam cone finds the tile's ENTRY (the classic marchStart), it
 // keeps marching a bounded budget to detect ONE proven-empty gap between two occupied bands — [firstExit,
 // secondEntry] — that sdf-world-views teleports the fine ray across. TileGapSteps caps the extra beam cost;
 // TileGapMinStep floors the through-band advance so a near-zero cone clearance can't stall the search.
-static const int TileGapSteps = 24;
+static const int TileGapSteps = 16;
 static const float TileGapMinStep = 0.15;
 // Early-abandon for the through-band phase: a ground/wall tile whose cone never re-clears would otherwise burn all
 // TileGapSteps descending monotonically deeper into the half-space. After this many CONSECUTIVE in-band steps whose
@@ -569,14 +569,14 @@ static const float TileGapMinStep = 0.15;
 // gap — a real gap re-clears within a few magnitude-stepped steps, so it resets the streak first. Missing a gap is
 // SAFE: the teleport just does not arm, and the fine march is pixel-identical whether or not it teleports (the jump
 // lands at secondEntry <= the true re-entry). Four stalled steps keep gap-less tile cost bounded.
-static const int TileGapStallLimit = 4;
+static const int TileGapStallLimit = 3;
 // F1 FAR BOUND: after the gap search resolves, a bounded TAIL phase cone-marches from the
 // resolved t to prove the far bound — the depth past which the tile's cone cannot produce any footprint-accepted hit
 // through MaxDistance. TileFarSteps caps that extra beam cost (the tail is a latency-rich single-thread march, per the
 // beam kernel's design). Sixteen steps is enough to walk a live tile's near band + one gap + a second band into a
 // clear-to-far span; if the span is not proven within the budget the tile publishes farBound = MaxDistance (no early
 // exit — a total function).
-static const int TileFarSteps = 16;
+static const int TileFarSteps = 10;
 // Bán & Valasek 2023 auto-relaxed sphere tracing (EG short paper). The fine march tracks the field's along-ray slope
 // with an EMA `m` and over-relaxes adaptively — `omega = max(1, 2/(1 - m))`, so a planar (m -> 1) approach takes a big
 // step and a concave (m -> -1) one degenerates to a plain step. SlopeBeta is the paper's default;
@@ -613,7 +613,7 @@ static const float ScreenLightMinDistanceSquared = 1.0e-4;
 // The 8-bit dither quantum: +-0.5 LSB of R2 noise before the store (see sdfR2Dither).
 static const float DitherQuantum = (1.0 / 255.0);
 // debug.view.evals calibration: the ramp saturates at this many tallied field evaluations. Worst case for a single
-// lit pixel is bounded by MaxSteps (160, primary march) + ShadowSamplesPerPixel * ShadowSteps (2 * 32 = 64, the
+// lit pixel is bounded by MaxSteps (128, primary march) + ShadowSamplesPerPixel * ShadowSteps (1 * 22 = 22, the
 // area-light shadow estimator) + 3 (calcAO) + 4 (the 4-tap
 // normal fallback, worse than the 1-eval analytic default) + 1 (the coverage-AA probe) ~= 216, so 256 leaves margin
 // before saturating solid red — chosen so a typical unshadowed ambient-only hit (~30-40 evals: a short march plus
@@ -625,8 +625,8 @@ static const float EvalHeatmapCeiling = 256.0;
 // from the sample DISTRIBUTION over the sun disc, not from a per-step ratio. 48 -> 32 and 16 -> 12 because a binary
 // test terminates at the first hit and takes the exactly-sound escape exit on the light side, where the old parabola
 // had to keep marching to refine a running minimum.
-static const int ShadowSteps = 32;
-static const int FastShadowSteps = 12;
+static const int ShadowSteps = 22;
+static const int FastShadowSteps = 9;
 // The sun's ANGULAR RADIUS in radians — the half-aperture of the cone the estimator samples. tan(0.11) = 0.11045
 // reproduces the retired parabola's 1/ShadowSharpness = 1/9 = 0.1111 penumbra half-slope to within 0.7%, so the
 // change reads as "the same shadows, sampled correctly" rather than as a jolt in penumbra width. The host bakes
@@ -635,7 +635,7 @@ static const int FastShadowSteps = 12;
 static const float SunAngularRadius = 0.11;
 // Sun-disc samples per pixel per frame. Each costs a full binary shadow trace, so this multiplies the shadow march's
 // worst-case field evaluations directly; 2 is the shipped point on the curve.
-static const uint ShadowSamplesPerPixel = 2u;
+static const uint ShadowSamplesPerPixel = 1u;
 // Bits of each net coordinate the disc table consumes (SphericalCapSampleTable.TableIndexBitCount): 4096 azimuth
 // cells and 4096 radius cells. The digital-net gate proves the (0,m,2)-net property survives this quantization, which
 // is the property the estimator actually relies on — the full 32-bit coordinate is never needed.
@@ -666,7 +666,7 @@ static const uint ShadowAccumulationOne = 255u;    // full visibility in the eig
 // Half the RT path's 24-unit reach: this compute march has no TLAS to fast-forward to the occluder, so every unit of
 // reach is marched per lit pixel. Contact/self shadows (the visual win) are near; 12 covers every realistic case while
 // halving the worst-case empty-space step count on dense scenes.
-static const float ShadowMaxDistance = 12.0;
+static const float ShadowMaxDistance = 9.0;
 static const float ShadowBias = 0.02;
 static const float ShadowStepMin = 0.02;  // an occluder thinner than this can be stepped through
 static const float ShadowStepMax = 0.6;   // the NEAR-field ceiling; far-field it grows with distance (ShadowStepFarSlope)
@@ -683,7 +683,7 @@ static const float ShadowStepFarSlope = 0.15;
 // none — which is the same trade the near-field ShadowStepMin floor already makes.
 static const float FastShadowStepMax = 1.8;
 static const float FastShadowStepFarSlope = 0.45;
-static const float FastShadowMaxDistance = 6.0;
+static const float FastShadowMaxDistance = 5.0;
 // The shadow-cull gather's cone chord (see sdfShadowGather): the half-slope of the cone whose occluders the gather
 // must contain for the shadow march to be sound. It is now a bound on the SAMPLED CONE — the estimator's rays leave
 // the surface inside a cone of half-slope tan(SunAngularRadius) = 0.1104, so every occluder any sample can reach sits

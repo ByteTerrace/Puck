@@ -71,6 +71,58 @@ public sealed record ShapeDocument(
 /// <param name="Id">The ordinal, case-sensitive identifier an entity-part anchor names.</param>
 /// <param name="ShapeId">The stable <see cref="ShapeDocument.Id"/> whose dynamic pose the part publishes.</param>
 public sealed record CreationPartDocument(string Id, int ShapeId);
+/// <summary>The creation-level noise-relief facet: bounded hash-lattice fBm displacement
+/// (<see cref="SdfProgramBuilder.NoiseDisplace"/>) applied to the creation's whole composed field inside its stamp
+/// scope — irregular rock, terrain, bark. Render-only relief: contact and colliders ride the un-displaced base
+/// shapes, so keep <see cref="Amplitude"/> small on walkable surfaces. Static-stamp placements only — the dynamic
+/// stamp pool emits per-shape instances a creation-level field op cannot span, so an animated (framed) creation, an
+/// attached or inhabited placement, and a body look all refuse it at validation. The noise samples the creation's
+/// local frame, so every stamped copy carries identical relief; a mirrored copy samples the un-mirrored pattern.</summary>
+/// <param name="Frequency">The base lattice frequency, cells per creation unit (clamped to
+/// (0, <see cref="MaxFrequency"/>]).</param>
+/// <param name="Amplitude">The peak outward displacement, world units (clamped to (0, <see cref="MaxAmplitude"/>];
+/// zero drops the facet).</param>
+/// <param name="Octaves">The fBm octave count (null = 4; clamped to 1..<see cref="SdfProgramBuilder.MaxNoiseOctaves"/>).</param>
+/// <param name="Gain">The per-octave amplitude factor (null = 0.5; clamped to
+/// [<see cref="MinGain"/>, <see cref="MaxGain"/>]).</param>
+/// <param name="Lacunarity">The per-octave frequency factor (null = 2; clamped to
+/// [<see cref="MinLacunarity"/>, <see cref="MaxLacunarity"/>]).</param>
+/// <param name="Seed">The hash seed folded into every lattice corner (null = 0).</param>
+public sealed record CreationNoiseDocument(
+    float Frequency,
+    float Amplitude,
+    int? Octaves = null,
+    float? Gain = null,
+    float? Lacunarity = null,
+    uint? Seed = null
+) {
+    /// <summary>The largest authored amplitude, world units.</summary>
+    public const float MaxAmplitude = 4f;
+    /// <summary>The largest authored base frequency, cells per creation unit.</summary>
+    public const float MaxFrequency = 8f;
+    /// <summary>The largest per-octave gain.</summary>
+    public const float MaxGain = 1f;
+    /// <summary>The largest per-octave lacunarity.</summary>
+    public const float MaxLacunarity = 4f;
+    /// <summary>The largest derived march step factor (<see cref="SdfProgram.NoiseDisplaceStepFactor"/>) a creation
+    /// may declare — the whole program's march divides its steps by this factor, so it is a shared frame budget,
+    /// refused (never silently clamped) when exceeded.</summary>
+    public const float MaxStepFactor = 8f;
+    /// <summary>The smallest per-octave gain.</summary>
+    public const float MinGain = 0.05f;
+    /// <summary>The smallest per-octave lacunarity.</summary>
+    public const float MinLacunarity = 1f;
+
+    /// <summary>Returns the derived march step factor of this facet's resolved parameters.</summary>
+    /// <returns>The multiplicative step factor (1 = inert).</returns>
+    public float StepFactor() => SdfProgram.NoiseDisplaceStepFactor(
+        amplitude: MathF.Abs(x: Amplitude),
+        frequency: MathF.Abs(x: Frequency),
+        gain: (Gain ?? 0.5f),
+        lacunarity: (Lacunarity ?? 2f),
+        octaves: (Octaves ?? 4)
+    );
+}
 /// <summary>
 /// One engraved/embossed text run a creation carries — a string laid onto one of the creation's own surfaces (a shop
 /// facade, a marquee band), stored as text-plus-placement and expanded at world-emission time into
@@ -316,6 +368,9 @@ public sealed record CreationBehaviorDocument(
 /// serializes to unchanged bytes.</param>
 /// <param name="Parts">The authored part identities this creation publishes when used as an entity look (null = none).
 /// Each maps a stable identifier to one shape's dynamic transform.</param>
+/// <param name="Noise">The creation-level noise-relief facet (null = none) — see
+/// <see cref="CreationNoiseDocument"/>. Omitted from the wire when null, so a creation authored without it
+/// serializes to unchanged bytes.</param>
 public sealed record CreationDocument(
     string? Schema,
     DocumentIdentifier? Name,
@@ -328,7 +383,9 @@ public sealed record CreationDocument(
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<TextRunDocument>? TextRuns = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-    IReadOnlyList<CreationPartDocument>? Parts = null
+    IReadOnlyList<CreationPartDocument>? Parts = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    CreationNoiseDocument? Noise = null
 ) {
     /// <summary>The version tag every saved document carries.</summary>
     public const string CurrentSchema = "puck.creation.v1";

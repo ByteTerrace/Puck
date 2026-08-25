@@ -394,6 +394,15 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path} stamps {stampShapes} shapes, exceeding the {WorldPlacementPolicy.MaxShapesPerStamp}-shape per-stamp budget.");
             }
 
+            // A creation-level field op cannot span the per-shape dynamic instances the stamp pool emits for a framed
+            // creation — noise is a static-stamp facet.
+            if (
+                (creation.Document.Noise is not null) &&
+                (creation.Document.Frames is { Count: > 0 })
+            ) {
+                errors.Add(item: $"{path}.doc.noise is refused on an animated (framed) creation — noise relief is a static-stamp facet.");
+            }
+
             foreach (var run in (creation.Document.TextRuns ?? [])) {
                 if (!hasTextCatalog) {
                     errors.Add(item: $"{path}.doc.textRuns requires the world to declare a text font catalog.");
@@ -818,6 +827,10 @@ public static partial class WorldDefinitionValidator {
                             creations: creations,
                             id: creation.PrototypeId
                         );
+
+                        if (resolvedCreation is { Document.Noise: not null }) {
+                            errors.Add(item: $"{path}.source.prototypeId '{creation.PrototypeId}' carries noise relief — a static-stamp facet the body stamp pool cannot render.");
+                        }
                     }
 
                     break;
@@ -1221,6 +1234,10 @@ public static partial class WorldDefinitionValidator {
                 // attached row of a FRAMED creation is one registration, not two.
                 stampRegistrationCount++;
                 dynamicInstanceCount++;
+
+                if (animatedCreation is { Document.Noise: not null }) {
+                    errors.Add(item: $"{path} ATTACHES — its creation's noise relief is a static-stamp facet the stamp pool cannot render.");
+                }
             }
 
             // The INHABIT facet: a placement's binding to live population bodies (Arc 7). Resolve its kit, gate its
@@ -1245,6 +1262,10 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{path} INHABITS — placement distribution/mirror facets are incompatible with a live body.");
                 }
 
+                if (animatedCreation is { Document.Noise: not null }) {
+                    errors.Add(item: $"{path} INHABITS — its creation's noise relief is a static-stamp facet the stamp pool cannot render.");
+                }
+
                 if (inhabit.Count > 0) {
                     dynamicInstanceCount += inhabit.Count;
                 }
@@ -1254,10 +1275,17 @@ public static partial class WorldDefinitionValidator {
                 !isAnimated &&
                 (placement.Inhabit is null)
             ) {
-                var contribution = WorldPlacementStamp.MaterializedCopyCeiling(
+                // A scope-free static stamp materializes one engine instance PER SHAPE (the tight-bound emission
+                // split — Puck.Forge.Authoring.CreationStampEmitter.PerCopyInstanceCount), so the ceiling charges
+                // copies × that factor.
+                var perCopyInstances = ((animatedCreation is { } staticCreation)
+                    ? Puck.Forge.Authoring.CreationStampEmitter.PerCopyInstanceCount(document: staticCreation.Document)
+                    : 1
+                );
+                var contribution = checked((WorldPlacementStamp.MaterializedCopyCeiling(
                     placement: placement,
                     ceiling: (SdfProgramBuilder.MaxInstances + 1L)
-                );
+                ) * perCopyInstances));
                 var previousInstanceCount = staticPlacementInstanceCount;
 
                 staticPlacementInstanceCount = Math.Min(

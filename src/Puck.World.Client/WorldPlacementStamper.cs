@@ -116,10 +116,19 @@ public static class WorldPlacementStamper {
             axis: Vector3.UnitY,
             angle: (placement.YawDegrees * (MathF.PI / 180f))
         );
-        // A creation whose parts carve each other is one candidate against the world field, never a carve of it.
+        // A creation whose parts carve each other (or that carries noise relief) is one SCOPED candidate against the
+        // world field. A scope-free, text-free creation instead emits one TIGHT instance per shape — union-family
+        // members mask bit-identically, and per-shape bounds keep a big creation (a tree's whole-canopy reach) from
+        // masking every tile it merely overlaps.
         var scoped = (
             (creation.Shapes is { Count: > 0 }) &&
-            CreationStampEmitter.ComposesInternally(document: creation)
+            CreationStampEmitter.RequiresScope(document: creation)
+        );
+        var perShape = (
+            !scoped &&
+            !hasText &&
+            (creation.TextRuns is not { Count: > 0 }) &&
+            (creation.Shapes is { Count: > 0 })
         );
 
         CreationStampLattice.ForEachInstance(
@@ -129,6 +138,48 @@ public static class WorldPlacementStamper {
             sampledOffsets: WorldPlacementStamp.SampledOffsetsFor(placement: placement, worldSeed: worldSeed),
             mirror: WorldPlacementStamp.MirrorFor(placement: placement),
             visitor: instance => {
+                if (perShape) {
+                    var stampTransform = new CreationStampTransform(
+                        Origin: instance.Origin,
+                        Rotation: rotation,
+                        Scale: placement.Scale,
+                        ReflectionNormal: instance.ReflectionNormal
+                    );
+
+                    for (var shapeIndex = 0; (shapeIndex < creation.Shapes!.Count); shapeIndex++) {
+                        var shape = creation.Shapes[shapeIndex];
+                        // A fold's copies leave any shape-local sphere, so a domain-bearing shape keeps the
+                        // whole-creation bound.
+                        var (boundCenter, boundRadius) = ((shape.Domain is { Count: > 0 })
+                            ? (instance.Origin, reach)
+                            : CreationStampEmitter.ShapeStampBound(
+                                document: creation,
+                                shapeIndex: shapeIndex,
+                                transform: stampTransform
+                            )
+                        );
+
+                        _ = builder.BeginInstance(
+                            boundCenter: boundCenter,
+                            boundRadius: (boundRadius + PlacementBoundMargin)
+                        );
+                        CreationStampEmitter.EmitShapeStamp(
+                            builder: builder,
+                            document: creation,
+                            shapeIndex: shapeIndex,
+                            transform: stampTransform,
+                            material: paletteIds[Math.Clamp(
+                                value: (shape.Material ?? 0),
+                                max: (paletteIds.Length - 1),
+                                min: 0
+                            )]
+                        );
+                        _ = builder.EndInstance();
+                    }
+
+                    return;
+                }
+
                 _ = builder.BeginInstance(
                     boundCenter: instance.Origin,
                     boundRadius: (reach + PlacementBoundMargin)
@@ -164,6 +215,21 @@ public static class WorldPlacementStamper {
                         textLayouts: textLayouts
                     );
                 }
+                if (
+                    scoped &&
+                    (creation.Noise is { } noise)
+                ) {
+                    CreationStampEmitter.EmitNoise(
+                        builder: builder,
+                        noise: noise,
+                        transform: new CreationStampTransform(
+                            Origin: instance.Origin,
+                            Rotation: rotation,
+                            Scale: placement.Scale,
+                            ReflectionNormal: instance.ReflectionNormal
+                        )
+                    );
+                }
                 if (scoped) {
                     _ = builder.PopField();
                 }
@@ -196,8 +262,11 @@ public static class WorldPlacementStamper {
     /// carrying the densest legal per-shape chain — so any real
     /// static emission within the placement policy fits the once-sized buffers by construction. Never rendered.</summary>
     /// <param name="builder">The program builder.</param>
-    /// <param name="reservedCount">The reserved stamp count (boot placements + the authoring headroom).</param>
-    public static void EmitProbe(SdfProgramBuilder builder, int reservedCount) {
+    /// <param name="reservedCount">The reserved SCOPED stamp count (scoped/text-carrying boot placements + the
+    /// authoring headroom).</param>
+    /// <param name="reservedShapeInstances">The reserved per-SHAPE instance count (scope-free boot placements'
+    /// copies × shapes — see <see cref="StaticStampReservation"/>).</param>
+    public static void EmitProbe(SdfProgramBuilder builder, int reservedCount, int reservedShapeInstances = 0) {
         for (var index = 0; (index < reservedCount); index++) {
             // Worst-case distinct materials: every reserved stamp references a DISTINCT creation with a full palette
             // (the per-id cache only relaxes this; probing as if every stamp were unique is the conservative bound).
@@ -232,6 +301,43 @@ public static class WorldPlacementStamper {
                 );
             }
 
+            _ = builder.EndInstance();
+        }
+
+        // The PER-SHAPE reservation: one instance per shape of every scope-free static stamp, each a single
+        // full-modifier chain (the domain envelope mirrors ShapeDomainOps.ProbeWorstCase — every domain kind costs one
+        // instruction, so four symmetries dominate any authored combination). Spread like the stamps so segment
+        // merging can never under-reserve the directory.
+        for (var index = 0; (index < reservedShapeInstances); index++) {
+            var material = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(value: 0.5f)));
+            var center = new Vector3(
+                x: (index * ProbeSpread),
+                y: -4f,
+                z: ProbeSpread
+            );
+
+            _ = builder.BeginInstance(
+                boundCenter: center,
+                boundRadius: 12f
+            );
+
+            var chain = builder
+                .ResetPoint()
+                .Translate(offset: center)
+                .Rotate(rotation: Quaternion.Identity)
+                .Scale(scale: Vector3.One);
+
+            for (var op = 0; (op < ShapeDocument.MaxDomainOps); op++) {
+                chain = chain.SymmetryPlane(normal: Vector3.UnitX);
+            }
+
+            _ = SdfSolidGeometry.AppendPrimitive(
+                chain: chain
+                    .Translate(offset: Vector3.Zero)
+                    .Rotate(rotation: Quaternion.Identity),
+                type: SdfSolidPrimitive.Sphere,
+                material: material
+            );
             _ = builder.EndInstance();
         }
     }
@@ -323,24 +429,53 @@ public static class WorldPlacementStamper {
     /// <param name="worldSeed">The world's reroll seed (<c>generation.worldSeed</c>) — resolves each row's
     /// Noise/Scatter distribution to its actual admitted count.</param>
     public static int StaticStampInstances(IReadOnlyList<WorldPrototype> creations, IReadOnlyList<WorldPlacement> placements, ulong worldSeed = 0UL) {
-        var instances = 0;
+        var (scopedStamps, shapeInstances) = StaticStampReservation(
+            creations: creations,
+            placements: placements,
+            worldSeed: worldSeed
+        );
+
+        return checked((scopedStamps + shapeInstances));
+    }
+    /// <summary>The static stamp reservation split by emission class: SCOPED stamps (one whole-creation instance per
+    /// copy — a scoped or text-carrying creation) and per-SHAPE instances (every other copy materializes one instance
+    /// per shape). KEEP IN SYNC with <c>EmitPlacement</c>'s split and <c>EmitProbe</c>'s two reservation forms.</summary>
+    /// <param name="creations">The world's creation rows.</param>
+    /// <param name="placements">The placement rows.</param>
+    /// <param name="worldSeed">The world's reroll seed — resolves each row's Noise/Scatter distribution.</param>
+    /// <returns>The scoped-stamp count and the per-shape instance count.</returns>
+    public static (int ScopedStamps, int ShapeInstances) StaticStampReservation(IReadOnlyList<WorldPrototype> creations, IReadOnlyList<WorldPlacement> placements, ulong worldSeed = 0UL) {
+        var scopedStamps = 0;
+        var shapeInstances = 0;
 
         foreach (var placement in placements) {
             if (
                 (WorldDefinitionRows.FindCreation(
                 creations: creations,
                 id: placement.PrototypeId
-            ) is { } creation) &&
-                IsStaticStamp(
+            ) is not { } creation) ||
+                !IsStaticStamp(
                 creation: creation,
                 placement: placement
             )
             ) {
-                instances = checked((instances + InstanceCount(placement: placement, worldSeed: worldSeed)));
+                continue;
+            }
+
+            var copies = InstanceCount(
+                placement: placement,
+                worldSeed: worldSeed
+            );
+            var perCopy = CreationStampEmitter.PerCopyInstanceCount(document: creation.Document);
+
+            if (perCopy == 1) {
+                scopedStamps = checked((scopedStamps + copies));
+            } else {
+                shapeInstances = checked((shapeInstances + checked((copies * perCopy))));
             }
         }
 
-        return instances;
+        return (scopedStamps, shapeInstances);
     }
 
 }

@@ -1241,6 +1241,13 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
                         var candidateDistance = resultDistance;
                         var candidateMaterial = resultMaterial;
 
+                        // Data1.y is the scope's baked 1/L candidate scale (KEEP IN SYNC with mapCore's pop); zero =
+                        // unpatched, no scale. The directed-floor multiply rounds a positive candidate down —
+                        // conservative for the march, like every scaled advance in this evaluator.
+                        if (instruction.Data1Y > FixedQ4816.Zero) {
+                            candidateDistance *= instruction.Data1Y;
+                        }
+
                         resultDistance = savedFieldDistance;
                         resultMaterial = savedFieldMaterial;
                         (resultDistance, resultMaterial) = Compose(

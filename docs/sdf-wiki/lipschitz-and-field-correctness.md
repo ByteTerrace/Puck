@@ -123,6 +123,32 @@ bound (`frequency·(15/4)·√3` per normalized octave sum) folded by
 relaxed parity envelope (isolated silhouette winner flips only). The
 sine-product `Displace` remains the hash-free periodic sibling.
 
+A field op emitted in a SHAPE-FREE chain (its own `ResetPoint` + transform
+prefix, no shape — the spelling the creation-level `noise` facet's stamp
+emission uses) never reaches a `ShapeBlend` compose, so the chain-product path
+alone drops its factor. `AnalyzeLipschitz` pass 2 therefore folds a shape-free
+chain's `Displace`/`NoiseDisplace` factor additively at the op's own
+instruction site (`|∇(f + g)| ≤ L_f + L_g`), inside the scope the op acts on —
+a `Union` pop then keeps the addition instance-local (max across instances)
+instead of summing it across every stamped copy.
+
+Two further consequences of scoping the analysis:
+
+- **The per-scope step clamp.** A scope's own Lipschitz bound bakes onto its
+  `PopField` as a `1/L_scope` candidate scale (the instruction's free
+  `Data1.y` lane; zero = unpatched). The interpreters multiply the scope's
+  field by it at the pop: a positively scaled distance keeps its zero set, and
+  `(1/L)·f` of an `L`-Lipschitz `f` is exactly 1-Lipschitz, so scoped
+  relief/warps/eccentricity never tax the global `stepScale`. Anything
+  UNSCOPED still folds globally — a flattened `Ellipsoid` outside a scope
+  slows every march in the program by its eccentricity.
+- **The far band.** The relief ops are bounded by `|amplitude|`, so past
+  `4·|amplitude|` of accumulated field the kernels subtract `|amplitude|`
+  instead of evaluating the basis — a valid conservative lower bound. The
+  band rarely fires for a camera standing on the noised surface itself
+  (every march sample is near-band there); walkable relief belongs in
+  geometry, noise on silhouette masses.
+
 Visual plausibility is not evidence of a safe distance estimate. Validate new
 field operations with grazing rays, fold boundaries, thin geometry, and a
 strict/reference march comparison.

@@ -222,51 +222,190 @@ public static class CreationStampEmitter {
         ArgumentNullException.ThrowIfNull(materialFor);
 
         foreach (var shape in (document.Shapes ?? [])) {
-            var (shapePosition, shapeRotation) = ReflectedShapeTransform(
+            EmitShapeChain(
+                builder: builder,
+                contactMargin: contactMargin,
+                material: materialFor(arg: shape),
                 shape: shape,
-                normal: transform.ReflectionNormal
+                transform: transform
             );
-            var shapeScale = EffectiveScale(value: shape.Scale);
-            var chain = ShapeDomainOps.Apply(
-                chain: builder
-                    .ResetPoint()
-                    .Translate(offset: transform.Origin)
-                    .Rotate(rotation: transform.Rotation)
-                    .Scale(scale: new Vector3(value: transform.Scale)),
-                domain: shape.Domain
-            )
-                .Translate(offset: shapePosition)
-                .Rotate(rotation: shapeRotation);
+        }
+    }
+    private static void EmitShapeChain(SdfProgramBuilder builder, ShapeDocument shape, CreationStampTransform transform, int material, float? contactMargin) {
+        var (shapePosition, shapeRotation) = ReflectedShapeTransform(
+            shape: shape,
+            normal: transform.ReflectionNormal
+        );
+        var shapeScale = EffectiveScale(value: shape.Scale);
+        var chain = ShapeDomainOps.Apply(
+            chain: builder
+                .ResetPoint()
+                .Translate(offset: transform.Origin)
+                .Rotate(rotation: transform.Rotation)
+                .Scale(scale: new Vector3(value: transform.Scale)),
+            domain: shape.Domain
+        )
+            .Translate(offset: shapePosition)
+            .Rotate(rotation: shapeRotation);
 
-            var blend = (shape.Blend ?? SdfBlendOp.Union);
-            var smooth = (shape.Smooth ?? 0f);
+        var blend = (shape.Blend ?? SdfBlendOp.Union);
+        var smooth = (shape.Smooth ?? 0f);
 
-            if (
-                (contactMargin is not { } margin) ||
-                (margin == 0f)
-            ) {
-                _ = SdfSolidGeometry.AppendScaledPrimitive(
-                    chain: chain,
-                    type: shape.Type,
-                    scale: shapeScale,
-                    material: materialFor(arg: shape),
-                    blend: blend,
-                    smooth: smooth
-                );
-                continue;
-            }
-
-            chain = SdfSolidGeometry.AppendScaledPrimitive(
-                chain: chain.PushField(
-                    compose: blend,
-                    smooth: smooth
-                ),
+        if (
+            (contactMargin is not { } margin) ||
+            (margin == 0f)
+        ) {
+            _ = SdfSolidGeometry.AppendScaledPrimitive(
+                chain: chain,
                 type: shape.Type,
                 scale: shapeScale,
-                material: materialFor(arg: shape)
-            ).Dilate(radius: margin);
-            _ = chain.PopField();
+                material: material,
+                blend: blend,
+                smooth: smooth
+            );
+
+            return;
         }
+
+        chain = SdfSolidGeometry.AppendScaledPrimitive(
+            chain: chain.PushField(
+                compose: blend,
+                smooth: smooth
+            ),
+            type: shape.Type,
+            scale: shapeScale,
+            material: material
+        ).Dilate(radius: margin);
+        _ = chain.PopField();
+    }
+    /// <summary>Emits ONE shape of a creation under the stamp transform — the per-shape-instance form of
+    /// <see cref="Emit"/>, for a stamper that gives each shape its own tight cull bound
+    /// (<see cref="ShapeStampBound"/>) instead of one whole-creation instance.</summary>
+    /// <param name="builder">The target program builder.</param>
+    /// <param name="document">The creation document.</param>
+    /// <param name="shapeIndex">The shape's index in <see cref="CreationDocument.Shapes"/>.</param>
+    /// <param name="transform">The stamp transform.</param>
+    /// <param name="material">The shape's resolved program material id.</param>
+    public static void EmitShapeStamp(SdfProgramBuilder builder, CreationDocument document, int shapeIndex, CreationStampTransform transform, int material) {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(document);
+
+        EmitShapeChain(
+            builder: builder,
+            contactMargin: null,
+            material: material,
+            shape: document.Shapes![shapeIndex],
+            transform: transform
+        );
+    }
+    /// <summary>Measures one shape's world-space cull bound under the stamp transform: its reflected, stamped
+    /// position and its primitive reach — the tight per-shape sibling of <see cref="RenderReach"/>. Only sound for a
+    /// DOMAIN-FREE shape (a fold's copies leave any shape-local sphere); callers keep domain-bearing shapes on the
+    /// whole-creation bound.</summary>
+    /// <param name="document">The creation document.</param>
+    /// <param name="shapeIndex">The shape's index in <see cref="CreationDocument.Shapes"/>.</param>
+    /// <param name="transform">The stamp transform.</param>
+    /// <returns>The bound center (world space) and radius.</returns>
+    public static (Vector3 Center, float Radius) ShapeStampBound(CreationDocument document, int shapeIndex, CreationStampTransform transform) {
+        ArgumentNullException.ThrowIfNull(document);
+
+        var shape = document.Shapes![shapeIndex];
+        var (shapePosition, _) = ReflectedShapeTransform(
+            shape: shape,
+            normal: transform.ReflectionNormal
+        );
+
+        return (
+            (transform.Origin + Vector3.Transform(
+                value: (shapePosition * transform.Scale),
+                rotation: transform.Rotation
+            )),
+            (SdfSolidGeometry.Reach(
+                type: shape.Type,
+                scale: shape.Scale
+            ) * transform.Scale)
+        );
+    }
+    /// <summary>Returns whether a creation's stamp needs its own field scope: a blend outside the union family
+    /// (whose accumulator compose is order-local — see the accumulator rule), an engraving text run, or a noise
+    /// facet. A scope-free creation's shapes may each ride their own tight instance
+    /// (<see cref="EmitShapeStamp"/>) — a masked-out union-family member is bit-identical to skipping it, and
+    /// <c>SdfProgram.PackInstances</c> inflates each bound by its smooth radius.</summary>
+    /// <param name="document">The creation document.</param>
+    /// <returns><see langword="true"/> when the stamp must emit as one scoped instance.</returns>
+    public static bool RequiresScope(CreationDocument document) {
+        ArgumentNullException.ThrowIfNull(document);
+
+        if (document.Noise is not null) {
+            return true;
+        }
+
+        foreach (var shape in (document.Shapes ?? [])) {
+            var blend = (shape.Blend ?? SdfBlendOp.Union);
+
+            if (blend is not (SdfBlendOp.Union or SdfBlendOp.SmoothUnion)) {
+                return true;
+            }
+        }
+
+        foreach (var run in (document.TextRuns ?? [])) {
+            if (string.Equals(
+                a: run.Mode,
+                b: TextRunDocument.ModeEngrave,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    /// <summary>The instances one static stamp of the creation materializes: one per shape when the stamp is
+    /// scope-free and text-free (<see cref="RequiresScope"/>), else one for the whole creation. KEEP IN SYNC with
+    /// the static stamper's emission split (<c>Client.WorldPlacementStamper</c>).</summary>
+    /// <param name="document">The creation document.</param>
+    /// <returns>The per-copy instance count (at least 1).</returns>
+    public static int PerCopyInstanceCount(CreationDocument document) {
+        ArgumentNullException.ThrowIfNull(document);
+
+        if (
+            RequiresScope(document: document) ||
+            (document.TextRuns is { Count: > 0 })
+        ) {
+            return 1;
+        }
+
+        return Math.Max(
+            val1: (document.Shapes?.Count ?? 0),
+            val2: 1
+        );
+    }
+    /// <summary>Emits a creation's noise-relief facet against the field accumulated so far — one
+    /// <see cref="SdfProgramBuilder.NoiseDisplace"/> sampled in the creation's own frame, so every stamped copy
+    /// carries identical relief and the pattern rides the stamp's rotation and scale.</summary>
+    /// <param name="builder">The target program builder, inside the stamp's open field scope.</param>
+    /// <param name="noise">The creation's normalized noise facet.</param>
+    /// <param name="transform">The stamp transform.</param>
+    /// <remarks>The caller owns the surrounding <see cref="SdfProgramBuilder.PushField"/>/<see cref="SdfProgramBuilder.PopField"/>
+    /// pair — an unscoped field op would displace the whole composed world field. Amplitude is world units
+    /// (un-scaled by the stamp); the sampling point rides the stamp's frame.</remarks>
+    public static void EmitNoise(SdfProgramBuilder builder, CreationNoiseDocument noise, CreationStampTransform transform) {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(noise);
+
+        _ = builder
+            .ResetPoint()
+            .Translate(offset: transform.Origin)
+            .Rotate(rotation: transform.Rotation)
+            .Scale(scale: new Vector3(value: transform.Scale))
+            .NoiseDisplace(
+                amplitude: noise.Amplitude,
+                frequency: noise.Frequency,
+                gain: (noise.Gain ?? 0.5f),
+                lacunarity: (noise.Lacunarity ?? 2f),
+                octaves: (noise.Octaves ?? 4),
+                seed: (noise.Seed ?? 0u)
+            );
     }
     /// <summary>Emits a creation's shape list under one materialized stamp transform, deriving every transform
     /// constant in deterministic fixed point before the SDF program's single-precision encoding boundary.</summary>
@@ -633,16 +772,18 @@ public static class CreationStampEmitter {
             );
         }
 
-        var reach = 0f;
+        // Noise relief grows the composed surface outward by up to its amplitude (world units, un-scaled), so the
+        // bound charges it once up front.
+        var reach = (document.Noise?.Amplitude ?? 0f);
         var any = false;
 
         foreach (var shape in (document.Shapes ?? [])) {
             reach = MathF.Max(
                 x: reach,
-                y: ((shape.Position.Length() + SdfSolidGeometry.Reach(
+                y: (((shape.Position.Length() + SdfSolidGeometry.Reach(
                     type: shape.Type,
                     scale: shape.Scale
-                )) * scale)
+                )) * scale) + (document.Noise?.Amplitude ?? 0f))
             );
             any = true;
         }

@@ -221,6 +221,8 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     // Direct3D 12), and no second set/descriptor-write path exists.
     private readonly IGpuComputePipeline m_viewsCorePipeline;
     private readonly IGpuShaderModule m_viewsCoreShaderModule;
+    private readonly IGpuComputePipeline m_viewsFoldsPipeline;
+    private readonly IGpuShaderModule m_viewsFoldsShaderModule;
     private readonly IGpuComputePipeline m_viewsPipeline;
     private readonly IGpuShaderModule m_viewsShaderModule;
     private readonly uint m_width;
@@ -287,7 +289,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private bool m_skipThisFrame;
     private ulong m_timingFrame;
     private IGpuTimingPool[]? m_timingPools;
-    private bool m_useCoreViews;
+    private SdfViewsKernelVariant m_viewsVariant;
 
     // sdf-world-views.comp (Stage 1 ONLY): screenSource0..MaxScreenSurfaces-1, registers t5.. — one binding per screen
     // index (KEEP IN SYNC with sdf-world.hlsli's screenSource declarations). DERIVED from the base + count so the list
@@ -458,6 +460,11 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             deviceContext: device,
             stage: GpuShaderStage.Compute,
             bytecode: kernels.ViewsCore
+        );
+        m_viewsFoldsShaderModule = gpu.ShaderModuleFactory.Create(
+            deviceContext: device,
+            stage: GpuShaderStage.Compute,
+            bytecode: kernels.ViewsFolds
         );
         m_skyShaderModule = gpu.ShaderModuleFactory.Create(
             deviceContext: device,
@@ -916,6 +923,17 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             description: new GpuComputePipelineDescription(
                 Bindings: viewsBindings,
                 Name: "sdf-world-views-core",
+                PushConstantBinding: pushConstantBinding,
+                SamplerFilter: GpuSamplerFilter.Nearest
+            ),
+            deviceContext: device
+        );
+        // The fold-ops Stage 1 variant rides the same shared layout as the other two (see the comment above).
+        m_viewsFoldsPipeline = gpu.ComputePipelineFactory.Create(
+            computeShaderModule: m_viewsFoldsShaderModule,
+            description: new GpuComputePipelineDescription(
+                Bindings: viewsBindings,
+                Name: "sdf-world-views-folds",
                 PushConstantBinding: pushConstantBinding,
                 SamplerFilter: GpuSamplerFilter.Nearest
             ),
@@ -1455,6 +1473,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         m_cullArgsPipeline.Dispose();
         m_viewsPipeline.Dispose();
         m_viewsCorePipeline.Dispose();
+        m_viewsFoldsPipeline.Dispose();
         m_skyPipeline.Dispose();
         m_compositePipeline.Dispose();
         m_descriptorAllocator.DestroySampler(
@@ -1478,6 +1497,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         m_cullArgsShaderModule.Dispose();
         m_viewsShaderModule.Dispose();
         m_viewsCoreShaderModule.Dispose();
+        m_viewsFoldsShaderModule.Dispose();
         m_skyShaderModule.Dispose();
         m_compositeShaderModule.Dispose();
     }

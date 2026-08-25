@@ -104,22 +104,20 @@ public sealed partial class SdfWorldEngine {
         // core-only program runs the exotic-stripped variant, bit-identical by construction (the stripped cases are
         // unreachable) but with far less live register state in the interpreter. Logged (when GPU timing is armed) only
         // when the selection CHANGES, so a per-interaction overworld rebuild doesn't spam the digest stream.
-        var exoticTouch = SdfViewsKernelVariants.FirstExoticTouch(program: program);
-        var viewsVariant = ((exoticTouch is null)
-            ? SdfViewsKernelVariant.CoreOps
-            : SdfViewsKernelVariant.Full
-        );
+        var (viewsVariant, variantTouch) = SdfViewsKernelVariants.Select(program: program);
 
-        m_useCoreViews = (SdfViewsKernelVariant.CoreOps == viewsVariant);
+        m_viewsVariant = viewsVariant;
 
         if (
             Views.ViewTiming.Enabled &&
             (m_loggedViewsVariant != viewsVariant)
         ) {
             m_loggedViewsVariant = viewsVariant;
-            Console.Error.WriteLine(value: ((exoticTouch is null)
-                ? $"[world-timing] {DebugLabel} views variant: core-ops (no exotic op in the program)"
-                : $"[world-timing] {DebugLabel} views variant: full (program touches {exoticTouch})"));
+            Console.Error.WriteLine(value: (viewsVariant switch {
+                SdfViewsKernelVariant.CoreOps => $"[world-timing] {DebugLabel} views variant: core-ops (no exotic op in the program)",
+                SdfViewsKernelVariant.Folds => $"[world-timing] {DebugLabel} views variant: folds (program touches {variantTouch}, no heavy op)",
+                _ => $"[world-timing] {DebugLabel} views variant: full (program touches {variantTouch})",
+            }));
         }
     }
 }

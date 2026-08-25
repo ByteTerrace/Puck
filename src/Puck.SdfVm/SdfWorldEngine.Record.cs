@@ -412,10 +412,11 @@ public sealed partial class SdfWorldEngine {
             // program (full ISA vs core-ops — the stripped cases are unreachable under core, so the field is the same;
             // see SdfViewsKernelVariant); the per-slot views set binds against either (identically defined layouts, same
             // bindings array).
-            var viewsPipeline = (m_useCoreViews
-                ? m_viewsCorePipeline
-                : m_viewsPipeline
-            );
+            var viewsPipeline = (m_viewsVariant switch {
+                SdfViewsKernelVariant.CoreOps => m_viewsCorePipeline,
+                SdfViewsKernelVariant.Folds => m_viewsFoldsPipeline,
+                _ => m_viewsPipeline,
+            });
 
             recorder.BeginDebugGroup(
                 commandBufferHandle: commandBuffer,

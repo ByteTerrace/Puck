@@ -870,6 +870,147 @@ public static class CreationCanonicalizer {
             y: ClampCellLimit(value: value.Y),
             z: ClampCellLimit(value: value.Z)
         );
+    // A polar domain's positional material recolor adds sector·stride to the shape's base material id BEFORE the
+    // material load, so the palette must already hold every id the recolor reaches — an uncovered reach reads past
+    // the packed material table on the GPU (or into a neighbouring creation's palette).
+    private static void ValidatePolarStride(CreationDocument document, List<DocumentValidationError> errors) {
+        var paletteCount = Math.Clamp(
+            value: (document.Palette?.Count ?? 1),
+            max: CreationDocument.PaletteSize,
+            min: 1
+        );
+
+        for (var index = 0; (index < (document.Shapes?.Count ?? 0)); index++) {
+            var shape = document.Shapes![index];
+
+            foreach (var op in (shape.Domain ?? [])) {
+                if (op is not ShapeDomainOp.Polar { MaterialStride: > 0 } polar) {
+                    continue;
+                }
+
+                var reach = ((shape.Material ?? 0) + (polar.MaterialStride.Value * Math.Max(
+                    val1: (polar.Count - 1),
+                    val2: 0
+                )));
+
+                if (reach >= paletteCount) {
+                    errors.Add(item: new(
+                        Message: $"the polar material recolor reaches palette slot {reach}, past the {paletteCount}-entry palette — add the entries the stride reaches, or lower the stride/count.",
+                        Path: $"shapes[{index}].domain"
+                    ));
+                }
+            }
+        }
+    }
+    // The step-factor door: normalization clamps each parameter into its own range, but the derived march cost is a
+    // product of all of them, so an over-budget combination is refused by name (never silently reshaped) — the whole
+    // program's march divides its steps by this factor.
+    private static void ValidateNoise(CreationDocument document, List<DocumentValidationError> errors) {
+        if (document.Noise is not { } noise) {
+            return;
+        }
+
+        var priorErrorCount = errors.Count;
+
+        if (
+            !float.IsFinite(f: noise.Frequency) ||
+            (noise.Frequency <= 0f) ||
+            (noise.Frequency > CreationNoiseDocument.MaxFrequency)
+        ) {
+            errors.Add(item: new(
+                Message: $"frequency must be finite in (0, {CreationNoiseDocument.MaxFrequency}]; got {noise.Frequency}.",
+                Path: "noise.frequency"
+            ));
+        }
+
+        if (
+            !float.IsFinite(f: noise.Amplitude) ||
+            (noise.Amplitude <= 0f) ||
+            (noise.Amplitude > CreationNoiseDocument.MaxAmplitude)
+        ) {
+            errors.Add(item: new(
+                Message: $"amplitude must be finite in (0, {CreationNoiseDocument.MaxAmplitude}]; got {noise.Amplitude}.",
+                Path: "noise.amplitude"
+            ));
+        }
+
+        if (noise.Octaves is { } octaves && ((octaves < 1) || (octaves > SdfProgramBuilder.MaxNoiseOctaves))) {
+            errors.Add(item: new(
+                Message: $"octaves must be in 1..{SdfProgramBuilder.MaxNoiseOctaves}; got {octaves}.",
+                Path: "noise.octaves"
+            ));
+        }
+
+        if (noise.Gain is { } gain && (!float.IsFinite(f: gain) || (gain < CreationNoiseDocument.MinGain) || (gain > CreationNoiseDocument.MaxGain))) {
+            errors.Add(item: new(
+                Message: $"gain must be finite in [{CreationNoiseDocument.MinGain}, {CreationNoiseDocument.MaxGain}]; got {gain}.",
+                Path: "noise.gain"
+            ));
+        }
+
+        if (noise.Lacunarity is { } lacunarity && (!float.IsFinite(f: lacunarity) || (lacunarity < CreationNoiseDocument.MinLacunarity) || (lacunarity > CreationNoiseDocument.MaxLacunarity))) {
+            errors.Add(item: new(
+                Message: $"lacunarity must be finite in [{CreationNoiseDocument.MinLacunarity}, {CreationNoiseDocument.MaxLacunarity}]; got {lacunarity}.",
+                Path: "noise.lacunarity"
+            ));
+        }
+
+        if (errors.Count > priorErrorCount) {
+            return;
+        }
+
+        var stepFactor = noise.StepFactor();
+
+        if (stepFactor > CreationNoiseDocument.MaxStepFactor) {
+            errors.Add(item: new(
+                Message: $"the derived march step factor {stepFactor:0.###} exceeds the {CreationNoiseDocument.MaxStepFactor} budget — reduce amplitude, frequency, octaves, or lacunarity so amplitude·frequency·(15/4)·√3·Σ(gain·lacunarity)ᵏ/Σgainᵏ stays within it.",
+                Path: "noise"
+            ));
+        }
+    }
+    // An inert facet (zero/non-finite frequency or amplitude after clamping) drops to null so absence and inertness
+    // share one spelling; every optional resolves to its documented default so the round-trip is idempotent.
+    private static CreationNoiseDocument? NormalizeNoise(CreationNoiseDocument? noise) {
+        if (noise is null) {
+            return null;
+        }
+
+        var frequency = Math.Clamp(
+            value: (float.IsFinite(f: noise.Frequency) ? noise.Frequency : 0f),
+            max: CreationNoiseDocument.MaxFrequency,
+            min: 0f
+        );
+        var amplitude = Math.Clamp(
+            value: (float.IsFinite(f: noise.Amplitude) ? noise.Amplitude : 0f),
+            max: CreationNoiseDocument.MaxAmplitude,
+            min: 0f
+        );
+
+        if ((frequency <= 0f) || (amplitude <= 0f)) {
+            return null;
+        }
+
+        return new CreationNoiseDocument(
+            Amplitude: amplitude,
+            Frequency: frequency,
+            Gain: Math.Clamp(
+                value: (float.IsFinite(f: (noise.Gain ?? 0.5f)) ? (noise.Gain ?? 0.5f) : 0.5f),
+                max: CreationNoiseDocument.MaxGain,
+                min: CreationNoiseDocument.MinGain
+            ),
+            Lacunarity: Math.Clamp(
+                value: (float.IsFinite(f: (noise.Lacunarity ?? 2f)) ? (noise.Lacunarity ?? 2f) : 2f),
+                max: CreationNoiseDocument.MaxLacunarity,
+                min: CreationNoiseDocument.MinLacunarity
+            ),
+            Octaves: Math.Clamp(
+                value: (noise.Octaves ?? 4),
+                max: SdfProgramBuilder.MaxNoiseOctaves,
+                min: 1
+            ),
+            Seed: (noise.Seed ?? 0u)
+        );
+    }
     private static Vector3 NormalizeSpacing(Vector3 value) =>
         new(
             x: Math.Max(val1: (float.IsFinite(f: value.X) ? value.X : 0f), val2: 0.001f),
@@ -979,6 +1120,7 @@ public static class CreationCanonicalizer {
             behavior: document.Behavior,
             shapeIds: shapeIds
         ),
+            Noise = NormalizeNoise(noise: document.Noise),
             Cameras = NormalizeCreationCameras(
             cameras: document.Cameras,
             shapeIds: shapeIds
@@ -1131,6 +1273,14 @@ public static class CreationCanonicalizer {
             errors: errors
         );
         ValidateExtensions(
+            document: document,
+            errors: errors
+        );
+        ValidateNoise(
+            document: document,
+            errors: errors
+        );
+        ValidatePolarStride(
             document: document,
             errors: errors
         );

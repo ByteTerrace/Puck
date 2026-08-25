@@ -384,6 +384,18 @@ uint sdfGridWordAt(SdfInstanceGridHeader grid, uint relativeWord) {
 // stripped op/shape), so a stripped case is provably unreachable whenever this variant runs. KEEP the strip set IN SYNC
 // with SdfViewsKernelVariants.Select (Puck.SdfVm/SdfViewsKernelVariant.cs) — a case guarded here must make Select
 // answer Full, or the core variant silently no-ops the op.
+// The two-tier strip ladder: SDF_CORE_OPS strips EVERYTHING exotic (folds, scopes, warps, exotic shapes);
+// SDF_FOLD_OPS (sdf-world-views-folds.comp) keeps the fold/scope/simple-exotic tier and strips only the HEAVY
+// warp/noise family — the register-hungry cases whose live state holds the full interpreter at low occupancy.
+// KEEP both strip sets IN SYNC with SdfViewsKernelVariants.Select: a case stripped under a macro must send
+// Select to a fuller variant.
+#ifdef SDF_CORE_OPS
+#define SDF_STRIP_ALL_EXOTIC
+#define SDF_STRIP_HEAVY
+#endif
+#ifdef SDF_FOLD_OPS
+#define SDF_STRIP_HEAVY
+#endif
 // SDF_OP_CELL_JITTER Blend-lane (instructionHeader.z) noise flavor: how the per-cell POSITION offset is distributed
 // (KEEP IN SYNC with Puck.SignedDistance.SdfNoiseFlavor). Reshapes ONLY r0 — tumble and material variant are unaffected.
 #define SDF_NOISE_WHITE          0u
@@ -1372,13 +1384,13 @@ float evaluateShape(uint shapeType, float3 p, float4 data0, float4 data1) {
         // A ScreenSlab IS a box; only its material sentinel distinguishes it (see SDF_SCREEN_MATERIAL).
         case SDF_SHAPE_BOX:
         case SDF_SHAPE_SCREEN_SLAB: result = sdfBox(p, data0.xyz, data0.w); break;
-#ifndef SDF_CORE_OPS
+#ifndef SDF_STRIP_ALL_EXOTIC
         case SDF_SHAPE_TORUS:       result = sdfTorus(p, data0.x, data0.y); break;
 #endif
         // The plane normal is normalized HOST-SIDE (SdfProgramBuilder.Plane) — the biggest per-eval saving of all:
         // the plane is in nearly every scene, and a per-sample normalize would run for EVERY map() sample.
         case SDF_SHAPE_PLANE:       result = sdfPlane(p, data0.xyz, data0.w); break;
-#ifndef SDF_CORE_OPS
+#ifndef SDF_STRIP_ALL_EXOTIC
         case SDF_SHAPE_ROUND_CONE:  result = sdfRoundCone(p, data0.x, data0.y, data0.z, data0.w, data1.y); break;
         case SDF_SHAPE_ELLIPSOID:   result = sdfEllipsoid(p, data1.yzw); break;
         case SDF_SHAPE_VESICA:      result = sdfVesica(p, data0.x, data0.y, data0.z); break;
@@ -1391,7 +1403,7 @@ float evaluateShape(uint shapeType, float3 p, float4 data0, float4 data1) {
         // A regular polygon is sdfStar2D's m = 2 case, so it shares the star's body verbatim. RoundedRectangle is a
         // CORE shape (the room's cabinetry is built from it); the rest of the family is exotic.
         case SDF_SHAPE_ROUNDED_RECT:    result = sdfRoundedRect(p, data0, data1); break;
-#ifndef SDF_CORE_OPS
+#ifndef SDF_STRIP_HEAVY
         case SDF_SHAPE_REGULAR_POLYGON:
         case SDF_SHAPE_STAR:            result = sdfPolyStar(p, data0, data1); break;
         case SDF_SHAPE_TRAPEZOID:       result = sdfTrapezoidSolid(p, data0, data1); break;
@@ -1615,7 +1627,7 @@ float3 evaluateShapeGradient(uint shapeType, float3 p, float4 data0, float4 data
         case SDF_SHAPE_PLANE:       return data0.xyz;
         case SDF_SHAPE_BOX:
         case SDF_SHAPE_SCREEN_SLAB: return sdfBoxGradient(p, data0.xyz, data0.w);
-#ifndef SDF_CORE_OPS
+#ifndef SDF_STRIP_ALL_EXOTIC
         case SDF_SHAPE_TORUS:       return sdfTorusGradient(p, data0.x, data0.y);
 #endif
         case SDF_SHAPE_CAPSULE:     return sdfCapsuleGradient(p, data0.xyz, data1.y);
@@ -2183,7 +2195,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     distanceScale *= data0.w;
                     break;
                 }
-#ifndef SDF_CORE_OPS
+#ifndef SDF_STRIP_HEAVY
                 // Log-spherical DOMAIN WARP: data0.x = w (= ln shellRatio, HOST-BAKED), data0.y = twist (radians/shell),
                 // data0.z = 1/w (HOST-BAKED). Fold the RADIAL log-coordinate to the NEAREST shell (round, exactly like
                 // SDF_OP_REPEAT): a translation along log(radius) becomes a uniform Cartesian SCALING, tiling space into
@@ -2243,7 +2255,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     break;
                 }
 #endif
-#ifndef SDF_CORE_OPS
+#ifndef SDF_STRIP_ALL_EXOTIC
                 case SDF_OP_REPEAT: {
                     // data0 arrives pre-clamped and data1 = 1/spacing, both HOST-BAKED by SdfProgramBuilder.Repeat.
                     SDF_VM_LOAD_DATA0;
@@ -2251,6 +2263,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     localPosition -= (data0.xyz * round(localPosition * data1.xyz));
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_ALL_EXOTIC
                 case SDF_OP_REPEAT_LIMITED: {
                     // data0.xyz = spacing, pre-clamped away from 0 exactly as SDF_OP_REPEAT's is (HOST-BAKED by
                     // SdfProgramBuilder.RepeatLimited); data1.xyz = the per-axis cell limit. Unlike Repeat there is no
@@ -2270,6 +2284,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 // on the two's-complement cell index xored with the seed), so cell decisions are bit-identical across
                 // both DXC targets. Displacement and tumble are BOTH isometries — distanceScale is untouched, and the
                 // only Lipschitz contribution is the jitter half-amplitude (SdfProgram.AnalyzeLipschitz).
+#endif
+#ifndef SDF_STRIP_HEAVY
                 case SDF_OP_CELL_JITTER: {
                     SDF_VM_LOAD_DATA0;
                     SDF_VM_LOAD_DATA1;
@@ -2347,6 +2363,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 // SDF_OP_REPEAT the prototype must stay clear of the sector walls). atan2/floor are floats, so a
                 // sector-seam pixel carries the usual +-1 LSB warp noise (geometry only; the per-sector material can flip
                 // at a seam exactly as SDF_OP_WALLPAPER_FOLD's can). At the axis (r == 0) atan2(0,0) = 0 keeps it a no-op.
+#endif
+#ifndef SDF_STRIP_ALL_EXOTIC
                 case SDF_OP_REPEAT_POLAR: {
                     SDF_VM_LOAD_DATA0;
                     uint polarAxis = instructionHeader.y;
@@ -2384,6 +2402,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 // norm <= amp*max|freq_i| (J - I is a scaled cyclic permutation, so its norm is its largest entry), so the metric
                 // stretches by up to (1 + amp*max|freq_i|); SdfProgram.AnalyzeLipschitz bakes
                 // that step clamp and folds the point's max travel (amp*sqrt(3)) into a downstream twist/bend's reach.
+#endif
+#ifndef SDF_STRIP_HEAVY
                 case SDF_OP_DOMAIN_WARP: {
                     SDF_VM_LOAD_DATA0;
                     localPosition += (data0.w * float3(
@@ -2397,6 +2417,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 // points on the negative side (dot(p,n)+offset < 0) mirror onto the positive side. For n = (1,0,0),
                 // offset 0 this is abs(localPosition.x) to the bit. A reflection is an isometry, so distanceScale is
                 // untouched and the field stays 1-Lipschitz.
+#endif
+#ifndef SDF_STRIP_ALL_EXOTIC
                 case SDF_OP_SYMMETRY_PLANE: {
                     SDF_VM_LOAD_DATA0;
                     float spT = (dot(localPosition, data0.xyz) + data0.w);
@@ -2413,6 +2435,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 //   BEND_Y: angle keyed on y, rotates the XY plane
                 //   BEND_Z: angle keyed on y, rotates the YZ plane
                 // TWIST_Y keys on y and rotates XZ (the axis-orthogonal plane) — the only one that twists about its axis.
+#endif
+#ifndef SDF_STRIP_HEAVY
                 case SDF_OP_TWIST_Y: {
                     SDF_VM_LOAD_DATA0;
                     float twistCos = cos(data0.x * localPosition.y);
@@ -2423,6 +2447,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                         ((-twistSin * localPosition.x) + (twistCos * localPosition.z)));
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_HEAVY
                 case SDF_OP_BEND_X: {
                     SDF_VM_LOAD_DATA0;
                     float bendCos = cos(data0.x * localPosition.x);
@@ -2433,6 +2459,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                         ((-bendSin * localPosition.x) + (bendCos * localPosition.y)));
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_HEAVY
                 case SDF_OP_BEND_Y: {
                     SDF_VM_LOAD_DATA0;
                     float bendCos = cos(data0.x * localPosition.y);
@@ -2443,6 +2471,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                         ((-bendSin * localPosition.x) + (bendCos * localPosition.y)));
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_HEAVY
                 case SDF_OP_BEND_Z: {
                     SDF_VM_LOAD_DATA0;
                     float bendCos = cos(data0.x * localPosition.y);
@@ -2453,6 +2483,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                         ((-bendSin * localPosition.y) + (bendCos * localPosition.z)));
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_ALL_EXOTIC
                 case SDF_OP_ELONGATE: {
                     SDF_VM_LOAD_DATA0;
                     localPosition -= clamp(localPosition, -data0.xyz, data0.xyz);
@@ -2461,11 +2493,15 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 // The FIELD ops act on the running result, not the point: Onion shells everything accumulated so far
                 // into a hollow skin; Dilate inflates it. Both operate in world units (candidates were distance-scaled
                 // before blending).
+#endif
+#ifndef SDF_STRIP_ALL_EXOTIC
                 case SDF_OP_ONION: {
                     SDF_VM_LOAD_DATA0;
                     result.distance = (abs(result.distance) - data0.x);
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_ALL_EXOTIC
                 case SDF_OP_DILATE: {
                     SDF_VM_LOAD_DATA0;
                     result.distance -= data0.x;
@@ -2479,8 +2515,18 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 // squared sines, so it maximizes at a cube vertex and reaches exactly amp*max|freq_i| (the infinity norm,
                 // not the Euclidean length): the field can overestimate by (1 + amp*max|freq_i|), which
                 // SdfProgram.AnalyzeLipschitz bakes as the step clamp.
+#endif
+#ifndef SDF_STRIP_HEAVY
                 case SDF_OP_DISPLACE: {
                     SDF_VM_LOAD_DATA0;
+                    // FAR-BAND fast path: the relief is bounded by |amplitude|, so beyond a few amplitudes of the
+                    // accumulated field `f - |amplitude|` is already a valid conservative lower bound — the march
+                    // needs nothing tighter there, and the trig runs only near the band that can matter.
+                    float displaceReach = abs(data0.w);
+                    if (result.distance > (4.0 * displaceReach)) {
+                        result.distance -= displaceReach;
+                        break;
+                    }
                     float3 df = (data0.xyz * localPosition);
                     result.distance += (data0.w * ((sin(df.x) * sin(df.y)) * sin(df.z)));
                     break;
@@ -2492,9 +2538,18 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 // across both DXC targets; the blend is float mul/add (+-1 LSB). AnalyzeLipschitz bakes the gradient
                 // bound as the step clamp; the normalized sum stays in [-1, 1], so the surface reach is bounded by
                 // |amplitude| (the scoped-reach / cull-margin channels read that).
+#endif
+#ifndef SDF_STRIP_HEAVY
                 case SDF_OP_NOISE_DISPLACE: {
                     SDF_VM_LOAD_DATA0;
                     SDF_VM_LOAD_DATA1;
+                    // FAR-BAND fast path (see SDF_OP_DISPLACE): the normalized octave sum stays in [-1, 1], so the
+                    // relief is bounded by |amplitude| and the far field subtracts it instead of hashing.
+                    float noiseReach = abs(data0.y);
+                    if (result.distance > (4.0 * noiseReach)) {
+                        result.distance -= noiseReach;
+                        break;
+                    }
                     float3 q = (localPosition * data0.x);
                     float octaveAmplitude = 1.0;
                     float noiseSum = 0.0;
@@ -2508,6 +2563,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     result.distance += ((data0.y * data1.x) * noiseSum);
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_ALL_EXOTIC
                 case SDF_OP_WALLPAPER_FOLD: {
                     SDF_VM_LOAD_DATA0;
                     SDF_VM_LOAD_DATA1;
@@ -2588,7 +2645,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     }
                     break;
                 }
-#ifndef SDF_CORE_OPS
+#ifndef SDF_STRIP_ALL_EXOTIC
                 // Scoped field accumulator (KEEP IN SYNC with Puck.SignedDistance.SdfOp.PushField/PopField). A scope touches ONLY
                 // the FIELD — never localPosition / distanceScale / parityMaterialDelta — so the point chain is untouched
                 // and ResetPoint semantics are unchanged.
@@ -2612,7 +2669,14 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     // parityMaterialDelta must NOT touch it (the fusion trap). Restore the parent accumulator as the
                     // blend LHS, then fall into the SAME material-winner + blendShape tail a SHAPE uses. The compose blend
                     // + smooth ride the POP instruction (header.z / data1.x, baked by SdfProgramBuilder.PushField).
+                    // data1.y is the scope's baked 1/L candidate scale (SdfProgram.AnalyzeLipschitz): a positively
+                    // scaled distance keeps its zero set and the scaled candidate is exactly 1-Lipschitz, so a scoped
+                    // warp/relief pays its march tax only through this candidate, never the global stepScale. Zero
+                    // (unpatched, every factor-1 scope) means no scale.
                     composeCandidate = result.distance;
+                    if (data1.y > 0.0) {
+                        composeCandidate *= data1.y;
+                    }
                     if (trackMaterial) {
                         composeMaterial = result.material;
                     }
@@ -2965,7 +3029,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     distanceScale *= data0.w;
                     break;
                 }
-#ifndef SDF_CORE_OPS
+#ifndef SDF_STRIP_HEAVY
                 case SDF_OP_LOG_SPHERE: {
                     // KEEP-IN-SYNC with mapCore's case, EXCEPT the fold-safe step bound: this dual twin is HIT-ONLY
                     // (normals at an accepted sample), so it neither steps nor publishes sdfMapStepBound.
@@ -3003,15 +3067,19 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     break;
                 }
 #endif
-#ifndef SDF_CORE_OPS
+#ifndef SDF_STRIP_ALL_EXOTIC
                 case SDF_OP_REPEAT: {
                     localPosition -= (data0.xyz * round(localPosition * data1.xyz));   // A = I (round is locally constant)
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_ALL_EXOTIC
                 case SDF_OP_REPEAT_LIMITED: {
                     localPosition -= (data0.xyz * clamp(round(localPosition / data0.xyz), -data1.xyz, data1.xyz));
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_HEAVY
                 case SDF_OP_CELL_JITTER: {
                     float3 cell = round(localPosition * data1.xyz);
                     uint3 seed = uint3(instructionHeader.y, (instructionHeader.y * SDF_HASH_STREAM_A), (instructionHeader.y * SDF_HASH_STREAM_B));
@@ -3057,6 +3125,8 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
 
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_ALL_EXOTIC
                 case SDF_OP_REPEAT_POLAR: {
                     uint polarAxis = instructionHeader.y;
                     float2 pv;
@@ -3088,6 +3158,8 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
 
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_HEAVY
                 case SDF_OP_DOMAIN_WARP: {
                     // A = I + amp * M, M a scaled cyclic permutation (each axis driven by the next); rows below.
                     float cx = cos(data0.x * localPosition.y);
@@ -3104,6 +3176,8 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                         sin(data0.z * localPosition.x)));
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_ALL_EXOTIC
                 case SDF_OP_SYMMETRY_PLANE: {
                     float spT = (dot(localPosition, data0.xyz) + data0.w);
                     // Reflection A = I - 2 n n^T, applied only on the negative side (spT < 0) — the same half-space fold.
@@ -3114,6 +3188,8 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     localPosition -= ((2.0 * min(spT, 0.0)) * data0.xyz);
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_HEAVY
                 case SDF_OP_TWIST_Y: {
                     float twistCos = cos(data0.x * localPosition.y);
                     float twistSin = sin(data0.x * localPosition.y);
@@ -3127,6 +3203,8 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     localPosition.xz = float2(nx, nz);
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_HEAVY
                 case SDF_OP_BEND_X: {
                     float bendCos = cos(data0.x * localPosition.x);
                     float bendSin = sin(data0.x * localPosition.x);
@@ -3140,6 +3218,8 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     localPosition.xy = float2(nx, ny);
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_HEAVY
                 case SDF_OP_BEND_Y: {
                     float bendCos = cos(data0.x * localPosition.y);
                     float bendSin = sin(data0.x * localPosition.y);
@@ -3153,6 +3233,8 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     localPosition.xy = float2(nx, ny);
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_HEAVY
                 case SDF_OP_BEND_Z: {
                     float bendCos = cos(data0.x * localPosition.y);
                     float bendSin = sin(data0.x * localPosition.y);
@@ -3166,6 +3248,8 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     localPosition.yz = float2(ny, nz);
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_ALL_EXOTIC
                 case SDF_OP_ELONGATE: {
                     // A = diag(indicator(|p_i| > h_i)): the interior of the swept region collapses onto the core (zero
                     // derivative there), the outside translates rigidly (unit derivative).
@@ -3176,18 +3260,31 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     localPosition -= clamp(localPosition, -data0.xyz, data0.xyz);
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_ALL_EXOTIC
                 case SDF_OP_ONION: {
                     float onionSign = ((result.distance < 0.0) ? -1.0 : 1.0);   // d -> |d| - t flips the gradient by sign(d)
                     result.distance = (abs(result.distance) - data0.x);
                     resultGradient *= onionSign;
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_ALL_EXOTIC
                 case SDF_OP_DILATE: {
                     result.distance -= data0.x;   // gradient unchanged (a uniform outward offset)
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_HEAVY
                 case SDF_OP_DISPLACE: {
                     // gradient += amp * grad(sin*sin*sin) — analytic and exact (the FD-cancellation win), mapped to world.
+                    // FAR-BAND fast path (KEEP IN SYNC with mapCore's case): the skipped band contributes a constant
+                    // to the bound field, so the gradient is untouched there.
+                    float displaceReach = abs(data0.w);
+                    if (result.distance > (4.0 * displaceReach)) {
+                        result.distance -= displaceReach;
+                        break;
+                    }
                     float3 df = (data0.xyz * localPosition);
                     float sx = sin(df.x);
                     float sy = sin(df.y);
@@ -3200,9 +3297,17 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     resultGradient += float3(dot(localGradProduct, jx), dot(localGradProduct, jy), dot(localGradProduct, jz));
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_HEAVY
                 case SDF_OP_NOISE_DISPLACE: {
                     // distance += amp*invNorm*fbm; gradient += the analytic octave-summed lattice gradient, mapped to
                     // world through the chain Jacobian columns (KEEP IN SYNC with mapCore's case above).
+                    // FAR-BAND fast path (KEEP IN SYNC with mapCore's case): constant contribution, gradient untouched.
+                    float noiseReach = abs(data0.y);
+                    if (result.distance > (4.0 * noiseReach)) {
+                        result.distance -= noiseReach;
+                        break;
+                    }
                     float3 q = (localPosition * data0.x);
                     float octaveAmplitude = 1.0;
                     float octaveFrequency = data0.x;
@@ -3224,6 +3329,8 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     resultGradient += float3(dot(localGradProduct, jx), dot(localGradProduct, jy), dot(localGradProduct, jz));
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_ALL_EXOTIC
                 case SDF_OP_WALLPAPER_FOLD: {
                     uint group = instructionHeader.y;
                     uint plane = instructionHeader.z;
@@ -3292,7 +3399,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     composePending = true;
                     break;
                 }
-#ifndef SDF_CORE_OPS
+#ifndef SDF_STRIP_ALL_EXOTIC
                 case SDF_OP_PUSH_FIELD: {
                     saved.distance = result.distance;
                     saved.material = result.material;
@@ -3303,8 +3410,15 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     break;
                 }
                 case SDF_OP_POP_FIELD: {
+                    // data1.y = the scope's baked 1/L candidate scale (see mapCore's pop). The gradient scales WITH the
+                    // distance so the soft-blend h weights stay consistent with the scaled candidate; the consumer's
+                    // final normalize cancels the uniform factor.
                     composeCandidate = result.distance;
                     composeGradient = resultGradient;
+                    if (data1.y > 0.0) {
+                        composeCandidate *= data1.y;
+                        composeGradient *= data1.y;
+                    }
                     composeMaterial = result.material;
                     composeBlend = instructionHeader.z;
                     composeSmooth = data1.x;

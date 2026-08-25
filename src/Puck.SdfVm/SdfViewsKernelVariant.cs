@@ -22,6 +22,10 @@ public enum SdfViewsKernelVariant {
     /// <summary>The exotic-ops-stripped interpreter (sdf-world-views-core.comp) — selected only for a program whose
     /// instruction stream provably touches no stripped op or shape.</summary>
     CoreOps = 1,
+    /// <summary>The fold-ops middle tier (sdf-world-views-folds.comp) — folds, scopes, and the simple exotic shapes
+    /// stay compiled; the HEAVY warp/noise family (<c>SDF_STRIP_HEAVY</c> in sdf-vm.hlsli) compiles out. Selected for
+    /// a program that touches a fold/scope/simple-exotic case but no heavy one.</summary>
+    Folds = 2,
 }
 /// <summary>Selects the Stage 1 views kernel variant for a program — the host half of the <c>SDF_CORE_OPS</c>
 /// contract. KEEP the exotic sets IN SYNC with the <c>#ifndef SDF_CORE_OPS</c> strips in sdf-vm.hlsli: an op or shape
@@ -70,14 +74,60 @@ public static class SdfViewsKernelVariants {
 
         return null;
     }
-    /// <summary>Selects the views kernel variant for <paramref name="program"/> — <see cref="SdfViewsKernelVariant.CoreOps"/>
-    /// exactly when <see cref="FirstExoticTouch"/> finds nothing. Deterministic and data-driven: the same program
-    /// always selects the same variant on every backend.</summary>
+    /// <summary>The first HEAVY op/shape the program's instruction stream touches (the <c>SDF_STRIP_HEAVY</c> set —
+    /// the warp/noise family and the analytic-solve 2D shapes), or <see langword="null"/> when it touches none. KEEP
+    /// this set IN SYNC with the <c>SDF_STRIP_HEAVY</c> gates in sdf-vm.hlsli.</summary>
+    /// <param name="program">The program to inspect.</param>
+    /// <returns>The first heavy touch, or <see langword="null"/>.</returns>
+    public static string? FirstHeavyTouch(SdfProgram program) {
+        ArgumentNullException.ThrowIfNull(program);
+
+        foreach (var instruction in program.Instructions) {
+            switch (instruction.Op) {
+                case SdfOp.TwistY:
+                case SdfOp.BendX:
+                case SdfOp.BendY:
+                case SdfOp.BendZ:
+                case SdfOp.LogSphere:
+                case SdfOp.CellJitter:
+                case SdfOp.Displace:
+                case SdfOp.DomainWarp:
+                case SdfOp.NoiseDisplace:
+                    return $"op {instruction.Op}";
+                case SdfOp.ShapeBlend:
+                    switch ((SdfShapeType)instruction.Shape) {
+                        case SdfShapeType.RegularPolygon:
+                        case SdfShapeType.Star:
+                        case SdfShapeType.Trapezoid:
+                        case SdfShapeType.Ellipse:
+                            return $"shape {((SdfShapeType)instruction.Shape)}";
+                        default:
+                            break;
+                    }
+
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        return null;
+    }
+    /// <summary>Selects the views kernel variant for <paramref name="program"/>: <see cref="SdfViewsKernelVariant.Full"/>
+    /// when the stream touches a heavy op/shape, <see cref="SdfViewsKernelVariant.Folds"/> when it touches only the
+    /// fold/scope/simple-exotic tier, else <see cref="SdfViewsKernelVariant.CoreOps"/>. Deterministic and
+    /// data-driven: the same program always selects the same variant on every backend.</summary>
     /// <param name="program">The program about to be uploaded.</param>
-    /// <returns>The variant the engine should dispatch Stage 1 with.</returns>
-    public static SdfViewsKernelVariant Select(SdfProgram program) =>
-        ((FirstExoticTouch(program: program) is null)
-            ? SdfViewsKernelVariant.CoreOps
-            : SdfViewsKernelVariant.Full
-        );
+    /// <returns>The variant the engine should dispatch Stage 1 with, and the touch that decided it (null for core).</returns>
+    public static (SdfViewsKernelVariant Variant, string? Touch) Select(SdfProgram program) {
+        if (FirstHeavyTouch(program: program) is { } heavy) {
+            return (SdfViewsKernelVariant.Full, heavy);
+        }
+
+        if (FirstExoticTouch(program: program) is { } exotic) {
+            return (SdfViewsKernelVariant.Folds, exotic);
+        }
+
+        return (SdfViewsKernelVariant.CoreOps, null);
+    }
 }

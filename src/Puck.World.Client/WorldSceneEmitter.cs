@@ -66,6 +66,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // The placement capacity reservation, in worst-case stamp instances: boot static instances + the authoring
     // headroom. Frozen at construction; the apply-time measure charges max(candidate instances, this).
     private readonly int m_placementReservation;
+    private readonly int m_placementShapeReservation;
     private readonly WorldRenderSettings m_settings;
     private readonly WorldTextCatalog m_text;
 
@@ -176,11 +177,14 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
             dynamics: definition.Dynamics,
             bodyStamps: m_bodyStamps
         );
-        m_placementReservation = (WorldPlacementStamper.StaticStampInstances(
+        // Authoring-headroom stamps reserve as SCOPED whole-creation stamps (the 48-shape probe form dominates
+        // anything a live-placed candidate can materialize).
+        (m_placementReservation, m_placementShapeReservation) = WorldPlacementStamper.StaticStampReservation(
             creations: definition.Creations,
             placements: definition.Placements,
             worldSeed: (definition.Generation?.WorldSeed ?? 0UL)
-        ) + m_authoringHeadroomPlacements);
+        );
+        m_placementReservation += m_authoringHeadroomPlacements;
     }
 
     /// <summary>The frozen transform-slot count this emitter declares: every leaf in the all-128 avatar catalog plus
@@ -257,17 +261,22 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
             placementProbe ||
             probeWorstCase
         ) {
-            var candidateInstances = WorldPlacementStamper.StaticStampInstances(
+            var (candidateScoped, candidateShapes) = WorldPlacementStamper.StaticStampReservation(
                 creations: creations,
                 placements: placements,
                 worldSeed: (client.Definition.Generation?.WorldSeed ?? 0UL)
             );
 
+            // Each reservation class maxes against its construction-time floor independently — conservative in both.
             WorldPlacementStamper.EmitProbe(
                 builder: builder,
                 reservedCount: Math.Max(
-                    val1: candidateInstances,
+                    val1: candidateScoped,
                     val2: m_placementReservation
+                ),
+                reservedShapeInstances: Math.Max(
+                    val1: candidateShapes,
+                    val2: m_placementShapeReservation
                 )
             );
         } else {
