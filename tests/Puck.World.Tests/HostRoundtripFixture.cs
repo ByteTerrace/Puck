@@ -10,24 +10,19 @@ namespace Puck.World.Tests;
 /// fresh host — see <see cref="WorldAuthorityCheckpointHostRoundtripLawTests"/> for the scenario's own remarks on
 /// why the moved seat stays local (never peer-range) and why row-a keeps a second occupant.</summary>
 internal static class HostRoundtripFixture {
-    /// <summary>Builds the two-row host, joins two local seats on row-a, steps both rows, drains a transfer of
-    /// slot 0 to row-b, and steps a settled tail.</summary>
-    public static (WorldInstanceHost Host, HostRow RowA, HostRow RowB, Guid MachineId) BuildCommittedScenario() {
-        var machineId = Guid.NewGuid();
-        var host = new WorldInstanceHost(
-            applicationStopping: CancellationToken.None,
-            admitsSpawn: true,
-            machineId: machineId,
-            resolver: new WorldSessionResolver(),
-            seats: WorldEmbodiedSeats.None,
-            stateRoot: Directory.CreateTempSubdirectory(prefix: "puck-host-roundtrip-tests-").FullName
-        );
-        var rowA = HostRow.Build(name: "row-a");
-        var rowB = HostRow.Build(name: "row-b");
-
-        host.Admit(row: rowA.Instance);
-        host.Admit(row: rowB.Instance);
-
+    /// <summary>Builds a two-row host's <see cref="WorldInstanceHost"/> with a fresh temp state root under
+    /// <paramref name="tempPrefix"/> — the exact construction shape every scenario builder below shares.</summary>
+    private static WorldInstanceHost BuildHost(Guid machineId, string tempPrefix) => new(
+        applicationStopping: CancellationToken.None,
+        admitsSpawn: true,
+        machineId: machineId,
+        resolver: new WorldSessionResolver(),
+        seats: WorldEmbodiedSeats.None,
+        stateRoot: Directory.CreateTempSubdirectory(prefix: tempPrefix).FullName
+    );
+    /// <summary>Joins local seats 0 and 1 on <paramref name="rowA"/> — the exact two-seat shape
+    /// <see cref="BuildCommittedScenario"/> and <see cref="BuildInDoubtScenario"/> both start from.</summary>
+    private static void JoinTwoLocalSeats(HostRow rowA) {
         Assert.True(condition: rowA.Server.ApplySession(request: new SessionRequest.Join(
             IdentityName: null,
             Principal: WorldPrincipal.Seat(slot: 0),
@@ -40,11 +35,28 @@ internal static class HostRoundtripFixture {
             Slot: 1,
             WireProtocolKey: WorldProtocol.WireProtocolKey
         )).Accepted);
-
-        for (var tick = 0; (tick < 50); tick++) {
+    }
+    /// <summary>Drains pending transfers and steps <paramref name="host"/> for <paramref name="ticks"/> settled ticks.</summary>
+    private static void AdvanceSettledTicks(WorldInstanceHost host, int ticks) {
+        for (var tick = 0; (tick < ticks); tick++) {
             host.DrainPendingTransfers();
             host.StepInstances(masterDeltaTicks: Fixtures.StepTicks);
         }
+    }
+    /// <summary>Builds the two-row host, joins two local seats on row-a, steps both rows, drains a transfer of
+    /// slot 0 to row-b, and steps a settled tail.</summary>
+    public static (WorldInstanceHost Host, HostRow RowA, HostRow RowB, Guid MachineId) BuildCommittedScenario() {
+        var machineId = Guid.NewGuid();
+        var host = BuildHost(machineId: machineId, tempPrefix: "puck-host-roundtrip-tests-");
+        var rowA = HostRow.Build(name: "row-a");
+        var rowB = HostRow.Build(name: "row-b");
+
+        host.Admit(row: rowA.Instance);
+        host.Admit(row: rowB.Instance);
+
+        JoinTwoLocalSeats(rowA: rowA);
+
+        AdvanceSettledTicks(host: host, ticks: 50);
 
         _ = host.EnqueueTransfer(
             actingPrincipal: WorldPrincipal.Console,
@@ -57,10 +69,7 @@ internal static class HostRoundtripFixture {
 
         Assert.True(condition: rowB.Server.Population.IsActive(index: 0));
 
-        for (var tick = 0; (tick < 50); tick++) {
-            host.DrainPendingTransfers();
-            host.StepInstances(masterDeltaTicks: Fixtures.StepTicks);
-        }
+        AdvanceSettledTicks(host: host, ticks: 50);
 
         return (host, rowA, rowB, machineId);
     }
@@ -71,14 +80,7 @@ internal static class HostRoundtripFixture {
     /// retry the commit for real and resolve the in-doubt entry this scenario exists to capture.</summary>
     public static (WorldInstanceHost Host, HostRow RowA, HostRow RowB, Guid MachineId, ulong TransferId) BuildInDoubtScenario() {
         var machineId = Guid.NewGuid();
-        var host = new WorldInstanceHost(
-            applicationStopping: CancellationToken.None,
-            admitsSpawn: true,
-            machineId: machineId,
-            resolver: new WorldSessionResolver(),
-            seats: WorldEmbodiedSeats.None,
-            stateRoot: Directory.CreateTempSubdirectory(prefix: "puck-host-roundtrip-in-doubt-tests-").FullName
-        );
+        var host = BuildHost(machineId: machineId, tempPrefix: "puck-host-roundtrip-in-doubt-tests-");
         var rowA = HostRow.Build(name: "row-a");
         var rowB = HostRow.Build(name: "row-b");
 
@@ -89,23 +91,9 @@ internal static class HostRoundtripFixture {
             instanceName: "row-b"
         );
 
-        Assert.True(condition: rowA.Server.ApplySession(request: new SessionRequest.Join(
-            IdentityName: null,
-            Principal: WorldPrincipal.Seat(slot: 0),
-            Slot: 0,
-            WireProtocolKey: WorldProtocol.WireProtocolKey
-        )).Accepted);
-        Assert.True(condition: rowA.Server.ApplySession(request: new SessionRequest.Join(
-            IdentityName: null,
-            Principal: WorldPrincipal.Seat(slot: 1),
-            Slot: 1,
-            WireProtocolKey: WorldProtocol.WireProtocolKey
-        )).Accepted);
+        JoinTwoLocalSeats(rowA: rowA);
 
-        for (var tick = 0; (tick < 50); tick++) {
-            host.DrainPendingTransfers();
-            host.StepInstances(masterDeltaTicks: Fixtures.StepTicks);
-        }
+        AdvanceSettledTicks(host: host, ticks: 50);
 
         var transferId = host.EnqueueTransfer(
             actingPrincipal: WorldPrincipal.Console,
@@ -136,14 +124,7 @@ internal static class HostRoundtripFixture {
     /// why that resume is what makes the comparison hold.</summary>
     public static (WorldInstanceHost Host, HostRow RowA, HostRow RowB, Guid MachineId, int PeerSlot) BuildPeerRangeCommittedScenario() {
         var machineId = Guid.NewGuid();
-        var host = new WorldInstanceHost(
-            applicationStopping: CancellationToken.None,
-            admitsSpawn: true,
-            machineId: machineId,
-            resolver: new WorldSessionResolver(),
-            seats: WorldEmbodiedSeats.None,
-            stateRoot: Directory.CreateTempSubdirectory(prefix: "puck-host-roundtrip-peer-tests-").FullName
-        );
+        var host = BuildHost(machineId: machineId, tempPrefix: "puck-host-roundtrip-peer-tests-");
         var document = Fixtures.BuildDocument() with {
             PopulationRaw = Fixtures.BuildDocument().Population with {
                 CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 1),
@@ -178,10 +159,7 @@ internal static class HostRoundtripFixture {
             refusal: out _
         )));
 
-        for (var tick = 0; (tick < 50); tick++) {
-            host.DrainPendingTransfers();
-            host.StepInstances(masterDeltaTicks: Fixtures.StepTicks);
-        }
+        AdvanceSettledTicks(host: host, ticks: 50);
 
         _ = host.EnqueueTransfer(
             actingPrincipal: WorldPrincipal.Console,
@@ -194,10 +172,7 @@ internal static class HostRoundtripFixture {
 
         Assert.True(condition: rowB.Server.Population.IsActive(index: peerSlot));
 
-        for (var tick = 0; (tick < 50); tick++) {
-            host.DrainPendingTransfers();
-            host.StepInstances(masterDeltaTicks: Fixtures.StepTicks);
-        }
+        AdvanceSettledTicks(host: host, ticks: 50);
 
         return (host, rowA, rowB, machineId, peerSlot);
     }
@@ -234,14 +209,7 @@ internal static class HostRoundtripFixture {
     /// different id here would diverge a byte-identity comparison on a field the law itself introduces, never one the
     /// checkpoint completeness rule is about.</summary>
     public static (WorldInstanceHost Host, HostRow RowA, HostRow RowB) RestoreBoth(Guid machineId, WorldAuthorityCheckpoint checkpointA, WorldAuthorityCheckpoint checkpointB) {
-        var host = new WorldInstanceHost(
-            applicationStopping: CancellationToken.None,
-            admitsSpawn: true,
-            machineId: machineId,
-            resolver: new WorldSessionResolver(),
-            seats: WorldEmbodiedSeats.None,
-            stateRoot: Directory.CreateTempSubdirectory(prefix: "puck-host-roundtrip-restore-tests-").FullName
-        );
+        var host = BuildHost(machineId: machineId, tempPrefix: "puck-host-roundtrip-restore-tests-");
 
         static HostRow RestoredRow(WorldAuthorityCheckpoint checkpoint, string name) {
             var definition = WorldDefinitionSerialization.Deserialize(utf8Json: checkpoint.Server.DefinitionJson);

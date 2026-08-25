@@ -8,13 +8,9 @@ namespace Puck.Launcher.Tests.Release;
 /// <summary>Laws over <see cref="ReleaseRolloutBucket"/>: the exact boundary at a chosen percent, 0 and 100 as
 /// closed/open ends, and the mint-or-load persistence contract.</summary>
 public sealed class ReleaseRolloutBucketTests : IDisposable {
-    private readonly string m_root = Path.Combine(path1: Path.GetTempPath(), path2: $"puck-launcher-rollout-tests-{Guid.NewGuid():n}");
+    private readonly TempStagingRoot m_root = new();
 
-    public void Dispose() {
-        if (Directory.Exists(path: m_root)) {
-            Directory.Delete(path: m_root, recursive: true);
-        }
-    }
+    public void Dispose() => m_root.Dispose();
 
     // Finds an install id whose bucket value is EXACTLY the requested modulo-100 remainder, by trying candidate
     // hex ids in order — deterministic (no RNG at assertion time) and independent of the production hash path
@@ -50,8 +46,8 @@ public sealed class ReleaseRolloutBucketTests : IDisposable {
         Assert.True(condition: ReleaseRolloutBucket.IsIncluded(installId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", percent: 100));
     [Fact]
     public void MintOrLoad_PersistsAcrossCalls() {
-        var first = ReleaseRolloutBucket.MintOrLoad(cacheRoot: m_root);
-        var second = ReleaseRolloutBucket.MintOrLoad(cacheRoot: m_root);
+        var first = ReleaseRolloutBucket.MintOrLoad(cacheRoot: m_root.RootPath);
+        var second = ReleaseRolloutBucket.MintOrLoad(cacheRoot: m_root.RootPath);
 
         Assert.Equal(actual: second, expected: first);
         Assert.Equal(expected: 32, actual: first.Length);

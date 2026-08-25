@@ -8,7 +8,7 @@ using Xunit;
 namespace Puck.Attestation.Tests;
 
 /// <summary>One minted domain's raw key material: root, issuing, and a subject's signing and sealing keys — all sharing the domain's root fingerprint.</summary>
-internal sealed record DomainKeys(
+public sealed record DomainKeys(
     string Domain,
     ECDsa RootKey,
     byte[] RootSpki,
@@ -24,14 +24,14 @@ internal sealed record DomainKeys(
     byte[] SubjectSealingSpki,
     KeyId SubjectSealingId
 );
-internal static class AttestationTestSupport {
+public static class AttestationTestSupport {
     internal const long Epoch = 1_700_000_000L;
 
     /// <summary>The reach every ordinary test trust list authors, so a scenario that does not care about scoping still carries a real one.</summary>
     internal static readonly IReadOnlySet<string> DefaultReach = new HashSet<string>(comparer: StringComparer.Ordinal) { "slot:wallet", "slot:title" };
 
     /// <summary>Mints a fresh domain's whole key set. Minting is randomised, so every call produces a distinct domain even for the same subject string.</summary>
-    internal static DomainKeys MintDomainKeys(string subject) {
+    public static DomainKeys MintDomainKeys(string subject) {
         var rootKey = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);
         var rootSpki = rootKey.ExportSubjectPublicKeyInfo();
         var rootId = KeyId.ForRoot(
@@ -83,7 +83,7 @@ internal static class AttestationTestSupport {
         );
     }
     /// <summary>Mints binding #1 (root vouches issuing) and binding #2 (issuing vouches subject) — the depth-exactly-two chain.</summary>
-    internal static (SignedAttestation RootToIssuing, SignedAttestation IssuingToSubject) BuildChain(IAttestationCodec codec, DomainKeys keys, long notBefore, long notAfter) {
+    public static (SignedAttestation RootToIssuing, SignedAttestation IssuingToSubject) BuildChain(IAttestationCodec codec, DomainKeys keys, long notBefore, long notAfter) {
         var rootToIssuing = AttestationSigner.SignKeyBinding(
             codec: codec,
             domain: keys.Domain,
