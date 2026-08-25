@@ -3,7 +3,7 @@ using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
-public sealed partial class WorldServer {
+public sealed partial class WorldServer : IWorldFieldLatticeHost {
     /// <summary>Describes the field lattice for a console read-back.</summary>
     /// <returns>One line, or a none line when the world declares no <c>fields</c> section.</returns>
     public string DescribeFields() => ((m_population.Fields is { } lattice)
@@ -11,7 +11,8 @@ public sealed partial class WorldServer {
         : "[world.fields: none]"
     );
     // Runs after the rules so a tag a rule wrote this tick is what an emit reads, and before the snapshot so the
-    // step's cell writes ride this tick's delivery.
+    // step's cell writes ride this tick's delivery. `this` is the host — the lattice reaches bodies and state-row
+    // cells through the interface below, never a per-tick delegate.
     private void StepFields(ulong tick) {
         if (m_population.Fields is not { } lattice) {
             return;
@@ -19,28 +20,29 @@ public sealed partial class WorldServer {
 
         lattice.Step(
             bodyCount: m_population.Capacity,
-            bodyPosition: index => Body(index: index)?.FixedPosition,
-            readTag: (row, body) => ReadTagCell(
-                body: body,
-                catalog: lattice.Program.StateCatalog,
-                row: row,
-                tick: tick
-            ),
-            tick: tick,
-            writeTag: (row, body, value) => WriteTagCell(
-                body: body,
-                catalog: lattice.Program.StateCatalog,
-                row: row,
-                tick: tick,
-                value: value
-            ),
-            readScalar: row => ReadScalarSlot(
-                catalog: lattice.Program.StateCatalog,
-                row: row,
-                tick: tick
-            )
+            host: this,
+            tick: tick
         );
     }
+    FixedVector3? IWorldFieldLatticeHost.BodyPosition(int body) => Body(index: body)?.FixedPosition;
+    long IWorldFieldLatticeHost.ReadTag(WorldStateHandle row, int body, ulong tick) => ReadTagCell(
+        body: body,
+        catalog: m_population.Fields!.Program.StateCatalog,
+        row: row,
+        tick: tick
+    );
+    void IWorldFieldLatticeHost.WriteTag(WorldStateHandle row, int body, long value, ulong tick) => WriteTagCell(
+        body: body,
+        catalog: m_population.Fields!.Program.StateCatalog,
+        row: row,
+        tick: tick,
+        value: value
+    );
+    FixedQ4816 IWorldFieldLatticeHost.ReadScalar(WorldStateHandle row, ulong tick) => ReadScalarSlot(
+        catalog: m_population.Fields!.Program.StateCatalog,
+        row: row,
+        tick: tick
+    );
     // A reaction scalar's row read: the named row's SLOT cell as Q48.16 raw bits (0 when the row or its slot cell
     // does not exist yet — the slot is minted by its first write).
     private FixedQ4816 ReadScalarSlot(WorldStateCatalog catalog, WorldStateHandle row, ulong tick) => ((WorldStateReader.TryReadHandle(

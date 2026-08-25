@@ -30,12 +30,24 @@ public sealed class WorldFieldLatticeLawTests {
         Reactions: reactions
     );
 
+    // The test double for IWorldFieldLatticeHost: every hook defaults to the same no-op/zero WorldFieldLattice.Step
+    // itself falls back to when a caller omits a delegate.
+    private sealed class LambdaHost(
+        Func<int, FixedVector3?>? bodyPosition = null,
+        Func<WorldStateHandle, int, ulong, long>? readTag = null,
+        Action<WorldStateHandle, int, long, ulong>? writeTag = null,
+        Func<WorldStateHandle, ulong, FixedQ4816>? readScalar = null
+    ) : IWorldFieldLatticeHost {
+        public FixedVector3? BodyPosition(int body) => bodyPosition?.Invoke(body);
+        public long ReadTag(WorldStateHandle row, int body, ulong tick) => (readTag?.Invoke(row, body, tick) ?? 0L);
+        public void WriteTag(WorldStateHandle row, int body, long value, ulong tick) => writeTag?.Invoke(row, body, value, tick);
+        public FixedQ4816 ReadScalar(WorldStateHandle row, ulong tick) => (readScalar?.Invoke(row, tick) ?? FixedQ4816.Zero);
+    }
+
     private static void Step(WorldFieldLattice lattice) => lattice.Step(
         tick: 1,
         bodyCount: 0,
-        bodyPosition: _ => null,
-        readTag: (_, _) => 0,
-        writeTag: (_, _, _) => { }
+        host: new LambdaHost()
     );
 
     private static WorldFieldsSection FilledFields(WorldLatticeFill fill, int width = 32, int depth = 32) => new(
@@ -132,10 +144,7 @@ public sealed class WorldFieldLatticeLawTests {
         void StepOnce() => lattice.Step(
             tick: 1,
             bodyCount: 0,
-            bodyPosition: static _ => null,
-            readTag: static (_, _) => 0,
-            writeTag: static (_, _, _) => { },
-            readScalar: _ => season
+            host: new LambdaHost(readScalar: (_, _) => season)
         );
 
         StepOnce();
@@ -163,13 +172,14 @@ public sealed class WorldFieldLatticeLawTests {
         lattice.Step(
             tick: 1,
             bodyCount: 1,
-            bodyPosition: _ => new FixedVector3(
-                X: FixedQ4816.FromDouble(value: 0.5),
-                Y: FixedQ4816.FromDouble(value: 1.5),
-                Z: FixedQ4816.FromDouble(value: 0.5)
-            ),
-            readTag: (_, _) => 1,
-            writeTag: (_, _, _) => { }
+            host: new LambdaHost(
+                bodyPosition: _ => new FixedVector3(
+                    X: FixedQ4816.FromDouble(value: 0.5),
+                    Y: FixedQ4816.FromDouble(value: 1.5),
+                    Z: FixedQ4816.FromDouble(value: 0.5)
+                ),
+                readTag: (_, _, _) => 1
+            )
         );
 
         Assert.Equal(
@@ -189,13 +199,14 @@ public sealed class WorldFieldLatticeLawTests {
         lattice.Step(
             tick: 1,
             bodyCount: 1,
-            bodyPosition: _ => new FixedVector3(
-                X: FixedQ4816.FromDouble(value: 0.5),
-                Y: FixedQ4816.FromInteger(value: 30),
-                Z: FixedQ4816.FromDouble(value: 0.5)
-            ),
-            readTag: (_, _) => 1,
-            writeTag: (_, _, _) => { }
+            host: new LambdaHost(
+                bodyPosition: _ => new FixedVector3(
+                    X: FixedQ4816.FromDouble(value: 0.5),
+                    Y: FixedQ4816.FromInteger(value: 30),
+                    Z: FixedQ4816.FromDouble(value: 0.5)
+                ),
+                readTag: (_, _, _) => 1
+            )
         );
 
         Assert.Equal(
@@ -243,12 +254,13 @@ public sealed class WorldFieldLatticeLawTests {
         lattice.Step(
             tick: 1UL,
             bodyCount: 1,
-            bodyPosition: static _ => new FixedVector3(FixedQ4816.FromDouble(value: 0.5), FixedQ4816.FromDouble(value: 0.5), FixedQ4816.FromDouble(value: 0.5)),
-            readTag: static (_, _) => 0L,
-            writeTag: (row, _, next) => {
-                written = row;
-                value = next;
-            }
+            host: new LambdaHost(
+                bodyPosition: static _ => new FixedVector3(FixedQ4816.FromDouble(value: 0.5), FixedQ4816.FromDouble(value: 0.5), FixedQ4816.FromDouble(value: 0.5)),
+                writeTag: (row, _, next, _) => {
+                    written = row;
+                    value = next;
+                }
+            )
         );
 
         Assert.Equal(expected: expose.Row, actual: written);

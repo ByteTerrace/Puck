@@ -5,6 +5,32 @@ using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
+/// <summary>The body-position and state-row seam a <see cref="WorldFieldLattice.Step"/> reaches through — implemented
+/// once by the owning host (<see cref="WorldServer"/>) so a step reaches body state through a plain interface call
+/// rather than allocating fresh delegates every tick. Every method receives the stepping tick explicitly since the
+/// interface itself carries none.</summary>
+public interface IWorldFieldLatticeHost {
+    /// <summary>Resolves an active body's position, or <see langword="null"/> for an inactive slot.</summary>
+    /// <param name="body">The body index.</param>
+    FixedVector3? BodyPosition(int body);
+    /// <summary>Reads a typed keyed int state row's cell for a body index (0 when absent).</summary>
+    /// <param name="row">The compiled state row handle.</param>
+    /// <param name="body">The body index used as the cell's key.</param>
+    /// <param name="tick">The stepping tick.</param>
+    long ReadTag(WorldStateHandle row, int body, ulong tick);
+    /// <summary>Writes a typed keyed int state row's cell for a body index.</summary>
+    /// <param name="row">The compiled state row handle.</param>
+    /// <param name="body">The body index used as the cell's key.</param>
+    /// <param name="value">The value to write.</param>
+    /// <param name="tick">The stepping tick.</param>
+    void WriteTag(WorldStateHandle row, int body, long value, ulong tick);
+    /// <summary>Reads a scalar fixed-kind state row's slot cell for a row-referenced reaction scalar (0 when absent
+    /// or unwritten).</summary>
+    /// <param name="row">The compiled state row handle.</param>
+    /// <param name="tick">The stepping tick.</param>
+    FixedQ4816 ReadScalar(WorldStateHandle row, ulong tick);
+}
+
 /// <summary>
 /// The live cell values of a world's <c>fields</c> section and the reactions that evolve them — simulation state
 /// beside the population: stepped from <c>WorldServer.Step</c> on the lattice's cadence, checkpointed, and delivered
@@ -641,46 +667,45 @@ public sealed class WorldFieldLattice {
             }
         }
     }
-    /// <summary>Steps the reactions once when <paramref name="tick"/> falls on the cadence; a no-op otherwise.</summary>
+    /// <summary>Steps the reactions once when <paramref name="tick"/> falls on the cadence; a no-op otherwise. The
+    /// host is invoked directly (no per-call delegate is allocated) so a world with a <c>fields</c> section pays
+    /// nothing beyond the cadence check on the ticks the lattice does not react on.</summary>
     /// <param name="tick">The simulation tick.</param>
     /// <param name="bodyCount">The entity-table capacity; bodies are visited by index.</param>
-    /// <param name="bodyPosition">Resolves an active body's position, or <see langword="null"/> for an inactive slot.</param>
-    /// <param name="readTag">Reads a typed keyed int state row's cell for a body index (0 when absent).</param>
-    /// <param name="writeTag">Writes a typed keyed int state row's cell for a body index.</param>
-    /// <param name="readScalar">Reads a scalar fixed-kind state row's slot cell for a row-referenced reaction
-    /// scalar (0 when absent or unwritten); <see langword="null"/> resolves every reference to 0.</param>
-    public void Step(ulong tick, int bodyCount, Func<int, FixedVector3?> bodyPosition, Func<WorldStateHandle, int, long> readTag, Action<WorldStateHandle, int, long> writeTag, Func<WorldStateHandle, FixedQ4816>? readScalar = null) {
+    /// <param name="host">The body-position and state-row seam.</param>
+    public void Step(ulong tick, int bodyCount, IWorldFieldLatticeHost host) {
         if ((tick % ((ulong)m_stepEveryTicks)) != 0UL) {
             return;
         }
 
-        var scalars = (readScalar ?? (static _ => FixedQ4816.Zero));
+        ArgumentNullException.ThrowIfNull(argument: host);
 
         foreach (var reaction in m_program.Nodes) {
             switch (reaction) {
                 case WorldFieldNode.Diffuse diffuse:
                     StepDiffuse(
                         field: diffuse.Field.Ordinal,
-                        rate: ClampRate(rate: Resolve(input: diffuse.Rate, readScalar: scalars))
+                        rate: ClampRate(rate: Resolve(host: host, input: diffuse.Rate, tick: tick))
                     );
                     break;
                 case WorldFieldNode.Decay decay:
                     StepDecay(
                         field: decay.Field.Ordinal,
-                        rate: ClampRate(rate: Resolve(input: decay.Rate, readScalar: scalars))
+                        rate: ClampRate(rate: Resolve(host: host, input: decay.Rate, tick: tick))
                     );
                     break;
                 case WorldFieldNode.Transform transform:
                     StepTransform(
-                        readScalar: scalars,
-                        reaction: transform
+                        host: host,
+                        reaction: transform,
+                        tick: tick
                     );
                     break;
                 case WorldFieldNode.Emit emit:
                     for (var body = 0; (body < bodyCount); body++) {
                         if (
-                            (bodyPosition(arg: body) is not { } position) ||
-                            (readTag(arg1: emit.Tag, arg2: body) == 0L) ||
+                            (host.BodyPosition(body: body) is not { } position) ||
+                            (host.ReadTag(row: emit.Tag, body: body, tick: tick) == 0L) ||
                             !TryBodyCellOf(
                             position: in position,
                             cell: out var cell
@@ -695,7 +720,7 @@ public sealed class WorldFieldLattice {
                             value: AddClamped(
                                 field: emit.Field.Ordinal,
                                 x: m_values[emit.Field.Ordinal][cell],
-                                y: Resolve(input: emit.Amount, readScalar: scalars)
+                                y: Resolve(host: host, input: emit.Amount, tick: tick)
                             )
                         );
                     }
@@ -703,7 +728,7 @@ public sealed class WorldFieldLattice {
                     break;
                 case WorldFieldNode.Expose expose:
                     for (var body = 0; (body < bodyCount); body++) {
-                        if (bodyPosition(arg: body) is not { } position) {
+                        if (host.BodyPosition(body: body) is not { } position) {
                             continue;
                         }
 
@@ -712,14 +737,15 @@ public sealed class WorldFieldLattice {
                             cell: out var cell
                         ) && Holds(
                             comparison: expose.Comparison,
-                            expected: Resolve(input: expose.Value, readScalar: scalars),
+                            expected: Resolve(host: host, input: expose.Value, tick: tick),
                             value: m_values[expose.Field.Ordinal][cell]
                         ));
 
-                        writeTag(
-                            arg1: expose.Row,
-                            arg2: body,
-                            arg3: (exposed
+                        host.WriteTag(
+                            body: body,
+                            row: expose.Row,
+                            tick: tick,
+                            value: (exposed
                                 ? 1L
                                 : 0L)
                         );
@@ -729,8 +755,8 @@ public sealed class WorldFieldLattice {
             }
         }
     }
-    private static FixedQ4816 Resolve(WorldFieldScalarInput input, Func<WorldStateHandle, FixedQ4816> readScalar) => (input.IsState
-        ? readScalar(arg: input.State)
+    private static FixedQ4816 Resolve(IWorldFieldLatticeHost host, WorldFieldScalarInput input, ulong tick) => (input.IsState
+        ? host.ReadScalar(row: input.State, tick: tick)
         : input.Literal
     );
     private static FixedQ4816 ClampRate(FixedQ4816 rate) => ((rate < FixedQ4816.Zero)
@@ -793,17 +819,17 @@ public sealed class WorldFieldLattice {
             );
         }
     }
-    private void StepTransform(WorldFieldNode.Transform reaction, Func<WorldStateHandle, FixedQ4816> readScalar) {
+    private void StepTransform(WorldFieldNode.Transform reaction, IWorldFieldLatticeHost host, ulong tick) {
         // Row-referenced terms resolve ONCE per step, before the cell loop — a season row's value is a step-wide
         // constant, never a per-cell read.
         var whenValues = new FixedQ4816[reaction.When.Length];
         var thenValues = new FixedQ4816[reaction.Then.Length];
 
         for (var index = 0; (index < reaction.When.Length); index++) {
-            whenValues[index] = Resolve(input: reaction.When[index].Value, readScalar: readScalar);
+            whenValues[index] = Resolve(host: host, input: reaction.When[index].Value, tick: tick);
         }
         for (var index = 0; (index < reaction.Then.Length); index++) {
-            thenValues[index] = Resolve(input: reaction.Then[index].Value, readScalar: readScalar);
+            thenValues[index] = Resolve(host: host, input: reaction.Then[index].Value, tick: tick);
         }
 
         for (var cell = 0; (cell < CellCount); cell++) {
