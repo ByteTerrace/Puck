@@ -85,6 +85,11 @@
             "$ref": "./common.schema.json#/$defs/WorldPlacementResponseList",
             "description": "The placement\u0027s response facet (see WorldPlacementResponse) \u2014 the ordered state-driven prototype swaps a lattice-field condition can fire, or null for an ordinary placement that always shows PrototypeId. Omitted from the wire when null. Refused together with Attach, Inhabit, and FaceSources.",
             "default": null
+          },
+          "grip": {
+            "$ref": "./common.schema.json#/$defs/WorldPlacementGrip",
+            "description": "The placement\u0027s grip facet (see WorldPlacementGrip) \u2014 overrides the world\u0027s default climb policy for this row\u0027s compiled surface(s), or null to inherit the world default. Omitted from the wire when null. Requires Solid (validated).",
+            "default": null
           }
         },
         "required": [
