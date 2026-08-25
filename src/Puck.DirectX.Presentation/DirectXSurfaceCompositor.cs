@@ -247,11 +247,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
                 pixels: surface.Pixels.Span,
                 width: surface.Width,
                 height: surface.Height,
-                format: surface.Format switch {
-                    SurfaceFormat.B8G8R8A8Unorm => DirectXPixelFormat.B8G8R8A8Unorm,
-                    SurfaceFormat.R8G8B8A8Unorm => DirectXPixelFormat.R8G8B8A8Unorm,
-                    _ => throw new InvalidOperationException(message: "The surface format has no DirectX mapping."),
-                }
+                format: GpuPixelFormats.FromSurfaceFormat(format: surface.Format)
             );
             sourceResource = m_cpuUpload.TextureHandle;
             sourceFormat = m_cpuUpload.TextureFormat;
@@ -260,11 +256,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             var imported = m_surfaceImport.Import(
                 deviceContext: deviceContext,
                 sharedHandle: surface.SharedHandle,
-                format: surface.Format switch {
-                    SurfaceFormat.B8G8R8A8Unorm => GpuPixelFormat.B8G8R8A8Unorm,
-                    SurfaceFormat.R8G8B8A8Unorm => GpuPixelFormat.R8G8B8A8Unorm,
-                    _ => throw new InvalidOperationException(message: "The surface format has no DirectX mapping."),
-                },
+                format: GpuPixelFormats.FromSurfaceFormat(format: surface.Format),
                 width: surface.Width,
                 height: surface.Height
             );

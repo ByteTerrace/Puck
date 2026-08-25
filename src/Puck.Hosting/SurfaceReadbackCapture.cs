@@ -5,7 +5,7 @@ namespace Puck.Hosting;
 
 // The surface-readback orchestration both backend presenters need for a one-shot CPU-pixel capture: import a
 // shared-handle surface onto the calling device when it did not already produce it, then read it back. Only the
-// device-context type and its own SurfaceFormat->GpuPixelFormat mapping differ per backend.
+// device-context type differs per backend; the format mapping is the shared GpuPixelFormats.FromSurfaceFormat bridge.
 public static class SurfaceReadbackCapture {
     /// <summary>Reads a surface back to CPU pixels, importing it onto <paramref name="deviceContext"/> first when it
     /// carries a shared handle produced elsewhere. The caller handles empty and CPU-resident surfaces before
