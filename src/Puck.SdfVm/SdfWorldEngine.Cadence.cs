@@ -64,7 +64,15 @@ public readonly record struct SdfCadenceDiagnostics(
     bool BrickBaking
 );
 public sealed partial class SdfWorldEngine {
-    private static void AddViewportsExcludingTime(ref Fnv1aHash hash, ReadOnlySpan<byte> viewportScratch) {
+    // Feeds the same byte sequence into two independent FNV-1a accumulators in one pass — the combined signature and
+    // this span's own diagnostics hash — so the per-span hash costs no second traversal of the buffer.
+    private static void AddToBoth(ref Fnv1aHash combined, ref Fnv1aHash span, ReadOnlySpan<byte> values) {
+        foreach (var value in values) {
+            combined.Add(value: value);
+            span.Add(value: value);
+        }
+    }
+    private static void AddViewportsExcludingTime(ref Fnv1aHash combined, ref Fnv1aHash span, ReadOnlySpan<byte> viewportScratch) {
         const int TimeLaneOffset = (sizeof(float) * 3); // position.xyz precede time in each row (PackViewports)
         const int TimeLaneLength = sizeof(float);
 
@@ -74,8 +82,16 @@ public sealed partial class SdfWorldEngine {
                 start: rowStart
             );
 
-            hash.Add(values: row[..TimeLaneOffset]);
-            hash.Add(values: row[(TimeLaneOffset + TimeLaneLength)..]);
+            AddToBoth(
+                combined: ref combined,
+                span: ref span,
+                values: row[..TimeLaneOffset]
+            );
+            AddToBoth(
+                combined: ref combined,
+                span: ref span,
+                values: row[(TimeLaneOffset + TimeLaneLength)..]
+            );
         }
     }
     // Whether any brick slot is mid-bake: a Baking slot has RecordBrickBakeSlices writing new voxels every frame, so the
@@ -93,46 +109,22 @@ public sealed partial class SdfWorldEngine {
 
         return false;
     }
-    private CadenceSpanHashes ComputeCadenceSpanHashes(uint viewportCount) {
-        Span<byte> revisions = stackalloc byte[(sizeof(ulong) * 3)];
-
-        MemoryMarshal.Write(
-            destination: revisions[..sizeof(ulong)],
-            value: in m_programRevision
-        );
-        MemoryMarshal.Write(
-            destination: revisions.Slice(
-                length: sizeof(ulong),
-                start: sizeof(ulong)
-            ),
-            value: in m_decalRevision
-        );
-        var viewportCountWide = ((ulong)viewportCount);
-
-        MemoryMarshal.Write(
-            destination: revisions.Slice(
-                length: sizeof(ulong),
-                start: (sizeof(ulong) * 2)
-            ),
-            value: in viewportCountWide
-        );
-
-        return new CadenceSpanHashes(
-            Revisions: Fnv1aHash.Compute(values: revisions),
-            Push: Fnv1aHash.Compute(values: m_pushConstant),
-            Viewports: HashViewportsExcludingTime(viewportScratch: m_viewportScratch),
-            Dynamics: Fnv1aHash.Compute(values: m_dynamicTransformScratch),
-            ScreenSurfaces: Fnv1aHash.Compute(values: m_screenSurfaceScratch),
-            ScreenLights: Fnv1aHash.Compute(values: m_screenLightScratch)
-        );
-    }
     // The 64-bit FNV-1a change signature over every packed span + revision the skipped passes consume (see
-    // DecideCadenceSkip for the coverage rationale). Hashing the WHOLE scratch buffers (including any rows past the live
-    // count) is deliberately conservative: extra stale bytes can only make two frames look DIFFERENT (a redundant
-    // render), never make a changed frame look the SAME (a stale skip). A collision would require a 64-bit hash clash
-    // across two genuinely different input sets — negligible, and still only presentation, never simulation.
-    private ulong ComputeFrameSignature(uint viewportCount) {
-        var hash = Fnv1aHash.Create();
+    // DecideCadenceSkip for the coverage rationale), computed in the SAME pass as each span's own independent
+    // diagnostics hash (CadenceSpanHashes) — one traversal of the packed buffers feeds both the combined accumulator
+    // and that span's accumulator per byte (AddToBoth), rather than hashing every buffer twice. Hashing the WHOLE
+    // scratch buffers (including any rows past the live count) is deliberately conservative: extra stale bytes can
+    // only make two frames look DIFFERENT (a redundant render), never make a changed frame look the SAME (a stale
+    // skip). A collision would require a 64-bit hash clash across two genuinely different input sets — negligible,
+    // and still only presentation, never simulation.
+    private (ulong Signature, CadenceSpanHashes SpanHashes) ComputeFrameSignature(uint viewportCount) {
+        var combined = Fnv1aHash.Create();
+        var revisionsSpan = Fnv1aHash.Create();
+        var pushSpan = Fnv1aHash.Create();
+        var viewportsSpan = Fnv1aHash.Create();
+        var dynamicsSpan = Fnv1aHash.Create();
+        var screenSurfacesSpan = Fnv1aHash.Create();
+        var screenLightsSpan = Fnv1aHash.Create();
 
         Span<byte> revisions = stackalloc byte[(sizeof(ulong) * 3)];
 
@@ -157,17 +149,48 @@ public sealed partial class SdfWorldEngine {
             value: in viewportCountWide
         );
 
-        hash.Add(values: revisions);
-        hash.Add(values: m_pushConstant);
+        AddToBoth(
+            combined: ref combined,
+            span: ref revisionsSpan,
+            values: revisions
+        );
+        AddToBoth(
+            combined: ref combined,
+            span: ref pushSpan,
+            values: m_pushConstant
+        );
         AddViewportsExcludingTime(
-            hash: ref hash,
+            combined: ref combined,
+            span: ref viewportsSpan,
             viewportScratch: m_viewportScratch
         );
-        hash.Add(values: m_dynamicTransformScratch);
-        hash.Add(values: m_screenSurfaceScratch);
-        hash.Add(values: m_screenLightScratch);
+        AddToBoth(
+            combined: ref combined,
+            span: ref dynamicsSpan,
+            values: m_dynamicTransformScratch
+        );
+        AddToBoth(
+            combined: ref combined,
+            span: ref screenSurfacesSpan,
+            values: m_screenSurfaceScratch
+        );
+        AddToBoth(
+            combined: ref combined,
+            span: ref screenLightsSpan,
+            values: m_screenLightScratch
+        );
 
-        return hash.Value;
+        return (
+            combined.Value,
+            new CadenceSpanHashes(
+                Revisions: revisionsSpan.Value,
+                Push: pushSpan.Value,
+                Viewports: viewportsSpan.Value,
+                Dynamics: dynamicsSpan.Value,
+                ScreenSurfaces: screenSurfacesSpan.Value,
+                ScreenLights: screenLightsSpan.Value
+            )
+        );
     }
     // Cadence gate: latches whether Record may skip the sky/mask/beam/cull-args/views passes and re-composite from
     // the retained (ring-shared) views output + tile buffer. A skip is permitted only when the gate is enabled, this
@@ -222,7 +245,7 @@ public sealed partial class SdfWorldEngine {
             return;
         }
 
-        var signature = ComputeFrameSignature(viewportCount: viewportCount);
+        var (signature, spanHashes) = ComputeFrameSignature(viewportCount: viewportCount);
         var brickBaking = AnyBrickBaking();
 
         m_skipThisFrame =
@@ -239,7 +262,6 @@ public sealed partial class SdfWorldEngine {
             m_cadenceRenderedFrameCount++;
         }
 
-        var spanHashes = ComputeCadenceSpanHashes(viewportCount: viewportCount);
         var changedSpans = SdfCadenceSpan.None;
 
         if (m_hasPreviousCadenceSpanHashes) {
@@ -270,20 +292,6 @@ public sealed partial class SdfWorldEngine {
         m_previousCadenceSpanHashes = spanHashes;
         m_hasPreviousCadenceSpanHashes = true;
     }
-    // Hashes m_viewportScratch a row at a time, skipping each 96-byte ViewportData row's presentation-TIME lane (byte
-    // offset 12, one float — PackViewports' position.w) so the signature is invariant to time's per-frame advance.
-    // Time-driven content is instead covered by DecideCadenceSkip's m_programDeclaresScreenSlab force-render — see the
-    // SIGNATURE COVERAGE comment there. Allocation-free: no copy, just two folded spans per row instead of one.
-    private static ulong HashViewportsExcludingTime(ReadOnlySpan<byte> viewportScratch) {
-        var hash = Fnv1aHash.Create();
-
-        AddViewportsExcludingTime(
-            hash: ref hash,
-            viewportScratch: viewportScratch
-        );
-
-        return hash.Value;
-    }
     // Whether the program's instruction stream declares any shape of the given type — a one-time UploadProgram walk
     // backing per-program facts (the SampledRegion frozen-envelope guard; the cadence gate's ScreenSlab force-render).
     private static bool ProgramDeclaresShape(SdfProgram program, SdfShapeType shapeType) {
@@ -303,8 +311,8 @@ public sealed partial class SdfWorldEngine {
     /// Default (all-zero, <see cref="SdfCadenceDiagnostics.GateEnabled"/> false) until the gate first arms.</summary>
     public SdfCadenceDiagnostics CadenceDiagnostics => m_cadenceDiagnostics;
 
-    // STEP 1 instrumentation: the same six spans ComputeFrameSignature chains, but each hashed INDEPENDENTLY (fresh
-    // from the FNV basis) so DecideCadenceSkip can name exactly which span changed frame-to-frame. Never used for the
-    // skip decision — a diagnostics-only read of state ComputeFrameSignature already touched.
+    // The same six spans ComputeFrameSignature chains, but each hashed INDEPENDENTLY (fresh from the FNV basis) so
+    // DecideCadenceSkip can name exactly which span changed frame-to-frame. Never used for the skip decision — a
+    // diagnostics-only read of state ComputeFrameSignature already touched.
     private readonly record struct CadenceSpanHashes(ulong Revisions, ulong Push, ulong Viewports, ulong Dynamics, ulong ScreenSurfaces, ulong ScreenLights);
 }
