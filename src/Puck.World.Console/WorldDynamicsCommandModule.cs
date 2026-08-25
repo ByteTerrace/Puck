@@ -15,135 +15,53 @@ namespace Puck.World;
 /// <c>world.row.set</c>/<c>world.row.remove dynamics</c>.
 /// </summary>
 public sealed class WorldDynamicsCommandModule(IWorldConsoleAuthority authority) : ICommandModule {
-    private static int CountKitReferences(WorldDefinition definition, string name) {
-        var count = 0;
-
-        foreach (var kit in definition.Kits) {
-            var declared = (kit?.Motion switch {
-                WorldMotionModel.Grounded grounded => grounded.Dynamics,
-                WorldMotionModel.Swim swim => swim.Dynamics,
-                _ => null,
-            });
-
-            if (string.Equals(
-                a: declared,
-                b: name,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                count++;
-            }
-        }
-
-        return count;
+    // The five census buckets a WorldDefinitionRows.EnumerateDynamicsReferences entry's Section groups into — KEEP
+    // IN SYNC with the Section values that helper yields.
+    private readonly record struct ReferenceCounts(int Cameras, int Looks, int Parts, int Kits, int State) {
+        public ReferenceCounts Increment(string section) => section switch {
+            "cameras" => (this with { Cameras = (Cameras + 1) }),
+            "looks" => (this with { Looks = (Looks + 1) }),
+            "parts" => (this with { Parts = (Parts + 1) }),
+            "kits" => (this with { Kits = (Kits + 1) }),
+            "state" => (this with { State = (State + 1) }),
+            _ => this,
+        };
     }
-    private static int CountLookReferences(WorldDefinition definition, string name) {
-        var count = 0;
+    // One pass over the whole document, grouped by the referenced row name — every row's census then looks itself up
+    // rather than each re-walking the document.
+    private static Dictionary<string, ReferenceCounts> CountReferencesByRow(WorldDefinition definition) {
+        var counts = new Dictionary<string, ReferenceCounts>(comparer: StringComparer.Ordinal);
 
-        foreach (var look in definition.Looks) {
-            if (string.Equals(
-                a: look?.Motion.Dynamics,
-                b: name,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                count++;
-            }
+        foreach (var reference in WorldDefinitionRows.EnumerateDynamicsReferences(definition: definition)) {
+            counts[reference.RowName] = (counts.TryGetValue(
+                key: reference.RowName,
+                value: out var existing
+            )
+                ? existing
+                : default
+            ).Increment(section: reference.Section);
         }
 
-        return count;
-    }
-    private static int CountPartReferences(WorldDefinition definition, string name) {
-        var count = 0;
-
-        foreach (var look in definition.Looks) {
-            foreach (var (_, partRow) in (look?.Motion.PartDynamics ?? new Dictionary<string, string>())) {
-                if (string.Equals(
-                    a: partRow,
-                    b: name,
-                    comparisonType: StringComparison.Ordinal
-                )) {
-                    count++;
-                }
-            }
-        }
-
-        return count;
-    }
-    private static bool ReferencesRow(WorldCameraProgram? program, string name) =>
-        ((program?.DynamicsOp is { } op) && string.Equals(
-            a: op.Row,
-            b: name,
-            comparisonType: StringComparison.Ordinal
-        ));
-    private static int CountCameraReferences(WorldDefinition definition, string name) {
-        var count = 0;
-
-        foreach (var camera in definition.Cameras) {
-            if (ReferencesRow(
-                name: name,
-                program: camera?.Rig
-            )) {
-                count++;
-            }
-        }
-
-        if (definition.ViewsRaw is { } views) {
-            if (ReferencesRow(
-                name: name,
-                program: views.SeatRig
-            )) {
-                count++;
-            }
-
-            if (ReferencesRow(
-                name: name,
-                program: views.CameraRig
-            )) {
-                count++;
-            }
-        }
-
-        return count;
-    }
-    private static int CountStateReferences(WorldDefinition definition, string name) {
-        var count = 0;
-
-        foreach (var row in definition.State) {
-            if (row is null) {
-                continue;
-            }
-
-            if (string.Equals(
-                a: row.Dynamics?.Row,
-                b: name,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                count++;
-            }
-
-            foreach (var cell in (row.Cells ?? [])) {
-                if (string.Equals(
-                    a: cell?.Dynamics?.Row,
-                    b: name,
-                    comparisonType: StringComparison.Ordinal
-                )) {
-                    count++;
-                }
-            }
-        }
-
-        return count;
+        return counts;
     }
     private static string FormatRaw32(long raw) => (raw / 4294967296.0).ToString(
         format: "0.###",
         provider: CultureInfo.InvariantCulture
     );
-    private static string DescribeRow(WorldDefinition definition, WorldDynamicsRow row) {
+    private static string DescribeRow(WorldDynamicsRow row, IReadOnlyDictionary<string, ReferenceCounts> referenceCounts) {
         // A validated row always compiles (ValidateDynamics runs this same derivation at the door), so no catch
         // masks a refusal here.
         var constants = SecondOrderDynamics.Create(
             dampingRatio: FixedQ4816.FromDouble(value: row.Damping),
             frequencyHz: FixedQ4816.FromDouble(value: row.Frequency),
             initialResponse: FixedQ4816.FromDouble(value: row.Response)
+        );
+        var refs = (referenceCounts.TryGetValue(
+            key: row.Name,
+            value: out var found
+        )
+            ? found
+            : default
         );
 
         return $" {row.Name}"
@@ -153,11 +71,11 @@ public sealed class WorldDynamicsCommandModule(IWorldConsoleAuthority authority)
             + $" decay={FormatRaw32(raw: constants.DecayRateRaw)}"
             + $" osc={FormatRaw32(raw: constants.OscillationRateRaw)}"
             + $" k3={FormatRaw32(raw: constants.TargetVelocityGainRaw)}"
-            + $" refs=cameras:{CountCameraReferences(definition: definition, name: row.Name)}"
-            + $",looks:{CountLookReferences(definition: definition, name: row.Name)}"
-            + $",parts:{CountPartReferences(definition: definition, name: row.Name)}"
-            + $",kits:{CountKitReferences(definition: definition, name: row.Name)}"
-            + $",state:{CountStateReferences(definition: definition, name: row.Name)}";
+            + $" refs=cameras:{refs.Cameras}"
+            + $",looks:{refs.Looks}"
+            + $",parts:{refs.Parts}"
+            + $",kits:{refs.Kits}"
+            + $",state:{refs.State}";
     }
     private static string DescribeDynamics(WorldDefinition definition) {
         var dynamics = definition.Dynamics;
@@ -166,12 +84,13 @@ public sealed class WorldDynamicsCommandModule(IWorldConsoleAuthority authority)
             return "[world.dynamics: none declared]";
         }
 
+        var referenceCounts = CountReferencesByRow(definition: definition);
         var builder = new StringBuilder(value: "[world.dynamics:");
 
         for (var index = 0; (index < dynamics.Count); index++) {
             if (dynamics[index] is { } row) {
                 builder.Append(value: DescribeRow(
-                    definition: definition,
+                    referenceCounts: referenceCounts,
                     row: row
                 ));
             }

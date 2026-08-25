@@ -30,13 +30,6 @@ namespace Puck.World;
 /// writes while denying the whole-row pair — the difference between bumping a row and redefining it. Revoking either
 /// grant, or narrowing its mask, refuses that principal's writes here, whichever verb produced them.</remarks>
 public sealed class WorldStateCommandModule(IWorldConsoleAuthority authority, IServerLink link) : ICommandModule {
-    // Transparency alongside the live value above: what the trait IS (rate) and where its clock sits (epoch), the
-    // same "what it is, then where it is" precedent DescribeRow already follows for a generator's cursor.
-    private static string DescribeAdvance(WorldStateRow row) =>
-        ((row.Advance is { } advance)
-            ? $" advance={advance.RateNumerator}/{advance.RateDenominator}@epoch{advance.EpochTick}"
-            : string.Empty
-        );
     private static string DescribeCell(WorldServer server, WorldStateRow row, string key, long raw, string? text, WorldStateAdvance? advance, WorldStateDynamics? dynamics) =>
         $"[world.state.cell '{row.Name}'.'{key}' value={DescribeValue(
             raw: raw,
@@ -48,8 +41,9 @@ public sealed class WorldStateCommandModule(IWorldConsoleAuthority authority, IS
             row: row,
             server: server
         )}]";
-    // The KEYED counterpart of DescribeAdvance above — a cell's OWN advance trait, echoed on the cell line rather
-    // than the row line, since it is the cell's own base/rate/epoch that governs it, never the row's.
+    // Formats an Advance trait — shared by DescribeRow's row line (against row.Advance) and DescribeCell's cell
+    // line (against a keyed cell's own Advance): what the trait IS (rate) and where its clock sits (epoch), the
+    // same "what it is, then where it is" precedent DescribeRow already follows for a generator's cursor.
     private static string DescribeCellAdvance(WorldStateAdvance? advance) =>
         ((advance is { } a)
             ? $" advance={a.RateNumerator}/{a.RateDenominator}@epoch{a.EpochTick}"
@@ -159,24 +153,24 @@ public sealed class WorldStateCommandModule(IWorldConsoleAuthority authority, IS
             return CommandResult.Error(output: $"[world.state {rowName}: no such row]");
         }
 
-        return ((rawValue is { } raw)
-            ? new CommandResult(Output: DescribeCell(
-                server: server,
-                row: row,
-                key: key,
-                raw: raw,
-                text: text,
-                advance: FindCellAdvance(
-                    key: key,
-                    row: row
-                ),
-                dynamics: FindCellDynamics(
-                    key: key,
-                    row: row
-                )
-            ))
-            : CommandResult.Error(output: $"[world.state {rowName} {key}: no such cell]")
+        if (rawValue is not { } raw) {
+            return CommandResult.Error(output: $"[world.state {rowName} {key}: no such cell]");
+        }
+
+        var cell = WorldDefinitionRows.FindCell(
+            cells: row.Cells,
+            key: WorldCellName.Parse(candidate: key)
         );
+
+        return new CommandResult(Output: DescribeCell(
+            server: server,
+            row: row,
+            key: key,
+            raw: raw,
+            text: text,
+            advance: cell?.Advance,
+            dynamics: cell?.Dynamics
+        ));
     }
     // One row's own line PLUS every cell it holds — the verb's one-argument form, because there is one substrate and
     // no shape that hides from it.
@@ -249,7 +243,7 @@ public sealed class WorldStateCommandModule(IWorldConsoleAuthority authority, IS
             kind: row.Kind,
             min: row.Min,
             max: row.Max
-        )}{DescribeAdvance(row: row)}{DescribeDynamics(
+        )}{DescribeCellAdvance(advance: row.Advance)}{DescribeDynamics(
             dynamics: row.Dynamics,
             key: WorldStateRow.SlotKey.Value,
             row: row,
@@ -330,35 +324,6 @@ public sealed class WorldStateCommandModule(IWorldConsoleAuthority authority, IS
         CellKind.Text => $"'{text}'",
         _ => raw.ToString(provider: CultureInfo.InvariantCulture),
     };
-    // Looks up an addressed cell's OWN advance trait for the read-back — mirroring Server.WorldServer's identical
-    // helper, kept separate since it is a different assembly, over the SAME WorldStateRow shape.
-    private static WorldStateAdvance? FindCellAdvance(WorldStateRow row, string key) {
-        foreach (var cell in (row.Cells ?? [])) {
-            if (string.Equals(
-                a: cell.Key.Value,
-                b: key,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return cell.Advance;
-            }
-        }
-
-        return null;
-    }
-    // The Dynamics twin of FindCellAdvance above.
-    private static WorldStateDynamics? FindCellDynamics(WorldStateRow row, string key) {
-        foreach (var cell in (row.Cells ?? [])) {
-            if (string.Equals(
-                a: cell.Key.Value,
-                b: key,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return cell.Dynamics;
-            }
-        }
-
-        return null;
-    }
     private static WorldStateRow? FindRow(WorldServer server, string name) => WorldDefinitionRows.FindStateRow(
         rows: server.Definition.State,
         name: name

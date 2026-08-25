@@ -150,4 +150,81 @@ public static class WorldDefinitionRows {
         name: name,
         selector: static row => row.Name
     );
+    /// <summary>Enumerates every declared reference to a <c>dynamics</c> row across the document: a camera's own rig
+    /// and the world's <c>views.seatRig</c>/<c>views.cameraRig</c> (<c>Section</c> <c>"cameras"</c>), a look's root
+    /// follower (<c>"looks"</c>) and per-part followers (<c>"parts"</c>), a kit's planar shaping (<c>"kits"</c>), and
+    /// a state row's or cell's own eased trait (<c>"state"</c>) — the one walk both the <c>world.dynamics</c> census
+    /// and a dangling-reference check can share. Yields nothing for a reference that is absent; never yields a
+    /// section/row pairing that names no dynamics row.</summary>
+    /// <param name="definition">The document to walk.</param>
+    /// <returns>One entry per declared reference, in authored order: <c>Section</c> is the referencing area,
+    /// <c>Path</c> locates the specific reference within it, and <c>RowName</c> is the <c>dynamics</c> row name it
+    /// names.</returns>
+    public static IEnumerable<(string Section, string Path, string RowName)> EnumerateDynamicsReferences(WorldDefinition definition) {
+        foreach (var camera in definition.Cameras) {
+            if (camera is null) {
+                continue;
+            }
+
+            if (camera.Rig.DynamicsOp is { } cameraOp) {
+                yield return ("cameras", $"cameras.{camera.Name}", cameraOp.Row);
+            }
+        }
+
+        if (definition.ViewsRaw is { } views) {
+            if (views.SeatRig.DynamicsOp is { } seatOp) {
+                yield return ("cameras", "views.seatRig", seatOp.Row);
+            }
+
+            if (views.CameraRig?.DynamicsOp is { } viewCameraOp) {
+                yield return ("cameras", "views.cameraRig", viewCameraOp.Row);
+            }
+        }
+
+        foreach (var look in definition.Looks) {
+            if (look is null) {
+                continue;
+            }
+
+            if (look.Motion.Dynamics is { } lookDynamics) {
+                yield return ("looks", $"looks.{look.Name}", lookDynamics);
+            }
+
+            if (look.Motion.PartDynamics is { } partDynamics) {
+                foreach (var (part, partRow) in partDynamics) {
+                    yield return ("parts", $"looks.{look.Name}.parts.{part}", partRow);
+                }
+            }
+        }
+
+        foreach (var kit in definition.Kits) {
+            if (kit is null) {
+                continue;
+            }
+
+            if (kit.Motion.DeclaredDynamics is { } kitDynamics) {
+                yield return ("kits", $"kits.{kit.Name}", kitDynamics);
+            }
+        }
+
+        foreach (var row in definition.State) {
+            if (row is null) {
+                continue;
+            }
+
+            if (row.Dynamics?.Row is { } rowDynamics) {
+                yield return ("state", $"state.{row.Name}", rowDynamics);
+            }
+
+            foreach (var cell in (row.Cells ?? [])) {
+                if (cell is null) {
+                    continue;
+                }
+
+                if (cell.Dynamics?.Row is { } cellDynamics) {
+                    yield return ("state", $"state.{row.Name}.{cell.Key}", cellDynamics);
+                }
+            }
+        }
+    }
 }

@@ -226,12 +226,12 @@ public sealed partial class WorldServer {
                 rebasedRow = (rebasedRow with {
                     Dynamics = RebaseDynamics(
                     candidateTrait: rowDynamics,
-                    newTarget: (FindCell(
+                    newTarget: (WorldDefinitionRows.FindCell(
                         cells: row.Cells,
                         key: WorldStateRow.SlotKey
                     )?.Value ?? 0L),
                     original: original,
-                    originalCell: FindCell(
+                    originalCell: WorldDefinitionRows.FindCell(
                         cells: originalRow?.Cells,
                         key: WorldStateRow.SlotKey
                     ),
@@ -259,36 +259,17 @@ public sealed partial class WorldServer {
                 continue;
             }
 
-            var advance = cell.Advance;
-            var dynamics = cell.Dynamics;
-            var changed = false;
-
-            if (advance is { } cellAdvance) {
-                advance = (cellAdvance with { EpochTick = epoch });
-                changed = true;
-            }
-
-            if (dynamics is { } cellDynamics) {
-                dynamics = RebaseDynamics(
-                    candidateTrait: cellDynamics,
-                    newTarget: cell.Value,
-                    original: original,
-                    originalCell: FindCell(
-                        cells: originalRow?.Cells,
-                        key: cell.Key
-                    ),
-                    originalRow: originalRow,
-                    tick: tick
-                );
-                changed = true;
-            }
-
-            if (!changed) {
+            if (RebaseOneCell(
+                cell: cell,
+                definition: original,
+                row: originalRow,
+                tick: tick
+            ) is not { } rebased) {
                 continue;
             }
 
             rebasedCells ??= new List<WorldStateCell>(collection: cells);
-            rebasedCells[index] = (cell with { Advance = advance, Dynamics = dynamics });
+            rebasedCells[index] = rebased;
         }
 
         if (rebasedCells is not null) {
@@ -307,16 +288,35 @@ public sealed partial class WorldServer {
             ))
         );
     }
-    // Finds a cell by key in a (possibly absent) cell list — the small lookup RebaseCellTraits/RebaseKeyedCellTraits
-    // share to read a PRE-WRITE cell out of `original`.
-    private static WorldStateCell? FindCell(IReadOnlyList<WorldStateCell>? cells, WorldCellName key) {
-        foreach (var cell in (cells ?? [])) {
-            if (cell.Key == key) {
-                return cell;
-            }
+    // Rebases ONE cell's Advance/Dynamics trait to `tick`, against the PRE-write `row`/`definition` — the shared
+    // body RebaseCellTraits' per-cell loop and RebaseKeyedCellTraits' single-cell arm both perform. Returns null
+    // for a cell that carries neither trait, so a caller's own loop can skip an untouched cell in one check.
+    private static WorldStateCell? RebaseOneCell(WorldStateCell cell, WorldStateRow? row, WorldDefinition definition, ulong tick) {
+        var advance = cell.Advance;
+        var dynamics = cell.Dynamics;
+        var changed = false;
+
+        if (advance is { } cellAdvance) {
+            advance = (cellAdvance with { EpochTick = unchecked((long)tick) });
+            changed = true;
         }
 
-        return null;
+        if (dynamics is { } cellDynamics) {
+            dynamics = RebaseDynamics(
+                candidateTrait: cellDynamics,
+                newTarget: cell.Value,
+                original: definition,
+                originalCell: WorldDefinitionRows.FindCell(
+                    cells: row?.Cells,
+                    key: cell.Key
+                ),
+                originalRow: row,
+                tick: tick
+            );
+            changed = true;
+        }
+
+        return (changed ? (cell with { Advance = advance, Dynamics = dynamics }) : null);
     }
     // Rebases one keyed cell's Advance/Dynamics trait to `tick` — the same rebase RebaseCellTraits' own
     // UpsertStateCell arm performs on a single named cell, factored out so a market write (which may touch several
@@ -341,41 +341,23 @@ public sealed partial class WorldServer {
                 continue;
             }
 
-            if (
-                (cell.Advance is null) &&
-                (cell.Dynamics is null)
-            ) {
-                return rows;
-            }
-
             var originalRow = WorldDefinitionRows.FindStateRow(
                 rows: original.State,
                 name: rowName
             );
-            var advance = cell.Advance;
-            var dynamics = cell.Dynamics;
 
-            if (advance is { } a) {
-                advance = (a with { EpochTick = unchecked((long)tick) });
-            }
-
-            if (dynamics is { } d) {
-                dynamics = RebaseDynamics(
-                    candidateTrait: d,
-                    newTarget: cell.Value,
-                    original: original,
-                    originalCell: FindCell(
-                        cells: originalRow?.Cells,
-                        key: cellKey
-                    ),
-                    originalRow: originalRow,
-                    tick: tick
-                );
+            if (RebaseOneCell(
+                cell: cell,
+                definition: original,
+                row: originalRow,
+                tick: tick
+            ) is not { } rebased) {
+                return rows;
             }
 
             var rebasedCells = new List<WorldStateCell>(collection: cells);
 
-            rebasedCells[index] = (cell with { Advance = advance, Dynamics = dynamics });
+            rebasedCells[index] = rebased;
 
             return Upsert(
                 list: rows,
@@ -1599,14 +1581,12 @@ public sealed partial class WorldServer {
                     // whatever the existing cell already declared rather than silently deleting it; RebaseCellTraits
                     // (below TryCompose) then re-bases the preserved trait to this tick, exactly as it already does
                     // for a row-level trait's slot cell.
-                    var existingAdvance = FindCellAdvance(
-                        cells: (row.Cells ?? []),
+                    var existingCell = WorldDefinitionRows.FindCell(
+                        cells: row.Cells,
                         key: cellKey
                     );
-                    var existingDynamics = FindCellDynamics(
-                        cells: (row.Cells ?? []),
-                        key: cellKey
-                    );
+                    var existingAdvance = existingCell?.Advance;
+                    var existingDynamics = existingCell?.Dynamics;
                     var isNewKey = !WorldStateCellWriter.ContainsKey(
                         cells: (row.Cells ?? []),
                         key: cellKey

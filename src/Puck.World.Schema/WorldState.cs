@@ -247,19 +247,14 @@ public sealed record WorldStateRow(
     /// through: the HUD path runs this per frame.</remarks>
     /// <param name="key">The cell key to look for.</param>
     /// <returns><see langword="true"/> when the row declares a cell under that key.</returns>
-    public bool HasCell(string key) {
-        foreach (var cell in (Cells ?? [])) {
-            if (string.Equals(
-                a: cell.Key,
-                b: key,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return true;
-            }
-        }
-
-        return false;
-    }
+    public bool HasCell(string key) => (WorldCellName.TryParse(
+        candidate: key,
+        name: out var cellKey,
+        reason: out _
+    ) && (WorldDefinitionRows.FindCell(
+        cells: Cells,
+        key: cellKey
+    ) is not null));
 }
 /// <summary>
 /// A <see cref="WorldStateRow"/>'s continuous accumulation trait: the row's stored cell is a base value, and the

@@ -325,32 +325,35 @@ public static class WorldStateReader {
         text = null;
         var target = (key ?? WorldStateRow.SlotKey.Value);
 
-        foreach (var candidate in (row.Cells ?? [])) {
-            if (string.Equals(
-                a: candidate.Key,
-                b: target,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                rawValue = (((row.Advance is { } advance) && (candidate.Key == WorldStateRow.SlotKey))
-                    ? advance.ComputeCurrentValue(
-                        row: row,
-                        baseValue: candidate.Value,
-                        currentTick: tick
-                    )
-                    : ((candidate.Advance is { } cellAdvance)
-                        ? cellAdvance.ComputeCurrentValue(
-                            row: row,
-                            baseValue: candidate.Value,
-                            currentTick: tick
-                        )
-                        : candidate.Value
-                ));
-                text = candidate.Text;
-
-                break;
-            }
+        if (
+            !WorldCellName.TryParse(
+            candidate: target,
+            name: out var targetKey,
+            reason: out _
+        ) ||
+            (WorldDefinitionRows.FindCell(
+            cells: row.Cells,
+            key: targetKey
+        ) is not { } cell)
+        ) {
+            return;
         }
 
+        rawValue = (((row.Advance is { } advance) && (cell.Key == WorldStateRow.SlotKey))
+            ? advance.ComputeCurrentValue(
+                row: row,
+                baseValue: cell.Value,
+                currentTick: tick
+            )
+            : ((cell.Advance is { } cellAdvance)
+                ? cellAdvance.ComputeCurrentValue(
+                    row: row,
+                    baseValue: cell.Value,
+                    currentTick: tick
+                )
+                : cell.Value
+        ));
+        text = cell.Text;
     }
     /// <summary>Resolves one (row, key) pair the same way <see cref="TryRead"/> does, except a cell carrying a
     /// <see cref="WorldStateDynamics"/> easing trait reads its EASED value at <paramref name="tick"/>
@@ -395,19 +398,17 @@ public static class WorldStateReader {
         }
 
         var target = (key ?? WorldStateRow.SlotKey.Value);
-        WorldStateCell? cell = null;
-
-        foreach (var candidate in (row.Cells ?? [])) {
-            if (string.Equals(
-                a: candidate.Key,
-                b: target,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                cell = candidate;
-
-                break;
-            }
-        }
+        var cell = (WorldCellName.TryParse(
+            candidate: target,
+            name: out var targetKey,
+            reason: out _
+        )
+            ? WorldDefinitionRows.FindCell(
+                cells: row.Cells,
+                key: targetKey
+            )
+            : null
+        );
 
         if (
             (cell is { } resolvedCell) &&

@@ -1125,20 +1125,13 @@ public sealed partial class WorldServer {
             rows: rows
         )!;
         var cellKey = WorldCellName.Parse(candidate: key);
-        WorldStateAdvance? existingAdvance = null;
-        WorldStateDynamics? existingDynamics = null;
-        string? existingProvenance = null;
-
-        foreach (var cell in (row.Cells ?? [])) {
-            if (cell.Key == cellKey) {
-                existingAdvance = cell.Advance;
-                existingDynamics = cell.Dynamics;
-                existingProvenance = cell.Provenance;
-
-                break;
-            }
-        }
-
+        var existingCell = WorldDefinitionRows.FindCell(
+            cells: row.Cells,
+            key: cellKey
+        );
+        var existingAdvance = existingCell?.Advance;
+        var existingDynamics = existingCell?.Dynamics;
+        var existingProvenance = existingCell?.Provenance;
         var cells = Upsert(
             list: (row.Cells ?? []),
             item: new WorldStateCell(

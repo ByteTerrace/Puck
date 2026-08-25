@@ -144,28 +144,6 @@ public sealed partial class WorldServer {
         : 0L),
         _ => (value.Value >> FixedQ4816.FractionBitCount), // Int.
     };
-    // The KEYED counterpart of a slot cell's row-level rebase target: looks up an already-installed cell's own
-    // advance trait so a scalar-value UpsertStateCell write preserves it (see the UpsertStateCell compose arm above)
-    // rather than a fresh WorldStateCell record silently dropping it.
-    private static WorldStateAdvance? FindCellAdvance(IReadOnlyList<WorldStateCell> cells, WorldCellName key) {
-        foreach (var cell in cells) {
-            if (cell.Key == key) {
-                return cell.Advance;
-            }
-        }
-
-        return null;
-    }
-    // The Dynamics twin of FindCellAdvance above, over the SAME preserve-on-scalar-write rule.
-    private static WorldStateDynamics? FindCellDynamics(IReadOnlyList<WorldStateCell> cells, WorldCellName key) {
-        foreach (var cell in cells) {
-            if (cell.Key == key) {
-                return cell.Dynamics;
-            }
-        }
-
-        return null;
-    }
     private static WorldFact Finite(FixedQ4816 value) => new(
         IsForever: false,
         Value: value
