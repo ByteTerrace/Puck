@@ -1314,10 +1314,11 @@ internal static partial class Subjects {
             ) is { } drawFailure) { return drawFailure; }
         }
 
-        // ValueNoise01 stays inside its documented [0, 1) band over a drawn operand stream.
+        // ValueNoise01 stays inside its documented [0, 1) band over a drawn operand stream — the whole signed cell
+        // domain, negative indices included, at the half-open bound.
         for (var draw = 0; (draw < 256); ++draw) {
-            var cellX = ((int)(generator.NextUInt32() & 0x3FFFU));
-            var cellZ = ((int)(generator.NextUInt32() & 0x3FFFU));
+            var cellX = unchecked((int)generator.NextUInt32());
+            var cellZ = unchecked((int)generator.NextUInt32());
             var noiseCells = ((int)((generator.NextUInt32() % 63U) + 1U));
             var seed = generator.NextUInt32();
             var sample = Pcg3dLatticeNoise.ValueNoise01(
@@ -1329,8 +1330,8 @@ internal static partial class Subjects {
 
             if (
                 (sample.Value < FixedQ4816.Zero.Value) ||
-                (sample.Value > FixedQ4816.One.Value)
-            ) { return $"ValueNoise01({cellX}, {cellZ}, {noiseCells}, {seed}) left [0, 1] at raw {sample.Value}"; }
+                (sample.Value >= FixedQ4816.One.Value)
+            ) { return $"ValueNoise01({cellX}, {cellZ}, {noiseCells}, {seed}) left [0, 1) at raw {sample.Value}"; }
         }
 
         // At an exact cell boundary the quintic fade is zero on both axes, so the blend collapses onto the near

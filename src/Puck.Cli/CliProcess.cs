@@ -47,8 +47,11 @@ internal static class CliProcess {
 
         using var process = (Process.Start(startInfo: startInfo)
             ?? throw new InvalidOperationException(message: $"Failed to start {fileName}."));
+        // Both pipes drain concurrently: a child that fills one pipe before closing the other would deadlock a
+        // sequential ReadToEnd pair.
+        var stderrTask = process.StandardError.ReadToEndAsync();
         var stdout = process.StandardOutput.ReadToEnd();
-        var stderr = process.StandardError.ReadToEnd();
+        var stderr = stderrTask.GetAwaiter().GetResult();
 
         process.WaitForExit();
 
