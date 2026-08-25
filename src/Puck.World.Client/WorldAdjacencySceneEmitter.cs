@@ -74,8 +74,20 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     private int m_neighbourRevision;
     private int m_selectionRevision;
 
+    // EmitCurrent's own scratch for one band's source-mapped placements, bounded by MaxInstancesPerBand (the same
+    // reservation WorldAdjacencyGeometry.Select's default `maximum` honors) and reused across bands and rebuilds —
+    // EmitStatic consumes it synchronously and never retains the reference.
+    private readonly WorldPlacement[] m_mappedPlacements = new WorldPlacement[MaxInstancesPerBand];
+
     // WriteRevision's own scratch: the rebuild watch must not disturb the emitted latch it is comparing against.
     private readonly bool[] m_polledEntities = new bool[WorldRigCatalog.Capacity];
+    // WriteRevision's own scratch for the reachability poll's "still present this call" set, cleared and refilled
+    // every call rather than reallocated.
+    private readonly HashSet<string> m_observedAdjacencies = new(comparer: StringComparer.Ordinal);
+    // WriteRevision's own scratch for the polled-revision keys no longer observed this call. Collected in a first
+    // pass over m_polledRevisions.Keys (read-only — Dictionary forbids mutating a table a live Keys enumerator is
+    // open over), then applied in a second pass, so the two-pass shape stays without allocating a LINQ array.
+    private readonly List<string> m_missingAdjacencies = [];
 
     // The last-polled reachability/revision per band, keyed by (placementId, faceName) — WriteRevision's own poll
     // compares against this to decide whether a rebuild is owed, without ever emitting from inside WriteRevision
@@ -171,18 +183,38 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     public void EmitCurrent(SdfProgramBuilder builder, int slotBase = 0, bool includeEntities = false) {
         ArgumentNullException.ThrowIfNull(argument: builder);
 
-        var projections = m_source.Visuals().ToArray();
+        // One Visuals() read, indexed rather than foreach'd — the compile-time type is the IReadOnlyList seam, and
+        // an indexer read costs no enumerator where a foreach over it would allocate one.
+        var projections = m_source.Visuals();
+        var bandLimit = Math.Min(
+            val1: projections.Count,
+            val2: m_bandCount
+        );
 
         if (includeEntities) {
-            m_emittedProjections = ((projections.Length > m_bandCount)
-                ? projections[..m_bandCount]
-                : projections
+            // m_emittedProjections stays a bare array — PackDynamicTransforms foreach's it every produced frame, and
+            // an array foreach costs no enumerator where an IReadOnlyList foreach would. Visuals()'s own concrete
+            // return is already a freshly-built array for this tick, so the untruncated case stores it directly
+            // rather than copying; only an over-authored live band (more than this composition reserved at boot)
+            // pays for a copy, bounded to what actually fits.
+            m_emittedProjections = ((projections.Count > m_bandCount)
+                ? CopyProjections(
+                    count: bandLimit,
+                    source: projections
+                )
+                : ((projections is WorldAdjacencyProjection[] array)
+                    ? array
+                    : CopyProjections(
+                        count: projections.Count,
+                        source: projections
+                    )
+                )
             );
         }
 
-        var bandIndex = 0;
+        for (var bandIndex = 0; (bandIndex < projections.Count); bandIndex++) {
+            var projection = projections[bandIndex];
 
-        foreach (var projection in projections) {
             // The per-band appearance arrays and the frozen instance reservation are both sized from the BOOT
             // document's projection capacity. A live mutation that authors another adjacency row can outrun both, so
             // the extra band is dropped by name rather than indexed past the arrays it has no room in.
@@ -200,14 +232,17 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
                 frame: projection.Path[0].Neighbour,
                 overlapDepth: projection.OverlapDepth
             );
-            var transformed = selection.Placements
-                .Select(selector: placement => MapIntoSource(
-                placement: placement,
-                path: projection.Path
-            ))
-                .ToArray();
+            var placements = selection.Placements;
+            var mappedCount = placements.Count;
 
-            if (transformed.Length > 0) {
+            for (var index = 0; (index < mappedCount); index++) {
+                m_mappedPlacements[index] = MapIntoSource(
+                    placement: placements[index],
+                    path: projection.Path
+                );
+            }
+
+            if (mappedCount > 0) {
                 // Adjacency delivery currently carries the neighbouring document, not its hash-pinned font asset
                 // bytes. Emit its ordinary geometry but omit creation text until federation owns asset transport and
                 // the local renderer can merge remote catalogs into its one glyph binding.
@@ -215,7 +250,11 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
                     builder: builder,
                     definition: neighbour.Definition,
                     creations: neighbour.Definition.Creations,
-                    placements: transformed
+                    placements: new ArraySegment<WorldPlacement>(
+                        array: m_mappedPlacements,
+                        offset: 0,
+                        count: mappedCount
+                    )
                 );
             }
 
@@ -227,8 +266,19 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
                     slotBase: (slotBase + (bandIndex * WorldRigCatalog.DynamicTransformCapacity))
                 );
             }
-            bandIndex++;
         }
+    }
+    // A plain indexed copy of the first `count` entries — the ONLY place EmitCurrent allocates a fresh
+    // m_emittedProjections array, reached only when a live edit authors more adjacency projections than this
+    // composition reserved at boot.
+    private static WorldAdjacencyProjection[] CopyProjections(IReadOnlyList<WorldAdjacencyProjection> source, int count) {
+        var copy = new WorldAdjacencyProjection[count];
+
+        for (var index = 0; (index < count); index++) {
+            copy[index] = source[index];
+        }
+
+        return copy;
     }
 
     internal static (Vector3 Position, Quaternion Orientation) MapPoseIntoSource(Vector3 position, Quaternion orientation, IReadOnlyList<WorldAdjacencyFramePair> path) {
@@ -504,11 +554,16 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     public void WriteRevision(Span<int> destination) {
         // Poll every band's neighbour reachability/definition-revision — a live neighbour edit (or a neighbour
         // becoming reachable/unreachable) bumps this component so the host rebuilds, exactly like every other
-        // watched counter in this composition.
-        var observed = new HashSet<string>(comparer: StringComparer.Ordinal);
+        // watched counter in this composition. One Visuals() call, reused by both passes below.
+        var visuals = m_source.Visuals();
 
-        foreach (var projection in m_source.Visuals()) {
-            _ = observed.Add(item: projection.Name);
+        m_observedAdjacencies.Clear();
+
+        for (var index = 0; (index < visuals.Count); index++) {
+            var projection = visuals[index];
+
+            _ = m_observedAdjacencies.Add(item: projection.Name);
+
             var polled = (Definition: (projection.Neighbour.DefinitionRevision + 1), Snapshot: (projection.Neighbour.SnapshotRevision + 1));
 
             if (
@@ -522,7 +577,15 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
                 m_neighbourRevision++;
             }
         }
-        foreach (var missing in m_polledRevisions.Keys.Where(predicate: key => !observed.Contains(item: key)).ToArray()) {
+
+        m_missingAdjacencies.Clear();
+
+        foreach (var key in m_polledRevisions.Keys) {
+            if (!m_observedAdjacencies.Contains(item: key)) {
+                m_missingAdjacencies.Add(item: key);
+            }
+        }
+        foreach (var missing in m_missingAdjacencies) {
             if (m_polledRevisions[missing] != default) {
                 m_polledRevisions[missing] = default;
                 m_neighbourRevision++;
@@ -532,13 +595,13 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
         // Re-run the ONE selection rule and compare it against what the live program was compiled for. A band whose
         // set moved needs a rebuild; a band the emitted layout no longer has room for is already covered by the
         // reachability component above.
-        var bandIndex = 0;
+        var bandLimit = Math.Min(
+            val1: visuals.Count,
+            val2: m_bandCount
+        );
 
-        foreach (var projection in m_source.Visuals()) {
-            if (bandIndex >= m_bandCount) {
-                break;
-            }
-
+        for (var bandIndex = 0; (bandIndex < bandLimit); bandIndex++) {
+            var projection = visuals[bandIndex];
             var appearanceBase = (bandIndex * WorldRigCatalog.Capacity);
             var polled = m_polledEntities.AsSpan();
 
@@ -553,7 +616,6 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
             ))) {
                 m_selectionRevision++;
             }
-            bandIndex++;
         }
 
         destination[0] = m_neighbourRevision;
