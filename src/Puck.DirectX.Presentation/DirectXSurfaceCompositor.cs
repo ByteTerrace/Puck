@@ -281,6 +281,9 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             sourceFormat = view.Format;
         } else if (surface.IsCpuPixels) {
             m_cpuUpload ??= new DirectXSurfaceUpload(deviceContext: deviceContext);
+            // The upload texture is one resource shared by every ring slot: an in-flight frame may still be
+            // sampling it, so overwriting it must wait for every presented frame, not just this slot's.
+            WaitForAllFrames();
             m_cpuUpload.Upload(
                 pixels: surface.Pixels.Span,
                 width: surface.Width,
@@ -309,6 +312,9 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         // Skip rewriting the single SRV descriptor when the source resource is unchanged (parity with the
         // Vulkan compositor's last-written-view cache).
         if (sourceResource != m_lastBlitResource) {
+            // The single SRV descriptor is consumed at command-list execution, so rewriting it while the other
+            // ring slot's frame is still in flight would redirect that frame's read mid-execution.
+            WaitForAllFrames();
             WriteSrv(device: device, format: sourceFormat, resource: ((ID3D12Resource*)sourceResource));
 
             m_lastBlitResource = sourceResource;
@@ -397,6 +403,24 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             _ = PInvoke.WaitForSingleObject(dwMilliseconds: uint.MaxValue, hHandle: m_frameFenceEvent);
         }
     }
+    /// <summary>Blocks until every presented frame has fully retired on the GPU — the guard for the resources the
+    /// ring does not duplicate per slot: the single CPU-upload texture, the single blit SRV descriptor, and the
+    /// per-slot allocators/lists at teardown. Any write to a cross-slot resource must run behind this, because
+    /// <see cref="WaitForFrameSlot"/> only proves one slot idle while the other may still be sampling.</summary>
+    private void WaitForAllFrames() {
+        var lastSignaled = (m_nextFrameFenceValue - 1);
+
+        if ((m_frameFence == 0) || (lastSignaled == 0)) {
+            return;
+        }
+
+        var fence = ((ID3D12Fence*)m_frameFence);
+
+        if (fence->GetCompletedValue() < lastSignaled) {
+            fence->SetEventOnCompletion(Value: lastSignaled, hEvent: m_frameFenceEvent);
+            _ = PInvoke.WaitForSingleObject(dwMilliseconds: uint.MaxValue, hHandle: m_frameFenceEvent);
+        }
+    }
 
     /// <summary>Gets the last display-confirmed present count and its QPC timestamp (Stopwatch ticks); <see langword="false"/> when unavailable.</summary>
     /// <param name="presentCount">The most recent confirmed present count.</param>
@@ -469,6 +493,9 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
 
     /// <inheritdoc/>
     public void Dispose() {
+        // The last present may still be executing against this slot's allocator/list — retire everything before
+        // any release below.
+        WaitForAllFrames();
         m_cpuUpload?.Dispose();
         m_cpuUpload = null;
         m_surfaceImport?.Dispose();
