@@ -141,7 +141,12 @@ internal sealed partial class PlayerCommandModule {
             actingPrincipal: actingPrincipal,
             target: target
         ) is { IsAllowed: false } engageVerdict) {
-            return CommandResult.Error(output: $"[body.engage: {actingPrincipal.Describe()} cannot control {target.Describe()} ({engageVerdict.DescribeDenial()}) — see world.why]");
+            return CommandResult.Error(output: $"[body.engage: {engageVerdict.DescribeRefusal(
+                actor: actingPrincipal,
+                dropped: "see world.why",
+                subject: target.Describe(),
+                verb: "control"
+            )}]");
         }
 
         if (target.Kind == GrantSubjectKind.Screen) {
@@ -308,11 +313,9 @@ internal sealed partial class PlayerCommandModule {
         }
 
         if (
-            int.TryParse(
-            s: token,
-            style: NumberStyles.Integer,
-            provider: CultureInfo.InvariantCulture,
-            result: out var screenIndex
+            CommandArgs.TryParseInt(
+            text: token,
+            value: out var screenIndex
         ) &&
             (screenIndex >= 0)
         ) {

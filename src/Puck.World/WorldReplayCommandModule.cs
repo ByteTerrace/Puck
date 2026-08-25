@@ -19,8 +19,8 @@ internal sealed class WorldReplayCommandModule(WorldReplayTape tape) : ICommandM
     private readonly WorldReplayTape m_tape = tape;
 
     private CommandResult Cancel(WireArgs args) {
-        if (args.Count > 0) {
-            return CommandResult.Error(output: "[replay.cancel: expected no arguments]");
+        if (CommandResult.RequireNoArguments(args: args, verb: "replay.cancel") is { } refusal) {
+            return refusal;
         }
 
         if (m_tape.Mode != WorldReplayMode.Recording) {
@@ -32,8 +32,8 @@ internal sealed class WorldReplayCommandModule(WorldReplayTape tape) : ICommandM
         return new CommandResult(Output: $"[replay.cancel: dropped '{name}' — nothing written]");
     }
     private static CommandResult ListReplays(WireArgs args) {
-        if (args.Count > 0) {
-            return CommandResult.Error(output: "[replay.list: expected no arguments]");
+        if (CommandResult.RequireNoArguments(args: args, verb: "replay.list") is { } refusal) {
+            return refusal;
         }
 
         var names = WorldReplayTape.List();
@@ -70,8 +70,8 @@ internal sealed class WorldReplayCommandModule(WorldReplayTape tape) : ICommandM
         return new CommandResult(Output: $"[replay.record: recording '{name}' — replay.stop persists it, replay.cancel drops it]");
     }
     private CommandResult Status(WireArgs args) {
-        if (args.Count > 0) {
-            return CommandResult.Error(output: "[replay.status: expected no arguments]");
+        if (CommandResult.RequireNoArguments(args: args, verb: "replay.status") is { } refusal) {
+            return refusal;
         }
 
         return new CommandResult(Output: ((m_tape.Mode == WorldReplayMode.Idle)
@@ -79,8 +79,8 @@ internal sealed class WorldReplayCommandModule(WorldReplayTape tape) : ICommandM
             : $"[replay.status: recording '{m_tape.Name}' | {m_tape.TickCount} ticks captured]"));
     }
     private CommandResult Stop(WireArgs args) {
-        if (args.Count > 0) {
-            return CommandResult.Error(output: "[replay.stop: expected no arguments]");
+        if (CommandResult.RequireNoArguments(args: args, verb: "replay.stop") is { } refusal) {
+            return refusal;
         }
 
         if (m_tape.Mode != WorldReplayMode.Recording) {

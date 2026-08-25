@@ -283,18 +283,13 @@ internal sealed class WorldHudCommandModule(WorldServer server, IHudBindingResol
         }
 
         return (
-            int.TryParse(
-            s: token.AsSpan(start: SeatFilterPrefix.Length),
-            style: System.Globalization.NumberStyles.Integer,
-            provider: System.Globalization.CultureInfo.InvariantCulture,
-            result: out seat
+            CommandArgs.TryParseInt(
+            text: token.AsSpan(start: SeatFilterPrefix.Length),
+            value: out seat
         ) &&
             (seat >= 1) &&
             (seat <= PlayerRoster.MaxSlots)
         );
-    }
-    private static CommandResult Usage(string verb, string form) {
-        return CommandResult.Error(output: $"[{verb}: expected {form}]");
     }
 
     /// <inheritdoc/>
@@ -317,7 +312,7 @@ internal sealed class WorldHudCommandModule(WorldServer server, IHudBindingResol
                 );
 
                 return ((template.Length == 0)
-                    ? Usage(
+                    ? CommandResult.Usage(
                         form: "<template text...>",
                         verb: "world.hud.template"
                     )

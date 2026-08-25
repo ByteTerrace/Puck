@@ -1,6 +1,7 @@
 using Puck.Commands;
 using Puck.World.Client;
 using Puck.World.Protocol;
+using Puck.World.Server;
 
 namespace Puck.World;
 
@@ -208,7 +209,7 @@ internal sealed partial class PlayerCommandModule {
             );
             var joinReply = instance.Server.ApplySession(request: new SessionRequest.Join(
                 Principal: context.ActingPrincipal(),
-                Slot: (instanceSlot - 1),
+                Slot: WorldPopulation.EntityFromDisplay(number: instanceSlot),
                 IdentityName: instanceIdentity,
                 WireProtocolKey: WorldProtocol.WireProtocolKey
             ));
@@ -333,22 +334,22 @@ internal sealed partial class PlayerCommandModule {
 
             if (m_instances.TryFindFollowedRosterSlot(
                 instanceName: instance.Name,
-                instanceSlot: (instanceSlot - 1),
+                instanceSlot: WorldPopulation.EntityFromDisplay(number: instanceSlot),
                 rosterSlot: out var rosterSlot
             )) {
                 if (!m_roster.Leave(
                     slot: rosterSlot,
                     actingPrincipal: context.ActingPrincipal()
                 )) {
-                    return CommandResult.Error(output: $"[player.leave: '{instance.Name}' seat {instanceSlot} is followed by player {(rosterSlot + 1)}, which cannot leave or the actor was denied]");
+                    return CommandResult.Error(output: $"[player.leave: '{instance.Name}' seat {instanceSlot} is followed by player {PlayerRoster.DisplayNumber(slot: rosterSlot)}, which cannot leave or the actor was denied]");
                 }
 
-                return new CommandResult(Output: $"[player.leave: player {(rosterSlot + 1)} left '{instance.Name}' seat {instanceSlot}] {m_roster.Describe()}");
+                return new CommandResult(Output: $"[player.leave: player {PlayerRoster.DisplayNumber(slot: rosterSlot)} left '{instance.Name}' seat {instanceSlot}] {m_roster.Describe()}");
             }
 
             var leaveReply = instance.Server.ApplySession(request: new SessionRequest.Leave(
                 Principal: context.ActingPrincipal(),
-                Slot: (instanceSlot - 1)
+                Slot: WorldPopulation.EntityFromDisplay(number: instanceSlot)
             ));
 
             if (!leaveReply.Accepted) {

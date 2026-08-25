@@ -268,7 +268,7 @@ internal sealed partial class WorldProbes {
             var bySeat = rowInfo.InstancesBySeat!;
 
             for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
-                var seat = (slot + 1);
+                var seat = PlayerRoster.DisplayNumber(slot: slot);
                 var occupied = m_roster.IsJoined(slot: slot);
                 var hasInstance = bySeat.TryGetValue(key: seat, value: out var existing);
 

@@ -183,6 +183,64 @@ internal static partial class Oracles {
             exact: ((new BigInteger(value: from) << 16) + ((new BigInteger(value: to) - from) * amount)),
             shift: 16
         );
+    /// <summary>The exact scalar MoveToward landing/ordering decision: the true displacement
+    /// <c>targetRaw − currentRaw</c> is formed in <see cref="BigInteger"/>, with no wrap at any width. Returns
+    /// <paramref name="targetRaw"/> when that exact displacement's magnitude is at most <paramref name="maxDeltaRaw"/>;
+    /// otherwise <paramref name="currentRaw"/> stepped by <paramref name="maxDeltaRaw"/> in the displacement's own
+    /// sign, reduced to the signed 64-bit carrier.</summary>
+    /// <param name="currentRaw">The current raw.</param>
+    /// <param name="targetRaw">The target raw.</param>
+    /// <param name="maxDeltaRaw">The non-negative maximum step raw.</param>
+    /// <returns>The expected raw.</returns>
+    /// <remarks>Shares nothing with the subject: <see cref="FixedQ4816.MoveToward"/> reads ordering and separation
+    /// from a widened UNSIGNED reading of the same two raws, where this oracle forms the exact SIGNED displacement in
+    /// arbitrary width and never reads a wrapped subtraction at any point.</remarks>
+    public static long MoveTowardRaw(long currentRaw, long targetRaw, long maxDeltaRaw) {
+        var displacement = (new BigInteger(value: targetRaw) - currentRaw);
+
+        if (BigInteger.Abs(value: displacement) <= maxDeltaRaw) {
+            return targetRaw;
+        }
+
+        var step = ((displacement.Sign > 0) ? maxDeltaRaw : -maxDeltaRaw);
+
+        return WrapToRaw(value: (new BigInteger(value: currentRaw) + step));
+    }
+    /// <summary>The exact vector MoveToward landing verdict and per-axis displacement sign, independent of the
+    /// subject's own subtraction: each axis's raw displacement <c>targetRaw − currentRaw</c> is formed in
+    /// <see cref="BigInteger"/> with no wrap at any width, and landing is decided by comparing the exact squared
+    /// Euclidean distance against <c>maxDeltaRaw²</c>, never a wrapped or narrowed intermediate.</summary>
+    /// <param name="currentX">The current vector's X raw.</param>
+    /// <param name="currentY">The current vector's Y raw.</param>
+    /// <param name="currentZ">The current vector's Z raw.</param>
+    /// <param name="targetX">The target vector's X raw.</param>
+    /// <param name="targetY">The target vector's Y raw.</param>
+    /// <param name="targetZ">The target vector's Z raw.</param>
+    /// <param name="maxDeltaRaw">The non-negative maximum step raw.</param>
+    /// <returns>Whether the exact distance lands within <paramref name="maxDeltaRaw"/>, and each axis's exact
+    /// displacement sign (<c>-1</c>, <c>0</c>, or <c>1</c>).</returns>
+    public static (bool Landing, int SignX, int SignY, int SignZ) MoveTowardVerdict(
+        long currentX,
+        long currentY,
+        long currentZ,
+        long targetX,
+        long targetY,
+        long targetZ,
+        long maxDeltaRaw
+    ) {
+        var dx = (new BigInteger(value: targetX) - currentX);
+        var dy = (new BigInteger(value: targetY) - currentY);
+        var dz = (new BigInteger(value: targetZ) - currentZ);
+        var squaredSum = (((dx * dx) + (dy * dy)) + (dz * dz));
+        var maxDeltaSquared = (new BigInteger(value: maxDeltaRaw) * maxDeltaRaw);
+
+        return (
+            Landing: (squaredSum <= maxDeltaSquared),
+            SignX: dx.Sign,
+            SignY: dy.Sign,
+            SignZ: dz.Sign
+        );
+    }
     /// <summary>The IDEAL Q16 unit direction: each component ONE ties-to-even rounding of the exact ratio
     /// <c>rawᵢ·2¹⁶ / √(Σ rawⱼ²)</c>, with no preconditioning and no intermediate quantization. A zero vector maps to
     /// the zero vector.</summary>

@@ -61,7 +61,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
             index: 1,
             value: WorldSequence.R1
         )) {
-            return Submit(mutation: toMutation(
+            return link.Submit(mutation: toMutation(
                 principal,
                 new WorldRowAssignment(
                     Sequence: new WorldSequence(
@@ -82,7 +82,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
                 return CommandResult.Error(output: $"[{verb}: cycle needs at least one name]");
             }
 
-            return Submit(mutation: toMutation(
+            return link.Submit(mutation: toMutation(
                 principal,
                 new WorldRowAssignment(
                     Sequence: new WorldSequence(
@@ -684,7 +684,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
     };
     private CommandResult HandleAssign(CommandContext context, WireArgs args) {
         if (args.Count < 2) {
-            return Usage(
+            return CommandResult.Usage(
                 form: "kits|looks r1 | cycle <name> [<name>…]",
                 verb: "world.assign"
             );
@@ -719,7 +719,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
     }
     private CommandResult HandleRemove(WorldServer server, CommandContext context, WireArgs args) {
         if (args.Count != 2) {
-            return Usage(
+            return CommandResult.Usage(
                 form: "<path> <key>",
                 verb: "world.row.remove"
             );
@@ -734,7 +734,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
             b: PropertiesNamesPath,
             comparisonType: StringComparison.Ordinal
         )) {
-            return Submit(mutation: new WorldMutation.SetProperty(
+            return link.Submit(mutation: new WorldMutation.SetProperty(
                 Name: key,
                 Principal: principal,
                 Remove: true
@@ -763,12 +763,12 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
 
         return ((outcome.Error is { } error)
             ? CommandResult.Error(output: $"[world.row.remove: {path}: {error}]")
-            : Submit(mutation: outcome.Mutation!)
+            : link.Submit(mutation: outcome.Mutation!)
         );
     }
     private CommandResult HandleSet(WorldServer server, CommandContext context, WireArgs args) {
         if (args.Count < 1) {
-            return Usage(
+            return CommandResult.Usage(
                 form: "<path> <json>",
                 verb: "world.row.set"
             );
@@ -783,13 +783,13 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
             comparisonType: StringComparison.Ordinal
         )) {
             if (args.Count != 2) {
-                return Usage(
+                return CommandResult.Usage(
                     form: $"{PropertiesNamesPath} <name>",
                     verb: "world.row.set"
                 );
             }
 
-            return Submit(mutation: new WorldMutation.SetProperty(
+            return link.Submit(mutation: new WorldMutation.SetProperty(
                 Principal: principal,
                 Name: args[1].ToString(),
                 Remove: false
@@ -813,7 +813,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         );
 
         if (string.IsNullOrWhiteSpace(value: raw)) {
-            return Usage(
+            return CommandResult.Usage(
                 form: $"{path} <json>",
                 verb: "world.row.set"
             );
@@ -827,7 +827,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
 
         return ((outcome.Error is { } error)
             ? CommandResult.Error(output: $"[world.row.set: {path}: {error}]")
-            : Submit(mutation: outcome.Mutation!)
+            : link.Submit(mutation: outcome.Mutation!)
         );
     }
     // rules and interactions key their Remove mutation by the validated WorldCellName type rather than a plain
@@ -851,11 +851,9 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
     // screens is the one section keyed by an integer index rather than a string name.
     private static Func<WorldServer, WorldPrincipal, string, RowOutcome> RemoveByIndex(Func<WorldPrincipal, int, WorldMutation> remove) {
         return (_, principal, key) => {
-            if (!int.TryParse(
-                s: key,
-                style: NumberStyles.Integer,
-                provider: CultureInfo.InvariantCulture,
-                result: out var index
+            if (!CommandArgs.TryParseInt(
+                text: key,
+                value: out var index
             )) {
                 return RowOutcome.Fail(error: $"bad index '{key}' — an integer");
             }
@@ -871,11 +869,6 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
             arg1: principal,
             arg2: key
         ));
-    }
-    private CommandResult Submit(WorldMutation mutation) {
-        link.SubmitWorldMutation(mutation: mutation);
-
-        return CommandResult.None;
     }
     // Materializes the trailing tokens from <paramref name="start"/> onward as the assignment's identifier array —
     // the ONE place world.assign needs each row name separately rather than the joined free-text tail RawAfter gives.
@@ -996,9 +989,6 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
             ));
         };
     }
-    private static CommandResult Usage(string verb, string form) {
-        return CommandResult.Error(output: $"[{verb}: expected {form}]");
-    }
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
@@ -1103,7 +1093,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
     }
     private CommandResult HandleStep(WorldServer server, CommandContext context, WireArgs args) {
         if (args.Count is (< 1 or > 2)) {
-            return Usage(
+            return CommandResult.Usage(
                 form: "<path> <delta>",
                 verb: "world.row.step"
             );
@@ -1122,7 +1112,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         } else if (context.Origin == CommandOrigin.Binding) {
             delta = context.Value.AsAxis1D;
         } else {
-            return Usage(
+            return CommandResult.Usage(
                 form: "<path> <delta>",
                 verb: "world.row.step"
             );
@@ -1319,11 +1309,9 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
     // The one section (screens) keyed by its own array POSITION rather than a stable name.
     private static Func<WorldServer, string, RowReadOutcome> ReadRowByIndex<T>(JsonTypeInfo<T> info, Func<WorldServer, IReadOnlyList<T>> select) {
         return (server, key) => {
-            if (!int.TryParse(
-                s: key,
-                style: NumberStyles.Integer,
-                provider: CultureInfo.InvariantCulture,
-                result: out var index
+            if (!CommandArgs.TryParseInt(
+                text: key,
+                value: out var index
             )) {
                 return RowReadOutcome.Fail(error: $"bad index '{key}' — an integer");
             }

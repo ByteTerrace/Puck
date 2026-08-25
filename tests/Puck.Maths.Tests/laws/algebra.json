@@ -212,6 +212,15 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
+        "Subject": "Rational is a valid rational representation before any identity is checked: default(Rational) — whose zero-initialized storage never ran the constructor — reads back as the canonical 0/1 rather than the invalid 0/0, and that reading rounds cleanly to raw zero through FixedPointRounding.TryRoundRational; the constructor refuses an explicit zero Denominator, asserted by exception type AND the parameter name it reports; and the division operator refuses a zero-numerator divisor with DivideByZeroException, for both an explicitly constructed zero and the defaulted one.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
         "Subject": "Rational never reduces a fraction, so its own record equality is not a valid rational-equality test; every identity below is checked by CROSS-MULTIPLICATION instead (a/b = c/d iff a·d = c·b), over eight operand rationals including a zero numerator, negative numerators and a pair wide enough (2^96 over 2^40) to exercise BigInteger growth. The ctor/Numerator/Denominator readback, Two = One + One, the additive identity and inverse (a + 0 = a, a + (-a) = 0, -(-a) = a), the multiplicative identity (a·1 = 1·a = a), and a - b = a + (-b) are asserted for every sample; commutativity of + and ·, and (a / b)·b = a for every nonzero b, over every ordered pair; associativity of + and · and distributivity of · over + over every ordered triple",
         "Against": "",
         "Shared": "",

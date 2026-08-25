@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Forge.Authoring;
+using Puck.Hosting;
 using Puck.Maths;
 using Puck.SignedDistance;
 using Puck.World.Protocol;
@@ -15,6 +16,21 @@ public sealed class AttachmentLawTests {
     private const int DetachOrdinal = 4;
     private const int ReelOrdinal = 5;
     private const int ForwardOrdinal = 0;
+
+    private sealed class RestoredCheckpoint(WorldServer server, WorldMachineHost machines, string stateDirectory) : IDisposable {
+        public WorldServer Server { get; } = server;
+
+        public void Dispose() {
+            machines.Dispose();
+
+            if (Directory.Exists(path: stateDirectory)) {
+                Directory.Delete(
+                    path: stateDirectory,
+                    recursive: true
+                );
+            }
+        }
+    }
 
     // A body standing at the origin resolves the wall's near face (a clean X-only clamp — see
     // BuildAttachmentDocument's remarks) within this tolerance of world X 1.8: exactly the half-extent margin plus
@@ -137,6 +153,57 @@ public sealed class AttachmentLawTests {
     private static PlayerIntent Attach() => default(PlayerIntent).WithChannel(ordinal: AttachOrdinal, value: FixedQ4816.One);
     private static PlayerIntent Detach() => default(PlayerIntent).WithChannel(ordinal: DetachOrdinal, value: FixedQ4816.One);
     private static PlayerIntent Forward() => default(PlayerIntent).WithChannel(ordinal: ForwardOrdinal, value: FixedQ4816.One);
+    private static PlayerIntent ReelIn() => default(PlayerIntent).WithChannel(ordinal: ReelOrdinal, value: -FixedQ4816.One);
+    private static WorldAuthorityHostRowCheckpoint EmptyHostRow() => new(
+        AnnouncedCrossingHolds: [],
+        AppliedTransferHighWater: null,
+        AppliedTransferIds: [],
+        ElapsedEngineTicks: 0,
+        ForwardedBodies: [],
+        FreshCounter: 0,
+        InDoubtTransfers: [],
+        IsPaused: false,
+        NextTransferId: 1,
+        PortalOccupancy: [],
+        Retained: false,
+        ScheduleAccumulatorTicks: 0,
+        SeededArrivals: []
+    );
+    private static RestoredCheckpoint Restore(WorldFixture fixture, string identity) {
+        Assert.True(condition: fixture.Server.TryCaptureCheckpoint(
+            checkpoint: out var checkpoint,
+            hostRow: EmptyHostRow(),
+            reason: out var refusal
+        ), userMessage: refusal);
+        var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint!);
+
+        Assert.True(condition: WorldAuthorityCheckpointCodec.TryDecode(
+            bytes: encoded,
+            checkpoint: out var decoded,
+            reason: out var decodeRefusal
+        ), userMessage: decodeRefusal);
+
+        var definition = WorldDefinitionSerialization.Deserialize(utf8Json: decoded!.Server.DefinitionJson);
+        var machines = new WorldMachineHost(engines: [], screens: definition.Screens);
+        var stateDirectory = Directory.CreateTempSubdirectory(prefix: "puck-attachment-checkpoint-").FullName;
+        var profiles = new WorldOwnedWorlds(
+            directory: stateDirectory,
+            machineId: Guid.NewGuid(),
+            template: definition
+        );
+        var (server, _) = WorldServer.FromCheckpoint(
+            checkpoint: decoded,
+            instanceIdentity: identity,
+            machines: machines,
+            profiles: profiles
+        );
+
+        return new RestoredCheckpoint(
+            machines: machines,
+            server: server,
+            stateDirectory: stateDirectory
+        );
+    }
 
     [Fact]
     public void ClimbAttach_SnapsToTheGrippedSurfaceAndSuspendsGrounding() {
@@ -268,6 +335,43 @@ public sealed class AttachmentLawTests {
         Assert.NotEqual(expected: first, actual: withoutAttach);
     }
     [Fact]
+    public void ClimbCheckpointRestore_PreservesTheWholeTangentIntegratorAndContinuesBitIdentically() {
+        using var fixture = Fixtures.FreshServer(definition: BuildAttachmentDocument());
+        var uninterruptedBody = JoinBody(fixture: fixture);
+
+        uninterruptedBody.SubmitIntent(intent: Attach());
+        fixture.Step();
+        for (var tick = 0; (tick < 7); tick++) {
+            uninterruptedBody.SubmitIntent(intent: Forward());
+            fixture.Step();
+        }
+
+        using var restored = Restore(
+            fixture: fixture,
+            identity: "climb-checkpoint"
+        );
+        var restoredBody = restored.Server.Body(index: 0)!;
+
+        Assert.Equal(expected: WorldBodyAttachmentMode.Climb, actual: restoredBody.AttachmentMode);
+        Assert.Equal(expected: uninterruptedBody.CaptureIntegrationResidue(), actual: restoredBody.CaptureIntegrationResidue());
+
+        var elapsed = 0UL;
+        var nextTick = fixture.Server.NextInputTick;
+
+        for (var step = 0; (step < 24); step++) {
+            uninterruptedBody.SubmitIntent(intent: Forward());
+            restoredBody.SubmitIntent(intent: Forward());
+            elapsed = checked((elapsed + Fixtures.StepTicks));
+            var context = new FixedStepContext(ElapsedTicks: elapsed, StepTicks: Fixtures.StepTicks, Tick: nextTick++);
+
+            fixture.Server.Step(context: in context);
+            restored.Server.Step(context: in context);
+
+            Assert.Equal(expected: WorldReplaySnapshot.HashState(population: fixture.Server.Population), actual: WorldReplaySnapshot.HashState(population: restored.Server.Population));
+            Assert.Equal(expected: uninterruptedBody.CaptureIntegrationResidue(), actual: restoredBody.CaptureIntegrationResidue());
+        }
+    }
+    [Fact]
     public void GrappleAttach_ConstrainsThroughTheOrdinaryTetherPipeline() {
         var document = BuildAttachmentDocument(includeWall: false);
 
@@ -283,6 +387,44 @@ public sealed class AttachmentLawTests {
         Assert.NotNull(@object: body.AttachmentRopeLength);
         Assert.NotNull(@object: body.TetherLength);
         Assert.False(condition: body.AttachmentGrantedByOverride);
+    }
+    [Fact]
+    public void GrappleCheckpointRestore_PreservesRopeAnchorAndReelFractionAndContinuesBitIdentically() {
+        using var fixture = Fixtures.FreshServer(definition: BuildAttachmentDocument(includeWall: false));
+        var uninterruptedBody = JoinBody(fixture: fixture);
+
+        uninterruptedBody.SubmitIntent(intent: Attach());
+        fixture.Step();
+        for (var tick = 0; (tick < 7); tick++) {
+            uninterruptedBody.SubmitIntent(intent: ReelIn());
+            fixture.Step();
+        }
+
+        using var restored = Restore(
+            fixture: fixture,
+            identity: "grapple-checkpoint"
+        );
+        var restoredBody = restored.Server.Body(index: 0)!;
+
+        Assert.Equal(expected: WorldBodyAttachmentMode.Grapple, actual: restoredBody.AttachmentMode);
+        Assert.Equal(expected: uninterruptedBody.CaptureIntegrationResidue(), actual: restoredBody.CaptureIntegrationResidue());
+
+        var elapsed = 0UL;
+        var nextTick = fixture.Server.NextInputTick;
+
+        for (var step = 0; (step < 24); step++) {
+            uninterruptedBody.SubmitIntent(intent: ReelIn());
+            restoredBody.SubmitIntent(intent: ReelIn());
+            elapsed = checked((elapsed + Fixtures.StepTicks));
+            var context = new FixedStepContext(ElapsedTicks: elapsed, StepTicks: Fixtures.StepTicks, Tick: nextTick++);
+
+            fixture.Server.Step(context: in context);
+            restored.Server.Step(context: in context);
+
+            Assert.Equal(expected: uninterruptedBody.TetherLength, actual: restoredBody.TetherLength);
+            Assert.Equal(expected: WorldReplaySnapshot.HashState(population: fixture.Server.Population), actual: WorldReplaySnapshot.HashState(population: restored.Server.Population));
+            Assert.Equal(expected: uninterruptedBody.CaptureIntegrationResidue(), actual: restoredBody.CaptureIntegrationResidue());
+        }
     }
     [Fact]
     public void AttachChannelNamingAnUndeclaredChannel_RefusesValidation_WhereADeclaredNameIsAdmitted() {

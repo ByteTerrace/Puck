@@ -582,7 +582,7 @@ internal sealed class WorldPlacementCommandModule(WorldServer server, WorldPopul
                     return CommandResult.Error(output: "[world.faces: no instance-addressed form — screens are the boot instance's own; see world.inhabitants/world.attachments/world.portals/world.destinations for instance:<name>]");
                 }
 
-                return CommandResult.Error(output: $"[world.faces: unrecognized '{args[0]}' — expected no arguments]");
+                return CommandResult.RequireNoArguments(args: args, verb: "world.faces")!.Value;
             }
         );
         yield return CommandDefinition.WithWireArgs(

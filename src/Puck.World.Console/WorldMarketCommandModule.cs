@@ -1,5 +1,3 @@
-using System.Globalization;
-using System.Text;
 using Puck.Commands;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -34,24 +32,19 @@ public sealed class WorldMarketCommandModule(IWorldConsoleAuthority authority, I
             return "[world.market: (no market section)]";
         }
 
-        var builder = new StringBuilder();
-
-        _ = builder.Append(value: "[world.market:");
+        var echo = CommandEcho.Open(verb: "world.market");
 
         if (filter is null) {
-            _ = builder.Append(value: " formats=[").Append(value: string.Join(
+            var config = new System.Text.StringBuilder(value: "formats=[").Append(value: string.Join(
                 separator: ',',
                 values: market.EffectiveFormats
             )).Append(value: ']')
                 .Append(value: " feeBasisPoints=").Append(value: market.FeeBasisPoints)
                 .Append(value: " duration=[").Append(value: market.MinDurationSeconds).Append(value: "..").Append(value: market.MaxDurationSeconds).Append(value: ']')
                 .Append(value: " retentionSeconds=").Append(value: market.RetentionSeconds)
-                .Append(value: " feeReserve=").Append(value: market.FeeReserve)
-                .Append(value: " |");
+                .Append(value: " feeReserve=").Append(value: market.FeeReserve);
 
-            foreach (var tier in (market.AdmissionTiers ?? [])) {
-                _ = builder.Append(value: " tier ").Append(value: tier.Name).Append(value: " requireAttestation=").Append(value: tier.RequireAttestation).Append(value: " |");
-            }
+            _ = echo.Text(text: config.ToString()).Segment();
         }
 
         foreach (var listing in (market.Listings ?? [])) {
@@ -62,7 +55,7 @@ public sealed class WorldMarketCommandModule(IWorldConsoleAuthority authority, I
                 continue;
             }
 
-            _ = builder.Append(value: " listing #").Append(value: listing.Id)
+            var text = new System.Text.StringBuilder(value: "listing #").Append(value: listing.Id)
                 .Append(value: " seller=").Append(value: listing.Seller.Describe())
                 .Append(value: " item=").Append(value: listing.Quantity).Append(value: 'x').Append(value: listing.ItemRow.Value)
                 .Append(value: " currency=").Append(value: listing.CurrencyRow.Value)
@@ -70,25 +63,25 @@ public sealed class WorldMarketCommandModule(IWorldConsoleAuthority authority, I
                 .Append(value: " startPrice=").Append(value: listing.StartPrice);
 
             if (listing.BuyoutPrice is { } buyoutPrice) {
-                _ = builder.Append(value: " buyoutPrice=").Append(value: buyoutPrice);
+                _ = text.Append(value: " buyoutPrice=").Append(value: buyoutPrice);
             }
 
-            _ = builder.Append(value: " deadlineTick=").Append(value: listing.DeadlineTick)
+            _ = text.Append(value: " deadlineTick=").Append(value: listing.DeadlineTick)
                 .Append(value: " status=").Append(value: listing.Status)
                 .Append(value: " currentBid=").Append(value: listing.CurrentBid);
 
             if (listing.CurrentBidder is { } bidder) {
-                _ = builder.Append(value: " currentBidder=").Append(value: bidder.Describe());
+                _ = text.Append(value: " currentBidder=").Append(value: bidder.Describe());
             }
 
             if (listing.ResolvedTick is { } resolvedTick) {
-                _ = builder.Append(value: " resolvedTick=").Append(value: resolvedTick);
+                _ = text.Append(value: " resolvedTick=").Append(value: resolvedTick);
             }
 
-            _ = builder.Append(value: " |");
+            _ = echo.Text(text: text.ToString()).Segment();
         }
 
-        return (builder.Append(value: ']').ToString());
+        return echo.Close();
     }
     private static bool TryFormat(ReadOnlySpan<char> token, out WorldMarketFormat format) {
         if (token.Equals(
@@ -113,14 +106,6 @@ public sealed class WorldMarketCommandModule(IWorldConsoleAuthority authority, I
 
         return false;
     }
-    private static bool TryLong(in WireArgs args, int index, out long value) =>
-        long.TryParse(
-            s: args[index],
-            style: NumberStyles.Integer,
-            provider: CultureInfo.InvariantCulture,
-            result: out value
-        );
-    private static CommandResult Usage(string verb, string form) => CommandResult.Error(output: $"[{verb}: expected {form}]");
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
@@ -130,7 +115,7 @@ public sealed class WorldMarketCommandModule(IWorldConsoleAuthority authority, I
             description: "Lists <quantity> of <itemRow> for sale on behalf of <seller>, escrowing it out of their own cell: market.list <seller> <itemRow> <quantity> <currencyRow> <english|buyout> <startPrice> <buyoutPrice> <durationSeconds>. <seller> is a principal token (seat1..seat4|peer:<n>:<generation>). <buyoutPrice> 0 means none (legal for english; buyout requires a positive value). <startPrice> is unused by buyout (pass 0). Rejected loudly when the world authors no market section, <seller> is not a seat or peer, the format is not admitted, the duration falls outside the market's bounds, either row is not a declared capacity-bounded int state row, or the seller holds fewer than <quantity>. Buffers and applies at the tick boundary under Mutate/section:market.",
             handler: (context, args) => {
                 if (args.Count != 8) {
-                    return Usage(
+                    return CommandResult.Usage(
                         form: "<seller> <itemRow> <quantity> <currencyRow> <english|buyout> <startPrice> <buyoutPrice> <durationSeconds>",
                         verb: "market.list"
                     );
@@ -140,7 +125,7 @@ public sealed class WorldMarketCommandModule(IWorldConsoleAuthority authority, I
                     token: args[0],
                     principal: out var seller
                 )) {
-                    return CommandResult.Error(output: $"[market.list: unknown principal '{args[0].ToString()}' — seat1..seat4|console|addon:<name>|peer:<n>:<generation>]");
+                    return CommandResult.Error(output: $"[market.list: unknown principal '{args[0].ToString()}' — {WorldPrincipal.TokenGrammar}]");
                 }
 
                 if (!WorldCellName.TryParse(
@@ -151,8 +136,7 @@ public sealed class WorldMarketCommandModule(IWorldConsoleAuthority authority, I
                     return CommandResult.Error(output: $"[market.list: itemRow '{args[1].ToString()}' {itemReason}]");
                 }
 
-                if (!TryLong(
-                    args: args,
+                if (!args.TryLong(
                     index: 2,
                     value: out var quantity
                 )) {
@@ -174,16 +158,14 @@ public sealed class WorldMarketCommandModule(IWorldConsoleAuthority authority, I
                     return CommandResult.Error(output: $"[market.list: unknown format '{args[4].ToString()}' — english|buyout]");
                 }
 
-                if (!TryLong(
-                    args: args,
+                if (!args.TryLong(
                     index: 5,
                     value: out var startPrice
                 )) {
                     return CommandResult.Error(output: $"[market.list: '{args[5].ToString()}' is not an integer startPrice]");
                 }
 
-                if (!TryLong(
-                    args: args,
+                if (!args.TryLong(
                     index: 6,
                     value: out var buyoutPrice
                 )) {
@@ -221,7 +203,7 @@ public sealed class WorldMarketCommandModule(IWorldConsoleAuthority authority, I
             description: "Places an ascending bid against an english listing on behalf of <bidder>, escrowing <amount> out of their own currency cell and refunding any standing bidder: market.bid <bidder> <listingId> <amount>. Rejected loudly when the listing does not exist, is not active, has reached its deadline, is not english, <bidder> is the listing's own seller or not a seat/peer, <amount> does not strictly exceed the current bid (or the listing's startPrice while unbid), or the bidder cannot afford it. Buffers and applies at the tick boundary under Mutate/section:market.",
             handler: (context, args) => {
                 if (args.Count != 3) {
-                    return Usage(
+                    return CommandResult.Usage(
                         form: "<bidder> <listingId> <amount>",
                         verb: "market.bid"
                     );
@@ -231,19 +213,17 @@ public sealed class WorldMarketCommandModule(IWorldConsoleAuthority authority, I
                     token: args[0],
                     principal: out var bidder
                 )) {
-                    return CommandResult.Error(output: $"[market.bid: unknown principal '{args[0].ToString()}' — seat1..seat4|console|addon:<name>|peer:<n>:<generation>]");
+                    return CommandResult.Error(output: $"[market.bid: unknown principal '{args[0].ToString()}' — {WorldPrincipal.TokenGrammar}]");
                 }
 
-                if (!TryLong(
-                    args: args,
+                if (!args.TryLong(
                     index: 1,
                     value: out var listingId
                 )) {
                     return CommandResult.Error(output: $"[market.bid: '{args[1].ToString()}' is not an integer listingId]");
                 }
 
-                if (!TryLong(
-                    args: args,
+                if (!args.TryLong(
                     index: 2,
                     value: out var amount
                 )) {
@@ -267,7 +247,7 @@ public sealed class WorldMarketCommandModule(IWorldConsoleAuthority authority, I
             description: "Settles a listing immediately at its declared buyoutPrice on behalf of <buyer>: market.buyout <buyer> <listingId>. Pays the seller net of the market's fee, refunds any standing english bidder, and credits the buyer's item cell. Rejected loudly when the listing does not exist, is not active, has reached its deadline, declares no buyoutPrice, <buyer> is the listing's own seller or not a seat/peer, or the buyer cannot afford it. Buffers and applies at the tick boundary under Mutate/section:market.",
             handler: (context, args) => {
                 if (args.Count != 2) {
-                    return Usage(
+                    return CommandResult.Usage(
                         form: "<buyer> <listingId>",
                         verb: "market.buyout"
                     );
@@ -277,11 +257,10 @@ public sealed class WorldMarketCommandModule(IWorldConsoleAuthority authority, I
                     token: args[0],
                     principal: out var buyer
                 )) {
-                    return CommandResult.Error(output: $"[market.buyout: unknown principal '{args[0].ToString()}' — seat1..seat4|console|addon:<name>|peer:<n>:<generation>]");
+                    return CommandResult.Error(output: $"[market.buyout: unknown principal '{args[0].ToString()}' — {WorldPrincipal.TokenGrammar}]");
                 }
 
-                if (!TryLong(
-                    args: args,
+                if (!args.TryLong(
                     index: 1,
                     value: out var listingId
                 )) {
@@ -304,7 +283,7 @@ public sealed class WorldMarketCommandModule(IWorldConsoleAuthority authority, I
             description: "Withdraws a listing before it settles on behalf of <canceler>, returning the escrowed item to the seller and refunding any standing bidder: market.cancel <canceler> <listingId>. Rejected loudly when the listing does not exist, is not active, or <canceler> is not its seller. Buffers and applies at the tick boundary under Mutate/section:market.",
             handler: (context, args) => {
                 if (args.Count != 2) {
-                    return Usage(
+                    return CommandResult.Usage(
                         form: "<canceler> <listingId>",
                         verb: "market.cancel"
                     );
@@ -314,11 +293,10 @@ public sealed class WorldMarketCommandModule(IWorldConsoleAuthority authority, I
                     token: args[0],
                     principal: out var canceler
                 )) {
-                    return CommandResult.Error(output: $"[market.cancel: unknown principal '{args[0].ToString()}' — seat1..seat4|console|addon:<name>|peer:<n>:<generation>]");
+                    return CommandResult.Error(output: $"[market.cancel: unknown principal '{args[0].ToString()}' — {WorldPrincipal.TokenGrammar}]");
                 }
 
-                if (!TryLong(
-                    args: args,
+                if (!args.TryLong(
                     index: 1,
                     value: out var listingId
                 )) {
@@ -338,10 +316,10 @@ public sealed class WorldMarketCommandModule(IWorldConsoleAuthority authority, I
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.market",
-            description: "Echoes the market section — config (formats, feeBasisPoints, duration bounds, admission tiers) and the live listing ledger: world.market [listingId]. With a listing id, echoes only that listing.",
+            description: "Echoes the market section — config (formats, feeBasisPoints, duration bounds, retention, and fee reserve) and the live listing ledger: world.market [listingId]. With a listing id, echoes only that listing.",
             handler: (context, args) => {
                 if (args.Count > 1) {
-                    return Usage(
+                    return CommandResult.Usage(
                         form: "[listingId]",
                         verb: "world.market"
                     );
@@ -359,8 +337,7 @@ public sealed class WorldMarketCommandModule(IWorldConsoleAuthority authority, I
                 long? filter = null;
 
                 if (args.Count == 1) {
-                    if (!TryLong(
-                        args: args,
+                    if (!args.TryLong(
                         index: 0,
                         value: out var id
                     )) {

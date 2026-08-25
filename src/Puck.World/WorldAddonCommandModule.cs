@@ -20,7 +20,7 @@ namespace Puck.World;
 internal sealed class WorldAddonCommandModule(WorldAddonRuntime runtime, WorldServer server) : ICommandModule {
     private CommandResult Describe(WireArgs args) {
         if (args.Count > 0) {
-            return Usage(
+            return CommandResult.Usage(
                 form: "",
                 verb: "world.addons"
             );
@@ -78,11 +78,6 @@ internal sealed class WorldAddonCommandModule(WorldAddonRuntime runtime, WorldSe
         AddonState.Disabled => "DISABLED",
         _ => $"FAULTED({(entry.FaultDetail ?? entry.State.ToString())})",
     };
-    private static CommandResult Usage(string verb, string form) {
-        return CommandResult.Error(output: (string.IsNullOrEmpty(value: form)
-            ? $"[{verb}: expected no arguments]"
-            : $"[{verb}: expected {form}]"));
-    }
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {

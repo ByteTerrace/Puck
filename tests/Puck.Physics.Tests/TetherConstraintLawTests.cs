@@ -522,6 +522,39 @@ public sealed class TetherConstraintLawTests {
     }
 
     [Fact]
+    public void CaptureState_RestoresTheExactNextReelFraction() {
+        var rate = FixedQ4816.FromDouble(value: 0.37d);
+        var uninterrupted = new FixedTetherConstraint(
+            length: FixedQ4816.FromInteger(value: 20L),
+            minLength: FixedQ4816.Zero
+        );
+
+        for (var tick = 0; (tick < 7); tick++) {
+            uninterrupted.Reel(
+                elapsedTicks: 210UL,
+                ratePerSecond: rate
+            );
+        }
+
+        var restored = FixedTetherConstraint.FromState(state: uninterrupted.CaptureState());
+
+        Assert.Equal(expected: uninterrupted.CaptureState(), actual: restored.CaptureState());
+
+        for (var tick = 0; (tick < 240); tick++) {
+            uninterrupted.Reel(
+                elapsedTicks: 210UL,
+                ratePerSecond: rate
+            );
+            restored.Reel(
+                elapsedTicks: 210UL,
+                ratePerSecond: rate
+            );
+
+            Assert.Equal(expected: uninterrupted.CaptureState(), actual: restored.CaptureState());
+        }
+    }
+
+    [Fact]
     public void ResolveAnchor_RotatesTheLocalOffsetByTheAnchorBodysOrientation() {
         var anchorPosition = new FixedVector3(
             X: FixedQ4816.FromInteger(value: 1L),

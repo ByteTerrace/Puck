@@ -129,7 +129,7 @@ public sealed class HeadlessTickHostedService : BackgroundService {
                 );
             }
 
-            var spinThreshold = ((frequency / 1000L) * LauncherHostLoop.SpinThresholdMilliseconds);
+            var spinThreshold = LauncherHostLoop.SpinThreshold(frequency: frequency);
             var hostFrame = 0UL;
             var nextDeadline = Stopwatch.GetTimestamp();
             var exitAfterTimestamp = ((m_options.ExitAfter is { } exitAfter)

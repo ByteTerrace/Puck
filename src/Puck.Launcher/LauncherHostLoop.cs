@@ -16,7 +16,16 @@ internal static class LauncherHostLoop {
     /// is the fallback for both the null and the stopped case, never a value that silently overrides an authored
     /// one (the registered simulation still gates its OWN actual stepping internally).</summary>
     public const uint DefaultUpdateRate = 240U;
-    public const int SpinThresholdMilliseconds = 2;
+    // Deliberate busy waiting is limited to the final 100 us. The previous 2 ms threshold burned roughly 120 ms of
+    // one CPU core per second at 60 Hz before doing useful work, which is especially costly when a laptop CPU and
+    // integrated GPU share the same thermal/power envelope. The precision waiter handles the bulk of the interval;
+    // this small tail only absorbs scheduler/timer granularity without becoming a standing frame tax.
+    private const long SpinThresholdMicroseconds = 100L;
+
+    public static long SpinThreshold(long frequency) => Math.Max(
+        val1: 1L,
+        val2: ((frequency * SpinThresholdMicroseconds) / 1_000_000L)
+    );
 
     public static T? SingleOrDefault<T>(IEnumerable<T> items, string name, string hostDescription)
         where T : class {

@@ -64,6 +64,34 @@ public struct FixedTetherConstraint {
     /// <see cref="Reel"/>.</summary>
     public FixedQ4816 MinLength { get; }
 
+    /// <summary>Captures the complete deterministic reel state. The accumulator remainder is authoritative: dropping
+    /// it can make the next non-tick-exact reel advance differ by one raw fixed-point unit.</summary>
+    /// <returns>The current rope limits and integration remainder.</returns>
+    public readonly FixedTetherConstraintState CaptureState() => new(
+        Length: Length,
+        MinLength: MinLength,
+        Remainder: m_lengthAccumulator.Remainder
+    );
+
+    /// <summary>Restores a previously captured deterministic reel state.</summary>
+    /// <param name="state">The state produced by <see cref="CaptureState"/>.</param>
+    /// <returns>A tether that continues reeling from the captured fixed-point fraction.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="state"/> carries a negative minimum length, a
+    /// length below that minimum, or a remainder outside the engine tick denominator.</exception>
+    public static FixedTetherConstraint FromState(FixedTetherConstraintState state) {
+        var tether = new FixedTetherConstraint(
+            length: state.Length,
+            minLength: state.MinLength
+        ) {
+            m_lengthAccumulator = FixedRateAccumulator.FromRemainder(
+                remainder: state.Remainder,
+                ticksPerSecond: checked((long)FixedTickConversion.TicksPerSecond)
+            ),
+        };
+
+        return tether;
+    }
+
     /// <summary>Constructs a tether at an initial length.</summary>
     /// <param name="length">The initial rope length. Must be at least <paramref name="minLength"/>.</param>
     /// <param name="minLength">The floor <see cref="Reel"/> clamps to. Must be non-negative.</param>
@@ -166,3 +194,9 @@ public struct FixedTetherConstraint {
 /// <param name="Taut">Whether the rope was at its cap this call — <see langword="false"/> means <c>Solve</c> left
 /// position and velocity untouched.</param>
 public readonly record struct FixedTetherResolution(bool Taut);
+
+/// <summary>The complete deterministic state of a <see cref="FixedTetherConstraint"/>.</summary>
+/// <param name="Length">The current rope length.</param>
+/// <param name="MinLength">The reel-in floor.</param>
+/// <param name="Remainder">The reel rate accumulator's signed remainder over the engine tick denominator.</param>
+public readonly record struct FixedTetherConstraintState(FixedQ4816 Length, FixedQ4816 MinLength, long Remainder);

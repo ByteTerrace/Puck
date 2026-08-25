@@ -55,6 +55,12 @@ internal enum PopulationKind {
 /// </para>
 /// </remarks>
 public sealed partial class WorldPopulation {
+    /// <summary>The 0-based entity index for a 1-based display number — the body-axis peer of
+    /// <c>Client.PlayerRoster.SlotFromDisplay</c>, for a console verb that addresses an instance-targeted body by its
+    /// 1-based token.</summary>
+    /// <param name="number">The 1-based display number.</param>
+    /// <returns>The 0-based entity index.</returns>
+    public static int EntityFromDisplay(int number) => (number - 1);
     /// <summary>Gets the currently configured adjacency resolver — see <see cref="ConfigureAdjacencies"/>, the
     /// one writer.</summary>
     public IWorldAdjacencySource? Adjacencies => m_adjacencies;

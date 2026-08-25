@@ -21,7 +21,6 @@ namespace Puck.World;
 /// over authoring is the ordinary <see cref="WorldCapability.Mutate"/> hold over
 /// <see cref="WorldSection.Properties"/>/<see cref="WorldSection.Interactions"/> the row verb already checks.</remarks>
 internal sealed class WorldInteractionCommandModule(IServerLink link) : ICommandModule {
-    private static CommandResult Usage(string verb, string form) => CommandResult.Error(output: $"[{verb}: expected {form}]");
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
@@ -31,7 +30,7 @@ internal sealed class WorldInteractionCommandModule(IServerLink link) : ICommand
             description: "Reads the property registry back (Immediate): with no argument, the declared vocabulary; with a 0-based body index, which of those registered properties are currently ON for that carrier (a nonzero cell at key=<bodyIndex> in the property's own row): world.properties [bodyIndex].",
             handler: (_, args) => {
                 if (args.Count > 1) {
-                    return Usage(
+                    return CommandResult.Usage(
                         form: "[bodyIndex]",
                         verb: "world.properties"
                     );
@@ -40,11 +39,9 @@ internal sealed class WorldInteractionCommandModule(IServerLink link) : ICommand
                 int? bodyIndex = null;
 
                 if (args.Count == 1) {
-                    if (!int.TryParse(
-                        s: args[0].ToString(),
-                        style: System.Globalization.NumberStyles.Integer,
-                        provider: System.Globalization.CultureInfo.InvariantCulture,
-                        result: out var parsed
+                    if (!args.TryInt(
+                        index: 0,
+                        value: out var parsed
                     )) {
                         return CommandResult.Error(output: $"[world.properties: '{args[0].ToString()}' is not an integer]");
                     }

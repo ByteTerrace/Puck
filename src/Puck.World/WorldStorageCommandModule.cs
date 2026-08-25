@@ -134,8 +134,8 @@ internal sealed class WorldStorageCommandModule(WorldOwnedWorlds profiles, IPlay
             bindability: CommandBindability.Unbindable,
             name: "storage.status",
             description: "Reports the honest player-catalog storage state (Immediate): the wiring disposition (including the discovery-endpoint decision), the identity resolver's decision, the endpoint, the discovery endpoint, the per-catalog revision / last-synced cursor / dirty flag / tracked-token count / last-write outcome (ok / precondition-failed / failed), and the last storage.credential verdict.",
-            handler: (_, args) => ((args.Count > 0)
-            ? CommandResult.Error(output: "[storage.status: expected no arguments]")
+            handler: (_, args) => ((CommandResult.RequireNoArguments(args: args, verb: "storage.status") is { } refusal)
+            ? refusal
             : new CommandResult(Output: Describe()))
         );
         yield return CommandDefinition.WithWireArgs(
@@ -170,8 +170,8 @@ internal sealed class WorldStorageCommandModule(WorldOwnedWorlds profiles, IPlay
             bindability: CommandBindability.Unbindable,
             name: "storage.credential",
             description: "Probes whether the ambient Azure credential can issue a storage token from this machine — the credential the cloud tier authenticates a service-URI endpoint with (a player signs in ambiently, a hosted server runs as a managed identity; no app registration is involved). A presence check, never a prompt: it records its verdict for storage.status to echo (Immediate, up to 10s).",
-            handler: (_, args) => ((args.Count > 0)
-            ? CommandResult.Error(output: "[storage.credential: expected no arguments]")
+            handler: (_, args) => ((CommandResult.RequireNoArguments(args: args, verb: "storage.credential") is { } refusal)
+            ? refusal
             : Probe())
         );
     }

@@ -1,4 +1,6 @@
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 
 using Xunit;
 
@@ -19,6 +21,34 @@ public sealed class MarketSchemaLeakLawTests {
         Assert.DoesNotContain(actualString: json, comparisonType: StringComparison.OrdinalIgnoreCase, expectedSubstring: "effectiveFormats");
         // The authored field itself must still be there — this is a leak fix, not a data-loss regression.
         Assert.Contains(actualString: json, comparisonType: StringComparison.Ordinal, expectedSubstring: "\"formats\"");
+    }
+    [Fact]
+    public void RetiredAdmissionTiersMember_RefusesByName() {
+        var control = WorldDefinitionSerialization.Serialize(definition: MarketFixtures.BuildDocument());
+        var node = JsonNode.Parse(json: Encoding.UTF8.GetString(bytes: control))!.AsObject();
+
+        Assert.DoesNotContain(
+            expectedSubstring: "admissionTiers",
+            actualString: Encoding.UTF8.GetString(bytes: control),
+            comparisonType: StringComparison.Ordinal
+        );
+        _ = WorldDefinitionSerialization.Deserialize(utf8Json: control);
+
+        node["market"]!["admissionTiers"] = new JsonArray(new JsonObject {
+            ["name"] = "open",
+            ["requireAttestation"] = false,
+        });
+
+        var exception = Assert.Throws<InvalidDataException>(testCode: () => WorldDefinitionSerialization.Deserialize(
+            utf8Json: Encoding.UTF8.GetBytes(s: node.ToJsonString())
+        ));
+
+        Assert.IsType<JsonException>(@object: exception.InnerException);
+        Assert.Contains(
+            expectedSubstring: "admissionTiers",
+            actualString: exception.InnerException!.Message,
+            comparisonType: StringComparison.Ordinal
+        );
     }
     [Fact]
     public void EffectiveFormats_StillComputesCorrectly_AuthoredAndUnauthored() {

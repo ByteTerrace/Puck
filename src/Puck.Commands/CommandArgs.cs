@@ -98,4 +98,44 @@ public static class CommandArgs {
         text: text.AsSpan(),
         value: out value
     );
+    /// <summary>The single <see cref="long"/>-parse rule for every console argument — invariant-culture, the same
+    /// style <see cref="TryParseInt(ReadOnlySpan{char}, out int)"/> uses.</summary>
+    /// <param name="text">The argument token.</param>
+    /// <param name="value">The parsed value, or 0 on failure.</param>
+    /// <returns>Whether the token parsed.</returns>
+    public static bool TryParseLong(ReadOnlySpan<char> text, out long value) =>
+        long.TryParse(
+            s: text,
+            result: out value,
+            provider: CultureInfo.InvariantCulture,
+            style: NumberStyles.Integer
+        );
+    /// <summary>Parses one invariant-culture <see cref="long"/> argument (see the span overload for the rule).</summary>
+    /// <param name="text">The argument token.</param>
+    /// <param name="value">The parsed value, or 0 on failure.</param>
+    /// <returns>Whether the token parsed.</returns>
+    public static bool TryParseLong(string text, out long value) => TryParseLong(
+        text: text.AsSpan(),
+        value: out value
+    );
+    /// <summary>The single <see cref="ulong"/>-parse rule for every console argument — invariant-culture, the same
+    /// style <see cref="TryParseInt(ReadOnlySpan{char}, out int)"/> uses.</summary>
+    /// <param name="text">The argument token.</param>
+    /// <param name="value">The parsed value, or 0 on failure.</param>
+    /// <returns>Whether the token parsed.</returns>
+    public static bool TryParseULong(ReadOnlySpan<char> text, out ulong value) =>
+        ulong.TryParse(
+            s: text,
+            result: out value,
+            provider: CultureInfo.InvariantCulture,
+            style: NumberStyles.Integer
+        );
+    /// <summary>Parses one invariant-culture <see cref="ulong"/> argument (see the span overload for the rule).</summary>
+    /// <param name="text">The argument token.</param>
+    /// <param name="value">The parsed value, or 0 on failure.</param>
+    /// <returns>Whether the token parsed.</returns>
+    public static bool TryParseULong(string text, out ulong value) => TryParseULong(
+        text: text.AsSpan(),
+        value: out value
+    );
 }

@@ -68,7 +68,7 @@ internal sealed partial class WorldScreenBinder {
 
             var token = m_roster.DeviceToken(device: device.DeviceId);
             var seatText = ((m_roster.DeviceSlot(device: device.DeviceId) is { } slot)
-                ? $"p{(slot + 1)}"
+                ? $"p{PlayerRoster.DisplayNumber(slot: slot)}"
                 : "unassigned"
             );
 
@@ -150,7 +150,7 @@ internal sealed partial class WorldScreenBinder {
     /// prints per camera socket.</summary>
     /// <param name="seat">The 1-based local seat.</param>
     public string? ResolvedCameraToken(int seat) => (m_roster.TryGetSeatDevice(
-        slot: (seat - 1),
+        slot: PlayerRoster.SlotFromDisplay(number: seat),
         kind: InputDeviceKind.Camera,
         device: out var device
     )
@@ -261,7 +261,7 @@ internal sealed partial class WorldScreenBinder {
     // frame. A seat with no enumerated camera, or whose camera lacks this sensor, simply has no feed yet.
     private bool TryFulfillCameraDemand(int seat, WorldCameraSensor sensor) {
         if (
-            !m_roster.TryGetSeatDevice(slot: (seat - 1), kind: InputDeviceKind.Camera, device: out var deviceId) ||
+            !m_roster.TryGetSeatDevice(slot: PlayerRoster.SlotFromDisplay(number: seat), kind: InputDeviceKind.Camera, device: out var deviceId) ||
             !m_cameraDevices.TryGetValue(key: deviceId, value: out var device) ||
             !DeviceHasSensor(device: device, sensor: sensor)
         ) {
@@ -288,7 +288,7 @@ internal sealed partial class WorldScreenBinder {
         device = null;
         feed = null;
 
-        if (!m_roster.TryGetSeatDevice(slot: (seat - 1), kind: InputDeviceKind.Camera, device: out var deviceId)) {
+        if (!m_roster.TryGetSeatDevice(slot: PlayerRoster.SlotFromDisplay(number: seat), kind: InputDeviceKind.Camera, device: out var deviceId)) {
             fault = $"seat {seat} has no camera assigned";
 
             return false;
@@ -725,7 +725,7 @@ internal sealed partial class WorldScreenBinder {
             return;
         }
 
-        var desired = (((m_roster.DeviceSlot(device: device.DeviceId) is { } slot) && m_seatCameraControls.TryGetValue(key: (slot + 1), value: out var found))
+        var desired = (((m_roster.DeviceSlot(device: device.DeviceId) is { } slot) && m_seatCameraControls.TryGetValue(key: PlayerRoster.DisplayNumber(slot: slot), value: out var found))
             ? found
             : null
         );
@@ -774,7 +774,7 @@ internal sealed partial class WorldScreenBinder {
             handler: $"{sensorName} {stream.Width}x{stream.Height}{transport}{(feed.Live ? "" : ((feed.Fault is { } liveFault) ? $" '{liveFault}'" : " (no frames)"))}"
         );
 
-        var controls = (((m_roster.DeviceSlot(device: device.DeviceId) is { } slot) && m_seatCameraControls.TryGetValue(key: (slot + 1), value: out var found)) ? found : null);
+        var controls = (((m_roster.DeviceSlot(device: device.DeviceId) is { } slot) && m_seatCameraControls.TryGetValue(key: PlayerRoster.DisplayNumber(slot: slot), value: out var found)) ? found : null);
         var surface = graph.Controls;
 
         foreach (var (control, label, select) in CameraControlMap) {

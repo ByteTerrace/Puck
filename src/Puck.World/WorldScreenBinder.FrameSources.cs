@@ -327,7 +327,7 @@ internal sealed partial class WorldScreenBinder {
     // every demand entry is then ensured against whichever device the roster resolves it to.
     private void ReconcileCameraFeedsToDemand() {
         foreach (var device in m_cameraDeviceOrder) {
-            var seat = (m_roster.DeviceSlot(device: device.DeviceId) is { } slot ? (slot + 1) : 0);
+            var seat = (m_roster.DeviceSlot(device: device.DeviceId) is { } slot ? PlayerRoster.DisplayNumber(slot: slot) : 0);
             // A slot can carry more than one camera at once (TryGetSeatDevice's own most-recently-assigned
             // tie-break exists precisely because PlayerRoster allows this) — so mapping to a demanding seat is not
             // enough to keep a feed open. Only the seat's RESOLVED device (the one TryFulfillCameraDemand/
@@ -336,7 +336,7 @@ internal sealed partial class WorldScreenBinder {
             // exactly like a camera the seat no longer demands at all.
             var isResolvedDevice = (
                 (seat != 0) &&
-                m_roster.TryGetSeatDevice(slot: (seat - 1), kind: InputDeviceKind.Camera, device: out var resolvedDeviceId) &&
+                m_roster.TryGetSeatDevice(slot: PlayerRoster.SlotFromDisplay(number: seat), kind: InputDeviceKind.Camera, device: out var resolvedDeviceId) &&
                 (resolvedDeviceId == device.DeviceId)
             );
 

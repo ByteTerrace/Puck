@@ -35,23 +35,20 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
     // OWN 1-based entity index (never the local roster display number) — its Observe grant check narrows to that
     // body, the one subject a routed seat is always seeded with, so a transferred seat never needs a standing
     // world-wide grant just to read music/judge state.
-    private static CommandResult RoutedQuery(Func<int, WorldQuery> query, WorldAuthorityRoute route) {
-        var result = default(CommandResult);
-
-        route.Endpoint.Submissions.Query(
-            query: query((route.EntityIndex + 1)),
-            completion: answer => {
-                result = new CommandResult(Output: answer.Text) { IsError = answer.Refused };
-            }
-        );
-
-        return result;
-    }
+    private CommandResult RoutedQuery(Func<int, WorldQuery> query) => (seatRouter.TryRouteQuery(
+        factory: query,
+        result: out var result,
+        slot: 0,
+        tagInstance: false
+    )
+        ? result
+        : CommandResult.Error(output: "[query: seat 1 has no authority claim]")
+    );
     // The world.speakers listing: one segment per declared row off the LIVE definition, so a speaker mutation's new
     // source narrates honestly, the same live-definition read world.screens uses.
     private CommandResult SpeakersHandler(CommandContext context, WireArgs args) {
-        if (args.Count != 0) {
-            return CommandResult.Error(output: "[world.speakers: no arguments — lists every declared speaker]");
+        if (CommandResult.RequireNoArguments(args: args, verb: "world.speakers") is { } refusal) {
+            return refusal;
         }
 
         var speakers = server.Definition.Speakers;
@@ -90,8 +87,8 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
     // reads), mixer meters off the service-owned mixer, and the derived-emitter count off the director. The fault
     // detail is a free-form tail so its spaces never split the machine-read fields before it.
     private CommandResult StateHandler(CommandContext context, WireArgs args) {
-        if (args.Count != 0) {
-            return CommandResult.Error(output: "[audio.state: no arguments — echoes the live speaker-device state]");
+        if (CommandResult.RequireNoArguments(args: args, verb: "audio.state") is { } refusal) {
+            return refusal;
         }
 
         var mixer = device.Mixer;
@@ -115,13 +112,10 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
 
         if (
             (args.Count != 1) ||
-            !float.TryParse(
-            s: args[0],
-            style: System.Globalization.NumberStyles.Float,
-            provider: CultureInfo.InvariantCulture,
-            result: out var volume
+            !args.TryFloat(
+            index: 0,
+            value: out var volume
         ) ||
-            !float.IsFinite(f: volume) ||
             (volume < 0f) ||
             (volume > Puck.Forge.Authoring.CreationSoundDocument.MaxLevel)
         ) {
@@ -168,8 +162,8 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
             bindability: CommandBindability.Unbindable,
             name: "speaker.state",
             description: "Echoes every speaker row's AND every placement Emission facet's LIVE status (the per-row runtime half beside audio.state's device facts): kind, source token, binding status (bound | silent(no-machine|no-tune|no-device|no-source) | faulted(no-patch)), the last published resolved position (unresolved for an absent anchor — an inactive Attach carrier included), and inMix=y|n (whether the listener sits inside the row's finite support), plus the live transient-cue tail (cue:<token>=<patch>). A query — always echoes.",
-            handler: (context, args) => ((args.Count != 0)
-            ? CommandResult.Error(output: "[speaker.state: no arguments — echoes every speaker row's live status]")
+            handler: (context, args) => ((CommandResult.RequireNoArguments(args: args, verb: "speaker.state") is { } refusal)
+            ? refusal
             : new CommandResult(Output: director.DescribeSpeakerState()))
         );
         yield return CommandDefinition.WithWireArgs(
@@ -182,8 +176,8 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
             bindability: CommandBindability.Unbindable,
             name: "audio.emitters",
             description: "Dumps the derived audio emitter table, one segment each — stable id, key (speaker:<name>|scene:<id>|placement:<id>|sound:<placement>:<name>), kind, source token, channel, gain, and support radii. Deterministic document-derived facts (never live poses), so a piped proof asserts the derivation. A query — always echoes.",
-            handler: (context, args) => ((args.Count != 0)
-            ? CommandResult.Error(output: "[audio.emitters: no arguments — dumps the derived emitter table]")
+            handler: (context, args) => ((CommandResult.RequireNoArguments(args: args, verb: "audio.emitters") is { } refusal)
+            ? refusal
             : new CommandResult(Output: director.DescribeEmitters()))
         );
         yield return CommandDefinition.Verb(
@@ -192,8 +186,7 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
             description: "Reads the live music clock/director state authoritatively off seat 1's currently claimed authority — the current segment, any pending transition, elapsed clock ticks, transition count, and the tick/from/to of the most recent committed transition (none= before the first one, or when the world declares no music). Follows a transferred seat the same way body.where does, so it answers correctly whether that authority is local or remote. A query — always echoes.",
             valueKind: CommandValueKind.Digital,
             handler: _ => RoutedQuery(
-                query: static index => new WorldQuery.MusicState(Index: index),
-                route: seatRouter.Route(slot: 0)
+                query: static index => new WorldQuery.MusicState(Index: index)
             ),
             routing: CommandRouting.Immediate
         );
@@ -203,8 +196,7 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
             description: "Reads the declared judge window sets, and the last judged grade/tick, authoritatively off seat 1's currently claimed authority. Follows a transferred seat the same way body.where does. A query — always echoes.",
             valueKind: CommandValueKind.Digital,
             handler: _ => RoutedQuery(
-                query: static index => new WorldQuery.JudgeState(Index: index),
-                route: seatRouter.Route(slot: 0)
+                query: static index => new WorldQuery.JudgeState(Index: index)
             ),
             routing: CommandRouting.Immediate
         );

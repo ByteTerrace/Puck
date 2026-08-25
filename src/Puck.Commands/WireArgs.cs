@@ -143,4 +143,47 @@ public readonly ref struct WireArgs {
         text: this[index],
         value: out value
     );
+    /// <summary>Parses the token at <paramref name="index"/> as an invariant-culture <see cref="long"/> straight from
+    /// its span, through <see cref="CommandArgs.TryParseLong(ReadOnlySpan{char}, out long)"/>.</summary>
+    /// <param name="index">The zero-based trailing-token index.</param>
+    /// <param name="value">The parsed value, or <c>0</c> on failure.</param>
+    /// <returns>Whether the token parsed.</returns>
+    public bool TryLong(int index, out long value) => CommandArgs.TryParseLong(
+        text: this[index],
+        value: out value
+    );
+    /// <summary>Parses the token at <paramref name="index"/> as an invariant-culture <see cref="ulong"/> straight
+    /// from its span, through <see cref="CommandArgs.TryParseULong(ReadOnlySpan{char}, out ulong)"/>.</summary>
+    /// <param name="index">The zero-based trailing-token index.</param>
+    /// <param name="value">The parsed value, or <c>0</c> on failure.</param>
+    /// <returns>Whether the token parsed.</returns>
+    public bool TryULong(int index, out ulong value) => CommandArgs.TryParseULong(
+        text: this[index],
+        value: out value
+    );
+    /// <summary>Parses <paramref name="count"/> consecutive float arguments starting at <paramref name="start"/>
+    /// (e.g. an <c>&lt;x&gt; &lt;y&gt; &lt;z&gt;</c> triple) — fails as a unit if any token is missing or unparsable,
+    /// the zero-copy peer of <see cref="CommandArgs.TryParseFloats(string[], int, int, out float[])"/>.</summary>
+    /// <param name="start">The zero-based trailing-token index to start from.</param>
+    /// <param name="count">How many consecutive floats to parse.</param>
+    /// <param name="values">The parsed values (length <paramref name="count"/>), zeroed on failure.</param>
+    /// <returns>Whether every token in the range parsed.</returns>
+    public bool TryFloats(int start, int count, out float[] values) {
+        values = new float[count];
+
+        if (Count < (start + count)) {
+            return false;
+        }
+
+        for (var index = 0; (index < count); index++) {
+            if (!TryFloat(
+                index: (start + index),
+                value: out values[index]
+            )) {
+                return false;
+            }
+        }
+
+        return true;
+    }
 }

@@ -1043,6 +1043,12 @@ public readonly partial record struct FixedQ4816(long Value)
     /// <param name="maxDelta">The greatest distance to move.</param>
     /// <returns><paramref name="target"/> when it is within range; otherwise, the point <paramref name="maxDelta"/> toward it.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="maxDelta"/> is negative.</exception>
+    /// <remarks>Ordering and separation are read from the two raw carrier readings directly, in the unsigned 64-bit
+    /// domain — never from <c>target − current</c>, whose true magnitude can exceed what the signed 64-bit carrier can
+    /// hold even though both endpoints are individually representable (the opposing carrier extremes, for instance).
+    /// The non-landing branch's own addition cannot overflow: since the true separation exceeds
+    /// <paramref name="maxDelta"/>, the landed point sits strictly between <paramref name="current"/> and
+    /// <paramref name="target"/> on the real line, a range both endpoints already witness is representable.</remarks>
     public static FixedQ4816 MoveToward(FixedQ4816 current, FixedQ4816 target, FixedQ4816 maxDelta) {
         // The parameter name is passed explicitly: the throw helper's caller-argument expression would otherwise report
         // the literal string "maxDelta.Value", a property expression rather than a parameter of this method.
@@ -1051,11 +1057,11 @@ public readonly partial record struct FixedQ4816(long Value)
             paramName: nameof(maxDelta)
         );
 
-        var delta = (target - current);
+        var (separation, targetIsGreater) = FixedVectorMath.RawSeparation(currentRaw: current.Value, targetRaw: target.Value);
 
-        return ((Abs(value: delta) <= maxDelta)
+        return ((separation <= ((ulong)maxDelta.Value))
             ? target
-            : (current + ((delta > Zero) ? maxDelta : -maxDelta))
+            : new(Value: unchecked(current.Value + (targetIsGreater ? maxDelta.Value : -maxDelta.Value)))
         );
     }
     /// <summary>Returns the exact angular frequency <c>ω = 2π·frequencyHz</c> as a rational pair, unscaled — no

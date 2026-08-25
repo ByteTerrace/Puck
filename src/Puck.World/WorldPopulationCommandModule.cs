@@ -217,18 +217,18 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
             bindability: CommandBindability.Unbindable,
             name: "world.attach-policy",
             description: "Reads the authored/compiled climb-grapple attachment section back (Immediate): the world default grip policy, every reach/speed/cost/rope/reel/release tuning field, and each attach/detach/reel channel name with its resolved ordinal. 'attachment disabled' when the world authors no attachment section (today's behavior, unchanged). body.attachment answers the per-body question this does not — mode, anchor, rope length.",
-            handler: (_, args) => ((args.Count == 0)
-                ? new CommandResult(Output: DescribeAttachmentPolicy())
-                : CommandResult.Error(output: $"[world.attach-policy: unrecognized '{args[0]}' — expected no arguments]")),
+            handler: (_, args) => ((CommandResult.RequireNoArguments(args: args, verb: "world.attach-policy") is { } refusal)
+                ? refusal
+                : new CommandResult(Output: DescribeAttachmentPolicy())),
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.gravity",
             description: "Reads the authored and compiled gravity field back (Immediate): solver, uniform acceleration, shared G/softening, explicit mass sources, point/planet surface-gravity presets with their derived masses, and the last deterministic solve's work counters.",
-            handler: (_, args) => ((args.Count == 0)
-                ? new CommandResult(Output: DescribeGravity())
-                : CommandResult.Error(output: $"[world.gravity: unrecognized '{args[0]}' — expected no arguments]")),
+            handler: (_, args) => ((CommandResult.RequireNoArguments(args: args, verb: "world.gravity") is { } refusal)
+                ? refusal
+                : new CommandResult(Output: DescribeGravity())),
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
@@ -242,9 +242,9 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
             bindability: CommandBindability.Unbindable,
             name: "world.responses",
             description: "Reads every placement carrying a response trait back (Immediate): its current prototype and which authored when-condition (if any) currently holds at its coupled lattice cell.",
-            handler: (context, args) => ((args.Count == 0)
-                ? new CommandResult(Output: server.DescribeResponses())
-                : CommandResult.Error(output: $"[world.responses: unrecognized '{args[0]}' — expected no arguments]")),
+            handler: (context, args) => ((CommandResult.RequireNoArguments(args: args, verb: "world.responses") is { } refusal)
+                ? refusal
+                : new CommandResult(Output: server.DescribeResponses())),
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(

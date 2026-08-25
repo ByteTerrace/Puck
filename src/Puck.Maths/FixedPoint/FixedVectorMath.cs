@@ -176,6 +176,37 @@ internal static class FixedVectorMath {
     }
     internal static ulong RawMagnitude(long value) =>
         FusedArithmetic.RawMagnitude(value: value);
+    /// <summary>The exact separation between two raw carrier readings, independent of ordinary signed subtraction: the
+    /// true difference between two <see cref="long"/> values always fits the unsigned 64-bit carrier (its magnitude is
+    /// at most <c>2⁶⁴ − 1</c>, reached exactly at the opposing carrier extremes), so this never wraps regardless of how
+    /// far apart the two readings are — unlike <c>target − current</c> in the signed carrier, which does.</summary>
+    /// <param name="currentRaw">The current raw.</param>
+    /// <param name="targetRaw">The target raw.</param>
+    /// <returns>The non-negative separation, and whether <paramref name="targetRaw"/> is the greater of the two.</returns>
+    internal static (ulong Separation, bool TargetIsGreater) RawSeparation(long currentRaw, long targetRaw) {
+        var targetIsGreater = (targetRaw > currentRaw);
+
+        return (
+            Separation: (targetIsGreater
+                ? unchecked((ulong)targetRaw - (ulong)currentRaw)
+                : unchecked((ulong)currentRaw - (ulong)targetRaw)),
+            TargetIsGreater: targetIsGreater
+        );
+    }
+    /// <summary>Reconstructs a signed raw from a non-negative magnitude and a sign — the same two's-complement
+    /// identity <see cref="ScaleRaw"/> and its siblings use: a magnitude of exactly <c>2⁶³</c> negated reproduces
+    /// <see cref="long.MinValue"/> unchanged, so the full magnitude range <c>[0, 2⁶³]</c> round-trips.</summary>
+    /// <param name="magnitude">The non-negative magnitude, at most <c>2⁶³</c>.</param>
+    /// <param name="negative">Whether the result is negative.</param>
+    /// <returns>The signed raw.</returns>
+    internal static long SignedFromMagnitude(ulong magnitude, bool negative) {
+        var raw = unchecked((long)magnitude);
+
+        return (negative
+            ? unchecked(-raw)
+            : raw
+        );
+    }
     /// <summary>Returns the nearest raw Q16 square root of an exact raw Q32 sum; no integral halfway case exists, so no tie rule is needed.</summary>
     internal static FixedQ4816 RootOfSquaredSum(ulong squaredSum) {
         var root = squaredSum.SquareRoot();

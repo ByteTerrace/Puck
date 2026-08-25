@@ -72,16 +72,60 @@ internal static class AngularFrequencyAndRationalClaims {
     private static double ToDouble(Rational value) =>
         ((double)value.Numerator / (double)value.Denominator);
 
-    /// <summary>Proves <see cref="Rational"/>'s field-axiom identities EXACTLY, by cross-multiplication rather than by
-    /// reducing either side (the type never reduces, so <c>==</c> on the record's own generated equality is not a
-    /// valid rational-equality test) — commutativity and associativity of <c>+</c>/<c>*</c>, distributivity, additive
-    /// and multiplicative identity and inverse, and that <c>-</c>/<c>/</c> agree with their defining identities
-    /// <c>a − b = a + (−b)</c> and <c>(a / b)·b = a</c>. The independent leg reconstructs every operator result as a
-    /// <see cref="double"/> from the operands' own numerator/denominator pairs and compares against the exact
-    /// result converted the same way, so a defect in an operator's arithmetic (not merely its cross-multiplied
-    /// bookkeeping) has a second path to be caught on.</summary>
+    /// <summary>Proves <see cref="Rational"/> is a valid rational representation before proving its field-axiom
+    /// identities: <see langword="default"/>(<see cref="Rational"/>) reads back as the canonical <c>0/1</c> — never
+    /// the invalid <c>0/0</c> its own zero-initialized storage would otherwise carry — and that reading survives
+    /// <see cref="FixedPointRounding.TryRoundRational"/>; the constructor refuses an explicit zero denominator by
+    /// exception type AND parameter name; and <c>/</c> refuses a zero-numerator divisor, both an explicit one and
+    /// the defaulted one, by exception type. Only then are the field-axiom identities checked EXACTLY, by
+    /// cross-multiplication rather than by reducing either side (the type never reduces, so <c>==</c> on the record's
+    /// own generated equality is not a valid rational-equality test) — commutativity and associativity of
+    /// <c>+</c>/<c>*</c>, distributivity, additive and multiplicative identity and inverse, and that <c>-</c>/<c>/</c>
+    /// agree with their defining identities <c>a − b = a + (−b)</c> and <c>(a / b)·b = a</c>. The independent leg
+    /// reconstructs every operator result as a <see cref="double"/> from the operands' own numerator/denominator
+    /// pairs and compares against the exact result converted the same way, so a defect in an operator's arithmetic
+    /// (not merely its cross-multiplied bookkeeping) has a second path to be caught on.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? RationalAlgebraSurface() {
+        // default(Rational) never ran the constructor, so its raw storage is Numerator=0 and a zero denominator
+        // backing — the invariant every OTHER Rational holds only because the ctor refuses a zero denominator. The
+        // canonical reading is 0/1, not the invalid 0/0.
+        var defaulted = default(Rational);
+
+        if (!defaulted.Numerator.IsZero || (defaulted.Denominator != BigInteger.One)) {
+            return $"default(Rational) read back as {defaulted.Numerator}/{defaulted.Denominator} rather than the canonical 0/1";
+        }
+
+        if (!FixedPointRounding.TryRoundRational(numerator: defaulted.Numerator, denominator: defaulted.Denominator, fractionBitCount: 16, result: out var defaultedRaw) || (0L != defaultedRaw)) {
+            return $"TryRoundRational on default(Rational)'s own Numerator/Denominator did not round cleanly to raw zero";
+        }
+
+        // A direct zero-denominator construction is refused by the ctor itself, unlike the default's own
+        // zero-initialized storage, which bypasses every constructor.
+        try {
+            _ = new Rational(Numerator: BigInteger.One, Denominator: BigInteger.Zero);
+
+            return "new Rational(1, 0) did not refuse a zero denominator";
+        } catch (ArgumentOutOfRangeException refusal) {
+            if ("Denominator" != refusal.ParamName) {
+                return $"new Rational(1, 0)'s refusal names '{refusal.ParamName}' rather than 'Denominator'";
+            }
+        }
+
+        // Division by the rational zero (a zero numerator) would otherwise manufacture a zero denominator; the
+        // operator refuses it instead, for both an explicitly zero-numerator divisor and the defaulted one.
+        try {
+            _ = (Rational.One / new Rational(Numerator: BigInteger.Zero, Denominator: 5));
+
+            return "Rational.One / (0/5) did not throw DivideByZeroException";
+        } catch (DivideByZeroException) { }
+
+        try {
+            _ = (Rational.One / defaulted);
+
+            return "Rational.One / default(Rational) did not throw DivideByZeroException";
+        } catch (DivideByZeroException) { }
+
         var zero = new Rational(Numerator: BigInteger.Zero, Denominator: BigInteger.One);
         var samples = new Rational[] {
             new(Numerator: 1, Denominator: 1),

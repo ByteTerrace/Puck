@@ -22,10 +22,11 @@ public static partial class WorldAuthorityCheckpointCodec {
     private const int MaxHashChars = 128;
     private const int MaxSectionBytes = ((64 * 1024) * 1024);
     private const int MaxStringBytes = WireLimits.MaxStringBytes;
+    // Bump on EVERY wire-layout change; there is deliberately no compatibility reader. In particular,
     // WritePrincipal/ReadPrincipal, WriteSubject/ReadSubject, and the capability leaf carry WorldWireTags's pinned
-    // bytes, not a raw C#-enum-ordinal cast; bump this on any future change to that mapping so a blob encoded under
-    // a different mapping refuses by name instead of decoding a different principal, subject, or capability kind.
-    private const ushort SupportedVersion = 4;
+    // bytes rather than raw enum ordinals, so a mapping change is a layout change too and must refuse by version
+    // instead of decoding a different principal, subject, or capability kind.
+    private const ushort SupportedVersion = 5;
 
     private delegate T ReadItem<T>(ref WireReader reader);
     private delegate T ReadStructItem<T>(ref WireReader reader) where T : struct;

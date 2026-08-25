@@ -35,4 +35,22 @@ public readonly record struct CommandResult(string Output, bool ClearTranscript 
     public static CommandResult Error(string output) => new(Output: output) {
         IsError = true,
     };
+    /// <summary>Creates the shared wrong-argument-count refusal every command module hand-spelled locally:
+    /// <c>[verb: expected form]</c>, or <c>[verb: expected no arguments]</c> when <paramref name="form"/> is
+    /// empty.</summary>
+    /// <param name="verb">The verb name.</param>
+    /// <param name="form">The expected argument grammar, or empty for a no-argument verb.</param>
+    /// <returns>A result with <see cref="IsError"/> set to <see langword="true"/>.</returns>
+    public static CommandResult Usage(string verb, string form) => Error(output: (string.IsNullOrEmpty(value: form)
+        ? $"[{verb}: expected no arguments]"
+        : $"[{verb}: expected {form}]"));
+    /// <summary>Refuses a wire call carrying any trailing token for a verb that takes none — the shared body every
+    /// zero-argument verb's argument check reduces to: <c>[verb: unrecognized '&lt;token&gt;' — expected no
+    /// arguments]</c>.</summary>
+    /// <param name="args">The verb's wire arguments.</param>
+    /// <param name="verb">The verb name.</param>
+    /// <returns>The refusal, or <see langword="null"/> when no argument was passed.</returns>
+    public static CommandResult? RequireNoArguments(in WireArgs args, string verb) => ((args.Count == 0)
+        ? null
+        : Error(output: $"[{verb}: unrecognized '{args[0]}' — expected no arguments]"));
 }

@@ -371,7 +371,11 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
         );
 
         if (!verdict.IsAllowed) {
-            error = $"[{verb}: {acting.Describe()} cannot author player {player}'s identity ({verdict.DescribeDenial()})]";
+            error = $"[{verb}: {verdict.DescribeRefusal(
+                actor: acting,
+                subject: $"player {player}'s identity",
+                verb: "author"
+            )}]";
 
             return false;
         }
@@ -384,20 +388,23 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
     // holds Drive over the player's body) BEFORE resolving the identity itself — a non-owner is refused before this
     // door tells them anything about whether the target is even joined.
     private bool TryAuthorizedIdentity(CommandContext context, in WireArgs args, int optionalAt, string verb, out int player, out WorldIdentity? identity, out string error) {
-        player = 1;
         identity = null;
 
-        if (
-            (args.Count > optionalAt) &&
-            (!args.TryInt(
-            index: optionalAt,
-            value: out player
-        ) || (player < 1) || (player > PlayerRoster.MaxSlots))
-        ) {
-            error = $"[{verb}: player must be 1..{PlayerRoster.MaxSlots}]";
+        var (slot, seatError) = SeatCommandArgs.ResolveSlot(
+            args: in args,
+            at: optionalAt,
+            context: context,
+            verb: verb
+        );
+
+        if (seatError is { } refusal) {
+            player = 1;
+            error = refusal.Output;
 
             return false;
         }
+
+        player = PlayerRoster.DisplayNumber(slot: slot);
 
         return (
             TryAuthorize(
@@ -428,17 +435,23 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
         return true;
     }
     private CommandResult Whisper(CommandContext context, WireArgs args) {
-        if (
-            (args.Count < 2) ||
-            !args.TryInt(
-            index: 0,
-            value: out var player
-        ) ||
-            (player < 1) ||
-            (player > PlayerRoster.MaxSlots)
-        ) {
+        if (args.Count < 2) {
             return CommandResult.Error(output: $"[chat.whisper: expected <player 1..{PlayerRoster.MaxSlots}> <recipient-id> <text...>]");
         }
+
+        var (whisperSlot, whisperSeatError) = SeatCommandArgs.ResolveSlot(
+            args: in args,
+            at: 0,
+            context: context,
+            verb: "chat.whisper"
+        );
+
+        if (whisperSeatError is not null) {
+            return CommandResult.Error(output: $"[chat.whisper: expected <player 1..{PlayerRoster.MaxSlots}> <recipient-id> <text...>]");
+        }
+
+        var player = PlayerRoster.DisplayNumber(slot: whisperSlot);
+
         if (!WorldSafeName.TryParse(
             candidate: args[1].ToString(),
             name: out var recipientId,

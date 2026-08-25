@@ -995,7 +995,12 @@ public sealed partial class PlayerRoster : IInputSlotResolver, ICommandPrincipal
             subject: GrantSubject.Body(index: current)
         ) is { IsAllowed: false } sourceVerdict)
         ) {
-            Console.Error.WriteLine(value: $"[player.assign denied: {actingPrincipal.Describe()} cannot drive body:{current} ({sourceVerdict.DescribeDenial()}) — relocating this device would dissolve it]");
+            Console.Error.WriteLine(value: $"[player.assign denied: {sourceVerdict.DescribeRefusal(
+                actor: actingPrincipal,
+                dropped: "relocating this device would dissolve it",
+                subject: $"body:{current}",
+                verb: "drive"
+            )}]");
 
             return AssignOutcome.Denied;
         }
@@ -1012,7 +1017,11 @@ public sealed partial class PlayerRoster : IInputSlotResolver, ICommandPrincipal
                 capability: WorldCapability.Drive,
                 subject: GrantSubject.Body(index: targetSlot)
             ) is { IsAllowed: false } verdict) {
-                Console.Error.WriteLine(value: $"[player.assign denied: {effectivePrincipal.Describe()} cannot drive body:{targetSlot} ({verdict.DescribeDenial()})]");
+                Console.Error.WriteLine(value: $"[player.assign denied: {verdict.DescribeRefusal(
+                    actor: effectivePrincipal,
+                    subject: $"body:{targetSlot}",
+                    verb: "drive"
+                )}]");
 
                 return AssignOutcome.Denied;
             }

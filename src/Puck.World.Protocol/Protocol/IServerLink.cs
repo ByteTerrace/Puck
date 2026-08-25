@@ -1,3 +1,5 @@
+using Puck.Commands;
+
 namespace Puck.World.Protocol;
 
 /// <summary>The client→server channel: a client submits per-tick intents, authority commands, session requests, and
@@ -163,4 +165,15 @@ public static class ServerLinkSubmissions {
         payload: new WorldSubmissionPayload.ScreenOp(Value: op),
         principal: principal
     );
+    /// <summary>Submits a live world edit exactly like <see cref="SubmitWorldMutation"/>, for a console handler whose
+    /// echo is the tick-boundary accept/reject narration rather than a synchronous reply — the shared body every
+    /// mutation-submitting verb's handler reduces to.</summary>
+    /// <param name="link">The link.</param>
+    /// <param name="mutation">The world mutation to apply.</param>
+    /// <returns><see cref="CommandResult.None"/>.</returns>
+    public static CommandResult Submit(this IServerLink link, WorldMutation mutation) {
+        link.SubmitWorldMutation(mutation: mutation);
+
+        return CommandResult.None;
+    }
 }

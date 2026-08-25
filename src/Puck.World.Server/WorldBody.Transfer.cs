@@ -445,8 +445,10 @@ public sealed partial class WorldBody {
     /// never a stamped deadline tick — the same distinction that keeps a park's <c>ParkedUntilTick</c> out of this
     /// struct entirely.</summary>
     /// <remarks>
-    /// <para>Every mutable instance field this class declares is classified below so a reviewer can check a table
-    /// rather than re-hunt the class. Two invariants bound the classification either way: no park state (governed by
+    /// <para>Every mutable instance field this class declares is classified between this transfer record and the
+    /// checkpoint-only <see cref="IntegrationResidue"/>/<see cref="AttachmentResidue"/> records below, so a reviewer
+    /// can check a table rather than re-hunt every partial declaration. Two invariants bound the transfer
+    /// classification either way: no park state (governed by
     /// <see cref="Puck.World.Server.WorldPopulation.Entry.ParkedUntilTick"/>, never this struct — re-derived on the
     /// next <c>DeactivateSeat</c>, never replayed from a snapshot), and no absolute tick (every field here is either
     /// a duration/countdown or a signed remainder — see <see cref="Puck.Maths.FixedRateAccumulator"/>'s own "the
@@ -544,10 +546,15 @@ public sealed partial class WorldBody {
     /// unconditionally by <c>RestoreDetachedSeat</c>'s own <c>Pose()</c> call, which already writes the correct
     /// value (Teleport) for a genuinely discontinuous restore. <c>m_affectingSubject</c> — reset to <c>-1</c> at the
     /// tail of every <see cref="Advance"/>, one-tick, like <c>m_heldChannels</c>.</para>
-    /// <para><b>Not audited here — named rather than silently assumed fine.</b> <c>m_engaged</c>/<c>m_engagedIntent</c>
-    /// (the screen-engagement route latch): engagement is governed by <see cref="Puck.World.Server.WorldEngagement"/>,
-    /// a separate subsystem keyed by slot, not by this class — whether it re-establishes engagement onto a restored
-    /// body is that subsystem's own question.
+    /// <para><b>Checkpoint-only continuation.</b> <see cref="IntegrationResidue"/> carries the same-world integration
+    /// state a cross-world transfer deliberately cannot: position/rotation/gravity-axis accumulator remainders,
+    /// previous position, grounded/up/frame/reseat state, dynamics-follower seed latches, engagement latches, and the
+    /// complete <see cref="AttachmentResidue"/>. The latter includes every field declared by
+    /// <c>WorldBody.Attachment.cs</c>/<c>WorldBody.Tether.cs</c> except the compiled attachment policy, which the
+    /// checkpoint's own world definition reconstructs before restore. Grip points, tangent bases, tether anchors, and
+    /// rope integration fractions stay out of <see cref="TransferState"/> because they name the source authority's
+    /// coordinate frame and geometry.</para>
+    /// <para><b>Population-owned state.</b>
     /// <see cref="Puck.World.Server.WorldPopulation.Entry.Designations"/> and
     /// <see cref="Puck.World.Server.WorldPopulation.Entry.ProducerState"/> are not <see cref="WorldBody"/> fields at
     /// all; they live on the population's own per-seat <c>Entry</c>, entirely outside this struct's reach. They are
@@ -704,6 +711,15 @@ public sealed partial class WorldBody {
     /// <param name="AffectingSubject">The entity index that most recently pushed this body during contact
     /// resolution, or <c>-1</c> — reset to <c>-1</c> at the tail of every <see cref="Advance"/>, so this is a
     /// one-tick image carried here purely so a checkpoint taken mid-tick-window reads identically on restore.</param>
+    /// <param name="Frame">The carried rotation from world +Y into <paramref name="Up"/>. It is not safely
+    /// reconstructible from the two axes at their antipodal point and also carries the body's tangent-frame twist.</param>
+    /// <param name="UpNeedsReseat">Whether the next usable solved-gravity direction must reseat the body's up axis
+    /// after a teleport instead of steering continuously toward it.</param>
+    /// <param name="FieldUpTurnRemainder">The solved-field up-turn rate accumulator's signed remainder.</param>
+    /// <param name="ContactUpTurnRemainder">The measured-contact-normal turn accumulator's signed remainder.</param>
+    /// <param name="PlanarFollowerSeeded">Whether the planar dynamics follower has consumed its first target.</param>
+    /// <param name="VerticalFollowerSeeded">Whether the vertical dynamics follower has consumed its first target.</param>
+    /// <param name="Attachment">The body-local climb/grapple continuation state.</param>
     public readonly record struct IntegrationResidue(
         FixedVector3 PreviousPosition,
         long PositionRemainderX,
@@ -719,7 +735,50 @@ public sealed partial class WorldBody {
         PlayerIntent EngagedIntent,
         bool OrdinaryAdvanceAdmitted,
         ulong? ContinuumConsumedThroughEngineTick,
-        int AffectingSubject
+        int AffectingSubject,
+        FixedQuaternion Frame,
+        bool UpNeedsReseat,
+        long FieldUpTurnRemainder,
+        long ContactUpTurnRemainder,
+        bool PlanarFollowerSeeded,
+        bool VerticalFollowerSeeded,
+        AttachmentResidue Attachment
+    );
+
+    /// <summary>The checkpoint-only attachment state that remains meaningful only inside the same authoritative
+    /// world's coordinate frame. It is intentionally not part of <see cref="TransferState"/>: a cross-world transfer
+    /// cannot carry a grip point or tether anchor whose geometry belongs to the source authority.</summary>
+    /// <param name="Mode">The active attachment dispatch mode.</param>
+    /// <param name="AttachPreviousBit">The attach channel's previous threshold-crossing image.</param>
+    /// <param name="DetachPreviousBit">The detach channel's previous threshold-crossing image.</param>
+    /// <param name="ClimbAnchor">The gripped surface point.</param>
+    /// <param name="ClimbNormal">The gripped surface normal.</param>
+    /// <param name="ClimbTangentRight">The fixed climb plane's right tangent.</param>
+    /// <param name="ClimbTangentUp">The fixed climb plane's up tangent.</param>
+    /// <param name="ClimbVelocity">The most recent climb-plane velocity.</param>
+    /// <param name="ClimbRemainderX">The climb position accumulator's X remainder.</param>
+    /// <param name="ClimbRemainderY">The climb position accumulator's Y remainder.</param>
+    /// <param name="ClimbRemainderZ">The climb position accumulator's Z remainder.</param>
+    /// <param name="ClimbGrantedByOverride">Whether a placement-local grip override admitted the climb.</param>
+    /// <param name="Tether">The complete rope constraint state, or <see langword="null"/> when none is attached.</param>
+    /// <param name="TetherAnchorBodyIndex">The anchor body index, or <c>-1</c> for a world-point tether.</param>
+    /// <param name="TetherAnchorPointOrLocalOffset">The world point or body-local anchor offset.</param>
+    public readonly record struct AttachmentResidue(
+        WorldBodyAttachmentMode Mode,
+        bool AttachPreviousBit,
+        bool DetachPreviousBit,
+        FixedVector3 ClimbAnchor,
+        FixedVector3 ClimbNormal,
+        FixedVector3 ClimbTangentRight,
+        FixedVector3 ClimbTangentUp,
+        FixedVector3 ClimbVelocity,
+        long ClimbRemainderX,
+        long ClimbRemainderY,
+        long ClimbRemainderZ,
+        bool ClimbGrantedByOverride,
+        FixedTetherConstraintState? Tether,
+        int TetherAnchorBodyIndex,
+        FixedVector3 TetherAnchorPointOrLocalOffset
     );
 
     /// <summary>Captures this body's integration residue — see <see cref="IntegrationResidue"/>. Read live, right
@@ -739,7 +798,30 @@ public sealed partial class WorldBody {
         EngagedIntent: m_engagedIntent,
         OrdinaryAdvanceAdmitted: m_ordinaryAdvanceAdmitted,
         ContinuumConsumedThroughEngineTick: m_continuumConsumedThroughEngineTick,
-        AffectingSubject: m_affectingSubject
+        AffectingSubject: m_affectingSubject,
+        Frame: m_frame,
+        UpNeedsReseat: m_upNeedsReseat,
+        FieldUpTurnRemainder: m_upTurnAccumulator.Remainder,
+        ContactUpTurnRemainder: m_contactUpTurnAccumulator.Remainder,
+        PlanarFollowerSeeded: m_planarFollowerSeeded,
+        VerticalFollowerSeeded: m_verticalFollowerSeeded,
+        Attachment: new AttachmentResidue(
+            Mode: m_attachmentMode,
+            AttachPreviousBit: m_attachPreviousBit,
+            DetachPreviousBit: m_detachPreviousBit,
+            ClimbAnchor: m_climbAnchor,
+            ClimbNormal: m_climbNormal,
+            ClimbTangentRight: m_climbTangentRight,
+            ClimbTangentUp: m_climbTangentUp,
+            ClimbVelocity: m_climbVelocity,
+            ClimbRemainderX: m_climbAccumulator.XRemainder,
+            ClimbRemainderY: m_climbAccumulator.YRemainder,
+            ClimbRemainderZ: m_climbAccumulator.ZRemainder,
+            ClimbGrantedByOverride: m_climbGrantedByOverride,
+            Tether: m_tether?.CaptureState(),
+            TetherAnchorBodyIndex: m_tetherAnchorBodyIndex,
+            TetherAnchorPointOrLocalOffset: m_tetherAnchorPointOrLocalOffset
+        )
     );
     /// <summary>Restores a previously captured integration residue onto this body — called after
     /// <see cref="Pose(FixedVector3, FixedQ4816, FixedQ4816, FixedQ4816)"/> has already set position/orientation and
@@ -770,5 +852,41 @@ public sealed partial class WorldBody {
         m_ordinaryAdvanceAdmitted = residue.OrdinaryAdvanceAdmitted;
         m_continuumConsumedThroughEngineTick = residue.ContinuumConsumedThroughEngineTick;
         m_affectingSubject = residue.AffectingSubject;
+        m_frame = residue.Frame;
+        m_upNeedsReseat = residue.UpNeedsReseat;
+        m_upTurnAccumulator = FixedRateAccumulator.FromRemainder(
+            remainder: residue.FieldUpTurnRemainder,
+            ticksPerSecond: EngineTicksPerSecond
+        );
+        m_contactUpTurnAccumulator = FixedRateAccumulator.FromRemainder(
+            remainder: residue.ContactUpTurnRemainder,
+            ticksPerSecond: EngineTicksPerSecond
+        );
+        m_planarFollowerSeeded = residue.PlanarFollowerSeeded;
+        m_verticalFollowerSeeded = residue.VerticalFollowerSeeded;
+
+        var attachment = residue.Attachment;
+
+        m_attachmentMode = attachment.Mode;
+        m_attachPreviousBit = attachment.AttachPreviousBit;
+        m_detachPreviousBit = attachment.DetachPreviousBit;
+        m_climbAnchor = attachment.ClimbAnchor;
+        m_climbNormal = attachment.ClimbNormal;
+        m_climbTangentRight = attachment.ClimbTangentRight;
+        m_climbTangentUp = attachment.ClimbTangentUp;
+        m_climbVelocity = attachment.ClimbVelocity;
+        m_climbAccumulator = FixedVector3RateAccumulator.FromRemainders(
+            xRemainder: attachment.ClimbRemainderX,
+            yRemainder: attachment.ClimbRemainderY,
+            zRemainder: attachment.ClimbRemainderZ,
+            ticksPerSecond: EngineTicksPerSecond
+        );
+        m_climbGrantedByOverride = attachment.ClimbGrantedByOverride;
+        m_tether = (attachment.Tether is { } tether
+            ? FixedTetherConstraint.FromState(state: tether)
+            : null
+        );
+        m_tetherAnchorBodyIndex = attachment.TetherAnchorBodyIndex;
+        m_tetherAnchorPointOrLocalOffset = attachment.TetherAnchorPointOrLocalOffset;
     }
 }

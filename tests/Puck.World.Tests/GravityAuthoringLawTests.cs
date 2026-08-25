@@ -14,6 +14,19 @@ namespace Puck.World.Tests;
 
 /// <summary>Laws for the document-to-fixed point/planet gravity authoring seam.</summary>
 public sealed class GravityAuthoringLawTests {
+    private sealed class TemporaryStateDirectory : IDisposable {
+        public string Path { get; } = Directory.CreateTempSubdirectory(prefix: "puck-gravity-checkpoint-").FullName;
+
+        public void Dispose() {
+            if (Directory.Exists(path: Path)) {
+                Directory.Delete(
+                    path: Path,
+                    recursive: true
+                );
+            }
+        }
+    }
+
     private static WorldDefinition WithGravity(WorldGravity gravity) => Fixtures.BuildGradientUpDocument(gradientUp: false) with {
         GravityRaw = gravity,
     };
@@ -421,9 +434,11 @@ public sealed class GravityAuthoringLawTests {
         Assert.Equal(expected: 0, actual: fixture.Server.Population.GravityAreaStatistics.ActiveAreaCount);
     }
 
-    [Fact]
-    public void AttachedArea_CheckpointRestoreContinuesBitIdenticallyOnTheNextSolve() {
-        using var fixture = Fixtures.FreshServer(definition: AttachedAreaDefinition(zeroAcceleration: true));
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AttachedArea_CheckpointRestoreContinuesBitIdenticallyOnTheNextSolve(bool zeroAcceleration) {
+        using var fixture = Fixtures.FreshServer(definition: AttachedAreaDefinition(zeroAcceleration: zeroAcceleration));
         var actor = WorldPrincipal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(actor, actor.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
@@ -451,15 +466,24 @@ public sealed class GravityAuthoringLawTests {
             ),
             reason: out var refusal
         ), userMessage: refusal);
-        var restoredDefinition = WorldDefinitionSerialization.Deserialize(utf8Json: checkpoint!.Server.DefinitionJson);
+        var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint!);
+
+        Assert.True(condition: WorldAuthorityCheckpointCodec.TryDecode(
+            bytes: encoded,
+            checkpoint: out var decoded,
+            reason: out var decodeRefusal
+        ), userMessage: decodeRefusal);
+
+        var restoredDefinition = WorldDefinitionSerialization.Deserialize(utf8Json: decoded!.Server.DefinitionJson);
         using var machines = new WorldMachineHost(engines: [], screens: restoredDefinition.Screens);
+        using var stateDirectory = new TemporaryStateDirectory();
         var profiles = new WorldOwnedWorlds(
-            directory: Directory.CreateTempSubdirectory(prefix: "puck-gravity-checkpoint-").FullName,
+            directory: stateDirectory.Path,
             machineId: Guid.NewGuid(),
             template: restoredDefinition
         );
         var (restored, _) = WorldServer.FromCheckpoint(
-            checkpoint: checkpoint,
+            checkpoint: decoded,
             instanceIdentity: "gravity-area",
             machines: machines,
             profiles: profiles

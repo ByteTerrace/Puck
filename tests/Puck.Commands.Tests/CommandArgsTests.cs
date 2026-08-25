@@ -55,4 +55,43 @@ public sealed class CommandArgsTests {
         // A missing final token fails the whole run rather than partially parsing.
         Assert.False(condition: CommandArgs.TryParseFloats(args: ["1", "2"], count: 3, start: 0, out _));
     }
+    [InlineData("42", true, 42L)]
+    [InlineData("-3", true, -3L)]
+    [InlineData("9223372036854775807", true, long.MaxValue)]
+    [InlineData("1.5", false, 0L)]
+    [InlineData("abc", false, 0L)]
+    [InlineData("", false, 0L)]
+    [Theory]
+    public void TryParseLongFollowsTheInvariantIntegerRule(string text, bool expected, long value) {
+        Assert.Equal(expected: expected, actual: CommandArgs.TryParseLong(text: text, value: out var parsed));
+
+        if (expected) {
+            Assert.Equal(actual: parsed, expected: value);
+        }
+    }
+    [InlineData("42", true, 42UL)]
+    [InlineData("0", true, 0UL)]
+    [InlineData("18446744073709551615", true, ulong.MaxValue)]
+    [InlineData("-1", false, 0UL)]
+    [InlineData("1.5", false, 0UL)]
+    [InlineData("abc", false, 0UL)]
+    [Theory]
+    public void TryParseULongFollowsTheInvariantIntegerRule(string text, bool expected, ulong value) {
+        Assert.Equal(expected: expected, actual: CommandArgs.TryParseULong(text: text, value: out var parsed));
+
+        if (expected) {
+            Assert.Equal(actual: parsed, expected: value);
+        }
+    }
+    [InlineData("1.5")]
+    [InlineData("-2")]
+    [InlineData("nonsense")]
+    [Theory]
+    public void LongSpanAndStringOverloadsAgree(string text) {
+        var stringOk = CommandArgs.TryParseLong(text: text, value: out var fromString);
+        var spanOk = CommandArgs.TryParseLong(text: text.AsSpan(), value: out var fromSpan);
+
+        Assert.Equal(actual: spanOk, expected: stringOk);
+        Assert.Equal(actual: fromSpan, expected: fromString);
+    }
 }

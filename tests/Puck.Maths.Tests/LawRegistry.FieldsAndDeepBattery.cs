@@ -1797,6 +1797,20 @@ internal static partial class LawRegistry {
             )
         ),
         Case(
+            id: "vector.move-toward-carrier-extremes",
+            run: () => Laws.Claim(
+                claim: MoveTowardAndEmitterClaims.MoveTowardCarrierExtremesSurface,
+                lawId: "vector.move-toward-carrier-extremes"
+            )
+        ),
+        Case(
+            id: "scalar.move-toward-carrier-extremes",
+            run: () => Laws.Claim(
+                claim: MoveTowardAndEmitterClaims.ScalarMoveTowardCarrierExtremesSurface,
+                lawId: "scalar.move-toward-carrier-extremes"
+            )
+        ),
+        Case(
             id: "core.rust-port-emitters-are-pure-and-live",
             run: () => Laws.Claim(
                 claim: MoveTowardAndEmitterClaims.RustPortEmitterSurface,

@@ -189,7 +189,9 @@ body-anchored rope is resolved by having the caller pass that body's CURRENT
 pose through `FixedTetherConstraint.ResolveAnchor` each tick. `Reel` changes
 the rope length at a caller-supplied rate, clamped to a caller-supplied floor,
 through the same `FixedRateAccumulator` discipline the rest of this library's
-per-tick rates use.
+per-tick rates use. `CaptureState`/`FromState` preserve the rope limits and
+that accumulator's remainder when a same-world checkpoint must continue on
+the exact next fixed-point fraction.
 
 ## 🚀 Basic use
 

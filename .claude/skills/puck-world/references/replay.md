@@ -217,6 +217,10 @@ as a hash MISMATCH on the very next tick it moves the pose — but the follower
 raws themselves are not independently hashed; they cross only through
 `TransferState`/`WorldAuthorityCheckpointCodec` (see
 [mutations.md](mutations.md)'s body-motion notes), never the replay tape.
+Checkpoint continuation also carries the follower seed latches, arbitrary-up
+frame/reseat/turn fractions, and same-world climb/grapple state through
+`WorldBody.IntegrationResidue`; none is independently covered by this pose
+hash before it changes a later pose.
 Across a session request, MATCH proves that re-executing the request reproduced
 the same hashed pose trajectory. It does not directly prove the request's reply,
 roster echo, profile document, population metadata, or any other unhashed effect.

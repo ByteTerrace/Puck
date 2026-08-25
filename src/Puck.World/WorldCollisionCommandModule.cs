@@ -61,30 +61,19 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
     private CommandResult Probe(WireArgs args) {
         if (
             (args.Count != 3) ||
-            !float.TryParse(
-            s: args[0],
-            style: NumberStyles.Float,
-            provider: CultureInfo.InvariantCulture,
-            result: out var x
-        ) ||
-            !float.TryParse(
-            s: args[1],
-            style: NumberStyles.Float,
-            provider: CultureInfo.InvariantCulture,
-            result: out var y
-        ) ||
-            !float.TryParse(
-            s: args[2],
-            style: NumberStyles.Float,
-            provider: CultureInfo.InvariantCulture,
-            result: out var z
+            !args.TryFloats(
+            count: 3,
+            start: 0,
+            values: out var xyz
         )
         ) {
-            return Usage(
+            return CommandResult.Usage(
                 form: "<x> <y> <z>",
                 verb: "world.collision.probe"
             );
         }
+
+        var (x, y, z) = (xyz[0], xyz[1], xyz[2]);
 
         if (server.SolidField is not { } field) {
             return CommandResult.Error(output: "[world.collision.probe: no field — author a field-selecting contact requirement]");
@@ -165,9 +154,6 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
             handler: $"[world.collision.status: selectedProvider={provider} forcedBy={forcedBy} instructions={instructions} placementFieldShapes={placementFieldShapes} placementColliders={census.PlacementColliderCount} placementColliderLimit={WorldPlacementPolicy.MaxSolidPlacementColliders} revision={server.SolidRevision} skin={collision.ContactSkin:0.###} slope={collision.MaxSlopeDegrees:0.#}° colliders=[{kitTable}]]"
         ));
     }
-    private static CommandResult Usage(string verb, string form) {
-        return CommandResult.Error(output: $"[{verb}: expected {form}]");
-    }
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
@@ -195,19 +181,24 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
                     return CommandResult.Error(output: $"[world.contacts: bad body index '{args[0].ToString()}' — 1..{server.Population.Capacity}]");
                 }
 
-                var result = default(CommandResult);
-                var submissions = link;
-                var authorityIndex = index;
-
-                if (index <= WorldBodiesLimits.LocalSeatCount) {
-                    var route = seatRouter.Route(slot: (index - 1));
-
-                    submissions = route.Endpoint.Submissions;
-                    authorityIndex = (route.EntityIndex + 1);
+                if (
+                    (index <= WorldBodiesLimits.LocalSeatCount) &&
+                    seatRouter.TryRouteQuery(
+                    factory: static authorityIndex => new WorldQuery.Contacts(Index: authorityIndex),
+                    result: out var routed,
+                    slot: (index - 1),
+                    tagInstance: false
+                )
+                ) {
+                    return routed;
                 }
 
-                submissions.Query(
-                    query: new WorldQuery.Contacts(Index: authorityIndex),
+                // No local route for this slot (a world declaring fewer local seats than the ceiling) or a
+                // simulated entry beyond the local range: query the injected link with the raw 1-based index.
+                var result = default(CommandResult);
+
+                link.Query(
+                    query: new WorldQuery.Contacts(Index: index),
                     completion: answer => {
                         result = new CommandResult(Output: answer.Text) { IsError = answer.Refused };
                     }
@@ -225,9 +216,9 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
             bindability: CommandBindability.Unbindable,
             name: "world.collision.status",
             description: "Reports the selected contact provider, the requirements that forced it, solid instruction count, field revision, contact skin, and the per-kit collider table.",
-            handler: (_, args) => ((args.Count == 0)
-            ? Status()
-            : CommandResult.Error(output: $"[world.collision.status: unrecognized '{args[0]}' — expected no arguments]"))
+            handler: (_, args) => ((CommandResult.RequireNoArguments(args: args, verb: "world.collision.status") is { } refusal)
+            ? refusal
+            : Status())
         );
     }
 

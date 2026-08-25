@@ -36,18 +36,6 @@ public enum WorldMarketListingStatus : byte {
     /// that set this status.</summary>
     Expired,
 }
-/// <summary>One per-tier admission rule a <see cref="WorldMarketSection"/> may declare. Validated and round-tripped
-/// today; not yet consulted by any listing/bid/buyout compose arm — LOCAL enforcement is admit-everyone (the trivial
-/// self-mint posture the fact vocabulary's <see cref="WorldStateCell.Provenance"/> also takes), and a federated
-/// authority is expected to consult this row before it enforces attestation.</summary>
-/// <param name="Name">The tier's stable name, unique within the section.</param>
-/// <param name="RequireAttestation">Whether a participant must carry a ring attestation to trade under this tier —
-/// authored now, inert until federation reads it.</param>
-[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public readonly record struct WorldMarketAdmissionTier(
-    string Name,
-    bool RequireAttestation = false
-);
 /// <summary>One listing on the market — an item escrowed out of its seller's spendable set the moment this row is
 /// created, resolved exactly once by a buyout, a cancel, or the deadline sweep. <see cref="ItemRow"/>/
 /// <see cref="CurrencyRow"/> each name a keyed <c>state</c> row (see <see cref="WorldStateCell"/>'s remarks) whose
@@ -97,7 +85,7 @@ public sealed record WorldMarketListing(
 /// <summary>The <c>market</c> document section — a single-authority local auction house. OPTIONAL, like
 /// <c>groups</c>/<c>water</c>: a document declaring none carries <see langword="null"/> here, which is exactly
 /// today's no-market behavior (every <c>market.*</c> verb refuses by name against a world that never authored this
-/// section). Only <c>Puck.World</c>'s <c>play</c> world authors one among the shipped worlds.</summary>
+/// section). The shipped prototype nexus is the worked authored example.</summary>
 /// <param name="Formats">Which <see cref="WorldMarketFormat"/> values a listing may declare, or <see langword="null"/>
 /// to permit both.</param>
 /// <param name="FeeBasisPoints">The house fee, in basis points of a settled sale's price
@@ -105,11 +93,9 @@ public sealed record WorldMarketListing(
 /// never destroyed, so escrow conservation holds across the fee too.</param>
 /// <param name="MinDurationSeconds">The least authored listing duration this market admits.</param>
 /// <param name="MaxDurationSeconds">The greatest authored listing duration this market admits.</param>
-/// <param name="AdmissionTiers">The declared per-tier admission rules (see <see cref="WorldMarketAdmissionTier"/>) —
-/// validated and round-tripped, locally inert.</param>
 /// <param name="Listings">The live listing ledger — engine- and player-mutated, never re-seeded from the document on
-/// boot the way <see cref="Formats"/>/<see cref="AdmissionTiers"/> are (matches <c>groups</c>' authored-vs-runtime
-/// split for its own <see cref="WorldOwnership"/> rows).</param>
+/// boot the way <see cref="Formats"/> is (matches <c>groups</c>' authored-vs-runtime split for its own
+/// <see cref="WorldOwnership"/> rows).</param>
 /// <param name="NextListingId">The next <see cref="WorldMarketListing.Id"/> a <c>WorldMutation.CreateMarketListing</c>
 /// mints — engine bookkeeping, monotonically increasing, never reused.</param>
 /// <param name="FeeReserve">The house's accumulated fee take — engine bookkeeping; the fee sink escrow conservation
@@ -128,7 +114,6 @@ public sealed record WorldMarketSection(
     int FeeBasisPoints = 0,
     float MinDurationSeconds = 60f,
     float MaxDurationSeconds = 86400f,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldMarketAdmissionTier>? AdmissionTiers = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldMarketListing>? Listings = null,
     long NextListingId = 1,
     long FeeReserve = 0,
@@ -147,8 +132,6 @@ public sealed record WorldMarketSection(
 }
 /// <summary>The <see cref="WorldMarketSection"/> caps read by <see cref="WorldDefinitionValidator"/>.</summary>
 public static class WorldMarketCapacity {
-    /// <summary>The section's declared admission-tier-count ceiling.</summary>
-    public const int MaxAdmissionTiers = 8;
     /// <summary>The greatest legal <see cref="WorldMarketSection.MaxDurationSeconds"/> (30 days).</summary>
     public const float MaxDurationCeilingSeconds = 2_592_000f;
     /// <summary>The greatest <see cref="WorldMarketSection.FeeBasisPoints"/> a market may declare (20%).</summary>

@@ -145,7 +145,10 @@ table — a row added there grants nothing until relaunch.
   solid buildability — everything but the per-entry authority check, which the
   every-section hold already re-proves). ALL-OR-NOTHING: any entry failing any
   gate refuses the whole undo, names the failing entry's index and reason on
-  stderr, and installs NOTHING. There is no per-mutation inverse. Proven
+  stderr, and installs NOTHING. Market listings, bids, buyouts, cancellations,
+  and settlements are economic finality barriers: the undo refuses before
+  dropping one, while `PruneMarketListings` remains undoable because it only
+  archives terminal rows and moves no value. There is no per-mutation inverse. Proven
   in-process by `tests/Puck.World.Tests/MutationAllOrNothingLawTests.cs`
   against the shared apply gate; the replay loop's own early-return on a
   genuine mid-replay failure is unproven (see that law's own remarks).

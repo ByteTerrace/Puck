@@ -217,7 +217,7 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
                 m_seatSources[slot] = panel;
                 m_seatBuilds[slot] = BuildPanel(
                     panel: panel,
-                    seat: (slot + 1),
+                    seat: PlayerRoster.DisplayNumber(slot: slot),
                     slot: slot
                 );
             }

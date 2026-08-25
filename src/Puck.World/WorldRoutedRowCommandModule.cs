@@ -35,7 +35,7 @@ internal sealed class WorldRoutedRowCommandModule(PlayerRoster roster, WorldSeat
             (display < 1) ||
             (display > PlayerRoster.MaxSlots)
         ) {
-            return CommandResult.Error(output: $"[{verb}: player {display} is outside 1..{PlayerRoster.MaxSlots}]");
+            return CommandResult.Error(output: $"[{verb}: seat must be an integer 1..{PlayerRoster.MaxSlots}]");
         }
 
         if (!m_roster.IsJoined(slot: slot)) {
@@ -71,9 +71,9 @@ internal sealed class WorldRoutedRowCommandModule(PlayerRoster roster, WorldSeat
             handler: (context, args) => {
                 if (
                     (args.Count < 3) ||
-                    !int.TryParse(
-                    s: args[0],
-                    result: out var display
+                    !args.TryInt(
+                    index: 0,
+                    value: out var display
                 )
                 ) {
                     return CommandResult.Error(output: "[player.row.set: expected <player> <path> <json>]");
@@ -113,9 +113,9 @@ internal sealed class WorldRoutedRowCommandModule(PlayerRoster roster, WorldSeat
             handler: (context, args) => {
                 if (
                     ((args.Count != 4) && (args.Count != 5)) ||
-                    !int.TryParse(
-                    s: args[0],
-                    result: out var display
+                    !args.TryInt(
+                    index: 0,
+                    value: out var display
                 )
                 ) {
                     return CommandResult.Error(output: "[player.state.cell.set: expected <player> <row> <key> <value> [add]]");

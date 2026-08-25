@@ -87,6 +87,66 @@
     ]
   },
   {
+    "Id": "vector.move-toward-carrier-extremes",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "MoveToward"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the landing verdict and, on a non-landing step, each axis's movement sign, at eight carrier-extreme segments (each axis alone at the opposing raw extremes with the other two held at zero, plus all three together) and five step sizes including a single raw unit and the largest representable step",
+        "Against": "Oracles.MoveTowardVerdict, whose per-axis displacement and squared-distance comparison are formed entirely in BigInteger with no wrap or narrowing at any width — never the subject's own componentwise target-minus-current, which is exactly what wraps at these endpoints",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedUpstream",
+        "Subject": "the never-overshoot bound on a non-landing step's travelled distance",
+        "Against": "maxDelta plus a small fixed tolerance",
+        "Shared": "FixedVector3.Length and the subtraction operator, the same members vector.move-toward-boundaries-and-segment's own travelled-distance leg reaches through; a defect INSIDE Length that scaled every measurement alike would move the subject and this bound together",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: an axis is allowed to report NO movement even on a non-landing step, because the fixed-point unit direction can round a tiny per-axis share of maxDelta to zero (the all-three-extreme segment at maxDelta raw 1 is exactly this case) — the leg only refuses movement against the oracle's sign, never a rounded-to-zero movement.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.move-toward-carrier-extremes",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "MoveToward"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the exact resulting raw at both orderings of the opposing carrier extremes and five step sizes including a single raw unit and the largest representable step",
+        "Against": "Oracles.MoveTowardRaw, whose displacement is formed entirely in BigInteger with no wrap at any width — never the subject's own target-minus-current, which is exactly what wraps at these endpoints",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
     "Id": "core.rust-port-emitters-are-pure-and-live",
     "Tier": "Default",
     "Members": [

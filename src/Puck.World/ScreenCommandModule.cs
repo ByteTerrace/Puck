@@ -293,8 +293,8 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
         return CommandResult.None;
     }
     private CommandResult LinksHandler(CommandContext context, WireArgs args) {
-        if (args.Count != 0) {
-            return CommandResult.Error(output: "[screen.links: expected no arguments]");
+        if (CommandResult.RequireNoArguments(args: args, verb: "screen.links") is { } refusal) {
+            return refusal;
         }
 
         return new CommandResult(Output: $"[screen.links: {m_binder.DescribeLinks()}]");
@@ -452,11 +452,9 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
                 count: magazine.Entries.Count,
                 wrap: magazine.Wrap
             );
-        } else if (!int.TryParse(
-            s: token,
-            style: NumberStyles.Integer,
-            provider: CultureInfo.InvariantCulture,
-            result: out target
+        } else if (!CommandArgs.TryParseInt(
+            text: token,
+            value: out target
         )) {
             return CommandResult.Error(output: $"[screen.select: '{token}' must be next, prev, or an entry index]");
         }
@@ -822,8 +820,8 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
         );
     }
     private CommandResult CameraHandler(CommandContext context, WireArgs args) {
-        if (args.Count != 0) {
-            return CommandResult.Error(output: "[screen.camera: expected no arguments]");
+        if (CommandResult.RequireNoArguments(args: args, verb: "screen.camera") is { } refusal) {
+            return refusal;
         }
 
         return ((m_binder.DescribeCamera() is { } description)

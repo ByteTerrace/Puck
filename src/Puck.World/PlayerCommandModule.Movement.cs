@@ -2,6 +2,7 @@ using System.Numerics;
 using Puck.Commands;
 using Puck.Maths;
 using Puck.World.Protocol;
+using Puck.World.Server;
 
 namespace Puck.World;
 
@@ -98,7 +99,7 @@ internal sealed partial class PlayerCommandModule {
 
             instance.Server.ApplyCommand(command: new WorldCommand.EnqueueSegment(
                 Principal: context.ActingPrincipal(),
-                EntityIndex: (instanceSlot - 1),
+                EntityIndex: WorldPopulation.EntityFromDisplay(number: instanceSlot),
                 Intent: instanceChannels.RoleOrdinals.Intent(
                     moveAdvance: FixedQ4816.FromDouble(value: iForward),
                     moveStrafe: FixedQ4816.FromDouble(value: iStrafe),
@@ -310,7 +311,7 @@ internal sealed partial class PlayerCommandModule {
 
             instance.Server.ApplyCommand(command: new WorldCommand.SnapPose(
                 Principal: context.ActingPrincipal(),
-                EntityIndex: (instanceSlot - 1),
+                EntityIndex: WorldPopulation.EntityFromDisplay(number: instanceSlot),
                 Position: new Vector3(
                     x: ix,
                     y: iy,
@@ -556,7 +557,7 @@ internal sealed partial class PlayerCommandModule {
 
             instance.Server.ApplyCommand(command: new WorldCommand.Stop(
                 Principal: context.ActingPrincipal(),
-                EntityIndex: (instanceSlot - 1)
+                EntityIndex: WorldPopulation.EntityFromDisplay(number: instanceSlot)
             ));
 
             return new CommandResult(Output: $"[body.stop: '{instance.Name}' seat {instanceSlot} — tape cleared]");
@@ -831,7 +832,7 @@ internal sealed partial class PlayerCommandModule {
                 return CommandResult.Error(output: $"[body.where: instance-targeted <slot> must be an integer 1..{WorldBodiesLimits.LocalSeatCount}]");
             }
 
-            var instanceAnswer = instance.Server.Answer(query: new WorldQuery.PlayerWhere(Index: (instanceSlot - 1)));
+            var instanceAnswer = instance.Server.Answer(query: new WorldQuery.PlayerWhere(Index: WorldPopulation.EntityFromDisplay(number: instanceSlot)));
 
             return new CommandResult(Output: WithInstanceTag(
                 text: instanceAnswer.Text,
@@ -857,31 +858,30 @@ internal sealed partial class PlayerCommandModule {
             IsSeat(index: routedIndex)
         ) {
             var rosterSlot = routedIndex;
-            var location = seatRouter.Route(slot: rosterSlot);
 
+            // The boot claim's Endpoint.Submissions IS the injected local link, so routing through it would answer
+            // identically to the local arm below — this selector exists only for the boot path's untagged,
+            // anchor-free output, never because routing itself would misbehave.
             if (
                 m_roster.IsJoined(slot: rosterSlot) &&
+                (seatRouter.TryRoute(slot: rosterSlot) is { } location) &&
                 !string.Equals(
                 a: location.Endpoint.Identity,
                 b: WorldInstanceHost.BootInstanceName,
                 comparisonType: StringComparison.Ordinal
+            ) &&
+                seatRouter.TryRouteQuery(
+                factory: authorityIndex => new WorldQuery.PlayerWhere(Index: (authorityIndex - 1)),
+                result: out var routed,
+                slot: rosterSlot,
+                tagInstance: true
             )
             ) {
-                var routedResult = default(CommandResult);
+                // player.where's own anchor=body:N suffix, off the route as it stands now — it may have moved on
+                // since the query was submitted.
+                var current = (seatRouter.TryRoute(slot: rosterSlot) ?? location);
 
-                location.Endpoint.Submissions.Query(
-                    query: new WorldQuery.PlayerWhere(Index: location.EntityIndex),
-                    completion: answer => {
-                        var current = seatRouter.Route(slot: rosterSlot);
-                        var tagged = WithInstanceTag(
-                            text: answer.Text,
-                            instanceName: current.Endpoint.Identity
-                        );
-
-                        routedResult = new CommandResult(Output: $"{tagged[..^1]} anchor=body:{current.EntityIndex}]") { IsError = answer.Refused };
-                    }
-                );
-                return routedResult;
+                return new CommandResult(Output: $"{routed.Output[..^1]} anchor=body:{current.EntityIndex}]") { IsError = routed.IsError };
             }
         }
 

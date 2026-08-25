@@ -63,18 +63,20 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
                 if (args.Count > 1) {
                     return CommandResult.Error(output: $"[world.view.camera: too many arguments — expected [<player>], player an integer 1..{PlayerRoster.MaxSlots}]");
                 }
-                if (!WorldArgs.TryParseIndex(
-                    args: args,
+
+                var (slot, error) = SeatCommandArgs.ResolveJoinedSeat(
+                    args: in args,
                     at: 0,
-                    fallback: 1,
-                    max: PlayerRoster.MaxSlots,
-                    min: 1,
-                    value: out var player
-                )) {
-                    return CommandResult.Error(output: $"[world.view.camera: player index must be an integer 1..{PlayerRoster.MaxSlots}]");
+                    context: context,
+                    roster: roster,
+                    verb: "world.view.camera"
+                );
+
+                if (error is { } refusal) {
+                    return refusal;
                 }
 
-                return new CommandResult(Output: Describe(slot: PlayerRoster.SlotFromDisplay(number: player)));
+                return new CommandResult(Output: Describe(slot: slot));
             },
             routing: CommandRouting.Immediate
         );

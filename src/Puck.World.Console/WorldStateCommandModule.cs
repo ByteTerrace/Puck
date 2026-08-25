@@ -339,7 +339,7 @@ public sealed class WorldStateCommandModule(IWorldConsoleAuthority authority, IS
     // SAME buffered batch (before this door can see it live) is the one case that still needs two steps.
     private CommandResult HandleCellSet(WorldServer server, CommandContext context, WireArgs args) {
         if (args.Count < 2) {
-            return Usage(
+            return CommandResult.Usage(
                 form: "<row> <key> <value> [add] | <row> <key> <text...>",
                 verb: "world.state.cell.set"
             );
@@ -360,7 +360,7 @@ public sealed class WorldStateCommandModule(IWorldConsoleAuthority authority, IS
                 tokens: 3
             );
 
-            return Submit(mutation: new WorldMutation.UpsertStateCell(
+            return link.Submit(mutation: new WorldMutation.UpsertStateCell(
                 Principal: context.ActingPrincipal(),
                 Row: rowName,
                 Key: args[1].ToString(),
@@ -374,7 +374,7 @@ public sealed class WorldStateCommandModule(IWorldConsoleAuthority authority, IS
             (args.Count != 3) &&
             (args.Count != 4)
         ) {
-            return Usage(
+            return CommandResult.Usage(
                 form: "<row> <key> <value> [add] | <row> <key> <text...>",
                 verb: "world.state.cell.set"
             );
@@ -394,7 +394,7 @@ public sealed class WorldStateCommandModule(IWorldConsoleAuthority authority, IS
             kind = WorldDocumentWriteKind.Add;
         }
 
-        return Submit(mutation: new WorldMutation.UpsertStateCell(
+        return link.Submit(mutation: new WorldMutation.UpsertStateCell(
             Principal: context.ActingPrincipal(),
             Row: rowName,
             Key: args[1].ToString(),
@@ -402,14 +402,6 @@ public sealed class WorldStateCommandModule(IWorldConsoleAuthority authority, IS
             Kind: kind,
             RawToken: args[2].ToString()
         ));
-    }
-    private CommandResult Submit(WorldMutation mutation) {
-        link.SubmitWorldMutation(mutation: mutation);
-
-        return CommandResult.None;
-    }
-    private static CommandResult Usage(string verb, string form) {
-        return CommandResult.Error(output: $"[{verb}: expected {form}]");
     }
 
     /// <inheritdoc/>
@@ -442,13 +434,13 @@ public sealed class WorldStateCommandModule(IWorldConsoleAuthority authority, IS
             description: "Removes ONE cell from an already-declared row, leaving the row itself in place: world.state.cell.remove <row> <key>. Rejected if <row> names no state row, no cell inside it carries <key>, or the acting principal's Edit hold does not admit RemoveStateCell.",
             handler: (context, args) => {
                 if (args.Count != 2) {
-                    return Usage(
+                    return CommandResult.Usage(
                         form: "<row> <key>",
                         verb: "world.state.cell.remove"
                     );
                 }
 
-                return Submit(mutation: new WorldMutation.RemoveStateCell(
+                return link.Submit(mutation: new WorldMutation.RemoveStateCell(
                     Principal: context.ActingPrincipal(),
                     Row: args[0].ToString(),
                     Key: args[1].ToString()
@@ -462,13 +454,13 @@ public sealed class WorldStateCommandModule(IWorldConsoleAuthority authority, IS
             description: "Redraws a DRAW SITE — a state row declaring a \"draw\" facet: world.generate <row>. One argument, because a site owns its whole draw: the facet either names a declared source from the document's \"generators\" section (\"source\": <name>) or inlines one (\"generator\": {...}), and the drawn value lands in the site's own slot cell. A markov source walks weighted transitions and writes TEXT — ending at a TERMINAL context (one declaring no alternatives) and REFUSING BY NAME rather than truncating if it reaches the source's declared bound first; under a deck mode (withoutReplacement / reshuffleOnExhaustion) each alternative is dealt at most once per context, and the deck persists across draws in THIS SITE's own bookkeeping (two sites sharing one source deal independently). The uniformRange, weightedNumeric, and streamDraw sources each write ONE numeric value. Refused by name if the site declares timing=boot (drawn once at first fill, never again). The drawn value and the site's advanced cursor land in the SAME candidate, so world.undo rewinds a draw exactly. Buffers and applies at the tick boundary; rejected loudly if <row> names no state row, names one declaring no draw, the site's source resolves to nothing or writes a kind the site cannot hold, the emission exceeds the text bound, or the acting principal lacks a Mutate/section:state or Edit/state:<row> hold admitting Generate.",
             handler: (context, args) => {
                 if (args.Count != 1) {
-                    return Usage(
+                    return CommandResult.Usage(
                         form: "<row>",
                         verb: "world.generate"
                     );
                 }
 
-                return Submit(mutation: new WorldMutation.Generate(
+                return link.Submit(mutation: new WorldMutation.Generate(
                     Principal: context.ActingPrincipal(),
                     Row: args[0].ToString()
                 ));

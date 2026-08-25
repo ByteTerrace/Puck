@@ -269,7 +269,8 @@ buffers through the ordered domain, drains FIFO at the tick boundary,
 composes a candidate → revalidates the WHOLE document → capacity-checks →
 swaps atomically and rebuilds the changed derived state → journals →
 delivers to clients. `world.undo` replays journal-minus-tail
-through the same gates, all-or-nothing. Rendering derives from the
+through the same gates, all-or-nothing, but refuses before crossing a market
+listing, bid, buyout, cancellation, or settlement finality barrier. Rendering derives from the
 delivered definition on revision moves — a mutation's visual effect is a
 side effect, never a draw call. The exact `WorldServer.Step` order, the
 apply pipeline, the 64-kind catalog with declared ordinals, and the

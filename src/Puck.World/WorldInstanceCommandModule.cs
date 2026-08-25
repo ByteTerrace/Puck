@@ -1,5 +1,6 @@
 using System.Globalization;
 using Puck.Commands;
+using Puck.World.Client;
 using Puck.World.Protocol;
 using Puck.World.Server;
 using static Puck.World.WorldCommandDefinition;
@@ -43,8 +44,8 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
 
         for (var slot = 0; (slot < WorldBodiesLimits.LocalSeatCount); slot++) {
             parts[slot] = (population.IsActive(index: slot)
-                ? $"{(slot + 1)}={(population.EntryBody(index: slot)?.Profile?.Id ?? "pending")}"
-                : $"{(slot + 1)}=-"
+                ? $"{PlayerRoster.DisplayNumber(slot: slot)}={(population.EntryBody(index: slot)?.Profile?.Id ?? "pending")}"
+                : $"{PlayerRoster.DisplayNumber(slot: slot)}=-"
             );
         }
 
@@ -229,7 +230,7 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
 
                         parts[slot] = string.Create(
                             provider: CultureInfo.InvariantCulture,
-                            handler: $"{(slot + 1)}={location.Endpoint.Identity}:{(location.EntityIndex + 1)}@{location.Epoch}"
+                            handler: $"{PlayerRoster.DisplayNumber(slot: slot)}={location.Endpoint.Identity}:{(location.EntityIndex + 1)}@{location.Epoch}"
                         );
                     }
 
@@ -255,7 +256,7 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
                     return CommandResult.Error(output: $"[world.view: expected a seat number 1..{WorldSeatBindings.SeatCount}]");
                 }
 
-                var seatLocation = m_seatRouter.Route(slot: (seat - 1));
+                var seatLocation = m_seatRouter.Route(slot: PlayerRoster.SlotFromDisplay(number: seat));
 
                 return new CommandResult(Output: string.Create(
                     provider: CultureInfo.InvariantCulture,
@@ -365,11 +366,9 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
                             comparisonType: StringComparison.Ordinal,
                             value: "transfer:"
                         ) &&
-                            ulong.TryParse(
-                            s: token[9..],
-                            style: NumberStyles.Integer,
-                            provider: CultureInfo.InvariantCulture,
-                            result: out var parsedTransferId
+                            CommandArgs.TryParseULong(
+                            text: token[9..],
+                            value: out var parsedTransferId
                         )
                         ) {
                             explicitTransferId = parsedTransferId;
@@ -383,11 +382,9 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
                             comparisonType: StringComparison.Ordinal,
                             value: "forcejoinrefusal:"
                         ) &&
-                            int.TryParse(
-                            s: token[17..],
-                            style: NumberStyles.Integer,
-                            provider: CultureInfo.InvariantCulture,
-                            result: out var parsedOrdinal
+                            CommandArgs.TryParseInt(
+                            text: token[17..],
+                            value: out var parsedOrdinal
                         )
                         ) {
                             forceJoinRefusalOrdinal = parsedOrdinal;

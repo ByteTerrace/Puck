@@ -15,10 +15,8 @@ namespace Puck.World;
 public sealed class WorldContributionCommandModule(IWorldConsoleAuthority authority) : ICommandModule {
     private static string Describe(WorldServer server, string? filter) {
         var definition = server.Definition;
-        var builder = new StringBuilder();
+        var echo = CommandEcho.Open(verb: "world.contributions");
         var matched = 0;
-
-        _ = builder.Append(value: "[world.contributions:");
 
         foreach (var placement in definition.Placements) {
             if (placement.Contribution is not { } contribution) {
@@ -38,7 +36,7 @@ public sealed class WorldContributionCommandModule(IWorldConsoleAuthority author
 
             matched++;
 
-            _ = builder.Append(value: " slot '").Append(value: placement.Id).Append(value: '\'')
+            var text = new StringBuilder(value: "slot '").Append(value: placement.Id).Append(value: '\'')
                 .Append(value: " tenure=").Append(value: contribution.Tenure)
                 .Append(value: " slotCreation=").Append(value: contribution.SlotCreationId)
                 .Append(value: " creation=").Append(value: placement.PrototypeId)
@@ -51,12 +49,12 @@ public sealed class WorldContributionCommandModule(IWorldConsoleAuthority author
             if (contribution.Tenure == WorldContributionTenure.Presence) {
                 var link = (contribution.Link?.Value ?? "(none)");
 
-                _ = builder.Append(value: " link=").Append(value: link)
+                _ = text.Append(value: " link=").Append(value: link)
                     .Append(value: " graceSeconds=").Append(value: contribution.GraceSeconds)
                     .Append(value: " graceTicks=").Append(value: contribution.CompiledGrace(simulationRateHz: definition.SimulationRateHz));
 
                 if (contribution.Link is not null) {
-                    _ = builder.Append(value: " linkState=").Append(value: (server.TryLinkLiveness(
+                    _ = text.Append(value: " linkState=").Append(value: (server.TryLinkLiveness(
                         adjacencyName: link,
                         dropped: out var dropped,
                         staleTicks: out var staleTicks
@@ -69,22 +67,22 @@ public sealed class WorldContributionCommandModule(IWorldConsoleAuthority author
                     ));
                 }
 
-                _ = builder.Append(value: " deadlineTick=").Append(value: (contribution.RetractDeadlineTick?.ToString() ?? "none"));
+                _ = text.Append(value: " deadlineTick=").Append(value: (contribution.RetractDeadlineTick?.ToString() ?? "none"));
             }
 
-            _ = builder.Append(value: " |");
+            _ = echo.Text(text: text.ToString()).Segment();
         }
 
         if (matched == 0) {
-            _ = builder.Append(value: ((filter is { } missing)
-                ? $" no contribution slot '{missing}'"
-                : " (no contribution slots)"
+            _ = echo.Text(text: ((filter is { } missing)
+                ? $"no contribution slot '{missing}'"
+                : "(no contribution slots)"
             ));
         }
 
-        _ = builder.Append(value: " tick=").Append(value: (server.NextInputTick - 1UL));
+        _ = echo.Field(key: "tick", value: (server.NextInputTick - 1UL));
 
-        return (builder.Append(value: ']').ToString());
+        return echo.Close();
     }
 
     /// <inheritdoc/>

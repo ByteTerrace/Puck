@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 
 namespace Puck.World.Client;
@@ -127,4 +128,55 @@ public sealed class WorldSeatAuthorityRouter {
 
         return Volatile.Read(location: ref m_routes[slot]);
     }
+    /// <summary>Routes a read-back query to the slot's currently claimed authority — the shared body every routed
+    /// query verb reduces to. Submits <paramref name="factory"/>'s query (built from the claim's own
+    /// <see cref="WorldAuthorityRoute.QueryIndex"/>) through the claim's own submission door; when
+    /// <paramref name="tagInstance"/> and the claim's identity is not the boot identity, the answer text is suffixed
+    /// with <c>instance:&lt;identity&gt;</c> before its closing bracket. Does not throw: a slot with no published
+    /// claim returns <see langword="false"/> with no result.</summary>
+    /// <param name="slot">The 0-based seat slot.</param>
+    /// <param name="factory">Builds the query from the claim's own 1-based entity index.</param>
+    /// <param name="tagInstance">Whether a non-boot answer is suffixed with its routed instance identity.</param>
+    /// <param name="result">The routed answer, on success.</param>
+    /// <returns>Whether the slot held a published claim to route through.</returns>
+    public bool TryRouteQuery(int slot, Func<int, WorldQuery> factory, bool tagInstance, out CommandResult result) {
+        if (TryRoute(slot: slot) is not { } route) {
+            result = default;
+
+            return false;
+        }
+
+        var routed = default(CommandResult);
+        var tag = ((tagInstance && !string.Equals(
+            a: route.Endpoint.Identity,
+            b: WorldDefinitionLoader.BootInstanceName,
+            comparisonType: StringComparison.Ordinal
+        ))
+            ? route.Endpoint.Identity
+            : null
+        );
+
+        route.Endpoint.Submissions.Query(
+            query: factory(route.QueryIndex),
+            completion: answer => {
+                var text = ((tag is { } instanceName)
+                    ? WithInstanceTag(
+                    text: answer.Text,
+                    instanceName: instanceName
+                )
+                    : answer.Text
+                );
+
+                routed = new CommandResult(Output: text) { IsError = answer.Refused };
+            }
+        );
+
+        result = routed;
+
+        return true;
+    }
+    private static string WithInstanceTag(string text, string instanceName) => (text.EndsWith(value: ']')
+        ? $"{text[..^1]} instance:{instanceName}]"
+        : text
+    );
 }

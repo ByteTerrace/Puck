@@ -110,8 +110,8 @@ public sealed class WorldDynamicsCommandModule(IWorldConsoleAuthority authority)
             name: "world.dynamics",
             description: "Reports the dynamics census (Immediate; the stdin barrier makes it read the settled state after any pending mutation): one segment per row — the authored f/zeta/r triple, the derived decay/osc/k3 constants (the SAME fixed-point derivation the simulation reads), and how many document members reference it.",
             handler: (context, args) => {
-                if (args.Count != 0) {
-                    return CommandResult.Error(output: $"[world.dynamics: unrecognized '{args[0]}' — expected no arguments]");
+                if (CommandResult.RequireNoArguments(args: args, verb: "world.dynamics") is { } refusal) {
+                    return refusal;
                 }
 
                 if (!authority.TryResolveServer(

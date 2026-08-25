@@ -94,8 +94,8 @@ internal sealed class WorldRecordingCommandModule(
         return new CommandResult(Output: $"[capture.start: recording -> {session.OutputPath} | codec {session.CodecLanded} | audio tracks {status.AudioTrackCount} | {notes}]");
     }
     private CommandResult Status(WireArgs args) {
-        if (args.Count > 0) {
-            return CommandResult.Error(output: "[capture.status: expected no arguments]");
+        if (CommandResult.RequireNoArguments(args: args, verb: "capture.status") is { } refusal) {
+            return refusal;
         }
 
         var origin = m_source.SourcePath;
@@ -113,8 +113,8 @@ internal sealed class WorldRecordingCommandModule(
         return new CommandResult(Output: ((string)$"[capture.status: recording -> {status.OutputPath} | codec {status.CodecLanded} | frames {status.FramesCaptured}/{status.FramesDropped} dropped | audio tracks {status.AudioTrackCount} drops {status.AudioSamplesDropped} | bytes {status.BytesWritten} | document {origin} | readback synchronous presenter readback per captured GPU frame{fault}]"));
     }
     private CommandResult Stop(WireArgs args) {
-        if (args.Count > 0) {
-            return CommandResult.Error(output: "[capture.stop: expected no arguments]");
+        if (CommandResult.RequireNoArguments(args: args, verb: "capture.stop") is { } refusal) {
+            return refusal;
         }
 
         var session = (m_capture.Disarm() as RecordingSession);

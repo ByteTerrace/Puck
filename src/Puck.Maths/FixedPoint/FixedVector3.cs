@@ -200,6 +200,15 @@ public readonly record struct FixedVector3(FixedQ4816 X, FixedQ4816 Y, FixedQ481
     /// <param name="maxDelta">The greatest distance to move.</param>
     /// <returns>The target when it is within range; otherwise, the point <paramref name="maxDelta"/> toward it.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="maxDelta"/> is negative.</exception>
+    /// <remarks>Ordering is read per axis from the two raw carrier readings directly, in the unsigned 64-bit domain —
+    /// never from a componentwise <c>target − current</c>, whose true per-axis magnitude can exceed what the signed
+    /// 64-bit carrier can hold even though both endpoints are individually representable (the opposing carrier
+    /// extremes, for instance). Whenever every axis separation fits the signed carrier, the ordinary
+    /// delta/<see cref="Length"/> path below is exact and bit-for-bit identical to comparing the componentwise
+    /// difference directly. Only when some axis separation does not fit does this fall back to a widened-domain step: a
+    /// single axis separation that already exceeds a representable <paramref name="maxDelta"/> (whose raw is at most
+    /// <see cref="long.MaxValue"/>) refutes landing outright, since the 3D distance can only be at least as large as
+    /// its largest axis component.</remarks>
     public static FixedVector3 MoveToward(FixedVector3 current, FixedVector3 target, FixedQ4816 maxDelta) {
         // The parameter name is passed explicitly: the throw helper's caller-argument expression would otherwise report
         // the literal string "maxDelta.Value", a property expression rather than a parameter of this method.
@@ -208,12 +217,39 @@ public readonly record struct FixedVector3(FixedQ4816 X, FixedQ4816 Y, FixedQ481
             paramName: nameof(maxDelta)
         );
 
-        var delta = (target - current);
-        var distance = delta.Length;
+        var (separationX, targetGreaterX) = FixedVectorMath.RawSeparation(currentRaw: current.X.Value, targetRaw: target.X.Value);
+        var (separationY, targetGreaterY) = FixedVectorMath.RawSeparation(currentRaw: current.Y.Value, targetRaw: target.Y.Value);
+        var (separationZ, targetGreaterZ) = FixedVectorMath.RawSeparation(currentRaw: current.Z.Value, targetRaw: target.Z.Value);
+        var maxSeparation = Math.Max(val1: separationX, val2: Math.Max(val1: separationY, val2: separationZ));
 
-        return (((distance <= maxDelta) || (distance <= FixedQ4816.Zero))
-            ? target
-            : (current + ((delta / distance) * maxDelta))
+        if (maxSeparation <= ((ulong)long.MaxValue)) {
+            var delta = (target - current);
+            var distance = delta.Length;
+
+            return (((distance <= maxDelta) || (distance <= FixedQ4816.Zero))
+                ? target
+                : (current + ((delta / distance) * maxDelta))
+            );
+        }
+
+        // Some axis separation exceeds what the signed 64-bit carrier can hold, so it also exceeds every
+        // representable maxDelta.Value (at most long.MaxValue) — landing is therefore impossible, and the step is a
+        // proportional share of maxDelta along the unit direction of the (halved, to fit the sign/magnitude
+        // reconstruction) per-axis separations. The addition below cannot overflow: the true separation on every axis
+        // that moves is strictly larger than that axis's own step, so the landed point stays strictly between
+        // current and target on the real line, a range both endpoints already witness is representable.
+        var dx = FixedVectorMath.SignedFromMagnitude(magnitude: (separationX >> 1), negative: !targetGreaterX);
+        var dy = FixedVectorMath.SignedFromMagnitude(magnitude: (separationY >> 1), negative: !targetGreaterY);
+        var dz = FixedVectorMath.SignedFromMagnitude(magnitude: (separationZ >> 1), negative: !targetGreaterZ);
+        var (unitX, unitY, unitZ) = FixedVectorMath.Normalize(x: dx, y: dy, z: dz);
+        var stepX = (FixedQ4816.FromRawBits(value: unitX) * maxDelta);
+        var stepY = (FixedQ4816.FromRawBits(value: unitY) * maxDelta);
+        var stepZ = (FixedQ4816.FromRawBits(value: unitZ) * maxDelta);
+
+        return new(
+            X: (current.X + stepX),
+            Y: (current.Y + stepY),
+            Z: (current.Z + stepZ)
         );
     }
     /// <summary>Normalizes the vector to Q16 unit length at every representable input scale. The calculation applies

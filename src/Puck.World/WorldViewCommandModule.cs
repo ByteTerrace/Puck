@@ -112,9 +112,6 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
 
         return builder.Append(value: ']').ToString();
     }
-    private static CommandResult Usage(string verb, string form) {
-        return CommandResult.Error(output: $"[{verb}: expected {form}]");
-    }
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
@@ -147,7 +144,7 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
                     return CommandResult.None;
                 }
                 if (args.Count != 2) {
-                    return Usage(
+                    return CommandResult.Usage(
                         form: "camera|layout <name|auto>",
                         verb: "view.override"
                     );
@@ -176,18 +173,18 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
             bindability: CommandBindability.Unbindable,
             name: "world.view.state",
             description: "Echoes the live window composition: world.view.state — the active layout name, selection reason (override|authored|builtin), transition progress, and each slot's rect + occupant (seat<order> | cam:<name>). A query (always echoes) — the pipe-assertable composition read.",
-            handler: (context, args) => ((args.Count == 0)
-            ? new CommandResult(Output: DescribeState())
-            : CommandResult.Error(output: $"[world.view.state: unrecognized '{args[0]}' — expected no arguments]")),
+            handler: (context, args) => ((CommandResult.RequireNoArguments(args: args, verb: "world.view.state") is { } refusal)
+            ? refusal
+            : new CommandResult(Output: DescribeState())),
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.view.pointer",
             description: "Echoes the drawn cursor's last composed frame: world.view.pointer — the seat the pointer rides (1-based; the keyboard's seat, the one WorldPointerSink resolves the mouse onto), the cursor position in CLIENT pixels (position=), the same position mapped into the fixed FRAME extent the overlay draws in (frame= — the two diverge when the OS window is resized; WorldCursorFeed.Decide owns the mapping) and normalized within the seat's viewport (local=), the viewport rect, the visibility verdict (visible | no-position | no-view | outside-viewport | orbit-drag — WorldCursorFeed's one visibility rule), the held pointer buttons (buttons=, L/R/M in that order or '-' — the live store state, so an injected press is assertable before anything acts on it), the live hover target (hover=none, or the hovered panel/world row's label), and the seat's SYSTEM-RELEASE generation (syscount= — WorldPointer.SystemReleaseCount: how many times the store has force-cleared this seat's held buttons without a genuine release event; an edge-deriving consumer compares this against the value it captured at press time to tell a synthetic release from a real one). A query (always echoes) — the pipe-assertable pointer read, the world.view.camera sibling: live per-seat presentation state nothing else can echo.",
-            handler: (context, args) => ((args.Count == 0)
-            ? DescribePointer()
-            : CommandResult.Error(output: $"[world.view.pointer: unrecognized '{args[0]}' — expected no arguments]")),
+            handler: (context, args) => ((CommandResult.RequireNoArguments(args: args, verb: "world.view.pointer") is { } refusal)
+            ? refusal
+            : DescribePointer()),
             routing: CommandRouting.Immediate
         );
     }

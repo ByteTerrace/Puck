@@ -343,7 +343,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     frequency: frequency,
                     requestedHertz: m_presentPacing.TargetHertz
                 );
-                var spinThreshold = ((frequency / 1000L) * LauncherHostLoop.SpinThresholdMilliseconds);
+                var spinThreshold = LauncherHostLoop.SpinThreshold(frequency: frequency);
                 var startTimestamp = Stopwatch.GetTimestamp();
                 var nextRenderDeadline = startTimestamp;
                 var exitAfterTimestamp = ((m_options.ExitAfter is { } exitAfter)

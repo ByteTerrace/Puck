@@ -1,5 +1,6 @@
 using Puck.Audio.Simulation;
 using Puck.Networking;
+using Puck.Physics;
 using Puck.World.Protocol;
 using Puck.Physics.Motion;
 
@@ -915,6 +916,16 @@ public static partial class WorldAuthorityCheckpointCodec {
             writeValue: static (w, v) => w.WriteUInt64(value: v)
         );
         writer.WriteInt32(value: residue.AffectingSubject);
+        writer.WriteFixedQuaternion(value: residue.Frame);
+        writer.WriteBoolean(value: residue.UpNeedsReseat);
+        writer.WriteInt64(value: residue.FieldUpTurnRemainder);
+        writer.WriteInt64(value: residue.ContactUpTurnRemainder);
+        writer.WriteBoolean(value: residue.PlanarFollowerSeeded);
+        writer.WriteBoolean(value: residue.VerticalFollowerSeeded);
+        WriteAttachmentResidue(
+            writer: writer,
+            residue: residue.Attachment
+        );
     }
     private static WorldBody.IntegrationResidue ReadResidue(ref WireReader reader) {
         var previousPosition = reader.ReadFixedVector();
@@ -935,14 +946,26 @@ public static partial class WorldAuthorityCheckpointCodec {
             readValue: static (ref WireReader r) => r.ReadUInt64()
         );
         var affectingSubject = reader.ReadInt32();
+        var frame = reader.ReadFixedQuaternion();
+        var upNeedsReseat = reader.ReadBoolean();
+        var fieldUpTurnRemainder = reader.ReadInt64();
+        var contactUpTurnRemainder = reader.ReadInt64();
+        var planarFollowerSeeded = reader.ReadBoolean();
+        var verticalFollowerSeeded = reader.ReadBoolean();
+        var attachment = ReadAttachmentResidue(reader: ref reader);
 
         return new WorldBody.IntegrationResidue(
             AffectingSubject: affectingSubject,
+            Attachment: attachment,
+            ContactUpTurnRemainder: contactUpTurnRemainder,
             ContinuumConsumedThroughEngineTick: continuumConsumedThroughEngineTick,
             Engaged: engaged,
             EngagedIntent: engagedIntent,
+            FieldUpTurnRemainder: fieldUpTurnRemainder,
+            Frame: frame,
             Grounded: grounded,
             OrdinaryAdvanceAdmitted: ordinaryAdvanceAdmitted,
+            PlanarFollowerSeeded: planarFollowerSeeded,
             PositionRemainderX: positionRemainderX,
             PositionRemainderY: positionRemainderY,
             PositionRemainderZ: positionRemainderZ,
@@ -951,7 +974,86 @@ public static partial class WorldAuthorityCheckpointCodec {
             RotationRemainderY: rotationRemainderY,
             RotationRemainderZ: rotationRemainderZ,
             Up: up,
+            UpNeedsReseat: upNeedsReseat,
+            VerticalFollowerSeeded: verticalFollowerSeeded,
             VerticalVelocityRemainder: verticalVelocityRemainder
+        );
+    }
+    private static void WriteAttachmentResidue(WireWriter writer, WorldBody.AttachmentResidue residue) {
+        writer.WriteByte(value: ((byte)residue.Mode));
+        writer.WriteBoolean(value: residue.AttachPreviousBit);
+        writer.WriteBoolean(value: residue.DetachPreviousBit);
+        writer.WriteFixedVector(value: residue.ClimbAnchor);
+        writer.WriteFixedVector(value: residue.ClimbNormal);
+        writer.WriteFixedVector(value: residue.ClimbTangentRight);
+        writer.WriteFixedVector(value: residue.ClimbTangentUp);
+        writer.WriteFixedVector(value: residue.ClimbVelocity);
+        writer.WriteInt64(value: residue.ClimbRemainderX);
+        writer.WriteInt64(value: residue.ClimbRemainderY);
+        writer.WriteInt64(value: residue.ClimbRemainderZ);
+        writer.WriteBoolean(value: residue.ClimbGrantedByOverride);
+        writer.WriteBoolean(value: residue.Tether.HasValue);
+
+        if (residue.Tether is { } tether) {
+            writer.WriteFixed(value: tether.Length);
+            writer.WriteFixed(value: tether.MinLength);
+            writer.WriteInt64(value: tether.Remainder);
+        }
+
+        writer.WriteInt32(value: residue.TetherAnchorBodyIndex);
+        writer.WriteFixedVector(value: residue.TetherAnchorPointOrLocalOffset);
+    }
+    private static WorldBody.AttachmentResidue ReadAttachmentResidue(ref WireReader reader) {
+        var mode = ((WorldBodyAttachmentMode)reader.ReadByte());
+
+        if (
+            !reader.Failed &&
+            !Enum.IsDefined(value: mode)
+        ) {
+            reader.Fail(
+                detail: $"{nameof(WorldBodyAttachmentMode)} wire value {((byte)mode)} is not declared",
+                refusal: WireRefusal.EnumValueUnknown
+            );
+        }
+
+        var attachPreviousBit = reader.ReadBoolean();
+        var detachPreviousBit = reader.ReadBoolean();
+        var climbAnchor = reader.ReadFixedVector();
+        var climbNormal = reader.ReadFixedVector();
+        var climbTangentRight = reader.ReadFixedVector();
+        var climbTangentUp = reader.ReadFixedVector();
+        var climbVelocity = reader.ReadFixedVector();
+        var climbRemainderX = reader.ReadInt64();
+        var climbRemainderY = reader.ReadInt64();
+        var climbRemainderZ = reader.ReadInt64();
+        var climbGrantedByOverride = reader.ReadBoolean();
+        var tether = (reader.ReadBoolean()
+            ? new FixedTetherConstraintState(
+                Length: reader.ReadFixed(),
+                MinLength: reader.ReadFixed(),
+                Remainder: reader.ReadInt64()
+            )
+            : (FixedTetherConstraintState?)null
+        );
+        var tetherAnchorBodyIndex = reader.ReadInt32();
+        var tetherAnchorPointOrLocalOffset = reader.ReadFixedVector();
+
+        return new WorldBody.AttachmentResidue(
+            Mode: mode,
+            AttachPreviousBit: attachPreviousBit,
+            DetachPreviousBit: detachPreviousBit,
+            ClimbAnchor: climbAnchor,
+            ClimbNormal: climbNormal,
+            ClimbTangentRight: climbTangentRight,
+            ClimbTangentUp: climbTangentUp,
+            ClimbVelocity: climbVelocity,
+            ClimbRemainderX: climbRemainderX,
+            ClimbRemainderY: climbRemainderY,
+            ClimbRemainderZ: climbRemainderZ,
+            ClimbGrantedByOverride: climbGrantedByOverride,
+            Tether: tether,
+            TetherAnchorBodyIndex: tetherAnchorBodyIndex,
+            TetherAnchorPointOrLocalOffset: tetherAnchorPointOrLocalOffset
         );
     }
 }

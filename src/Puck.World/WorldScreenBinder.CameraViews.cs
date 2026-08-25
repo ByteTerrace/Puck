@@ -42,7 +42,7 @@ internal sealed partial class WorldScreenBinder {
             view.AnchorSource = new RankedAnchorSource(
                 owner: this,
                 camera: camera,
-                slot: (seat - 1)
+                slot: PlayerRoster.SlotFromDisplay(number: seat)
             );
             view.AnchorIdSource = static () => 0;
             CompileCameraRig(

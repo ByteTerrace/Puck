@@ -95,15 +95,15 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
             return CommandResult.Error(output: "[player.bind: expected <seat> <source> <destination> [scale:<value>|value:<value>] — seat 1..4; <source> may be chord:<m1>+<m2> (press order) or held:<m1>+<m2> (any order), either as <prefix>:<group>:<m1>+<m2>; <destination> a command name or channel:<name>]");
         }
 
-        if (!WorldArgs.TryParseIndex(
-            args: args,
+        var (seatSlot, seatError) = SeatCommandArgs.ResolveSlot(
+            args: in args,
             at: 0,
-            fallback: null,
-            max: PlayerRoster.MaxSlots,
-            min: 1,
-            value: out var seat
-        )) {
-            return CommandResult.Error(output: $"[player.bind: <seat> must be an integer 1..{PlayerRoster.MaxSlots}]");
+            context: context,
+            verb: "player.bind"
+        );
+
+        if (seatError is { } seatRefusal) {
+            return seatRefusal;
         }
 
         var source = args[1].ToString();
@@ -159,15 +159,10 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
                     return CommandResult.Error(output: "[player.bind: scale:<value> is only meaningful beside a channel destination]");
                 }
 
-                if (
-                    !float.TryParse(
-                    s: token.AsSpan(start: ScaleTokenPrefix.Length),
-                    style: System.Globalization.NumberStyles.Float,
-                    provider: System.Globalization.CultureInfo.InvariantCulture,
-                    result: out var parsedScale
-                ) ||
-                    !float.IsFinite(f: parsedScale)
-                ) {
+                if (!CommandArgs.TryParseFloat(
+                    text: token.AsSpan(start: ScaleTokenPrefix.Length),
+                    value: out var parsedScale
+                )) {
                     return CommandResult.Error(output: "[player.bind: expected scale:<value> as the fourth argument]");
                 }
 
@@ -188,15 +183,10 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
                     return CommandResult.Error(output: $"[player.bind: value:<value> only applies to a destination whose declared value kind is Axis1D — '{command}' takes {destinationMetadata.ValueKind.ToString().ToLowerInvariant()}]");
                 }
 
-                if (
-                    !float.TryParse(
-                    s: token.AsSpan(start: ValueTokenPrefix.Length),
-                    style: System.Globalization.NumberStyles.Float,
-                    provider: System.Globalization.CultureInfo.InvariantCulture,
-                    result: out var parsedValue
-                ) ||
-                    !float.IsFinite(f: parsedValue)
-                ) {
+                if (!CommandArgs.TryParseFloat(
+                    text: token.AsSpan(start: ValueTokenPrefix.Length),
+                    value: out var parsedValue
+                )) {
                     return CommandResult.Error(output: "[player.bind: expected value:<value> as the fourth argument]");
                 }
 
@@ -204,7 +194,7 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
             }
         }
 
-        var slot = PlayerRoster.SlotFromDisplay(number: seat);
+        var slot = seatSlot;
         var current = m_seatBindings.SessionRebind(slot: slot);
         var restingPage = m_seatBindings.RestingPage(slot: slot);
         BindingProfileDocument rebind;
@@ -320,27 +310,26 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
             slot: slot
         );
 
-        return new CommandResult(Output: $"[player.bind: seat {seat} '{source}' → '{destinationLabel}' (unsaved — identity.bindings.save to persist)]");
+        return new CommandResult(Output: $"[player.bind: seat {PlayerRoster.DisplayNumber(slot: slot)} '{source}' → '{destinationLabel}' (unsaved — identity.bindings.save to persist)]");
     }
     private CommandResult BindingsHandler(CommandContext context, WireArgs args) {
         if (args.Count > 1) {
             return CommandResult.Error(output: "[player.bindings: expected at most 1 value — an optional seat index]");
         }
 
-        if (!WorldArgs.TryParseIndex(
-            args: args,
+        var (slot, error) = SeatCommandArgs.ResolveSlot(
+            args: in args,
             at: 0,
-            fallback: 1,
-            max: PlayerRoster.MaxSlots,
-            min: 1,
-            value: out var seat
-        )) {
-            return CommandResult.Error(output: $"[player.bindings: seat must be an integer 1..{PlayerRoster.MaxSlots}]");
+            context: context,
+            verb: "player.bindings"
+        );
+
+        if (error is { } refusal) {
+            return refusal;
         }
 
-        var slot = PlayerRoster.SlotFromDisplay(number: seat);
         var document = m_seatBindings.ComposedDocument(slot: slot);
-        var builder = new StringBuilder(value: $"[player.bindings: seat {seat}");
+        var builder = new StringBuilder(value: $"[player.bindings: seat {PlayerRoster.DisplayNumber(slot: slot)}");
         var defaultGroup = ((document.Chords is { Count: > 0 } chords)
             ? (string)chords[0].Group
             : string.Empty
@@ -592,25 +581,23 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
             return CommandResult.Error(output: "[identity.bindings.save: expected at most 1 value — an optional seat index]");
         }
 
-        if (!WorldArgs.TryParseIndex(
-            args: args,
+        var (slot, error) = SeatCommandArgs.ResolveSlot(
+            args: in args,
             at: 0,
-            fallback: 1,
-            max: PlayerRoster.MaxSlots,
-            min: 1,
-            value: out var seat
-        )) {
-            return CommandResult.Error(output: $"[identity.bindings.save: seat must be an integer 1..{PlayerRoster.MaxSlots}]");
+            context: context,
+            verb: "identity.bindings.save"
+        );
+
+        if (error is { } refusal) {
+            return refusal;
         }
 
-        var slot = PlayerRoster.SlotFromDisplay(number: seat);
-
         if (m_roster.ProfileAt(slot: slot) is not { } profile) {
-            return CommandResult.Error(output: $"[identity.bindings.save: seat {seat} is not joined — see world.players]");
+            return CommandResult.Error(output: $"[identity.bindings.save: seat {PlayerRoster.DisplayNumber(slot: slot)} is not joined — see world.players]");
         }
 
         if (m_seatBindings.SessionRebind(slot: slot) is not { } session) {
-            return CommandResult.Error(output: $"[identity.bindings.save: seat {seat} has no unsaved rebinds]");
+            return CommandResult.Error(output: $"[identity.bindings.save: seat {PlayerRoster.DisplayNumber(slot: slot)} has no unsaved rebinds]");
         }
 
         // Fold the session rebinds into the identity's existing binding layer (or start one) and persist directly
@@ -637,7 +624,7 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
             slot: slot
         );
         RefreshSeatsBoundTo(profileId: profile.Id);
-        return new CommandResult(Output: $"[identity.bindings.save: seat {seat} → world:{profile.Id}]");
+        return new CommandResult(Output: $"[identity.bindings.save: seat {PlayerRoster.DisplayNumber(slot: slot)} → world:{profile.Id}]");
     }
     private CommandResult SignalHandler(CommandContext context, WireArgs args) {
         if (args.Count is not (2 or 3)) {
@@ -693,11 +680,9 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
         )) {
             phase = CommandPhase.Completed;
             value = CommandValue.Digital(active: false);
-        } else if (float.TryParse(
-            s: args[1],
-            style: System.Globalization.NumberStyles.Float,
-            provider: System.Globalization.CultureInfo.InvariantCulture,
-            result: out var sample
+        } else if (args.TryFloat(
+            index: 1,
+            value: out var sample
         )) {
             phase = CommandPhase.Active;
             value = CommandValue.Axis(value: sample);
@@ -900,8 +885,8 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
             bindability: CommandBindability.Unbindable,
             name: "world.affordances",
             description: "Echoes the affordance manifest — every dispatchable command with its declared value kind, routing, and BINDABILITY — as one compact JSON array sorted by name: world.affordances. This is the SINGLE machine-readable vocabulary binding documents are validated against: a binding entry naming a command absent from this list, sending it the wrong value kind, or naming one whose \\\"bindable\\\" is false (an authority verb — the world grant/mutation surface, the editor apply paths, profile administration) is refused loudly at player.bind, at world.row.set bindingOverlays, at every recompose, and by the document validators, instead of resolving to a silently dead key or a reachable escalation. Immediate.",
-            handler: (_, args) => ((args.Count > 0)
-            ? CommandResult.Error(output: "[world.affordances: expected no arguments]")
+            handler: (_, args) => ((CommandResult.RequireNoArguments(args: args, verb: "world.affordances") is { } refusal)
+            ? refusal
             : new CommandResult(Output: DescribeAffordances()))
         );
         yield return CommandDefinition.WithWireArgs(

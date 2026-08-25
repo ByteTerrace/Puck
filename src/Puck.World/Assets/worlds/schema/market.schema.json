@@ -34,31 +34,8 @@
       "type": "number",
       "default": 86400
     },
-    "admissionTiers": {
-      "description": "The declared per-tier admission rules (see WorldMarketAdmissionTier) \u2014 validated and round-tripped, locally inert.",
-      "type": [
-        "array",
-        "null"
-      ],
-      "items": {
-        "description": "One per-tier admission rule a WorldMarketSection may declare. Validated and round-tripped today; not yet consulted by any listing/bid/buyout compose arm \u2014 LOCAL enforcement is admit-everyone (the trivial self-mint posture the fact vocabulary\u0027s Provenance also takes), and a federated authority is expected to consult this row before it enforces attestation.",
-        "type": "object",
-        "properties": {
-          "name": {
-            "description": "The tier\u0027s stable name, unique within the section.",
-            "type": "string"
-          },
-          "requireAttestation": {
-            "description": "Whether a participant must carry a ring attestation to trade under this tier \u2014 authored now, inert until federation reads it.",
-            "type": "boolean"
-          }
-        },
-        "additionalProperties": false
-      },
-      "default": null
-    },
     "listings": {
-      "description": "The live listing ledger \u2014 engine- and player-mutated, never re-seeded from the document on boot the way Formats/AdmissionTiers are (matches groups\u0027 authored-vs-runtime split for its own WorldOwnership rows).",
+      "description": "The live listing ledger \u2014 engine- and player-mutated, never re-seeded from the document on boot the way Formats is (matches groups\u0027 authored-vs-runtime split for its own WorldOwnership rows).",
       "type": [
         "array",
         "null"

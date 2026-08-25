@@ -239,21 +239,10 @@ public sealed partial class WorldServer {
             }
         }
     }
-    // Reads a market fact cell, defaulting to zero for a holder who has never traded — the SAME "absent key ==
-    // zero" convention UpsertStateCell's own Add operand already follows.
-    private static long ReadMarketCellValue(WorldDefinition definition, WorldCellName row, string key, ulong tick) {
-        _ = WorldStateReader.TryRead(
-            definition: definition,
-            key: key,
-            rawValue: out var raw,
-            row: out _,
-            rowName: row,
-            text: out _,
-            tick: tick
-        );
-
-        return (raw ?? 0L);
-    }
+    private static WorldEconomicCell MarketCell(WorldCellName row, string key) => new(
+        Row: row,
+        Key: WorldCellName.Parse(candidate: key)
+    );
     // ESCROW RECOVERY — the "recovery is a LIFETIME RULE" half of the escrow/transfer lane, run every tick right
     // beside world-rule evaluation (deterministic, tick-driven, no wall clock — the SAME $tick unit a rule's own
     // gate would compare against). Fires an ordinary SettleOwnership(Reclaim: true) under WorldPrincipal.World — the
@@ -402,18 +391,16 @@ public sealed partial class WorldServer {
             return false;
         }
 
-        // A standing bidder buying themselves out only owes the difference — their own escrowed bid is refunded
-        // and re-spent in the SAME move, never round-tripped through a separate refund the caller could observe.
+        var settlement = new WorldEconomicSettlement(source: current, tick: tick);
+        var buyerCell = MarketCell(row: listing.CurrencyRow, key: buyerKey);
+
+        // A standing bidder buying themselves out only owes the difference — their own escrowed bid is released and
+        // re-spent inside this one settlement, never published as a separate refund.
         var refundToSelf = ((listing.CurrentBidder == mutation.Buyer)
             ? listing.CurrentBid
             : 0L
         );
-        var buyerBalance = ReadMarketCellValue(
-            definition: current,
-            row: listing.CurrencyRow,
-            key: buyerKey,
-            tick: tick
-        );
+        _ = settlement.TryBalance(cell: buyerCell, balance: out var buyerBalance);
         var effectiveCost = (buyoutPrice - refundToSelf);
 
         if (buyerBalance < effectiveCost) {
@@ -422,82 +409,64 @@ public sealed partial class WorldServer {
             return false;
         }
 
-        var state = WriteMarketCell(
-            rows: current.State,
-            rowName: listing.CurrencyRow,
-            key: buyerKey,
-            value: (buyerBalance - effectiveCost)
-        );
-
         if (
             (listing.CurrentBidder is { } previousBidder) &&
-            (previousBidder != mutation.Buyer) &&
             TryPlayerCellKey(
             key: out var previousKey,
             principal: previousBidder
         )
         ) {
-            var previousBalance = ReadMarketCellValue(
-                definition: current.WithWorldState(rows: state),
-                row: listing.CurrencyRow,
-                key: previousKey,
-                tick: tick
-            );
-
-            state = WriteMarketCell(
-                rows: state,
-                rowName: listing.CurrencyRow,
-                key: previousKey,
-                value: (previousBalance + listing.CurrentBid)
+            _ = settlement.Release(row: listing.CurrencyRow, amount: listing.CurrentBid);
+            _ = settlement.Credit(
+                cell: MarketCell(row: listing.CurrencyRow, key: previousKey),
+                amount: listing.CurrentBid
             );
         }
+
+        _ = settlement.Debit(
+            cell: buyerCell,
+            amount: buyoutPrice,
+            insufficientReason: $"buyer holds {buyerBalance} of '{listing.CurrencyRow}', short of the {effectiveCost} needed"
+        );
 
         var fee = MarketFee(
             amount: buyoutPrice,
             feeBasisPoints: market.FeeBasisPoints
         );
-        var sellerBalance = ReadMarketCellValue(
-            definition: current.WithWorldState(rows: state),
+        _ = settlement.Credit(
+            cell: MarketCell(row: listing.CurrencyRow, key: sellerKey),
+            amount: (buyoutPrice - fee)
+        );
+        _ = settlement.Reserve(
             row: listing.CurrencyRow,
-            key: sellerKey,
-            tick: tick
+            amount: fee
         );
-
-        state = WriteMarketCell(
-            rows: state,
-            rowName: listing.CurrencyRow,
-            key: sellerKey,
-            value: (sellerBalance + (buyoutPrice - fee))
-        );
-
-        var buyerItemBalance = ReadMarketCellValue(
-            definition: current.WithWorldState(rows: state),
+        _ = settlement.Release(
             row: listing.ItemRow,
-            key: buyerKey,
-            tick: tick
+            amount: listing.Quantity
         );
-
-        state = WriteMarketCell(
-            rows: state,
-            rowName: listing.ItemRow,
-            key: buyerKey,
-            value: (buyerItemBalance + listing.Quantity)
+        _ = settlement.Credit(
+            cell: MarketCell(row: listing.ItemRow, key: buyerKey),
+            amount: listing.Quantity
         );
 
         var updatedListing = (listing with { Status = WorldMarketListingStatus.Settled, ResolvedTick = unchecked((long)tick) });
 
-        candidate = (current.WithWorldState(rows: state) with {
-            Market = (market with {
-                Listings = Upsert(
-            list: (market.Listings ?? []),
-            item: updatedListing,
-            keyOf: static (WorldMarketListing l) => l.Id
-        ),
-                FeeReserve = (market.FeeReserve + fee),
+        return settlement.TryApply(
+            complete: stateCandidate => (stateCandidate with {
+                Market = (market with {
+                    Listings = Upsert(
+                        list: (market.Listings ?? []),
+                        item: updatedListing,
+                        keyOf: static (WorldMarketListing l) => l.Id
+                    ),
+                    FeeReserve = (market.FeeReserve + fee),
+                }),
             }),
-        });
-
-        return true;
+            candidate: out candidate,
+            receipt: out _,
+            reason: out reason
+        );
     }
     // market.cancel — withdraws a listing, returning the escrowed item to the seller and refunding any standing
     // English bidder, all in the SAME candidate. Seller-only.
@@ -545,17 +514,15 @@ public sealed partial class WorldServer {
             return false;
         }
 
-        var sellerItemBalance = ReadMarketCellValue(
-            definition: current,
+        var settlement = new WorldEconomicSettlement(source: current, tick: tick);
+
+        _ = settlement.Release(
             row: listing.ItemRow,
-            key: sellerKey,
-            tick: tick
+            amount: listing.Quantity
         );
-        var state = WriteMarketCell(
-            rows: current.State,
-            rowName: listing.ItemRow,
-            key: sellerKey,
-            value: (sellerItemBalance + listing.Quantity)
+        _ = settlement.Credit(
+            cell: MarketCell(row: listing.ItemRow, key: sellerKey),
+            amount: listing.Quantity
         );
 
         if (
@@ -565,18 +532,13 @@ public sealed partial class WorldServer {
             principal: bidder
         )
         ) {
-            var bidderBalance = ReadMarketCellValue(
-                definition: current.WithWorldState(rows: state),
+            _ = settlement.Release(
                 row: listing.CurrencyRow,
-                key: bidderKey,
-                tick: tick
+                amount: listing.CurrentBid
             );
-
-            state = WriteMarketCell(
-                rows: state,
-                rowName: listing.CurrencyRow,
-                key: bidderKey,
-                value: (bidderBalance + listing.CurrentBid)
+            _ = settlement.Credit(
+                cell: MarketCell(row: listing.CurrencyRow, key: bidderKey),
+                amount: listing.CurrentBid
             );
         }
 
@@ -589,9 +551,12 @@ public sealed partial class WorldServer {
         ),
         });
 
-        candidate = (current.WithWorldState(rows: state) with { Market = newMarket });
-
-        return true;
+        return settlement.TryApply(
+            complete: stateCandidate => (stateCandidate with { Market = newMarket }),
+            candidate: out candidate,
+            receipt: out _,
+            reason: out reason
+        );
     }
     // market.list — escrows Quantity out of the seller's own ItemRow cell atomically with minting the listing row.
     private static bool TryComposeCreateMarketListing(WorldDefinition current, WorldMutation.CreateMarketListing mutation, ulong tick, out WorldDefinition candidate, out string reason) {
@@ -731,12 +696,10 @@ public sealed partial class WorldServer {
             return false;
         }
 
-        var sellerBalance = ReadMarketCellValue(
-            definition: current,
-            row: mutation.ItemRow,
-            key: sellerKey,
-            tick: tick
-        );
+        var settlement = new WorldEconomicSettlement(source: current, tick: tick);
+        var sellerCell = MarketCell(row: mutation.ItemRow, key: sellerKey);
+
+        _ = settlement.TryBalance(cell: sellerCell, balance: out var sellerBalance);
 
         if (sellerBalance < mutation.Quantity) {
             reason = $"seller holds {sellerBalance} of '{mutation.ItemRow}', short of the {mutation.Quantity} listed";
@@ -750,11 +713,14 @@ public sealed partial class WorldServer {
         );
         var deadlineTick = unchecked((((long)tick) + ((long)durationTicks)));
 
-        var state = WriteMarketCell(
-            rows: current.State,
-            rowName: mutation.ItemRow,
-            key: sellerKey,
-            value: (sellerBalance - mutation.Quantity)
+        _ = settlement.Debit(
+            cell: sellerCell,
+            amount: mutation.Quantity,
+            insufficientReason: $"seller holds {sellerBalance} of '{mutation.ItemRow}', short of the {mutation.Quantity} listed"
+        );
+        _ = settlement.Reserve(
+            row: mutation.ItemRow,
+            amount: mutation.Quantity
         );
 
         var listing = new WorldMarketListing(
@@ -778,9 +744,12 @@ public sealed partial class WorldServer {
             NextListingId = (market.NextListingId + 1),
         });
 
-        candidate = (current.WithWorldState(rows: state) with { Market = newMarket });
-
-        return true;
+        return settlement.TryApply(
+            complete: stateCandidate => (stateCandidate with { Market = newMarket }),
+            candidate: out candidate,
+            receipt: out _,
+            reason: out reason
+        );
     }
     // market.bid — escrows Amount out of the bidder's own currency cell, refunding any standing bidder in the SAME
     // candidate. English format only. A standing bidder raising their OWN bid is netted against their own standing
@@ -869,12 +838,10 @@ public sealed partial class WorldServer {
             : mutation.Amount
         );
 
-        var bidderBalance = ReadMarketCellValue(
-            definition: current,
-            row: listing.CurrencyRow,
-            key: bidderKey,
-            tick: tick
-        );
+        var settlement = new WorldEconomicSettlement(source: current, tick: tick);
+        var bidderCell = MarketCell(row: listing.CurrencyRow, key: bidderKey);
+
+        _ = settlement.TryBalance(cell: bidderCell, balance: out var bidderBalance);
 
         if (bidderBalance < netCharge) {
             reason = (isSelfRaise
@@ -885,11 +852,13 @@ public sealed partial class WorldServer {
             return false;
         }
 
-        var state = WriteMarketCell(
-            rows: current.State,
-            rowName: listing.CurrencyRow,
-            key: bidderKey,
-            value: (bidderBalance - netCharge)
+        _ = settlement.Debit(
+            cell: bidderCell,
+            amount: netCharge,
+            insufficientReason: (isSelfRaise
+                ? $"bidder holds {bidderBalance} of '{listing.CurrencyRow}', short of the {netCharge} additional needed to raise from {listing.CurrentBid} to {mutation.Amount}"
+                : $"bidder holds {bidderBalance} of '{listing.CurrencyRow}', short of the {mutation.Amount} bid"
+            )
         );
 
         if (
@@ -900,20 +869,20 @@ public sealed partial class WorldServer {
             principal: previousBidder
         )
         ) {
-            var previousBalance = ReadMarketCellValue(
-                definition: current.WithWorldState(rows: state),
+            _ = settlement.Release(
                 row: listing.CurrencyRow,
-                key: previousKey,
-                tick: tick
+                amount: listing.CurrentBid
             );
-
-            state = WriteMarketCell(
-                rows: state,
-                rowName: listing.CurrencyRow,
-                key: previousKey,
-                value: (previousBalance + listing.CurrentBid)
+            _ = settlement.Credit(
+                cell: MarketCell(row: listing.CurrencyRow, key: previousKey),
+                amount: listing.CurrentBid
             );
         }
+
+        _ = settlement.Reserve(
+            row: listing.CurrencyRow,
+            amount: (isSelfRaise ? netCharge : mutation.Amount)
+        );
 
         var updatedListing = (listing with { CurrentBid = mutation.Amount, CurrentBidder = mutation.Bidder });
         var newMarket = (market with {
@@ -924,9 +893,12 @@ public sealed partial class WorldServer {
         ),
         });
 
-        candidate = (current.WithWorldState(rows: state) with { Market = newMarket });
-
-        return true;
+        return settlement.TryApply(
+            complete: stateCandidate => (stateCandidate with { Market = newMarket }),
+            candidate: out candidate,
+            receipt: out _,
+            reason: out reason
+        );
     }
     // market retention sweep — removes every terminal (settled/cancelled/expired) row whose ResolvedTick lies at
     // least market.retentionSeconds (converted the same way a listing's own duration becomes its DeadlineTick)
@@ -1041,116 +1013,80 @@ public sealed partial class WorldServer {
             principal: winner
         )
         ) {
+            var settlement = new WorldEconomicSettlement(source: current, tick: tick);
             var fee = MarketFee(
                 amount: listing.CurrentBid,
                 feeBasisPoints: market.FeeBasisPoints
             );
-            var sellerBalance = ReadMarketCellValue(
-                definition: current,
+            _ = settlement.Release(
                 row: listing.CurrencyRow,
-                key: sellerKey,
-                tick: tick
+                amount: listing.CurrentBid
             );
-            var state = WriteMarketCell(
-                rows: current.State,
-                rowName: listing.CurrencyRow,
-                key: sellerKey,
-                value: (sellerBalance + (listing.CurrentBid - fee))
+            _ = settlement.Credit(
+                cell: MarketCell(row: listing.CurrencyRow, key: sellerKey),
+                amount: (listing.CurrentBid - fee)
             );
-            var winnerItemBalance = ReadMarketCellValue(
-                definition: current.WithWorldState(rows: state),
+            _ = settlement.Reserve(
+                row: listing.CurrencyRow,
+                amount: fee
+            );
+            _ = settlement.Release(
                 row: listing.ItemRow,
-                key: winnerKey,
-                tick: tick
+                amount: listing.Quantity
             );
-
-            state = WriteMarketCell(
-                rows: state,
-                rowName: listing.ItemRow,
-                key: winnerKey,
-                value: (winnerItemBalance + listing.Quantity)
+            _ = settlement.Credit(
+                cell: MarketCell(row: listing.ItemRow, key: winnerKey),
+                amount: listing.Quantity
             );
 
             var settled = (listing with { Status = WorldMarketListingStatus.Settled, ResolvedTick = unchecked((long)tick) });
 
-            candidate = (current.WithWorldState(rows: state) with {
-                Market = (market with {
-                    Listings = Upsert(
-                list: (market.Listings ?? []),
-                item: settled,
-                keyOf: static (WorldMarketListing l) => l.Id
-            ),
-                    FeeReserve = (market.FeeReserve + fee),
+            return settlement.TryApply(
+                complete: stateCandidate => (stateCandidate with {
+                    Market = (market with {
+                        Listings = Upsert(
+                            list: (market.Listings ?? []),
+                            item: settled,
+                            keyOf: static (WorldMarketListing l) => l.Id
+                        ),
+                        FeeReserve = (market.FeeReserve + fee),
+                    }),
                 }),
-            });
-
-            return true;
+                candidate: out candidate,
+                receipt: out _,
+                reason: out reason
+            );
         }
 
         // No bid ever landed — expiry, not a sale: return the escrowed item.
-        var sellerItemBalance = ReadMarketCellValue(
-            definition: current,
+        var expiry = new WorldEconomicSettlement(source: current, tick: tick);
+
+        _ = expiry.Release(
             row: listing.ItemRow,
-            key: sellerKey,
-            tick: tick
+            amount: listing.Quantity
         );
-        var expiredState = WriteMarketCell(
-            rows: current.State,
-            rowName: listing.ItemRow,
-            key: sellerKey,
-            value: (sellerItemBalance + listing.Quantity)
+        _ = expiry.Credit(
+            cell: MarketCell(row: listing.ItemRow, key: sellerKey),
+            amount: listing.Quantity
         );
         var expired = (listing with { Status = WorldMarketListingStatus.Expired, ResolvedTick = unchecked((long)tick) });
 
-        candidate = (current.WithWorldState(rows: expiredState) with {
-            Market = (market with {
-                Listings = Upsert(
-            list: (market.Listings ?? []),
-            item: expired,
-            keyOf: static (WorldMarketListing l) => l.Id
-        ),
+        return expiry.TryApply(
+            complete: stateCandidate => (stateCandidate with {
+                Market = (market with {
+                    Listings = Upsert(
+                        list: (market.Listings ?? []),
+                        item: expired,
+                        keyOf: static (WorldMarketListing l) => l.Id
+                    ),
+                }),
             }),
-        });
-
-        return true;
-    }
-    // Writes a market fact cell's quantity/balance, preserving whatever Advance/Dynamics/Provenance the cell already
-    // carried (a market move is a value write, never a re-mint) — the SAME base-value-write-preserves-trait rule
-    // UpsertStateCell's own compose arm follows. Assumes `rowName` already resolved against `rows` (every caller
-    // validates existence first); the row's declared envelope (Min/Max/NonNegative) is left to the whole-document
-    // revalidation TryApplyMutation runs after compose, exactly like every other state write here.
-    private static IReadOnlyList<WorldStateRow> WriteMarketCell(IReadOnlyList<WorldStateRow> rows, WorldCellName rowName, string key, long value) {
-        var row = WorldDefinitionRows.FindStateRow(
-            name: rowName,
-            rows: rows
-        )!;
-        var cellKey = WorldCellName.Parse(candidate: key);
-        var existingCell = WorldDefinitionRows.FindCell(
-            cells: row.Cells,
-            key: cellKey
-        );
-        var existingAdvance = existingCell?.Advance;
-        var existingDynamics = existingCell?.Dynamics;
-        var existingProvenance = existingCell?.Provenance;
-        var cells = Upsert(
-            list: (row.Cells ?? []),
-            item: new WorldStateCell(
-                Key: cellKey,
-                Value: value,
-                Advance: existingAdvance,
-                Provenance: existingProvenance,
-                Dynamics: existingDynamics
-            ),
-            keyOf: static (WorldStateCell cell) => cell.Key
-        );
-
-        return Upsert(
-            list: rows,
-            item: (row with { Cells = cells }),
-            keyOf: static (WorldStateRow r) => r.Name
+            candidate: out candidate,
+            receipt: out _,
+            reason: out reason
         );
     }
 
-    // One (row, key) cell a market compose arm wrote through WriteMarketCell.
+    // One (row, key) cell a market compose arm settled through WorldEconomicSettlement.
     private readonly record struct MarketCellTouch(WorldCellName Row, string Key);
 }

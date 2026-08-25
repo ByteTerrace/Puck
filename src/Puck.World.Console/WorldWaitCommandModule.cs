@@ -33,11 +33,9 @@ public sealed class WorldWaitCommandModule(IWorldConsoleAuthority authority, IWo
                     return CommandResult.Error(output: "[world.wait: expected exactly one value — <ticks>]");
                 }
 
-                if (!ulong.TryParse(
-                    s: args[0],
-                    style: NumberStyles.None,
-                    provider: CultureInfo.InvariantCulture,
-                    result: out var ticks
+                if (!args.TryULong(
+                    index: 0,
+                    value: out var ticks
                 )) {
                     return CommandResult.Error(output: $"[world.wait: '{args[0]}' is not a whole number of ticks]");
                 }

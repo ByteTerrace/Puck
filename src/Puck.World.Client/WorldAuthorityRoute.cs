@@ -9,4 +9,7 @@ namespace Puck.World.Client;
 /// </summary>
 public sealed record WorldAuthorityRoute(WorldAuthorityEndpoint Endpoint, WorldEntityAddress Entity, ulong Epoch) {
     public int EntityIndex => Entity.Index;
+    /// <summary>The routed endpoint's own 1-based entity index — the shape a routed read-back query carries so its
+    /// Observe grant check narrows to the one subject a routed seat is always seeded with.</summary>
+    public int QueryIndex => (EntityIndex + 1);
 }

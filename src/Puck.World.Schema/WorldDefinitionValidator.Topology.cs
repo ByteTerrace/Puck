@@ -326,8 +326,8 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: exception.Message);
         }
     }
-    // The market section: null IS today's no-market world. A declared section validates its config (formats/fee/
-    // duration bounds/admission tiers) and its live listing ledger. A listing's item/currency rows must already be
+    // The market section: null IS today's no-market world. A declared section validates its config (formats, fee,
+    // and duration bounds) and its live listing ledger. A listing's item/currency rows must already be
     // declared, Int-kind, capacity-bounded (keyed-table intent) state rows — the same rows the compose-time doors in
     // Server.WorldServer re-check before every escrow move, so an authored (or engine-composed) listing can never
     // outlive the row it depends on without this pass catching it first.
@@ -386,34 +386,6 @@ public static partial class WorldDefinitionValidator {
             for (var index = 0; (index < formats.Count); index++) {
                 if (!seenFormats.Add(item: formats[index])) {
                     errors.Add(item: $"market.formats[{index}] '{formats[index]}' is duplicated.");
-                }
-            }
-        }
-
-        if (market.AdmissionTiers is { } tiers) {
-            if (tiers.Count > WorldMarketCapacity.MaxAdmissionTiers) {
-                errors.Add(item: $"market.admissionTiers count {tiers.Count} exceeds the maximum of {WorldMarketCapacity.MaxAdmissionTiers}.");
-            }
-
-            var seenTierNames = new HashSet<string>(comparer: StringComparer.Ordinal);
-
-            for (var index = 0; (index < tiers.Count); index++) {
-                var tier = tiers[index];
-                var path = $"market.admissionTiers[{index}]";
-
-                if (
-                    !string.IsNullOrWhiteSpace(value: tier.Name) &&
-                    (tier.Name.Length > WorldStateCapacity.MaxTextValueLength)
-                ) {
-                    errors.Add(item: $"{path}.name length {tier.Name.Length} exceeds the maximum of {WorldStateCapacity.MaxTextValueLength}.");
-                } else {
-                    RequireUniqueName(
-                        value: tier.Name,
-                        seen: seenTierNames,
-                        path: path,
-                        field: "name",
-                        errors: errors
-                    );
                 }
             }
         }

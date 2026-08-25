@@ -220,10 +220,12 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
         }
         if (!TryPlayer(
             args: in args,
+            context: context,
             error: out var error,
             identity: out var identity,
             optionalAt: 1,
-            player: out var player
+            player: out var player,
+            verb: "identity.hud"
         )) {
             return CommandResult.Error(output: error);
         }
@@ -280,10 +282,12 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
         }
         if (!TryPlayer(
             args: in args,
+            context: context,
             error: out var error,
             identity: out var identity,
             optionalAt: 2,
-            player: out var player
+            player: out var player,
+            verb: "identity.motion"
         )) {
             return CommandResult.Error(output: error);
         }
@@ -319,10 +323,12 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
     private CommandResult Show(CommandContext context, WireArgs args) {
         if (!TryPlayer(
             args: in args,
+            context: context,
             error: out var error,
             identity: out var identity,
             optionalAt: 0,
-            player: out var player
+            player: out var player,
+            verb: "identity.show"
         )) {
             return CommandResult.Error(output: error);
         }
@@ -361,25 +367,33 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
         )
         );
     }
-    private bool TryPlayer(in WireArgs args, int optionalAt, out int player, out WorldIdentity? identity, out string error) {
-        player = 1;
+    private bool TryPlayer(CommandContext context, in WireArgs args, int optionalAt, string verb, out int player, out WorldIdentity? identity, out string error) {
         identity = null;
         error = string.Empty;
-        if (
-            (args.Count > optionalAt) &&
-            (!args.TryInt(
-            index: optionalAt,
-            value: out player
-        ) || (player < 1) || (player > PlayerRoster.MaxSlots))
-        ) {
-            error = $"[identity: player must be 1..{PlayerRoster.MaxSlots}]";
+
+        var (slot, seatError) = SeatCommandArgs.ResolveSlot(
+            args: in args,
+            at: optionalAt,
+            context: context,
+            verb: verb
+        );
+
+        if (seatError is { } refusal) {
+            player = 0;
+            error = refusal.Output;
+
             return false;
         }
-        identity = m_roster.ProfileAt(slot: PlayerRoster.SlotFromDisplay(number: player));
+
+        player = PlayerRoster.DisplayNumber(slot: slot);
+        identity = m_roster.ProfileAt(slot: slot);
+
         if (identity is null) {
-            error = $"[identity: player {player} is not joined]";
+            error = $"[{verb}: player {player} is not joined]";
+
             return false;
         }
+
         return true;
     }
 

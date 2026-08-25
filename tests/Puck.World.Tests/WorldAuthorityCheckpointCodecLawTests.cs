@@ -317,6 +317,24 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
         Assert.Contains(actualString: reason, expectedSubstring: "version 2");
     }
     [Fact]
+    public void Version_four_envelope_refuses_by_name() {
+        var checkpoint = CapturedCheckpoint();
+        var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
+        var downgraded = ((byte[])encoded.Clone());
+
+        // Version 4 predates checkpoint-only arbitrary-up, follower-seed, and attachment continuation state. The
+        // current decoder must reject that exact prior layout instead of reading its shorter population residue.
+        downgraded[4] = 4;
+        downgraded[5] = 0;
+
+        Assert.False(condition: WorldAuthorityCheckpointCodec.TryDecode(
+            bytes: downgraded,
+            checkpoint: out _,
+            reason: out var reason
+        ));
+        Assert.Contains(actualString: reason, expectedSubstring: "version 4");
+    }
+    [Fact]
     public async Task Capture_encode_write_load_decode_restore_reaches_an_identical_second_checkpoint() {
         var checkpoint = CapturedCheckpoint();
         var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);

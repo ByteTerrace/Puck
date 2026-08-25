@@ -16,17 +16,17 @@ internal sealed class WorldCaptureCommandModule(WorldServer server) : ICommandMo
             bindability: CommandBindability.Unbindable,
             name: "world.captures",
             description: "Reads the document's captures section (Immediate, no arguments): the resolved output directory and every station's declared tick schedule and palette-entry count. Absent captures reports an empty schedule, never a refusal.",
-            handler: (_, args) => ((args.Count == 0)
-            ? Describe()
-            : CommandResult.Error(output: "[world.captures: expected no arguments]"))
+            handler: (_, args) => ((CommandResult.RequireNoArguments(args: args, verb: "world.captures") is { } refusal)
+            ? refusal
+            : Describe())
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.state.hash",
             description: "Reads the live deterministic state hash (Immediate, no arguments): the same FNV-1a summary WorldCaptureScheduler stamps into a manifest entry — WorldReplaySnapshot.HashState's active-body pose fold, then every state.world row's declared cells (document order) chained onto it at the current tick.",
-            handler: (_, args) => ((args.Count == 0)
-            ? Hash()
-            : CommandResult.Error(output: "[world.state.hash: expected no arguments]"))
+            handler: (_, args) => ((CommandResult.RequireNoArguments(args: args, verb: "world.state.hash") is { } refusal)
+            ? refusal
+            : Hash())
         );
     }
     private CommandResult Describe() {

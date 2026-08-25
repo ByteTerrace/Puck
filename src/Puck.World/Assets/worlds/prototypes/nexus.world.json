@@ -1684,12 +1684,6 @@
     "feeBasisPoints": 250,
     "minDurationSeconds": 10,
     "maxDurationSeconds": 3600,
-    "admissionTiers": [
-      {
-        "name": "open",
-        "requireAttestation": false
-      }
-    ],
     "listings": [],
     "nextListingId": 1,
     "feeReserve": 0,

@@ -155,12 +155,15 @@ public readonly record struct WorldPrincipal(PrincipalKind Kind, int Index, stri
         Kind: PrincipalKind.Seat,
         Name: null
     );
-    /// <summary>Parses a principal token (<c>seat1</c>..<c>seat4</c> | <c>console</c> | <c>addon:&lt;name&gt;</c> |
-    /// <c>peer:&lt;n&gt;:&lt;generation&gt;</c>) — shared by <c>Puck.World.WorldPrincipalJsonConverter</c> and
-    /// <c>Puck.World.WorldGrantCommandModule</c>'s <c>world.grant</c>/<c>world.revoke</c> console verbs, so a
-    /// document-sourced principal (a <see cref="WorldGrant.Principal"/> row, an addon manifest's implicit
-    /// self-reference) always canonicalizes through the identical grammar a console token does. There is no other
-    /// way to construct a non-canonical <see cref="WorldPrincipal"/> from either surface.</summary>
+    /// <summary>The principal token grammar <see cref="TryParse"/> accepts, for a console verb's unknown-token
+    /// refusal to interpolate rather than hand-spell.</summary>
+    public const string TokenGrammar = "seat1..seat4|console|addon:<name>|peer:<n>:<generation>|document:<id>|group:<id>";
+    /// <summary>Parses a principal token (<see cref="TokenGrammar"/>) — shared by
+    /// <c>Puck.World.WorldPrincipalJsonConverter</c> and <c>Puck.World.WorldGrantCommandModule</c>'s
+    /// <c>world.grant</c>/<c>world.revoke</c> console verbs, so a document-sourced principal (a
+    /// <see cref="WorldGrant.Principal"/> row, an addon manifest's implicit self-reference) always canonicalizes
+    /// through the identical grammar a console token does. There is no other way to construct a non-canonical
+    /// <see cref="WorldPrincipal"/> from either surface.</summary>
     /// <param name="token">The token to parse.</param>
     /// <param name="principal">The parsed principal, on success.</param>
     /// <returns><see langword="true"/> when the token parsed.</returns>

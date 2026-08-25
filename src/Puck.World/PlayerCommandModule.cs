@@ -262,7 +262,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
             return (Player: null, Slot: 0, Error: $"[{verb}: instance-targeted slot must be an integer 1..{WorldBodiesLimits.LocalSeatCount}]");
         }
 
-        return ((instance.Server.Body(index: (slot - 1)) is { } body)
+        return ((instance.Server.Body(index: WorldPopulation.EntityFromDisplay(number: slot)) is { } body)
             ? (Player: body, Slot: slot, Error: null)
             : (Player: null, Slot: slot, Error: $"[{verb}: '{instance.Name}' seat {slot} is not active — see world.instance.seats]")
         );
@@ -358,33 +358,30 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
 
         var slot = index;
 
-        if (!m_roster.IsJoined(slot: slot)) {
-            return false;
-        }
-
-        var route = seatRouter.Route(slot: slot);
-
-        if (string.Equals(
+        // The boot claim's Endpoint.Submissions IS the injected local link, so routing through it would answer
+        // identically to the local arm below — this presentation-arm selector exists only so the boot path keeps
+        // its untagged output and richer local target grammar, never because routing itself would misbehave.
+        if (
+            !m_roster.IsJoined(slot: slot) ||
+            (seatRouter.TryRoute(slot: slot) is not { } route) ||
+            string.Equals(
             a: route.Endpoint.Identity,
             b: WorldInstanceHost.BootInstanceName,
             comparisonType: StringComparison.Ordinal
-        )) {
+        )
+        ) {
             return false;
         }
 
-        var routedResult = default(CommandResult);
-
-        route.Endpoint.Submissions.Query(
-            query: query(route.EntityIndex),
-            completion: answer => {
-                routedResult = new CommandResult(Output: WithInstanceTag(
-                    text: answer.Text,
-                    instanceName: route.Endpoint.Identity
-                )) { IsError = answer.Refused };
-            }
+        // The routed factory takes the SAME 0-based entity index the local arm's ResolveTarget produces — undoing
+        // the shared helper's 1-based QueryIndex, since this family's WorldQuery kinds are 0-based by convention,
+        // unlike Audio/Collision's.
+        return seatRouter.TryRouteQuery(
+            factory: authorityIndex => query((authorityIndex - 1)),
+            result: out result,
+            slot: slot,
+            tagInstance: true
         );
-        result = routedResult;
-        return true;
     }
     // Strips an optional trailing `instance:<name>` token — the addressing token that redirects join/leave/fly/stop/
     // where/pose from the boot world's roster/population onto a named running instance's own local-seat table (see

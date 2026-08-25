@@ -49,7 +49,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             );
             _ = builder.Append(
                 provider: CultureInfo.InvariantCulture,
-                handler: $"{(any ? "," : "")}seat{(slot + 1)}:{((winner >= 0) ? winner.ToString(provider: CultureInfo.InvariantCulture) : "none")}"
+                handler: $"{(any ? "," : "")}seat{PlayerRoster.DisplayNumber(slot: slot)}:{((winner >= 0) ? winner.ToString(provider: CultureInfo.InvariantCulture) : "none")}"
             );
             any = true;
         }
@@ -411,11 +411,9 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             token = token[..^1];
         }
 
-        if (!float.TryParse(
-            provider: CultureInfo.InvariantCulture,
-            result: out scale,
-            s: token,
-            style: NumberStyles.Float
+        if (!CommandArgs.TryParseFloat(
+            text: token,
+            value: out scale
         )) {
             return false;
         }
@@ -472,11 +470,9 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             token = token[..^1];
         }
 
-        if (!float.TryParse(
-            provider: CultureInfo.InvariantCulture,
-            result: out reach,
-            s: token,
-            style: NumberStyles.Float
+        if (!CommandArgs.TryParseFloat(
+            text: token,
+            value: out reach
         )) {
             return false;
         }
@@ -528,11 +524,9 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             token = token[..^1];
         }
 
-        if (!float.TryParse(
-            provider: CultureInfo.InvariantCulture,
-            result: out sharpness,
-            s: token,
-            style: NumberStyles.Float
+        if (!CommandArgs.TryParseFloat(
+            text: token,
+            value: out sharpness
         )) {
             return false;
         }
@@ -588,11 +582,9 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
                 if (args.Count >= 2) {
                     if (
-                        !float.TryParse(
-                        args[1],
-                        NumberStyles.Float,
-                        CultureInfo.InvariantCulture,
-                        out var radius
+                        !args.TryFloat(
+                        index: 1,
+                        value: out var radius
                     ) ||
                         (radius < 0f) ||
                         (radius > 100f)
@@ -944,8 +936,8 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             name: "world.budget",
             description: "Prints the compose-time cost sheet (Immediate): the live render program's packed words and instances against their frozen envelopes, the program's Lipschitz step scale with its march multiplier (1.00 = unclamped), the lattice program's node/cadence counts plus exact full-cell and body-slot passes, gravity's static source count and last deterministic solve work, the derived static placement instance count (including any Noise/Scatter distribution's resolved copies) against its authored row count, and the state row count. Every number is DERIVED from what the document declares — the sheet is how an authored choice's price becomes legible instead of a silent frame tax.",
             handler: (_, args) => {
-                if (args.Count != 0) {
-                    return CommandResult.Error(output: $"[world.budget: unrecognized '{args[0]}' — expected no arguments]");
+                if (CommandResult.RequireNoArguments(args: args, verb: "world.budget") is { } refusal) {
+                    return refusal;
                 }
 
                 var render = ((renderProbe.Node is { } node)

@@ -74,9 +74,12 @@ candidate document, revalidating the WHOLE document through
 the changed section's derived state; a failure rejects loudly and changes
 nothing. The journal is the undo engine: `world.undo` restores the loaded base
 definition and deterministically replays the journal minus its tail through
-the same apply path — no per-mutation inverse exists. `world.save` writes a
-canonical session snapshot and compacts the journal (the saved definition
-becomes the new base). `world.reset`/`world.load`/`world.reload` are ONE
+the same apply path — no per-mutation inverse exists. Market listings, bids,
+buyouts, cancellations, and settlements are economic finality barriers:
+`world.undo` may remove later authoring edits, but refuses before crossing one
+of those entries. Retention pruning moves no value and remains undoable.
+`world.save` writes a canonical session snapshot and compacts the journal (the
+saved definition becomes the new base). `world.reset`/`world.load`/`world.reload` are ONE
 rebuild-and-swap mechanism (`WorldServer.ApplyRebuild`) over three document
 sources — the server's own base, a different file, or a re-read of the
 current origin — that also wipes and re-seeds the ENTIRE runtime grant table
@@ -87,9 +90,9 @@ the journal length.
 
 **Lifetime sweeps.** Five per-tick passes run side by side at the end of
 `WorldServer.StepCore`, each firing ORDINARY mutations under
-`WorldPrincipal.World`'s structural exemption so recovery is journalled and
-undoable rather than a bespoke erase: `ReclaimExpiredEscrows` (an unaccepted
-ownership offer), `SettleExpiredMarketListings`/`PruneExpiredMarketListings` (a
+`WorldPrincipal.World`'s structural exemption so recovery is journalled rather
+than a bespoke erase: `ReclaimExpiredEscrows` (an unaccepted ownership offer),
+`SettleExpiredMarketListings`/`PruneExpiredMarketListings` (a
 listing past its deadline, a terminal row past `market.retentionSeconds`),
 `SweepContributionTenure` (`WorldServer.Contributions.cs` — a presence-tenure
 contribution slot whose watched `adjacencies` row has read dropped past the
@@ -100,7 +103,8 @@ condition holds at a placement's coupled cell becomes its prototype). The
 contribution sweep reads link liveness through `WorldServer.TryLinkLiveness`,
 which pairs `WorldEventFeed.LinkStalenessTicks` with the row's compiled
 `livenessGraceSeconds`; its retraction defers, rather than proceeding, while
-the slot's inhabitant is drive-possessed.
+the slot's inhabitant is drive-possessed. Market settlement is journal-final;
+market retention pruning and the other recovery mutations remain undoable.
 
 **Steady-state performance contract.** The per-tick pipeline — intent fold,
 sim step, snapshot emission, binding resolution — allocates nothing; document
@@ -182,10 +186,12 @@ A kit shaping its planar velocity through a `dynamics` row (rather than the
 engage/release response table) carries the follower's Q32 state — position
 and velocity raws, plus the previous commanded target the `r` term needs —
 as ordinary `WorldBody` sim state (`WorldBody.Dynamics.cs`); a swim kit's
-vertical lane carries the scalar counterpart. Both round-trip through
-`TransferState`/`WorldAuthorityCheckpointCodec`
-(`SupportedVersion`, bumped whenever the wire shape changes) alongside every
-other body field.
+vertical lane carries the scalar counterpart. Cross-world motion continuity
+round-trips their values through `TransferState`. A same-world authority
+checkpoint additionally carries their seeded latches, the arbitrary-up
+frame/reseat/turn fractions, and complete climb/grapple state through
+`IntegrationResidue`/`WorldAuthorityCheckpointCodec` (`SupportedVersion`,
+bumped whenever the fail-closed wire shape changes).
 
 A disconnected seat or peer does not drop its body on the spot — it PARKS
 (`Entry.Parked`/`ParkedUntilTick`) for `bodies.reconnectGraceSeconds` (converted to ticks at compile),
