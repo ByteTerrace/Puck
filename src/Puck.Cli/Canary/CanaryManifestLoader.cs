@@ -7,6 +7,8 @@ internal static class CanaryManifestLoader {
     private const int MaximumFederatedExitSeconds = 90;
     private const int MaximumFederatedLegTimeoutSeconds = 240;
     private const int MaximumLegTimeoutSeconds = 60;
+    private const string UnknownMemberDetail = "strict manifests refuse fields the runner does not read.";
+    private static readonly Func<string, Exception> Refusal = static message => new CanaryManifestRefusal(message: message);
 
     public static bool TryLoadAll(string repositoryRoot, out IReadOnlyList<CanaryManifest> manifests, out string error) {
         var canaryRoot = Path.Combine(path1: repositoryRoot, path2: "tests", path3: "Puck.World.Canaries");
@@ -77,45 +79,39 @@ internal static class CanaryManifestLoader {
         error = string.Empty;
 
         try {
-            using var document = JsonDocument.Parse(
-                utf8Json: File.ReadAllBytes(path: manifestPath),
-                options: new JsonDocumentOptions { AllowTrailingCommas = false, CommentHandling = JsonCommentHandling.Disallow, MaxDepth = 32 }
-            );
+            using var document = CliStrictJson.ParseStrict(path: manifestPath, maxDepth: 32, duplicateDetail: "the reviewer and runtime must see one value.", refusal: Refusal);
+            var root = CliStrictJson.RequireObject(element: document.RootElement, context: "manifest root", refusal: Refusal);
 
-            if (TryFindDuplicateMember(element: document.RootElement, path: "$", duplicate: out var duplicate)) {
-                throw new CanaryManifestRefusal(message: $"duplicate JSON member '{duplicate}' is ambiguous; the reviewer and runtime must see one value.");
-            }
-
-            var root = RequireObject(element: document.RootElement, context: "manifest root");
-
-            RequireOnlyMembers(
+            CliStrictJson.RequireOnlyMembers(
                 element: root,
                 context: "manifest root",
+                unknownMemberDetail: UnknownMemberDetail,
+                refusal: Refusal,
                 "binding", "bootShape", "discriminating", "fixtures", "id", "positive", "requirements", "seconds", "timeoutSeconds", "title"
             );
 
-            var id = ReadRequiredString(context: "manifest root", element: root, member: "id");
+            var id = CliStrictJson.ReadRequiredString(context: "manifest root", element: root, member: "id", refusal: Refusal);
 
             if (!IsSafeToken(allowColon: false, allowDot: false, value: id)) {
                 throw new CanaryManifestRefusal(message: $"id '{id}' is not a safe lower-case token; use letters, digits, and single interior hyphens only.");
             }
 
-            var title = ReadRequiredString(context: $"canary '{id}'", element: root, member: "title");
-            var binding = ReadRequiredString(context: $"canary '{id}'", element: root, member: "binding");
-            var bootShape = ReadBootShape(value: ReadRequiredString(context: $"canary '{id}'", element: root, member: "bootShape"), id: id);
+            var title = CliStrictJson.ReadRequiredString(context: $"canary '{id}'", element: root, member: "title", refusal: Refusal);
+            var binding = CliStrictJson.ReadRequiredString(context: $"canary '{id}'", element: root, member: "binding", refusal: Refusal);
+            var bootShape = ReadBootShape(value: CliStrictJson.ReadRequiredString(context: $"canary '{id}'", element: root, member: "bootShape", refusal: Refusal), id: id);
             var requirements = ReadRequirements(element: root, id: id);
-            var seconds = ReadInteger(context: $"canary '{id}'", element: root, member: "seconds");
-            var timeoutSeconds = ReadInteger(context: $"canary '{id}'", element: root, member: "timeoutSeconds");
+            var seconds = CliStrictJson.ReadRequiredInt32(context: $"canary '{id}'", element: root, member: "seconds", refusal: Refusal);
+            var timeoutSeconds = CliStrictJson.ReadRequiredInt32(context: $"canary '{id}'", element: root, member: "timeoutSeconds", refusal: Refusal);
 
             var positive = ReadLeg(
-                element: ReadRequiredObject(context: $"canary '{id}'", element: root, member: "positive"),
+                element: CliStrictJson.ReadRequiredObject(context: $"canary '{id}'", element: root, member: "positive", refusal: Refusal),
                 id: id,
                 name: "positive",
                 repositoryRoot: repositoryRoot,
                 canaryDirectory: directory
             );
             var discriminating = ReadLeg(
-                element: ReadRequiredObject(context: $"canary '{id}'", element: root, member: "discriminating"),
+                element: CliStrictJson.ReadRequiredObject(context: $"canary '{id}'", element: root, member: "discriminating", refusal: Refusal),
                 id: id,
                 name: "discriminating",
                 repositoryRoot: repositoryRoot,
@@ -183,10 +179,10 @@ internal static class CanaryManifestLoader {
     private static CanaryLeg ReadLeg(JsonElement element, string id, string name, string repositoryRoot, string canaryDirectory) {
         var context = $"canary '{id}' {name} leg";
 
-        RequireOnlyMembers(element: element, context: context, "authorities", "authorityWorld", "commands", "connect", "expect", "script", "world");
+        CliStrictJson.RequireOnlyMembers(element: element, context: context, unknownMemberDetail: UnknownMemberDetail, refusal: Refusal, "authorities", "authorityWorld", "commands", "connect", "expect", "script", "world");
 
-        var worldText = ReadRequiredString(context: context, element: element, member: "world");
-        var scriptText = ReadRequiredString(context: context, element: element, member: "script");
+        var worldText = CliStrictJson.ReadRequiredString(context: context, element: element, member: "world", refusal: Refusal);
+        var scriptText = CliStrictJson.ReadRequiredString(context: context, element: element, member: "script", refusal: Refusal);
         var worldPath = ResolveFile(basePath: repositoryRoot, containmentRoot: repositoryRoot, context: $"{context} world", rawPath: worldText);
         var scriptPath = ResolveFile(basePath: canaryDirectory, containmentRoot: repositoryRoot, context: $"{context} script", rawPath: scriptText);
         string? authorityWorldPath = null;
@@ -243,11 +239,11 @@ internal static class CanaryManifestLoader {
 
         for (var index = 0; (index < count); index++) {
             var rowContext = $"{context} authorities[{index}]";
-            var row = RequireObject(context: rowContext, element: authoritiesElement[index]);
+            var row = CliStrictJson.RequireObject(context: rowContext, element: authoritiesElement[index], refusal: Refusal);
 
-            RequireOnlyMembers(element: row, context: rowContext, "id", "script", "world");
+            CliStrictJson.RequireOnlyMembers(element: row, context: rowContext, unknownMemberDetail: UnknownMemberDetail, refusal: Refusal, "id", "script", "world");
 
-            var authorityId = ReadRequiredString(context: rowContext, element: row, member: "id");
+            var authorityId = CliStrictJson.ReadRequiredString(context: rowContext, element: row, member: "id", refusal: Refusal);
 
             if (!IsSafeToken(allowColon: false, allowDot: false, value: authorityId)) {
                 throw new CanaryManifestRefusal(message: $"{rowContext} id '{authorityId}' is not a safe lower-case token; use letters, digits, and single interior hyphens only.");
@@ -256,8 +252,8 @@ internal static class CanaryManifestLoader {
                 throw new CanaryManifestRefusal(message: $"{rowContext} repeats authority id '{authorityId}'.");
             }
 
-            var authorityWorldText = ReadRequiredString(context: rowContext, element: row, member: "world");
-            var authorityScriptText = ReadRequiredString(context: rowContext, element: row, member: "script");
+            var authorityWorldText = CliStrictJson.ReadRequiredString(context: rowContext, element: row, member: "world", refusal: Refusal);
+            var authorityScriptText = CliStrictJson.ReadRequiredString(context: rowContext, element: row, member: "script", refusal: Refusal);
             var authorityWorldPath = ResolveFile(basePath: repositoryRoot, containmentRoot: repositoryRoot, context: $"{rowContext} world", rawPath: authorityWorldText);
             var authorityScriptPath = ResolveFile(basePath: canaryDirectory, containmentRoot: repositoryRoot, context: $"{rowContext} script", rawPath: authorityScriptText);
 
@@ -271,7 +267,7 @@ internal static class CanaryManifestLoader {
         return roles;
     }
     private static IReadOnlyList<CanaryCommandClaim> ReadCommands(JsonElement element, string context, string scriptPath) {
-        var array = ReadRequiredArray(context: context, element: element, member: "commands");
+        var array = CliStrictJson.ReadRequiredArray(context: context, element: element, member: "commands", refusal: Refusal);
         var claims = new List<CanaryCommandClaim>(capacity: array.GetArrayLength());
 
         for (var index = 0; (index < array.GetArrayLength()); index++) {
@@ -281,23 +277,23 @@ internal static class CanaryManifestLoader {
                 throw new CanaryManifestRefusal(message: $"{context} commands[{index}] is null; every script command needs an outcome.");
             }
 
-            var row = RequireObject(context: $"{context} commands[{index}]", element: item);
+            var row = CliStrictJson.RequireObject(context: $"{context} commands[{index}]", element: item, refusal: Refusal);
 
-            RequireOnlyMembers(element: row, context: $"{context} commands[{index}]", "occurrence", "outcome", "stream", "verb");
+            CliStrictJson.RequireOnlyMembers(element: row, context: $"{context} commands[{index}]", unknownMemberDetail: UnknownMemberDetail, refusal: Refusal, "occurrence", "outcome", "stream", "verb");
 
-            var verb = ReadRequiredString(context: $"{context} commands[{index}]", element: row, member: "verb");
+            var verb = CliStrictJson.ReadRequiredString(context: $"{context} commands[{index}]", element: row, member: "verb", refusal: Refusal);
 
             if (!IsSafeToken(allowColon: false, allowDot: true, value: verb)) {
                 throw new CanaryManifestRefusal(message: $"{context} command verb '{verb}' is not a lower-case dotted token.");
             }
 
-            var occurrence = ReadInteger(context: $"{context} commands[{index}]", element: row, member: "occurrence");
+            var occurrence = CliStrictJson.ReadRequiredInt32(context: $"{context} commands[{index}]", element: row, member: "occurrence", refusal: Refusal);
 
             if (occurrence <= 0) {
                 throw new CanaryManifestRefusal(message: $"{context} command '{verb}' occurrence must be positive.");
             }
 
-            var outcomeText = ReadRequiredString(context: $"{context} commands[{index}]", element: row, member: "outcome");
+            var outcomeText = CliStrictJson.ReadRequiredString(context: $"{context} commands[{index}]", element: row, member: "outcome", refusal: Refusal);
             var outcome = outcomeText switch {
                 "accepted" => CanaryCommandOutcome.Accepted,
                 "refused" => CanaryCommandOutcome.Refused,
@@ -375,7 +371,7 @@ internal static class CanaryManifestLoader {
         return commands;
     }
     private static IReadOnlyList<CanaryAssertion> ReadAssertions(JsonElement element, string context, IReadOnlySet<string> authorityIds) {
-        var array = ReadRequiredArray(context: context, element: element, member: "expect");
+        var array = CliStrictJson.ReadRequiredArray(context: context, element: element, member: "expect", refusal: Refusal);
 
         if (array.GetArrayLength() == 0) {
             throw new CanaryManifestRefusal(message: $"{context} expect is empty; a leg with no observation passes vacuously.");
@@ -393,8 +389,8 @@ internal static class CanaryManifestLoader {
                 throw new CanaryManifestRefusal(message: $"{context} expect[{index}] is null; a null assertion observes nothing.");
             }
 
-            var row = RequireObject(context: $"{context} expect[{index}]", element: item);
-            var type = ReadRequiredString(context: $"{context} expect[{index}]", element: row, member: "type");
+            var row = CliStrictJson.RequireObject(context: $"{context} expect[{index}]", element: item, refusal: Refusal);
+            var type = CliStrictJson.ReadRequiredString(context: $"{context} expect[{index}]", element: row, member: "type", refusal: Refusal);
             CanaryAssertion assertion = type switch {
                 "line" => ReadLineAssertion(authorityIds: authorityIds, context: $"{context} expect[{index}]", element: row),
                 "response" => ReadResponseAssertion(authorityIds: authorityIds, context: $"{context} expect[{index}]", element: row, values: values),
@@ -427,9 +423,9 @@ internal static class CanaryManifestLoader {
         return assertions;
     }
     private static CanaryFileDifferenceAssertion ReadFileDifferenceAssertion(JsonElement element, string context) {
-        RequireOnlyMembers(element: element, context: context, "after", "before", "different", "name", "type");
+        CliStrictJson.RequireOnlyMembers(element: element, context: context, unknownMemberDetail: UnknownMemberDetail, refusal: Refusal, "after", "before", "different", "name", "type");
 
-        var name = ReadRequiredString(context: context, element: element, member: "name");
+        var name = CliStrictJson.ReadRequiredString(context: context, element: element, member: "name", refusal: Refusal);
         var before = ReadRunRelativePath(context: context, element: element, member: "before");
         var after = ReadRunRelativePath(context: context, element: element, member: "after");
         var different = true;
@@ -449,9 +445,9 @@ internal static class CanaryManifestLoader {
         return new CanaryFileDifferenceAssertion(After: after, Before: before, Different: different, Name: name);
     }
     private static CanaryFrameAgreementAssertion ReadFrameAgreementAssertion(JsonElement element, string context) {
-        RequireOnlyMembers(element: element, context: context, "after", "agree", "before", "name", "type");
+        CliStrictJson.RequireOnlyMembers(element: element, context: context, unknownMemberDetail: UnknownMemberDetail, refusal: Refusal, "after", "agree", "before", "name", "type");
 
-        var name = ReadRequiredString(context: context, element: element, member: "name");
+        var name = CliStrictJson.ReadRequiredString(context: context, element: element, member: "name", refusal: Refusal);
         var before = ReadRunRelativePath(context: context, element: element, member: "before");
         var after = ReadRunRelativePath(context: context, element: element, member: "after");
 
@@ -474,7 +470,7 @@ internal static class CanaryManifestLoader {
         return new CanaryFrameAgreementAssertion(After: after, Agree: agree, Before: before, Name: name);
     }
     private static string ReadRunRelativePath(JsonElement element, string member, string context) {
-        var value = ReadRequiredString(context: context, element: element, member: member);
+        var value = CliStrictJson.ReadRequiredString(context: context, element: element, member: member, refusal: Refusal);
 
         if (Path.IsPathRooted(path: value) || ContainsParentSegment(path: value) || value.Contains(value: '{') || value.Contains(value: '}')) {
             throw new CanaryManifestRefusal(message: $"{context} {member} '{value}' must be a run-directory-relative path without parent segments or tokens.");
@@ -483,18 +479,18 @@ internal static class CanaryManifestLoader {
         return value;
     }
     private static CanaryLineAssertion ReadLineAssertion(JsonElement element, string context, IReadOnlySet<string> authorityIds) {
-        RequireOnlyMembers(element: element, context: context, "authority", "match", "name", "present", "stream", "text", "type");
+        CliStrictJson.RequireOnlyMembers(element: element, context: context, unknownMemberDetail: UnknownMemberDetail, refusal: Refusal, "authority", "match", "name", "present", "stream", "text", "type");
 
-        var name = ReadRequiredString(context: context, element: element, member: "name");
+        var name = CliStrictJson.ReadRequiredString(context: context, element: element, member: "name", refusal: Refusal);
         var authority = ReadAssertionAuthority(authorityIds: authorityIds, context: context, element: element);
-        var stream = ReadStream(value: ReadRequiredString(context: context, element: element, member: "stream"), context: context);
-        var matchText = ReadRequiredString(context: context, element: element, member: "match");
+        var stream = ReadStream(value: CliStrictJson.ReadRequiredString(context: context, element: element, member: "stream", refusal: Refusal), context: context);
+        var matchText = CliStrictJson.ReadRequiredString(context: context, element: element, member: "match", refusal: Refusal);
         var match = matchText switch {
             "exact" => CanaryLineMatch.Exact,
             "contains" => CanaryLineMatch.Contains,
             _ => throw new CanaryManifestRefusal(message: $"{context} match '{matchText}' is invalid; use exactly 'exact' or 'contains' (casing is significant)."),
         };
-        var text = ReadRequiredString(context: context, element: element, member: "text");
+        var text = CliStrictJson.ReadRequiredString(context: context, element: element, member: "text", refusal: Refusal);
         var present = true;
 
         if (element.TryGetProperty(propertyName: "present", value: out var presentElement)) {
@@ -526,11 +522,11 @@ internal static class CanaryManifestLoader {
         return authorityId;
     }
     private static CanaryResponseAssertion ReadResponseAssertion(JsonElement element, string context, HashSet<string> values, IReadOnlySet<string> authorityIds) {
-        RequireOnlyMembers(element: element, context: context, "authority", "count", "extract", "name", "occurrence", "stream", "type", "verb");
+        CliStrictJson.RequireOnlyMembers(element: element, context: context, unknownMemberDetail: UnknownMemberDetail, refusal: Refusal, "authority", "count", "extract", "name", "occurrence", "stream", "type", "verb");
 
-        var name = ReadRequiredString(context: context, element: element, member: "name");
+        var name = CliStrictJson.ReadRequiredString(context: context, element: element, member: "name", refusal: Refusal);
         var authority = ReadAssertionAuthority(authorityIds: authorityIds, context: context, element: element);
-        var stream = ReadStream(value: ReadRequiredString(context: context, element: element, member: "stream"), context: context);
+        var stream = ReadStream(value: CliStrictJson.ReadRequiredString(context: context, element: element, member: "stream", refusal: Refusal), context: context);
         var selector = ReadSelector(context: context, element: element);
         var extractions = new List<CanaryValueExtraction>();
 
@@ -540,16 +536,16 @@ internal static class CanaryManifestLoader {
             }
 
             for (var index = 0; (index < extractionElement.GetArrayLength()); index++) {
-                var row = RequireObject(element: extractionElement[index], context: $"{context} extract[{index}]");
+                var row = CliStrictJson.RequireObject(element: extractionElement[index], context: $"{context} extract[{index}]", refusal: Refusal);
 
-                RequireOnlyMembers(element: row, context: $"{context} extract[{index}]", "component", "field", "name");
+                CliStrictJson.RequireOnlyMembers(element: row, context: $"{context} extract[{index}]", unknownMemberDetail: UnknownMemberDetail, refusal: Refusal, "component", "field", "name");
 
-                var valueName = ReadRequiredString(context: $"{context} extract[{index}]", element: row, member: "name");
-                var field = ReadRequiredString(context: $"{context} extract[{index}]", element: row, member: "field");
+                var valueName = CliStrictJson.ReadRequiredString(context: $"{context} extract[{index}]", element: row, member: "name", refusal: Refusal);
+                var field = CliStrictJson.ReadRequiredString(context: $"{context} extract[{index}]", element: row, member: "field", refusal: Refusal);
                 int? component = null;
 
                 if (row.TryGetProperty(propertyName: "component", value: out _)) {
-                    component = ReadInteger(context: $"{context} extract[{index}]", element: row, member: "component");
+                    component = CliStrictJson.ReadRequiredInt32(context: $"{context} extract[{index}]", element: row, member: "component", refusal: Refusal);
                     if (component < 0) {
                         throw new CanaryManifestRefusal(message: $"{context} extract[{index}] component must be zero or greater.");
                     }
@@ -574,12 +570,12 @@ internal static class CanaryManifestLoader {
         );
     }
     private static CanarySequenceAssertion ReadSequenceAssertion(JsonElement element, string context, IReadOnlySet<string> authorityIds) {
-        RequireOnlyMembers(element: element, context: context, "authority", "name", "responses", "stream", "type");
+        CliStrictJson.RequireOnlyMembers(element: element, context: context, unknownMemberDetail: UnknownMemberDetail, refusal: Refusal, "authority", "name", "responses", "stream", "type");
 
-        var name = ReadRequiredString(context: context, element: element, member: "name");
+        var name = CliStrictJson.ReadRequiredString(context: context, element: element, member: "name", refusal: Refusal);
         var authority = ReadAssertionAuthority(authorityIds: authorityIds, context: context, element: element);
-        var stream = ReadStream(value: ReadRequiredString(context: context, element: element, member: "stream"), context: context);
-        var rows = ReadRequiredArray(context: context, element: element, member: "responses");
+        var stream = ReadStream(value: CliStrictJson.ReadRequiredString(context: context, element: element, member: "stream", refusal: Refusal), context: context);
+        var rows = CliStrictJson.ReadRequiredArray(context: context, element: element, member: "responses", refusal: Refusal);
 
         if (rows.GetArrayLength() == 0) {
             throw new CanaryManifestRefusal(message: $"{context} responses is empty; an empty order assertion is vacuous.");
@@ -588,20 +584,20 @@ internal static class CanaryManifestLoader {
         var responses = new List<CanaryResponseSelector>(capacity: rows.GetArrayLength());
 
         for (var index = 0; (index < rows.GetArrayLength()); index++) {
-            var row = RequireObject(element: rows[index], context: $"{context} responses[{index}]");
+            var row = CliStrictJson.RequireObject(element: rows[index], context: $"{context} responses[{index}]", refusal: Refusal);
 
-            RequireOnlyMembers(element: row, context: $"{context} responses[{index}]", "count", "occurrence", "verb");
+            CliStrictJson.RequireOnlyMembers(element: row, context: $"{context} responses[{index}]", unknownMemberDetail: UnknownMemberDetail, refusal: Refusal, "count", "occurrence", "verb");
             responses.Add(item: ReadSelector(context: $"{context} responses[{index}]", element: row));
         }
 
         return new CanarySequenceAssertion(Authority: authority, Name: name, Responses: responses, Stream: stream);
     }
     private static CanaryRelationAssertion ReadRelationAssertion(JsonElement element, string context, HashSet<string> values) {
-        RequireOnlyMembers(element: element, context: context, "left", "margin", "maximum", "minimum", "name", "operator", "right", "type");
+        CliStrictJson.RequireOnlyMembers(element: element, context: context, unknownMemberDetail: UnknownMemberDetail, refusal: Refusal, "left", "margin", "maximum", "minimum", "name", "operator", "right", "type");
 
-        var name = ReadRequiredString(context: context, element: element, member: "name");
-        var left = ReadOperand(element: ReadRequiredObject(context: context, element: element, member: "left"), context: $"{context} left");
-        var operatorText = ReadRequiredString(context: context, element: element, member: "operator");
+        var name = CliStrictJson.ReadRequiredString(context: context, element: element, member: "name", refusal: Refusal);
+        var left = ReadOperand(element: CliStrictJson.ReadRequiredObject(context: context, element: element, member: "left", refusal: Refusal), context: $"{context} left");
+        var operatorText = CliStrictJson.ReadRequiredString(context: context, element: element, member: "operator", refusal: Refusal);
         var relationOperator = operatorText switch {
             "equal" => CanaryRelationOperator.Equal,
             "notEqual" => CanaryRelationOperator.NotEqual,
@@ -620,24 +616,24 @@ internal static class CanaryManifestLoader {
         switch (relationOperator) {
             case CanaryRelationOperator.Equal:
             case CanaryRelationOperator.NotEqual:
-                right = ReadOperand(element: ReadRequiredObject(context: context, element: element, member: "right"), context: $"{context} right");
+                right = ReadOperand(element: CliStrictJson.ReadRequiredObject(context: context, element: element, member: "right", refusal: Refusal), context: $"{context} right");
                 break;
             case CanaryRelationOperator.BetweenInclusive:
-                minimum = ReadFiniteNumber(context: context, element: element, member: "minimum");
-                maximum = ReadFiniteNumber(context: context, element: element, member: "maximum");
+                minimum = CliStrictJson.ReadRequiredFiniteNumber(context: context, element: element, member: "minimum", descriptor: "finite in-range number", refusal: Refusal);
+                maximum = CliStrictJson.ReadRequiredFiniteNumber(context: context, element: element, member: "maximum", descriptor: "finite in-range number", refusal: Refusal);
                 if (minimum > maximum) {
                     throw new CanaryManifestRefusal(message: $"{context} minimum is greater than maximum.");
                 }
                 break;
             case CanaryRelationOperator.AtLeast:
-                minimum = ReadFiniteNumber(context: context, element: element, member: "minimum");
+                minimum = CliStrictJson.ReadRequiredFiniteNumber(context: context, element: element, member: "minimum", descriptor: "finite in-range number", refusal: Refusal);
                 break;
             case CanaryRelationOperator.AtMost:
-                maximum = ReadFiniteNumber(context: context, element: element, member: "maximum");
+                maximum = CliStrictJson.ReadRequiredFiniteNumber(context: context, element: element, member: "maximum", descriptor: "finite in-range number", refusal: Refusal);
                 break;
             case CanaryRelationOperator.MinimumMargin:
-                right = ReadOperand(element: ReadRequiredObject(context: context, element: element, member: "right"), context: $"{context} right");
-                margin = ReadFiniteNumber(context: context, element: element, member: "margin");
+                right = ReadOperand(element: CliStrictJson.ReadRequiredObject(context: context, element: element, member: "right", refusal: Refusal), context: $"{context} right");
+                margin = CliStrictJson.ReadRequiredFiniteNumber(context: context, element: element, member: "margin", descriptor: "finite in-range number", refusal: Refusal);
                 if (margin < 0) {
                     throw new CanaryManifestRefusal(message: $"{context} margin must be zero or greater.");
                 }
@@ -657,7 +653,7 @@ internal static class CanaryManifestLoader {
         );
     }
     private static CanaryOperand ReadOperand(JsonElement element, string context) {
-        RequireOnlyMembers(element: element, context: context, "literal", "value");
+        CliStrictJson.RequireOnlyMembers(element: element, context: context, unknownMemberDetail: UnknownMemberDetail, refusal: Refusal, "literal", "value");
 
         var hasValue = element.TryGetProperty(propertyName: "value", value: out var valueElement);
         var hasLiteral = element.TryGetProperty(propertyName: "literal", value: out var literalElement);
@@ -681,14 +677,14 @@ internal static class CanaryManifestLoader {
         };
     }
     private static CanaryResponseSelector ReadSelector(JsonElement element, string context) {
-        var verb = ReadRequiredString(context: context, element: element, member: "verb");
+        var verb = CliStrictJson.ReadRequiredString(context: context, element: element, member: "verb", refusal: Refusal);
 
         if (!IsSafeToken(allowColon: false, allowDot: true, value: verb)) {
             throw new CanaryManifestRefusal(message: $"{context} verb '{verb}' is not a lower-case dotted token.");
         }
 
-        var occurrence = ReadInteger(context: context, element: element, member: "occurrence");
-        var count = ReadInteger(context: context, element: element, member: "count");
+        var occurrence = CliStrictJson.ReadRequiredInt32(context: context, element: element, member: "occurrence", refusal: Refusal);
+        var count = CliStrictJson.ReadRequiredInt32(context: context, element: element, member: "count", refusal: Refusal);
 
         if ((occurrence <= 0) || (count <= 0) || (occurrence > count)) {
             throw new CanaryManifestRefusal(message: $"{context} requires 1 <= occurrence <= count; the selected response must exist and cardinality must be exact.");
@@ -697,7 +693,7 @@ internal static class CanaryManifestLoader {
         return new CanaryResponseSelector(Count: count, Occurrence: occurrence, Verb: verb);
     }
     private static IReadOnlyList<string> ReadRequirements(JsonElement element, string id) {
-        var array = ReadRequiredArray(context: $"canary '{id}'", element: element, member: "requirements");
+        var array = CliStrictJson.ReadRequiredArray(context: $"canary '{id}'", element: element, member: "requirements", refusal: Refusal);
         var requirements = new List<string>(capacity: array.GetArrayLength());
         var seen = new HashSet<string>(comparer: StringComparer.Ordinal);
 
@@ -850,86 +846,6 @@ internal static class CanaryManifestLoader {
         "stderr" => CanaryStream.Stderr,
         _ => throw new CanaryManifestRefusal(message: $"{context} stream '{value}' is invalid; use exactly 'stdout' or 'stderr' (casing is significant)."),
     };
-    private static int ReadInteger(JsonElement element, string member, string context) {
-        if (!element.TryGetProperty(propertyName: member, value: out var value) || (value.ValueKind != JsonValueKind.Number) || !value.TryGetInt32(value: out var result)) {
-            throw new CanaryManifestRefusal(message: $"{context} {member} must be a finite in-range integer.");
-        }
-
-        return result;
-    }
-    private static double ReadFiniteNumber(JsonElement element, string member, string context) {
-        if (!element.TryGetProperty(propertyName: member, value: out var value) || (value.ValueKind != JsonValueKind.Number) || !value.TryGetDouble(value: out var result) || !double.IsFinite(d: result)) {
-            throw new CanaryManifestRefusal(message: $"{context} {member} must be a finite in-range number.");
-        }
-
-        return result;
-    }
-    private static string ReadRequiredString(JsonElement element, string member, string context) {
-        if (!element.TryGetProperty(propertyName: member, value: out var value) || (value.ValueKind != JsonValueKind.String) || string.IsNullOrWhiteSpace(value: value.GetString())) {
-            throw new CanaryManifestRefusal(message: $"{context} {member} is required and must be non-blank.");
-        }
-
-        return value.GetString()!;
-    }
-    private static JsonElement ReadRequiredArray(JsonElement element, string member, string context) {
-        if (!element.TryGetProperty(propertyName: member, value: out var value) || (value.ValueKind != JsonValueKind.Array)) {
-            throw new CanaryManifestRefusal(message: $"{context} {member} is required and must be an array.");
-        }
-
-        return value;
-    }
-    private static JsonElement ReadRequiredObject(JsonElement element, string member, string context) {
-        if (!element.TryGetProperty(propertyName: member, value: out var value)) {
-            throw new CanaryManifestRefusal(message: $"{context} {member} is required and must be an object.");
-        }
-
-        return RequireObject(context: $"{context} {member}", element: value);
-    }
-    private static JsonElement RequireObject(JsonElement element, string context) {
-        if (element.ValueKind != JsonValueKind.Object) {
-            throw new CanaryManifestRefusal(message: $"{context} must be an object.");
-        }
-
-        return element;
-    }
-    private static void RequireOnlyMembers(JsonElement element, string context, params string[] allowed) {
-        var names = new HashSet<string>(collection: allowed, comparer: StringComparer.Ordinal);
-
-        foreach (var property in element.EnumerateObject()) {
-            if (!names.Contains(item: property.Name)) {
-                throw new CanaryManifestRefusal(message: $"{context} contains unknown member '{property.Name}'; strict manifests refuse fields the runner does not read.");
-            }
-        }
-    }
-    private static bool TryFindDuplicateMember(JsonElement element, string path, out string duplicate) {
-        if (element.ValueKind == JsonValueKind.Object) {
-            var names = new HashSet<string>(comparer: StringComparer.Ordinal);
-
-            foreach (var property in element.EnumerateObject()) {
-                if (!names.Add(item: property.Name)) {
-                    duplicate = $"{path}.{property.Name}";
-
-                    return true;
-                }
-                if (TryFindDuplicateMember(element: property.Value, path: $"{path}.{property.Name}", duplicate: out duplicate)) {
-                    return true;
-                }
-            }
-        } else if (element.ValueKind == JsonValueKind.Array) {
-            var index = 0;
-
-            foreach (var item in element.EnumerateArray()) {
-                if (TryFindDuplicateMember(duplicate: out duplicate, element: item, path: $"{path}[{index}]")) {
-                    return true;
-                }
-                index++;
-            }
-        }
-
-        duplicate = string.Empty;
-
-        return false;
-    }
     private static bool ContainsParentSegment(string path) =>
         path.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: ['/', '\\']).Any(predicate: static segment => (segment == ".."));
     private static bool IsSafeToken(string value, bool allowColon, bool allowDot) {
