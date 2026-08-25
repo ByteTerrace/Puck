@@ -157,7 +157,7 @@ public readonly record struct WorldPrincipal(PrincipalKind Kind, int Index, stri
     );
     /// <summary>The principal token grammar <see cref="TryParse"/> accepts, for a console verb's unknown-token
     /// refusal to interpolate rather than hand-spell.</summary>
-    public const string TokenGrammar = "seat1..seat4|console|addon:<name>|peer:<n>:<generation>|document:<id>|group:<id>";
+    public const string TokenGrammar = "seat1..seat4|console|world|addon:<name>|peer:<n>:<generation>|document:<id>|group:<id>";
     /// <summary>Parses a principal token (<see cref="TokenGrammar"/>) — shared by
     /// <c>Puck.World.WorldPrincipalJsonConverter</c> and <c>Puck.World.WorldGrantCommandModule</c>'s
     /// <c>world.grant</c>/<c>world.revoke</c> console verbs, so a document-sourced principal (a

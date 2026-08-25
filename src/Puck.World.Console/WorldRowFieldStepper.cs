@@ -3,6 +3,8 @@ using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
+using Puck.Commands;
+
 namespace Puck.World;
 
 /// <summary>
@@ -191,9 +193,9 @@ public static class WorldRowFieldStepper {
 
             if (
                 !token.EndsWith(value: ']') ||
-                !int.TryParse(
-                    s: token[(bracket + 1)..^1],
-                    result: out var index
+                !CommandArgs.TryParseInt(
+                    text: token[(bracket + 1)..^1],
+                    value: out var index
                 ) ||
                 (index < 0)
             ) {

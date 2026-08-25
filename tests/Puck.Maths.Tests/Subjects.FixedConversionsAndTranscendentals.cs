@@ -124,6 +124,45 @@ internal static partial class Subjects {
         );
     }
 
+    /// <summary>Proves <c>FixedPointConvert.ScaleDecimalWide</c> reaches <c>FixedPointRounding.RoundRational</c> —
+    /// the module's ONE rational-rounding core — rather than a second, independently rounding body: for each sample,
+    /// the decimal is decomposed by <see cref="DecimalParts"/> exactly as <c>ScaleDecimalWide</c> itself decomposes
+    /// it, and <c>RoundRational</c> is called DIRECTLY on that decomposition; <c>ScaleDecimalWide</c>'s own result
+    /// must equal it exactly. The samples sit as close to an exact binary half as a base-10 fraction can reach at
+    /// these scales — one raw unit above and below — since <c>10^scale</c>'s only odd factor is <c>5^scale</c> and an
+    /// exact half needs a denominator that reduces to exactly two, which no decimal scale can produce against a
+    /// fraction bit count (32 or 48) at least as large as the decimal's own scale (at most 28): a genuine rounding
+    /// TIE is provably unreachable here, so the nearest-representable pair is the sharpest rounding-direction test
+    /// available.</summary>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? ScaleDecimalWideReachesCanonicalCore() {
+        (decimal Value, int FractionBitCount)[] samples = [
+            (0.5m, FixedQ1648.FractionBitCount), (-0.5m, FixedQ1648.FractionBitCount),
+            (1.5m, FixedQ1648.FractionBitCount), (-1.5m, FixedQ1648.FractionBitCount),
+            (0.4999999999999999999999999999m, FixedQ1648.FractionBitCount),
+            (0.5000000000000000000000000001m, FixedQ1648.FractionBitCount),
+            (0.5m, FixedQ3232.FractionBitCount), (-1.5m, FixedQ3232.FractionBitCount),
+            (0.4999999999999999999999999999m, FixedQ3232.FractionBitCount),
+            (0.5000000000000000000000000001m, FixedQ3232.FractionBitCount),
+            (decimal.MaxValue, FixedQ1648.FractionBitCount), (decimal.MinValue, FixedQ3232.FractionBitCount),
+        ];
+
+        foreach (var (value, fractionBitCount) in samples) {
+            var (numerator, decimalExponent) = DecimalParts(value: value);
+            var expected = FixedPointRounding.RoundRational(
+                denominator: BigInteger.Pow(value: 10, exponent: decimalExponent),
+                fractionBitCount: fractionBitCount,
+                numerator: numerator
+            );
+            var actual = FixedPointConvert.ScaleDecimalWide(value: value, fractionBitCount: fractionBitCount);
+
+            if (actual != expected) {
+                return $"ScaleDecimalWide({value}, {fractionBitCount}) = {actual}, but RoundRational on the same decomposed (numerator={numerator}, denominator=10^{decimalExponent}) is {expected}";
+            }
+        }
+
+        return null;
+    }
     /// <summary>Proves the three <c>INumberBase</c> conversion modes through a <c>decimal</c> source into
     /// <see cref="FixedQ1648"/> — one of the two public routes to <c>FixedPointConvert.ScaleDecimalWide</c>, the
     /// other being <see cref="Q3232DecimalConversionModes"/>: <see cref="GenericConversionModes"/> exercises the

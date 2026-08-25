@@ -16,6 +16,10 @@ namespace Puck.World;
 /// and returns <see cref="CommandResult.None"/> — the server prints the loud <c>[world.mutation: … applied/rejected]</c> line.
 /// </summary>
 public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority, IServerLink link) : ICommandModule {
+    // Narrower than WorldPrincipal.TokenGrammar: a group member/ownership party is never group:<id> or document:<id>
+    // (a group cannot itself be a member — see this class's own remarks) or world (never a real actor).
+    private const string MemberTokenGrammar = "seat1..seat4|console|addon:<name>|peer:<n>:<generation>";
+
     private delegate WorldMutation Build(string groupId, WorldPrincipal member, WorldPrincipal actor);
 
     // The read-back: kinds, then every live group row (id-filtered when requested), then ownership bindings. Omits a
@@ -50,17 +54,19 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority, IS
                     ));
                 }
 
-                var text = new System.Text.StringBuilder(value: "kind ").Append(value: kind.Name).Append(value: " roles=[").Append(value: roles).Append(value: ']')
-                    .Append(value: " ownership=").Append(value: kind.OwnershipPolicy)
-                    .Append(value: " lifetime=").Append(value: kind.Lifetime)
-                    .Append(value: " eviction=").Append(value: kind.EvictionPolicy)
-                    .Append(value: " cap=").Append(value: kind.Capacity);
+                _ = echo.Head(head: "kind")
+                    .Field(key: "name", value: kind.Name)
+                    .Field(key: "roles", value: $"[{roles}]")
+                    .Field(key: "ownership", value: kind.OwnershipPolicy.ToString())
+                    .Field(key: "lifetime", value: kind.Lifetime.ToString())
+                    .Field(key: "eviction", value: kind.EvictionPolicy.ToString())
+                    .Field(key: "cap", value: kind.Capacity);
 
                 if (kind.SharedStateScope is { } scope) {
-                    _ = text.Append(value: " sharedState=").Append(value: scope);
+                    _ = echo.Field(key: "sharedState", value: scope.ToString());
                 }
 
-                _ = echo.Text(text: text.ToString()).Segment();
+                _ = echo.Segment();
             }
         }
 
@@ -76,10 +82,14 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority, IS
                 continue;
             }
 
-            _ = echo.Text(text: $"group {group.Id} kind={group.KindName} members=[{string.Join(
+            _ = echo.Head(head: "group")
+                .Field(key: "id", value: group.Id)
+                .Field(key: "kind", value: group.KindName)
+                .Field(key: "members", value: $"[{string.Join(
                 separator: ',',
                 values: DescribeMembers(members: group.Members)
-            )}]").Segment();
+            )}]")
+                .Segment();
         }
 
         if (filter is null) {
@@ -93,7 +103,10 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority, IS
                     _ => (ownership.Owner.Principal?.Describe() ?? "?"),
                 };
 
-                _ = echo.Text(text: $"ownership {ownership.Subject.Kind}:{ownership.Subject.Id} -> {owner}").Segment();
+                _ = echo.Head(head: "ownership")
+                    .Field(key: "subject", value: $"{ownership.Subject.Kind}:{ownership.Subject.Id}")
+                    .Field(key: "owner", value: owner)
+                    .Segment();
             }
         }
 
@@ -232,7 +245,7 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority, IS
                     token: args[1],
                     principal: out var recipient
                 )) {
-                    return CommandResult.Error(output: $"[world.ownership.offer: unknown principal '{args[1].ToString()}' — {WorldPrincipal.TokenGrammar}]");
+                    return CommandResult.Error(output: $"[world.ownership.offer: unknown principal '{args[1].ToString()}' — {MemberTokenGrammar}]");
                 }
 
                 if (!args.TryInt(
@@ -318,7 +331,7 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority, IS
                 token: args[1],
                 principal: out var member
             )) {
-                return CommandResult.Error(output: $"[{verb}: unknown principal '{args[1].ToString()}' — {WorldPrincipal.TokenGrammar}]");
+                return CommandResult.Error(output: $"[{verb}: unknown principal '{args[1].ToString()}' — {MemberTokenGrammar}]");
             }
 
             link.SubmitWorldMutation(mutation: build(

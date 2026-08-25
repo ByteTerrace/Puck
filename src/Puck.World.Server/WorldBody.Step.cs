@@ -371,7 +371,7 @@ public sealed partial class WorldBody {
                     ratePerSecond: rate
                 );
 
-                m_verticalVelocity = MoveTowardScalar(
+                m_verticalVelocity = FixedQ4816.MoveToward(
                     current: m_verticalVelocity,
                     maxDelta: maxDelta,
                     target: target
@@ -1009,16 +1009,6 @@ public sealed partial class WorldBody {
             elapsedTicks: scratch.StepTicks,
             ratePerSecond: scratch.Velocity
         ));
-    }
-    private static FixedQ4816 MoveTowardScalar(FixedQ4816 current, FixedQ4816 target, FixedQ4816 maxDelta) {
-        var delta = (target - current);
-
-        return ((FixedQ4816.Abs(value: delta) <= maxDelta)
-            ? target
-            : (current + ((delta > FixedQ4816.Zero)
-                ? maxDelta
-                : -maxDelta))
-        );
     }
     private PlayerIntent NextIntent(ulong stepTicks) {
         var movement = default(PlayerIntent);
@@ -2002,7 +1992,7 @@ public sealed partial class WorldBody {
                 rate = tuning.CoastDrag;
             }
 
-            longitudinal = MoveTowardScalar(
+            longitudinal = FixedQ4816.MoveToward(
                 current: longitudinal,
                 target: target,
                 maxDelta: m_vehicleLongAccumulator.Integrate(
@@ -2016,7 +2006,7 @@ public sealed partial class WorldBody {
                 : tuning.Grip
             );
 
-            lateral = MoveTowardScalar(
+            lateral = FixedQ4816.MoveToward(
                 current: lateral,
                 target: FixedQ4816.Zero,
                 maxDelta: m_vehicleLatAccumulator.Integrate(

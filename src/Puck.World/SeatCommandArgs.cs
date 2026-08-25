@@ -15,19 +15,24 @@ internal static class SeatCommandArgs {
     /// <returns>The formatted command result.</returns>
     internal static CommandResult Echo(int slot, string verb, string detail) =>
         new(Output: $"[{verb}: seat {PlayerRoster.DisplayNumber(slot: slot)} {detail}]");
-    /// <summary>Resolves the acting seat: a present trailing [seat] token (1..4) is authoritative; an absent one falls
-    /// back to the invocation's slot — the pressing device's seat for a bound chord act, and the text path's default
-    /// seat 1 (<see cref="CommandContext.Slot"/> is 0 there by contract). Token presence is the discriminator, never
-    /// <see cref="CommandContext.Parse"/>: the registry's Immediate fast path hands wire handlers a null
-    /// Parse for typed lines too, so a Parse-null test would silently ignore a typed seat token.</summary>
+    /// <summary>Resolves the acting seat: a present trailing [seat] token (1..4) is authoritative; an absent one
+    /// falls back to <paramref name="defaultSlot"/> when given, otherwise to <see cref="CommandContext.Slot"/> — the
+    /// pressing device's seat for a bound chord act, and 0 for an unseated administrative stdin line, but the
+    /// ACTUAL seat for a session opened via <c>console on &lt;player&gt;</c>
+    /// (<see cref="TextCommandSource.CreateSeatSession"/>). Token presence is the discriminator, never
+    /// <see cref="CommandContext.Parse"/>: the registry's Immediate fast path hands wire handlers a null Parse for
+    /// typed lines too, so a Parse-null test would silently ignore a typed seat token.</summary>
     /// <param name="context">The invocation context.</param>
     /// <param name="args">The verb args.</param>
     /// <param name="at">The trailing seat token's index.</param>
     /// <param name="verb">The verb name for error text.</param>
+    /// <param name="defaultSlot">The 0-based slot to resolve to when the token is absent, overriding the
+    /// <see cref="CommandContext.Slot"/> fallback — pass <c>0</c> for a verb documented as "default 1" regardless of
+    /// the acting session.</param>
     /// <returns>The resolved 0-based slot, or an error result on a malformed index (-1 slot).</returns>
-    internal static (int Slot, CommandResult? Error) ResolveSlot(CommandContext context, in WireArgs args, int at, string verb) {
+    internal static (int Slot, CommandResult? Error) ResolveSlot(CommandContext context, in WireArgs args, int at, string verb, int? defaultSlot = null) {
         if (args.Count <= at) {
-            return (Slot: context.Slot, Error: null);
+            return (Slot: (defaultSlot ?? context.Slot), Error: null);
         }
 
         if (!WorldArgs.TryParseIndex(
@@ -44,19 +49,22 @@ internal static class SeatCommandArgs {
         return (Slot: PlayerRoster.SlotFromDisplay(number: seat), Error: null);
     }
     /// <summary>Resolves the acting seat exactly like <see cref="ResolveSlot"/>, additionally requiring it to be
-    /// JOINED — the shared gate every seat-scoped verb that reads or drives a live seat needs, in the ONE wording
-    /// every call site shares.</summary>
+    /// JOINED — the gate a verb that DRIVES or MUTATES a live seat needs, in the ONE wording every call site shares.
+    /// A pure read-back names no joined requirement of its own (see <see cref="ResolveSlot"/>): it describes
+    /// whatever slot it is asked about, joined or not.</summary>
     /// <param name="roster">The player roster.</param>
     /// <param name="context">The invocation context.</param>
     /// <param name="args">The verb args.</param>
     /// <param name="at">The trailing seat token's index.</param>
     /// <param name="verb">The verb name for error text.</param>
+    /// <param name="defaultSlot">See <see cref="ResolveSlot"/>.</param>
     /// <returns>The resolved 0-based slot, or an error result on a malformed index or an unjoined seat.</returns>
-    internal static (int Slot, CommandResult? Error) ResolveJoinedSeat(PlayerRoster roster, CommandContext context, in WireArgs args, int at, string verb) {
+    internal static (int Slot, CommandResult? Error) ResolveJoinedSeat(PlayerRoster roster, CommandContext context, in WireArgs args, int at, string verb, int? defaultSlot = null) {
         var (slot, error) = ResolveSlot(
             args: in args,
             at: at,
             context: context,
+            defaultSlot: defaultSlot,
             verb: verb
         );
 

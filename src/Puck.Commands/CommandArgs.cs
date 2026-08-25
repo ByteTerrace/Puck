@@ -138,4 +138,27 @@ public static class CommandArgs {
         text: text.AsSpan(),
         value: out value
     );
+    /// <summary>The digits-only <see cref="ulong"/>-parse rule for a tick/count console grammar — <see cref="NumberStyles.None"/>:
+    /// a plain run of ASCII digits, no leading sign, no surrounding whitespace, no thousands separators. Distinct
+    /// from <see cref="TryParseULong(ReadOnlySpan{char}, out ulong)"/> (<see cref="NumberStyles.Integer"/>, which also
+    /// admits a leading '+' and surrounding whitespace): a tick/count argument names a literal digit string, not a
+    /// formatted number, so <c>+1</c> and <c> 1 </c> are refused rather than silently accepted.</summary>
+    /// <param name="text">The argument token.</param>
+    /// <param name="value">The parsed value, or 0 on failure.</param>
+    /// <returns>Whether the token parsed.</returns>
+    public static bool TryParseUnsignedDigits(ReadOnlySpan<char> text, out ulong value) =>
+        ulong.TryParse(
+            s: text,
+            result: out value,
+            provider: CultureInfo.InvariantCulture,
+            style: NumberStyles.None
+        );
+    /// <summary>Parses one digits-only <see cref="ulong"/> argument (see the span overload for the rule).</summary>
+    /// <param name="text">The argument token.</param>
+    /// <param name="value">The parsed value, or 0 on failure.</param>
+    /// <returns>Whether the token parsed.</returns>
+    public static bool TryParseUnsignedDigits(string text, out ulong value) => TryParseUnsignedDigits(
+        text: text.AsSpan(),
+        value: out value
+    );
 }

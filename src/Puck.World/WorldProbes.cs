@@ -535,7 +535,7 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
 
         if (
             (at < 0) ||
-            !int.TryParse(s: probeRef.AsSpan(start: (at + 1)), result: out var parsedSeat) ||
+            !CommandArgs.TryParseInt(text: probeRef.AsSpan(start: (at + 1)), value: out var parsedSeat) ||
             (parsedSeat < 1)
         ) {
             baseId = probeRef;

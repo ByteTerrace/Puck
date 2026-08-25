@@ -161,6 +161,16 @@ public readonly ref struct WireArgs {
         text: this[index],
         value: out value
     );
+    /// <summary>Parses the token at <paramref name="index"/> as a digits-only <see cref="ulong"/> straight from its
+    /// span, through <see cref="CommandArgs.TryParseUnsignedDigits(ReadOnlySpan{char}, out ulong)"/> — the tick/count
+    /// grammar, distinct from <see cref="TryULong"/>.</summary>
+    /// <param name="index">The zero-based trailing-token index.</param>
+    /// <param name="value">The parsed value, or <c>0</c> on failure.</param>
+    /// <returns>Whether the token parsed.</returns>
+    public bool TryUnsignedDigits(int index, out ulong value) => CommandArgs.TryParseUnsignedDigits(
+        text: this[index],
+        value: out value
+    );
     /// <summary>Parses <paramref name="count"/> consecutive float arguments starting at <paramref name="start"/>
     /// (e.g. an <c>&lt;x&gt; &lt;y&gt; &lt;z&gt;</c> triple) — fails as a unit if any token is missing or unparsable,
     /// the zero-copy peer of <see cref="CommandArgs.TryParseFloats(string[], int, int, out float[])"/>.</summary>

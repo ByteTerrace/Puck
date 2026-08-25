@@ -66,6 +66,7 @@ internal sealed class WorldWheelCommandModule(PlayerRoster roster, WorldWheelFee
             args: in args,
             at: 0,
             context: context,
+            defaultSlot: 0,
             roster: m_roster,
             verb: CommitCommand
         );
@@ -162,6 +163,7 @@ internal sealed class WorldWheelCommandModule(PlayerRoster roster, WorldWheelFee
                 args: in args,
                 at: playerAt,
                 context: context,
+                defaultSlot: 0,
                 roster: m_roster,
                 verb: RingCommand
             );
@@ -223,11 +225,10 @@ internal sealed class WorldWheelCommandModule(PlayerRoster roster, WorldWheelFee
             return CommandResult.Error(output: $"[world.view.wheel: too many arguments — expected [<player>], player an integer 1..{PlayerRoster.MaxSlots}]");
         }
 
-        var (slot, error) = SeatCommandArgs.ResolveJoinedSeat(
+        var (slot, error) = SeatCommandArgs.ResolveSlot(
             args: in args,
             at: 0,
             context: context,
-            roster: m_roster,
             verb: "world.view.wheel"
         );
 

@@ -394,6 +394,7 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
             args: in args,
             at: optionalAt,
             context: context,
+            defaultSlot: 0,
             verb: verb
         );
 

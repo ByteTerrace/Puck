@@ -124,28 +124,19 @@ internal static class FixedPointConvert {
         var mantissa = (((BigInteger)((uint)bits[2])) << 64) |
                         (((BigInteger)((uint)bits[1])) << 32) |
                         ((BigInteger)((uint)bits[0]));
-        var numerator = (mantissa << fractionBitCount);
         var denominator = BigInteger.Pow(
             value: 10,
             exponent: (bits[3] >> 16) & 0xFF
         );
-        var quotient = BigInteger.DivRem(
-            dividend: numerator,
-            divisor: denominator,
-            remainder: out var remainder
+        var magnitude = FixedPointRounding.RoundRational(
+            denominator: denominator,
+            fractionBitCount: fractionBitCount,
+            numerator: mantissa
         );
-        var twiceRemainder = (remainder << 1);
-
-        if (
-            (twiceRemainder > denominator) ||
-            ((twiceRemainder == denominator) && !quotient.IsEven)
-        ) {
-            ++quotient;
-        }
 
         return ((bits[3] < 0)
-            ? -quotient
-            : quotient
+            ? -magnitude
+            : magnitude
         );
     }
     /// <summary>Implements the checked inbound generic-math conversion shared by the signed fixed-point carriers.</summary>

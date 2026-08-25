@@ -245,10 +245,9 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
                 }
 
                 if (
-                    !int.TryParse(
-                    s: args[0].ToString(),
-                    provider: CultureInfo.InvariantCulture,
-                    result: out var seat
+                    !CommandArgs.TryParseInt(
+                    text: args[0],
+                    value: out var seat
                 ) ||
                     (seat < 1) ||
                     (seat > WorldSeatBindings.SeatCount)

@@ -67,5 +67,19 @@ internal static partial class LawRegistry {
                 width: 6
             )
         ),
+        Case(
+            id: "dynamics.guard-scale-ties-vs-half-up",
+            run: () => Laws.Claim(
+                claim: GuardScaleTieDisciplineClaims.RoundToGuardScaleTiesVsHalfUpSurface,
+                lawId: "dynamics.guard-scale-ties-vs-half-up"
+            )
+        ),
+        Case(
+            id: "dynamics.guard-scale-public-divergence-search",
+            run: () => Laws.Claim(
+                claim: GuardScaleTieDisciplineClaims.GuardScalePublicDivergenceSearchSurface,
+                lawId: "dynamics.guard-scale-public-divergence-search"
+            )
+        ),
     ];
 }

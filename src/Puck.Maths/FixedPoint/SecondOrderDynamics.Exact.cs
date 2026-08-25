@@ -170,9 +170,14 @@ internal static class SecondOrderExactMath {
         return (sinSum, cosSum);
     }
 
-    // round(numerator / denominator · 2^GuardFractionBitCount) for a non-negative rational, ties to even — an
-    // internal working-precision approximation whose own error is many bits below what the caller's single final
-    // Q32 rounding can observe (unobservable at G=128: the tie rule below this scale cannot reach a Q32 result).
+    // round(numerator / denominator · 2^GuardFractionBitCount) for a non-negative rational, ties to even. This once
+    // rounded ties up instead (matching every other tie in the library only by coincidence of never landing on one);
+    // dynamics.guard-scale-ties-vs-half-up proves the two disciplines are REQUIRED to differ at an even-truncated
+    // guard-scale tie, and dynamics.guard-scale-public-divergence-search proves that no reduction point CompilePropagator
+    // reaches, across authored (frequency, damping) pairs straddling the critical boundary crossed with step widths
+    // from one tick to a million and tick rates from one to a million, ever lands on one — so the correction is
+    // unobservable at every public Q32 propagator entry that search reaches, not merely plausible from the guard
+    // margin.
     private static BigInteger RoundToGuardScale(BigInteger numerator, BigInteger denominator) =>
         FixedPointRounding.RoundRational(
             denominator: denominator,

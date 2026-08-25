@@ -35,7 +35,7 @@ internal sealed class WorldRoutedRowCommandModule(PlayerRoster roster, WorldSeat
             (display < 1) ||
             (display > PlayerRoster.MaxSlots)
         ) {
-            return CommandResult.Error(output: $"[{verb}: seat must be an integer 1..{PlayerRoster.MaxSlots}]");
+            return CommandResult.Error(output: $"[{verb}: player {display} is outside 1..{PlayerRoster.MaxSlots}]");
         }
 
         if (!m_roster.IsJoined(slot: slot)) {

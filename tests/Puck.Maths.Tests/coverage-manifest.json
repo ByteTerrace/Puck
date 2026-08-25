@@ -6588,7 +6588,8 @@
       "Id": "Puck.Maths.FixedQ4816.MoveToward(Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816)",
       "State": "covered",
       "CoveredBy": [
-        "scalar.move-toward-boundaries-and-segment"
+        "scalar.move-toward-boundaries-and-segment",
+        "scalar.move-toward-carrier-extremes"
       ]
     },
     {
@@ -8029,7 +8030,8 @@
       "Id": "Puck.Maths.FixedVector3.MoveToward(Puck.Maths.FixedVector3,Puck.Maths.FixedVector3,Puck.Maths.FixedQ4816)",
       "State": "covered",
       "CoveredBy": [
-        "vector.move-toward-boundaries-and-segment"
+        "vector.move-toward-boundaries-and-segment",
+        "vector.move-toward-carrier-extremes"
       ]
     },
     {
@@ -19372,6 +19374,8 @@
       "Id": "Puck.Maths.SecondOrderDynamics.Compile(System.UInt64,System.UInt64)",
       "State": "covered",
       "CoveredBy": [
+        "dynamics.guard-scale-public-divergence-search",
+        "dynamics.guard-scale-ties-vs-half-up",
         "dynamics.step-vs-evaluate-close-agreement"
       ]
     },
@@ -19379,7 +19383,9 @@
       "Id": "Puck.Maths.SecondOrderDynamics.Create(Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816)",
       "State": "covered",
       "CoveredBy": [
-        "dynamics.create-constants-vs-oracle"
+        "dynamics.create-constants-vs-oracle",
+        "dynamics.guard-scale-public-divergence-search",
+        "dynamics.guard-scale-ties-vs-half-up"
       ]
     },
     {

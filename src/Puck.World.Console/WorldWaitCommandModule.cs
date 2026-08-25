@@ -33,7 +33,7 @@ public sealed class WorldWaitCommandModule(IWorldConsoleAuthority authority, IWo
                     return CommandResult.Error(output: "[world.wait: expected exactly one value — <ticks>]");
                 }
 
-                if (!args.TryULong(
+                if (!args.TryUnsignedDigits(
                     index: 0,
                     value: out var ticks
                 )) {

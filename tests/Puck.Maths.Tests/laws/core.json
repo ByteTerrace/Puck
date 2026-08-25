@@ -1136,5 +1136,21 @@
         "Absolute": ""
       }
     ]
+  },
+  {
+    "Id": "core.scale-decimal-wide-reaches-canonical-core",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "DelegationTwin",
+        "Subject": "FixedPointConvert.ScaleDecimalWide's own result, at eleven decimal samples chosen as close to a binary half as a base-10 fraction can reach at these fraction bit counts (one raw unit above and below, since no decimal scale of at most 28 digits can produce an exact tie against a fraction bit count of 32 or 48 — 10^scale's only odd factor is 5^scale, and an exact half needs a reduced denominator of exactly two)",
+        "Against": "FixedPointRounding.RoundRational called DIRECTLY on the SAME (numerator, denominator, fractionBitCount) decimal.GetBits decomposes into — carriage only: agreement proves ScaleDecimalWide is wired to the shared core rather than carrying a second, independently rounding body, never that the core itself rounds correctly",
+        "Shared": "FixedPointRounding.RoundRational (internal) — the identical unbounded rational-rounding body FixedPointRounding.TryRoundRational (public) narrows to a signed 64-bit raw, and the one core SecondOrderExactMath.RoundToGuardScale routes through at its own working scale",
+        "Citation": "RoundRational's own correctness is independent evidence elsewhere: core.round-rational-scales-ties-and-refuses pins its public TryRoundRational face against an exact BigInteger reference, and q1648.decimal-conversion-modes/q3232.decimal-conversion-modes pin ScaleDecimalWide's PUBLIC decimal-conversion entry points against a wholly independent oracle that never calls RoundRational at all",
+        "Absolute": ""
+      }
+    ]
   }
 ]

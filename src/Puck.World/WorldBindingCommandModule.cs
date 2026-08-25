@@ -321,6 +321,7 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
             args: in args,
             at: 0,
             context: context,
+            defaultSlot: 0,
             verb: "player.bindings"
         );
 

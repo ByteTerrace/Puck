@@ -117,9 +117,9 @@ public sealed partial class PlayerRoster {
         device = default;
 
         if (
-            !int.TryParse(
-            s: ordinalText,
-            result: out var ordinal
+            !CommandArgs.TryParseInt(
+            text: ordinalText,
+            value: out var ordinal
         ) ||
             (ordinal < 1)
         ) {

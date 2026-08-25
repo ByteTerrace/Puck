@@ -64,11 +64,10 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
                     return CommandResult.Error(output: $"[world.view.camera: too many arguments — expected [<player>], player an integer 1..{PlayerRoster.MaxSlots}]");
                 }
 
-                var (slot, error) = SeatCommandArgs.ResolveJoinedSeat(
+                var (slot, error) = SeatCommandArgs.ResolveSlot(
                     args: in args,
                     at: 0,
                     context: context,
-                    roster: roster,
                     verb: "world.view.camera"
                 );
 

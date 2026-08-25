@@ -94,4 +94,35 @@ public sealed class CommandArgsTests {
         Assert.Equal(actual: spanOk, expected: stringOk);
         Assert.Equal(actual: fromSpan, expected: fromString);
     }
+    [InlineData("1", true, 1UL)]
+    [InlineData("0", true, 0UL)]
+    [InlineData("18446744073709551615", true, ulong.MaxValue)]
+    [InlineData("+1", false, 0UL)] // NumberStyles.None admits no sign — distinct from TryParseULong's Integer style
+    [InlineData("-1", false, 0UL)]
+    [InlineData(" 1", false, 0UL)] // no surrounding whitespace
+    [InlineData("1 ", false, 0UL)]
+    [InlineData("1.5", false, 0UL)]
+    [InlineData("18446744073709551616", false, 0UL)] // one past ulong.MaxValue
+    [InlineData("", false, 0UL)]
+    [InlineData("abc", false, 0UL)]
+    [Theory]
+    public void TryParseUnsignedDigitsAdmitsOnlyAPlainDigitRun(string text, bool expected, ulong value) {
+        Assert.Equal(expected: expected, actual: CommandArgs.TryParseUnsignedDigits(text: text, value: out var parsed));
+
+        if (expected) {
+            Assert.Equal(actual: parsed, expected: value);
+        }
+    }
+    [InlineData("1")]
+    [InlineData("+1")]
+    [InlineData(" 1 ")]
+    [InlineData("nonsense")]
+    [Theory]
+    public void UnsignedDigitsSpanAndStringOverloadsAgree(string text) {
+        var stringOk = CommandArgs.TryParseUnsignedDigits(text: text, value: out var fromString);
+        var spanOk = CommandArgs.TryParseUnsignedDigits(text: text.AsSpan(), value: out var fromSpan);
+
+        Assert.Equal(actual: spanOk, expected: stringOk);
+        Assert.Equal(actual: fromSpan, expected: fromString);
+    }
 }

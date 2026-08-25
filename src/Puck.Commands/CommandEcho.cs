@@ -4,13 +4,17 @@ using System.Text;
 namespace Puck.Commands;
 
 /// <summary>
-/// Builds the bracketed console echo line a read-back/mutation verb emits — <c>[verb: key=value key=value |
-/// key=value]</c> — so the envelope, field grammar, and segment separator are defined once rather than hand-spelled
-/// per verb. <see cref="Open(string)"/> starts the line; <see cref="Field(string, string)"/>/<see cref="Text(string)"/>
-/// append space-prefixed content; <see cref="Segment"/> marks a boundary between groups (a <c>" | "</c> separator,
-/// written only when further content follows — a trailing <see cref="Segment"/> before <see cref="Close"/> is
-/// dropped, so a trailing separator is impossible by construction); <see cref="Close"/> yields the finished string.
-/// Mutable and not thread-safe: one instance builds one line.
+/// Builds the bracketed console echo line a read-back/mutation verb emits — <c>[verb: key=value key=value | head
+/// field=value field=value]</c> — so the envelope and segment separator are defined once rather than hand-spelled per
+/// verb. A segment (the content between two <see cref="Segment"/> boundaries) is one of three shapes: a run of
+/// <see cref="Field(string, string)"/> <c>key=value</c> tokens; one <see cref="Head(string)"/> token — a declared,
+/// non-<c>key=value</c> first word naming what the segment describes (<c>kind</c>, <c>group</c>, <c>listing</c>) —
+/// followed by zero or more qualifying <see cref="Field(string, string)"/> tokens; or, for content that is not meant
+/// to be machine-parsed as a segment at all, one <see cref="Text(string)"/> call carrying a free-text sentence.
+/// <see cref="Open(string)"/> starts the line; <see cref="Segment"/> marks a boundary between segments (a
+/// <c>" | "</c> separator, written only when further content follows — a trailing <see cref="Segment"/> before
+/// <see cref="Close"/> is dropped, so a trailing separator is impossible by construction); <see cref="Close"/> yields
+/// the finished string. Mutable and not thread-safe: one instance builds one line.
 /// </summary>
 public sealed class CommandEcho {
     private readonly StringBuilder m_builder;
@@ -71,7 +75,21 @@ public sealed class CommandEcho {
             ? "true"
             : "false")
     );
-    /// <summary>Appends space-prefixed free text — for content not shaped as <c>key=value</c>.</summary>
+    /// <summary>Appends a space-prefixed, declared free-text HEAD token — the one non-<c>key=value</c> word a
+    /// segment may open with (e.g. <c>"kind"</c>, <c>"group"</c>, <c>"listing"</c>), naming what the
+    /// <see cref="Field(string, string)"/> tokens that follow describe.</summary>
+    /// <param name="head">The head word.</param>
+    /// <returns>The echo builder.</returns>
+    public CommandEcho Head(string head) {
+        FlushPendingSegment();
+
+        _ = m_builder.Append(value: ' ').Append(value: head);
+
+        return this;
+    }
+    /// <summary>Appends space-prefixed free text — a whole segment of prose not meant to be machine-parsed as
+    /// <c>key=value</c> fields at all (distinct from <see cref="Head(string)"/>, which names a segment's own
+    /// content).</summary>
     /// <param name="text">The text to append.</param>
     /// <returns>The echo builder.</returns>
     public CommandEcho Text(string text) {

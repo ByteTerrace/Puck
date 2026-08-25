@@ -230,5 +230,61 @@
         "Absolute": ""
       }
     ]
+  },
+  {
+    "Id": "dynamics.guard-scale-ties-vs-half-up",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.SecondOrderDynamics", "Name": "Create" },
+      { "Type": "Puck.Maths.SecondOrderDynamics", "Name": "Compile" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "FixedPointRounding.RoundRational (the core SecondOrderExactMath.RoundToGuardScale now routes through), at exact guard-scale ties whose truncated neighbor sweeps parities 0-7, and the same exact ratios re-scaled to a 300-bit-wide operand pair",
+        "Against": "Oracles.RoundHalfUp, a reconstruction of RoundToGuardScale's deleted formula — the two disciplines are REQUIRED to differ at an even-truncated tie",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": "dynamics.guard-scale-public-divergence-search"
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the two disciplines are proven to differ EXACTLY at an even-truncated tie (ties-to-even holds, half-up carries) and to AGREE at an odd-truncated tie (both carry) and everywhere off a tie (both round to the same nearer neighbor) — a battery of small and 200+-bit non-tie operands",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "dynamics.guard-scale-public-divergence-search",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.SecondOrderDynamics", "Name": "Create" },
+      { "Type": "Puck.Maths.SecondOrderDynamics", "Name": "Compile" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "every guard-scale rounding CompilePropagator performs (ExpNegative's and, when Underdamped, SinCosExact's) is independently re-derived — the SAME reduction the subject's own private method performs, transcribed rather than called, from the live ExpUnderflowExponent/ResidualShift constants — for a representative sweep of authored (frequency, damping) pairs including the critical boundary straddled from both sides, crossed with step widths from a single tick to a million and tick rates from one to a million; the reconstructed half-up formula never disagrees with the live ties-to-even core at any reduction point this sweep reaches",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: agreement at the guard-scale rounding PROVES agreement at the public Q32 propagator entry, because everything CompilePropagator does after a guard-scale rounding is a deterministic pure function of its result; this search's own domain is representative rather than exhaustive over every (frequency, damping, stepTicks, ticksPerSecond) quadruple, so a sample this sweep does not reach remains OWED. InitialResponse is not swept: CompilePropagator's guard-scale roundings never depend on it.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
   }
 ]

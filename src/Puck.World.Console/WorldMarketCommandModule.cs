@@ -1,3 +1,4 @@
+using System.Globalization;
 using Puck.Commands;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -26,6 +27,11 @@ namespace Puck.World;
 /// <c>[world.mutation: … applied/rejected]</c> line.
 /// </remarks>
 public sealed class WorldMarketCommandModule(IWorldConsoleAuthority authority, IServerLink link) : ICommandModule {
+    // Narrower than WorldPrincipal.TokenGrammar: a market party is a seat or peer only (see this class's own
+    // remarks) — console/world/addon/document/group all parse as a WorldPrincipal but are refused as a trade party,
+    // so the parse-failure refusal must not advertise them as legal here.
+    private const string PartyTokenGrammar = "seat1..seat4|peer:<n>:<generation>";
+
     // The read-back: config first (when unfiltered), then every live listing (id-filtered when requested).
     private static string Describe(WorldDefinition definition, long? filter) {
         if (definition.Market is not { } market) {
@@ -35,16 +41,15 @@ public sealed class WorldMarketCommandModule(IWorldConsoleAuthority authority, I
         var echo = CommandEcho.Open(verb: "world.market");
 
         if (filter is null) {
-            var config = new System.Text.StringBuilder(value: "formats=[").Append(value: string.Join(
+            _ = echo.Field(key: "formats", value: $"[{string.Join(
                 separator: ',',
                 values: market.EffectiveFormats
-            )).Append(value: ']')
-                .Append(value: " feeBasisPoints=").Append(value: market.FeeBasisPoints)
-                .Append(value: " duration=[").Append(value: market.MinDurationSeconds).Append(value: "..").Append(value: market.MaxDurationSeconds).Append(value: ']')
-                .Append(value: " retentionSeconds=").Append(value: market.RetentionSeconds)
-                .Append(value: " feeReserve=").Append(value: market.FeeReserve);
-
-            _ = echo.Text(text: config.ToString()).Segment();
+            )}]")
+                .Field(key: "feeBasisPoints", value: market.FeeBasisPoints)
+                .Field(key: "duration", value: $"[{market.MinDurationSeconds.ToString(provider: CultureInfo.InvariantCulture)}..{market.MaxDurationSeconds.ToString(provider: CultureInfo.InvariantCulture)}]")
+                .Field(key: "retentionSeconds", value: market.RetentionSeconds)
+                .Field(key: "feeReserve", value: market.FeeReserve)
+                .Segment();
         }
 
         foreach (var listing in (market.Listings ?? [])) {
@@ -55,30 +60,31 @@ public sealed class WorldMarketCommandModule(IWorldConsoleAuthority authority, I
                 continue;
             }
 
-            var text = new System.Text.StringBuilder(value: "listing #").Append(value: listing.Id)
-                .Append(value: " seller=").Append(value: listing.Seller.Describe())
-                .Append(value: " item=").Append(value: listing.Quantity).Append(value: 'x').Append(value: listing.ItemRow.Value)
-                .Append(value: " currency=").Append(value: listing.CurrencyRow.Value)
-                .Append(value: " format=").Append(value: listing.Format)
-                .Append(value: " startPrice=").Append(value: listing.StartPrice);
+            _ = echo.Head(head: "listing")
+                .Field(key: "id", value: listing.Id)
+                .Field(key: "seller", value: listing.Seller.Describe())
+                .Field(key: "item", value: $"{listing.Quantity}x{listing.ItemRow.Value}")
+                .Field(key: "currency", value: listing.CurrencyRow.Value)
+                .Field(key: "format", value: listing.Format.ToString())
+                .Field(key: "startPrice", value: listing.StartPrice);
 
             if (listing.BuyoutPrice is { } buyoutPrice) {
-                _ = text.Append(value: " buyoutPrice=").Append(value: buyoutPrice);
+                _ = echo.Field(key: "buyoutPrice", value: buyoutPrice);
             }
 
-            _ = text.Append(value: " deadlineTick=").Append(value: listing.DeadlineTick)
-                .Append(value: " status=").Append(value: listing.Status)
-                .Append(value: " currentBid=").Append(value: listing.CurrentBid);
+            _ = echo.Field(key: "deadlineTick", value: listing.DeadlineTick)
+                .Field(key: "status", value: listing.Status.ToString())
+                .Field(key: "currentBid", value: listing.CurrentBid);
 
             if (listing.CurrentBidder is { } bidder) {
-                _ = text.Append(value: " currentBidder=").Append(value: bidder.Describe());
+                _ = echo.Field(key: "currentBidder", value: bidder.Describe());
             }
 
             if (listing.ResolvedTick is { } resolvedTick) {
-                _ = text.Append(value: " resolvedTick=").Append(value: resolvedTick);
+                _ = echo.Field(key: "resolvedTick", value: resolvedTick);
             }
 
-            _ = echo.Text(text: text.ToString()).Segment();
+            _ = echo.Segment();
         }
 
         return echo.Close();
@@ -125,7 +131,7 @@ public sealed class WorldMarketCommandModule(IWorldConsoleAuthority authority, I
                     token: args[0],
                     principal: out var seller
                 )) {
-                    return CommandResult.Error(output: $"[market.list: unknown principal '{args[0].ToString()}' — {WorldPrincipal.TokenGrammar}]");
+                    return CommandResult.Error(output: $"[market.list: unknown principal '{args[0].ToString()}' — {PartyTokenGrammar}]");
                 }
 
                 if (!WorldCellName.TryParse(
@@ -213,7 +219,7 @@ public sealed class WorldMarketCommandModule(IWorldConsoleAuthority authority, I
                     token: args[0],
                     principal: out var bidder
                 )) {
-                    return CommandResult.Error(output: $"[market.bid: unknown principal '{args[0].ToString()}' — {WorldPrincipal.TokenGrammar}]");
+                    return CommandResult.Error(output: $"[market.bid: unknown principal '{args[0].ToString()}' — {PartyTokenGrammar}]");
                 }
 
                 if (!args.TryLong(
@@ -257,7 +263,7 @@ public sealed class WorldMarketCommandModule(IWorldConsoleAuthority authority, I
                     token: args[0],
                     principal: out var buyer
                 )) {
-                    return CommandResult.Error(output: $"[market.buyout: unknown principal '{args[0].ToString()}' — {WorldPrincipal.TokenGrammar}]");
+                    return CommandResult.Error(output: $"[market.buyout: unknown principal '{args[0].ToString()}' — {PartyTokenGrammar}]");
                 }
 
                 if (!args.TryLong(
@@ -293,7 +299,7 @@ public sealed class WorldMarketCommandModule(IWorldConsoleAuthority authority, I
                     token: args[0],
                     principal: out var canceler
                 )) {
-                    return CommandResult.Error(output: $"[market.cancel: unknown principal '{args[0].ToString()}' — {WorldPrincipal.TokenGrammar}]");
+                    return CommandResult.Error(output: $"[market.cancel: unknown principal '{args[0].ToString()}' — {PartyTokenGrammar}]");
                 }
 
                 if (!args.TryLong(

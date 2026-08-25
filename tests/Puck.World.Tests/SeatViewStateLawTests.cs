@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.SdfVm.Views;
 using Puck.World.Client;
 using Xunit;
 
@@ -36,5 +37,38 @@ public sealed class SeatViewStateLawTests {
             ),
             precision: 5
         );
+    }
+
+    /// <summary>A negative closing rate is refused rather than reversing the ease: <see cref="FirstOrderLag.Alpha"/>
+    /// clamps it to zero, so <see cref="WorldSeatViewState.Follow(float,float,float)"/> leaves the live yaw exactly where it was — the
+    /// intended behavior change from the deleted copy's own unclamped <c>1 - exp(-rate * dt)</c>, which moved
+    /// backward away from the target for a negative rate instead of holding still.</summary>
+    [Fact]
+    public void Follow_NegativeRate_HoldsTheLiveYawExactly() {
+        var state = new WorldSeatViewState();
+
+        state.Follow(
+            targetYaw: 1.5f,
+            rate: -1f,
+            deltaSeconds: 1f
+        );
+
+        Assert.Equal(expected: 0f, actual: state.Yaw);
+    }
+
+    /// <summary>Control for <see cref="Follow_NegativeRate_HoldsTheLiveYawExactly"/>: the same call with a positive
+    /// rate DOES move the live yaw, so the hold above is a discriminating assertion about the sign of the rate
+    /// rather than <see cref="WorldSeatViewState.Follow(float,float,float)"/> being inert generally.</summary>
+    [Fact]
+    public void Follow_PositiveRate_MovesTheLiveYawTowardTheTarget() {
+        var state = new WorldSeatViewState();
+
+        state.Follow(
+            targetYaw: 1.5f,
+            rate: 5f,
+            deltaSeconds: 1f
+        );
+
+        Assert.NotEqual(expected: 0f, actual: state.Yaw);
     }
 }

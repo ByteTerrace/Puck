@@ -877,6 +877,13 @@ internal static partial class LawRegistry {
             )
         ),
         Case(
+            id: "core.scale-decimal-wide-reaches-canonical-core",
+            run: () => Laws.Claim(
+                claim: Subjects.ScaleDecimalWideReachesCanonicalCore,
+                lawId: "core.scale-decimal-wide-reaches-canonical-core"
+            )
+        ),
+        Case(
             id: "q1648.peer-conversion-vs-fixedq4816",
             run: () => Laws.Claim(
                 claim: Subjects.Q1648PeerConversionExact,
