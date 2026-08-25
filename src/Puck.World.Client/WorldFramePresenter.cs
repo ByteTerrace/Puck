@@ -143,10 +143,14 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     // here, not per-seat state.
     private readonly WorldCameraProgram?[] m_cameraModeAuthoredRig = new WorldCameraProgram?[PlayerRoster.MaxSlots];
     private readonly IReadOnlyList<WorldDynamicsRow>?[] m_cameraModeAuthoredDynamics = new IReadOnlyList<WorldDynamicsRow>?[PlayerRoster.MaxSlots];
+    // Compilation embeds named Blend/Select dependencies resolved from definition.Cameras, so the cameras list
+    // reference is part of the key: an upsert of any camera row moves it, forcing the recompile a stale embedded
+    // dependency would otherwise survive.
+    private readonly IReadOnlyList<WorldCamera>?[] m_cameraModeAuthoredCameras = new IReadOnlyList<WorldCamera>?[PlayerRoster.MaxSlots];
     private readonly IWorldCameraProgramRig?[] m_cameraModeCompiledRig = new IWorldCameraProgramRig?[PlayerRoster.MaxSlots];
     // ResolveNamedCamera's compiled-rig cache, keyed by camera row name (several named cameras may resolve in one
     // frame — a camera-bearing layout slot). Same reference-equality invalidation as the seat cache above.
-    private readonly Dictionary<string, (WorldCameraProgram Program, IReadOnlyList<WorldDynamicsRow> Dynamics, IWorldCameraProgramRig Rig)> m_namedCameraRigCache = new(comparer: StringComparer.Ordinal);
+    private readonly Dictionary<string, (WorldCameraProgram Program, IReadOnlyList<WorldDynamicsRow> Dynamics, IReadOnlyList<WorldCamera> Cameras, IWorldCameraProgramRig Rig)> m_namedCameraRigCache = new(comparer: StringComparer.Ordinal);
     private readonly WorldGroupAnchors m_groupAnchors = new();
     private readonly List<SdfViewSnapshot> m_views = new(capacity: PlayerRoster.MaxSlots);
     private DynamicTransform[] m_transforms = [];
@@ -961,10 +965,15 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             !ReferenceEquals(
                 objA: m_cameraModeAuthoredDynamics[slot],
                 objB: definition.Dynamics
+            ) ||
+            !ReferenceEquals(
+                objA: m_cameraModeAuthoredCameras[slot],
+                objB: definition.Cameras
             )
         ) {
             m_cameraModeAuthoredRig[slot] = cameraRig;
             m_cameraModeAuthoredDynamics[slot] = definition.Dynamics;
+            m_cameraModeAuthoredCameras[slot] = definition.Cameras;
             m_cameraModeCompiledRig[slot] = WorldCameraRigCompiler.Compile(
                 definition: definition,
                 program: cameraRig
@@ -1055,6 +1064,10 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             ReferenceEquals(
                 objA: cached.Dynamics,
                 objB: definition.Dynamics
+            ) &&
+            ReferenceEquals(
+                objA: cached.Cameras,
+                objB: definition.Cameras
             )
         ) {
             cached.Rig.Retarget(definition: definition);
@@ -1067,7 +1080,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             program: program
         );
 
-        m_namedCameraRigCache[name] = (program, definition.Dynamics, rig);
+        m_namedCameraRigCache[name] = (program, definition.Dynamics, definition.Cameras, rig);
 
         return rig;
     }

@@ -101,6 +101,10 @@ public sealed class WorldStampPool {
         // moves, so a stale layout can never survive onto different text.
         public TextLayoutResult[]? CachedTextLayouts;
         public float CachedTextLayoutScale;
+        // The catalog the cached layouts' glyph bounds/UVs were resolved against: a definition.Text delivery packs a
+        // new catalog while the creation hash (and so this Registration) survives, and a layout against the old
+        // atlas must not be served against the new one.
+        public object? CachedTextLayoutCatalog;
         public required string Key;
         public required AuthoredPartTable Parts;
         // The row-rooted placement (an ANIMATED or an ATTACHED one), or null for a body-rooted stamp.
@@ -227,9 +231,9 @@ public sealed class WorldStampPool {
         // the cached scale no longer matches.
         var textLayouts = (hasText
             ? ResolveTextLayouts(
+                catalog: textCatalog!,
                 live: live!,
                 document: document!,
-                fontFor: textCatalog!.Resolve,
                 scale: placementScale
             )
             : null
@@ -367,22 +371,27 @@ public sealed class WorldStampPool {
     // The Registration-cached text layout for hasText's (document, scale): a cache hit when the last layout this
     // registration computed still matches the scale being rendered this call, a fresh CreationStampEmitter.LayoutTextRuns
     // otherwise (also the first call — CachedTextLayouts starts null on every freshly registered/recreated instance).
-    private static TextLayoutResult[] ResolveTextLayouts(Registration live, CreationDocument document, float scale, Func<string?, FontAtlas> fontFor) {
+    private static TextLayoutResult[] ResolveTextLayouts(PackedFontAtlasCatalog catalog, Registration live, CreationDocument document, float scale) {
         if (
             (live.CachedTextLayouts is { } cached) &&
-            (live.CachedTextLayoutScale == scale)
+            (live.CachedTextLayoutScale == scale) &&
+            ReferenceEquals(
+                objA: live.CachedTextLayoutCatalog,
+                objB: catalog
+            )
         ) {
             return cached;
         }
 
         var layouts = CreationStampEmitter.LayoutTextRuns(
             document: document,
-            fontFor: fontFor,
+            fontFor: catalog.Resolve,
             scale: scale
         );
 
         live.CachedTextLayouts = layouts;
         live.CachedTextLayoutScale = scale;
+        live.CachedTextLayoutCatalog = catalog;
 
         return layouts;
     }

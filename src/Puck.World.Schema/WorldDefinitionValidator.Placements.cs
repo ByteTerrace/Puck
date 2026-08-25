@@ -8,12 +8,28 @@ using Puck.Physics.Motion;
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
+    // The null-tolerant face of the keyed row lookups: a malformed row whose id/name never parsed resolves to
+    // nothing — the missing-key refusal is already recorded by the caller's own required-field check — exactly as
+    // the linear scan these dictionaries replaced treated a null key.
+    private static bool TryFindRow<TRow>(IReadOnlyDictionary<string, TRow> map, string? key, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out TRow? row) where TRow : class {
+        if (key is null) {
+            row = null;
+
+            return false;
+        }
+
+        return map.TryGetValue(
+            key: key,
+            value: out row
+        );
+    }
     // The creation's Locomotion token, resolved as a kit name (the creator's rule; null when the creation/token is absent).
     // Looks up the SAME name-keyed map ValidatePlacements builds once per whole-document validate (see its own
     // remarks) instead of rescanning definition.Creations per call.
-    private static string? ResolveLocomotionKit(IReadOnlyDictionary<string, WorldPrototype> creationsById, string prototypeId) => (creationsById.TryGetValue(
+    private static string? ResolveLocomotionKit(IReadOnlyDictionary<string, WorldPrototype> creationsById, string? prototypeId) => (TryFindRow(
         key: prototypeId,
-        value: out var creation
+        map: creationsById,
+        row: out var creation
     )
         ? creation.Document.Behavior?.Locomotion
         : null);
@@ -418,9 +434,10 @@ public static partial class WorldDefinitionValidator {
         var fontNames = scope.FontNames;
         var hasTextCatalog = scope.HasTextCatalog;
 
-        var creation = (creationsById.TryGetValue(
+        var creation = (TryFindRow(
             key: placement.PrototypeId,
-            value: out var faceSourceCreation
+            map: creationsById,
+            row: out var faceSourceCreation
         )
             ? faceSourceCreation
             : null);
@@ -963,7 +980,7 @@ public static partial class WorldDefinitionValidator {
         var creationsById = new Dictionary<string, WorldPrototype>(comparer: StringComparer.Ordinal);
 
         for (var creationIndex = 0; (creationIndex < creations.Count); creationIndex++) {
-            if (creations[creationIndex] is { } creationRow) {
+            if (creations[creationIndex] is { Id: not null } creationRow) {
                 _ = creationsById.TryAdd(
                     key: creationRow.Id,
                     value: creationRow
@@ -974,7 +991,7 @@ public static partial class WorldDefinitionValidator {
         var kitsByName = new Dictionary<string, WorldKit>(comparer: StringComparer.Ordinal);
 
         for (var kitIndex = 0; (kitIndex < definition.Kits.Count); kitIndex++) {
-            if (definition.Kits[kitIndex] is { } kitRow) {
+            if (definition.Kits[kitIndex] is { Name: not null } kitRow) {
                 _ = kitsByName.TryAdd(
                     key: kitRow.Name,
                     value: kitRow
@@ -1093,9 +1110,10 @@ public static partial class WorldDefinitionValidator {
                     errors: errors
                 );
 
-                if (creationsById.TryGetValue(
+                if (TryFindRow(
                     key: placement.PrototypeId,
-                    value: out var solidCreation
+                    map: creationsById,
+                    row: out var solidCreation
                 )) {
                     // A shape carrying domain ops compiles one collider PER EXPANDED COPY, so the ceiling counts the
                     // expansion, not the authored shape count. A fold with no rigid-copy expansion has no contact
@@ -1121,9 +1139,10 @@ public static partial class WorldDefinitionValidator {
                     var shapeColliders = 0L;
 
                     foreach (var variantId in solidVariantIds) {
-                        if (!creationsById.TryGetValue(
+                        if (!TryFindRow(
                             key: variantId,
-                            value: out var variantCreation
+                            map: creationsById,
+                            row: out var variantCreation
                         )) {
                             continue;
                         }
@@ -1178,9 +1197,10 @@ public static partial class WorldDefinitionValidator {
 
             // The animated-row constraints: a placement of a framed creation replays through the reserved dynamic
             // pool — single copy only (pattern/mirror are static-stamp facets), and at most the reserved pool count.
-            creationsById.TryGetValue(
+            _ = TryFindRow(
                 key: placement.PrototypeId,
-                value: out var animatedCreation
+                map: creationsById,
+                row: out var animatedCreation
             );
 
             var isAnimated = (animatedCreation is { Document.Frames.Count: > 0 });

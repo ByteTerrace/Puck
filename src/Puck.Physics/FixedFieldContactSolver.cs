@@ -770,8 +770,14 @@ public sealed class FixedFieldContactSolver(
         var lastNormal = FixedVector3.Zero;
         // Box conservative bounds are invariant across every iteration below (same volume.HalfExtents, same m_skin),
         // so the fixed-point sqrt behind FixedVector3.Length runs once per box volume here instead of once per
-        // iteration per box volume; non-box slots stay unread.
-        Span<FixedQ4816> boxConservativeMinimum = stackalloc FixedQ4816[volumes.Length];
+        // iteration per box volume; non-box slots stay unread. The stack buffer is bounded — IContactField.Resolve
+        // declares no span-length ceiling, so an oversized caller falls back to the heap instead of growing the
+        // stack with its input.
+        const int StackVolumeBudget = 64;
+        var boxConservativeMinimum = ((volumes.Length <= StackVolumeBudget)
+            ? stackalloc FixedQ4816[StackVolumeBudget]
+            : new FixedQ4816[volumes.Length]
+        )[..volumes.Length];
 
         for (var index = 0; (index < volumes.Length); index++) {
             if (volumes[index].Kind == FixedBodyColliderKind.Box) {

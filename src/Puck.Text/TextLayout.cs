@@ -103,7 +103,9 @@ public sealed class TextLayout {
     // here reproduce foreach's own desugaring (including disposing the enumerator in a finally) bit for bit.
     // placementCapacity seeds the placements list; 0 reproduces List<T>'s own default (lazy, grow-from-empty)
     // behavior for a caller with no cheap upper bound to offer.
-    private static TextLayoutResult LayoutRunes<TEnumerator>(FontAtlas atlas, TEnumerator runes, float scale, TextLayoutOptions options, int placementCapacity) where TEnumerator : IEnumerator<TextEffectRune> {
+    // The argument gate every public Layout overload runs before acquiring any rune enumerator: an invalid scale or
+    // option must throw before a caller-supplied IEnumerable's GetEnumerator can run (or leak undisposed).
+    private static void ValidateArguments(TextLayoutOptions options, float scale) {
         if (
             !float.IsFinite(f: scale) ||
             (scale <= 0.0f)
@@ -149,6 +151,11 @@ public sealed class TextLayout {
                 paramName: nameof(options)
             );
         }
+    }
+    private static TextLayoutResult LayoutRunes<TEnumerator>(FontAtlas atlas, TEnumerator runes, float scale, TextLayoutOptions options, int placementCapacity) where TEnumerator : IEnumerator<TextEffectRune> {
+        // Arguments are validated by ValidateArguments in every public entry point before an enumerator is
+        // acquired, so an invalid argument can never leak a caller-supplied enumerator.
+        var maxLineWidth = options.MaxLineWidth;
 
         var placements = new List<TextGlyphPlacement>(capacity: placementCapacity);
         var lineBreaks = ((options.Alignment == TextAlignment.Left)
@@ -330,11 +337,18 @@ public sealed class TextLayout {
         ArgumentNullException.ThrowIfNull(atlas);
         ArgumentNullException.ThrowIfNull(text);
 
+        var resolvedOptions = ((maxLineWidth is null)
+            ? TextLayoutOptions.Default
+            : new TextLayoutOptions(MaxLineWidth: maxLineWidth));
+
+        ValidateArguments(
+            options: resolvedOptions,
+            scale: scale
+        );
+
         return LayoutRunes(
             atlas: atlas,
-            options: ((maxLineWidth is null)
-            ? TextLayoutOptions.Default
-            : new TextLayoutOptions(MaxLineWidth: maxLineWidth)),
+            options: resolvedOptions,
             placementCapacity: text.Length,
             runes: new PlainRuneEnumerator(text: text),
             scale: scale
@@ -354,6 +368,11 @@ public sealed class TextLayout {
         ArgumentNullException.ThrowIfNull(atlas);
         ArgumentNullException.ThrowIfNull(text);
         ArgumentNullException.ThrowIfNull(options);
+
+        ValidateArguments(
+            options: options,
+            scale: scale
+        );
 
         return LayoutRunes(
             atlas: atlas,
@@ -376,11 +395,18 @@ public sealed class TextLayout {
         ArgumentNullException.ThrowIfNull(atlas);
         ArgumentNullException.ThrowIfNull(runes);
 
+        var resolvedOptions = ((maxLineWidth is null)
+            ? TextLayoutOptions.Default
+            : new TextLayoutOptions(MaxLineWidth: maxLineWidth));
+
+        ValidateArguments(
+            options: resolvedOptions,
+            scale: scale
+        );
+
         return LayoutRunes(
             atlas: atlas,
-            options: ((maxLineWidth is null)
-            ? TextLayoutOptions.Default
-            : new TextLayoutOptions(MaxLineWidth: maxLineWidth)),
+            options: resolvedOptions,
             placementCapacity: 0,
             runes: runes.GetEnumerator(),
             scale: scale
@@ -400,6 +426,11 @@ public sealed class TextLayout {
         ArgumentNullException.ThrowIfNull(atlas);
         ArgumentNullException.ThrowIfNull(runes);
         ArgumentNullException.ThrowIfNull(options);
+
+        ValidateArguments(
+            options: options,
+            scale: scale
+        );
 
         return LayoutRunes(
             atlas: atlas,
