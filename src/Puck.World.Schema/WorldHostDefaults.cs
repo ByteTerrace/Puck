@@ -85,7 +85,7 @@ public sealed record WorldPlacementPolicyDefaults(
 ) {
     /// <summary>Gets the inert absence — zero headroom, a zero-width scale envelope, no candidates.
     /// The engine holds no authoring policy of its own: the standard policy is AUTHORED, in
-    /// <c>Assets/worlds/standard.world.json</c>, and a world inherits it by naming that document as its basis; a
+    /// <c>Assets/worlds/puck.basis.json</c>, and a world inherits it by naming that document as its basis; a
     /// world reading this cannot author placements or edit.</summary>
     public static WorldPlacementPolicyDefaults Absent { get; } = new WorldPlacementPolicyDefaults(
         AuthoringHeadroomPlacements: 0,

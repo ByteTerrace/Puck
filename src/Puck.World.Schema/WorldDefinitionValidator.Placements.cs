@@ -1015,12 +1015,18 @@ public static partial class WorldDefinitionValidator {
                 errors: errors
             );
 
-            if (
-                !float.IsFinite(f: placement.Scale) ||
+            if (!float.IsFinite(f: placement.Scale) || (placement.Scale <= 0f)) {
+                // Refused before the envelope: a zero (or negative) scale is invisible content with degenerate
+                // colliders, and the Absent policy's zero-width envelope would otherwise ACCEPT exactly 0 — a
+                // placement that boots green and renders nothing.
+                errors.Add(item: $"{path}.scale {placement.Scale} must be a finite positive value.");
+            } else if (
                 (placement.Scale < authoring.MinPlacementScale) ||
                 (placement.Scale > authoring.MaxPlacementScale)
             ) {
-                errors.Add(item: $"{path}.scale {placement.Scale} is outside {authoring.MinPlacementScale}..{authoring.MaxPlacementScale}.");
+                errors.Add(item: ((authoring.MaxPlacementScale <= 0f)
+                    ? $"{path}.scale {placement.Scale}: this world's placements.policy declares no scale envelope (0..0) — author minPlacementScale/maxPlacementScale, or ride a basis whose policy does."
+                    : $"{path}.scale {placement.Scale} is outside {authoring.MinPlacementScale}..{authoring.MaxPlacementScale}."));
             }
 
             if (placement.Distribution is { } distribution) {
