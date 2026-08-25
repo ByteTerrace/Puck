@@ -235,7 +235,7 @@ internal static class HashDivergenceProbe {
     // change is the one flipped byte — a surgical, deterministic divergence for testing the localizer itself.
     private static void Perturb(AdvancedGamingBrickMachine machine) {
         var snapshot = machine.Snapshot();
-        var busSection = FindSectionByName(
+        var busSection = SnapshotDivergence.FindSectionByName(
             sections: snapshot.Sections,
             name: "bus"
         );
@@ -247,15 +247,6 @@ internal static class HashDivergenceProbe {
         );
 
         machine.Restore(snapshot: poked);
-    }
-    private static SnapshotSection FindSectionByName(IReadOnlyList<SnapshotSection> sections, string name) {
-        foreach (var section in sections) {
-            if (section.Name == name) {
-                return section;
-            }
-        }
-
-        throw new InvalidOperationException(message: $"snapshot has no '{name}' section");
     }
     private static void RunUntilCycle(AdvancedGamingBrickMachine machine, long target) {
         while (machine.Cycles < target) {
