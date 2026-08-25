@@ -10,15 +10,7 @@ public sealed partial class SdfWorldEngine {
     /// <param name="screenIndex">The screen slot (0..<see cref="MaxScreenSurfaces"/>-1).</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is out of range.</exception>
     public void ClearScreenDecal(int screenIndex) {
-        if (
-            (screenIndex < 0) ||
-            (screenIndex >= MaxScreenSurfaces)
-        ) {
-            throw new ArgumentOutOfRangeException(
-                paramName: nameof(screenIndex),
-                message: $"A screen index must be 0..{(MaxScreenSurfaces - 1)}."
-            );
-        }
+        RequireScreenIndex(screenIndex: screenIndex);
 
         var descriptorBase = (screenIndex * DecalWordsPerCell);
 
@@ -136,15 +128,7 @@ public sealed partial class SdfWorldEngine {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/>/<paramref name="columns"/>/<paramref name="rows"/> out of range, or the grid exceeds <see cref="MaxScreenDecalCells"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="cellWords"/> is not <c>rows × columns × 4</c> uints.</exception>
     public void SetScreenDecal(int screenIndex, int columns, int rows, float distanceRange, ReadOnlySpan<uint> cellWords) {
-        if (
-            (screenIndex < 0) ||
-            (screenIndex >= MaxScreenSurfaces)
-        ) {
-            throw new ArgumentOutOfRangeException(
-                paramName: nameof(screenIndex),
-                message: $"A screen index must be 0..{(MaxScreenSurfaces - 1)}."
-            );
-        }
+        RequireScreenIndex(screenIndex: screenIndex);
 
         if (
             (columns <= 0) ||
@@ -216,15 +200,7 @@ public sealed partial class SdfWorldEngine {
     /// <param name="color">The emitted light color (linear RGB, typically 0..1).</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is outside <c>0..31</c>.</exception>
     public void SetScreenLight(int screenIndex, Vector3 color) {
-        if (
-            (screenIndex < 0) ||
-            (screenIndex >= MaxScreenSurfaces)
-        ) {
-            throw new ArgumentOutOfRangeException(
-                paramName: nameof(screenIndex),
-                message: $"A screen index must be 0..{(MaxScreenSurfaces - 1)}."
-            );
-        }
+        RequireScreenIndex(screenIndex: screenIndex);
 
         m_screenLightColors[screenIndex] = color;
     }
@@ -243,15 +219,7 @@ public sealed partial class SdfWorldEngine {
     /// <param name="imageViewHandle">The source's same-device storage-image view, or 0 to unbind.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is outside <c>0..31</c>.</exception>
     public void SetScreenSource(int screenIndex, nint imageViewHandle) {
-        if (
-            (screenIndex < 0) ||
-            (screenIndex >= MaxScreenSurfaces)
-        ) {
-            throw new ArgumentOutOfRangeException(
-                paramName: nameof(screenIndex),
-                message: $"A screen index must be 0..{(MaxScreenSurfaces - 1)}."
-            );
-        }
+        RequireScreenIndex(screenIndex: screenIndex);
 
         m_screenSourceViews[screenIndex] = imageViewHandle;
         m_screenSourceMask = ((0 != imageViewHandle)
@@ -279,15 +247,7 @@ public sealed partial class SdfWorldEngine {
     /// <param name="halfHeight">The half-extent along <paramref name="up"/> this frame.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is outside <c>0..31</c>.</exception>
     public void SetScreenSurface(int screenIndex, Vector3 origin, Vector3 right, Vector3 up, float halfWidth, float halfHeight) {
-        if (
-            (screenIndex < 0) ||
-            (screenIndex >= MaxScreenSurfaces)
-        ) {
-            throw new ArgumentOutOfRangeException(
-                paramName: nameof(screenIndex),
-                message: $"A screen index must be 0..{(MaxScreenSurfaces - 1)}."
-            );
-        }
+        RequireScreenIndex(screenIndex: screenIndex);
 
         var unitRight = Vector3.Normalize(value: right);
         var unitUp = Vector3.Normalize(value: up);
@@ -314,5 +274,18 @@ public sealed partial class SdfWorldEngine {
             array: m_screenSurfaceDirty,
             value: true
         );
+    }
+    /// <summary>Throws if <paramref name="screenIndex"/> falls outside <c>0..<see cref="MaxScreenSurfaces"/>-1</c>.</summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is out of range.</exception>
+    private static void RequireScreenIndex(int screenIndex) {
+        if (
+            (screenIndex < 0) ||
+            (screenIndex >= MaxScreenSurfaces)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(screenIndex),
+                message: $"A screen index must be 0..{(MaxScreenSurfaces - 1)}."
+            );
+        }
     }
 }
