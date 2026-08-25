@@ -226,11 +226,17 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
                     var parts = new string[WorldSeatBindings.SeatCount];
 
                     for (var slot = 0; (slot < WorldSeatBindings.SeatCount); slot++) {
-                        var location = m_seatRouter.Route(slot: slot);
-
-                        parts[slot] = string.Create(
-                            provider: CultureInfo.InvariantCulture,
-                            handler: $"{PlayerRoster.DisplayNumber(slot: slot)}={location.Endpoint.Identity}:{(location.EntityIndex + 1)}@{location.Epoch}"
+                        // A world declaring fewer local seats than the host ceiling never publishes the rest; an
+                        // unclaimed slot reads '-', the same mark world.instance.seats uses for an unoccupied seat.
+                        parts[slot] = ((m_seatRouter.TryRoute(slot: slot) is { } location)
+                            ? string.Create(
+                                provider: CultureInfo.InvariantCulture,
+                                handler: $"{PlayerRoster.DisplayNumber(slot: slot)}={location.Endpoint.Identity}:{(location.EntityIndex + 1)}@{location.Epoch}"
+                            )
+                            : string.Create(
+                                provider: CultureInfo.InvariantCulture,
+                                handler: $"{PlayerRoster.DisplayNumber(slot: slot)}=-"
+                            )
                         );
                     }
 
@@ -255,7 +261,9 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
                     return CommandResult.Error(output: $"[world.view: expected a seat number 1..{WorldSeatBindings.SeatCount}]");
                 }
 
-                var seatLocation = m_seatRouter.Route(slot: PlayerRoster.SlotFromDisplay(number: seat));
+                if (m_seatRouter.TryRoute(slot: PlayerRoster.SlotFromDisplay(number: seat)) is not { } seatLocation) {
+                    return CommandResult.Error(output: $"[world.view {seat}: seat {seat} has no authority claim — this world declares fewer local seats]");
+                }
 
                 return new CommandResult(Output: string.Create(
                     provider: CultureInfo.InvariantCulture,
