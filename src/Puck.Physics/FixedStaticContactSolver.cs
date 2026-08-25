@@ -27,34 +27,23 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
         ref FixedVector3 lastNormal,
         ref FixedVector3 groundNormal
     ) {
-        position += (push.Normal * push.Penetration);
-
-        var walkable = (FixedVector3.Dot(
-            left: push.Normal,
-            right: up
-        ) >= GroundedThreshold);
-
-        grounded |= walkable;
-
-        if (walkable) {
-            groundNormal = push.Normal;
-        }
-
-        // The obstruction witness tracks only a NON-walkable push (a wall, not the ground or a ramp) — a standing body
-        // re-resolves its ground contact every solver iteration, so an unconditional "last push" would have the ground
-        // overwrite a genuine wall push from an earlier iteration in the SAME call.
-        if (!walkable) {
-            lastNormal = push.Normal;
-        }
-
-        var into = FixedVector3.Dot(
-            left: velocity,
-            right: push.Normal
+        // The obstruction witness (lastNormal) tracks only a NON-walkable push (a wall, not the ground or a ramp) —
+        // a standing body re-resolves its ground contact every solver iteration, so an unconditional "last push"
+        // would have the ground overwrite a genuine wall push from an earlier iteration in the SAME call.
+        FixedContactPushMath.Commit(
+            grounded: ref grounded,
+            groundNormal: ref groundNormal,
+            lastNormal: ref lastNormal,
+            position: ref position,
+            trial: FixedContactPushMath.ComputeOrdinary(
+                groundedThreshold: GroundedThreshold,
+                normal: push.Normal,
+                penetration: push.Penetration,
+                up: up,
+                velocity: in velocity
+            ),
+            velocity: ref velocity
         );
-
-        if (into < FixedQ4816.Zero) {
-            velocity -= (push.Normal * into);
-        }
     }
     private bool Sweep(
         ReadOnlySpan<FixedStaticCollider> colliders,

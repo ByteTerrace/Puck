@@ -43,6 +43,7 @@ public struct FixedPairManifoldSlot : IManifoldSlotEvictionKey {
     /// <summary>What the slot is doing this step.</summary>
     public FixedPairManifoldSlotDisposition Disposition;
 
+    readonly bool IManifoldSlotEvictionKey.Occupied => Occupied;
     readonly int IManifoldSlotEvictionKey.LastTouchedStep => LastTouchedStep;
     readonly long IManifoldSlotEvictionKey.NormalImpulseRaw => NormalImpulseRaw;
 }
@@ -84,30 +85,6 @@ public sealed class FixedPairManifoldSlotTable {
         }
     }
 
-    private int Evict() {
-        var victim = FixedManifoldEviction.SelectVictim(
-            capacity: Capacity,
-            claimed: m_claimed,
-            slots: m_slots
-        );
-
-        if (victim < 0) {
-            return -1;
-        }
-
-        m_slots[victim] = default;
-
-        return victim;
-    }
-    private int FindFree() {
-        for (var index = 0; (index < Capacity); ++index) {
-            if (!m_slots[index].Occupied) {
-                return index;
-            }
-        }
-
-        return -1;
-    }
     private int FindMatch(FixedTwoBodyContact candidate) {
         var best = -1;
         var bestDistance = FixedQ4816.MaxValue;
@@ -180,11 +157,18 @@ public sealed class FixedPairManifoldSlotTable {
             var retainImpulse = (target >= 0);
 
             if (target < 0) {
-                target = FindFree();
+                target = FixedManifoldEviction.FindFree(
+                    capacity: Capacity,
+                    slots: m_slots
+                );
             }
 
             if (target < 0) {
-                target = Evict();
+                target = FixedManifoldEviction.Evict(
+                    capacity: Capacity,
+                    claimed: m_claimed,
+                    slots: m_slots
+                );
             }
 
             if (target < 0) {
@@ -210,17 +194,13 @@ public sealed class FixedPairManifoldSlotTable {
             m_claimed[target] = true;
         }
 
-        for (var index = 0; (index < Capacity); ++index) {
-            ref var slot = ref m_slots[index];
-
-            if (
-                slot.Occupied &&
-                !m_claimed[index] &&
-                ((step - slot.LastTouchedStep) > IdleStepBudget)
-            ) {
-                slot = default;
-            }
-        }
+        FixedManifoldEviction.SweepIdle(
+            capacity: Capacity,
+            claimed: m_claimed,
+            idleStepBudget: IdleStepBudget,
+            slots: m_slots,
+            step: step
+        );
     }
     /// <summary>Folds every slot's persistent state into a running digest, in slot index order.</summary>
     /// <param name="digest">The running digest.</param>

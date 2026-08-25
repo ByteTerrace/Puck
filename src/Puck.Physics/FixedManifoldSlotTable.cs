@@ -65,6 +65,7 @@ internal struct FixedManifoldSlot : IManifoldSlotEvictionKey {
     /// <summary>The per-step working tangential impulse raw along <see cref="Tangent2"/>, at Q48.16.</summary>
     internal long TangentImpulseYRaw;
 
+    readonly bool IManifoldSlotEvictionKey.Occupied => Occupied;
     readonly int IManifoldSlotEvictionKey.LastTouchedStep => LastTouchedStep;
     readonly long IManifoldSlotEvictionKey.NormalImpulseRaw => NormalImpulseRaw;
 }
@@ -136,11 +137,18 @@ public sealed class FixedManifoldSlotTable {
             var retainImpulse = (target >= 0);
 
             if (target < 0) {
-                target = FindFree();
+                target = FixedManifoldEviction.FindFree(
+                    capacity: Capacity,
+                    slots: m_slots
+                );
             }
 
             if (target < 0) {
-                target = Evict();
+                target = FixedManifoldEviction.Evict(
+                    capacity: Capacity,
+                    claimed: m_claimed,
+                    slots: m_slots
+                );
             }
 
             if (target < 0) {
@@ -170,17 +178,13 @@ public sealed class FixedManifoldSlotTable {
             m_claimed[target] = true;
         }
 
-        for (var index = 0; (index < Capacity); ++index) {
-            ref var slot = ref m_slots[index];
-
-            if (
-                slot.Occupied &&
-                !m_claimed[index] &&
-                ((step - slot.LastTouchedStep) > IdleStepBudget)
-            ) {
-                slot = default;
-            }
-        }
+        FixedManifoldEviction.SweepIdle(
+            capacity: Capacity,
+            claimed: m_claimed,
+            idleStepBudget: IdleStepBudget,
+            slots: m_slots,
+            step: step
+        );
     }
     /// <summary>Folds every slot's persistent state into a running digest, in slot index order.</summary>
     /// <param name="digest">The running digest.</param>
@@ -243,30 +247,6 @@ public sealed class FixedManifoldSlotTable {
         return digest;
     }
 
-    private int Evict() {
-        var victim = FixedManifoldEviction.SelectVictim(
-            capacity: Capacity,
-            claimed: m_claimed,
-            slots: m_slots
-        );
-
-        if (victim < 0) {
-            return -1;
-        }
-
-        m_slots[victim] = default;
-
-        return victim;
-    }
-    private int FindFree() {
-        for (var index = 0; (index < Capacity); ++index) {
-            if (!m_slots[index].Occupied) {
-                return index;
-            }
-        }
-
-        return -1;
-    }
     private int FindMatch(FixedContactCandidate candidate) {
         var best = -1;
         var bestDistance = FixedQ4816.MaxValue;
