@@ -9,22 +9,14 @@ namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
     // The creation's Locomotion token, resolved as a kit name (the creator's rule; null when the creation/token is absent).
-    private static string? ResolveLocomotionKit(WorldDefinition definition, string prototypeId) {
-        foreach (var creation in definition.Creations) {
-            if (
-                (creation is not null) &&
-                string.Equals(
-                a: creation.Id,
-                b: prototypeId,
-                comparisonType: StringComparison.Ordinal
-            )
-            ) {
-                return creation.Document.Behavior?.Locomotion;
-            }
-        }
-
-        return null;
-    }
+    // Looks up the SAME name-keyed map ValidatePlacements builds once per whole-document validate (see its own
+    // remarks) instead of rescanning definition.Creations per call.
+    private static string? ResolveLocomotionKit(IReadOnlyDictionary<string, WorldPrototype> creationsById, string prototypeId) => (creationsById.TryGetValue(
+        key: prototypeId,
+        value: out var creation
+    )
+        ? creation.Document.Behavior?.Locomotion
+        : null);
     private static bool ShapesContain(IReadOnlyList<Puck.Forge.Authoring.ShapeDocument> shapes, int id) {
         for (var index = 0; (index < shapes.Count); index++) {
             if (shapes[index].Id == id) {
@@ -417,7 +409,7 @@ public static partial class WorldDefinitionValidator {
         return ids;
     }
     // The per-instance face overrides: each names a declared creation face, no duplicate face names.
-    private static void ValidateFaceSources(WorldDefinition definition, IReadOnlyList<WorldPlacementFace>? faceSources, WorldPlacement placement, IReadOnlyList<WorldPrototype> creations, WorldFaceCatalog faces, ValidationScope scope, string path, List<string> errors) {
+    private static void ValidateFaceSources(WorldDefinition definition, IReadOnlyList<WorldPlacementFace>? faceSources, WorldPlacement placement, IReadOnlyDictionary<string, WorldPrototype> creationsById, WorldFaceCatalog faces, ValidationScope scope, string path, List<string> errors) {
         if (faceSources is not { Count: > 0 } sources) {
             return;
         }
@@ -426,10 +418,12 @@ public static partial class WorldDefinitionValidator {
         var fontNames = scope.FontNames;
         var hasTextCatalog = scope.HasTextCatalog;
 
-        var creation = WorldDefinitionRows.FindCreation(
-            creations: creations,
-            id: placement.PrototypeId
-        );
+        var creation = (creationsById.TryGetValue(
+            key: placement.PrototypeId,
+            value: out var faceSourceCreation
+        )
+            ? faceSourceCreation
+            : null);
         var faceNames = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         foreach (var face in (creation?.Document.Behavior?.Faces ?? [])) {
@@ -538,9 +532,9 @@ public static partial class WorldDefinitionValidator {
     }
     // The INHABIT facet: the kit must resolve (its explicit kit name OR the creation's Locomotion token as a kit name),
     // a producer source must resolve on that kit, a named look must be declared, and count/distribution are bounded.
-    private static void ValidateInhabit(WorldPlacementInhabit inhabit, WorldPlacement placement, string path, WorldDefinition definition, HashSet<string> kitNames, HashSet<string> lookNames, List<string> errors) {
+    private static void ValidateInhabit(WorldPlacementInhabit inhabit, WorldPlacement placement, string path, WorldDefinition definition, IReadOnlyDictionary<string, WorldPrototype> creationsById, IReadOnlyDictionary<string, WorldKit> kitsByName, HashSet<string> kitNames, HashSet<string> lookNames, List<string> errors) {
         var resolvedKit = (inhabit.Kit ?? ResolveLocomotionKit(
-            definition: definition,
+            creationsById: creationsById,
             prototypeId: placement.PrototypeId
         ));
 
@@ -555,11 +549,9 @@ public static partial class WorldDefinitionValidator {
         } else if (
             inhabit.Source.IsProducer &&
             (inhabit.Source.ProducerName is { } producer) &&
-            !definition.Kits.First(predicate: kit => string.Equals(
-            a: kit.Name,
-            b: resolvedKit,
-            comparisonType: StringComparison.Ordinal
-        )).Producers.ContainsKey(key: producer)
+            // resolvedKit is already confirmed a member of kitNames above, and kit names are validated unique in
+            // ValidateKits, so this is the same unique row .First() found — just an O(1) lookup instead of a scan.
+            !kitsByName[resolvedKit].Producers.ContainsKey(key: producer)
         ) {
             errors.Add(item: $"{path}.source names producer '{producer}', but kit '{resolvedKit}' declares no parameters for it.");
         }
@@ -964,6 +956,32 @@ public static partial class WorldDefinitionValidator {
             return ids;
         }
 
+        // The creation/kit row lookups the per-placement loop below resolves against, built ONCE per whole-document
+        // validate rather than rescanned per placement. TryAdd in authored order mirrors WorldDefinitionRows.Find's
+        // linear scan exactly: both return the FIRST row matching by id/name, and creation ids/kit names are already
+        // validated unique elsewhere (ValidateCreations/ValidateKits), so a duplicate resolves identically either way.
+        var creationsById = new Dictionary<string, WorldPrototype>(comparer: StringComparer.Ordinal);
+
+        for (var creationIndex = 0; (creationIndex < creations.Count); creationIndex++) {
+            if (creations[creationIndex] is { } creationRow) {
+                _ = creationsById.TryAdd(
+                    key: creationRow.Id,
+                    value: creationRow
+                );
+            }
+        }
+
+        var kitsByName = new Dictionary<string, WorldKit>(comparer: StringComparer.Ordinal);
+
+        for (var kitIndex = 0; (kitIndex < definition.Kits.Count); kitIndex++) {
+            if (definition.Kits[kitIndex] is { } kitRow) {
+                _ = kitsByName.TryAdd(
+                    key: kitRow.Name,
+                    value: kitRow
+                );
+            }
+        }
+
         // The stamp-pool charge: every row that renders through Client.WorldStampPool's reserved registrations rather
         // than as a static stamp — an ANIMATED row (a framed creation) or an ATTACHED one (rooted on a live body).
         var stampRegistrationCount = 0;
@@ -1075,10 +1093,10 @@ public static partial class WorldDefinitionValidator {
                     errors: errors
                 );
 
-                if (WorldDefinitionRows.FindCreation(
-                    creations: creations,
-                    id: placement.PrototypeId
-                ) is { } solidCreation) {
+                if (creationsById.TryGetValue(
+                    key: placement.PrototypeId,
+                    value: out var solidCreation
+                )) {
                     // A shape carrying domain ops compiles one collider PER EXPANDED COPY, so the ceiling counts the
                     // expansion, not the authored shape count. A fold with no rigid-copy expansion has no contact
                     // geometry at all under EITHER provider — the analytic one would collide against one copy of
@@ -1103,10 +1121,10 @@ public static partial class WorldDefinitionValidator {
                     var shapeColliders = 0L;
 
                     foreach (var variantId in solidVariantIds) {
-                        if (WorldDefinitionRows.FindCreation(
-                            creations: creations,
-                            id: variantId
-                        ) is not { } variantCreation) {
+                        if (!creationsById.TryGetValue(
+                            key: variantId,
+                            value: out var variantCreation
+                        )) {
                             continue;
                         }
 
@@ -1160,10 +1178,12 @@ public static partial class WorldDefinitionValidator {
 
             // The animated-row constraints: a placement of a framed creation replays through the reserved dynamic
             // pool — single copy only (pattern/mirror are static-stamp facets), and at most the reserved pool count.
-            var isAnimated = (WorldDefinitionRows.FindCreation(
-                creations: creations,
-                id: placement.PrototypeId
-            ) is { Document.Frames.Count: > 0 });
+            creationsById.TryGetValue(
+                key: placement.PrototypeId,
+                value: out var animatedCreation
+            );
+
+            var isAnimated = (animatedCreation is { Document.Frames.Count: > 0 });
 
             if (isAnimated) {
                 stampRegistrationCount++;
@@ -1187,9 +1207,11 @@ public static partial class WorldDefinitionValidator {
             // source/look/count, and reject the lattice facets (one body cannot represent a placement distribution).
             if (placement.Inhabit is { } inhabit) {
                 ValidateInhabit(
+                    creationsById: creationsById,
                     definition: definition,
                     errors: errors,
                     inhabit: inhabit,
+                    kitsByName: kitsByName,
                     kitNames: kitNames,
                     lookNames: lookNames,
                     path: $"{path}.inhabit",
@@ -1238,7 +1260,7 @@ public static partial class WorldDefinitionValidator {
                 definition: definition,
                 faceSources: placement.FaceSources,
                 placement: placement,
-                creations: creations,
+                creationsById: creationsById,
                 faces: faces,
                 scope: scope,
                 path: $"{path}.faceSources",

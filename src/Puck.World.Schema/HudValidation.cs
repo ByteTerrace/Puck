@@ -163,7 +163,7 @@ internal static class HudRowValidation {
     // frame-source site) into this door's own collected style: run the shared gate into a scratch list, then fold
     // it into ONE hud.frameSourceInvalid line naming every collected sub-message, rather than forking a second copy
     // of the gate.
-    private static void ValidateFrameElementSource(WorldHudElement element, string path, WorldDefinition? definition, HashSet<string>? cameras, List<string> errors) {
+    private static void ValidateFrameElementSource(WorldHudElement element, string path, WorldDefinition? definition, HashSet<string>? cameras, List<string> errors, IReadOnlyDictionary<string, WorldStateRow>? stateRows = null) {
         var isFrame = (element.Kind == WorldHudElementKind.Frame);
 
         if (!isFrame) {
@@ -230,7 +230,8 @@ internal static class HudRowValidation {
                 definition: definition,
                 errors: predicateErrors,
                 path: $"{candidatePath}.when",
-                predicate: candidate?.When
+                predicate: candidate?.When,
+                stateRows: stateRows
             );
 
             if (predicateErrors.Count > 0) {
@@ -321,7 +322,8 @@ internal static class HudRowValidation {
             definition: definition,
             element: element,
             errors: errors,
-            path: path
+            path: path,
+            stateRows: stateRows
         );
 
         var hasBinding = (element.Binding is { Length: > 0 });
