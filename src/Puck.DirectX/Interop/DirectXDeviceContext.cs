@@ -264,9 +264,12 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         DrainDebugMessages();
     }
 
-    // Surface any Direct3D 12 debug-layer messages accumulated since the last drain to the console, then clear them.
-    // A no-op when the debug layer / info queue is unavailable.
-    private void DrainDebugMessages() {
+    /// <summary>Surfaces any Direct3D 12 debug-layer messages accumulated since the last drain to the console, then
+    /// clears them. A no-op when the debug layer / info queue is unavailable (the default; opt in with
+    /// <c>PUCK_D3D12_DEBUG</c>). Also called at the end of <see cref="WaitIdle"/>; callers that no longer drain the
+    /// whole device every frame (e.g. a per-ring-slot presenter) call this directly to keep the same per-frame
+    /// debug-message cadence.</summary>
+    public void DrainDebugMessages() {
         if (0 == m_infoQueue) {
             return;
         }
