@@ -412,13 +412,20 @@ public static class CreationStampEmitter {
     /// <param name="transform">The stamp transform.</param>
     /// <param name="fontFor">Resolves a run's optional font name through the owning catalog.</param>
     /// <param name="materialFor">Resolves a run's material id.</param>
-    public static void EmitText(SdfProgramBuilder builder, CreationDocument document, CreationStampTransform transform, Func<string?, FontAtlas> fontFor, Func<TextRunDocument, int> materialFor) {
+    /// <param name="textLayouts">Per-run layouts already computed by <see cref="LayoutTextRuns"/> for this same
+    /// (<paramref name="document"/>, <c>transform.Scale</c>, <paramref name="fontFor"/>) — indexed like
+    /// <see cref="CreationDocument.TextRuns"/>, reused instead of laying each run out again;
+    /// <see langword="null"/> lays every run out fresh, exactly as before this parameter existed.</param>
+    public static void EmitText(SdfProgramBuilder builder, CreationDocument document, CreationStampTransform transform, Func<string?, FontAtlas> fontFor, Func<TextRunDocument, int> materialFor, IReadOnlyList<TextLayoutResult>? textLayouts = null) {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(fontFor);
         ArgumentNullException.ThrowIfNull(materialFor);
 
-        foreach (var run in (document.TextRuns ?? [])) {
+        var runs = (document.TextRuns ?? []);
+
+        for (var index = 0; (index < runs.Count); index++) {
+            var run = runs[index];
             var (position, rotation) = RunFrame(
                 document: document,
                 run: run
@@ -477,7 +484,8 @@ public static class CreationStampEmitter {
                 layout: RunLayoutOptions(
                     run: run,
                     scale: transform.Scale
-                )
+                ),
+                precomputedLayout: textLayouts?[index]
             );
         }
     }
@@ -491,13 +499,20 @@ public static class CreationStampEmitter {
     /// <param name="scale">The uniform placement scale baked into the local layout.</param>
     /// <param name="fontFor">Resolves a run's optional font name through the owning catalog.</param>
     /// <param name="materialFor">Resolves a run's material id.</param>
-    public static void EmitTextDynamic(SdfProgramBuilder builder, CreationDocument document, int dynamicSlot, float scale, Func<string?, FontAtlas> fontFor, Func<TextRunDocument, int> materialFor) {
+    /// <param name="textLayouts">Per-run layouts already computed by <see cref="LayoutTextRuns"/> for this same
+    /// (<paramref name="document"/>, <paramref name="scale"/>, <paramref name="fontFor"/>) — indexed like
+    /// <see cref="CreationDocument.TextRuns"/>, reused instead of laying each run out again;
+    /// <see langword="null"/> lays every run out fresh, exactly as before this parameter existed.</param>
+    public static void EmitTextDynamic(SdfProgramBuilder builder, CreationDocument document, int dynamicSlot, float scale, Func<string?, FontAtlas> fontFor, Func<TextRunDocument, int> materialFor, IReadOnlyList<TextLayoutResult>? textLayouts = null) {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(fontFor);
         ArgumentNullException.ThrowIfNull(materialFor);
 
-        foreach (var run in (document.TextRuns ?? [])) {
+        var runs = (document.TextRuns ?? []);
+
+        for (var index = 0; (index < runs.Count); index++) {
+            var run = runs[index];
             var (position, rotation) = RunFrame(
                 document: document,
                 run: run
@@ -529,9 +544,53 @@ public static class CreationStampEmitter {
                     run: run,
                     scale: scale
                 ),
-                dynamicSlot: dynamicSlot
+                dynamicSlot: dynamicSlot,
+                precomputedLayout: textLayouts?[index]
             );
         }
+    }
+    /// <summary>Lays out every one of a creation's authored text runs once, in document order — the same input
+    /// <see cref="RenderReach"/> and <see cref="EmitText"/>/<see cref="EmitTextDynamic"/> each independently derive
+    /// from (<paramref name="document"/>, <paramref name="scale"/>, <paramref name="fontFor"/>) per run. A caller
+    /// measuring reach and then emitting the same runs passes the returned array to both through their
+    /// <c>textLayouts</c> parameter, so <see cref="TextLayout.Layout(FontAtlas, string, TextLayoutOptions, float)"/>
+    /// — the per-glyph kerning/wrap/align walk — runs once per run per call instead of twice, or once per
+    /// pattern/scatter instance for a repeated placement.</summary>
+    /// <param name="document">The creation document.</param>
+    /// <param name="scale">The uniform stamp scale.</param>
+    /// <param name="fontFor">Resolves a run's optional font name through the owning catalog.</param>
+    /// <returns>One <see cref="TextLayoutResult"/> per entry of <see cref="CreationDocument.TextRuns"/>, in the same
+    /// order; empty when the document authors no text runs.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="document"/> or <paramref name="fontFor"/> is
+    /// <see langword="null"/>.</exception>
+    public static TextLayoutResult[] LayoutTextRuns(CreationDocument document, float scale, Func<string?, FontAtlas> fontFor) {
+        ArgumentNullException.ThrowIfNull(document);
+        ArgumentNullException.ThrowIfNull(fontFor);
+
+        var runs = (document.TextRuns ?? []);
+
+        if (runs.Count == 0) {
+            return [];
+        }
+
+        var results = new TextLayoutResult[runs.Count];
+        var layout = new TextLayout();
+
+        for (var index = 0; (index < runs.Count); index++) {
+            var run = runs[index];
+
+            results[index] = layout.Layout(
+                atlas: fontFor(arg: run.Font),
+                options: (RunLayoutOptions(
+                    run: run,
+                    scale: scale
+                ) ?? TextLayoutOptions.Default),
+                scale: (run.EmHeight * scale),
+                text: run.Text
+            );
+        }
+
+        return results;
     }
     /// <summary>Whether a shape's effective per-axis scale is isotropic after the builder's magnitude and nonzero
     /// normalization.</summary>
@@ -554,10 +613,14 @@ public static class CreationStampEmitter {
     /// <param name="scale">The uniform stamp scale.</param>
     /// <param name="fontFor">Resolves a run's optional font name through the owning catalog, or
     /// <see langword="null"/> when this render path omits text.</param>
+    /// <param name="textLayouts">Per-run layouts already computed by <see cref="LayoutTextRuns"/> for this same
+    /// (<paramref name="document"/>, <paramref name="scale"/>, <paramref name="fontFor"/>) — indexed like
+    /// <see cref="CreationDocument.TextRuns"/>, reused instead of laying each run out again;
+    /// <see langword="null"/> lays every run out fresh, exactly as before this parameter existed.</param>
     /// <returns>The radius, in the builder's current coordinate space.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="scale"/> is not finite and greater than zero.</exception>
-    public static float RenderReach(CreationDocument document, float scale, Func<string?, FontAtlas>? fontFor) {
+    public static float RenderReach(CreationDocument document, float scale, Func<string?, FontAtlas>? fontFor, IReadOnlyList<TextLayoutResult>? textLayouts = null) {
         ArgumentNullException.ThrowIfNull(document);
 
         if (
@@ -591,17 +654,23 @@ public static class CreationStampEmitter {
             );
         }
 
-        foreach (var run in (document.TextRuns ?? [])) {
+        var runs = (document.TextRuns ?? []);
+
+        for (var index = 0; (index < runs.Count); index++) {
+            var run = runs[index];
             var atlas = fontFor(arg: run.Font);
             var emHeight = (run.EmHeight * scale);
-            var layout = new TextLayout().Layout(
-                atlas: atlas,
-                options: (RunLayoutOptions(
-                    run: run,
-                    scale: scale
-                ) ?? TextLayoutOptions.Default),
-                scale: emHeight,
-                text: run.Text
+            var layout = ((textLayouts is not null)
+                ? textLayouts[index]
+                : new TextLayout().Layout(
+                    atlas: atlas,
+                    options: (RunLayoutOptions(
+                        run: run,
+                        scale: scale
+                    ) ?? TextLayoutOptions.Default),
+                    scale: emHeight,
+                    text: run.Text
+                )
             );
             var worldPerTexel = (emHeight / atlas.Size);
             var depth = (MathF.Abs(x: (run.Depth ?? 0.02f)) * scale);
