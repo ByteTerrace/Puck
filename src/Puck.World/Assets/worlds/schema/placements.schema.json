@@ -80,6 +80,11 @@
             "$ref": "./common.schema.json#/$defs/WorldPlacementContribution",
             "description": "The placement\u0027s contribution facet (see WorldPlacementContribution) \u2014 marks the row a host-authored slot a federation partner fills, or null for an ordinary placement. Omitted from the wire when null. Composes with every other facet: the facet governs which creation the row shows and for how long, never its transform.",
             "default": null
+          },
+          "respond": {
+            "$ref": "./common.schema.json#/$defs/WorldPlacementResponseList",
+            "description": "The placement\u0027s response facet (see WorldPlacementResponse) \u2014 the ordered state-driven prototype swaps a lattice-field condition can fire, or null for an ordinary placement that always shows PrototypeId. Omitted from the wire when null. Refused together with Attach, Inhabit, and FaceSources.",
+            "default": null
           }
         },
         "required": [

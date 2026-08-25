@@ -1046,6 +1046,22 @@ current model.
   ordinary journalled mutations, so the host's FRAME stands, only the piece
   goes, and `world.undo` puts it back. It defers (never orphans) while the
   slot's inhabitant is drive-possessed. Read back with `world.contributions`.
+  `WorldPlacement.Respond` (`WorldPlacementResponse` rows) is the RESPONSE
+  facet — a state-driven prototype swap: an ordered `{when, prototypeId}`
+  list, each `when` the SAME `WorldFieldCondition` grammar a
+  `fields.reactions` Transform/Expose condition uses, tested at the
+  placement's own coupled lattice cell
+  (`Server/WorldFieldLattice.TryBodyCellOf`) by the per-tick
+  `SweepPlacementResponses` pass — run right after the field lattice steps,
+  so it reads THIS tick's own writes. Entries try in authored order; the
+  FIRST whose condition holds wins, through an ordinary `UpsertPlacement`
+  under `WorldPrincipal.World`; when none holds the row is left exactly as
+  it reads — the facet only ever SELECTS on a match, it never reverts a
+  prior swap. Refused alongside `Attach`/`Inhabit`/`FaceSources`; every
+  candidate prototype (the row's own base and every entry's) must resolve
+  to a declared, non-animated creation, and the analytic solid-collider
+  ceiling counts the WORST CASE across every variant the row could show.
+  Read back with `world.responses`.
 
 ## Owned-world identities
 

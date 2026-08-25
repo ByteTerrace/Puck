@@ -442,6 +442,31 @@ public sealed class WorldFieldLattice {
     /// <param name="cell">The cell index.</param>
     /// <returns>The value.</returns>
     public FixedQ4816 Value(int field, int cell) => m_values[field][cell];
+    /// <summary>Resolves a declared field's index by name.</summary>
+    /// <param name="name">The field name.</param>
+    /// <param name="field">The field index.</param>
+    /// <returns><see langword="true"/> when <paramref name="name"/> names a declared field.</returns>
+    public bool TryFieldIndex(string name, out int field) {
+        field = Array.IndexOf(
+            array: m_names,
+            value: name
+        );
+
+        return (field >= 0);
+    }
+    /// <summary>Evaluates one condition (the same grammar a <see cref="WorldReaction.Transform"/>/
+    /// <see cref="WorldReaction.Expose"/> condition uses) against a live cell — the seam a consumer outside the
+    /// reaction program (a placement's response trait) tests a cell through, never a second comparison grammar.</summary>
+    /// <param name="field">The field index (see <see cref="TryFieldIndex"/>).</param>
+    /// <param name="cell">The cell index.</param>
+    /// <param name="comparison">The comparison.</param>
+    /// <param name="expected">The scalar compared against (literal or state-row reference).</param>
+    /// <param name="readScalar">Reads a scalar state row's slot cell for <paramref name="expected"/>'s row form.</param>
+    public bool Holds(int field, int cell, WorldFieldComparison comparison, WorldLatticeScalar expected, Func<string, FixedQ4816> readScalar) => Holds(
+        comparison: comparison,
+        value: Value(field: field, cell: cell),
+        expected: CompiledScalar.Compile(scalar: expected).Resolve(readScalar: readScalar)
+    );
     /// <summary>Gets the solid surface height of a column — the greatest height any height field raises there, or
     /// the lattice origin's Y when none does.</summary>
     /// <param name="x">The column's X cell index.</param>

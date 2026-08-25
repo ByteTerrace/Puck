@@ -3629,6 +3629,60 @@
       ],
       "additionalProperties": false
     },
+    "WorldFieldCondition": {
+      "description": "One per-cell condition of a Transform.",
+      "type": "object",
+      "properties": {
+        "field": {
+          "description": "The field read at the cell.",
+          "type": "string"
+        },
+        "comparison": {
+          "$ref": "#/$defs/ActionStateComparison",
+          "description": "The comparison."
+        },
+        "value": {
+          "description": "The scalar compared against (literal or state-row reference)."
+        }
+      },
+      "required": [
+        "field",
+        "comparison",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "WorldPlacementResponse": {
+      "description": "One entry of a placement\u0027s response trait: while When holds against the lattice field at the placement\u0027s own coupled cell, the row\u0027s rendered/collided prototype becomes PrototypeId instead of its currently authored one \u2014 the bridge that lets a placement react to the lattice chemistry under it (a burning tree becomes a charred stump). Absent Respond is today\u0027s behavior exactly: the placement always shows its own authored PrototypeId.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "when": {
+          "$ref": "#/$defs/WorldFieldCondition",
+          "description": "The lattice condition, tested at the placement\u0027s coupled cell."
+        },
+        "prototypeId": {
+          "description": "The creation the placement shows/collides as while When holds. Must resolve to a declared, non-animated creation row.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "when",
+        "prototypeId"
+      ],
+      "additionalProperties": false
+    },
+    "WorldPlacementResponseList": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/WorldPlacementResponse"
+      }
+    },
     "WorldPlacement": {
       "description": "One placement instance row \u2014 a creation asset stamped into the world by reference: transform \u002B facets as data, addressed by its stable Id. A placement whose creation carries timeline frames is animated: it replays client-side on the render clock through the reserved dynamic-transform pool (distribution/mirror facets are static-stamp-only and reject on an animated row). A placement carrying an Inhabit facet is a live population body rather than furniture (see WorldPlacementInhabit); its declared creation eyes derive WorldCamera feeds and its declared faces derive screens (both at the delivery boundary, never written to the document).",
       "type": "object",
@@ -3695,6 +3749,11 @@
         "contribution": {
           "$ref": "#/$defs/WorldPlacementContribution",
           "description": "The placement\u0027s contribution facet (see WorldPlacementContribution) \u2014 marks the row a host-authored slot a federation partner fills, or null for an ordinary placement. Omitted from the wire when null. Composes with every other facet: the facet governs which creation the row shows and for how long, never its transform.",
+          "default": null
+        },
+        "respond": {
+          "$ref": "#/$defs/WorldPlacementResponseList",
+          "description": "The placement\u0027s response facet (see WorldPlacementResponse) \u2014 the ordered state-driven prototype swaps a lattice-field condition can fire, or null for an ordinary placement that always shows PrototypeId. Omitted from the wire when null. Refused together with Attach, Inhabit, and FaceSources.",
           "default": null
         }
       },

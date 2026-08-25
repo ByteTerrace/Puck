@@ -69,18 +69,22 @@ plus every admitted peer connection's re-minted admission grant; every other
 live `world.grant` acquisition drops). The `dirty` count in `world.status` IS
 the journal length.
 
-**Lifetime sweeps.** Four per-tick passes run side by side at the end of
+**Lifetime sweeps.** Five per-tick passes run side by side at the end of
 `WorldServer.StepCore`, each firing ORDINARY mutations under
 `WorldPrincipal.World`'s structural exemption so recovery is journalled and
 undoable rather than a bespoke erase: `ReclaimExpiredEscrows` (an unaccepted
 ownership offer), `SettleExpiredMarketListings`/`PruneExpiredMarketListings` (a
-listing past its deadline, a terminal row past `market.retentionSeconds`), and
+listing past its deadline, a terminal row past `market.retentionSeconds`),
 `SweepContributionTenure` (`WorldServer.Contributions.cs` — a presence-tenure
 contribution slot whose watched `adjacencies` row has read dropped past the
-slot's own `graceSeconds`). The last reads link liveness through
-`WorldServer.TryLinkLiveness`, which pairs `WorldEventFeed.LinkStalenessTicks`
-with the row's compiled `livenessGraceSeconds`; its retraction defers, rather
-than proceeding, while the slot's inhabitant is drive-possessed.
+slot's own `graceSeconds`), and `SweepPlacementResponses`
+(`WorldServer.Responses.cs` — right after `StepFields`, so it reads this
+tick's own lattice writes: the first `WorldPlacementResponse` entry whose
+condition holds at a placement's coupled cell becomes its prototype). The
+contribution sweep reads link liveness through `WorldServer.TryLinkLiveness`,
+which pairs `WorldEventFeed.LinkStalenessTicks` with the row's compiled
+`livenessGraceSeconds`; its retraction defers, rather than proceeding, while
+the slot's inhabitant is drive-possessed.
 
 **Steady-state performance contract.** The per-tick pipeline — intent fold,
 sim step, snapshot emission, binding resolution — allocates nothing; document

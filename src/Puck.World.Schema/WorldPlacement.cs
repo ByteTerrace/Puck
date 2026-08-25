@@ -186,6 +186,10 @@ public sealed record WorldPlacementAttach(int BodyIndex, DocumentVector3 LocalOf
 /// marks the row a host-authored slot a federation partner fills, or <see langword="null"/> for an ordinary
 /// placement. Omitted from the wire when null. Composes with every other facet: the facet governs which creation the
 /// row shows and for how long, never its transform.</param>
+/// <param name="Respond">The placement's response facet (see <see cref="WorldPlacementResponse"/>) — the ordered
+/// state-driven prototype swaps a lattice-field condition can fire, or <see langword="null"/> for an ordinary
+/// placement that always shows <paramref name="PrototypeId"/>. Omitted from the wire when null. Refused together
+/// with <paramref name="Attach"/>, <paramref name="Inhabit"/>, and <paramref name="FaceSources"/>.</param>
 public sealed record WorldPlacement(
     string Id,
     string PrototypeId,
@@ -200,7 +204,8 @@ public sealed record WorldPlacement(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldPlacementFace>? FaceSources = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementRegion? Region = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementAttach? Attach = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementContribution? Contribution = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementContribution? Contribution = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldPlacementResponse>? Respond = null
 );
 /// <summary>Adapts placement document facets to the shared creation-stamp vocabulary.</summary>
 public static class WorldPlacementStamp {

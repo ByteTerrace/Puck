@@ -188,6 +188,15 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
+            name: "world.responses",
+            description: "Reads every placement carrying a response trait back (Immediate): its current prototype and which authored when-condition (if any) currently holds at its coupled lattice cell.",
+            handler: (context, args) => ((args.Count == 0)
+                ? new CommandResult(Output: server.DescribeResponses())
+                : CommandResult.Error(output: $"[world.responses: unrecognized '{args[0]}' — expected no arguments]")),
+            routing: CommandRouting.Immediate
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "world.population",
             description: "Sets the simulated peer count and its between-tape source: world.population [count] [idle|producer:<name>] (tokens are order-independent; no argument reads both).",
             handler: (context, args) => {

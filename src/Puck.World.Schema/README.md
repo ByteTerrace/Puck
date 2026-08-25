@@ -155,6 +155,17 @@ there is no creationless placement to represent — the validator pins the pair
 (`WorldDefinitionValidator.Contribution.cs`): unfilled requires
 `creationId == slotCreationId`, filled requires them to differ. Read back with
 `world.contributions`.
+`Respond` (`WorldPlacementResponse` rows) is a STATE-DRIVEN prototype swap: an
+ordered list of `{When, PrototypeId}` entries, each `When` the SAME
+`WorldFieldCondition` grammar a `fields.reactions` Transform/Expose condition
+uses, tested at the placement's own coupled lattice cell
+(`Server/WorldFieldLattice.TryBodyCellOf`). The per-tick sweep
+(`Server/WorldServer.Responses.cs`, run right after the field lattice steps)
+tries entries in authored order and swaps to the first whose condition holds,
+through an ordinary `UpsertPlacement`; nothing reverts a swap when no entry
+holds. Refused alongside `Attach`/`Inhabit`/`FaceSources`, and every candidate
+prototype (the row's own and every entry's) must be a declared, non-animated
+creation. Read back with `world.responses`.
 `Solid` compiles the same creation-shape transform chain the renderer emits.
 The field provider evaluates that SDF geometry directly; the analytic provider
 materializes exact isotropically scaled spheres and conservative world-axis

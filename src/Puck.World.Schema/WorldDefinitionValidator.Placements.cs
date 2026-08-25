@@ -1079,20 +1079,48 @@ public static partial class WorldDefinitionValidator {
                     // geometry the renderer draws several times, and the field one throws out of
                     // CreationStampEmitter.EmitFixed at boot — so the expansion refusal is ungated while the
                     // analytic collider ceiling below is not.
+                    //
+                    // A row carrying a response facet (WorldPlacementResponse) can show any of several creations at
+                    // runtime — the ceiling counts the WORST CASE across every variant (the row's own base plus each
+                    // response entry's target), never just the authored one, so a swap can never push live collision
+                    // past what validation admitted.
+                    var solidVariantIds = new List<string> { placement.PrototypeId };
+
+                    if (placement.Respond is { Count: > 0 } solidResponses) {
+                        foreach (var solidResponse in solidResponses) {
+                            if (solidResponse?.PrototypeId is { } responsePrototypeId) {
+                                solidVariantIds.Add(item: responsePrototypeId);
+                            }
+                        }
+                    }
+
                     var shapeColliders = 0L;
 
-                    foreach (var solidShape in (solidCreation.Document.Shapes ?? [])) {
-                        if (!ShapeDomainOps.TryExpand(
-                            domain: solidShape.Domain,
-                            frames: out var solidFrames,
-                            refusal: out var solidRefusal
-                        )) {
-                            errors.Add(item: $"{path}.solid names creation '{placement.PrototypeId}', whose shape {solidShape.Id} carries {solidRefusal} — a solid row needs contact geometry for every copy its fold draws.");
-
+                    foreach (var variantId in solidVariantIds) {
+                        if (WorldDefinitionRows.FindCreation(
+                            creations: creations,
+                            id: variantId
+                        ) is not { } variantCreation) {
                             continue;
                         }
 
-                        shapeColliders += solidFrames.Length;
+                        var variantColliders = 0L;
+
+                        foreach (var solidShape in (variantCreation.Document.Shapes ?? [])) {
+                            if (!ShapeDomainOps.TryExpand(
+                                domain: solidShape.Domain,
+                                frames: out var solidFrames,
+                                refusal: out var solidRefusal
+                            )) {
+                                errors.Add(item: $"{path}.solid names creation '{variantId}', whose shape {solidShape.Id} carries {solidRefusal} — a solid row needs contact geometry for every copy its fold draws.");
+
+                                continue;
+                            }
+
+                            variantColliders += solidFrames.Length;
+                        }
+
+                        shapeColliders = Math.Max(val1: shapeColliders, val2: variantColliders);
                     }
 
                     // The field provider compiles every solid row into ONE program instead of one collider per copy,
@@ -1281,6 +1309,17 @@ public static partial class WorldDefinitionValidator {
                     errors: errors,
                     path: $"{path}.contribution",
                     placement: placement
+                );
+            }
+
+            // The RESPOND facet: an ordered, state-driven prototype swap (see WorldPlacementResponse).
+            if (placement.Respond is not null) {
+                ValidatePlacementResponse(
+                    placement: placement,
+                    definition: definition,
+                    prototypeIds: prototypeIds,
+                    placementPath: path,
+                    errors: errors
                 );
             }
         }

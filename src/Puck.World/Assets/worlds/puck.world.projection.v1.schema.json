@@ -7218,6 +7218,62 @@
             ],
             "additionalProperties": false,
             "default": null
+          },
+          "respond": {
+            "description": "The placement\u0027s response facet (see WorldPlacementResponse) \u2014 the ordered state-driven prototype swaps a lattice-field condition can fire, or null for an ordinary placement that always shows PrototypeId. Omitted from the wire when null. Refused together with Attach, Inhabit, and FaceSources.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "description": "One entry of a placement\u0027s response trait: while When holds against the lattice field at the placement\u0027s own coupled cell, the row\u0027s rendered/collided prototype becomes PrototypeId instead of its currently authored one \u2014 the bridge that lets a placement react to the lattice chemistry under it (a burning tree becomes a charred stump). Absent Respond is today\u0027s behavior exactly: the placement always shows its own authored PrototypeId.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "when": {
+                  "description": "The lattice condition, tested at the placement\u0027s coupled cell.",
+                  "type": "object",
+                  "properties": {
+                    "field": {
+                      "description": "The field read at the cell.",
+                      "type": "string"
+                    },
+                    "comparison": {
+                      "description": "The comparison.",
+                      "enum": [
+                        "Equal",
+                        "NotEqual",
+                        "Less",
+                        "LessOrEqual",
+                        "Greater",
+                        "GreaterOrEqual"
+                      ]
+                    },
+                    "value": {
+                      "description": "The scalar compared against (literal or state-row reference)."
+                    }
+                  },
+                  "required": [
+                    "field",
+                    "comparison",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                },
+                "prototypeId": {
+                  "description": "The creation the placement shows/collides as while When holds. Must resolve to a declared, non-animated creation row.",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "when",
+                "prototypeId"
+              ],
+              "additionalProperties": false
+            },
+            "default": null
           }
         },
         "required": [
@@ -10536,6 +10592,10 @@
                             },
                             "contribution": {
                               "$ref": "#/properties/placements/items/properties/contribution",
+                              "default": null
+                            },
+                            "respond": {
+                              "$ref": "#/properties/placements/items/properties/respond",
                               "default": null
                             }
                           },
