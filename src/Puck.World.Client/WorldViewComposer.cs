@@ -128,7 +128,9 @@ public sealed class WorldViewComposer {
         }
     }
     private static WorldViewLayout? FindBySeatCount(IReadOnlyList<WorldViewLayout> layouts, int seatCount) {
-        foreach (var layout in layouts) {
+        for (var index = 0; (index < layouts.Count); index++) {
+            var layout = layouts[index];
+
             if (layout.SeatCount == seatCount) {
                 return layout;
             }
@@ -137,7 +139,9 @@ public sealed class WorldViewComposer {
         return null;
     }
     private static WorldViewLayout? FindLayout(IReadOnlyList<WorldViewLayout> layouts, string name) {
-        foreach (var layout in layouts) {
+        for (var index = 0; (index < layouts.Count); index++) {
+            var layout = layouts[index];
+
             if (string.Equals(
                 a: layout.Name,
                 b: name,
@@ -198,8 +202,8 @@ public sealed class WorldViewComposer {
         var layouts = views.Layouts;
 
         m_authoredLayoutNames.Clear();
-        foreach (var layout in layouts) {
-            m_authoredLayoutNames.Add(item: layout.Name);
+        for (var index = 0; (index < layouts.Count); index++) {
+            m_authoredLayoutNames.Add(item: layouts[index].Name);
         }
 
         if (
