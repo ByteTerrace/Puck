@@ -18,8 +18,8 @@ namespace Puck.World;
 /// <list type="bullet">
 /// <item><description>Objects merge member-wise, recursively: a member the derived tree authors replaces or refines
 /// the basis's; a member it omits inherits; an authored <c>null</c> removes the inherited member (how a derived
-/// world clears an optional section its basis authors — e.g. <c>"water": null</c> derives a dry world from a wet
-/// basis).</description></item>
+/// world clears an optional section its basis authors — e.g. <c>"gravity": null</c> derives a zero-gravity world
+/// from a gravity-carrying basis).</description></item>
 /// <item><description>A <c>$type</c>-discriminated object whose derived discriminator differs from the basis's
 /// replaces wholesale — the arms of a union share no members, so merging across them could only compose a row the
 /// strict parse refuses.</description></item>

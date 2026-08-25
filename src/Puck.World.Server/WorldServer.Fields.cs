@@ -43,6 +43,12 @@ public sealed partial class WorldServer : IWorldFieldLatticeHost {
         row: row,
         tick: tick
     );
+    void IWorldFieldLatticeHost.AddScalar(WorldStateHandle row, FixedQ4816 amount, ulong tick) => AddScalarSlot(
+        catalog: m_population.Fields!.Program.StateCatalog,
+        row: row,
+        amount: amount,
+        tick: tick
+    );
     // A reaction scalar's row read: the named row's SLOT cell as Q48.16 raw bits (0 when the row or its slot cell
     // does not exist yet — the slot is minted by its first write).
     private FixedQ4816 ReadScalarSlot(WorldStateCatalog catalog, WorldStateHandle row, ulong tick) => ((WorldStateReader.TryReadHandle(
@@ -57,6 +63,57 @@ public sealed partial class WorldServer : IWorldFieldLatticeHost {
     ) && (raw is { } value))
         ? FixedQ4816.FromRawBits(value: value)
         : FixedQ4816.Zero
+    );
+    // A clamped-add write to a scalar slot row: precomputes the already-in-envelope sum itself (ClampToEnvelope is
+    // documented for reads, not writes -- an explicit write outside a row's envelope is refused, never silently
+    // clamped) so the mutation below can never be refused for a value this method already brought into range.
+    private void AddScalarSlot(WorldStateCatalog catalog, WorldStateHandle row, FixedQ4816 amount, ulong tick) {
+        if (amount == FixedQ4816.Zero) {
+            return;
+        }
+
+        if (!WorldStateReader.TryReadHandle(
+            catalog: catalog,
+            definition: m_definition,
+            handle: row,
+            key: WorldStateRow.SlotKey,
+            tick: tick,
+            row: out var declared,
+            rawValue: out var raw,
+            text: out _
+        )) {
+            return;
+        }
+
+        var current = (raw ?? 0L);
+        var sum = (((Int128)current) + amount.Value);
+        var clamped = declared.ClampToEnvelope(value: SaturateToInt64(value: sum));
+
+        if (clamped == current) {
+            return;
+        }
+
+        _ = TryApplyMutation(
+            mutation: new WorldMutation.UpsertStateCell(
+                Principal: WorldPrincipal.World,
+                Row: declared.Name,
+                Key: WorldStateRow.SlotKey,
+                Value: clamped,
+                Kind: WorldDocumentWriteKind.Set
+            ),
+            tick: tick,
+            connectionId: SubmissionEnvelope.LocalConnectionId,
+            correlationId: 0,
+            preMetered: false
+        );
+        m_output.DeliverDefinition(definition: m_definition);
+    }
+    private static long SaturateToInt64(Int128 value) => (
+        (value <= long.MinValue)
+            ? long.MinValue
+            : ((value >= long.MaxValue)
+                ? long.MaxValue
+                : ((long)value))
     );
     // Placement response traits are authored outside the field reaction program and therefore retain their named
     // scalar seam; reaction execution itself always uses the typed overload above.

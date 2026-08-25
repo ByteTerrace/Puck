@@ -1,0 +1,56 @@
+{
+  "id": "medium-submersion",
+  "title": "A body poked into a lattice medium field's coupled cell reads Submerged, and flips back the moment it leaves",
+  "binding": "The positive leg boots a minimal fixture whose one lattice row carries the medium facet (a filled 5-unit-deep pool) and a swim-kit body spawned dry above it. world.contacts 1 reads submerged=false before any tick runs; body.pose teleports the body down into the pool and, after a short settle, world.contacts 1 reads submerged=true; body.pose then teleports it back out and, before buoyancy has time to pull it back under, world.contacts 1 reads submerged=false again — the flag genuinely flips both ways off the population's per-tick WorldFieldLattice.MediumSurface sample, not a one-shot boot fact. The discriminating leg runs the IDENTICAL script against the SAME fixture with the medium row's initial value authored 0 instead of 1 (an empty, still-declared pool) — the coupled cell never carries a positive medium value, so MediumSurface never resolves and the body reads submerged=false at every occurrence; the positive leg's submerged=true assertion never matches this transcript.",
+  "bootShape": "headless",
+  "requirements": [],
+  "seconds": 6,
+  "timeoutSeconds": 20,
+  "fixtures": [],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/medium-submersion/fixture.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      { "verb": "world.status", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.contacts", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.contacts", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "body.pose", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.contacts", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "body.pose", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "world.contacts", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "dry-before-any-tick", "stream": "stdout", "match": "contains", "text": "[world.contacts: p1 grounded=true planarSpeed=0.00 resolved=0 submerged=false atSurface=false obstruction=none]", "present": true },
+      { "type": "line", "name": "wet-after-posing-into-the-pool", "stream": "stdout", "match": "contains", "text": "submerged=true", "present": true },
+      { "type": "line", "name": "dry-again-after-posing-back-out", "stream": "stdout", "match": "contains", "text": "[world.contacts: p1 grounded=false planarSpeed=0.00 resolved=0 submerged=false atSurface=false obstruction=none]", "present": true },
+      { "type": "line", "name": "no-mutation-rejected", "stream": "stderr", "match": "contains", "text": "world.mutation rejected", "present": false },
+      { "type": "line", "name": "no-unhandled-exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/medium-submersion/discriminating.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      { "verb": "world.status", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.contacts", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.contacts", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "body.pose", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.contacts", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "body.pose", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "world.contacts", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "reads-submerged-false-throughout", "stream": "stdout", "match": "contains", "text": "[world.contacts: p1 grounded=false planarSpeed=0.00 resolved=0 submerged=false atSurface=false obstruction=none]", "present": true },
+      { "type": "line", "name": "still-dry-even-once-posed-into-the-empty-pool", "stream": "stdout", "match": "contains", "text": "submerged=true", "present": false },
+      { "type": "line", "name": "no-unhandled-exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
+    ]
+  }
+}

@@ -44,7 +44,7 @@ public enum WorldPortalArrival {
 /// <c>WorldInstanceHost.TriggerPortal</c>'s job, never this facet's. Durability, scope, and process-local instance
 /// selection live on the named <see cref="WorldDestination"/> row this facet points at, not here — a facet composes
 /// one destination selection with a travel scope, never re-authors how that destination is minted. Extensible deliberately (an optional-member
-/// record, the same widen-without-moving-existing-members shape <see cref="WorldWaterSection"/>'s own remarks
+/// record, the same widen-without-moving-existing-members shape <see cref="WorldLatticeMedium"/>'s own remarks
 /// describe): a future fact-gate field (an authored predicate a traveler must satisfy to pass) adds cleanly as a new
 /// trailing member.
 /// </summary>
@@ -190,7 +190,7 @@ public sealed record WorldPortalDefaults(
 );
 /// <summary>
 /// The <c>portals</c> section — the world-scope defaults a <see cref="WorldPlacementPortal"/> facet resolves
-/// against when it does not author its own fact. Optional, for the same reason <see cref="WorldWaterSection"/> and
+/// against when it does not author its own fact. Optional, for the same reason <see cref="WorldMarketSection"/> and
 /// <see cref="WorldReference"/>'s own <c>references</c> section are: a world with no portals authors neither this
 /// section nor any portal facet, and a required section would refuse every existing document at boot for declaring
 /// nothing. Slotted immediately after <c>references</c> in <see cref="WorldDefinition"/>'s declaration order — the

@@ -579,13 +579,13 @@ public sealed partial class WorldBody {
         m_source = source;
         ClearTransientInput();
     }
-    /// <summary>Sets (or clears) the waterline this body's swim stages integrate against — the population hands it
-    /// the world's compiled water level beside the contact field, on activation and every rebuild. Meaningful only
-    /// to a swim-model kit; every other body carries it inertly.</summary>
-    /// <param name="level">The waterline's world-space Y, or <see langword="null"/> for a dry world.</param>
-    public void SetWaterline(FixedQ4816? level) {
-        m_hasWaterline = level.HasValue;
-        m_waterline = level.GetValueOrDefault();
+    /// <summary>Sets (or clears) the medium free surface this body's swim stages integrate against — sampled fresh
+    /// every tick from the population's field lattice at this body's coupled cell, before this body's own Advance
+    /// runs. Meaningful only to a swim-model kit; every other body carries it inertly.</summary>
+    /// <param name="surface">The medium surface's world-space Y, or <see langword="null"/> for no medium at this
+    /// body's position.</param>
+    public void SetMediumSurface(FixedQ4816? surface) {
+        m_mediumSurface = surface;
     }
     /// <summary>Stages one deterministic producer intent for the next <see cref="Advance"/> — the producer tier below
     /// the submitted stream, used only while <see cref="Source"/> names its producer
@@ -778,7 +778,7 @@ public sealed partial class WorldBody {
     /// <c>body.control</c> verb's read/write). <see cref="IntentSource.Live"/> by default; see
     /// <see cref="IntentSource"/> for the merge rule.</summary>
     public IntentSource Source => m_source;
-    /// <summary>Gets a value indicating whether the body's origin is below the waterline as of the swim model's last
+    /// <summary>Gets a value indicating whether the body's origin is below the medium surface as of the swim model's last
     /// surface stage — the <c>world.contacts</c> read-back's swim witness. Always <see langword="false"/> for a
     /// non-swim kit.</summary>
     public bool Submerged => m_submerged;

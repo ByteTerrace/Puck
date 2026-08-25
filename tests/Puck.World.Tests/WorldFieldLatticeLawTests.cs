@@ -36,12 +36,14 @@ public sealed class WorldFieldLatticeLawTests {
         Func<int, FixedVector3?>? bodyPosition = null,
         Func<WorldStateHandle, int, ulong, long>? readTag = null,
         Action<WorldStateHandle, int, long, ulong>? writeTag = null,
-        Func<WorldStateHandle, ulong, FixedQ4816>? readScalar = null
+        Func<WorldStateHandle, ulong, FixedQ4816>? readScalar = null,
+        Action<WorldStateHandle, FixedQ4816, ulong>? addScalar = null
     ) : IWorldFieldLatticeHost {
         public FixedVector3? BodyPosition(int body) => bodyPosition?.Invoke(body);
         public long ReadTag(WorldStateHandle row, int body, ulong tick) => (readTag?.Invoke(row, body, tick) ?? 0L);
         public void WriteTag(WorldStateHandle row, int body, long value, ulong tick) => writeTag?.Invoke(row, body, value, tick);
         public FixedQ4816 ReadScalar(WorldStateHandle row, ulong tick) => (readScalar?.Invoke(row, tick) ?? FixedQ4816.Zero);
+        public void AddScalar(WorldStateHandle row, FixedQ4816 amount, ulong tick) => addScalar?.Invoke(row, amount, tick);
     }
 
     private static void Step(WorldFieldLattice lattice) => lattice.Step(
@@ -61,6 +63,17 @@ public sealed class WorldFieldLatticeLawTests {
         ),
         Fields: [new WorldFieldRow(Name: "grass", Min: 0f, Max: 1f)],
         Paint: [(fill with { Field = "grass" })]
+    );
+    private static WorldFieldsSection MediumFields(float initial, float heightScale = 5f, int width = 4, int depth = 4) => new(
+        Lattice: new WorldFieldLatticeDefinition(
+            Origin: new DocumentVector3(x: 0f, y: 0f, z: 0f),
+            CellSize: 1f,
+            Width: width,
+            Depth: depth,
+            Layers: 1,
+            StepEveryTicks: 1
+        ),
+        Fields: [new WorldFieldRow(Name: "medium", Initial: initial, Min: 0f, Max: 1f, HeightScale: heightScale, Color: "#3B7BD6", Medium: true)]
     );
     private static WorldFieldLattice Lattice(WorldFieldsSection document, ulong worldSeed = 0UL, IReadOnlyList<WorldStateRow>? state = null) {
         var section = WorldFieldsSection.ToStateSection(composite: document);
@@ -213,6 +226,40 @@ public sealed class WorldFieldLatticeLawTests {
             expected: 0L,
             actual: lattice.Value(field: 0, cell: 0).Value
         );
+    }
+
+    [Fact]
+    public void AMediumFieldsSurfaceIsOriginYPlusValueTimesHeightScaleAtTheCoupledCell() {
+        var lattice = Lattice(document: MediumFields(initial: 1f, heightScale: 5f));
+        var position = new FixedVector3(
+            X: FixedQ4816.FromDouble(value: 0.5),
+            Y: FixedQ4816.Zero,
+            Z: FixedQ4816.FromDouble(value: 0.5)
+        );
+
+        Assert.Equal(
+            expected: FixedQ4816.FromInteger(value: 5),
+            actual: lattice.MediumSurface(position: in position)
+        );
+    }
+
+    [Fact]
+    public void ABodyOutsideTheLatticeOrOverAZeroValueCellHasNoMediumSurface() {
+        var zeroValued = Lattice(document: MediumFields(initial: 0f, heightScale: 5f));
+        var outside = Lattice(document: MediumFields(initial: 1f, heightScale: 5f));
+        var insidePosition = new FixedVector3(
+            X: FixedQ4816.FromDouble(value: 0.5),
+            Y: FixedQ4816.Zero,
+            Z: FixedQ4816.FromDouble(value: 0.5)
+        );
+        var outsidePosition = new FixedVector3(
+            X: FixedQ4816.FromInteger(value: 30),
+            Y: FixedQ4816.Zero,
+            Z: FixedQ4816.FromInteger(value: 30)
+        );
+
+        Assert.Null(@object: zeroValued.MediumSurface(position: in insidePosition));
+        Assert.Null(@object: outside.MediumSurface(position: in outsidePosition));
     }
 
     [Fact]

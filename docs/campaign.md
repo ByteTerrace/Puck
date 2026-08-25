@@ -67,9 +67,12 @@ boot-drawn row is the persisted evidence, re-read on every fresh load, never a v
 indistinguishable from an authored literal. A `state.lattices` topology plus a `lattice` trait on
 ordinary `fixed` rows is the field/terrain primitive, not a sibling section: `rect`/`noise`/`scatter`
 paint seeds a row deterministically (integer-hash + Q48.16, seeded from `generation.worldSeed`), and
-`diffuse`/`decay`/`transform`/`emit`/`expose` reactions evolve it each `stepEveryTicks`, every reaction
-scalar a literal or a `{"row": "name"}` read fresh per step — a season or weather-intensity row
-modulates chemistry live with no new reaction kind. The compiled reaction form is one typed program
+`diffuse`/`decay`/`transform`/`emit`/`expose`/`flow` reactions evolve it each `stepEveryTicks`, every
+reaction scalar a literal or a `{"row": "name"}` read fresh per step — a season or weather-intensity row
+modulates chemistry live with no new reaction kind. `flow` moves a field downhill over a combined
+surface height (its own value plus named `over` terrain fields), mass-conserving except where a clamp
+binds, with an optional `spillRow` catching what an edge cell would otherwise send past the lattice
+boundary. The compiled reaction form is one typed program
 over that same spelling — stable field/state handles, fixed-point scalar inputs, ordered nodes,
 immutable read/write sets and their dependency DAG, and exact cell/body work classes — consumed
 beside the full topology/paint/display composite so editors and schedulers share the runtime's
@@ -123,6 +126,15 @@ come back.
 | **No shipped world authors WORLD-SCOPE rules** — none carries a `rules` or `interactions` section; the two scenario documents under `Assets/scenarios/` do | the same read; `rules.schema.json` and `interactions.schema.json` both exist |
 | Similar worlds compose instead of redefining everything — the five quilts are `basis` deltas over the `quilt-base` template | read any `quilt-*.world.json`'s `basis` member; `world.status` echoes `basis <path>`; `tests/Puck.World.Tests/DocumentBasisLawTests.cs` |
 | A camera reading reaches per-tick input and a presentation parameter — the `ir-blob` probe's `x` lands as seat 1's `turn` channel and its `luminance` drives `sdf-film-grain.intensity` | windowed on the BRIO: `(sleep 8; echo probe.status; echo 'body.channels 0'; echo wire.errors; sleep 3) \| dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/brio-probe.world.json --exit-after-seconds 16` — `probe.status` echoes `state=running tier=gpu`, its `axis head-x … captured=<v>` equals `body.channels`' `turn … h=<v>`, `parameter … writes=` is positive, `wire.errors: 0`; hardware-free: the same verbs against `brio-probe-track.world.json --headless` (the recorded `Assets/probes/tracks/brio-head.probe-track.json` drives the axis; parameter writes stay 0 headless by design); `tests/Puck.Platform.Windows.Tests/ProbeKernelTests.cs` proves the kernel's numbers on a synthetic frame |
+
+**Verified 2026-08-25 (the medium/flow/ecosystem wave):** `puck.world.json`'s island carries a lattice
+`water` field marked `medium` (a 5-unit pool) beside the existing fire/char chemistry, transported by a
+`flow` reaction that spills its edge share into `falls-flux`, which gates a `falls-mist` rule — plus
+`fish`/`critter` placements and `pond-cam`/`south-fall-cam` view layouts. `puck canary medium-submersion`
+proves a swim kit's `Submerged` fact flips both ways off `WorldPopulation.SampleMediumSurfaces`; `puck
+canary flow-conservation-live` proves a spill row climbs strictly, live, only while a reaction keeps
+feeding its source. `puck parity` (both backends) holds unchanged — the parity world authors neither
+facet.
 
 **The foundation is complete and overshot.** Three motion arms (grounded, vehicle, swim); the portal
 lane end to end — step into a frame and the whole party transfers, all-or-nothing across capacity

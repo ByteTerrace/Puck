@@ -68,7 +68,8 @@ public sealed record WorldFieldsSection(
                 (field.Min != trait.Min) ||
                 (field.Max != trait.Max) ||
                 (field.HeightScale != trait.HeightScale) ||
-                !string.Equals(a: field.Color, b: trait.Color, comparisonType: StringComparison.Ordinal)
+                !string.Equals(a: field.Color, b: trait.Color, comparisonType: StringComparison.Ordinal) ||
+                (field.Medium != (trait.Medium is not null))
             ) {
                 return false;
             }
@@ -140,6 +141,7 @@ public sealed record WorldFieldsSection(
                 HeightScale: trait.HeightScale,
                 Initial: trait.Initial,
                 Max: trait.Max,
+                Medium: (trait.Medium is not null),
                 Min: trait.Min,
                 Name: row.Name.Value
             ));
@@ -165,6 +167,9 @@ public sealed record WorldFieldsSection(
                     When = [.. (transform.When ?? [])],
                     Then = [.. (transform.Then ?? [])],
                 },
+                WorldReaction.Flow flow => flow with {
+                    Over = [.. (flow.Over ?? [])],
+                },
                 _ => reaction,
             }).ToArray()
         );
@@ -189,6 +194,7 @@ public sealed record WorldFieldsSection(
                     HeightScale: row.HeightScale,
                     Initial: row.Initial,
                     Max: row.Max,
+                    Medium: (row.Medium ? new WorldLatticeMedium() : null),
                     Min: row.Min,
                     Paint: null,
                     Topology: DefaultTopologyName
@@ -241,6 +247,12 @@ public sealed record WorldFieldsSection(
             (a.When ?? []).SequenceEqual(second: (b.When ?? [])) &&
             (a.Then ?? []).SequenceEqual(second: (b.Then ?? []))
         ),
+        (WorldReaction.Flow a, WorldReaction.Flow b) => (
+            string.Equals(a: a.Field, b: b.Field, comparisonType: StringComparison.Ordinal) &&
+            (a.Rate == b.Rate) &&
+            (a.Over ?? []).SequenceEqual(second: (b.Over ?? [])) &&
+            string.Equals(a: a.SpillRow, b: b.SpillRow, comparisonType: StringComparison.Ordinal)
+        ),
         _ => false,
     };
 
@@ -282,7 +294,8 @@ public sealed record WorldFieldsSection(
                 (a.Initial != b.Initial) ||
                 (a.Min != b.Min) ||
                 (a.Max != b.Max) ||
-                (a.HeightScale != b.HeightScale)
+                (a.HeightScale != b.HeightScale) ||
+                (a.Medium != b.Medium)
             ) {
                 return false;
             }
@@ -326,6 +339,11 @@ public sealed record WorldStateLatticeTopology(
 /// <param name="Color">The <c>#RRGGBB</c> the row's surface shades with; required when <paramref name="HeightScale"/>
 /// is nonzero.</param>
 /// <param name="Paint">The initial fills, applied in order over <paramref name="Initial"/>.</param>
+/// <param name="Medium">Marks this field a fluid MEDIUM, or <see langword="null"/> for an ordinary field. A medium
+/// field's value times <paramref name="HeightScale"/> over the lattice origin is a free surface every active body
+/// samples each tick at its coupled cell — the same body-coupling ceiling <see cref="WorldReaction.Emit"/>/
+/// <see cref="WorldReaction.Expose"/> resolve against — refused unless <paramref name="HeightScale"/> is greater
+/// than zero (a surface-less medium is meaningless).</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldStateLatticeTrait(
     string Topology,
@@ -334,8 +352,14 @@ public sealed record WorldStateLatticeTrait(
     float Max = 1f,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float HeightScale = 0f,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Color = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldLatticeFill>? Paint = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldLatticeFill>? Paint = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldLatticeMedium? Medium = null
 );
+/// <summary>Marks a lattice-shaped field as a fluid medium (see <see cref="WorldStateLatticeTrait.Medium"/>). No
+/// required members today — the growth seam a future medium trait (density, drag) widens without moving what
+/// already exists, the same trailing-member shape as every other optional-facet record in this document.</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldLatticeMedium;
 /// <summary>A lattice's footprint: cubic cells from <paramref name="Origin"/> along +X (<paramref name="Width"/>),
 /// +Y (<paramref name="Layers"/>), and +Z (<paramref name="Depth"/>). <paramref name="Layers"/> = 1 is a ground
 /// lattice; more layers is a voxel volume and costs proportionally.</summary>
@@ -363,6 +387,7 @@ public sealed record WorldFieldLatticeDefinition(
 /// field that is not geometry.</param>
 /// <param name="Color">The <c>#RRGGBB</c> the field's surface shades with; required when <paramref name="HeightScale"/>
 /// is nonzero.</param>
+/// <param name="Medium">Whether this field is a fluid medium (see <see cref="WorldStateLatticeTrait.Medium"/>).</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldFieldRow(
     string Name,
@@ -370,7 +395,8 @@ public sealed record WorldFieldRow(
     float Min = 0f,
     float Max = 1f,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float HeightScale = 0f,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Color = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Color = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Medium = false
 );
 /// <summary>One initial fill of a lattice row, applied in order over the row's <c>initial</c>. Every kind decides
 /// per CELL with integer hashes and Q48.16 arithmetic only, so a fill is bit-identical on every machine and backend
@@ -490,6 +516,7 @@ public sealed record WorldFieldWrite(string Field, WorldFieldWriteOp Op, WorldLa
 [JsonDerivedType(typeof(WorldReaction.Transform), typeDiscriminator: "transform")]
 [JsonDerivedType(typeof(WorldReaction.Emit), typeDiscriminator: "emit")]
 [JsonDerivedType(typeof(WorldReaction.Expose), typeDiscriminator: "expose")]
+[JsonDerivedType(typeof(WorldReaction.Flow), typeDiscriminator: "flow")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record WorldReaction {
     /// <summary>Moves each cell a fraction of the way toward the mean of its face neighbours (four on a ground
@@ -521,6 +548,20 @@ public abstract record WorldReaction {
     /// <param name="Value">The constant compared against.</param>
     /// <param name="Row">The keyed int state row written, keyed by body index.</param>
     public sealed record Expose(string Field, WorldFieldComparison Comparison, WorldLatticeScalar Value, string Row) : WorldReaction;
+    /// <summary>Moves <paramref name="Field"/> downhill, cell to cell, over the combined surface height of
+    /// <paramref name="Over"/> plus <paramref name="Field"/>'s own value -- mass-conserving except where a cell's
+    /// clamp to its declared [min, max] binds. Every cell donates an equal share of its previous-step value to each
+    /// of the lattice's active-axis directions (four on a ground lattice, six in a volume -- the SAME count for
+    /// every cell, whether a direction reaches a neighbour or the lattice edge), and sends that share only along a
+    /// direction that is strictly downhill; a level or uphill direction moves nothing.</summary>
+    /// <param name="Field">The field transported.</param>
+    /// <param name="Rate">The fraction of a cell's per-direction share that actually moves each step, in
+    /// [0, 1].</param>
+    /// <param name="Over">The other lattice rows forming the terrain basis a downhill direction is measured
+    /// against; empty or omitted means the field flows over its own height alone.</param>
+    /// <param name="SpillRow">The scalar <c>fixed</c>-kind state row an edge cell's outward share accumulates into
+    /// each step (a clamped add), or <see langword="null"/> to treat every lattice edge as a wall.</param>
+    public sealed record Flow(string Field, WorldLatticeScalar Rate, IReadOnlyList<string>? Over = null, string? SpillRow = null) : WorldReaction;
 }
 /// <summary>How a field value compares against a constant.</summary>
 [JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<WorldFieldComparison>))]

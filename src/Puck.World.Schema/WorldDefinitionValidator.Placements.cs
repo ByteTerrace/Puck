@@ -627,6 +627,7 @@ public static partial class WorldDefinitionValidator {
         var programRows = BodyMotionProgramRows(programs: definition.BodyMotionPrograms);
 
         var kits = definition.Kits;
+        var hasMedium = HasMediumField(definition: definition);
 
         // A kit is required exactly when the census implies a body to move (a derived refusal, not a flat floor):
         // zero declared capacity needs no kit at all.
@@ -682,7 +683,7 @@ public static partial class WorldDefinitionValidator {
                 path: $"{path}.motion",
                 channelNames: compositionChannelNames,
                 dynamicsNames: dynamicsNames,
-                hasWater: (definition.Water is not null),
+                hasMedium: hasMedium,
                 simulationRateHz: definition.SimulationRateHz,
                 errors: errors
             );

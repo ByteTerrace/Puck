@@ -332,7 +332,7 @@
                     "type": "number"
                   },
                   "floatDepth": {
-                    "description": "How far below the waterline (world units) the body origin rests when floating \u2014 and the bob band\u0027s half-width around that rest line (one knob deliberately: the band a body settles in is the depth scale it settles at). The validator only checks this is positive and finite \u2014 it cannot see the document\u0027s contact geometry, so it does not (and cannot) check this against the local water column\u0027s depth. A FloatDepth deeper than the floor below it parks the body on the floor instead of at the float line, with AtSurface never true there \u2014 a geometry fact deliberately outside this validator\u0027s reach.",
+                    "description": "How far below the medium surface (world units) the body origin rests when floating \u2014 and the bob band\u0027s half-width around that rest line (one knob deliberately: the band a body settles in is the depth scale it settles at). The validator only checks this is positive and finite \u2014 it cannot see the document\u0027s contact geometry, so it does not (and cannot) check this against the local water column\u0027s depth. A FloatDepth deeper than the floor below it parks the body on the floor instead of at the float line, with AtSurface never true there \u2014 a geometry fact deliberately outside this validator\u0027s reach.",
                     "type": "number"
                   },
                   "sprintMultiplier": {

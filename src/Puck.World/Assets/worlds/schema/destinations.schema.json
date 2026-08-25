@@ -27,7 +27,7 @@
         ]
       },
       "scope": {
-        "description": "Which scoped identity/generation this destination selects (see WorldDestinationScope). Absent resolves to Global \u2014 today\u0027s behavior, unchanged for every row authored before this member existed. Trailing member: the same widen-without-moving-existing-members shape WorldWaterSection\u0027s own remarks describe.",
+        "description": "Which scoped identity/generation this destination selects (see WorldDestinationScope). Absent resolves to Global \u2014 today\u0027s behavior, unchanged for every row authored before this member existed. Trailing member: the same widen-without-moving-existing-members shape WorldLatticeMedium\u0027s own remarks describe.",
         "default": "global",
         "type": "string",
         "enum": [

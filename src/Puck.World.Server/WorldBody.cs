@@ -97,7 +97,6 @@ public sealed partial class WorldBody {
     private bool m_hasProducerIntent;
     private bool m_hasSubmittedIntent;
     private bool m_hasTransferHeldChannels;
-    private bool m_hasWaterline;
     // The action track — the channel-generic buttons, independent of the movement tape/sticks. Peer producers of the
     // same ordinals, merged every sub-step: m_heldChannels is the per-tick live-held device image the client submits
     // (only composition ordinals are meaningful there — a button down until its release edge; one-tick, republished
@@ -181,9 +180,9 @@ public sealed partial class WorldBody {
     // The swim-specific compiled half (null for every non-swim kit) and the swim integrator's own carry: ONE ramp
     // accumulator for the whole thrust convergence (planar and vertical alike), the same "remainder binds to the
     // tick base" shape as m_planarRampAccumulator — so alternating engage/release rates through it stays exact, no
-    // separate accumulator per stage. The waterline arrives from the population beside the contact field
-    // (SetWaterline); the two swim facts are written by the surface stage and read one tick behind, the same
-    // discipline m_grounded follows.
+    // separate accumulator per stage. The medium surface arrives fresh every tick from the population's field lattice
+    // (SetMediumSurface, sampled before this body's own Advance runs); the two swim facts are written by the surface
+    // stage and read one tick behind, the same discipline m_grounded follows.
     private FixedSwimTuning? m_swimTuning;
     private int m_tapeCount;
     private int m_tapeHead;
@@ -209,7 +208,10 @@ public sealed partial class WorldBody {
     // teleport that resets vertical state — Warp/Pose/Reconcile — but NOT by Face (resetVertical: false, the jump arc
     // keeps running), and by SetBodyMotionProgram only when the new program integrates vertical gravity.
     private FixedQ4816 m_verticalVelocity;
-    private FixedQ4816 m_waterline;
+    // Sampled fresh every tick, before this body's own Advance, from the population's field lattice at this body's
+    // coupled cell — never captured/restored (see WorldBody.Transfer.cs's own remarks): a pure function of this
+    // body's position and the live lattice, re-derived identically the very next tick regardless of any teleport.
+    private FixedQ4816? m_mediumSurface;
     // The grounded model's authoritative heading scalar (radians): integrated from the Turn rate, with m_orientation
     // derived from it each step (a pure yaw rotation). Under free it is inert (orientation is authoritative and Yaw is
     // read back out of it).

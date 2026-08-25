@@ -513,9 +513,12 @@ public sealed partial class WorldBody {
     /// <c>m_roleChannels</c>/<c>m_roleOrdinals</c>/<c>m_actionStateDefinitions</c>/<c>m_collider</c>/
     /// <c>m_maxSmoothError</c> — compiled kit config; <see cref="Puck.World.Server.WorldPopulation.RestoreDetachedSeat"/>
     /// reconstructs the body from the same seat kit row (<c>m_kits[m_seatKit]</c>), so these are byte-identical
-    /// without help. <c>m_contactField</c>/<c>m_hasWaterline</c>/<c>m_waterline</c> — wired directly by
-    /// <c>RestoreDetachedSeat</c>'s own <see cref="SetContactField"/>/<see cref="SetWaterline"/> calls immediately
-    /// after construction (the same population), always correct. <c>m_position</c>/<c>m_previousPosition</c>/
+    /// without help. <c>m_contactField</c> — wired directly by <c>RestoreDetachedSeat</c>'s own
+    /// <see cref="SetContactField"/> call immediately after construction (the same population), always correct.
+    /// <c>m_mediumSurface</c> needs no wiring at all: <see cref="Puck.World.Server.WorldPopulation.SampleMediumSurfaces"/>
+    /// re-samples every active body's coupled cell fresh each tick, before that body's own Advance runs, so the
+    /// restored body reads a correct surface (or none) on its very next tick regardless of what it held before
+    /// detaching. <c>m_position</c>/<c>m_previousPosition</c>/
     /// <c>m_yaw</c> — captured/restored outside this struct entirely, via <c>RestoreDetachedSeat</c>'s own
     /// position/yaw parameters into <see cref="Pose(FixedVector3, FixedQ4816, FixedQ4816, FixedQ4816)"/> (this
     /// struct's own top-level remarks already say so). <c>m_positionAccumulator</c>/
@@ -533,7 +536,8 @@ public sealed partial class WorldBody {
     /// <c>m_obstructionWitnessGraceTicks</c> — explicitly documented at their own declaration as "Read-back only" for
     /// <c>world.contacts</c>; losing the latch only ever produces a missing witness until the next real push or grace
     /// timeout, never a wrong positive one. <c>m_submerged</c>/<c>m_atSurface</c> — the swim surface stage
-    /// re-derives both, purely as a function of the restored position and waterline, on the very next Advance.
+    /// re-derives both, purely as a function of the restored position and the freshly resampled medium surface, on
+    /// the very next Advance.
     /// <c>m_heldChannels</c>/<c>m_channelReadHeld</c>/<c>m_channelReadComposed</c> — ordinary one-tick images; the
     /// last admitted held composition image is separately named in <paramref name="HeldChannelImage"/> solely for
     /// the bounded authority-handoff bridge.

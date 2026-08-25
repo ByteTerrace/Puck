@@ -70,6 +70,8 @@ public readonly record struct WorldFieldScalarInput(FixedQ4816 Literal, WorldSta
 /// <param name="Minimum">The inclusive cell-value floor.</param>
 /// <param name="Maximum">The inclusive cell-value ceiling.</param>
 /// <param name="HeightScale">World units of geometry height per field unit.</param>
+/// <param name="IsMedium">Whether this field is a fluid medium (see <see cref="WorldStateLatticeTrait.Medium"/>) —
+/// its value times <paramref name="HeightScale"/> over the lattice origin is a free surface bodies sample.</param>
 public readonly record struct WorldFieldDescriptor(
     WorldFieldHandle Handle,
     WorldStateHandle State,
@@ -77,7 +79,8 @@ public readonly record struct WorldFieldDescriptor(
     FixedQ4816 Initial,
     FixedQ4816 Minimum,
     FixedQ4816 Maximum,
-    FixedQ4816 HeightScale
+    FixedQ4816 HeightScale,
+    bool IsMedium
 );
 
 /// <summary>One typed condition in a compiled <see cref="WorldFieldNode.Transform"/> node.</summary>
@@ -189,6 +192,32 @@ public abstract record WorldFieldNode(
         WorldStateHandle Row,
         ImmutableArray<WorldStateHandle> StateReads
     ) : WorldFieldNode(Handle, WorldFieldWorkKind.Bodies, [Field], [], StateReads, [Row]);
+
+    /// <summary>Moves one field downhill over a combined surface height, with an optional boundary spill. See
+    /// <see cref="WorldReaction.Flow"/>.</summary>
+    /// <param name="Handle">The program-bound node handle.</param>
+    /// <param name="Field">The field read and written.</param>
+    /// <param name="Rate">The fixed literal or typed state input controlling the per-direction share that
+    /// moves.</param>
+    /// <param name="Over">The other fields forming the terrain basis, in authored order.</param>
+    /// <param name="SpillRow">The scalar state row an edge cell's outward share accumulates into, or the invalid
+    /// handle when edges are walls.</param>
+    /// <param name="FieldReads">The canonical immutable read set: <paramref name="Field"/> plus every
+    /// <paramref name="Over"/> field.</param>
+    /// <param name="StateReads">The canonical immutable state-read set implied by <paramref name="Rate"/> and, when
+    /// declared, <paramref name="SpillRow"/>'s current value.</param>
+    /// <param name="StateWrites">The canonical immutable state-write set: <paramref name="SpillRow"/> when
+    /// declared.</param>
+    public sealed record Flow(
+        WorldFieldNodeHandle Handle,
+        WorldFieldHandle Field,
+        WorldFieldScalarInput Rate,
+        ImmutableArray<WorldFieldHandle> Over,
+        WorldStateHandle SpillRow,
+        ImmutableArray<WorldFieldHandle> FieldReads,
+        ImmutableArray<WorldStateHandle> StateReads,
+        ImmutableArray<WorldStateHandle> StateWrites
+    ) : WorldFieldNode(Handle, WorldFieldWorkKind.Cells, FieldReads, [Field], StateReads, StateWrites);
 }
 
 /// <summary>The typed, deterministic reaction program compiled from one lattice topology and its ordered reactions.</summary>
@@ -219,6 +248,7 @@ public sealed class WorldFieldProgram {
         CellNodeCount = nodes.Count(predicate: static node => (node.Work == WorldFieldWorkKind.Cells));
         CellPassCount = nodes.Sum(selector: static node => node switch {
             WorldFieldNode.Diffuse => 2,
+            WorldFieldNode.Flow => 2,
             { Work: WorldFieldWorkKind.Cells } => 1,
             _ => 0,
         });
@@ -309,7 +339,8 @@ public sealed class WorldFieldProgram {
                 Initial: FixedQ4816.FromDouble(value: row.Initial),
                 Minimum: FixedQ4816.FromDouble(value: row.Min),
                 Maximum: FixedQ4816.FromDouble(value: row.Max),
-                HeightScale: FixedQ4816.FromDouble(value: row.HeightScale)
+                HeightScale: FixedQ4816.FromDouble(value: row.HeightScale),
+                IsMedium: row.Medium
             );
         }
 
@@ -353,6 +384,7 @@ public sealed class WorldFieldProgram {
                 WorldReaction.Transform reaction => CompileTransform(reaction, nodeHandle, index, Field, Scalar),
                 WorldReaction.Emit reaction => CompileEmit(reaction, nodeHandle, index, Field, Scalar, state),
                 WorldReaction.Expose reaction => CompileExpose(reaction, nodeHandle, index, Field, Scalar, state),
+                WorldReaction.Flow reaction => CompileFlow(reaction, nodeHandle, index, Field, Scalar, state),
                 _ => throw new InvalidOperationException(message: $"fields.reactions[{index}] carries an unknown reaction kind."),
             };
         }
@@ -444,6 +476,32 @@ public sealed class WorldFieldProgram {
             value,
             row,
             StateReads(value)
+        );
+    }
+
+    private static WorldFieldNode CompileFlow(WorldReaction.Flow reaction, WorldFieldNodeHandle handle, int index, Func<string, int, WorldFieldHandle> field, Func<WorldLatticeScalar, int, WorldFieldScalarInput> scalar, WorldStateCatalog state) {
+        var target = field(reaction.Field, index);
+        var rate = scalar(reaction.Rate, index);
+        var over = (reaction.Over ?? []).Select(selector: name => field(name, index)).ToImmutableArray();
+        var spillRow = ((reaction.SpillRow is { } spillName)
+            ? RequireState(state, spillName, WorldStateStorageShape.Slot, WorldStateValueKind.Fixed, $"fields.reactions[{index}].spillRow")
+            : default
+        );
+        var stateInputs = new List<WorldFieldScalarInput> { rate };
+
+        if (spillRow.IsValid) {
+            stateInputs.Add(item: new WorldFieldScalarInput(default, spillRow));
+        }
+
+        return new WorldFieldNode.Flow(
+            handle,
+            target,
+            rate,
+            over,
+            spillRow,
+            CanonicalFields(over.Append(target)),
+            CanonicalStates(stateInputs),
+            (spillRow.IsValid ? ImmutableArray.Create(spillRow) : ImmutableArray<WorldStateHandle>.Empty)
         );
     }
 

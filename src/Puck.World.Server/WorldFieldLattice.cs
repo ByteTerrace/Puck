@@ -29,6 +29,13 @@ public interface IWorldFieldLatticeHost {
     /// <param name="row">The compiled state row handle.</param>
     /// <param name="tick">The stepping tick.</param>
     FixedQ4816 ReadScalar(WorldStateHandle row, ulong tick);
+    /// <summary>Adds to a scalar fixed-kind state row's slot cell, clamped to the row's declared envelope (a
+    /// <see cref="WorldReaction.Flow"/> spill accumulator) — the host resolves and applies the clamp itself, so this
+    /// never refuses.</summary>
+    /// <param name="row">The compiled state row handle.</param>
+    /// <param name="amount">The raw amount to add.</param>
+    /// <param name="tick">The stepping tick.</param>
+    void AddScalar(WorldStateHandle row, FixedQ4816 amount, ulong tick);
 }
 
 /// <summary>
@@ -44,6 +51,7 @@ public sealed class WorldFieldLattice {
     private readonly bool[][] m_deltaDirty;
     private WorldFieldsSection m_document;
     private readonly FixedQ4816[] m_heightScale;
+    private readonly bool[] m_isMedium;
     private readonly int m_layers;
     private readonly FixedQ4816 m_bodyCouplingCeiling;
     private readonly FixedQ4816[] m_max;
@@ -52,6 +60,9 @@ public sealed class WorldFieldLattice {
     private readonly FixedVector3 m_origin;
     private WorldFieldProgram m_program;
     private readonly FixedQ4816[] m_scratch;
+    private readonly Int128[] m_flowDelta;
+    private readonly FixedQ4816[] m_flowHeights;
+    private readonly int m_flowDirections;
     private readonly int m_stepEveryTicks;
     private readonly FixedQ4816[][] m_values;
     private readonly int m_width;
@@ -115,9 +126,19 @@ public sealed class WorldFieldLattice {
         m_min = new FixedQ4816[fields.Count];
         m_max = new FixedQ4816[fields.Count];
         m_heightScale = new FixedQ4816[fields.Count];
+        m_isMedium = new bool[fields.Count];
         m_values = new FixedQ4816[fields.Count][];
         m_deltaDirty = new bool[fields.Count][];
         m_scratch = new FixedQ4816[CellCount];
+        m_flowDelta = new Int128[CellCount];
+        m_flowHeights = new FixedQ4816[CellCount];
+        // Every cell donates an equal share to each of the lattice's active-axis directions -- an axis with a
+        // single cell (Layers = 1 on a ground lattice) has no directions at all, never a "missing neighbour".
+        m_flowDirections = (
+            ((document.Lattice.Width > 1) ? 2 : 0) +
+            ((document.Lattice.Depth > 1) ? 2 : 0) +
+            ((document.Lattice.Layers > 1) ? 2 : 0)
+        );
 
         for (var field = 0; (field < fields.Count); field++) {
             var row = fields[field];
@@ -126,6 +147,7 @@ public sealed class WorldFieldLattice {
             m_min[field] = row.Minimum;
             m_max[field] = row.Maximum;
             m_heightScale[field] = row.HeightScale;
+            m_isMedium[field] = row.IsMedium;
             m_values[field] = new FixedQ4816[CellCount];
             m_deltaDirty[field] = new bool[CellCount];
 
@@ -289,7 +311,8 @@ public sealed class WorldFieldLattice {
                 (current.Initial != candidate.Initial) ||
                 (current.Minimum != candidate.Minimum) ||
                 (current.Maximum != candidate.Maximum) ||
-                (current.HeightScale != candidate.HeightScale)
+                (current.HeightScale != candidate.HeightScale) ||
+                (current.IsMedium != candidate.IsMedium)
             ) {
                 reason = $"field declaration {index} differs from the live allocation; restart the host to load it";
 
@@ -349,27 +372,32 @@ public sealed class WorldFieldLattice {
 
         return FixedQ4816.FromRawBits(value: ((long)raw));
     }
-    private static FixedQ4816 Mean(Int128 rawSum, int count) {
-        var negative = (rawSum < Int128.Zero);
-        var magnitude = ((UInt128)(negative ? -rawSum : rawSum));
-        var divisor = ((UInt128)(uint)count);
-        var quotient = (magnitude / divisor);
-        var remainder = (magnitude % divisor);
+    // The exact wide division every reaction that must round a sum without a second rounding pass shares:
+    // round-half-to-even on the remainder, computed in UInt128 magnitude then resigned. divisor is always positive.
+    private static Int128 DivideRoundHalfEven(Int128 numerator, Int128 divisor) {
+        var negative = (numerator < Int128.Zero);
+        var magnitude = ((UInt128)(negative ? -numerator : numerator));
+        var divisorMagnitude = ((UInt128)divisor);
+        var quotient = (magnitude / divisorMagnitude);
+        var remainder = (magnitude % divisorMagnitude);
 
         if (
-            ((remainder * 2U) > divisor) ||
-            (((remainder * 2U) == divisor) && ((quotient & 1U) != 0U))
+            ((remainder * 2U) > divisorMagnitude) ||
+            (((remainder * 2U) == divisorMagnitude) && ((quotient & 1U) != 0U))
         ) {
             quotient++;
         }
 
-        var raw = (negative
-            ? ((quotient == (((UInt128)1U) << 63)) ? long.MinValue : -((long)quotient))
-            : ((long)quotient)
-        );
-
-        return FixedQ4816.FromRawBits(value: raw);
+        return (negative ? -((Int128)quotient) : ((Int128)quotient));
     }
+    private static long SaturateToInt64(Int128 value) => (
+        (value <= long.MinValue)
+            ? long.MinValue
+            : ((value >= long.MaxValue)
+                ? long.MaxValue
+                : ((long)value))
+    );
+    private static FixedQ4816 Mean(Int128 rawSum, int count) => FixedQ4816.FromRawBits(value: SaturateToInt64(value: DivideRoundHalfEven(numerator: rawSum, divisor: count)));
     private void ClearDeltas() {
         foreach (var key in m_deltas) {
             var field = (key / CellCount);
@@ -504,6 +532,43 @@ public sealed class WorldFieldLattice {
     /// <param name="cell">The cell index.</param>
     /// <returns>The value.</returns>
     public FixedQ4816 Value(int field, int cell) => m_values[field][cell];
+    /// <summary>Resolves the free surface a body at <paramref name="position"/> would float against: the highest
+    /// medium field's value times its height scale, over the lattice origin, at the body's coupled cell (the same
+    /// coupling <see cref="TryBodyCellOf"/> resolves for <see cref="WorldReaction.Emit"/>/<see cref="WorldReaction.Expose"/>).
+    /// <see langword="null"/> when the body lies outside the lattice's coupling ceiling, or every medium field reads
+    /// zero or less there.</summary>
+    /// <param name="position">The body's world position.</param>
+    /// <returns>The surface's world-space Y, or <see langword="null"/> for no medium.</returns>
+    public FixedQ4816? MediumSurface(in FixedVector3 position) {
+        if (!TryBodyCellOf(position: in position, cell: out var cell)) {
+            return null;
+        }
+
+        FixedQ4816? best = null;
+
+        for (var field = 0; (field < m_values.Length); field++) {
+            if (!m_isMedium[field]) {
+                continue;
+            }
+
+            var value = m_values[field][cell];
+
+            if (value <= FixedQ4816.Zero) {
+                continue;
+            }
+
+            var surface = (m_origin.Y + (value * m_heightScale[field]));
+
+            if (
+                (best is not { } current) ||
+                (surface > current)
+            ) {
+                best = surface;
+            }
+        }
+
+        return best;
+    }
     /// <summary>Resolves a declared field's index by name.</summary>
     /// <param name="name">The field name.</param>
     /// <param name="field">The field index.</param>
@@ -726,6 +791,14 @@ public sealed class WorldFieldLattice {
                     }
 
                     break;
+                case WorldFieldNode.Flow flow:
+                    StepFlow(
+                        reaction: flow,
+                        rate: ClampRate(rate: Resolve(host: host, input: flow.Rate, tick: tick)),
+                        host: host,
+                        tick: tick
+                    );
+                    break;
                 case WorldFieldNode.Expose expose:
                     for (var body = 0; (body < bodyCount); body++) {
                         if (host.BodyPosition(body: body) is not { } position) {
@@ -867,6 +940,153 @@ public sealed class WorldFieldLattice {
                         : thenValues[index])
                 );
             }
+        }
+    }
+
+    // Mass-conserving directional transport. h_i (m_flowHeights) is snapshotted once per step: this field's own
+    // PREVIOUS-step value (Jacobi, like StepDiffuse) plus every 'over' field's LIVE value -- Flow never writes an
+    // over field, so live and snapshot agree there.
+    //
+    // A donor's fair share toward one direction is rate * (its previous-step value / m_flowDirections) -- because
+    // rate <= 1, the sum of every direction's share never exceeds a donor's own previous-step value, so a donor can
+    // never be driven negative by this reaction alone. A boundary direction (spills into SpillRow when declared,
+    // else the edge is a wall and the share stays put) always moves exactly this fair share.
+    //
+    // A paired direction (a real downhill neighbour) additionally caps the fair share at HALF the pair's own height
+    // gap -- at rate 1 an isolated pair moves exactly to a shared height, never past it -- whenever the field's own
+    // value feeds back into height (HeightScale > 0): without that cap, a cell donating its full fair share to
+    // several downhill neighbours at once can overshoot past their shared level and rebound next step, since the
+    // very act of moving mass changes the height ordering that decided it. A field with HeightScale 0 never
+    // contributes to its own height (Flow transports it, but only an 'over' field's static terrain decides
+    // direction), so that feedback cannot occur and the half-gap cap is skipped.
+    //
+    // Deltas accumulate exactly in Int128 and clamp only once, at the final write, so mass is conserved exactly
+    // whenever that clamp does not bind.
+    private void StepFlow(WorldFieldNode.Flow reaction, FixedQ4816 rate, IWorldFieldLatticeHost host, ulong tick) {
+        if (m_flowDirections == 0) {
+            return;
+        }
+
+        var field = reaction.Field.Ordinal;
+        var values = m_values[field];
+
+        Array.Copy(
+            sourceArray: values,
+            destinationArray: m_scratch,
+            length: values.Length
+        );
+
+        for (var cell = 0; (cell < CellCount); cell++) {
+            var height = (m_scratch[cell] * m_heightScale[field]);
+
+            foreach (var over in reaction.Over) {
+                height += (m_values[over.Ordinal][cell] * m_heightScale[over.Ordinal]);
+            }
+
+            m_flowHeights[cell] = height;
+        }
+
+        Array.Clear(array: m_flowDelta);
+
+        var directionDivisor = FixedQ4816.FromInteger(value: m_flowDirections);
+        var ownHeightScale = m_heightScale[field];
+        var hasSpill = reaction.SpillRow.IsValid;
+        var spilled = Int128.Zero;
+
+        FixedQ4816 FairShare(int donorCell) => (m_scratch[donorCell] / directionDivisor);
+
+        void Pair(int a, int b) {
+            if (m_flowHeights[a] == m_flowHeights[b]) {
+                return;
+            }
+
+            var aIsDonor = (m_flowHeights[a] > m_flowHeights[b]);
+            var donor = (aIsDonor ? a : b);
+            var receiver = (aIsDonor ? b : a);
+            var capped = FairShare(donorCell: donor);
+
+            if (ownHeightScale > FixedQ4816.Zero) {
+                var gap = FixedQ4816.Abs(value: (m_flowHeights[donor] - m_flowHeights[receiver]));
+                var halfGapShare = (gap / (ownHeightScale + ownHeightScale));
+
+                capped = FixedQ4816.Min(x: capped, y: halfGapShare);
+            }
+
+            var flux = (capped * rate).Value;
+
+            m_flowDelta[donor] -= flux;
+            m_flowDelta[receiver] += flux;
+        }
+
+        void Spill(int cell) {
+            var flux = (FairShare(donorCell: cell) * rate).Value;
+
+            m_flowDelta[cell] -= flux;
+            spilled += flux;
+        }
+
+        for (var z = 0; (z < m_depth); z++) {
+            for (var y = 0; (y < m_layers); y++) {
+                for (var x = 0; (x < m_width); x++) {
+                    var cell = CellIndex(x: x, y: y, z: z);
+
+                    if (m_width > 1) {
+                        if (x < (m_width - 1)) {
+                            Pair(a: cell, b: CellIndex(x: (x + 1), y: y, z: z));
+                        } else if (hasSpill) {
+                            Spill(cell: cell);
+                        }
+
+                        if ((x == 0) && hasSpill) {
+                            Spill(cell: cell);
+                        }
+                    }
+
+                    if (m_depth > 1) {
+                        if (z < (m_depth - 1)) {
+                            Pair(a: cell, b: CellIndex(x: x, y: y, z: (z + 1)));
+                        } else if (hasSpill) {
+                            Spill(cell: cell);
+                        }
+
+                        if ((z == 0) && hasSpill) {
+                            Spill(cell: cell);
+                        }
+                    }
+
+                    if (m_layers > 1) {
+                        if (y < (m_layers - 1)) {
+                            Pair(a: cell, b: CellIndex(x: x, y: (y + 1), z: z));
+                        } else if (hasSpill) {
+                            Spill(cell: cell);
+                        }
+
+                        if ((y == 0) && hasSpill) {
+                            Spill(cell: cell);
+                        }
+                    }
+                }
+            }
+        }
+
+        for (var cell = 0; (cell < CellCount); cell++) {
+            if (m_flowDelta[cell] == Int128.Zero) {
+                continue;
+            }
+
+            Write(
+                cell: cell,
+                field: field,
+                value: FixedQ4816.FromRawBits(value: SaturateToInt64(value: (((Int128)m_scratch[cell].Value) + m_flowDelta[cell])))
+            );
+        }
+
+        if (hasSpill && (spilled != Int128.Zero)) {
+            host.AddScalar(
+                row: reaction.SpillRow,
+                amount: FixedQ4816.FromRawBits(value: SaturateToInt64(value: spilled)),
+                tick: tick
+            );
         }
     }
 
@@ -1017,6 +1237,7 @@ public sealed class WorldFieldLattice {
                 WorldFieldNode.Transform => "transform",
                 WorldFieldNode.Emit => "emit",
                 WorldFieldNode.Expose => "expose",
+                WorldFieldNode.Flow => "flow",
                 _ => "unknown",
             });
         }

@@ -301,7 +301,7 @@ public static partial class WorldDefinitionValidator {
     // The kit.motion gate: required (a kit with no declared model is a dead kit), coherent with its body motion
     // program's selected operations (program is null when ValidateKits already refused bodyMotionProgram, in which
     // case coherence has nothing sound to check against), and per-arm valid. A new arm is a new case below.
-    private static void ValidateMotionModel(WorldMotionModel? model, CompiledBodyMotionProgram? program, string path, ISet<string> channelNames, ISet<string> dynamicsNames, bool hasWater, int simulationRateHz, List<string> errors) {
+    private static void ValidateMotionModel(WorldMotionModel? model, CompiledBodyMotionProgram? program, string path, ISet<string> channelNames, ISet<string> dynamicsNames, bool hasMedium, int simulationRateHz, List<string> errors) {
         if (model is null) {
             errors.Add(item: $"{path} is required.");
 
@@ -345,7 +345,7 @@ public static partial class WorldDefinitionValidator {
                     channelNames: channelNames,
                     dynamicsNames: dynamicsNames,
                     errors: errors,
-                    hasWater: hasWater,
+                    hasMedium: hasMedium,
                     path: path,
                     simulationRateHz: simulationRateHz,
                     tuning: swim
@@ -665,11 +665,11 @@ public static partial class WorldDefinitionValidator {
         }
     }
     // A kit's full swim locomotion tuning: thrust, medium dynamics, and the shared response/sprint/frame vocabulary.
-    // A swim kit in a world without a water section refuses HERE — the medium is the model's whole premise, and a
-    // silent dry-world swimmer would integrate against a waterline that does not exist.
-    private static void ValidateSwimMotion(WorldMotionModel.Swim tuning, string path, ISet<string> channelNames, ISet<string> dynamicsNames, bool hasWater, int simulationRateHz, List<string> errors) {
-        if (!hasWater) {
-            errors.Add(item: $"{path} declares a swim model but the world authors no water section.");
+    // A swim kit in a world with no medium lattice row refuses HERE — the medium is the model's whole premise, and a
+    // silent dry-world swimmer would integrate against a surface that does not exist.
+    private static void ValidateSwimMotion(WorldMotionModel.Swim tuning, string path, ISet<string> channelNames, ISet<string> dynamicsNames, bool hasMedium, int simulationRateHz, List<string> errors) {
+        if (!hasMedium) {
+            errors.Add(item: $"{path} declares a swim model but the world authors no medium lattice row.");
         }
 
         RequirePositive(

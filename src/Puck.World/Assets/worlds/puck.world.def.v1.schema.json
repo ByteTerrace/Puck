@@ -131,9 +131,6 @@
     "generators": {
       "$ref": "./schema/generators.schema.json"
     },
-    "water": {
-      "$ref": "./schema/water.schema.json"
-    },
     "references": {
       "$ref": "./schema/references.schema.json"
     },

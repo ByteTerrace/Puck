@@ -1,0 +1,93 @@
+{
+  "schema": "puck.world.def.v1",
+  "documentId": "medium-submersion-canary",
+  "bodies": { "localSeats": 1 },
+  "simulation": { "rateHz": 240 },
+  "spawnPoints": [{ "id": "origin", "position": [0, 6, 0] }],
+  "channels": [
+    { "name": "forward", "shape": "Bipolar", "role": "MoveAdvance" },
+    { "name": "strafe", "shape": "Bipolar", "role": "MoveStrafe" },
+    { "name": "turn", "shape": "Bipolar", "role": "Turn" },
+    { "name": "up", "shape": "Bipolar", "role": "MoveUp" }
+  ],
+  "collision": { "requirements": [], "contactSkin": 0.02, "maxIterations": 4, "maxSlopeDegrees": 60, "gradientProbe": 0 },
+  "state": {
+    "world": [
+      {
+        "name": "water",
+        "kind": "fixed",
+        "lattice": {
+          "topology": "pool",
+          "initial": 1,
+          "min": 0,
+          "max": 1,
+          "heightScale": 5,
+          "color": "#3B7BD6",
+          "medium": {}
+        }
+      }
+    ],
+    "lattices": [
+      {
+        "name": "pool",
+        "origin": [0, 0, 0],
+        "cellSize": 1,
+        "width": 4,
+        "depth": 4,
+        "layers": 1
+      }
+    ]
+  },
+  "views": {
+    "layouts": [],
+    "seatControl": { "yawReference": "World", "minPitch": -0.35, "maxPitch": 1.2 },
+    "seatRig": {
+      "name": "seatChase",
+      "version": "puck.camera.v1",
+      "operations": [
+        { "$type": "orbit", "distance": 5.4626001, "yaw": 0, "pitch": 0.4145069, "pivotOffset": [0, 0, 0] },
+        { "$type": "lookAt", "subject": { "$type": "reference" }, "targetOffset": [0, 1, 0], "worldAxes": false },
+        { "$type": "fov", "fieldOfViewRadians": 0.9599311 }
+      ]
+    }
+  },
+  "bodyMotionPrograms": [
+    {
+      "name": "swim",
+      "version": "puck.body-motion.v1",
+      "kind": "Motion",
+      "operations": [
+        "ResolveYawAttitudeAndPlanarFrame",
+        "ComputeSwimTargetVelocity",
+        "ShapePlanarVelocity",
+        "ApplyBuoyancyAndSurface",
+        "IntegratePlanarAndVerticalVelocity",
+        "CommitPose"
+      ]
+    }
+  ],
+  "kits": {
+    "rows": [
+      {
+        "name": "diver",
+        "bodyMotionProgram": "swim",
+        "motion": {
+          "$type": "swim",
+          "thrustSpeed": 3.2,
+          "turnSpeed": 2.2,
+          "verticalThrustFraction": 0.75,
+          "response": [],
+          "buoyancy": 0.5,
+          "maxRiseSpeed": 2.4,
+          "maxSinkSpeed": 3,
+          "surfaceSettleRate": 6,
+          "floatDepth": 1,
+          "sprintMultiplier": 1
+        },
+        "collider": { "$type": "sphere", "radius": 0.5 },
+        "bodyContact": "Solid"
+      }
+    ]
+  },
+  "defaultSeatKit": "diver"
+}

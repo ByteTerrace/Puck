@@ -5021,7 +5021,7 @@
                     "type": "number"
                   },
                   "floatDepth": {
-                    "description": "How far below the waterline (world units) the body origin rests when floating \u2014 and the bob band\u0027s half-width around that rest line (one knob deliberately: the band a body settles in is the depth scale it settles at). The validator only checks this is positive and finite \u2014 it cannot see the document\u0027s contact geometry, so it does not (and cannot) check this against the local water column\u0027s depth. A FloatDepth deeper than the floor below it parks the body on the floor instead of at the float line, with AtSurface never true there \u2014 a geometry fact deliberately outside this validator\u0027s reach.",
+                    "description": "How far below the medium surface (world units) the body origin rests when floating \u2014 and the bob band\u0027s half-width around that rest line (one knob deliberately: the band a body settles in is the depth scale it settles at). The validator only checks this is positive and finite \u2014 it cannot see the document\u0027s contact geometry, so it does not (and cannot) check this against the local water column\u0027s depth. A FloatDepth deeper than the floor below it parks the body on the floor instead of at the float line, with AtSurface never true there \u2014 a geometry fact deliberately outside this validator\u0027s reach.",
                     "type": "number"
                   },
                   "sprintMultiplier": {
@@ -9623,24 +9623,6 @@
       ],
       "additionalProperties": false
     },
-    "water": {
-      "description": "The standing-water medium, when the world authors one.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "level": {
-          "description": "The waterline\u0027s world-space Y \u2014 the free surface of the world\u0027s standing water. A position below it is submerged.",
-          "type": "number"
-        }
-      },
-      "required": [
-        "level"
-      ],
-      "additionalProperties": false,
-      "default": null
-    },
     "fields": {
       "description": "The field lattice declaration \u2014 a presentation peer renders field geometry from the snapshot\u0027s cell deltas and needs the lattice footprint, height scales, and colours to do it.",
       "type": [
@@ -9727,6 +9709,11 @@
                   "null"
                 ],
                 "default": null
+              },
+              "medium": {
+                "description": "Whether this field is a fluid medium (see Medium).",
+                "type": "boolean",
+                "default": false
               }
             },
             "required": [
@@ -9933,6 +9920,48 @@
                   "comparison",
                   "value",
                   "row"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "description": "Moves Field downhill, cell to cell, over the combined surface height of Over plus Field\u0027s own value -- mass-conserving except where a cell\u0027s clamp to its declared [min, max] binds. Every cell donates an equal share of its previous-step value to each of the lattice\u0027s active-axis directions (four on a ground lattice, six in a volume -- the SAME count for every cell, whether a direction reaches a neighbour or the lattice edge), and sends that share only along a direction that is strictly downhill; a level or uphill direction moves nothing.",
+                "properties": {
+                  "$type": {
+                    "const": "flow"
+                  },
+                  "field": {
+                    "description": "The field transported.",
+                    "type": "string"
+                  },
+                  "rate": {
+                    "description": "The fraction of a cell\u0027s per-direction share that actually moves each step, in [0, 1]."
+                  },
+                  "over": {
+                    "description": "The other lattice rows forming the terrain basis a downhill direction is measured against; empty or omitted means the field flows over its own height alone.",
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "default": null
+                  },
+                  "spillRow": {
+                    "description": "The scalar fixed-kind state row an edge cell\u0027s outward share accumulates into each step (a clamped add), or null to treat every lattice edge as a wall.",
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "default": null
+                  }
+                },
+                "required": [
+                  "field",
+                  "rate"
                 ],
                 "additionalProperties": false
               }
@@ -10814,7 +10843,7 @@
             ]
           },
           "scope": {
-            "description": "Which scoped identity/generation this destination selects (see WorldDestinationScope). Absent resolves to Global \u2014 today\u0027s behavior, unchanged for every row authored before this member existed. Trailing member: the same widen-without-moving-existing-members shape WorldWaterSection\u0027s own remarks describe.",
+            "description": "Which scoped identity/generation this destination selects (see WorldDestinationScope). Absent resolves to Global \u2014 today\u0027s behavior, unchanged for every row authored before this member existed. Trailing member: the same widen-without-moving-existing-members shape WorldLatticeMedium\u0027s own remarks describe.",
             "default": "global",
             "type": "string",
             "enum": [

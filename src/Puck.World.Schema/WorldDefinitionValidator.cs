@@ -1160,17 +1160,14 @@ public static partial class WorldDefinitionValidator {
             );
         }
 
-        ValidateWater(
-            water: definition.Water,
-            errors: errors
-        );
         ValidateFields(
             definition: definition,
             errors: errors
         );
 
-        // The local auction house: null IS today's no-market world, matching Water's own posture. Needs only
-        // stateRows (already built above) to resolve a listing's item/currency rows.
+        // The local auction house: null IS today's no-market world — the same null-is-absent posture every
+        // optional section here uses. Needs only stateRows (already built above) to resolve a listing's
+        // item/currency rows.
         ValidateMarket(
             market: definition.Market,
             stateRows: stateRows,

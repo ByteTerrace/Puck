@@ -1,0 +1,11 @@
+world.status
+world.contacts 1
+world.wait 2
+world.contacts 1
+body.pose 0 0 0 0 0 0
+world.wait 5
+world.contacts 1
+body.pose 0 6 0 0 0 0
+world.wait 3
+world.contacts 1
+world.wait 2

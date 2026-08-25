@@ -169,7 +169,6 @@ public sealed partial class WorldPopulation {
 
             body.SetContactField(field: m_contactField);
             body.SetGravityField(field: m_gravityField);
-            body.SetWaterline(level: m_waterline);
             body.SetAttachmentPolicy(policy: m_fixedAttachment);
             body.Pose(
                 position: captured.Position,

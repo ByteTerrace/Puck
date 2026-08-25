@@ -90,8 +90,7 @@ selectively: `Motion`, `SpawnPoints`, `Render`, `Screens`, `Cameras`,
 shape — `WorldDefinition.CompiledInputHold` is the compiled ticks form
 runtime code consumes; see `WorldInputHoldSettings`'s remarks), `Rules` (see
 below), `Identity`, `Groups`, `Properties`, `Interactions`, `Generation`,
-`Generators`, `Water` (the standing-water medium — one waterline `level`;
-null IS the dry world; `WorldWater.cs`), `References`, `Portals`,
+`Generators`, `References`, `Portals`,
 `Simulation`, `Destinations` (`WorldDestinations.cs`), `Admission`
 (`Protocol/WorldAdmission.cs`, the one trust list every ingress crosses —
 key-bearing rows for the TCP identity door, keyless `federatedAuthority` rows
@@ -202,7 +201,7 @@ It is the grant subject vocabulary
 (`section:<name>`) and the mutation dispatch axis — narrower than
 `WorldDefinition`'s own member list above: `Channels`,
 `TargetRegisters`, `BodyMotionPrograms`, `Storage`, `Identity`,
-`Generation`, `Generators`, `Water`, `References`, `Portals`, `Simulation`,
+`Generation`, `Generators`, `References`, `Portals`, `Simulation`,
 `Destinations`, `Admission`, `Adjacencies`, `Text`, and `Metadata` carry no dispatch axis of their own (some
 names also differ — `SpawnPoints`/`BindingOverlays`/`LookAssignment`/
 `DefaultSeatKit`/`Assignment` dispatch through `Spawns`/`Bindings`/`Looks`/
@@ -434,7 +433,11 @@ evolved by the topology's `reactions` in document order each step: `diffuse`, `d
 (`when` conditions on the cell → `then` set/add writes), `emit` (bodies tagged
 nonzero in a keyed row deposit into the cell they stand in), `expose` (writes
 1/0 into a keyed row per body by a field test at the body's cell — the bridge
-to body-level chemistry). A row with `heightScale` IS geometry: its value
+to body-level chemistry), `flow` (moves a field downhill, mass-conserving,
+over the combined surface height of itself plus its `over` terrain fields;
+each cell donates an equal share of its previous-step value to each of the
+lattice's active-axis directions; an optional `spillRow` catches an edge
+cell's outward share — without one, edges are walls). A row with `heightScale` IS geometry: its value
 raises a solid column above the origin that bodies stand on
 (`WorldFieldLatticeSolid`, unioned with the authored solids for contact) and
 the renderer shows (`WorldFieldEmitter`: one CPU-baked distance brick per
@@ -695,7 +698,8 @@ Worlds have no in-code definition. A boot with no `--world` override loads
 refuses the boot by name. Four shipped GAME worlds — the charter's whole roster: `nexus` (the hub — a floating
 island above a field of planetoids, and the boot default; carries the `references` section naming the other three
 plus `studio` by document path, and one `portal-arch` placement per named world), `dive` (the underwater
-arena scaffold — the one that also authors `water`), `kart` (the racing arena), `jump` (the platformer arena). A
+arena scaffold — still authors the retired top-level `water` section and does not currently parse; migrating it to
+a medium lattice row is unclaimed work), `kart` (the racing arena), `jump` (the platformer arena). A
 fifth document, `studio`, ships beside them as a non-game DEV CANVAS for character/creation work — neutral floor,
 no scenery or crowd, four anchored camera eyes and a `sheet` layout composing four angles at once — reached with
 `--world` or through the nexus's mapped archway. Five quilt documents (`quilt-nw`, `quilt-ne`, `quilt-se`,
@@ -835,8 +839,9 @@ deliberately none of grounded's planar-shaping facets — a vehicle kit never
 authors a `grounded`/`free` row. `swim` supplies its own two facets
 (`SwimThrust`, `SwimBuoyancy`) and deliberately none of grounded's gravity
 facets — a swim kit never authors a `grounded` row, and a world declaring a
-`swim` model with no `water` section refuses at boot (a swim kit implies a
-medium to swim in). A further model is another record arm, a new
+`swim` model with no medium lattice row (`state.world[].lattice.medium`)
+refuses at boot (a swim kit implies a medium to swim in). A further model is
+another record arm, a new
 `CompiledBodyMotionProgram` capability where one is needed (see
 `CompiledBodyMotionProgram.OwnsVerticalContactState` — the swim program sets
 this `false`, so the contact resolve never writes its vertical channel), and

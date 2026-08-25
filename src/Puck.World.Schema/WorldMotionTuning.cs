@@ -188,7 +188,7 @@ public abstract record WorldMotionModel {
     /// <param name="SurfaceSettleRate">The proportional settle gain (1/s) toward the float line, applied inside the
     /// bob band and above it (breach recovery): the medium's target velocity there is the displacement from the
     /// line times this gain, so a held ascent parks where thrust and settle balance instead of breaching.</param>
-    /// <param name="FloatDepth">How far below the waterline (world units) the body origin rests when floating — and
+    /// <param name="FloatDepth">How far below the medium surface (world units) the body origin rests when floating — and
     /// the bob band's half-width around that rest line (one knob deliberately: the band a body settles in is the
     /// depth scale it settles at). The validator only checks this is positive and finite — it cannot see the
     /// document's contact geometry, so it does not (and cannot) check this against the local water column's depth. A

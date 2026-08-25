@@ -262,6 +262,48 @@
                     "row"
                   ],
                   "additionalProperties": false
+                },
+                {
+                  "description": "Moves Field downhill, cell to cell, over the combined surface height of Over plus Field\u0027s own value -- mass-conserving except where a cell\u0027s clamp to its declared [min, max] binds. Every cell donates an equal share of its previous-step value to each of the lattice\u0027s active-axis directions (four on a ground lattice, six in a volume -- the SAME count for every cell, whether a direction reaches a neighbour or the lattice edge), and sends that share only along a direction that is strictly downhill; a level or uphill direction moves nothing.",
+                  "properties": {
+                    "$type": {
+                      "const": "flow"
+                    },
+                    "field": {
+                      "description": "The field transported.",
+                      "type": "string"
+                    },
+                    "rate": {
+                      "description": "The fraction of a cell\u0027s per-direction share that actually moves each step, in [0, 1]."
+                    },
+                    "over": {
+                      "description": "The other lattice rows forming the terrain basis a downhill direction is measured against; empty or omitted means the field flows over its own height alone.",
+                      "type": [
+                        "array",
+                        "null"
+                      ],
+                      "items": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "default": null
+                    },
+                    "spillRow": {
+                      "description": "The scalar fixed-kind state row an edge cell\u0027s outward share accumulates into each step (a clamped add), or null to treat every lattice edge as a wall.",
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "default": null
+                    }
+                  },
+                  "required": [
+                    "field",
+                    "rate"
+                  ],
+                  "additionalProperties": false
                 }
               ]
             },

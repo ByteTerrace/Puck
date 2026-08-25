@@ -718,15 +718,18 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: exception.Message);
         }
     }
-    // The water section: null IS the dry world, so the only refusable shape is a non-finite level. JSON cannot spell
-    // NaN/Infinity, so this guards the programmatic-construction path a future consumer would compile from.
-    private static void ValidateWater(WorldWaterSection? water, List<string> errors) {
-        if (
-            (water is not null) &&
-            !float.IsFinite(f: water.Level)
-        ) {
-            errors.Add(item: $"water.level must be finite (was {water.Level}).");
+    /// <summary>Gets whether the document declares at least one medium lattice field — the premise a swim-model kit
+    /// requires (see <c>ValidateSwimMotion</c>).</summary>
+    private static bool HasMediumField(WorldDefinition definition) {
+        var fields = (definition.Fields?.Fields ?? []);
+
+        for (var index = 0; (index < fields.Count); index++) {
+            if (fields[index].Medium) {
+                return true;
+            }
         }
+
+        return false;
     }
     private static void ValidateFields(WorldDefinition definition, List<string> errors) {
         var topologies = definition.StateRaw?.Lattices;
@@ -877,6 +880,13 @@ public static partial class WorldDefinitionValidator {
                 (row.HeightScale < 0f)
             ) {
                 errors.Add(item: $"{path}.heightScale must be finite and non-negative (was {row.HeightScale}).");
+            }
+
+            if (
+                row.Medium &&
+                (row.HeightScale <= 0f)
+            ) {
+                errors.Add(item: $"{path}.medium requires a heightScale greater than 0 — a surface-less medium is meaningless.");
             }
 
             if (row.HeightScale > 0f) {
@@ -1107,6 +1117,43 @@ public static partial class WorldDefinitionValidator {
                     }
 
                     break;
+                case WorldReaction.Flow flow: {
+                        RequireField(
+                            name: flow.Field,
+                            path: $"{path}.field"
+                        );
+                        RequireRate(
+                            rate: flow.Rate,
+                            path: $"{path}.rate"
+                        );
+
+                        var over = (flow.Over ?? []);
+                        var overNames = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+                        for (var o = 0; (o < over.Count); o++) {
+                            var overPath = $"{path}.over[{o}]";
+
+                            RequireField(
+                                name: over[o],
+                                path: overPath
+                            );
+
+                            if (string.Equals(a: over[o], b: flow.Field, comparisonType: StringComparison.Ordinal)) {
+                                errors.Add(item: $"{overPath} names '{over[o]}', the field flow itself transports; the field's own value already contributes without repeating it in over.");
+                            } else if ((over[o] is { } overName) && !overNames.Add(item: overName)) {
+                                errors.Add(item: $"{overPath} names '{over[o]}', duplicated within over.");
+                            }
+                        }
+
+                        if (flow.SpillRow is { } spillRow) {
+                            RequireScalarRow(
+                                path: $"{path}.spillRow",
+                                row: spillRow
+                            );
+                        }
+
+                        break;
+                    }
                 default:
                     errors.Add(item: $"{path} is an unknown reaction kind.");
                     break;

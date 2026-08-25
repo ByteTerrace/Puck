@@ -24,7 +24,7 @@ public enum ActionFact : byte {
     /// <summary>A targeted effect was applied by another body on the preceding completed tick.</summary>
     AffectedBy,
 
-    /// <summary>The body's origin is below the waterline. Written by the swim model's surface stage
+    /// <summary>The body's origin is below the medium surface. Written by the swim model's surface stage
     /// (<see cref="BodyMotionOp.ApplyBuoyancyAndSurface"/>); holds one tick behind that stage's evaluation, the same
     /// one-tick-behind discipline <see cref="Grounded"/> reads under.</summary>
     Submerged,

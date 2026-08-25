@@ -1,5 +1,6 @@
 using Xunit;
 
+using Puck.Assets.Documents;
 using Puck.Maths;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -172,9 +173,39 @@ public sealed class TransferAbortKitWideningLawTests {
             BodyMotionProgramsRaw = [swim, swimAlt, wander],
             KitRowsRaw = [kit],
             DefaultSeatKitRaw = "diver-test",
-            StateRaw = new WorldStateSection(World: Fixtures.BuildDocument().State, Identity: [new ActionStateSlot(Name: "surgeCounter", Kind: ActionStateKind.Counter, Initial: 0f)]),
-            // REQUIRED: WorldDefinitionValidator refuses a Swim-model kit when the world authors no water section.
-            Water = new WorldWaterSection(Level: 5f),
+            // REQUIRED: WorldDefinitionValidator refuses a Swim-model kit when the world authors no medium lattice
+            // row. A lattice covering every spawn point with plenty of margin (the body drifts only a few
+            // simulation-tick-widths of distance over this law's short drive) at heightScale 5, value 1 reproduces
+            // the SAME surface Y (5) the old waterline fixture floated bodies against.
+            StateRaw = new WorldStateSection(
+                World: [
+                    .. Fixtures.BuildDocument().State,
+                    new WorldStateRow(
+                        Name: WorldCellName.Parse(candidate: "medium"),
+                        Kind: CellKind.Fixed,
+                        Lattice: new WorldStateLatticeTrait(
+                            Topology: "world",
+                            Initial: 1f,
+                            Min: 0f,
+                            Max: 1f,
+                            HeightScale: 5f,
+                            Color: "#3B7BD6",
+                            Medium: new WorldLatticeMedium()
+                        )
+                    ),
+                ],
+                Identity: [new ActionStateSlot(Name: "surgeCounter", Kind: ActionStateKind.Counter, Initial: 0f)],
+                Lattices: [
+                    new WorldStateLatticeTopology(
+                        Name: "world",
+                        Origin: new DocumentVector3(x: -10f, y: 0f, z: -10f),
+                        CellSize: 1f,
+                        Width: 20,
+                        Depth: 20,
+                        Layers: 1
+                    ),
+                ]
+            ),
         };
     }
 

@@ -90,7 +90,7 @@ public readonly record struct FixedVehicleTuning(
 /// <param name="MaxRiseSpeed">The terminal ascent speed (u/s).</param>
 /// <param name="MaxSinkSpeed">The terminal descent speed (u/s).</param>
 /// <param name="SurfaceSettleRate">The surface interface's proportional settle gain toward the float line (1/s).</param>
-/// <param name="FloatDepth">The float line's depth below the waterline, and the bob band's half-width (u).</param>
+/// <param name="FloatDepth">The float line's depth below the medium surface, and the bob band's half-width (u).</param>
 public readonly record struct FixedSwimTuning(
     FixedQ4816 VerticalThrustFraction,
     FixedQ4816 Buoyancy,

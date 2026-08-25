@@ -267,6 +267,68 @@
             "step": 0
           }
         }
+      },
+      {
+        "id": "critter-1",
+        "prototypeId": "critter",
+        "position": [
+          6,
+          34,
+          4
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "inhabit": {
+          "kit": "critterKit",
+          "look": null,
+          "source": {
+            "$type": "producer",
+            "name": "wander"
+          },
+          "count": 1,
+          "distribution": {
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            },
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.618034
+            }
+          }
+        }
+      },
+      {
+        "id": "pond-fish",
+        "prototypeId": "fish",
+        "position": [
+          2,
+          34.5,
+          1
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "inhabit": {
+          "kit": "fishKit",
+          "look": null,
+          "source": {
+            "$type": "producer",
+            "name": "wander"
+          },
+          "count": 1,
+          "distribution": {
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            },
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.618034
+            }
+          }
+        }
       }
     ]
   },
@@ -2521,7 +2583,7 @@
             "type": "Cylinder",
             "position": [
               0,
-              -0.62,
+              1.5,
               0
             ],
             "rotation": [
@@ -2531,9 +2593,9 @@
               1
             ],
             "scale": [
-              7.2,
-              0.5,
-              7.2
+              7.0,
+              1.7,
+              7.0
             ],
             "material": 4,
             "blend": "Union",
@@ -2545,7 +2607,7 @@
             "type": "Cylinder",
             "position": [
               0,
-              -0.38,
+              1.3,
               0
             ],
             "rotation": [
@@ -2555,9 +2617,9 @@
               1
             ],
             "scale": [
-              6.3,
-              0.45,
-              6.3
+              6.2,
+              1.5,
+              6.2
             ],
             "material": 0,
             "blend": "Union",
@@ -2566,11 +2628,1038 @@
         ]
       },
       "id": "isle-falls"
+    },
+    {
+      "id": "critter",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "critter",
+        "palette": [
+          {
+            "color": "#C97A4A",
+            "shininess": 10,
+            "specular": 0.05
+          },
+          {
+            "color": "#3A3230",
+            "shininess": 4,
+            "specular": 0.02
+          }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "body",
+            "type": "Sphere",
+            "position": [
+              0,
+              0.22,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.22,
+              0.2,
+              0.28
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 1,
+            "name": "ear-left",
+            "type": "Cone",
+            "position": [
+              -0.1,
+              0.42,
+              -0.05
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.05,
+              0.1,
+              0.05
+            ],
+            "material": 1,
+            "blend": "SmoothUnion",
+            "smooth": 0.05
+          },
+          {
+            "id": 2,
+            "name": "ear-right",
+            "type": "Cone",
+            "position": [
+              0.1,
+              0.42,
+              -0.05
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.05,
+              0.1,
+              0.05
+            ],
+            "material": 1,
+            "blend": "SmoothUnion",
+            "smooth": 0.05
+          },
+          {
+            "id": 3,
+            "name": "snout",
+            "type": "Sphere",
+            "position": [
+              0,
+              0.18,
+              0.26
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.09,
+              0.08,
+              0.1
+            ],
+            "material": 1,
+            "blend": "SmoothUnion",
+            "smooth": 0.05
+          }
+        ]
+      }
+    },
+    {
+      "id": "fish",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "fish",
+        "palette": [
+          {
+            "color": "#E8A93F",
+            "shininess": 40,
+            "specular": 0.3
+          },
+          {
+            "color": "#F2D98A",
+            "shininess": 40,
+            "specular": 0.3
+          }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "body",
+            "type": "Capsule",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0.7071,
+              0.7071
+            ],
+            "scale": [
+              0.09,
+              0.16,
+              0.09
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 1,
+            "name": "tail",
+            "type": "Cone",
+            "position": [
+              0,
+              0,
+              -0.22
+            ],
+            "rotation": [
+              0.7071,
+              0,
+              0,
+              0.7071
+            ],
+            "scale": [
+              0.1,
+              0.08,
+              0.1
+            ],
+            "material": 1,
+            "blend": "SmoothUnion",
+            "smooth": 0.04
+          }
+        ]
+      }
     }
   ],
   "schema": "puck.world.def.v1",
   "render": {
     "renderScale": "quarter",
     "upscaleSharpness": 1
+  },
+  "state": {
+    "lattices": [
+      {
+        "name": "island",
+        "origin": [
+          -26,
+          33.8,
+          -26
+        ],
+        "cellSize": 0.5,
+        "width": 104,
+        "depth": 104,
+        "layers": 1,
+        "stepEveryTicks": 4,
+        "reactions": [
+          {
+            "$type": "diffuse",
+            "field": "heat",
+            "rate": 0.4
+          },
+          {
+            "$type": "decay",
+            "field": "heat",
+            "rate": 0.05
+          },
+          {
+            "$type": "emit",
+            "tag": "spark",
+            "field": "heat",
+            "amount": 10
+          },
+          {
+            "$type": "transform",
+            "when": [
+              {
+                "field": "heat",
+                "comparison": "GreaterOrEqual",
+                "value": 1.2
+              },
+              {
+                "field": "grass",
+                "comparison": "Greater",
+                "value": 0.1
+              },
+              {
+                "field": "fire",
+                "comparison": "LessOrEqual",
+                "value": 0
+              }
+            ],
+            "then": [
+              {
+                "field": "fire",
+                "op": "Set",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "$type": "transform",
+            "when": [
+              {
+                "field": "fire",
+                "comparison": "Greater",
+                "value": 0
+              }
+            ],
+            "then": [
+              {
+                "field": "heat",
+                "op": "Add",
+                "value": 2.5
+              },
+              {
+                "field": "grass",
+                "op": "Add",
+                "value": -0.03
+              },
+              {
+                "field": "char",
+                "op": "Add",
+                "value": 0.02
+              }
+            ]
+          },
+          {
+            "$type": "transform",
+            "when": [
+              {
+                "field": "fire",
+                "comparison": "Greater",
+                "value": 0
+              },
+              {
+                "field": "grass",
+                "comparison": "LessOrEqual",
+                "value": 0.05
+              }
+            ],
+            "then": [
+              {
+                "field": "fire",
+                "op": "Set",
+                "value": 0
+              },
+              {
+                "field": "grass",
+                "op": "Set",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "$type": "transform",
+            "when": [
+              {
+                "field": "water",
+                "comparison": "Greater",
+                "value": 0.25
+              },
+              {
+                "field": "fire",
+                "comparison": "Greater",
+                "value": 0
+              }
+            ],
+            "then": [
+              {
+                "field": "fire",
+                "op": "Set",
+                "value": 0
+              },
+              {
+                "field": "heat",
+                "op": "Add",
+                "value": -1.0
+              }
+            ]
+          },
+          {
+            "$type": "transform",
+            "when": [
+              {
+                "field": "water",
+                "comparison": "Greater",
+                "value": 0.3
+              },
+              {
+                "field": "grass",
+                "comparison": "Less",
+                "value": 0.9
+              },
+              {
+                "field": "fire",
+                "comparison": "LessOrEqual",
+                "value": 0
+              }
+            ],
+            "then": [
+              {
+                "field": "grass",
+                "op": "Add",
+                "value": {
+                  "row": "season"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "transform",
+            "when": [
+              {
+                "field": "dirt",
+                "comparison": "LessOrEqual",
+                "value": 0.12
+              }
+            ],
+            "then": [
+              {
+                "field": "water",
+                "op": "Add",
+                "value": 2.0
+              }
+            ]
+          },
+          {
+            "$type": "expose",
+            "field": "fire",
+            "comparison": "Greater",
+            "value": 0,
+            "row": "inFire"
+          },
+          {
+            "$type": "expose",
+            "field": "water",
+            "comparison": "GreaterOrEqual",
+            "value": 0.2,
+            "row": "inWater"
+          },
+          {
+            "$type": "flow",
+            "field": "water",
+            "rate": 0.8,
+            "over": [
+              "dirt"
+            ],
+            "spillRow": "falls-flux"
+          }
+        ]
+      }
+    ],
+    "world": [
+      {
+        "name": "dirt",
+        "kind": "fixed",
+        "lattice": {
+          "topology": "island",
+          "initial": 0.35,
+          "min": 0,
+          "max": 2,
+          "heightScale": 0.6,
+          "color": "#6B4A34",
+          "paint": [
+            {
+              "$type": "rect",
+              "value": 0.55,
+              "minX": -12,
+              "minZ": -12,
+              "maxX": 12,
+              "maxZ": 12
+            },
+            {
+              "$type": "rect",
+              "value": 0.1,
+              "minX": -7,
+              "minZ": -7,
+              "maxX": 7,
+              "maxZ": 7
+            },
+            {
+              "$type": "rect",
+              "value": 0.3,
+              "minX": 7,
+              "minZ": -3,
+              "maxX": 19,
+              "maxZ": 3
+            },
+            {
+              "$type": "rect",
+              "value": 0.15,
+              "minX": 19,
+              "minZ": -2,
+              "maxX": 26,
+              "maxZ": 2
+            },
+            {
+              "$type": "rect",
+              "value": 0.3,
+              "minX": -3,
+              "minZ": 7,
+              "maxX": 3,
+              "maxZ": 19
+            },
+            {
+              "$type": "rect",
+              "value": 0.15,
+              "minX": -2,
+              "minZ": 19,
+              "maxX": 2,
+              "maxZ": 26
+            },
+            {
+              "$type": "rect",
+              "value": 0.3,
+              "minX": -19,
+              "minZ": -19,
+              "maxX": -9,
+              "maxZ": -9
+            },
+            {
+              "$type": "rect",
+              "value": 0.15,
+              "minX": -26,
+              "minZ": -26,
+              "maxX": -19,
+              "maxZ": -19
+            }
+          ]
+        }
+      },
+      {
+        "name": "water",
+        "kind": "fixed",
+        "lattice": {
+          "topology": "island",
+          "initial": 0,
+          "min": 0,
+          "max": 4,
+          "heightScale": 1,
+          "color": "#3E8FD0",
+          "medium": {},
+          "paint": [
+            {
+              "$type": "rect",
+              "value": 3.0,
+              "minX": -7,
+              "minZ": -7,
+              "maxX": 7,
+              "maxZ": 7
+            }
+          ]
+        }
+      },
+      {
+        "name": "grass",
+        "kind": "fixed",
+        "lattice": {
+          "topology": "island",
+          "initial": 0,
+          "min": 0,
+          "max": 1,
+          "heightScale": 0.35,
+          "color": "#5FA04A",
+          "paint": [
+            {
+              "$type": "noise",
+              "value": 0.55,
+              "frequency": 5,
+              "threshold": 0.5,
+              "octaves": 2,
+              "seed": 301
+            },
+            {
+              "$type": "rect",
+              "value": 0.8,
+              "minX": 8,
+              "minZ": -12,
+              "maxX": 12,
+              "maxZ": -8
+            }
+          ]
+        }
+      },
+      {
+        "name": "heat",
+        "kind": "fixed",
+        "lattice": {
+          "topology": "island",
+          "initial": 0,
+          "min": -5,
+          "max": 15
+        }
+      },
+      {
+        "name": "fire",
+        "kind": "fixed",
+        "lattice": {
+          "topology": "island",
+          "initial": 0,
+          "min": 0,
+          "max": 1,
+          "heightScale": 0.22,
+          "color": "#FF5A1F"
+        }
+      },
+      {
+        "name": "char",
+        "kind": "fixed",
+        "lattice": {
+          "topology": "island",
+          "initial": 0,
+          "min": 0,
+          "max": 1,
+          "heightScale": 0.15,
+          "color": "#2A2320"
+        }
+      },
+      {
+        "name": "season",
+        "kind": "fixed",
+        "value": "0.02",
+        "min": "0",
+        "max": "0.05"
+      },
+      {
+        "name": "falls-flux",
+        "kind": "fixed",
+        "value": "0",
+        "min": "0",
+        "max": "100000"
+      },
+      {
+        "name": "falls-mist",
+        "kind": "int",
+        "value": 0,
+        "min": 0,
+        "max": 1
+      },
+      {
+        "name": "spark",
+        "kind": "int",
+        "min": 0,
+        "max": 1,
+        "capacity": 8
+      },
+      {
+        "name": "hot",
+        "kind": "int",
+        "capacity": 8
+      },
+      {
+        "name": "flammable",
+        "kind": "int",
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "2",
+            "value": 1
+          }
+        ]
+      },
+      {
+        "name": "burning",
+        "kind": "int",
+        "nonNegative": true,
+        "min": 0,
+        "max": 201600,
+        "capacity": 8
+      },
+      {
+        "name": "inFire",
+        "kind": "int",
+        "capacity": 8
+      },
+      {
+        "name": "inWater",
+        "kind": "int",
+        "capacity": 8
+      }
+    ]
+  },
+  "properties": {
+    "names": [
+      "flammable",
+      "hot"
+    ]
+  },
+  "interactions": {
+    "interactions": [
+      {
+        "name": "heat-ignites",
+        "left": "hot",
+        "right": "flammable",
+        "coOccurrence": "Distance",
+        "range": 2.0,
+        "mode": "Edge",
+        "effects": [
+          {
+            "$type": "setState",
+            "state": "burning",
+            "key": "$right",
+            "valueSeconds": 3.0
+          }
+        ]
+      }
+    ]
+  },
+  "rules": [
+    {
+      "name": "critter-burns",
+      "forEach": "burning",
+      "mode": "Level",
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "hot",
+          "key": "$each",
+          "value": 1
+        },
+        {
+          "$type": "countdownState",
+          "state": "burning",
+          "key": "$each"
+        }
+      ]
+    },
+    {
+      "name": "field-ignites",
+      "forEach": "inFire",
+      "mode": "Level",
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "burning",
+          "key": "$each",
+          "valueSeconds": 3.0
+        }
+      ]
+    },
+    {
+      "name": "water-douses",
+      "forEach": "inWater",
+      "mode": "Level",
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "burning",
+          "key": "$each",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "falls-mist-rises",
+      "gate": {
+        "$type": "compareState",
+        "state": "falls-flux",
+        "comparison": "Greater",
+        "value": 3.0
+      },
+      "mode": "Level",
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "falls-mist",
+          "value": 1
+        }
+      ]
+    }
+  ],
+  "bodyMotionPrograms": [
+    {
+      "name": "wander",
+      "version": "puck.body-motion.v1",
+      "kind": "Producer",
+      "operations": [
+        "ProduceWanderIntent"
+      ]
+    },
+    {
+      "name": "fishMotion",
+      "version": "puck.body-motion.v1",
+      "kind": "Motion",
+      "operations": [
+        "ResolveYawAttitudeAndPlanarFrame",
+        "ComputeSwimTargetVelocity",
+        "ShapePlanarVelocity",
+        "SnapYawToPlanarIntent",
+        "RunActionTriggers",
+        "ApplyBuoyancyAndSurface",
+        "ApplyVerticalDrive",
+        "IntegratePlanarAndVerticalVelocity",
+        "CommitPose"
+      ]
+    }
+  ],
+  "kits": {
+    "rows": [
+      {
+        "name": "critterKit",
+        "bodyMotionProgram": "defaultMotionProgram",
+        "motion": {
+          "$type": "grounded",
+          "moveSpeed": 1.4,
+          "turnSpeed": 2.0,
+          "riseGravity": 28,
+          "fallGravity": 46,
+          "maxFallSpeed": 40,
+          "sprintMultiplier": 1,
+          "facingSnap": true,
+          "response": []
+        },
+        "collider": {
+          "$type": "capsule",
+          "endpoint": [
+            0,
+            0.4,
+            0
+          ],
+          "radius": 0.22
+        },
+        "bodyContact": "Overlap",
+        "producers": {
+          "wander": {
+            "scalars": {
+              "weaveAmplitude": 0.4,
+              "softRadius": 6.0,
+              "inwardGain": 0.8,
+              "turnScale": 3.0,
+              "altitudeGain": 0.5,
+              "forward": 1.0,
+              "strafeWave": 0.0,
+              "upWave": 0.0,
+              "pitchWave": 0.0,
+              "rollTurn": 0.0,
+              "turnWave": 0.0,
+              "pressThreshold": 0.0,
+              "weaveFrequencyBase": 0.6,
+              "weaveFrequencyRange": 0.2,
+              "activityRateBase": 1.0,
+              "activityRateRange": 0.3,
+              "altitudeBase": 0.0,
+              "altitudeRange": 0.0
+            },
+            "channels": {}
+          }
+        }
+      },
+      {
+        "name": "fishKit",
+        "bodyMotionProgram": "fishMotion",
+        "motion": {
+          "$type": "swim",
+          "thrustSpeed": 1.0,
+          "turnSpeed": 1.5,
+          "verticalThrustFraction": 0.4,
+          "buoyancy": 0.6,
+          "maxRiseSpeed": 1.0,
+          "maxSinkSpeed": 1.0,
+          "surfaceSettleRate": 0.8,
+          "floatDepth": 0.6,
+          "sprintMultiplier": 1,
+          "facingSnap": true,
+          "response": []
+        },
+        "collider": {
+          "$type": "sphere",
+          "radius": 0.2
+        },
+        "bodyContact": "Overlap",
+        "producers": {
+          "wander": {
+            "scalars": {
+              "weaveAmplitude": 0.3,
+              "softRadius": 5.0,
+              "inwardGain": 0.8,
+              "turnScale": 3.0,
+              "altitudeGain": 0.5,
+              "forward": 0.6,
+              "strafeWave": 0.0,
+              "upWave": 0.0,
+              "pitchWave": 0.0,
+              "rollTurn": 0.0,
+              "turnWave": 0.0,
+              "pressThreshold": 0.0,
+              "weaveFrequencyBase": 0.6,
+              "weaveFrequencyRange": 0.2,
+              "activityRateBase": 1.0,
+              "activityRateRange": 0.3,
+              "altitudeBase": 0.0,
+              "altitudeRange": 0.0
+            },
+            "channels": {}
+          }
+        }
+      }
+    ]
+  },
+  "bodies": {
+    "capacity": 3
+  },
+  "defaultSeatKit": "defaultKit",
+  "markers": [
+    {
+      "id": "pond-spring-marker",
+      "source": {
+        "$type": "point",
+        "position": [
+          0,
+          36.8,
+          0
+        ]
+      },
+      "icon": "edit.place",
+      "style": {
+        "chipAlpha": 1.0,
+        "size": 10
+      }
+    }
+  ],
+  "speakers": [
+    {
+      "$type": "bed",
+      "name": "south-fall-ambience",
+      "center": [
+        0,
+        18,
+        27
+      ],
+      "radius": 14,
+      "innerRadius": 4,
+      "feed": {
+        "source": {
+          "$type": "none"
+        },
+        "channel": "mix",
+        "gain": 1.0
+      }
+    }
+  ],
+  "cameras": [
+    {
+      "name": "pond-cam",
+      "anchor": null,
+      "renderWidth": 640,
+      "renderHeight": 480,
+      "rig": {
+        "name": "pond-cam",
+        "version": "puck.camera.v1",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                50,
+                18
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                35,
+                0
+              ]
+            }
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 0.7
+          }
+        ]
+      }
+    },
+    {
+      "name": "south-fall-cam",
+      "anchor": null,
+      "renderWidth": 640,
+      "renderHeight": 480,
+      "rig": {
+        "name": "south-fall-cam",
+        "version": "puck.camera.v1",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                35,
+                45,
+                45
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                15,
+                26
+              ]
+            }
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 0.7
+          }
+        ]
+      }
+    }
+  ],
+  "views": {
+    "layouts": [
+      {
+        "name": "pond-view",
+        "seatCount": 0,
+        "slots": [
+          {
+            "camera": "pond-cam",
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          }
+        ],
+        "transitionSeconds": 0.4,
+        "transitionRenderScale": 0.5
+      },
+      {
+        "name": "south-fall-view",
+        "seatCount": 0,
+        "slots": [
+          {
+            "camera": "south-fall-cam",
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          }
+        ],
+        "transitionSeconds": 0.4,
+        "transitionRenderScale": 0.5
+      }
+    ]
+  },
+  "hud": {
+    "panels": [
+      {
+        "id": "ecosystem",
+        "rect": {
+          "x": 0.01,
+          "y": 0.01,
+          "width": 0.5,
+          "height": 0.07
+        },
+        "layer": "Under",
+        "style": "Strip",
+        "elements": [
+          {
+            "id": "readout",
+            "kind": "Text",
+            "rect": {
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1
+            },
+            "style": "Primary",
+            "template": "flux {state.falls-flux} grow {state.season} mist {state.falls-mist}"
+          }
+        ]
+      }
+    ]
   }
 }

@@ -289,12 +289,12 @@ public sealed partial class WorldBody {
     private void ApplyBuoyancyAndSurface(ref BodyMotionScratch scratch) {
         if (
             (m_swimTuning is not { } swim) ||
-            !m_hasWaterline
+            (m_mediumSurface is not { } mediumSurface)
         ) {
             return;
         }
 
-        var surfaceRest = (m_waterline - swim.FloatDepth);
+        var surfaceRest = (mediumSurface - swim.FloatDepth);
         var error = (surfaceRest - m_position.Y);
         FixedQ4816 medium;
 
@@ -336,7 +336,7 @@ public sealed partial class WorldBody {
                 maximum: swim.MaxRiseSpeed
             );
 
-            m_submerged = (m_position.Y < m_waterline);
+            m_submerged = (m_position.Y < mediumSurface);
             m_atSurface = (m_submerged && (((error < FixedQ4816.Zero)
                 ? -error
                 : error) <= swim.FloatDepth));
@@ -386,7 +386,7 @@ public sealed partial class WorldBody {
             }
         }
 
-        m_submerged = (m_position.Y < m_waterline);
+        m_submerged = (m_position.Y < mediumSurface);
         m_atSurface = (m_submerged && (((error < FixedQ4816.Zero)
             ? -error
             : error) <= swim.FloatDepth));

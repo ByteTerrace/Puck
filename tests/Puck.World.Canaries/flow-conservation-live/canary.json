@@ -1,0 +1,48 @@
+{
+  "id": "flow-conservation-live",
+  "title": "A flow reaction's boundary spill strictly climbs, live, while a transform keeps feeding the source cells",
+  "binding": "The positive leg boots a minimal fixture: a 3-cell channel lattice whose water field is topped back up to 50 every step it drops to 900 or below (an inexhaustible transform-driven source, the same 'dirt<=0.12 => water+=2.0' shape puck.world.json's island ecosystem uses to feed its falls), plus a flow reaction spilling water's edge share into the 'spill' state row every step. world.state reads every row back at three points in live time (tick 0, tick 20, tick 60) and the accumulated value strictly climbs at each read (0, then 1900.000091552734375, then 5900.000030517578125) — proving the spill accumulator genuinely advances tick over tick from the running reaction program, not a boot-time constant. The discriminating leg boots the SAME lattice with the SAME flow reaction but no feeding transform — water starts and stays at 0 everywhere, so flow has nothing to move and spill reads 0 at every occurrence; the positive leg's climbing-value assertions never match this transcript.",
+  "bootShape": "headless",
+  "requirements": [],
+  "seconds": 5,
+  "timeoutSeconds": 20,
+  "fixtures": [],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/flow-conservation-live/fixture.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      { "verb": "world.status", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "spill-starts-at-zero", "stream": "stdout", "match": "contains", "text": "[world.state.row 'spill' kind=fixed value=0 range=0..1000000]", "present": true },
+      { "type": "line", "name": "spill-climbs-by-tick-20", "stream": "stdout", "match": "contains", "text": "value=1900.000091552734375", "present": true },
+      { "type": "line", "name": "spill-climbs-further-by-tick-60", "stream": "stdout", "match": "contains", "text": "value=5900.000030517578125", "present": true },
+      { "type": "line", "name": "no-rejected-wire", "stream": "stdout", "match": "contains", "text": "[wire.errors: 0 rejected]", "present": true },
+      { "type": "line", "name": "no-unhandled-exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/flow-conservation-live/discriminating.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      { "verb": "world.status", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "spill-stays-at-zero-with-no-source-feeding-it", "stream": "stdout", "match": "contains", "text": "[world.state.row 'spill' kind=fixed value=0 range=0..1000000]", "present": true },
+      { "type": "line", "name": "spill-never-climbs-with-no-source-feeding-it", "stream": "stdout", "match": "contains", "text": "value=1900.000091552734375", "present": false },
+      { "type": "line", "name": "no-unhandled-exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
+    ]
+  }
+}

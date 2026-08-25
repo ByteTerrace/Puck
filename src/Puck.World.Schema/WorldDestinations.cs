@@ -86,7 +86,7 @@ public abstract record WorldGroupSelector {
 /// <param name="Scope">Which scoped identity/generation this destination selects (see
 /// <see cref="WorldDestinationScope"/>). Absent resolves to <see cref="WorldDestinationScope.Global"/> — today's
 /// behavior, unchanged for every row authored before this member existed. Trailing member: the same
-/// widen-without-moving-existing-members shape <see cref="WorldWaterSection"/>'s own remarks describe.</param>
+/// widen-without-moving-existing-members shape <see cref="WorldLatticeMedium"/>'s own remarks describe.</param>
 /// <param name="Selector">Which group a <see cref="WorldDestinationScope.Group"/> row resolves through (see
 /// <see cref="WorldGroupSelector"/>). Required exactly when <paramref name="Scope"/> is
 /// <see cref="WorldDestinationScope.Group"/> — a selector on any other scope, or a group scope with none, refuses by

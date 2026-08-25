@@ -308,18 +308,23 @@ composition root hands `Puck.Overlays` an `OverlayCapacity` built from them
 (`Puck.World.Client.WorldOverlayCapacity.FromSchema()`), never a restated
 number.
 
-## The `water` section — the world's standing-water medium
+## Medium fields — a fluid free surface, as lattice content
 
-`WorldWater.cs` holds the optional `water` section (`WorldWaterSection`): one
-waterline `level` (world-space Y). Null IS the dry world (the same
-optional-section rationale as `rules`), so no shipped world changed meaning
-when the section landed; `world.status` echoes `water <level|none>`. The swim
-motion model is the live consumer — its buoyancy/surface stage reads the
-waterline compiled onto each body by the population — and a hover kit's
-float-over height remains a later, not-yet-built consumer. Bounded water
-VOLUMES are the destination shape and arrive as a future optional member
-beside `level`, never a reshape of it. The section carries no mutation
-dispatch axis and no grant subject — it is boot-authored data.
+A `state.world` row's `lattice` trait may carry a `medium` facet
+(`WorldLatticeMedium`, `WorldFields.cs`): the row's value times its
+`heightScale`, over the lattice origin, is a fluid free surface every active
+body samples at its coupled cell each tick (the same coupling
+`WorldFieldLattice.TryBodyCellOf` resolves for `emit`/`expose`). No document
+authors a global waterline any more — a medium is lattice content like any
+other field, so it can vary by region, rise and fall under a reaction, or be
+absent entirely (a body outside every medium field's footprint floats
+against nothing). `medium` refuses without a `heightScale` greater than
+zero — a surface-less medium is meaningless. The swim motion model is the
+live consumer — its buoyancy/surface stage reads the surface
+`WorldPopulation.SampleMediumSurfaces` resamples onto each body every tick —
+and a hover kit's float-over height remains a later, not-yet-built consumer.
+`world.status` echoes the declared medium field names (`none` when there is
+no medium row).
 
 ## The `gravity` section — acceleration, not geometry
 
@@ -516,14 +521,20 @@ order every `stepEveryTicks`): `diffuse` (each cell moves a fraction toward its
 face-neighbour mean), `decay` (`v -= v·rate`), `transform` (where every `when`
 condition holds at a cell, apply every `then` write — ignition, melting,
 evaporation, and freezing are rows of this shape), `emit` (every active body
-tagged nonzero in a keyed row deposits into the field cell it stands in), and
+tagged nonzero in a keyed row deposits into the field cell it stands in),
 `expose` (writes 1/0 into a keyed row per body by a field test at the body's
-cell — the bridge to body-level chemistry). A reaction scalar
+cell — the bridge to body-level chemistry), and `flow` (moves a field downhill,
+mass-conserving, over the combined surface height of itself plus its `over`
+terrain fields; each cell donates an equal share of its previous-step value to
+each of the lattice's active-axis directions, and an optional `spillRow`
+catches what an edge cell would otherwise send past the lattice boundary —
+without one, edges are walls). A reaction scalar
 (`WorldLatticeScalar`) is a JSON number or `{"row": "name"}` naming a scalar
 `fixed`-kind state row's slot, read fresh every step — a season or
 weather-intensity row modulates chemistry live with no new reaction kind; an
 unwritten referenced row reads `0`, so a row-gated reaction is inert until
-something writes it. A row-driven `diffuse`/`decay` rate clamps to `[0, 1]`.
+something writes it. A row-driven `diffuse`/`decay`/`flow` rate clamps to
+`[0, 1]`.
 
 `WorldFieldProgram.Compile` is the typed reaction-program view over that same
 spelling, not a second graph language. It resolves lattice rows and

@@ -88,7 +88,6 @@ public sealed record WorldProjectionProvenance(string Authority, string? Documen
 /// <param name="Dynamics">The named second-order "personality" rows every look/camera/kit follower reference
 /// resolves against.</param>
 /// <param name="Hud">The HUD section.</param>
-/// <param name="Water">The standing-water medium, when the world authors one.</param>
 /// <param name="Fields">The field lattice declaration — a presentation peer renders field geometry from the snapshot's
 /// cell deltas and needs the lattice footprint, height scales, and colours to do it.</param>
 /// <param name="Simulation">The authored simulation rate, when the world authors one.</param>
@@ -124,7 +123,6 @@ public sealed record WorldProjectionDocument(
     WorldRowAssignment LookAssignment,
     IReadOnlyList<WorldDynamicsRow> Dynamics,
     WorldHudSection Hud,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldWaterSection? Water = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldFieldsSection? Fields = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSimulationDefaults? Simulation = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldInteractionsSection? Interactions = null,
@@ -227,7 +225,6 @@ public static class WorldProjection {
             LookAssignment: definition.LookAssignment,
             Dynamics: definition.Dynamics,
             Hud: definition.Hud,
-            Water: definition.Water,
             Simulation: definition.Simulation,
             Interactions: definition.Interactions,
             References: definition.References,
@@ -366,7 +363,6 @@ public static class WorldProjection {
                 LowerAfterSeconds: 0f,
                 Participants: []
             ),
-            Water: projection.Water,
             Simulation: projection.Simulation,
             Interactions: projection.Interactions,
             References: projection.References,

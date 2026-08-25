@@ -97,12 +97,6 @@ public sealed partial class WorldPopulation {
         );
         m_adjacencyDefinition = definition;
         ComposeContactField();
-        // The compiled waterline rides beside the contact field: one optional world fact every body carries, read only
-        // by a swim-model kit's stages.
-        m_waterline = ((definition.Water is { } water)
-            ? FixedQ4816.FromDouble(value: water.Level)
-            : (FixedQ4816?)null
-        );
         m_targetField = (WorldTargetSelection.RequiresLineOfSight(definition: definition)
             ? derivedSolids
             : null
@@ -570,7 +564,6 @@ public sealed partial class WorldPopulation {
             // edit takes effect on the next tick.
             body.SetContactField(field: m_contactField);
             body.SetGravityField(field: m_gravityField);
-            body.SetWaterline(level: m_waterline);
             body.SetAttachmentPolicy(policy: m_fixedAttachment);
         }
 
