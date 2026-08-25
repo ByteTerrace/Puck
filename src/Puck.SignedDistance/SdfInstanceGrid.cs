@@ -420,6 +420,11 @@ public static class SdfInstanceGrid {
             m_words = new uint[WordCapacity(maxInstances: m_maxInstances)];
         }
 
+        /// <summary>Gets the instance ceiling this workspace was constructed with — the resolution derivation's
+        /// <c>maxInstances</c> input, which a caller building against a specific ceiling (e.g. matching
+        /// <see cref="SdfProgramBuilder.MaxInstances"/>) reads back to confirm the two agree.</summary>
+        public int MaxInstances => m_maxInstances;
+
         private ReadOnlySpan<uint> DisabledWords() {
             var words = m_words.AsSpan(
                 length: HeaderWords,

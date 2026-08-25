@@ -62,8 +62,8 @@ public sealed partial class SdfProgramBuilder {
     /// <summary>The reserved material identifier used by the plain procedural screen material.</summary>
     public const int ScreenMaterialId = 65535;
 
-    private readonly List<SdfInstanceRange> m_instances = [];
-    private readonly List<SdfInstruction> m_instructions = [];
+    private readonly List<SdfInstanceRange> m_instances;
+    private readonly List<SdfInstruction> m_instructions;
     // Every positional recolor WINDOW the program has emitted: the recoloring op, the base material of the shape it
     // recolors, the largest delta that op can add to it, and the material SCOPE the shape was emitted in (null when
     // none was open). Recorded by Shape() — the palette is not final and the recolored shape does not exist when the
@@ -80,8 +80,38 @@ public sealed partial class SdfProgramBuilder {
     // Empty for a scope-free program, so the clamp path below never runs and emission stays byte-identical to before
     // this mechanism existed.
     private readonly List<SdfMaterialScope> m_materialScopes = [];
-    private readonly List<SdfMaterial> m_materials = [];
-    private readonly List<SdfScreenSurface> m_screenSurfaces = [];
+    private readonly List<SdfMaterial> m_materials;
+    private readonly List<SdfScreenSurface> m_screenSurfaces;
+
+    /// <summary>Creates a builder, optionally pre-sizing its instruction/instance/material/screen-surface lists so a
+    /// repeat-construction caller (a live composition rebuild) that already knows roughly how big the next program
+    /// will be — from a previous build's own counts, e.g. <see cref="SdfProgram.InstructionCount"/>/
+    /// <see cref="SdfProgram.Instances"/>.Count/<see cref="SdfProgram.MaterialCount"/>/<see cref="SdfProgram.ScreenSurfaces"/>.Count
+    /// — avoids re-paying <see cref="List{T}"/>'s geometric-growth reallocation from empty on every rebuild. Every hint
+    /// defaults to 0, matching <see cref="List{T}"/>'s own parameterless-constructor capacity, so a caller that
+    /// supplies none behaves exactly as before this constructor existed.</summary>
+    /// <param name="instructionCapacity">Initial capacity for the instruction list, or 0 to start empty.</param>
+    /// <param name="instanceCapacity">Initial capacity for the instance list, or 0 to start empty.</param>
+    /// <param name="materialCapacity">Initial capacity for the material list, or 0 to start empty.</param>
+    /// <param name="screenSurfaceCapacity">Initial capacity for the screen-surface list, or 0 to start empty.</param>
+    public SdfProgramBuilder(int instructionCapacity = 0, int instanceCapacity = 0, int materialCapacity = 0, int screenSurfaceCapacity = 0) {
+        m_instances = new List<SdfInstanceRange>(capacity: Math.Max(
+            val1: 0,
+            val2: instanceCapacity
+        ));
+        m_instructions = new List<SdfInstruction>(capacity: Math.Max(
+            val1: 0,
+            val2: instructionCapacity
+        ));
+        m_materials = new List<SdfMaterial>(capacity: Math.Max(
+            val1: 0,
+            val2: materialCapacity
+        ));
+        m_screenSurfaces = new List<SdfScreenSurface>(capacity: Math.Max(
+            val1: 0,
+            val2: screenSurfaceCapacity
+        ));
+    }
 
     // The one open field scope (a PushField without its PopField yet), or null when none is open: carries the compose
     // blend + smooth radius PopField bakes onto its instruction, and the ShapeBlend count when it opened (so a
@@ -698,7 +728,9 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="buildInstanceGrid">Whether to pack the world-space uniform-grid instance cull (default
     /// <see langword="true"/>). Pass <see langword="false"/> to force the beam's flat per-instance fallback over the same
     /// instances — the reference the grid-cull gate compares against; see <see cref="SdfProgram"/>.</param>
-    public SdfProgram Build(bool buildInstanceGrid = true) {
+    /// <param name="gridWorkspace">Forwarded to <see cref="SdfProgram"/>'s constructor — see its
+    /// <c>gridWorkspace</c> parameter. <see langword="null"/> (the default) keeps the allocating grid-build path.</param>
+    public SdfProgram Build(bool buildInstanceGrid = true, SdfInstanceGrid.Workspace? gridWorkspace = null) {
         if (m_openInstanceFirst >= 0) {
             throw new InvalidOperationException(message: "Build was called with an instance still open (unbalanced Begin/EndInstance).");
         }
@@ -811,6 +843,7 @@ public sealed partial class SdfProgramBuilder {
 
         return new SdfProgram(
             buildInstanceGrid: buildInstanceGrid,
+            gridWorkspace: gridWorkspace,
             instances: m_instances,
             instructions: m_instructions,
             materials: m_materials,
