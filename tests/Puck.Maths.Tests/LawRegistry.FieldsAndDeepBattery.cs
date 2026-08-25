@@ -542,6 +542,13 @@ internal static partial class LawRegistry {
             )
         ),
         Case(
+            id: "sampling.pcg3d-lattice-noise-reference-and-corners",
+            run: () => Laws.Claim(
+                claim: Subjects.Pcg3dLatticeNoiseReferenceAndCorners,
+                lawId: "sampling.pcg3d-lattice-noise-reference-and-corners"
+            )
+        ),
+        Case(
             id: "sampling.normal-quantile-ladder",
             run: () => Laws.Claim(
                 claim: Subjects.NormalQuantileLadderAndRefusals,

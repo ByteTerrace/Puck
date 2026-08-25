@@ -13,7 +13,7 @@ adversarial review's job, not this file's.
 
 | leg kind | flavor | legs | statements |
 | --- | --- | --- | --- |
-| classical | — | 760 | 484 |
+| classical | — | 761 | 485 |
 | presented-twin | — | 9 | 8 |
 | in-tree-independent | — | 28 | 22 |
 | shared-substrate | fused-substrate | 35 | 33 |
@@ -21,17 +21,17 @@ adversarial review's job, not this file's.
 | shared-substrate | delegation-twin | 42 | 38 |
 | shared-substrate | transcription | 27 | 24 |
 | shared-substrate | intra-presented | 82 | 47 |
-| shared-substrate | shared-upstream | 18 | 12 |
+| shared-substrate | shared-upstream | 19 | 13 |
 | relative-canary | — | 17 | 16 |
-| structural | — | 1107 | 538 |
-| **total** | | **2142** | **666** |
+| structural | — | 1108 | 539 |
+| **total** | | **2145** | **667** |
 
 ## Counts by surface
 
 | surface | statements | agreement legs | structural legs | statements with no independent leg |
 | --- | --- | --- | --- | --- |
 | law: Deep | 102 | 141 | 120 | 18 |
-| law: Default | 535 | 824 | 985 | 151 |
+| law: Default | 536 | 826 | 986 | 151 |
 | law: Exhaustive | 7 | 23 | 11 | 1 |
 | law: Smoke | 22 | 30 | 8 | 2 |
 
@@ -1696,6 +1696,9 @@ adversarial review's job, not this file's.
 | sampling.pcg-reference-vector-and-state | law: Default | shared-substrate | transcription | Shuffle over a 64-element identity span | a Fisher-Yates walk restated in the claim body over an identically seeded generator | the Fisher-Yates walk the member documents — one inclusive bounded draw per element from the high end down — restated against a generator seeded identically, compared position for position AND on the final state, so the advance count is part of the statement | none stands for the ORDERING: the reference is the same algorithm. What stands independently beside it is the permutation property the same rows assert — the output is a permutation of the input, with all 64 elements distinct — and sampling.shuffle-permutation-uniformity-at-scale, which measures all 24 permutations of four elements to within 700 of uniform over 480000 trials |
 | sampling.pcg-transcribed-reference-and-decorrelation | law: Deep | shared-substrate | transcription | Pcg32XshRr.NextUInt32 via FromRawBits(increment, DefaultMultiplier, state) over sixteen hand-chosen raw state/increment pairs, 50000 draws each | a private PcgRef struct transcribing the third-party reference PCG32 XSH-RR generator's published algorithm verbatim, sharing no code with Pcg32XshRr | the REFERENCE implementation's algorithm, not the subject's own rule — agreement proves Pcg32XshRr carries that third-party specification faithfully across a wide operand sweep, and NOT that either side matches the true published generator: a transcription error shared by both would be invisible here | the published opening six draws of srandom(42, 54), independently pinned as a PublishedConstant leg in sampling.pcg-reference-vector-and-state — the one witness a shared transcription error cannot fool |
 | sampling.pcg-transcribed-reference-and-decorrelation | law: Deep | structural | — | five stream-id pairs give at most 10 identical draws in 1000 — a decorrelation tripwire against two stream ids silently colliding, not a distribution claim | — | — | — |
+| sampling.pcg3d-lattice-noise-reference-and-corners | law: Default | classical | — | Pcg3d over the full 6³ edge cross product and 256 drawn triples | the identical Jarzynski & Olano mix, formed independently in BigInteger with the 2³² carrier reduction taken EXPLICITLY at every step | — | the subject relies on the carrier's own unchecked uint wrap to perform the reduction; the reference never wraps implicitly. Different route, exact on both sides, so the substrate condition does not arise |
+| sampling.pcg3d-lattice-noise-reference-and-corners | law: Default | structural | — | ValueNoise01 stays inside its documented [0, 1) band over 256 drawn cell/noise-edge/seed combinations | — | — | — |
+| sampling.pcg3d-lattice-noise-reference-and-corners | law: Default | shared-substrate | shared-upstream | ValueNoise01 at 108 exact cell-corner coordinates (nx, nz both 0..5, noise-cell edge 1, 7 or 16) | the corner extraction FixedQ4816.FromRawBits(Pcg3d(nx, nz, seed).X >> 16), formed directly against the PUBLIC Pcg3d rather than through ValueNoise01's own private corner step | the public Pcg3d hash: at a whole-cell boundary the quintic fade is exactly zero on both axes so the bilinear blend collapses onto the near corner, tying the two public members together rather than checking either against an outside reference | — |
 | sampling.secure-random-intervals | law: Default | structural | — | the interval contracts at five carrier widths — 8, 16, 32, 64 and 128 bits — each instantiated through a constrained generic helper so the statement is made about the generic member and not about one substitution: a singleton interval returns its only value 32 times running, the full interval draws without refusing, and 256 bounded draws all land inside [minimum, maximum] | — | — | — |
 | sampling.secure-random-intervals | law: Default | structural | — | the inverted-interval refusal, which is the one place this type can be wrong loudly rather than silently: an unsigned maximum below the minimum would wrap into a huge span and draw an unrelated value, so it throws ArgumentOutOfRangeException naming `maximum` — asserted at two widths | — | — | — |
 | sampling.secure-random-intervals | law: Default | structural | — | liveness, stated as such: 256 bounded draws over a thirty-value interval produce at least four distinct values, and 64 unbounded draws at least two. A generator that returned one constant satisfies every interval row above, and these two rows are the cheapest statement that separates it | — | — | — |

@@ -72,6 +72,7 @@ to meet them here than to discover them later.
 | `Pcg32XshRr` | `struct` | The seeded sequential generator: each draw hands back a value and moves the generator on to its next state. Reference-exact PCG32 XSH-RR, one sequence per stream, logarithmic seek, uniform / bounded / fraction / standard-normal draws, and an in-place shuffle. It is the only simulation state in the wing. |
 | `WeightedSampler` / `AliasTable<TElement>` | `static` / `sealed class` | Weighted choice, where some outcomes are meant to come up more often than others. Exact-integer Walker/Vose construction from ordered entries; constant-time sampling at exactly two generator advances per draw. |
 | `FieldNoise` | `static` | Spatial randomness. A stateless pure-integer map from a seed and a world position to smooth value noise in `[−1, 1]`, with an exact analytic gradient (the direction and rate the noise is changing, solved in closed form rather than estimated by sampling twice) and a planet-scale hierarchical overload. |
+| `Pcg3dLatticeNoise` | `static` | PCG3D hash-lattice value noise over a cell index, in `[0, 1)`. The shared kernel behind a world's field-lattice Noise/Scatter fills and a placement distribution's own Noise/Scatter regions, so both agree bit for bit on what a seed means. |
 | `LowDiscrepancy` | `static` | Even coverage by additive recurrence — keep adding a fixed step and read off the fractional part. Golden-ratio (`R1`) and plastic-number (`R2`) index-to-point maps: one multiply per component, no state. |
 | `DigitalNetSampler` | `static` | Even coverage by theorem. Digital `(0, m, 2)`-nets over the two-element field — the number system whose only values are 0 and 1, where addition is exclusive-or — in which a point is the exclusive-or of the direction vectors its index's set bits select. It offers only those randomizations that provably preserve stratification (the guarantee that every equal-sized box receives its exact share of the points): a digital shift of the coordinate, and a net-safe re-indexing. |
 | `StratifiedShuffle` | `static` | The index permutation a net may be re-indexed by: it carries every aligned dyadic block — a run of indices whose length is a power of two, beginning at a multiple of that length — onto an aligned dyadic block of the same size. |
@@ -290,6 +291,39 @@ Seed handling is domain-separated at every coordinate stage, meaning each stage
 gets its own derived seed rather than a shared one: independent seed states are
 injected at `x`, `y`, and `z`, so no single shift of the seed state translates
 the whole field, and each octave derives its own lattice.
+
+---
+
+## `Pcg3dLatticeNoise`
+
+Value noise over a 2D cell index, built on the Jarzynski & Olano PCG3D integer
+mix — the same mix `Puck.ShaderVm.ShaderIsa.Pcg3d` and the renderer's
+`sdfPcg3d` HLSL kernel carry, hand-kept in sync across those language
+boundaries. A corner's value is the hash's top 16 bits read directly as a
+`FixedQ4816` fraction; corners blend by the same quintic fade `FieldNoise`
+uses. Unlike `FieldNoise`, the domain is a discrete cell index rather than a
+continuous position, and the hash tree is PCG3D rather than an avalanche mix —
+the two types are not interchangeable, and neither is a special case of the
+other.
+
+**Determinism tier.** Cross-machine bit-identical, pure integer and
+fixed-point throughout.
+
+**Simulation state.** None. Every entry point is a pure function of its
+arguments.
+
+**Allocation.** None.
+
+| Operation | Semantics |
+|---|---|
+| `Pcg3d(x, y, z)` | The raw three-lane mix. |
+| `ValueNoise01(cellX, cellZ, noiseCells, seed)` | One octave of quintic-smoothed value noise over the cell index, in `[0, 1)`. A caller sums octaves itself, as `WorldFieldLattice.ApplyNoiseFill` and `CreationStampSampling.ResolveNoise` both do. |
+
+Both `Puck.World.Server.WorldFieldLattice` (a world's live `fields` section)
+and `Puck.Forge.Authoring.CreationStampSampling` (a placement's Noise/Scatter
+distribution regions) route their cell fills through this type instead of
+each keeping its own copy, so the two agree on what "the same seed" means by
+construction rather than by two hand-kept copies staying in sync.
 
 ---
 
@@ -821,17 +855,19 @@ ordinary law suite, under the `sampling` family:
 dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release
 ```
 
-Nine cases run there in a couple of seconds, and between them every public
+Ten cases run there in a couple of seconds, and between them every public
 member of this wing except `InvertibleBitMix` is owned by one — the published
 PCG32 reference vector and the snapshot, advance, bounded-draw, fraction and
 shuffle contracts; the alias factories' shared refusals and the fixed-point
 overloads as twins of the raw table; the net's radical inverse and Pascal
 identities and the `(0, m, 2)` property through order ten; the noise field's
 bounds, its integer-lattice tie to the public hash, and its gradient against an
-exact-integer central difference; the cone table's layout, refusals and
-stored-norm envelope; the quantile ladder and its antisymmetry; the additive
-recurrences against a wide-integer oracle; and the secure draw's interval
-contracts. `InvertibleBitMix` was deliberately waived to the `digital-net` stage
+exact-integer central difference; `Pcg3dLatticeNoise`'s mix against a
+wide-integer PCG3D reference and its corner collapse at cell boundaries; the
+cone table's layout, refusals and stored-norm envelope; the quantile ladder and
+its antisymmetry; the additive recurrences against a wide-integer oracle; and
+the secure draw's interval contracts. `InvertibleBitMix` was deliberately
+waived to the `digital-net` stage
 above, which round-tripped it over all `2³²` words — a statement no fast case can
 make — so with that stage gone it is **the one public member of this wing that
 nothing gates at all**. What the fast layer is *for* is that a small change to
