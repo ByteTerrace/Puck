@@ -131,16 +131,24 @@ public sealed partial class SdfProgram {
     /// grid instead of testing every instance in every tile. Pass <see langword="false"/> to pack a disabled grid so
     /// the beam falls back to the flat per-instance loop over the same instances, letting a caller compare the
     /// grid-cull and flat-loop results against each other by hand.</param>
+    /// <param name="gridWorkspace">Optional pooled scratch to build the packed grid block into instead of the
+    /// allocating <see cref="SdfInstanceGrid.Build"/> path — a repeat-construction caller (a live composition rebuild)
+    /// supplies its own <see cref="SdfInstanceGrid.Workspace"/> to avoid re-paying that allocation every rebuild. The
+    /// workspace's own <see cref="SdfInstanceGrid.Workspace.MaxInstances"/> must equal
+    /// <see cref="SdfProgramBuilder.MaxInstances"/> — the same ceiling the allocating path derives the grid resolution
+    /// against — or the two paths could coarsen the grid differently for the same instances. <see langword="null"/>
+    /// (the default) keeps the allocating path, so every existing one-shot caller is unaffected.</param>
     /// <exception cref="ArgumentException">An instruction's opcode, shape, blend, or material lane is outside the domain
     /// the packed format carries; an operand lane that is not a reinterpreted integer field is not finite; field scopes
     /// are unbalanced, empty, nested beyond the supported depth, or cross an instance boundary; two screen surfaces claim one
-    /// index; an instance range does not lie within the instruction stream; or two instance ranges claim one instruction.</exception>
+    /// index; an instance range does not lie within the instruction stream; two instance ranges claim one instruction; or
+    /// <paramref name="gridWorkspace"/> was sized for a different instance ceiling than <see cref="SdfProgramBuilder.MaxInstances"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException">A screen surface's index is outside
     /// <c>0..<see cref="SdfProgramBuilder.MaxScreenSurfaces"/>-1</c>, its origin is not finite, its right/up axes are
     /// not orthonormal, or its half-width or half-height is not finite and positive; a material component is not finite
     /// and non-negative; an instance bound is not finite and non-negative; or a trapezoid's profile slant vanishes in
     /// the deterministic field's representation.</exception>
-    public SdfProgram(IReadOnlyList<SdfInstruction> instructions, IReadOnlyList<SdfMaterial> materials, IReadOnlyList<SdfInstanceRange>? instances = null, IReadOnlyList<SdfScreenSurface>? screenSurfaces = null, bool buildInstanceGrid = true) {
+    public SdfProgram(IReadOnlyList<SdfInstruction> instructions, IReadOnlyList<SdfMaterial> materials, IReadOnlyList<SdfInstanceRange>? instances = null, IReadOnlyList<SdfScreenSurface>? screenSurfaces = null, bool buildInstanceGrid = true, SdfInstanceGrid.Workspace? gridWorkspace = null) {
         ArgumentNullException.ThrowIfNull(instructions);
         ArgumentNullException.ThrowIfNull(materials);
 
@@ -243,10 +251,30 @@ public sealed partial class SdfProgram {
         // program flows through this same path, so the frozen capacity envelope grows to cover the grid automatically.
         m_instanceBinning = ClassifyInstances();
         RequiresFrameInstanceGridRebuild = (buildInstanceGrid && HasFrameBinnableDynamicInstance());
-        var gridBlock = SdfInstanceGrid.Build(
-            enabled: buildInstanceGrid,
-            instances: m_instanceBinning,
-            maxInstances: SdfProgramBuilder.MaxInstances
+
+        if (
+            (gridWorkspace is not null) &&
+            (gridWorkspace.MaxInstances != SdfProgramBuilder.MaxInstances)
+        ) {
+            throw new ArgumentException(
+                message: $"gridWorkspace must be sized for SdfProgramBuilder.MaxInstances ({SdfProgramBuilder.MaxInstances}) instances; got a workspace sized for {gridWorkspace.MaxInstances}.",
+                paramName: nameof(gridWorkspace)
+            );
+        }
+
+        // The pooled path (gridWorkspace supplied) and the allocating SdfInstanceGrid.Build path run the IDENTICAL
+        // computation over owned vs. pooled scratch (see SdfInstanceGrid.Workspace.Build's remarks) — same instances,
+        // same maxInstances (enforced by the guard above) — so the packed bytes below are the same either way.
+        var gridBlock = ((gridWorkspace is not null)
+            ? gridWorkspace.Build(
+                instances: m_instanceBinning,
+                enabled: buildInstanceGrid
+            )
+            : SdfInstanceGrid.Build(
+                enabled: buildInstanceGrid,
+                instances: m_instanceBinning,
+                maxInstances: SdfProgramBuilder.MaxInstances
+            )
         );
 
         var dataOffsetVectors = (1 + instructionCount);
@@ -347,13 +375,10 @@ public sealed partial class SdfProgram {
         // The uniform-grid block sits after the world-segment list (mapCore never reads past that list, so its offset
         // chain and every rendered pixel of a scope-/instance-driven walk are unchanged — only the beam prepass reads
         // the grid). See SdfInstanceGrid for the block layout.
-        Array.Copy(
-            sourceArray: gridBlock,
-            sourceIndex: 0,
-            destinationArray: m_words,
-            destinationIndex: (gridOffsetVectors * WordsPerVector),
+        gridBlock.CopyTo(destination: m_words.AsSpan(
+            start: (gridOffsetVectors * WordsPerVector),
             length: gridBlock.Length
-        );
+        ));
         PackRigidPlan(
             plan: rigidPlan,
             rigidPlanOffsetVectors: rigidPlanOffsetVectors
@@ -379,6 +404,11 @@ public sealed partial class SdfProgram {
     /// spellings of ONE program (the CPU interpreter walks this, the GPU walks those), and a post-construction
     /// mutation through a downcast would desync them silently.</para></summary>
     public IReadOnlyList<SdfInstruction> Instructions => m_instructionsView;
+    /// <summary>Gets the number of materials in this program's palette — read back from the packed header lane
+    /// (<c>m_words[1]</c>), which is the single source of truth. Exposed so a caller rebuilding a similar program (a
+    /// live composition rebuild, say) can use the previous program's material count as a <see cref="SdfProgramBuilder"/>
+    /// list-capacity hint without needing its own copy of the material table.</summary>
+    public int MaterialCount => ((int)m_words[1]);
     /// <summary>Gets the minimum dynamic-transform slot capacity required to render this program without a shader reading
     /// past the supplied per-frame transform table. Equals one plus the highest <see cref="SdfOp.TransformDynamic"/>
     /// or dynamic-instance slot, or 0 for a static program.</summary>
@@ -491,54 +521,35 @@ public sealed partial class SdfProgram {
         //   erases a productive skip.
         // NEVER merges across an instance boundary (InstanceIndex differs) — the instance table's segment range must
         // stay contiguous and exclusive to its owner.
-        for (var index = (segments.Count - 2); (index >= 0); index--) {
-            var current = segments[index];
-            var next = segments[(index + 1)];
+        //
+        // A right-to-left COMPACTION pass, not a right-to-left scan with an in-place RemoveAt per merge: the scan
+        // order and every merge decision are unchanged (TryMergeAdjacentSegments below is the same test, same
+        // branches, same float ops the inline version used), but the result is built by APPENDING finished entries to
+        // a second list instead of shifting `segments`' own suffix down by one on every merge — O(segments) total
+        // instead of O(segments x merges). `accumulator` plays the role the old loop's `next` played: the up-to-date
+        // (possibly already-merged) entry immediately to the right of the index under test.
+        if (segments.Count > 1) {
+            var compacted = new List<BoundRecord>(capacity: segments.Count);
+            var accumulator = segments[^1];
 
-            if (
-                (current.Mode != next.Mode) ||
-                (current.InstanceIndex != next.InstanceIndex)
-            ) {
-                continue;
+            for (var index = (segments.Count - 2); (index >= 0); index--) {
+                var candidate = segments[index];
+
+                if (TryMergeAdjacentSegments(
+                    current: in candidate,
+                    next: in accumulator,
+                    merged: out var mergedRecord
+                )) {
+                    accumulator = mergedRecord;
+                } else {
+                    compacted.Add(item: accumulator);
+                    accumulator = candidate;
+                }
             }
 
-            if (BoundModeDynamic == current.Mode) {
-                if (current.Slot != next.Slot) {
-                    continue;
-                }
-
-                // Anchored on the first segment's center (the shared pre-dynamic offset); the enclosing max keeps it
-                // conservative even if the offsets differ.
-                segments[index] = current with {
-                    End = next.End,
-                    Radius = MathF.Max(
-                    x: current.Radius,
-                    y: (Vector3.Distance(
-                        value1: next.Center,
-                        value2: current.Center
-                    ) + next.Radius)
-                ),
-                };
-                segments.RemoveAt(index: (index + 1));
-            } else if (BoundModeStatic == current.Mode) {
-                var (mergedCenter, mergedRadius) = EncloseSpheres(
-                    centerA: current.Center,
-                    radiusA: current.Radius,
-                    centerB: next.Center,
-                    radiusB: next.Radius
-                );
-
-                if (mergedRadius > (current.Radius + next.Radius)) {
-                    continue;
-                }
-
-                segments[index] = current with {
-                    Center = mergedCenter,
-                    End = next.End,
-                    Radius = mergedRadius,
-                };
-                segments.RemoveAt(index: (index + 1));
-            }
+            compacted.Add(item: accumulator);
+            compacted.Reverse();
+            segments = compacted;
         }
 
         return (shapeBounds, segments);
@@ -1410,6 +1421,70 @@ public sealed partial class SdfProgram {
         var radius = (0.5f * ((distance + radiusA) + radiusB));
 
         return ((centerA + (Vector3.Normalize(value: (centerB - centerA)) * (radius - radiusA))), radius);
+    }
+    // AnalyzeBounds' merge test/production, extracted so its compaction pass can call it without shifting a list on
+    // every attempt. `current` is the earlier (lower-index) segment, `next` the one immediately after it — the same
+    // roles the inline version tested, so the accepted pairs and the merged record's fields (which side's Center
+    // survives, which side's End wins) are unchanged.
+    private static bool TryMergeAdjacentSegments(in BoundRecord current, in BoundRecord next, out BoundRecord merged) {
+        if (
+            (current.Mode != next.Mode) ||
+            (current.InstanceIndex != next.InstanceIndex)
+        ) {
+            merged = default;
+
+            return false;
+        }
+
+        if (BoundModeDynamic == current.Mode) {
+            if (current.Slot != next.Slot) {
+                merged = default;
+
+                return false;
+            }
+
+            // Anchored on the first segment's center (the shared pre-dynamic offset); the enclosing max keeps it
+            // conservative even if the offsets differ.
+            merged = current with {
+                End = next.End,
+                Radius = MathF.Max(
+                    x: current.Radius,
+                    y: (Vector3.Distance(
+                        value1: next.Center,
+                        value2: current.Center
+                    ) + next.Radius)
+                ),
+            };
+
+            return true;
+        }
+
+        if (BoundModeStatic == current.Mode) {
+            var (mergedCenter, mergedRadius) = EncloseSpheres(
+                centerA: current.Center,
+                radiusA: current.Radius,
+                centerB: next.Center,
+                radiusB: next.Radius
+            );
+
+            if (mergedRadius > (current.Radius + next.Radius)) {
+                merged = default;
+
+                return false;
+            }
+
+            merged = current with {
+                Center = mergedCenter,
+                End = next.End,
+                Radius = mergedRadius,
+            };
+
+            return true;
+        }
+
+        merged = default;
+
+        return false;
     }
     // The product of a chain's CellJitter boundary step factors, folded at chain-close against the chain's FINAL max
     // shape reach (mirrors chainLogSphereProduct's role, but reach-DEPENDENT on the shapes that follow the fold, so it

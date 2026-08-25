@@ -63,6 +63,13 @@ public sealed class SdfCompositionFrameSource : ISdfFrameSource {
     private readonly int[] m_builtRevisions;
     private readonly ISdfFrameDresser m_dresser;
     private readonly IReadOnlyList<ISdfSceneEmitter> m_emitters;
+    // Pooled scratch for the packed instance-cull grid every BuildProgram call needs (see SdfProgram's gridWorkspace
+    // parameter) — sized once against SdfProgramBuilder.MaxInstances, the same ceiling the allocating
+    // SdfInstanceGrid.Build path derives the grid resolution against, so routing through this workspace instead
+    // produces byte-identical packed words. One instance covers both the construction-time probe build and every live
+    // CaptureFrame rebuild: each build copies the workspace's span into the new SdfProgram's own m_words before
+    // returning (see SdfProgram's constructor), so nothing outlives a build that could alias the next one.
+    private readonly SdfInstanceGrid.Workspace m_gridWorkspace;
     // This frame's freshly-read components, and the STAGING half of the built record: captured before a build, promoted
     // into m_builtRevisions only once that build has returned. See CaptureRevisions/CaptureFrame for why both halves
     // of that ordering are load-bearing.
@@ -124,14 +131,18 @@ public sealed class SdfCompositionFrameSource : ISdfFrameSource {
         m_builtRevisions = new int[revisionCursor];
         m_pendingRevisions = new int[revisionCursor];
         m_transforms = new DynamicTransform[slotCursor];
+        m_gridWorkspace = new SdfInstanceGrid.Workspace(maxInstances: SdfProgramBuilder.MaxInstances);
 
-        var probe = BuildProgram(context: new SdfEmitContext(
-            Probe: true,
-            Time: 0f,
-            RenderOrigin: Vector3.Zero,
-            ParkPosition: ParkPosition,
-            SlotBase: 0
-        ));
+        var probe = BuildProgram(
+            context: new SdfEmitContext(
+                Probe: true,
+                Time: 0f,
+                RenderOrigin: Vector3.Zero,
+                ParkPosition: ParkPosition,
+                SlotBase: 0
+            ),
+            previous: null
+        );
 
         WorstCaseProgramWordCapacity = probe.Words.Length;
         WorstCaseInstanceCapacity = probe.Instances.Count;
@@ -164,8 +175,21 @@ public sealed class SdfCompositionFrameSource : ISdfFrameSource {
     // wrapped in a material scope for any OwnsMaterialScope emitter (the ONLY behavior difference from calling Emit
     // directly — see SdfMaterialScope). context.SlotBase is overwritten per-emitter from m_slotBases; the caller's
     // context otherwise carries Probe/Time/RenderOrigin/ParkPosition through unchanged.
-    private SdfProgram BuildProgram(SdfEmitContext context) {
-        var builder = new SdfProgramBuilder();
+    //
+    // `previous` — the program this call is rebuilding (null for the construction-time probe, which has no history)
+    // — supplies List capacity hints for the fresh builder: its own counts are exactly what THIS build's counts were
+    // last time, and a live scene's shape rarely swings wildly frame to frame, so seeding from them removes most of
+    // List<T>'s geometric-growth reallocation without guessing at a number nothing measured. A capacity hint changes
+    // nothing observable (List<T>.Capacity affects no read value), and every builder is routed through m_gridWorkspace
+    // — the pooled grid-build scratch this type owns — so the grid block is produced without its own per-call
+    // allocation either.
+    private SdfProgram BuildProgram(SdfEmitContext context, SdfProgram? previous) {
+        var builder = new SdfProgramBuilder(
+            instructionCapacity: (previous?.InstructionCount ?? 0),
+            instanceCapacity: (previous?.Instances.Count ?? 0),
+            materialCapacity: (previous?.MaterialCount ?? 0),
+            screenSurfaceCapacity: (previous?.ScreenSurfaces.Count ?? 0)
+        );
 
         for (var index = 0; (index < m_emitters.Count); index++) {
             var emitter = m_emitters[index];
@@ -193,7 +217,7 @@ public sealed class SdfCompositionFrameSource : ISdfFrameSource {
             }
         }
 
-        return builder.Build();
+        return builder.Build(gridWorkspace: m_gridWorkspace);
     }
     // THE REBUILD TRIGGER, and it must not be able to CANCEL — reading this frame's components into m_pendingRevisions
     // and reporting whether any of them moved, in one pass.
@@ -297,14 +321,17 @@ public sealed class SdfCompositionFrameSource : ISdfFrameSource {
             (m_program is null) ||
             moved
         ) {
-            m_program = BuildProgram(context: new SdfEmitContext(
-                Probe: false,
-                Time: m_time,
-                RenderOrigin: Vector3.Zero,
-                ParkPosition: ParkPosition,
-                SlotBase: 0,
-                InterpolationAlpha: interpolationAlpha
-            ));
+            m_program = BuildProgram(
+                context: new SdfEmitContext(
+                    Probe: false,
+                    Time: m_time,
+                    RenderOrigin: Vector3.Zero,
+                    ParkPosition: ParkPosition,
+                    SlotBase: 0,
+                    InterpolationAlpha: interpolationAlpha
+                ),
+                previous: m_program
+            );
 
             Array.Copy(
                 sourceArray: m_pendingRevisions,
