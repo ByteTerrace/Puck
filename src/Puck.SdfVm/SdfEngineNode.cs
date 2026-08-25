@@ -111,6 +111,24 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
         public long TotalTicks => (((((CaptureFrameTicks + SetupTicks) + ScreenPublishTicks) + ViewRenderTicks) + BindingsTicks) + SubmitFrameTicks);
     }
 
+    /// <summary>Brackets one CPU phase with <see cref="Stopwatch"/> only while <paramref name="enabled"/> is set;
+    /// disabled, <see cref="Stop"/> reads 0 without touching the clock.</summary>
+    private readonly ref struct CpuPhaseTimer(bool enabled, long startTicks) {
+        private readonly bool m_enabled = enabled;
+        private readonly long m_startTicks = startTicks;
+
+        public static CpuPhaseTimer Start(bool enabled) {
+            return new CpuPhaseTimer(
+                enabled: enabled,
+                startTicks: (enabled ? Stopwatch.GetTimestamp() : 0L)
+            );
+        }
+
+        public long Stop() {
+            return (m_enabled ? (Stopwatch.GetTimestamp() - m_startTicks) : 0L);
+        }
+    }
+
     // Concrete Dictionary<,> (not the read-only interface) so the per-frame foreach binds the struct enumerator
     // instead of boxing IEnumerator on the render thread every ProduceFrame; the ctor copies caller maps to match.
     private static readonly Dictionary<int, IRenderNode> EmptyChildren = new();
@@ -553,24 +571,15 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
         }
 
         var cpuTimingEnabled = GpuTimingControl.Shared.Armed;
-        var captureFrameStart = (cpuTimingEnabled
-            ? Stopwatch.GetTimestamp()
-            : 0L
-        );
+        var captureFrameTimer = CpuPhaseTimer.Start(enabled: cpuTimingEnabled);
         var frame = m_frameSource.CaptureFrame(
             width: m_width,
             height: m_height,
             deltaSeconds: ((float)context.FrameDeltaSeconds),
             interpolationAlpha: ((float)context.InterpolationAlpha)
         );
-        var captureFrameTicks = (cpuTimingEnabled
-            ? (Stopwatch.GetTimestamp() - captureFrameStart)
-            : 0L
-        );
-        var cpuPhaseStart = (cpuTimingEnabled
-            ? Stopwatch.GetTimestamp()
-            : 0L
-        );
+        var captureFrameTicks = captureFrameTimer.Stop();
+        var cpuPhaseTimer = CpuPhaseTimer.Start(enabled: cpuTimingEnabled);
 
         // Produce each child viewport's surface first (so its image-view is known before the source array is bound),
         // then build/refresh the engine, then hand it the child views for this frame's source-array (re)bind.
@@ -589,10 +598,7 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
             m_engine.DebugLabel = m_debugLabel;
         }
 
-        var setupTicks = (cpuTimingEnabled
-            ? (Stopwatch.GetTimestamp() - cpuPhaseStart)
-            : 0L
-        );
+        var setupTicks = cpuPhaseTimer.Stop();
 
         foreach (var (slot, _) in m_children) {
             if (
@@ -611,36 +617,21 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
         // Screen-source PREPARE: hand the frame source the live device + compute services so a CPU-pixel source can
         // upload THIS frame's image to a stable handle before the providers below are polled (they return that
         // handle). Mirrors AdvanceBricks — an engine seam, default no-op. m_gpu is set by EnsureEngine just above.
-        cpuPhaseStart = (cpuTimingEnabled
-            ? Stopwatch.GetTimestamp()
-            : 0L
-        );
+        cpuPhaseTimer = CpuPhaseTimer.Start(enabled: cpuTimingEnabled);
         m_frameSource.PrepareScreenSources(
             deviceContext: gpuDevice,
             gpu: m_gpu!
         );
-        var screenPublishTicks = (cpuTimingEnabled
-            ? (Stopwatch.GetTimestamp() - cpuPhaseStart)
-            : 0L
-        );
+        var screenPublishTicks = cpuPhaseTimer.Stop();
 
         // View RENDER: hand the frame source this frame's full context so a source hosting an offscreen ViewStack (a
         // diegetic camera / jumbotron) renders its views against the live device now — their handles fresh before the
         // screen-source poll below reads them. Mirrors PrepareScreenSources — an engine seam, default no-op.
-        cpuPhaseStart = (cpuTimingEnabled
-            ? Stopwatch.GetTimestamp()
-            : 0L
-        );
+        cpuPhaseTimer = CpuPhaseTimer.Start(enabled: cpuTimingEnabled);
         m_frameSource.RenderViews(context: in context);
-        var viewRenderTicks = (cpuTimingEnabled
-            ? (Stopwatch.GetTimestamp() - cpuPhaseStart)
-            : 0L
-        );
+        var viewRenderTicks = cpuPhaseTimer.Stop();
 
-        cpuPhaseStart = (cpuTimingEnabled
-            ? Stopwatch.GetTimestamp()
-            : 0L
-        );
+        cpuPhaseTimer = CpuPhaseTimer.Start(enabled: cpuTimingEnabled);
 
         // Screen sources: polled AFTER children have produced (a provider may read a just-produced child surface).
         // A provider returning 0 leaves the slot unbound this frame — the engine's material-shaded fallback applies.
@@ -716,15 +707,9 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
             LiveProgramStepScale = frame.Program.StepScale;
         }
 
-        var bindingsTicks = (cpuTimingEnabled
-            ? (Stopwatch.GetTimestamp() - cpuPhaseStart)
-            : 0L
-        );
+        var bindingsTicks = cpuPhaseTimer.Stop();
 
-        var submitFrameStart = (cpuTimingEnabled
-            ? Stopwatch.GetTimestamp()
-            : 0L
-        );
+        var submitFrameTimer = CpuPhaseTimer.Start(enabled: cpuTimingEnabled);
 
         if (0 == m_screenSourceFrames.Count) {
             m_engine!.SubmitFrame(frame: frame);
@@ -743,7 +728,7 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
                 ScreenPublishTicks: screenPublishTicks,
                 ViewRenderTicks: viewRenderTicks,
                 BindingsTicks: bindingsTicks,
-                SubmitFrameTicks: (Stopwatch.GetTimestamp() - submitFrameStart)
+                SubmitFrameTicks: submitFrameTimer.Stop()
             ));
         }
 
