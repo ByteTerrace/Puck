@@ -534,6 +534,31 @@ public sealed class QueuedMachineWorker : IDisposable {
             m_audioWriteFrame = 0;
         }
     }
+    // Submits one completion-bearing work item to the worker thread and blocks until the worker has run it: the
+    // shared submit-and-wait shape behind the debug-memory, time-travel, save-flush, and reconfigure seams. Returns
+    // whether the item was accepted; a refused item (the queue is closed, or the worker already faulted) never ran, so
+    // each caller decides its own fallback. The caller owns the completion handle's lifetime, so the handle stays alive
+    // until the caller's own scope ends.
+    private bool EnqueueAndWait(in WorkItem item) {
+        var queued = false;
+
+        lock (m_workLock) {
+            if (
+                m_acceptingWork &&
+                (m_workerFault is null)
+            ) {
+                m_work.Enqueue(item: item);
+                Monitor.Pulse(obj: m_workLock);
+                queued = true;
+            }
+        }
+
+        if (queued) {
+            item.Completion?.Wait();
+        }
+
+        return queued;
+    }
     // Marshals one debug memory access onto the worker thread (the single-producer discipline: peek/poke touch the same
     // core arrays/mapper state the worker mutates while stepping, so they must never be driven cross-thread), blocking
     // until it completes between steps. A no-op leaving the default result (peek 0) when no core is attached.
@@ -545,25 +570,11 @@ public sealed class QueuedMachineWorker : IDisposable {
         }
 
         using var completion = new ManualResetEventSlim(initialState: false);
-        var queued = false;
 
-        lock (m_workLock) {
-            if (
-                m_acceptingWork &&
-                (m_workerFault is null)
-            ) {
-                m_work.Enqueue(item: WorkItem.ForMemory(
-                    completion: completion,
-                    request: request
-                ));
-                Monitor.Pulse(obj: m_workLock);
-                queued = true;
-            }
-        }
-
-        if (queued) {
-            completion.Wait();
-        }
+        _ = EnqueueAndWait(item: WorkItem.ForMemory(
+            completion: completion,
+            request: request
+        ));
     }
     // Marshals a time-travel command onto the worker thread (the single-producer discipline: rewind/runahead manipulate
     // machine state and must never be driven cross-thread), blocking until it completes. A no-op returning a default
@@ -577,25 +588,11 @@ public sealed class QueuedMachineWorker : IDisposable {
         }
 
         using var completion = new ManualResetEventSlim(initialState: false);
-        var queued = false;
 
-        lock (m_workLock) {
-            if (
-                m_acceptingWork &&
-                (m_workerFault is null)
-            ) {
-                m_work.Enqueue(item: WorkItem.ForTimeTravel(
-                    completion: completion,
-                    request: request
-                ));
-                Monitor.Pulse(obj: m_workLock);
-                queued = true;
-            }
-        }
-
-        if (queued) {
-            completion.Wait();
-        }
+        _ = EnqueueAndWait(item: WorkItem.ForTimeTravel(
+            completion: completion,
+            request: request
+        ));
 
         return request;
     }
@@ -844,24 +841,11 @@ public sealed class QueuedMachineWorker : IDisposable {
         }
 
         using var completion = new ManualResetEventSlim(initialState: false);
-        var queued = false;
 
-        lock (m_workLock) {
-            if (
-                m_acceptingWork &&
-                (m_workerFault is null)
-            ) {
-                m_work.Enqueue(item: WorkItem.Flush(
-                    completion: completion,
-                    force: force
-                ));
-                Monitor.Pulse(obj: m_workLock);
-                queued = true;
-            }
-        }
-
-        if (queued) {
-            completion.Wait();
+        if (EnqueueAndWait(item: WorkItem.Flush(
+            completion: completion,
+            force: force
+        ))) {
             ThrowIfWorkerFaulted();
         } else {
             worker.Join();
@@ -1025,25 +1009,11 @@ public sealed class QueuedMachineWorker : IDisposable {
         }
 
         using var completion = new ManualResetEventSlim(initialState: false);
-        var queued = false;
 
-        lock (m_workLock) {
-            if (
-                m_acceptingWork &&
-                (m_workerFault is null)
-            ) {
-                m_work.Enqueue(item: WorkItem.ForReconfigure(
-                    completion: completion,
-                    request: request
-                ));
-                Monitor.Pulse(obj: m_workLock);
-                queued = true;
-            }
-        }
-
-        if (queued) {
-            completion.Wait();
-        }
+        _ = EnqueueAndWait(item: WorkItem.ForReconfigure(
+            completion: completion,
+            request: request
+        ));
 
         return (Ok: request.Ok, Reason: request.Reason);
     }

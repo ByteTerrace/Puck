@@ -151,12 +151,12 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     // (TryResolve, TryGetActive, TryAdopt, DescribeActive) — never the raw WorldReference.Document string a
     // destination row spells, since two documents naming the identical underlying file through different
     // spellings ("dive.world.json" vs "Assets/worlds/dive.world.json") would otherwise mint two separate
-    // resolver cache entries even though TryResolveDocumentPath's own probes already prove them identical.
+    // resolver cache entries even though WorldFileOrigin.TryResolveCanonicalPath's own probes already prove them identical.
     // A path this probe cannot resolve to an existing file falls back to the raw string unchanged — the
     // resolver still needs some stable identity for its cache key, and an unresolvable document is about to
     // fail this transfer outright at TryStart regardless.
     public static string CanonicalDocumentIdentity(string documentPath) =>
-        (TryResolveDocumentPath(
+        (WorldFileOrigin.TryResolveCanonicalPath(
             path: documentPath,
             resolved: out var resolved
         )
@@ -896,7 +896,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             return false;
         }
 
-        if (!TryResolveDocumentPath(
+        if (!WorldFileOrigin.TryResolveCanonicalPath(
             path: path,
             resolved: out var resolvedPath
         )) {

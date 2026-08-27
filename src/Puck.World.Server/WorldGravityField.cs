@@ -34,24 +34,13 @@ public sealed class WorldGravityField {
 
     private int m_bodyCount;
 
-    private static FixedQ4816 SaturatingAdd(FixedQ4816 left, FixedQ4816 right) {
-        var sum = (((Int128)left.Value) + right.Value);
-
-        return FixedQ4816.FromRawBits(value: ((sum > long.MaxValue)
-            ? long.MaxValue
-            : ((sum < long.MinValue)
-                ? long.MinValue
-                : ((long)sum)
-            )
-        ));
-    }
     // Composition is the one place independently valid accelerations meet. Saturating componentwise prevents an
     // overlap from wrapping toward the opposite direction; the fixed extreme is deterministic and Replace can still
     // reset it before a later Combine.
     private static FixedVector3 Compose(FixedVector3 left, FixedVector3 right) => new(
-        X: SaturatingAdd(left: left.X, right: right.X),
-        Y: SaturatingAdd(left: left.Y, right: right.Y),
-        Z: SaturatingAdd(left: left.Z, right: right.Z)
+        X: FixedSaturate.Add(left: left.X, right: right.X),
+        Y: FixedSaturate.Add(left: left.Y, right: right.Y),
+        Z: FixedSaturate.Add(left: left.Z, right: right.Z)
     );
 
     /// <summary>Initializes the field for a fixed population capacity.</summary>

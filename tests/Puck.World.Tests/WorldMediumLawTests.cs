@@ -126,19 +126,7 @@ public sealed class WorldMediumLawTests {
             DefaultSeatKitRaw = "diver-test",
             StateRaw = new WorldStateSection(
                 World: [
-                    new WorldStateRow(
-                        Name: WorldCellName.Parse(candidate: "medium"),
-                        Kind: CellKind.Fixed,
-                        Lattice: new WorldStateLatticeTrait(
-                            Topology: "world",
-                            Initial: 1f,
-                            Min: 0f,
-                            Max: 1f,
-                            HeightScale: 5f,
-                            Color: "#3B7BD6",
-                            Medium: new WorldLatticeMedium()
-                        )
-                    ),
+                    Fixtures.MediumRow(),
                 ],
                 Lattices: [topology]
             ),

@@ -105,17 +105,13 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.name '{row.Name}' is duplicated.");
             }
 
-            if (
-                string.IsNullOrWhiteSpace(value: row.Reference) ||
-                !referenceNames.Contains(item: row.Reference)
-            ) {
-                errors.Add(item: ((referenceNames.Count > 0)
-                    ? $"{path}.reference '{row.Reference}' names no references row; the world declares: {string.Join(
-                        separator: ", ",
-                        values: referenceNames
-                    )}."
-                    : $"{path}.reference '{row.Reference}' names no references row; the world declares none."));
-            }
+            RequireDeclaredListing(
+                declaredSet: referenceNames,
+                errors: errors,
+                rowNoun: "references row",
+                subject: $"{path}.reference '{row.Reference}'",
+                value: row.Reference
+            );
 
             if (row.Scope == WorldDestinationScope.Group) {
                 if (row.Selector is null) {

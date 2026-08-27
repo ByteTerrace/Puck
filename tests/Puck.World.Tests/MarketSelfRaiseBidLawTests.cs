@@ -22,7 +22,7 @@ public sealed class MarketSelfRaiseBidLawTests {
         // The bidder's liquid balance (15, after the first bid escrows 100 out of a starting 115) cannot cover the
         // new bid's FULL amount (110) — only the ADDITIONAL 10 over their own standing escrow. The pre-fix full-
         // amount check wrongly refused this exact shape.
-        var document = BuildDocument(bidderStartingGold: 115);
+        var document = MarketFixtures.BuildDocument(bidderStartingGold: 115);
         using var fixture = Fixtures.FreshServer(definition: document);
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.CreateMarketListing(
@@ -110,7 +110,7 @@ public sealed class MarketSelfRaiseBidLawTests {
     public void AMaximumStandingBid_HasNoWrappedSuccessor() {
         // Market prices are long-shaped independently of state-cell balances, so an authored/resumed ledger may
         // legally carry the carrier maximum even though no one can accumulate that amount through an int state row.
-        var baseDocument = BuildDocument(bidderStartingGold: MarketFixtures.BidderStartingGold);
+        var baseDocument = MarketFixtures.BuildDocument(bidderStartingGold: MarketFixtures.BidderStartingGold);
         var maximumListing = new WorldMarketListing(
             Id: 1,
             Seller: Seller,
@@ -145,24 +145,5 @@ public sealed class MarketSelfRaiseBidLawTests {
         Assert.Equal(expected: Bidder, actual: listing.CurrentBidder);
         Assert.Equal(expected: standingBidderBalance, actual: MarketFixtures.CellValueOf(definition: fixture.Server.Definition, row: MarketFixtures.GoldRow, principal: Bidder));
         Assert.Equal(expected: challengerBalance, actual: MarketFixtures.CellValueOf(definition: fixture.Server.Definition, row: MarketFixtures.GoldRow, principal: ThirdParty));
-    }
-
-    private static WorldDefinition BuildDocument(long bidderStartingGold) {
-        var gold = new WorldStateRow(Name: MarketFixtures.GoldRow, Kind: CellKind.Int, Capacity: 128, NonNegative: true, Cells: [
-            new WorldStateCell(Key: WorldCellName.Parse(candidate: "0"), Value: MarketFixtures.SellerStartingGold),
-            new WorldStateCell(Key: WorldCellName.Parse(candidate: "1"), Value: bidderStartingGold),
-            new WorldStateCell(Key: WorldCellName.Parse(candidate: "2"), Value: MarketFixtures.BidderStartingGold),
-        ]);
-        var apple = new WorldStateRow(Name: MarketFixtures.AppleRow, Kind: CellKind.Int, Capacity: 128, NonNegative: true, Cells: [
-            new WorldStateCell(Key: WorldCellName.Parse(candidate: "0"), Value: MarketFixtures.SellerStartingApples),
-        ]);
-        var market = new WorldMarketSection(
-            Formats: [WorldMarketFormat.English, WorldMarketFormat.Buyout],
-            FeeBasisPoints: MarketFixtures.FeeBasisPoints,
-            MinDurationSeconds: MarketFixtures.MinDurationSeconds,
-            MaxDurationSeconds: MarketFixtures.MaxDurationSeconds
-        );
-
-        return (Fixtures.BuildDocument().WithWorldState(rows: [gold, apple]) with { Market = market });
     }
 }

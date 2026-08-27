@@ -39,17 +39,12 @@ internal sealed class HumbleGamingBrickLookahead : ITimeTravelLookahead<MachineP
         start: 0
     ));
     /// <inheritdoc/>
-    public void ApplyInput(in MachinePadState input) {
-        m_joypad.SetButtons(pressed: BrickPad.ToJoypad(pad: in input));
-
-        // The lookahead applies the SAME full input image the authoritative core does (buttons AND the recorded tilt
-        // sensor sample) so a sensor-bearing cart's predicted branch matches the authority's — a no-op on a cart that
-        // never reads the tilt sensor.
-        m_tiltSensor.SetTilt(
-            x: input.Tilt.X,
-            y: input.Tilt.Y
+    public void ApplyInput(in MachinePadState input) =>
+        BrickPad.Apply(
+            joypad: m_joypad,
+            pad: in input,
+            tiltSensor: m_tiltSensor
         );
-    }
     /// <inheritdoc/>
     public void RunFrame() =>
         m_instance.Machine.Run(tCycles: m_oneFrameCycles);

@@ -16,24 +16,14 @@ public sealed class MarketRetentionArchivalLawTests {
 
     private const int FillCount = WorldMarketCapacity.MaxListings;
 
-    // A bespoke document, not MarketFixtures.BuildDocument(): filling 256 listings needs a seller apple balance far
-    // past the fixture's own (10), and this suite needs its own retentionSeconds to force an elapse inside a test's
-    // tick budget. Capacity (the row's own distinct-key ceiling, WorldStateCapacity.MaxCellsPerRow) stays at its max
-    // — this test seeds only one holder key ("0"), so it is the cell value, not the key count, that must be large.
+    // The shared market row/section shapes with this suite's own values, not MarketFixtures.BuildDocument():
+    // filling 256 listings needs a seller apple balance far past the fixture's own (10), and this suite needs its
+    // own retentionSeconds to force an elapse inside a test's tick budget. Only holder key "0" is seeded — it is the
+    // cell value, not the key count, that must be large.
     private static WorldDefinition BuildDocument(float retentionSeconds) {
-        var gold = new WorldStateRow(Name: MarketFixtures.GoldRow, Kind: CellKind.Int, Capacity: 128, NonNegative: true, Cells: [
-            new WorldStateCell(Key: WorldCellName.Parse(candidate: "0"), Value: 100_000),
-        ]);
-        var apple = new WorldStateRow(Name: MarketFixtures.AppleRow, Kind: CellKind.Int, Capacity: 128, NonNegative: true, Cells: [
-            new WorldStateCell(Key: WorldCellName.Parse(candidate: "0"), Value: (FillCount + 8)),
-        ]);
-        var market = new WorldMarketSection(
-            Formats: [WorldMarketFormat.English, WorldMarketFormat.Buyout],
-            FeeBasisPoints: 0,
-            MinDurationSeconds: 1f,
-            MaxDurationSeconds: 3_600f,
-            RetentionSeconds: retentionSeconds
-        );
+        var gold = MarketFixtures.HolderRow(name: MarketFixtures.GoldRow, balances: [100_000]);
+        var apple = MarketFixtures.HolderRow(name: MarketFixtures.AppleRow, balances: [(FillCount + 8)]);
+        var market = MarketFixtures.Section(feeBasisPoints: 0, retentionSeconds: retentionSeconds);
 
         return (Fixtures.BuildDocument().WithWorldState(rows: [gold, apple]) with { Market = market });
     }

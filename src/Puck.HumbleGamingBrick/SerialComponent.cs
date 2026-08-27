@@ -136,10 +136,7 @@ public sealed class SerialComponent : ISerial, IClockedComponent, ISnapshotable,
             : 0x00)));
 
         if (--m_bitsRemaining == 0) {
-            m_control &= unchecked((byte)~TransferActive);
-
-            m_interrupts.Request(kind: InterruptKind.Serial);
-            TransferCompleted?.Invoke(obj: m_data);
+            CompleteTransfer();
         }
     }
     /// <inheritdoc/>
@@ -275,15 +272,20 @@ public sealed class SerialComponent : ISerial, IClockedComponent, ISnapshotable,
             (m_bitsRemaining > 0) &&
             (--m_bitsRemaining == 0)
         ) {
-            m_control &= unchecked((byte)~TransferActive);
-
-            m_interrupts.Request(kind: InterruptKind.Serial);
-            TransferCompleted?.Invoke(obj: m_data);
+            CompleteTransfer();
         }
 
         return outgoing;
     }
 
+    // The transfer-completion epilogue both shift paths share (the internally-clocked tick and the peer's external
+    // clock edge): SC bit 7 clears, the serial interrupt is requested, and the assembled byte is published.
+    private void CompleteTransfer() {
+        m_control &= unchecked((byte)~TransferActive);
+
+        m_interrupts.Request(kind: InterruptKind.Serial);
+        TransferCompleted?.Invoke(obj: m_data);
+    }
     // The DIV bit driving the shifter: the Color fast clock (SC bit 1) selects a bit 32x faster than the normal rate.
     private bool DivBit() {
         var bit = (((m_control & FastClock) != 0)

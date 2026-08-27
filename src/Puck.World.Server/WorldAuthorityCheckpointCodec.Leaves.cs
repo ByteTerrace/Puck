@@ -116,27 +116,24 @@ public static partial class WorldAuthorityCheckpointCodec {
     // ---- shared leaf types ----
 
     private static void WritePrincipal(WireWriter writer, WorldPrincipal principal) {
-        if (!WorldWireTags.TryToWire(
-            value: principal.Kind,
-            wire: out var kindWire
+        if (!WorldWireCodec.TryWritePrincipal(
+            principal: principal,
+            writer: writer
         )) {
             throw new InvalidOperationException(message: $"{nameof(PrincipalKind)}.{principal.Kind} has no live wire value");
         }
-        writer.WriteByte(value: kindWire);
-        writer.WriteInt32(value: principal.Index);
-        writer.WriteInt32(value: principal.Generation);
-        writer.WriteNullableString(value: principal.Name);
     }
     private static WorldPrincipal ReadPrincipal(ref WireReader reader) {
-        var kindWire = reader.ReadByte();
-        var kindValid = WorldWireTags.TryFromWire(
-            value: out PrincipalKind kind,
-            wire: kindWire
+        var declared = WorldWireCodec.TryReadPrincipal(
+            kindWire: out var kindWire,
+            nameField: "principal name",
+            principal: out var principal,
+            reader: ref reader
         );
 
         if (
-            !reader.Failed &&
-            !kindValid
+            !declared &&
+            !reader.Failed
         ) {
             reader.Fail(
                 detail: $"{nameof(PrincipalKind)} wire value {kindWire} is not declared",
@@ -144,19 +141,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             );
         }
 
-        var index = reader.ReadInt32();
-        var generation = reader.ReadInt32();
-        var name = reader.ReadNullableString(
-            field: "principal name",
-            maxBytes: MaxStringBytes
-        );
-
-        return new WorldPrincipal(
-            Generation: generation,
-            Index: index,
-            Kind: kind,
-            Name: name
-        );
+        return principal;
     }
     private static void WriteSubject(WireWriter writer, GrantSubject subject) {
         if (!WorldWireTags.TryToWire(
@@ -245,62 +230,32 @@ public static partial class WorldAuthorityCheckpointCodec {
             : null
         );
     }
-    private static void WriteChannelValues(WireWriter writer, PlayerIntent intent) {
-        for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
-            writer.WriteFixed(value: intent[ordinal]);
-        }
-    }
-    private static PlayerIntent ReadChannelValues(ref WireReader reader) {
-        var intent = default(PlayerIntent);
-
-        for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
-            intent = intent.WithChannel(
-                ordinal: ordinal,
-                value: reader.ReadFixed()
-            );
-        }
-
-        return intent;
-    }
     private static void WriteIntentSource(WireWriter writer, IntentSource source) {
-        if (source.IsLive) {
-            writer.WriteByte(value: 0);
-        } else if (source.IsIdle) {
-            writer.WriteByte(value: 1);
-        } else {
-            writer.WriteByte(value: 2);
-            writer.WriteString(value: (source.ProducerName ?? string.Empty));
+        if (!WorldWireCodec.TryWriteIntentSource(
+            source: source,
+            writer: writer
+        )) {
+            throw new InvalidOperationException(message: $"{nameof(IntentSource)} '{source}' has no live wire value");
         }
     }
     private static IntentSource ReadIntentSource(ref WireReader reader) {
-        var kind = reader.ReadByte();
+        if (!WorldWireCodec.TryReadIntentSource(
+            producerNameField: "producer name",
+            reader: ref reader,
+            source: out var source,
+            wire: out var kind
+        )) {
+            if (!reader.Failed) {
+                reader.Fail(
+                    detail: $"{nameof(IntentSource)} wire value {kind} is not declared",
+                    refusal: WireRefusal.EnumValueUnknown
+                );
+            }
 
-        switch (kind) {
-            case 0:
-                return IntentSource.Live;
-            case 1:
-                return IntentSource.Idle;
-            case 2: {
-                    var name = reader.ReadRequiredString(
-                        field: "producer name",
-                        maxBytes: MaxStringBytes
-                    );
-
-                    return (reader.Failed
-                        ? IntentSource.Live
-                        : IntentSource.Producer(name: name)
-                    );
-                }
-            default:
-                if (!reader.Failed) {
-                    reader.Fail(
-                        detail: $"{nameof(IntentSource)} wire value {kind} is not declared",
-                        refusal: WireRefusal.EnumValueUnknown
-                    );
-                }
-
-                return IntentSource.Live;
+            return IntentSource.Live;
         }
+
+        return source;
     }
     private static void WritePeerEventEntry(WireWriter writer, WorldPeerEventEntry peer) {
         writer.WriteInt32(value: peer.BodyIndex);

@@ -73,15 +73,12 @@ internal sealed class HumbleGamingBrickCore : IQueuedMachineCore {
         m_framebuffer.Pixels;
 
     /// <inheritdoc/>
-    public void ApplyInput(in MachinePadState input) {
-        m_joypad.SetButtons(pressed: BrickPad.ToJoypad(pad: in input));
-
-        // Recorded per-segment sensor input: a no-op on any cartridge that never reads the tilt sensor.
-        m_tiltSensor.SetTilt(
-            x: input.Tilt.X,
-            y: input.Tilt.Y
+    public void ApplyInput(in MachinePadState input) =>
+        BrickPad.Apply(
+            joypad: m_joypad,
+            pad: in input,
+            tiltSensor: m_tiltSensor
         );
-    }
     /// <inheritdoc/>
     public void RunCycles(long cycles) =>
         m_machine.Machine.Run(tCycles: ((ulong)cycles));

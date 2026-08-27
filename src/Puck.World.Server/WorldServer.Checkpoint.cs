@@ -31,16 +31,12 @@ public sealed partial class WorldServer {
         }
 
         if (m_journal.Count == 0) {
-            Console.Error.WriteLine(value: "[world.undo: nothing to undo]");
-            EchoTap?.Invoke(obj: new WorldEditEcho(
-                Message: "undo refused: nothing to undo",
-                Rejected: true,
-                Kind: WorldEditEchoKind.Mutation,
-                ConnectionId: connectionId,
-                CorrelationId: correlationId
-            ));
-
-            return false;
+            return RefuseUndo(
+                connectionId: connectionId,
+                correlationId: correlationId,
+                logged: "nothing to undo",
+                refusal: "undo refused: nothing to undo"
+            );
         }
 
         var drop = Math.Clamp(
@@ -63,16 +59,11 @@ public sealed partial class WorldServer {
 
             var refusal = $"undo refused: journal entry {index} ({Describe(mutation: m_journal[index].Mutation)}) is a finalized market transaction";
 
-            Console.Error.WriteLine(value: $"[world.undo: {refusal}]");
-            EchoTap?.Invoke(obj: new WorldEditEcho(
-                Message: refusal,
-                Rejected: true,
-                Kind: WorldEditEchoKind.Mutation,
-                ConnectionId: connectionId,
-                CorrelationId: correlationId
-            ));
-
-            return false;
+            return RefuseUndo(
+                connectionId: connectionId,
+                correlationId: correlationId,
+                refusal: refusal
+            );
         }
 
         var candidate = m_base;
@@ -92,16 +83,11 @@ public sealed partial class WorldServer {
             )) {
                 var composeRefusal = $"undo refused: replay failed at journal entry {index} ({Describe(mutation: entry.Mutation)}) — {composeReason}";
 
-                Console.Error.WriteLine(value: $"[world.undo: {composeRefusal}]");
-                EchoTap?.Invoke(obj: new WorldEditEcho(
-                    Message: composeRefusal,
-                    Rejected: true,
-                    Kind: WorldEditEchoKind.Mutation,
-                    ConnectionId: connectionId,
-                    CorrelationId: correlationId
-                ));
-
-                return false;
+                return RefuseUndo(
+                    connectionId: connectionId,
+                    correlationId: correlationId,
+                    refusal: composeRefusal
+                );
             }
 
             // An advancing or easing cell's trait re-bases to the ORIGINAL journal tick it was set at, exactly as it
@@ -142,16 +128,11 @@ public sealed partial class WorldServer {
             ) {
                 var refusal = $"undo refused: replay failed at journal entry {index} ({Describe(mutation: entry.Mutation)}) — {reason}";
 
-                Console.Error.WriteLine(value: $"[world.undo: {refusal}]");
-                EchoTap?.Invoke(obj: new WorldEditEcho(
-                    Message: refusal,
-                    Rejected: true,
-                    Kind: WorldEditEchoKind.Mutation,
-                    ConnectionId: connectionId,
-                    CorrelationId: correlationId
-                ));
-
-                return false;
+                return RefuseUndo(
+                    connectionId: connectionId,
+                    correlationId: correlationId,
+                    refusal: refusal
+                );
             }
 
             candidate = next;
@@ -166,16 +147,11 @@ public sealed partial class WorldServer {
         )) {
             var refusal = $"undo refused: restored field runtime is incompatible — {undoFieldReason}";
 
-            Console.Error.WriteLine(value: $"[world.undo: {refusal}]");
-            EchoTap?.Invoke(obj: new WorldEditEcho(
-                Message: refusal,
-                Rejected: true,
-                Kind: WorldEditEchoKind.Mutation,
-                ConnectionId: connectionId,
-                CorrelationId: correlationId
-            ));
-
-            return false;
+            return RefuseUndo(
+                connectionId: connectionId,
+                correlationId: correlationId,
+                refusal: refusal
+            );
         }
 
         // The full replay validated every entry above, so this rebuild is expected to succeed; still checked and
@@ -188,16 +164,11 @@ public sealed partial class WorldServer {
         )) {
             var refusal = $"undo refused: solid field rebuild failed — {undoSolidReason}";
 
-            Console.Error.WriteLine(value: $"[world.undo: {refusal}]");
-            EchoTap?.Invoke(obj: new WorldEditEcho(
-                Message: refusal,
-                Rejected: true,
-                Kind: WorldEditEchoKind.Mutation,
-                ConnectionId: connectionId,
-                CorrelationId: correlationId
-            ));
-
-            return false;
+            return RefuseUndo(
+                connectionId: connectionId,
+                correlationId: correlationId,
+                refusal: refusal
+            );
         }
 
         // The final current-to-candidate reconcile: unconditional (never gated on whether the kept journal touched
@@ -225,16 +196,11 @@ public sealed partial class WorldServer {
                 )) {
                     var refusal = $"undo refused: the restored document's addon {addonReason}";
 
-                    Console.Error.WriteLine(value: $"[world.undo: {refusal}]");
-                    EchoTap?.Invoke(obj: new WorldEditEcho(
-                        Message: refusal,
-                        Rejected: true,
-                        Kind: WorldEditEchoKind.Mutation,
-                        ConnectionId: connectionId,
-                        CorrelationId: correlationId
-                    ));
-
-                    return false;
+                    return RefuseUndo(
+                        connectionId: connectionId,
+                        correlationId: correlationId,
+                        refusal: refusal
+                    );
                 }
 
                 if (addonPlan is not null) {
@@ -291,6 +257,21 @@ public sealed partial class WorldServer {
     // this candidate carries could still mount, without ever registering, disclosing, or journaling anything — the
     // plan is disposed immediately regardless of outcome. Only the FINAL candidate's prepare (after the loop above)
     // ever actually commits. A server with no addon runtime attached vacuously succeeds.
+    // Every ApplyUndo gate refuses identically: loud on stderr under world.undo, echoed to the same tap a rejected
+    // live mutation reaches, and false to the caller. logged overrides the stderr body for the one gate whose line
+    // predates the echo's own "undo refused:" prefix.
+    private bool RefuseUndo(string refusal, int connectionId, long correlationId, string? logged = null) {
+        Console.Error.WriteLine(value: $"[world.undo: {(logged ?? refusal)}]");
+        EchoTap?.Invoke(obj: new WorldEditEcho(
+            Message: refusal,
+            Rejected: true,
+            Kind: WorldEditEchoKind.Mutation,
+            ConnectionId: connectionId,
+            CorrelationId: correlationId
+        ));
+
+        return false;
+    }
     private bool AddonsCanPrepare(WorldDefinition candidate, out string reason) {
         if (m_addons is not { } addons) {
             reason = string.Empty;

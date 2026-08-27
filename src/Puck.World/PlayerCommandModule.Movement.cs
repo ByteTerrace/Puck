@@ -929,7 +929,7 @@ internal sealed partial class PlayerCommandModule {
             return text;
         }
 
-        return WorldArgs.SpliceTag(
+        return CommandEcho.SpliceTag(
             text: text,
             tag: $"anchor=body:{m_anchor.PerceivedBody(slot: index)}"
         );

@@ -148,11 +148,19 @@ public static class SdfInstanceGrid {
             value1: (maxBounds - minBounds),
             value2: Vector3.Zero
         );
+        var diameters = new float[binnableIndices.Count];
+
+        for (var slot = 0; (slot < binnableIndices.Count); slot++) {
+            diameters[slot] = (2.0f * MathF.Max(
+                x: instances[binnableIndices[slot]].Radius,
+                y: 0.0f
+            ));
+        }
+
         var cellSize = DeriveCellSize(
-            binnableIndices: binnableIndices,
+            diameters: diameters,
             dimensions: out var dimensions,
             extent: extent,
-            instances: instances,
             maxInstances: maxInstances
         );
 
@@ -268,17 +276,10 @@ public static class SdfInstanceGrid {
     }
     // Derives the cell edge from the median binned-bound diameter, then coarsens until the resolution honors both the
     // total-cell cap and the per-axis cap. Returns the cell size and (via out) the resulting per-axis cell counts.
-    private static float DeriveCellSize(IReadOnlyList<SdfInstanceGridInput> instances, List<int> binnableIndices, Vector3 extent, int maxInstances, out (int X, int Y, int Z) dimensions) {
-        var diameters = new float[binnableIndices.Count];
-
-        for (var slot = 0; (slot < binnableIndices.Count); slot++) {
-            diameters[slot] = (2.0f * MathF.Max(
-                x: instances[binnableIndices[slot]].Radius,
-                y: 0.0f
-            ));
-        }
-
-        Array.Sort(array: diameters);
+    // The diameters scratch is caller-owned (sorted in place here) so the allocating and workspace paths share one
+    // derivation without the workspace giving up its zero-alloc rebuild.
+    private static float DeriveCellSize(Span<float> diameters, Vector3 extent, int maxInstances, out (int X, int Y, int Z) dimensions) {
+        diameters.Sort();
 
         var medianDiameter = diameters[(diameters.Length / 2)];
         var cellSize = MathF.Max(
@@ -494,36 +495,15 @@ public static class SdfInstanceGrid {
                 value1: (maxBounds - minBounds),
                 value2: Vector3.Zero
             );
-            var diameters = m_diameters.AsSpan(
-                length: binnableCount,
-                start: 0
+            var cellSize = DeriveCellSize(
+                diameters: m_diameters.AsSpan(
+                    length: binnableCount,
+                    start: 0
+                ),
+                dimensions: out var dimensions,
+                extent: extent,
+                maxInstances: m_maxInstances
             );
-
-            diameters.Sort();
-
-            var cellSize = MathF.Max(
-                x: (CellDiameterFactor * diameters[(binnableCount / 2)]),
-                y: MinCellSize
-            );
-            var maxCells = (CellCapacityFactor * m_maxInstances);
-            var dimensions = DimensionsFor(
-                cellSize: cellSize,
-                extent: extent
-            );
-
-            while (
-                (((((long)dimensions.X) * dimensions.Y) * dimensions.Z) > maxCells) ||
-                (dimensions.X > MaxDimension) ||
-                (dimensions.Y > MaxDimension) ||
-                (dimensions.Z > MaxDimension)
-            ) {
-                cellSize *= 2.0f;
-                dimensions = DimensionsFor(
-                    cellSize: cellSize,
-                    extent: extent
-                );
-            }
-
             var cellCount = ((dimensions.X * dimensions.Y) * dimensions.Z);
 
             if (cellCount <= 1) {

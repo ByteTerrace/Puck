@@ -63,7 +63,6 @@ public sealed class WorldFaceCatalog {
     private readonly Dictionary<(string PlacementId, string FaceName), int> m_index;
 
     private static readonly ConditionalWeakTable<WorldDefinition, WorldFaceCatalog> PerDefinition = new();
-    private static readonly FixedQ4816 DegreesToRadians = FixedQ4816.FromDouble(value: (Math.PI / 180.0));
     // Puck.Forge.Authoring.CreationFrame's 180°-about-+Y conversion quaternion, built the same way (an exact axis
     // swap/negate, never Quaternion.CreateFromAxisAngle) — the value every author-frame shape's own rotation carries
     // when the author declared none.
@@ -271,7 +270,7 @@ public sealed class WorldFaceCatalog {
         }
 
         var placementRotation = FixedQuaternion.FromAxisAngle(
-            angle: (yawDegrees * DegreesToRadians),
+            angle: (yawDegrees * WorldAngles.DegreesToRadians),
             axis: UnitY
         );
 

@@ -521,9 +521,9 @@ public sealed class WorldReplaySnapshot {
     private static IntentSubmission ReadIntent(BinaryReader reader) {
         var tick = reader.ReadUInt64();
         var entityIndex = reader.ReadInt32();
-        var intent = ReadIntentValue(reader: reader);
+        var intent = WorldWireCodec.ReadIntent(reader: reader);
         var principal = ReadPrincipal(reader: reader);
-        var heldChannels = ReadIntentValue(reader: reader);
+        var heldChannels = WorldWireCodec.ReadIntent(reader: reader);
         var measuredHoldTicks = reader.ReadInt32();
 
         return new IntentSubmission(
@@ -536,23 +536,15 @@ public sealed class WorldReplaySnapshot {
         );
     }
     private static IntentSource ReadIntentSource(BinaryReader reader) {
-        var wire = reader.ReadByte();
-
-        return wire switch {
-            Wire.SourceLive => IntentSource.Live,
-            Wire.SourceIdle => IntentSource.Idle,
-            Wire.SourceProducer => IntentSource.Producer(name: reader.ReadString()),
-            _ => throw new InvalidDataException(message: $"unknown .puckreplay {nameof(IntentSource)} wire value {wire}."),
-        };
-    }
-    private static PlayerIntent ReadIntentValue(BinaryReader reader) {
-        var channels = default(ChannelValues);
-
-        for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
-            channels[ordinal] = new FixedQ4816(Value: reader.ReadInt64());
+        if (!WorldWireCodec.TryReadIntentSource(
+            reader: reader,
+            source: out var source,
+            wire: out var wire
+        )) {
+            throw new InvalidDataException(message: $"unknown .puckreplay {nameof(IntentSource)} wire value {wire}.");
         }
 
-        return new PlayerIntent(Channels: channels);
+        return source;
     }
     private static byte[] ReadLeafBytes(BinaryReader reader, string what) {
         var length = ReadCount(
@@ -578,12 +570,6 @@ public sealed class WorldReplaySnapshot {
 
         return (present
             ? value
-            : null
-        );
-    }
-    private static string? ReadNullableString(BinaryReader reader) {
-        return (reader.ReadBoolean()
-            ? reader.ReadString()
             : null
         );
     }
@@ -673,28 +659,15 @@ public sealed class WorldReplaySnapshot {
         return (entries, grants);
     }
     private static WorldPrincipal ReadPrincipal(BinaryReader reader) {
-        var kind = ReadPrincipalKind(reader: reader);
-        var index = reader.ReadInt32();
-        var generation = reader.ReadInt32();
-        var name = ReadNullableString(reader: reader);
+        if (!WorldWireCodec.TryReadPrincipal(
+            reader: reader,
+            principal: out var principal,
+            kindWire: out var wire
+        )) {
+            throw new InvalidDataException(message: $"unknown .puckreplay {nameof(PrincipalKind)} wire value {wire}.");
+        }
 
-        return new WorldPrincipal(
-            Generation: generation,
-            Index: index,
-            Kind: kind,
-            Name: name
-        );
-    }
-    private static PrincipalKind ReadPrincipalKind(BinaryReader reader) {
-        var wire = reader.ReadByte();
-
-        return (WorldWireTags.TryFromWire(
-            value: out PrincipalKind kind,
-            wire: wire
-        )
-            ? kind
-            : throw new InvalidDataException(message: $"unknown .puckreplay {nameof(PrincipalKind)} wire value {wire}.")
-        );
+        return principal;
     }
     private static WorldReplayProfilePin? ReadProfilePin(BinaryReader reader) {
         if (!reader.ReadBoolean()) {
@@ -714,7 +687,7 @@ public sealed class WorldReplaySnapshot {
     private static WorldReplayEntry ReadRebuildEntry(BinaryReader reader) {
         var kind = RebuildKindFromWire(reader: reader);
         var force = reader.ReadBoolean();
-        var pathHint = ReadNullableString(reader: reader);
+        var pathHint = WorldWireCodec.ReadNullableString(reader: reader);
         var contentHash = reader.ReadString();
         var actor = ReadPrincipal(reader: reader);
 
@@ -750,7 +723,7 @@ public sealed class WorldReplaySnapshot {
             throw new InvalidDataException(message: $"Corrupt .puckreplay screen-op leaf: {failure}");
         }
 
-        var contentHash = ReadNullableString(reader: reader);
+        var contentHash = WorldWireCodec.ReadNullableString(reader: reader);
         var actor = ReadPrincipal(reader: reader);
 
         return new WorldReplayEntry.ScreenOp(
@@ -1141,51 +1114,31 @@ public sealed class WorldReplaySnapshot {
     private static void WriteIntent(BinaryWriter writer, in IntentSubmission submission) {
         writer.Write(value: submission.Tick);
         writer.Write(value: submission.EntityIndex);
-        WriteIntentValue(
-            writer: writer,
-            intent: submission.Intent
+        WorldWireCodec.WriteIntent(
+            intent: submission.Intent,
+            writer: writer
         );
         WritePrincipal(
             writer: writer,
             principal: submission.Principal
         );
-        WriteIntentValue(
-            writer: writer,
-            intent: submission.HeldChannels
+        WorldWireCodec.WriteIntent(
+            intent: submission.HeldChannels,
+            writer: writer
         );
         writer.Write(value: submission.MeasuredHoldTicks);
     }
     private static void WriteIntentSource(BinaryWriter writer, IntentSource source) {
-        if (source.IsLive) {
-            writer.Write(value: Wire.SourceLive);
-        } else if (source.IsIdle) {
-            writer.Write(value: Wire.SourceIdle);
-        } else if (source.ProducerName is { } name) {
-            writer.Write(value: Wire.SourceProducer);
-            writer.Write(value: name);
-        } else {
+        if (!WorldWireCodec.TryWriteIntentSource(
+            source: source,
+            writer: writer
+        )) {
             throw new WorldReplayCodecException(message: $"no .puckreplay wire value for {nameof(IntentSource)} '{source}'.");
-        }
-    }
-    // The whole channel vector, unconditionally — ChannelLimits.MaxChannels raw Int64 values, one per ordinal. A
-    // world declaring fewer channels simply leaves the unused ordinals zero; this codec needs no per-document channel
-    // count to decode, because the vector's CAPACITY (not a document's declared count) is what is wire-shaped. The
-    // codec never needs the world's channel table at decode time.
-    private static void WriteIntentValue(BinaryWriter writer, PlayerIntent intent) {
-        for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
-            writer.Write(value: intent[ordinal].Value);
         }
     }
     private static void WriteLeafBytes(BinaryWriter writer, byte[] bytes) {
         writer.Write(value: bytes.Length);
         writer.Write(buffer: bytes);
-    }
-    private static void WriteNullableString(BinaryWriter writer, string? value) {
-        writer.Write(value: (value is not null));
-
-        if (value is not null) {
-            writer.Write(value: value);
-        }
     }
     private static void WritePeerEvent(BinaryWriter writer, IReadOnlyList<WorldPeerEventEntry> entries, IReadOnlyList<WorldGrant> grants, bool revoked) {
         writer.Write(value: entries.Count);
@@ -1222,30 +1175,17 @@ public sealed class WorldReplaySnapshot {
         }
     }
     private static void WritePrincipal(BinaryWriter writer, WorldPrincipal principal) {
-        WritePrincipalKind(
-            writer: writer,
-            kind: principal.Kind
-        );
-        writer.Write(value: principal.Index);
-        writer.Write(value: principal.Generation);
-        WriteNullableString(
-            writer: writer,
-            value: principal.Name
-        );
-    }
-    private static void WritePrincipalKind(BinaryWriter writer, PrincipalKind kind) {
-        if (!WorldWireTags.TryToWire(
-            value: kind,
-            wire: out var wire
+        if (!WorldWireCodec.TryWritePrincipal(
+            principal: principal,
+            writer: writer
         )) {
-            throw new WorldReplayCodecException(message: $"no .puckreplay wire value for {nameof(PrincipalKind)}.{kind} — a Document/World principal never rides the tape.");
+            throw new WorldReplayCodecException(message: $"no .puckreplay wire value for {nameof(PrincipalKind)}.{principal.Kind} — a Document/World principal never rides the tape.");
         }
-        writer.Write(value: wire);
     }
-    // The seat's profile pin rides the same present-flag convention as WriteNullableString: a profileless seat writes
-    // the flag and nothing else, and its body falls back to the seat kit's own tuning on the re-drive exactly as it did
-    // live. The two rates cross as their RAW fixed-point lanes — the simulation's own currency, never a float — so a
-    // recorded rate re-enters WorldBody.Advance bit-identical.
+    // The seat's profile pin rides the same present-flag convention as WorldWireCodec.WriteNullableString: a
+    // profileless seat writes the flag and nothing else, and its body falls back to the seat kit's own tuning on the
+    // re-drive exactly as it did live. The two rates cross as their RAW fixed-point lanes — the simulation's own
+    // currency, never a float — so a recorded rate re-enters WorldBody.Advance bit-identical.
     private static void WriteProfilePin(BinaryWriter writer, WorldReplayProfilePin? pin) {
         writer.Write(value: (pin is not null));
 
@@ -1263,9 +1203,9 @@ public sealed class WorldReplaySnapshot {
     private static void WriteRebuildLeaf(BinaryWriter writer, WorldReplayEntry.Rebuild rebuild) {
         writer.Write(value: RebuildKindToWire(kind: rebuild.Kind));
         writer.Write(value: rebuild.Force);
-        WriteNullableString(
-            writer: writer,
-            value: rebuild.PathHint
+        WorldWireCodec.WriteNullableString(
+            value: rebuild.PathHint,
+            writer: writer
         );
         writer.Write(value: rebuild.ContentHash);
     }
@@ -1285,9 +1225,9 @@ public sealed class WorldReplaySnapshot {
             bytes: bytes,
             writer: writer
         );
-        WriteNullableString(
-            writer: writer,
-            value: screenOp.ContentHash
+        WorldWireCodec.WriteNullableString(
+            value: screenOp.ContentHash,
+            writer: writer
         );
     }
     private static void WriteSessionLeaf(BinaryWriter writer, SessionRequest request) => WriteLeaf(
@@ -2036,9 +1976,11 @@ public sealed class WorldReplaySnapshot {
     }
 
     // ---------------------------------------------------------------------------------------------------------------
-    // The pinned wire sets. Every enum that reaches this codec crosses as a value declared here, mapped by an
-    // exhaustive switch in both directions — never by a cast, since a cast pins whatever ordinals the enum happens to
-    // have and a reorder/insert/delete would silently change every saved tape's meaning.
+    // This codec's OWN pinned wire set — the discriminants no shared table owns. Every enum crosses as a value
+    // declared here or in Puck.World.Protocol (WorldWireTags for the grant vocabulary, WorldWireCodec for the leaf
+    // layouts this tape shares with the submission wire), mapped by an exhaustive switch in both directions — never
+    // by a cast, since a cast pins whatever ordinals the enum happens to have and a reorder/insert/delete would
+    // silently change every saved tape's meaning.
     //
     // Frozen wire values: changing one invalidates every saved tape. The write side throws by name on a member the
     // set does not cover; the read side throws InvalidDataException naming the value it found, so a doctored or
@@ -2052,9 +1994,5 @@ public sealed class WorldReplaySnapshot {
         // WorldRebuildKind — this codec's OWN discriminant set, independent of WorldSubmissionCodec's identically-
         // numbered one (see WriteRebuildLeaf's remarks on why the two are never welded together).
         public const byte RebuildKindReset = 0;
-        public const byte SourceIdle = 1;
-        // IntentSource
-        public const byte SourceLive = 0;
-        public const byte SourceProducer = 2;
     }
 }

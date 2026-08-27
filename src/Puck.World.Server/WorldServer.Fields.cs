@@ -87,7 +87,7 @@ public sealed partial class WorldServer : IWorldFieldLatticeHost {
 
         var current = (raw ?? 0L);
         var sum = (((Int128)current) + amount.Value);
-        var clamped = declared.ClampToEnvelope(value: SaturateToInt64(value: sum));
+        var clamped = declared.ClampToEnvelope(value: FixedSaturate.ToInt64(value: sum));
 
         if (clamped == current) {
             return;
@@ -108,13 +108,6 @@ public sealed partial class WorldServer : IWorldFieldLatticeHost {
         );
         m_output.DeliverDefinition(definition: m_definition);
     }
-    private static long SaturateToInt64(Int128 value) => (
-        (value <= long.MinValue)
-            ? long.MinValue
-            : ((value >= long.MaxValue)
-                ? long.MaxValue
-                : ((long)value))
-    );
     // Placement response traits are authored outside the field reaction program and therefore retain their named
     // scalar seam; reaction execution itself always uses the typed overload above.
     private FixedQ4816 ReadScalarSlot(string row, ulong tick) => ((WorldStateReader.TryRead(

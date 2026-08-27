@@ -959,17 +959,13 @@ public static partial class WorldDefinitionValidator {
     // Camera, when present, is validated only as non-empty here — the destination's own definition is not joined at
     // boot, so an unknown camera name is a loud bind-time refusal (WorldScreenBinder), never a boot refusal.
     private static void ValidateSessionSource(WorldScreenSource.Session session, HashSet<string> destinationNames, WorldPlacementPortal? portal, string path, List<string> errors) {
-        if (
-            string.IsNullOrWhiteSpace(value: session.Destination) ||
-            !destinationNames.Contains(item: session.Destination)
-        ) {
-            errors.Add(item: ((destinationNames.Count > 0)
-                ? $"{path}.session.destination '{session.Destination}' names no destinations row; the world declares: {string.Join(
-                    separator: ", ",
-                    values: destinationNames
-                )}."
-                : $"{path}.session.destination '{session.Destination}' names no destinations row; the world declares none."));
-        }
+        RequireDeclaredListing(
+            declaredSet: destinationNames,
+            errors: errors,
+            rowNoun: "destinations row",
+            subject: $"{path}.session.destination '{session.Destination}'",
+            value: session.Destination
+        );
 
         if (
             (session.CameraName is { } camera) &&

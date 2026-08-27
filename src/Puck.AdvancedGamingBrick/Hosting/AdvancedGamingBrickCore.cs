@@ -47,17 +47,14 @@ internal sealed class AdvancedGamingBrickCore : IQueuedMachineCore {
         m_machine.Framebuffer;
 
     /// <inheritdoc/>
-    public void ApplyInput(in MachinePadState input) {
-        m_machine.SetKeyInput(keys: AdvancedPad.ToKeyInput(pad: in input));
-
-        // Sensor channels: recorded per-segment host input, held constant for the whole cycle budget like every other
-        // pad field — never a live read from inside the core. A no-op on a cartridge with no matching sensor.
-        m_cartridge.SetLightLevel(level: input.LightLevel);
-        m_cartridge.SetTilt(
-            x: input.Tilt.X,
-            y: input.Tilt.Y
+    // The sensor channels ride the same seam as the buttons: recorded per-segment host input, held constant for the whole
+    // cycle budget like every other pad field — never a live read from inside the core.
+    public void ApplyInput(in MachinePadState input) =>
+        AdvancedPad.Apply(
+            cartridge: m_cartridge,
+            machine: m_machine,
+            pad: in input
         );
-    }
     /// <inheritdoc/>
     public void RunCycles(long cycles) =>
         _ = m_machine.RunCycles(cycles: cycles);

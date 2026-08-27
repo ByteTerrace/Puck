@@ -585,6 +585,22 @@ public static partial class WorldDefinitionValidator {
 
         return true;
     }
+    // The same dangling-reference door as RequireDeclared, refused LOUDER: the message enumerates what the world did
+    // declare so an author reading it can see the whole admissible set (or that it is empty). subject is the caller's
+    // already-composed leading clause and rowNoun its whole noun phrase, so each call site keeps its own wording.
+    private static void RequireDeclaredListing(string? value, ISet<string> declaredSet, string subject, string rowNoun, List<string> errors) {
+        if (
+            string.IsNullOrWhiteSpace(value: value) ||
+            !declaredSet.Contains(item: value)
+        ) {
+            errors.Add(item: ((declaredSet.Count > 0)
+                ? $"{subject} names no {rowNoun}; the world declares: {string.Join(
+                    separator: ", ",
+                    values: declaredSet
+                )}."
+                : $"{subject} names no {rowNoun}; the world declares none."));
+        }
+    }
     private static void RequireFinite(float value, string name, List<string> errors) {
         if (!float.IsFinite(f: value)) {
             errors.Add(item: $"{name} must be finite.");

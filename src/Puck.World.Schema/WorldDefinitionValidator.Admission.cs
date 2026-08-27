@@ -413,17 +413,13 @@ public static partial class WorldDefinitionValidator {
     private static void ValidateGroupSelector(WorldGroupSelector selector, HashSet<string> groupIds, string path, List<string> errors) {
         switch (selector) {
             case WorldGroupSelector.Named named:
-                if (
-                    string.IsNullOrWhiteSpace(value: named.Group) ||
-                    !groupIds.Contains(item: named.Group)
-                ) {
-                    errors.Add(item: ((groupIds.Count > 0)
-                        ? $"{path} names group '{named.Group}', which names no groups.groups row; the world declares: {string.Join(
-                            separator: ", ",
-                            values: groupIds
-                        )}."
-                        : $"{path} names group '{named.Group}', which names no groups.groups row; the world declares none."));
-                }
+                RequireDeclaredListing(
+                    declaredSet: groupIds,
+                    errors: errors,
+                    rowNoun: "groups.groups row",
+                    subject: $"{path} names group '{named.Group}', which",
+                    value: named.Group
+                );
                 break;
 
             case WorldGroupSelector.Tagged tagged:

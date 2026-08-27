@@ -34,18 +34,12 @@ internal sealed class AdvancedGamingBrickLookahead : ITimeTravelLookahead<Machin
         start: 0
     ));
     /// <inheritdoc/>
-    public void ApplyInput(in MachinePadState input) {
-        m_machine.SetKeyInput(keys: AdvancedPad.ToKeyInput(pad: in input));
-
-        // The lookahead applies the SAME full input image the authoritative core does (buttons AND the recorded solar
-        // light level AND tilt) so a sensor-bearing cart's predicted branch matches the authority's — a no-op on a cart
-        // with no matching sensor.
-        m_cartridge.SetLightLevel(level: input.LightLevel);
-        m_cartridge.SetTilt(
-            x: input.Tilt.X,
-            y: input.Tilt.Y
+    public void ApplyInput(in MachinePadState input) =>
+        AdvancedPad.Apply(
+            cartridge: m_cartridge,
+            machine: m_machine,
+            pad: in input
         );
-    }
     /// <inheritdoc/>
     public void RunFrame() =>
         _ = m_machine.RunFrame();

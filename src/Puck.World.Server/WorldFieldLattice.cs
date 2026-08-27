@@ -390,14 +390,7 @@ public sealed class WorldFieldLattice {
 
         return (negative ? -((Int128)quotient) : ((Int128)quotient));
     }
-    private static long SaturateToInt64(Int128 value) => (
-        (value <= long.MinValue)
-            ? long.MinValue
-            : ((value >= long.MaxValue)
-                ? long.MaxValue
-                : ((long)value))
-    );
-    private static FixedQ4816 Mean(Int128 rawSum, int count) => FixedQ4816.FromRawBits(value: SaturateToInt64(value: DivideRoundHalfEven(numerator: rawSum, divisor: count)));
+    private static FixedQ4816 Mean(Int128 rawSum, int count) => FixedQ4816.FromRawBits(value: FixedSaturate.ToInt64(value: DivideRoundHalfEven(numerator: rawSum, divisor: count)));
     private void ClearDeltas() {
         foreach (var key in m_deltas) {
             var field = (key / CellCount);
@@ -1077,14 +1070,14 @@ public sealed class WorldFieldLattice {
             Write(
                 cell: cell,
                 field: field,
-                value: FixedQ4816.FromRawBits(value: SaturateToInt64(value: (((Int128)m_scratch[cell].Value) + m_flowDelta[cell])))
+                value: FixedQ4816.FromRawBits(value: FixedSaturate.ToInt64(value: (((Int128)m_scratch[cell].Value) + m_flowDelta[cell])))
             );
         }
 
         if (hasSpill && (spilled != Int128.Zero)) {
             host.AddScalar(
                 row: reaction.SpillRow,
-                amount: FixedQ4816.FromRawBits(value: SaturateToInt64(value: spilled)),
+                amount: FixedQ4816.FromRawBits(value: FixedSaturate.ToInt64(value: spilled)),
                 tick: tick
             );
         }

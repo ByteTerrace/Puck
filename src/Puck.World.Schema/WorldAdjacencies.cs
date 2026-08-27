@@ -37,7 +37,6 @@ public sealed record WorldAdjacencyBoundary(DocumentVector3 Center, float Outwar
         Y: FixedQ4816.Zero,
         Z: FixedQ4816.One
     );
-    private static readonly FixedQ4816 DegreesToRadians = FixedQ4816.FromDouble(value: (Math.PI / 180.0));
 
     /// <summary>Compiles the authored rectangle into the same fixed-point frame used by crossing, mapping, contact,
     /// and presentation. Cardinal headings preserve exact axes.</summary>
@@ -72,7 +71,7 @@ public sealed record WorldAdjacencyBoundary(DocumentVector3 Center, float Outwar
                 break;
             default: {
                     var rotation = FixedQuaternion.FromAxisAngle(
-                        angle: (yaw * DegreesToRadians),
+                        angle: (yaw * WorldAngles.DegreesToRadians),
                         axis: Y
                     );
 
@@ -110,7 +109,7 @@ public sealed record WorldAdjacencyBoundary(DocumentVector3 Center, float Outwar
                 break;
             default: {
                     var rotation = FixedQuaternion.FromAxisAngle(
-                        angle: (pitch * DegreesToRadians),
+                        angle: (pitch * WorldAngles.DegreesToRadians),
                         axis: right
                     );
 

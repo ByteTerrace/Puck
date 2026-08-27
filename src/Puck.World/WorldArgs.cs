@@ -7,8 +7,9 @@ namespace Puck.World;
 /// Shared player-index parsing for the world verbs: the trailing (or positional) integer index the drive-a-player and
 /// roster-management verbs constrain to <c>[min, max]</c>. A local index-in-range convenience over
 /// <see cref="Puck.Commands.CommandArgs.TryParseInt(string, out int)"/>. Also owns the trailing
-/// <c>instance:&lt;name&gt;</c> token grammar and the bracket-splice echo surgery every instance-addressed verb
-/// shares — see <see cref="InstanceTokenPrefix"/> and <see cref="SpliceTag(string, string)"/>.
+/// <c>instance:&lt;name&gt;</c> token grammar — see <see cref="InstanceTokenPrefix"/>. The bracket-splice echo
+/// surgery every instance-addressed verb shares lives in
+/// <see cref="Puck.Commands.CommandEcho.SpliceTag(string, string)"/>.
 /// </summary>
 internal static class WorldArgs {
     /// <summary>Parses an integer index token at <paramref name="at"/> constrained to <c>[min, max]</c>. When
@@ -153,15 +154,4 @@ internal static class WorldArgs {
 
         return true;
     }
-    /// <summary>Splices ` <paramref name="tag"/>` just inside a bracketed echo's closing <c>]</c>, or returns
-    /// <paramref name="text"/> unchanged when it does not end in <c>]</c> — the shared surgery every instance/anchor
-    /// tag echo uses. Each caller computes its own tag text (and any extra guard) before calling.</summary>
-    /// <param name="text">The bracketed echo to tag.</param>
-    /// <param name="tag">The tag text, without surrounding brackets or the leading space.</param>
-    /// <returns>The tagged echo, or <paramref name="text"/> unchanged.</returns>
-    public static string SpliceTag(string text, string tag) =>
-        (text.EndsWith(value: ']')
-            ? $"{text[..^1]} {tag}]"
-            : text
-        );
 }

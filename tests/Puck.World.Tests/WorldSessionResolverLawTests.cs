@@ -502,7 +502,7 @@ public sealed class WorldSessionResolverLawTests {
         var destination = GlobalDestination(name: "home");
         // Stands in for WorldInstanceHost.CanonicalDocumentIdentity's own output — the ONE string two raw spellings
         // ("dive.world.json" and "Assets/worlds/dive.world.json", say) fold to once the host resolves both through
-        // TryResolveDocumentPath's probes. This law's whole point is that the RESOLVER never sees the raw spellings
+        // WorldFileOrigin.TryResolveCanonicalPath's probes. This law's whole point is that the RESOLVER never sees the raw spellings
         // at all, only this already-folded identity — proving that IS enough to dedupe.
         const string canonicalIdentity = "D:/repo/src/Puck.World/Assets/worlds/dive.world.json";
 

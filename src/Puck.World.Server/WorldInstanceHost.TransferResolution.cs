@@ -251,11 +251,11 @@ public sealed partial class WorldInstanceHost {
             // the same probe TryStart itself uses (rooted/relative/base-directory/shipped-worlds), so a
             // spelling difference alone never false-refuses.
             if (
-                !TryResolveDocumentPath(
+                !WorldFileOrigin.TryResolveCanonicalPath(
                 path: documentPath,
                 resolved: out var expectedPath
             ) ||
-                !TryResolveDocumentPath(
+                !WorldFileOrigin.TryResolveCanonicalPath(
                 path: resolved.SourcePath,
                 resolved: out var actualPath
             ) ||
@@ -381,7 +381,7 @@ public sealed partial class WorldInstanceHost {
         );
     }
     // The "return means home" origin scan: every running instance's own resolved document path against the
-    // destination's, through the same TryResolveDocumentPath probes ResolveByStableName's name-collision
+    // destination's, through the same WorldFileOrigin.TryResolveCanonicalPath probes ResolveByStableName's name-collision
     // fence already uses, so a spelling difference alone never false-refuses or false-matches. Names order
     // (ordinal) for determinism; a stopped instance is invisible by construction (removed from m_instances
     // by TryStop already). Two or more matches is reported ambiguous rather than adopting one arbitrarily.
@@ -389,7 +389,7 @@ public sealed partial class WorldInstanceHost {
         matchedName = string.Empty;
         ambiguous = null;
 
-        if (!TryResolveDocumentPath(
+        if (!WorldFileOrigin.TryResolveCanonicalPath(
             path: documentPath,
             resolved: out var targetPath
         )) {
@@ -400,7 +400,7 @@ public sealed partial class WorldInstanceHost {
 
         foreach (var name in Names) {
             if (
-                !TryResolveDocumentPath(
+                !WorldFileOrigin.TryResolveCanonicalPath(
                 path: m_instances[name].SourcePath,
                 resolved: out var candidatePath
             ) ||
@@ -506,52 +506,10 @@ public sealed partial class WorldInstanceHost {
                 return false;
         }
     }
-    private static bool TryResolveDocumentPath(string path, out string resolved) {
-        try {
-            var direct = Path.GetFullPath(path: path);
-
-            if (File.Exists(path: direct)) {
-                resolved = direct;
-
-                return true;
-            }
-
-            var fallback = Path.GetFullPath(path: Path.Combine(
-                path1: AppContext.BaseDirectory,
-                path2: path
-            ));
-
-            if (File.Exists(path: fallback)) {
-                resolved = fallback;
-
-                return true;
-            }
-
-            var shippedWorlds = Path.GetFullPath(path: Path.Combine(
-                path1: AppContext.BaseDirectory,
-                path2: "Assets",
-                path3: "worlds",
-                path4: path
-            ));
-
-            if (File.Exists(path: shippedWorlds)) {
-                resolved = shippedWorlds;
-
-                return true;
-            }
-        } catch (Exception exception) when ((exception is ArgumentException or NotSupportedException or PathTooLongException)) {
-            // A path the OS cannot even form is a path with no file at it, which is exactly what the caller refuses
-            // by name — swallowing here keeps one refusal sentence instead of two spellings of "not found".
-        }
-
-        resolved = string.Empty;
-
-        return false;
-    }
     private bool TryResolveWorldPeerCall(in PendingTransfer transfer, WorldInstance source, out WorldPeerCall authority, out string resolvedName, out bool spawned, out string reason) {
         if (
             (transfer.Destination.DocumentPath is { } documentPath) &&
-            TryResolveDocumentPath(
+            WorldFileOrigin.TryResolveCanonicalPath(
             path: documentPath,
             resolved: out var resolvedPath
         )
@@ -870,7 +828,7 @@ public sealed partial class WorldInstanceHost {
             return true;
         }
 
-        if (!TryResolveDocumentPath(
+        if (!WorldFileOrigin.TryResolveCanonicalPath(
             path: referencedDocument,
             resolved: out var resolvedPath
         )) {

@@ -102,4 +102,15 @@ public sealed class CommandEcho {
     /// <summary>Closes the echo line and returns the finished string.</summary>
     /// <returns>The finished <c>[verb: …]</c> line.</returns>
     public string Close() => m_builder.Append(value: ']').ToString();
+    /// <summary>Splices ` <paramref name="tag"/>` just inside an already-closed bracketed echo's trailing <c>]</c>,
+    /// or returns <paramref name="text"/> unchanged when it does not end in <c>]</c> — the shared surgery every
+    /// after-the-fact echo tag (instance, perception anchor) uses. Each caller computes its own tag text.</summary>
+    /// <param name="text">The bracketed echo to tag.</param>
+    /// <param name="tag">The tag text, without surrounding brackets or the leading space.</param>
+    /// <returns>The tagged echo, or <paramref name="text"/> unchanged.</returns>
+    public static string SpliceTag(string text, string tag) =>
+        (text.EndsWith(value: ']')
+            ? $"{text[..^1]} {tag}]"
+            : text
+        );
 }

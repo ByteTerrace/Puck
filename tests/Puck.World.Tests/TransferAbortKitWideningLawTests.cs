@@ -180,19 +180,7 @@ public sealed class TransferAbortKitWideningLawTests {
             StateRaw = new WorldStateSection(
                 World: [
                     .. Fixtures.BuildDocument().State,
-                    new WorldStateRow(
-                        Name: WorldCellName.Parse(candidate: "medium"),
-                        Kind: CellKind.Fixed,
-                        Lattice: new WorldStateLatticeTrait(
-                            Topology: "world",
-                            Initial: 1f,
-                            Min: 0f,
-                            Max: 1f,
-                            HeightScale: 5f,
-                            Color: "#3B7BD6",
-                            Medium: new WorldLatticeMedium()
-                        )
-                    ),
+                    Fixtures.MediumRow(),
                 ],
                 Identity: [new ActionStateSlot(Name: "surgeCounter", Kind: ActionStateKind.Counter, Initial: 0f)],
                 Lattices: [

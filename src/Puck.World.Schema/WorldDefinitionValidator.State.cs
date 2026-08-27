@@ -4,10 +4,6 @@ using Puck.Maths;
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
-    /// <summary>Describes the authored spelling of a source shape, for a refusal message.</summary>
-    private static string DescribeGeneratorSource(WorldGeneratorSource source) =>
-        (char.ToLowerInvariant(c: source.ToString()[0]) + source.ToString()[1..]);
-    private static string DescribeKind(CellKind kind) => kind.ToString().ToLowerInvariant();
     // Fixed-kind values speak DECIMAL in refusal text — never the raw Q48.16 bit pattern — matching the document
     // JSON, console verb, and read-back conventions the same value crosses.
     private static string DescribeValue(CellKind kind, long raw) =>
@@ -29,7 +25,7 @@ public static partial class WorldDefinitionValidator {
         }
 
         if (!numeric) {
-            errors.Add(item: $"{path} ('{row.Name}') declares advance on a {DescribeKind(kind: row.Kind)} row — only int/fixed rows accumulate.");
+            errors.Add(item: $"{path} ('{row.Name}') declares advance on a {WorldRefusalSpelling.Kind(kind: row.Kind)} row — only int/fixed rows accumulate.");
         }
 
         if (advance.RateDenominator <= 0) {
@@ -66,7 +62,7 @@ public static partial class WorldDefinitionValidator {
         }
 
         if (!numeric) {
-            errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares advance on a {DescribeKind(kind: row.Kind)} cell — only int/fixed cells accumulate.");
+            errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares advance on a {WorldRefusalSpelling.Kind(kind: row.Kind)} cell — only int/fixed cells accumulate.");
         }
 
         if (advance.RateDenominator <= 0) {
@@ -95,7 +91,7 @@ public static partial class WorldDefinitionValidator {
         }
 
         if (!numeric) {
-            errors.Add(item: $"{path} ('{row.Name}') declares dynamics on a {DescribeKind(kind: row.Kind)} row — only int/fixed rows ease.");
+            errors.Add(item: $"{path} ('{row.Name}') declares dynamics on a {WorldRefusalSpelling.Kind(kind: row.Kind)} row — only int/fixed rows ease.");
         }
 
         RequireDeclared(
@@ -130,7 +126,7 @@ public static partial class WorldDefinitionValidator {
         }
 
         if (!numeric) {
-            errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares dynamics on a {DescribeKind(kind: row.Kind)} cell — only int/fixed cells ease.");
+            errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares dynamics on a {WorldRefusalSpelling.Kind(kind: row.Kind)} cell — only int/fixed cells ease.");
         }
 
         RequireDeclared(
@@ -462,11 +458,11 @@ public static partial class WorldDefinitionValidator {
         // set of values that could mislead.
         if (generator.Source != WorldGeneratorSource.Markov) {
             if (generator.Bound != WorldGenerator.DefaultBound) {
-                errors.Add(item: $"{path}.source={DescribeGeneratorSource(source: generator.Source)} declares bound {generator.Bound} — a numeric source is always exactly ONE draw, and 'bound' belongs to source=markov.");
+                errors.Add(item: $"{path}.source={WorldRefusalSpelling.GeneratorSource(source: generator.Source)} declares bound {generator.Bound} — a numeric source is always exactly ONE draw, and 'bound' belongs to source=markov.");
             }
 
             if (generator.Mode != WorldGeneratorMode.WithReplacement) {
-                errors.Add(item: $"{path}.source={DescribeGeneratorSource(source: generator.Source)} declares mode={generator.Mode.ToString().ToLowerInvariant()} — a numeric source never deals, and 'mode' belongs to source=markov.");
+                errors.Add(item: $"{path}.source={WorldRefusalSpelling.GeneratorSource(source: generator.Source)} declares mode={generator.Mode.ToString().ToLowerInvariant()} — a numeric source never deals, and 'mode' belongs to source=markov.");
             }
         }
 
@@ -699,7 +695,7 @@ public static partial class WorldDefinitionValidator {
                 !numeric &&
                 ((row.Min is not null) || (row.Max is not null))
             ) {
-                errors.Add(item: $"{path} ('{row.Name}') declares min/max on a {DescribeKind(kind: row.Kind)} row — only int/fixed rows carry a range.");
+                errors.Add(item: $"{path} ('{row.Name}') declares min/max on a {WorldRefusalSpelling.Kind(kind: row.Kind)} row — only int/fixed rows carry a range.");
             } else if ((row.Min is null) != (row.Max is null)) {
                 errors.Add(item: $"{path} declares only one of min/max — a range is authored as a pair or not at all.");
             } else if (
@@ -720,7 +716,7 @@ public static partial class WorldDefinitionValidator {
                 !numeric &&
                 row.NonNegative
             ) {
-                errors.Add(item: $"{path} ('{row.Name}') declares nonNegative on a {DescribeKind(kind: row.Kind)} row — only int/fixed rows carry a floor.");
+                errors.Add(item: $"{path} ('{row.Name}') declares nonNegative on a {WorldRefusalSpelling.Kind(kind: row.Kind)} row — only int/fixed rows carry a floor.");
             }
 
             // GatesDrive is the composition-lane's drive-admission gate (WorldGrants.TryGetDriveGate) — a nonzero

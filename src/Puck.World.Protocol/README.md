@@ -72,7 +72,13 @@ vocabulary insert/eject/select/options/link/unlink, each CAS-pinned where it
 names on-disk content), and `WorldSubmissionResult.cs`.
 
 `WorldSubmissionCodec.cs` is the single encoder/decoder owner for each of the
-thirteen payload leaves. `WorldFrameCodec.cs` wraps a leaf as little-endian
+thirteen payload leaves. `WorldWireCodec.cs` holds the leaf layouts it shares
+byte for byte with `Puck.World.Server`'s `.puckreplay` tape, authority
+checkpoint, and federation frames — nullable string, channel vector,
+`IntentSource`, `WorldPrincipal`. Each layout carries two overloads, one over
+`BinaryReader`/`BinaryWriter` and one over `Puck.Networking`'s
+`WireReader`/`WireWriter`, because the framing differs while the bytes do not;
+both are `Try`-shaped so each codec raises its own refusal in its own wording. `WorldFrameCodec.cs` wraps a leaf as little-endian
 `[u32 following-length][u8 kind][payload]` with a hard per-kind cap over
 `Puck.Networking`'s transport-neutral frame grammar; malformed caller state
 and bytes return a `WorldCodecRefusal` name. Loopback always round-trips

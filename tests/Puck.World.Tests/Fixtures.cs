@@ -7,6 +7,7 @@ using Xunit;
 using Puck.Assets.Documents;
 using Puck.Forge.Authoring;
 using Puck.Hosting;
+using Puck.Maths;
 using Puck.SignedDistance;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -644,6 +645,75 @@ internal static class Fixtures {
         } catch (IOException) {
         }
     }
+
+    /// <summary>The test double for <see cref="IWorldFieldLatticeHost"/>: every hook defaults to the same
+    /// no-op/zero <see cref="WorldFieldLattice.Step"/> itself falls back to when a caller omits a delegate.</summary>
+    public sealed class LambdaHost(
+        Func<int, FixedVector3?>? bodyPosition = null,
+        Func<WorldStateHandle, int, ulong, long>? readTag = null,
+        Action<WorldStateHandle, int, long, ulong>? writeTag = null,
+        Func<WorldStateHandle, ulong, FixedQ4816>? readScalar = null,
+        Action<WorldStateHandle, FixedQ4816, ulong>? addScalar = null
+    ) : IWorldFieldLatticeHost {
+        public FixedVector3? BodyPosition(int body) => bodyPosition?.Invoke(body);
+        public long ReadTag(WorldStateHandle row, int body, ulong tick) => (readTag?.Invoke(row, body, tick) ?? 0L);
+        public void WriteTag(WorldStateHandle row, int body, long value, ulong tick) => writeTag?.Invoke(row, body, value, tick);
+        public FixedQ4816 ReadScalar(WorldStateHandle row, ulong tick) => (readScalar?.Invoke(row, tick) ?? FixedQ4816.Zero);
+        public void AddScalar(WorldStateHandle row, FixedQ4816 amount, ulong tick) => addScalar?.Invoke(row, amount, tick);
+    }
+
+    /// <summary>Advances one <see cref="WorldFieldLattice"/> a single tick with no bodies, against
+    /// <paramref name="host"/> or an all-default <see cref="LambdaHost"/>.</summary>
+    public static void StepLattice(WorldFieldLattice lattice, IWorldFieldLatticeHost? host = null) => lattice.Step(
+        tick: 1,
+        bodyCount: 0,
+        host: (host ?? new LambdaHost())
+    );
+
+    /// <summary>Compiles <paramref name="document"/> (plus any extra world <paramref name="state"/> rows) into a
+    /// <see cref="WorldFieldLattice"/> the way a booted world would.</summary>
+    public static WorldFieldLattice BuildLattice(
+        WorldFieldsSection document,
+        ulong worldSeed = 0UL,
+        IReadOnlyList<WorldStateRow>? state = null
+    ) {
+        var section = WorldFieldsSection.ToStateSection(composite: document);
+
+        if (state is { Count: > 0 }) {
+            section = section with { World = [.. (section.World ?? []), .. state] };
+        }
+
+        var catalog = WorldStateCatalog.Compile(section: section);
+
+        return new WorldFieldLattice(
+            document: document,
+            program: WorldFieldProgram.Compile(document: document, state: catalog),
+            worldSeed: worldSeed
+        );
+    }
+
+    /// <summary>The document spelling of a composite: state.lattices topology + one lattice-shaped row per
+    /// composite row — what <c>with { Fields = ... }</c> said before the fold made Fields a compiled view of the
+    /// state section.</summary>
+    public static WorldDefinition WithLattice(WorldDefinition definition, WorldFieldsSection composite) =>
+        (definition with { StateRaw = WorldFieldsSection.ToStateSection(composite: composite) });
+
+    /// <summary>The swim-floatable medium row a swim-kit fixture splices into its <c>state.world</c>: a
+    /// full-value lattice row over <paramref name="topology"/> whose <paramref name="heightScale"/> places the free
+    /// surface at that Y — the level the retired global waterline section floated bodies against.</summary>
+    public static WorldStateRow MediumRow(string topology = "world", string name = "medium", float heightScale = 5f) => new(
+        Name: WorldCellName.Parse(candidate: name),
+        Kind: CellKind.Fixed,
+        Lattice: new WorldStateLatticeTrait(
+            Topology: topology,
+            Initial: 1f,
+            Min: 0f,
+            Max: 1f,
+            HeightScale: heightScale,
+            Color: "#3B7BD6",
+            Medium: new WorldLatticeMedium()
+        )
+    );
 }
 /// <summary>A fresh, disposable <see cref="WorldServer"/> plus the resources its construction owns
 /// (<see cref="WorldMachineHost"/>, the scratch profile-catalog directory) — bundled so a law body drives the

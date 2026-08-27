@@ -5,6 +5,9 @@ using Puck.Physics.Motion;
 namespace Puck.World.Server;
 
 public sealed partial class WorldPopulation {
+    private static readonly Func<WorldKit, string> KitRowName = static kit => kit.Name;
+    private static readonly Func<WorldLook, string> LookRowName = static look => look.Name;
+
     // Compile the definition's sim-affecting sections to the fixed-point tables runtime simulation reads: the profileless
     // motion tuning, kit producer parameters, kit rows and their fixed compilations, and the resolved seat-kit row. Shared by the
     // constructor and Rebuild so a live retune quantizes through exactly the same path.
@@ -287,17 +290,8 @@ public sealed partial class WorldPopulation {
             return 0;
         }
 
-        for (var kit = 0; (kit < m_kitRows.Count); kit++) {
-            if (string.Equals(
-                a: m_kitRows[kit].Name,
-                b: name,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return ((byte)kit);
-            }
-        }
-
-        throw new InvalidOperationException(message: $"No kit row named '{name}' in the world definition.");
+        return (ResolveKitOrNull(name: name)
+            ?? throw new InvalidOperationException(message: $"No kit row named '{name}' in the world definition."));
     }
     // The kit row a population index actually runs: a local seat (0..LocalSeatCount) always reads the resolved seat
     // kit (m_seatKit), never its entry's own KitIndex — the seat kit can differ from a seat entry's assigned row on a
@@ -307,33 +301,14 @@ public sealed partial class WorldPopulation {
         ? m_seatKit
         : m_entries[index].KitIndex
     );
-    private byte? ResolveKitOrNull(string name) {
-        for (var kit = 0; (kit < m_kitRows.Count); kit++) {
-            if (string.Equals(
-                a: m_kitRows[kit].Name,
-                b: name,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return ((byte)kit);
-            }
-        }
-
-        return null;
-    }
+    private byte? ResolveKitOrNull(string name) => ResolveRowIndex(
+        name: name,
+        nameOf: KitRowName,
+        rows: m_kitRows
+    );
     // The look row index a kebab name resolves to. The validator gates unknown names at startup / apply.
-    private byte ResolveLook(string name) {
-        for (var look = 0; (look < m_lookRows.Count); look++) {
-            if (string.Equals(
-                a: m_lookRows[look].Name,
-                b: name,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return ((byte)look);
-            }
-        }
-
-        throw new InvalidOperationException(message: $"No look row named '{name}' in the world definition.");
-    }
+    private byte ResolveLook(string name) => (ResolveLookOrNull(name: name)
+        ?? throw new InvalidOperationException(message: $"No look row named '{name}' in the world definition."));
     // Resolve every entry's LookIndex from the definition's authored sequence and row view.
     private void ResolveLookIndices(WorldDefinition definition) {
         m_lookAssignmentRows = ResolveRows(
@@ -350,14 +325,21 @@ public sealed partial class WorldPopulation {
             );
         }
     }
-    private byte? ResolveLookOrNull(string name) {
-        for (var look = 0; (look < m_lookRows.Count); look++) {
+    private byte? ResolveLookOrNull(string name) => ResolveRowIndex(
+        name: name,
+        nameOf: LookRowName,
+        rows: m_lookRows
+    );
+    // The one ordinal name search every named row table resolves through, so a kit lookup and a look lookup can never
+    // disagree on what "the same name" means. Cached nameOf delegates keep the call allocation-free.
+    private static byte? ResolveRowIndex<TRow>(IReadOnlyList<TRow> rows, string name, Func<TRow, string> nameOf) {
+        for (var row = 0; (row < rows.Count); row++) {
             if (string.Equals(
-                a: m_lookRows[look].Name,
+                a: nameOf(arg: rows[row]),
                 b: name,
                 comparisonType: StringComparison.Ordinal
             )) {
-                return ((byte)look);
+                return ((byte)row);
             }
         }
 

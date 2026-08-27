@@ -1,7 +1,4 @@
 using System.Buffers;
-using System.Text.Json;
-using System.Text.Json.Serialization;
-using Puck.Abstractions.Documents;
 
 namespace Puck.World;
 
@@ -209,50 +206,26 @@ public readonly record struct WorldCellName {
 
 /// <summary>Reads/writes <see cref="WorldSafeName"/> as its plain string — refusing on read, by name, exactly like
 /// <see cref="WorldSafeName.TryParse"/>, so a document holding one can never carry an unsafe id.</summary>
-internal sealed class WorldSafeNameJsonConverter : JsonConverter<WorldSafeName>, IJsonSchemaStringConverter {
-    // Free-form (validated at parse by WorldSafeName.TryParse, not by a fixed token set) — "type":"string" alone,
-    // no "enum". See IJsonSchemaStringConverter's own remarks for why null means this rather than "unconstrained".
-    public IReadOnlyList<string>? SchemaTokens => null;
-
-    public override WorldSafeName Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
-        var token = ((reader.TokenType == JsonTokenType.String)
-            ? reader.GetString()
-            : null
-        );
-
-        return (WorldSafeName.TryParse(
-            candidate: token,
-            name: out var name,
-            reason: out var reason
-        )
-            ? name
-            : throw new JsonException(message: $"'{token}' {reason}.")
-        );
-    }
-    public override void Write(Utf8JsonWriter writer, WorldSafeName value, JsonSerializerOptions options) => writer.WriteStringValue(value: value.Value);
+internal sealed class WorldSafeNameJsonConverter : TryParseStringJsonConverter<WorldSafeName> {
+    /// <inheritdoc/>
+    protected override bool TryParse(string? candidate, out WorldSafeName value, out string reason) => WorldSafeName.TryParse(
+        candidate: candidate,
+        name: out value,
+        reason: out reason
+    );
+    /// <inheritdoc/>
+    protected override string ToValue(WorldSafeName value) => value.Value;
 }
 /// <summary>Reads/writes <see cref="WorldCellName"/> as its plain string — refusing on read, by name, exactly like
 /// <see cref="WorldCellName.TryParse"/>, so a document holding one can never carry a dotted or unsafe row/cell
 /// name.</summary>
-internal sealed class WorldCellNameJsonConverter : JsonConverter<WorldCellName>, IJsonSchemaStringConverter {
-    // Free-form (validated at parse by WorldCellName.TryParse, not by a fixed token set) — "type":"string" alone,
-    // matching WorldSafeNameJsonConverter's own reasoning.
-    public IReadOnlyList<string>? SchemaTokens => null;
-
-    public override WorldCellName Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
-        var token = ((reader.TokenType == JsonTokenType.String)
-            ? reader.GetString()
-            : null
-        );
-
-        return (WorldCellName.TryParse(
-            candidate: token,
-            name: out var name,
-            reason: out var reason
-        )
-            ? name
-            : throw new JsonException(message: $"'{token}' {reason}.")
-        );
-    }
-    public override void Write(Utf8JsonWriter writer, WorldCellName value, JsonSerializerOptions options) => writer.WriteStringValue(value: value.Value);
+internal sealed class WorldCellNameJsonConverter : TryParseStringJsonConverter<WorldCellName> {
+    /// <inheritdoc/>
+    protected override bool TryParse(string? candidate, out WorldCellName value, out string reason) => WorldCellName.TryParse(
+        candidate: candidate,
+        name: out value,
+        reason: out reason
+    );
+    /// <inheritdoc/>
+    protected override string ToValue(WorldCellName value) => value.Value;
 }

@@ -55,11 +55,6 @@ public static class WorldGeneratorEngine {
     /// (every numeric source, and a Markov source under <see cref="WorldGeneratorMode.WithReplacement"/>).</param>
     public readonly record struct FireResult(string? Text, long? Numeric, long Samples, IReadOnlyList<long>? Decks);
 
-    /// <summary>Describes the authored spelling of a cell kind, for a refusal message.</summary>
-    private static string DescribeKind(CellKind kind) => kind.ToString().ToLowerInvariant();
-    /// <summary>Describes the authored spelling of a source shape, for a refusal message.</summary>
-    private static string DescribeSource(WorldGeneratorSource source) =>
-        (char.ToLowerInvariant(c: source.ToString()[0]) + source.ToString()[1..]);
     // Each VARIABLE-LENGTH ladder rung folds its LENGTH before its content, so two different rung sequences can never
     // present the same byte stream to the hash; the fixed-width rungs added directly are self-delimiting (see this
     // type's remarks).
@@ -249,7 +244,7 @@ public static class WorldGeneratorEngine {
                 return true;
             }
 
-            reason = $"source={DescribeSource(source: source)} writes text, but the site is kind={DescribeKind(kind: targetKind)}";
+            reason = $"source={WorldRefusalSpelling.GeneratorSource(source: source)} writes text, but the site is kind={WorldRefusalSpelling.Kind(kind: targetKind)}";
 
             return false;
         }
@@ -260,7 +255,7 @@ public static class WorldGeneratorEngine {
             return true;
         }
 
-        reason = $"source={DescribeSource(source: source)} writes a numeric value, but the site is kind={DescribeKind(kind: targetKind)}";
+        reason = $"source={WorldRefusalSpelling.GeneratorSource(source: source)} writes a numeric value, but the site is kind={WorldRefusalSpelling.Kind(kind: targetKind)}";
 
         return false;
     }

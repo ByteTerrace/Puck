@@ -4,6 +4,21 @@ namespace Puck.AdvancedGamingBrick;
 
 /// <summary>Folds a neutral controller image into the Advanced GamingBrick's active-low KEYINPUT register.</summary>
 internal static class AdvancedPad {
+    /// <summary>Applies one recorded pad image to a machine's input devices: the KEYINPUT image plus the recorded solar
+    /// light level and tilt sample. The authoritative core and its lookahead fork drive this one seam, so the predicted
+    /// branch applies the SAME full input image the authority does; the sensor writes are no-ops on a cartridge with no
+    /// matching sensor.</summary>
+    /// <param name="pad">The neutral controller image.</param>
+    /// <param name="machine">The machine whose KEYINPUT register the pad drives.</param>
+    /// <param name="cartridge">The cartridge carrying the sensor channels.</param>
+    public static void Apply(in MachinePadState pad, AdvancedGamingBrickMachine machine, AgbCartridge cartridge) {
+        machine.SetKeyInput(keys: ToKeyInput(pad: in pad));
+        cartridge.SetLightLevel(level: pad.LightLevel);
+        cartridge.SetTilt(
+            x: pad.Tilt.X,
+            y: pad.Tilt.Y
+        );
+    }
     /// <summary>Maps the supported face, system, shoulder, d-pad, and left-stick channels to KEYINPUT.</summary>
     public static ushort ToKeyInput(in MachinePadState pad) {
         var keys = 0x03FF;

@@ -507,7 +507,7 @@ internal sealed class WorldPlacementCommandModule(WorldServer server, WorldPopul
     // instance (null): its own echoes carry no tag.
     private static string WithInstanceTag(string text, WorldInstance? instance) =>
         ((instance is not null)
-            ? WorldArgs.SpliceTag(
+            ? CommandEcho.SpliceTag(
                 text: text,
                 tag: $"instance:{instance.Name}"
             )

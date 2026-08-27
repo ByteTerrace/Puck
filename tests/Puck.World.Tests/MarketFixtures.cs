@@ -24,39 +24,39 @@ internal static class MarketFixtures {
     public const long SellerStartingApples = 10;
     public const long SellerStartingGold = 500;
 
-    /// <summary>Builds the market-flavored document: <see cref="Fixtures.BuildDocument"/> plus the <c>gold</c>/<c>apple</c>
-    /// state rows and a <c>market</c> section admitting both formats.</summary>
-    public static WorldDefinition BuildDocument() {
-        var gold = new WorldStateRow(
-            Name: GoldRow,
-            Kind: CellKind.Int,
-            Capacity: 128,
-            NonNegative: true,
-            Cells: [
-                new WorldStateCell(Key: WorldCellName.Parse(candidate: "0"), Value: SellerStartingGold),
-                new WorldStateCell(Key: WorldCellName.Parse(candidate: "1"), Value: BidderStartingGold),
-                new WorldStateCell(Key: WorldCellName.Parse(candidate: "2"), Value: BidderStartingGold),
-            ]
-        );
-
-        var apple = new WorldStateRow(
-            Name: AppleRow,
-            Kind: CellKind.Int,
-            Capacity: 128,
-            NonNegative: true,
-            Cells: [
-                new WorldStateCell(Key: WorldCellName.Parse(candidate: "0"), Value: SellerStartingApples),
-            ]
-        );
-
-        var market = new WorldMarketSection(
+    /// <summary>Builds one keyed-Int market row — the shape every market fixture shares — carrying
+    /// <paramref name="balances"/> keyed by 0-based holder index.</summary>
+    public static WorldStateRow HolderRow(WorldCellName name, params long[] balances) => new(
+        Name: name,
+        Kind: CellKind.Int,
+        Capacity: 128,
+        NonNegative: true,
+        Cells: [.. balances.Select(selector: static (value, index) => new WorldStateCell(
+            Key: WorldCellName.Parse(candidate: index.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)),
+            Value: value
+        ))]
+    );
+    /// <summary>Builds the <c>market</c> section every market fixture shares: both formats admitted, the fixture
+    /// duration window, and the schema's own retention default unless <paramref name="retentionSeconds"/> names
+    /// one.</summary>
+    public static WorldMarketSection Section(int feeBasisPoints = FeeBasisPoints, float? retentionSeconds = null) {
+        var section = new WorldMarketSection(
             Formats: [WorldMarketFormat.English, WorldMarketFormat.Buyout],
-            FeeBasisPoints: FeeBasisPoints,
+            FeeBasisPoints: feeBasisPoints,
             MinDurationSeconds: MinDurationSeconds,
             MaxDurationSeconds: MaxDurationSeconds
         );
 
-        return (Fixtures.BuildDocument().WithWorldState(rows: [gold, apple]) with { Market = market });
+        return ((retentionSeconds is float seconds) ? (section with { RetentionSeconds = seconds }) : section);
+    }
+    /// <summary>Builds the market-flavored document: <see cref="Fixtures.BuildDocument"/> plus the <c>gold</c>/<c>apple</c>
+    /// state rows and a <c>market</c> section admitting both formats. <paramref name="bidderStartingGold"/> sets
+    /// seat 1's balance alone; seat 2 always holds <see cref="BidderStartingGold"/>.</summary>
+    public static WorldDefinition BuildDocument(long bidderStartingGold = BidderStartingGold) {
+        var gold = HolderRow(name: GoldRow, balances: [SellerStartingGold, bidderStartingGold, BidderStartingGold]);
+        var apple = HolderRow(name: AppleRow, balances: [SellerStartingApples]);
+
+        return (Fixtures.BuildDocument().WithWorldState(rows: [gold, apple]) with { Market = Section() });
     }
     /// <summary>Reads a principal's cell value out of a keyed state row, defaulting to zero when the row declares no
     /// cell for that holder — the same convention the market compose arms themselves read through.</summary>

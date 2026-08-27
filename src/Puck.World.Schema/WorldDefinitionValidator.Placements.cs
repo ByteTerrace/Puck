@@ -1444,17 +1444,13 @@ public static partial class WorldDefinitionValidator {
     // boot; Puck.World.WorldInstanceHost resolves it against the destination's delivered definition at transfer
     // time (see WorldPortalCounterpart).
     private static void ValidatePortal(WorldPlacementPortal portal, HashSet<string> destinationNames, string path, List<string> errors) {
-        if (
-            string.IsNullOrWhiteSpace(value: portal.Destination) ||
-            !destinationNames.Contains(item: portal.Destination)
-        ) {
-            errors.Add(item: ((destinationNames.Count > 0)
-                ? $"{path}.destination '{portal.Destination}' names no destinations row; the world declares: {string.Join(
-                    separator: ", ",
-                    values: destinationNames
-                )}."
-                : $"{path}.destination '{portal.Destination}' names no destinations row; the world declares none."));
-        }
+        RequireDeclaredListing(
+            declaredSet: destinationNames,
+            errors: errors,
+            rowNoun: "destinations row",
+            subject: $"{path}.destination '{portal.Destination}'",
+            value: portal.Destination
+        );
 
         if (portal.Arrival == WorldPortalArrival.Mapped) {
             if (string.IsNullOrWhiteSpace(value: portal.Counterpart)) {

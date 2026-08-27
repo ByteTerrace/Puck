@@ -219,7 +219,7 @@ public static class WorldSubmissionCodec {
             1 => new WorldCommand.EnqueueSegment(
             Principal: principal,
             EntityIndex: entity,
-            Intent: ReadIntent(reader: reader),
+            Intent: WorldWireCodec.ReadIntent(reader: reader),
             Seconds: reader.ReadSingle()
         ),
             2 => new WorldCommand.PressChannel(
@@ -349,57 +349,40 @@ public static class WorldSubmissionCodec {
             static r => new DocumentWriteMask(Bits: r.ReadUInt64())
         )
     );
-    private static PlayerIntent ReadIntent(BinaryReader reader) {
-        var intent = default(PlayerIntent);
-
-        for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
-            intent = intent.WithChannel(
-                ordinal: ordinal,
-                value: new FixedQ4816(Value: reader.ReadInt64())
-            );
+    private static IntentSource ReadIntentSource(BinaryReader reader) {
+        if (!WorldWireCodec.TryReadIntentSource(
+            reader: reader,
+            source: out var source,
+            wire: out var value
+        )) {
+            throw new LeafCodecException(failure: Fail(
+                WorldCodecRefusal.EnumValueUnknown,
+                $"{nameof(IntentSource)} wire value {value} is not declared"
+            ));
         }
-        return intent;
+
+        return source;
     }
-    private static IntentSource ReadIntentSource(BinaryReader reader) => reader.ReadByte() switch {
-        0 => IntentSource.Live,
-        1 => IntentSource.Idle,
-        2 => IntentSource.Producer(name: reader.ReadString()),
-        var value => throw new LeafCodecException(failure: Fail(
-        WorldCodecRefusal.EnumValueUnknown,
-        $"{nameof(IntentSource)} wire value {value} is not declared"
-    )),
-    };
     private static UInt128 ReadKindMaskBits(BinaryReader reader) {
         var low = reader.ReadUInt64();
 
         return (((UInt128)reader.ReadUInt64()) << 64) | low;
     }
-    private static string? ReadNullableString(BinaryReader reader) => (reader.ReadBoolean()
-        ? reader.ReadString()
-        : null
-    );
     private static T? ReadOptional<T>(BinaryReader reader, Func<BinaryReader, T> read) where T : struct => (reader.ReadBoolean()
         ? read(reader)
         : null
     );
     private static WorldPrincipal ReadPrincipal(BinaryReader reader) {
-        var wireKind = reader.ReadByte();
-
-        if (!WorldWireTags.TryFromWire(
-            value: out PrincipalKind kind,
-            wire: wireKind
+        if (!WorldWireCodec.TryReadPrincipal(
+            reader: reader,
+            principal: out var principal,
+            kindWire: out var wireKind
         )) {
             throw new LeafCodecException(failure: Fail(
                 WorldCodecRefusal.EnumValueUnknown,
                 $"{nameof(PrincipalKind)} wire value {wireKind} is not declared"
             ));
         }
-        var principal = new WorldPrincipal(
-            Kind: kind,
-            Index: reader.ReadInt32(),
-            Generation: reader.ReadInt32(),
-            Name: ReadNullableString(reader: reader)
-        );
         // Reuse the write-side shape ruling without exposing an exception to the caller.
         using var sink = new MemoryStream();
         using var writer = new BinaryWriter(output: sink);
@@ -413,8 +396,8 @@ public static class WorldSubmissionCodec {
     private static WorldRebuildRequest ReadRebuild(BinaryReader reader) {
         var kind = RebuildKindFromWire(value: reader.ReadByte());
         var force = reader.ReadBoolean();
-        var pathHint = ReadNullableString(reader: reader);
-        var contentHash = ReadNullableString(reader: reader);
+        var pathHint = WorldWireCodec.ReadNullableString(reader: reader);
+        var contentHash = WorldWireCodec.ReadNullableString(reader: reader);
         var hasDefinition = reader.ReadBoolean();
         WorldDefinition? definition = null;
 
@@ -493,8 +476,8 @@ public static class WorldSubmissionCodec {
                 field: "Insert.ContentPath",
                 reader: reader
             ),
-            EngineId: ReadNullableString(reader: reader),
-            Options: ReadNullableString(reader: reader)
+            EngineId: WorldWireCodec.ReadNullableString(reader: reader),
+            Options: WorldWireCodec.ReadNullableString(reader: reader)
         ),
             1 => new WorldScreenOp.Eject(Index: reader.ReadInt32()),
             2 => new WorldScreenOp.Select(
@@ -503,7 +486,7 @@ public static class WorldSubmissionCodec {
         ),
             3 => new WorldScreenOp.SetOptions(
             Index: reader.ReadInt32(),
-            Options: ReadNullableString(reader: reader)
+            Options: WorldWireCodec.ReadNullableString(reader: reader)
         ),
             4 => ReadScreenOpLink(reader: reader),
             5 => new WorldScreenOp.Unlink(Name: ReadRequiredString(
@@ -587,7 +570,7 @@ public static class WorldSubmissionCodec {
         return new GrantSubject(
             Kind: kind,
             Value: value,
-            Id: ReadNullableString(reader: reader)
+            Id: WorldWireCodec.ReadNullableString(reader: reader)
         );
     }
     private static Vector3 ReadVector(BinaryReader reader) => new(
@@ -949,9 +932,9 @@ public static class WorldSubmissionCodec {
                     writer: writer
                 ); break;
             case WorldCommand.EnqueueSegment value:
-                writer.Write(value: ((byte)1)); WriteIntent(
-                    writer,
-                    value.Intent
+                writer.Write(value: ((byte)1)); WorldWireCodec.WriteIntent(
+                    intent: value.Intent,
+                    writer: writer
                 ); writer.Write(value: value.Seconds); break;
             case WorldCommand.PressChannel value:
                 writer.Write(value: ((byte)2)); writer.Write(value: value.ChannelOrdinal); writer.Write(value: value.Value.Value); WriteOptional(
@@ -1056,20 +1039,11 @@ public static class WorldSubmissionCodec {
             static (w, value) => w.Write(value: value.Bits)
         );
     }
-    private static void WriteIntent(BinaryWriter writer, PlayerIntent intent) {
-        for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
-            writer.Write(value: intent[ordinal].Value);
-        }
-    }
     private static void WriteIntentSource(BinaryWriter writer, IntentSource value) {
-        if (value.IsLive) {
-            writer.Write(value: ((byte)0));
-        } else if (value.IsIdle) {
-            writer.Write(value: ((byte)1));
-        } else if (value.ProducerName is { } name) {
-            writer.Write(value: ((byte)2));
-            writer.Write(value: name);
-        } else {
+        if (!WorldWireCodec.TryWriteIntentSource(
+            source: value,
+            writer: writer
+        )) {
             throw new LeafCodecException(failure: Fail(
                 WorldCodecRefusal.EnumValueUnknown,
                 $"{nameof(IntentSource)} '{value}' is not declared"
@@ -1085,12 +1059,6 @@ public static class WorldSubmissionCodec {
     private static void WriteKindMaskBits(BinaryWriter writer, UInt128 bits) {
         writer.Write(value: ((ulong)bits));
         writer.Write(value: ((ulong)(bits >> 64)));
-    }
-    private static void WriteNullableString(BinaryWriter writer, string? value) {
-        writer.Write(value: (value is not null));
-        if (value is not null) {
-            writer.Write(value: value);
-        }
     }
     private static void WriteOptional<T>(BinaryWriter writer, T? value, Action<BinaryWriter, T> write) where T : struct {
         writer.Write(value: value.HasValue);
@@ -1118,22 +1086,15 @@ public static class WorldSubmissionCodec {
         // group IS a legitimate grant TARGET on the runtime leaf: world.grant group:<id> ... round-trips through
         // this identical loopback codec path even for a local submission. A group never ACTS, so this value is
         // only ever reached as WorldGrant.Principal, never as an envelope's own actor.
-        if (!WorldWireTags.TryToWire(
-            value: principal.Kind,
-            wire: out var kindWire
+        if (!WorldWireCodec.TryWritePrincipal(
+            principal: principal,
+            writer: writer
         )) {
             throw new LeafCodecException(failure: Fail(
                 WorldCodecRefusal.EnumValueUnknown,
                 $"{nameof(PrincipalKind)}.{principal.Kind} has no LIVE wire value — a {principal.Describe()} row is authored with world.grant.set (the document's Grants section, read by the cross-document write-back channel), never granted into the runtime table where nothing would read it"
             ));
         }
-        writer.Write(value: kindWire);
-        writer.Write(value: principal.Index);
-        writer.Write(value: principal.Generation);
-        WriteNullableString(
-            writer,
-            principal.Name
-        );
     }
     // The rebuild leaf's own tagged union: one discriminant byte for WorldRebuildKind, the force flag, an optional
     // path hint, an optional content-hash pin, then — Load/Reload only — the embedded document through the document's
@@ -1156,13 +1117,13 @@ public static class WorldSubmissionCodec {
         }
         writer.Write(value: RebuildKindToWire(value: request.Kind));
         writer.Write(value: request.Force);
-        WriteNullableString(
-            writer,
-            request.PathHint
+        WorldWireCodec.WriteNullableString(
+            value: request.PathHint,
+            writer: writer
         );
-        WriteNullableString(
-            writer,
-            request.ContentHash
+        WorldWireCodec.WriteNullableString(
+            value: request.ContentHash,
+            writer: writer
         );
         var hasDefinition = (request.Definition is not null);
 
@@ -1223,13 +1184,13 @@ public static class WorldSubmissionCodec {
                     value.ContentPath,
                     "Insert.ContentPath"
                 );
-                WriteNullableString(
-                    writer,
-                    value.EngineId
+                WorldWireCodec.WriteNullableString(
+                    value: value.EngineId,
+                    writer: writer
                 );
-                WriteNullableString(
-                    writer,
-                    value.Options
+                WorldWireCodec.WriteNullableString(
+                    value: value.Options,
+                    writer: writer
                 );
                 break;
             case WorldScreenOp.Eject value:
@@ -1244,9 +1205,9 @@ public static class WorldSubmissionCodec {
             case WorldScreenOp.SetOptions value:
                 writer.Write(value: ((byte)3));
                 writer.Write(value: value.Index);
-                WriteNullableString(
-                    writer,
-                    value.Options
+                WorldWireCodec.WriteNullableString(
+                    value: value.Options,
+                    writer: writer
                 );
                 break;
             case WorldScreenOp.Link value:
@@ -1317,9 +1278,9 @@ public static class WorldSubmissionCodec {
         } else {
             writer.Write(value: subject.Value);
         }
-        WriteNullableString(
-            writer,
-            subject.Id
+        WorldWireCodec.WriteNullableString(
+            value: subject.Id,
+            writer: writer
         );
     }
     private static void WriteVector(BinaryWriter writer, Vector3 value) { writer.Write(value: value.X); writer.Write(value: value.Y); writer.Write(value: value.Z); }

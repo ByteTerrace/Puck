@@ -10,24 +10,6 @@ namespace Puck.World.Tests;
 /// (including boundary spill), equilibrium under flat terrain, directional movement under a ramp, determinism, and
 /// the validator's refusals over its <c>over</c>/<c>spillRow</c> vocabulary.</summary>
 public sealed class WorldFieldFlowLawTests {
-    // The test double for IWorldFieldLatticeHost -- every hook defaults to the same no-op/zero
-    // WorldFieldLattice.Step itself falls back to when a caller omits a delegate.
-    private sealed class LambdaHost(
-        Action<WorldStateHandle, FixedQ4816, ulong>? addScalar = null
-    ) : IWorldFieldLatticeHost {
-        public FixedVector3? BodyPosition(int body) => null;
-        public long ReadTag(WorldStateHandle row, int body, ulong tick) => 0L;
-        public void WriteTag(WorldStateHandle row, int body, long value, ulong tick) { }
-        public FixedQ4816 ReadScalar(WorldStateHandle row, ulong tick) => FixedQ4816.Zero;
-        public void AddScalar(WorldStateHandle row, FixedQ4816 amount, ulong tick) => addScalar?.Invoke(row, amount, tick);
-    }
-
-    private static void Step(WorldFieldLattice lattice, LambdaHost? host = null) => lattice.Step(
-        tick: 1,
-        bodyCount: 0,
-        host: (host ?? new LambdaHost())
-    );
-
     // One field ("water", transported) and, when includeGround, a second static terrain field ("ground") the
     // reaction's `over` names. Both fields carry a [0, 100] envelope -- generous enough that the small whole-number
     // test fixtures below never bind a clamp (exact conservation depends on that), and within the maximumRaise
@@ -63,21 +45,6 @@ public sealed class WorldFieldFlowLawTests {
             ),
             Fields: fields,
             Reactions: [new WorldReaction.Flow(Field: "water", Rate: rate, Over: over, SpillRow: spillRow)]
-        );
-    }
-    private static WorldFieldLattice Lattice(WorldFieldsSection document, IReadOnlyList<WorldStateRow>? state = null) {
-        var section = WorldFieldsSection.ToStateSection(composite: document);
-
-        if (state is { Count: > 0 }) {
-            section = section with { World = [.. (section.World ?? []), .. state] };
-        }
-
-        var catalog = WorldStateCatalog.Compile(section: section);
-
-        return new WorldFieldLattice(
-            document: document,
-            program: WorldFieldProgram.Compile(document: document, state: catalog),
-            worldSeed: 0UL
         );
     }
     private static WorldFieldLattice.WorldFieldCheckpoint IntCheckpoint(params int[][] fieldsRaw) => new(
@@ -119,13 +86,13 @@ public sealed class WorldFieldFlowLawTests {
             }
         }
 
-        var lattice = Lattice(document: FlowFields(width: width, depth: depth));
+        var lattice = Fixtures.BuildLattice(document: FlowFields(width: width, depth: depth));
         lattice.Restore(checkpoint: IntCheckpoint(water, ground));
 
         var before = SumRaw(lattice: lattice, field: 0, cellCount: cells);
 
         for (var step = 0; (step < 20); step++) {
-            Step(lattice: lattice);
+            Fixtures.StepLattice(lattice: lattice);
         }
 
         var after = SumRaw(lattice: lattice, field: 0, cellCount: cells);
@@ -138,14 +105,14 @@ public sealed class WorldFieldFlowLawTests {
         const int width = 4;
         const int cells = width;
 
-        var lattice = Lattice(document: FlowFields(width: width, depth: 1));
+        var lattice = Fixtures.BuildLattice(document: FlowFields(width: width, depth: 1));
         lattice.Restore(checkpoint: IntCheckpoint([10, 0, 0, 0], [0, 0, 0, 0]));
 
         var values = Snapshot(lattice: lattice, field: 0, cellCount: cells);
         var gap = (values.Max() - values.Min());
 
         for (var step = 0; (step < 12); step++) {
-            Step(lattice: lattice);
+            Fixtures.StepLattice(lattice: lattice);
 
             var next = Snapshot(lattice: lattice, field: 0, cellCount: cells);
             var nextGap = (next.Max() - next.Min());
@@ -164,7 +131,7 @@ public sealed class WorldFieldFlowLawTests {
         const int width = 4;
 
         // waterHeightScale 0 isolates the terrain-driven direction from water's own self-leveling contribution.
-        var lattice = Lattice(document: FlowFields(width: width, depth: 1, waterHeightScale: 0f));
+        var lattice = Fixtures.BuildLattice(document: FlowFields(width: width, depth: 1, waterHeightScale: 0f));
         lattice.Restore(checkpoint: IntCheckpoint([8, 0, 0, 0], [6, 4, 2, 0]));
 
         long WeightedPosition() {
@@ -180,7 +147,7 @@ public sealed class WorldFieldFlowLawTests {
         var position = WeightedPosition();
 
         for (var step = 0; (step < 3); step++) {
-            Step(lattice: lattice);
+            Fixtures.StepLattice(lattice: lattice);
 
             var next = WeightedPosition();
 
@@ -201,15 +168,15 @@ public sealed class WorldFieldFlowLawTests {
             [1, 3, 0, 2, 1, 4, 0, 2, 3]
         );
 
-        var a = Lattice(document: FlowFields(width: width, depth: depth));
-        var b = Lattice(document: FlowFields(width: width, depth: depth));
+        var a = Fixtures.BuildLattice(document: FlowFields(width: width, depth: depth));
+        var b = Fixtures.BuildLattice(document: FlowFields(width: width, depth: depth));
 
         a.Restore(checkpoint: checkpoint);
         b.Restore(checkpoint: checkpoint);
 
         for (var step = 0; (step < 15); step++) {
-            Step(lattice: a);
-            Step(lattice: b);
+            Fixtures.StepLattice(lattice: a);
+            Fixtures.StepLattice(lattice: b);
 
             Assert.Equal(expected: Snapshot(lattice: b, field: 0, cellCount: cells), actual: Snapshot(lattice: a, field: 0, cellCount: cells));
         }
@@ -218,7 +185,7 @@ public sealed class WorldFieldFlowLawTests {
     [Fact]
     public void AnEdgeCellSpillsExactlyItsShareIntoSpillRowAndTheWholeSystemStillConserves() {
         var document = FlowFields(width: 2, depth: 1, waterHeightScale: 0f, includeGround: false, spillRow: "spill");
-        var lattice = Lattice(
+        var lattice = Fixtures.BuildLattice(
             document: document,
             state: [new WorldStateRow(Name: WorldCellName.Parse(candidate: "spill"), Kind: CellKind.Fixed)]
         );
@@ -230,7 +197,7 @@ public sealed class WorldFieldFlowLawTests {
         var spilled = FixedQ4816.Zero;
         var calls = 0;
 
-        Step(lattice: lattice, host: new LambdaHost(addScalar: (row, amount, _) => {
+        Fixtures.StepLattice(lattice: lattice, host: new Fixtures.LambdaHost(addScalar: (row, amount, _) => {
             written = row;
             spilled = amount;
             calls++;
@@ -246,19 +213,16 @@ public sealed class WorldFieldFlowLawTests {
         Assert.Equal(expected: FixedQ4816.FromInteger(value: 10).Value, actual: (SumRaw(lattice: lattice, field: 0, cellCount: 2) + spilled.Value));
     }
 
-    private static WorldDefinition WithLattice(WorldDefinition definition, WorldFieldsSection composite) =>
-        (definition with { StateRaw = WorldFieldsSection.ToStateSection(composite: composite) });
-
     [Fact]
     public void ValidatorRefusesAnUndeclaredOverFieldASelfReferencingOverEntryAndADuplicateOverEntry() {
-        var undeclared = WithLattice(definition: Fixtures.BuildDocument(), composite: FlowFields(width: 2, depth: 2) with {
+        var undeclared = Fixtures.WithLattice(definition: Fixtures.BuildDocument(), composite: FlowFields(width: 2, depth: 2) with {
             Fields = [new WorldFieldRow(Name: "water", Min: 0f, Max: 1f)],
             Reactions = [new WorldReaction.Flow(Field: "water", Rate: 1f, Over: ["missing"])],
         });
-        var selfReferencing = WithLattice(definition: Fixtures.BuildDocument(), composite: FlowFields(width: 2, depth: 2) with {
+        var selfReferencing = Fixtures.WithLattice(definition: Fixtures.BuildDocument(), composite: FlowFields(width: 2, depth: 2) with {
             Reactions = [new WorldReaction.Flow(Field: "water", Rate: 1f, Over: ["water"])],
         });
-        var duplicated = WithLattice(definition: Fixtures.BuildDocument(), composite: FlowFields(width: 2, depth: 2) with {
+        var duplicated = Fixtures.WithLattice(definition: Fixtures.BuildDocument(), composite: FlowFields(width: 2, depth: 2) with {
             Reactions = [new WorldReaction.Flow(Field: "water", Rate: 1f, Over: ["ground", "ground"])],
         });
 
@@ -274,8 +238,8 @@ public sealed class WorldFieldFlowLawTests {
 
     [Fact]
     public void ValidatorRefusesASpillRowThatIsNotADeclaredScalarFixedRow() {
-        var missing = WithLattice(definition: Fixtures.BuildDocument(), composite: FlowFields(width: 2, depth: 2, spillRow: "missing"));
-        var wrongShapeBase = WithLattice(definition: Fixtures.BuildDocument(), composite: FlowFields(width: 2, depth: 2, spillRow: "keyed"));
+        var missing = Fixtures.WithLattice(definition: Fixtures.BuildDocument(), composite: FlowFields(width: 2, depth: 2, spillRow: "missing"));
+        var wrongShapeBase = Fixtures.WithLattice(definition: Fixtures.BuildDocument(), composite: FlowFields(width: 2, depth: 2, spillRow: "keyed"));
         var wrongShape = wrongShapeBase with {
             StateRaw = wrongShapeBase.StateRaw! with {
                 World = [.. (wrongShapeBase.StateRaw!.World ?? []), new WorldStateRow(Name: WorldCellName.Parse(candidate: "keyed"), Kind: CellKind.Fixed, Capacity: 4)],

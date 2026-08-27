@@ -1,23 +1,24 @@
 using Puck.Networking;
+using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
 public static partial class WorldAuthorityCheckpointCodec {
     private static void WriteSubmittedInput(WireWriter writer, WorldSubmittedInput input) {
         writer.WriteBoolean(value: input.HasIntent);
-        WriteChannelValues(
-            writer: writer,
-            intent: input.Intent
+        WorldWireCodec.WriteIntent(
+            intent: input.Intent,
+            writer: writer
         );
-        WriteChannelValues(
-            writer: writer,
-            intent: input.HeldChannels
+        WorldWireCodec.WriteIntent(
+            intent: input.HeldChannels,
+            writer: writer
         );
     }
     private static WorldSubmittedInput ReadSubmittedInput(ref WireReader reader) {
         var hasIntent = reader.ReadBoolean();
-        var intent = ReadChannelValues(reader: ref reader);
-        var heldChannels = ReadChannelValues(reader: ref reader);
+        var intent = WorldWireCodec.ReadIntent(reader: ref reader);
+        var heldChannels = WorldWireCodec.ReadIntent(reader: ref reader);
 
         return new WorldSubmittedInput(
             HasIntent: hasIntent,

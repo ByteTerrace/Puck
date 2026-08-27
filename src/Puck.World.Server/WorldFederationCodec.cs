@@ -319,23 +319,21 @@ public static class WorldFederationCodec {
         );
     }
     private static IntentSource ReadIntentSource(ref WireReader reader) {
-        var tag = reader.ReadByte();
+        if (!WorldWireCodec.TryReadIntentSource(
+            producerNameField: "intent source producer name",
+            reader: ref reader,
+            source: out var source,
+            wire: out var tag
+        )) {
+            reader.Fail(
+                detail: $"intent source tag {tag} is not declared",
+                refusal: WireRefusal.EnumValueUnknown
+            );
 
-        switch (tag) {
-            case 0:
-                return IntentSource.Live;
-            case 1:
-                return IntentSource.Idle;
-            case 2:
-                return IntentSource.Producer(name: reader.ReadString(field: "intent source producer name"));
-            default:
-                reader.Fail(
-                    detail: $"intent source tag {tag} is not declared",
-                    refusal: WireRefusal.EnumValueUnknown
-                );
-
-                return IntentSource.Idle;
+            return IntentSource.Idle;
         }
+
+        return source;
     }
     private static bool TryDeserializeDefinition(byte[] bytes, string field, out WorldDefinition? definition, out WireFailure failure) {
         try {
@@ -457,17 +455,10 @@ public static class WorldFederationCodec {
         }
     }
     private static void WriteIntentSource(WireWriter writer, IntentSource source) {
-        if (source.IsLive) {
-            writer.WriteByte(value: 0);
-        } else if (source.IsIdle) {
-            writer.WriteByte(value: 1);
-        } else if (
-            source.IsProducer &&
-            (source.ProducerName is { } producerName)
-        ) {
-            writer.WriteByte(value: 2);
-            writer.WriteString(value: producerName);
-        } else {
+        if (!WorldWireCodec.TryWriteIntentSource(
+            source: source,
+            writer: writer
+        )) {
             throw new InvalidOperationException(message: $"intent source '{source}' is not defined");
         }
     }
@@ -566,13 +557,14 @@ public static class WorldFederationCodec {
         writer.WriteUInt64(value: submission.Tick);
         writer.WriteInt32(value: submission.MeasuredHoldTicks);
 
-        for (var channel = 0; (channel < ChannelLimits.MaxChannels); channel++) {
-            writer.WriteFixed(value: submission.Intent[channel]);
-        }
-
-        for (var channel = 0; (channel < ChannelLimits.MaxChannels); channel++) {
-            writer.WriteFixed(value: submission.HeldChannels[channel]);
-        }
+        WorldWireCodec.WriteIntent(
+            intent: submission.Intent,
+            writer: writer
+        );
+        WorldWireCodec.WriteIntent(
+            intent: submission.HeldChannels,
+            writer: writer
+        );
 
         return writer.ToArray();
     }
@@ -821,41 +813,25 @@ public static class WorldFederationCodec {
     /// <param name="stream">The connection stream.</param>
     /// <param name="ct">Cancellation.</param>
     /// <returns>The frame, or a named refusal.</returns>
-    public static async Task<WireFrameRead> ReadRequestAsync(Stream stream, CancellationToken ct) {
-        var read = await WireFrame.ReadAsync(
-            ct: ct,
-            maxFrameBytes: MaxFrameBytes,
-            stream: stream
-        ).ConfigureAwait(continueOnCapturedContext: false);
-
-        if (!read.Ok) {
-            return read;
-        }
-
-        var kind = ((WorldFederationRequest)read.Kind);
-
-        if (!Enum.IsDefined(value: kind)) {
-            return WireFrameRead.Refused(
-                refusal: WireRefusal.FrameKindUnknown,
-                detail: $"federation request kind {read.Kind} is not declared"
-            );
-        }
-
-        var cap = MaxRequestBytes(kind: kind);
-
-        return ((read.Body.Length > cap)
-            ? WireFrameRead.Refused(
-                refusal: WireRefusal.PayloadTooLarge,
-                detail: $"{kind} body is {read.Body.Length} bytes; cap is {cap}"
-            )
-            : read
-        );
-    }
+    public static Task<WireFrameRead> ReadRequestAsync(Stream stream, CancellationToken ct) => ReadFrameAsync<RequestHalf, WorldFederationRequest>(
+        ct: ct,
+        stream: stream
+    );
     /// <summary>Reads one framed response, refusing an undeclared kind or an over-cap body by name.</summary>
     /// <param name="stream">The connection stream.</param>
     /// <param name="ct">Cancellation.</param>
     /// <returns>The frame, or a named refusal.</returns>
-    public static async Task<WireFrameRead> ReadResponseAsync(Stream stream, CancellationToken ct) {
+    public static Task<WireFrameRead> ReadResponseAsync(Stream stream, CancellationToken ct) => ReadFrameAsync<ResponseHalf, WorldFederationResponse>(
+        ct: ct,
+        stream: stream
+    );
+    // The one framed-read shape both directions share: read the frame, refuse an undeclared kind by its wire number,
+    // then refuse a body over that kind's own cap. Only the enum and its cap table differ; the half names itself in the
+    // refusal text. The half rides as a static-abstract witness rather than a pair of delegates so every frame's kind
+    // widen and cap lookup compiles to a direct call — this sits on the per-frame path of every federated session.
+    private static async Task<WireFrameRead> ReadFrameAsync<THalf, TKind>(Stream stream, CancellationToken ct)
+        where THalf : struct, IFederationHalf<TKind>
+        where TKind : struct, Enum {
         var read = await WireFrame.ReadAsync(
             ct: ct,
             maxFrameBytes: MaxFrameBytes,
@@ -866,21 +842,21 @@ public static class WorldFederationCodec {
             return read;
         }
 
-        var kind = ((WorldFederationResponse)read.Kind);
+        var kind = THalf.ToKind(wire: read.Kind);
 
         if (!Enum.IsDefined(value: kind)) {
             return WireFrameRead.Refused(
                 refusal: WireRefusal.FrameKindUnknown,
-                detail: $"federation response kind {read.Kind} is not declared"
+                detail: $"federation {THalf.Direction} kind {read.Kind} is not declared"
             );
         }
 
-        var cap = MaxResponseBytes(kind: kind);
+        var capacity = THalf.Cap(kind: kind);
 
-        return ((read.Body.Length > cap)
+        return ((read.Body.Length > capacity)
             ? WireFrameRead.Refused(
                 refusal: WireRefusal.PayloadTooLarge,
-                detail: $"{kind} body is {read.Body.Length} bytes; cap is {cap}"
+                detail: $"{kind} body is {read.Body.Length} bytes; cap is {capacity}"
             )
             : read
         );
@@ -1076,22 +1052,8 @@ public static class WorldFederationCodec {
 
         var tick = reader.ReadUInt64();
         var measured = reader.ReadInt32();
-        var intent = default(PlayerIntent);
-        var held = default(PlayerIntent);
-
-        for (var channel = 0; (channel < ChannelLimits.MaxChannels); channel++) {
-            intent = intent.WithChannel(
-                ordinal: channel,
-                value: reader.ReadFixed()
-            );
-        }
-
-        for (var channel = 0; (channel < ChannelLimits.MaxChannels); channel++) {
-            held = held.WithChannel(
-                ordinal: channel,
-                value: reader.ReadFixed()
-            );
-        }
+        var intent = WorldWireCodec.ReadIntent(reader: ref reader);
+        var held = WorldWireCodec.ReadIntent(reader: ref reader);
 
         submission = new IntentSubmission(
             tick,
@@ -1540,4 +1502,24 @@ public static class WorldFederationCodec {
             kind: ((byte)kind),
             stream: stream
         );
+
+    // One half of the framed conversation: its enum, that enum's cap table, and the word its refusals narrate with.
+    private interface IFederationHalf<TKind> where TKind : struct, Enum {
+        static abstract string Direction { get; }
+
+        static abstract int Cap(TKind kind);
+        static abstract TKind ToKind(byte wire);
+    }
+    private readonly struct RequestHalf : IFederationHalf<WorldFederationRequest> {
+        public static string Direction => "request";
+
+        public static int Cap(WorldFederationRequest kind) => MaxRequestBytes(kind: kind);
+        public static WorldFederationRequest ToKind(byte wire) => ((WorldFederationRequest)wire);
+    }
+    private readonly struct ResponseHalf : IFederationHalf<WorldFederationResponse> {
+        public static string Direction => "response";
+
+        public static int Cap(WorldFederationResponse kind) => MaxResponseBytes(kind: kind);
+        public static WorldFederationResponse ToKind(byte wire) => ((WorldFederationResponse)wire);
+    }
 }

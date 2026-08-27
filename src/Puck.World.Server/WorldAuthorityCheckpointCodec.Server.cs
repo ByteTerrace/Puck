@@ -10,26 +10,26 @@ public static partial class WorldAuthorityCheckpointCodec {
     private static void WriteIntentSubmission(WireWriter writer, IntentSubmission submission) {
         writer.WriteUInt64(value: submission.Tick);
         writer.WriteInt32(value: submission.EntityIndex);
-        WriteChannelValues(
-            writer: writer,
-            intent: submission.Intent
+        WorldWireCodec.WriteIntent(
+            intent: submission.Intent,
+            writer: writer
         );
         WritePrincipal(
             writer: writer,
             principal: submission.Principal
         );
-        WriteChannelValues(
-            writer: writer,
-            intent: submission.HeldChannels
+        WorldWireCodec.WriteIntent(
+            intent: submission.HeldChannels,
+            writer: writer
         );
         writer.WriteInt32(value: submission.MeasuredHoldTicks);
     }
     private static IntentSubmission ReadIntentSubmission(ref WireReader reader) {
         var tick = reader.ReadUInt64();
         var entityIndex = reader.ReadInt32();
-        var intent = ReadChannelValues(reader: ref reader);
+        var intent = WorldWireCodec.ReadIntent(reader: ref reader);
         var principal = ReadPrincipal(reader: ref reader);
-        var heldChannels = ReadChannelValues(reader: ref reader);
+        var heldChannels = WorldWireCodec.ReadIntent(reader: ref reader);
         var measuredHoldTicks = reader.ReadInt32();
 
         return new IntentSubmission(
@@ -573,9 +573,9 @@ public static partial class WorldAuthorityCheckpointCodec {
             writer: writer,
             values: state.PreviousChannelBit
         );
-        WriteChannelValues(
-            writer: writer,
-            intent: state.HeldChannelImage
+        WorldWireCodec.WriteIntent(
+            intent: state.HeldChannelImage,
+            writer: writer
         );
         WriteBoolArray(
             writer: writer,
@@ -660,7 +660,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         WriteArray(
             writer: writer,
             items: state.TapeIntents,
-            writeItem: WriteChannelValues
+            writeItem: WorldWireCodec.WriteIntent
         );
         WriteULongArray(
             writer: writer,
@@ -696,7 +696,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             field: "previous channel bit",
             reader: ref reader
         );
-        var heldChannelImage = ReadChannelValues(reader: ref reader);
+        var heldChannelImage = WorldWireCodec.ReadIntent(reader: ref reader);
         var pendingDefaultChannelPress = ReadBoolArray(
             field: "pending default channel press",
             reader: ref reader
@@ -794,7 +794,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         var tapeIntents = ReadArray(
             reader: ref reader,
             field: "tape intents",
-            readItem: static (ref WireReader r) => ReadChannelValues(reader: ref r)
+            readItem: static (ref WireReader r) => WorldWireCodec.ReadIntent(reader: ref r)
         );
         var tapeRemainingTicks = ReadULongArray(
             field: "tape remaining ticks",
@@ -905,9 +905,9 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteFixedVector(value: residue.Up);
         writer.WriteBoolean(value: residue.Grounded);
         writer.WriteBoolean(value: residue.Engaged);
-        WriteChannelValues(
-            writer: writer,
-            intent: residue.EngagedIntent
+        WorldWireCodec.WriteIntent(
+            intent: residue.EngagedIntent,
+            writer: writer
         );
         writer.WriteBoolean(value: residue.OrdinaryAdvanceAdmitted);
         WriteOptional(
@@ -939,7 +939,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         var up = reader.ReadFixedVector();
         var grounded = reader.ReadBoolean();
         var engaged = reader.ReadBoolean();
-        var engagedIntent = ReadChannelValues(reader: ref reader);
+        var engagedIntent = WorldWireCodec.ReadIntent(reader: ref reader);
         var ordinaryAdvanceAdmitted = reader.ReadBoolean();
         var continuumConsumedThroughEngineTick = ReadOptional(
             reader: ref reader,
