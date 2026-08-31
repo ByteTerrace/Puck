@@ -342,7 +342,7 @@ Facts a script needs:
   today — the `arcade` addon was ported to a world `rules` section and its
   compiled guest deleted before the addons themselves went unmounted), a
   hand-authored SM83 cartridge ROM (`roms/`: `arcade-quest.gbc`, also unhosted
-  today — see `src/Puck.World.Forge/Games/README.md`), and an example `puck.sdf.v1`
+  today — see `src/Puck.HumbleGamingBrick.Forge/Games/README.md`), and an example `puck.sdf.v1`
   document (`sdf/`).
 
 ## The world as data
@@ -559,7 +559,7 @@ currency, translated once into a neutral pad image through the named kit's
 rides the grant table's `Control` capability. See [`Puck.World.Server`](../Puck.World.Server/README.md) for the full contract.
 
 A THIRD registered engine, `tune-instrument`
-(`Puck.Forge.Tune.TuneInstrumentEngine`), is a diegetic, player-operated
+(`Puck.HumbleGamingBrick.Forge.Tune.TuneInstrumentEngine`), is a diegetic, player-operated
 instrument: its content is a `puck.audio.v1` document rather than a
 cartridge ROM, compiled to the same jukebox cart `Audio/TuneMachineSource.cs`
 plays passively and booted on a real `Puck.HumbleGamingBrick.MachineHost`, so

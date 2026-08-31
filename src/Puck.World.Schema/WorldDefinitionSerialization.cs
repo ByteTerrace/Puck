@@ -1565,22 +1565,22 @@ internal sealed class WorldPrincipalJsonConverter : JsonConverter<WorldPrincipal
     }
 }
 /// <summary>
-/// Bridges an embedded <see cref="Puck.Forge.Authoring.CreationDocument"/> (a <see cref="WorldPrototype.Document"/>) through
+/// Bridges an embedded <see cref="Puck.World.Authoring.CreationDocument"/> (a <see cref="WorldPrototype.Document"/>) through
 /// the creation contract's own serializer shape (<see cref="Puck.Assets.Documents.DocumentJsonOptions.Shared"/> — member
 /// order, string enums, and the Vector2/Vector3/Quaternion array converters) instead of this context's
 /// policies, so the inline-canonical embed carries exactly the member vocabulary
-/// <see cref="Puck.Forge.Authoring.CreationCanonicalizer"/> hashes. Formatting (indent/newlines) rides the outer canonical
+/// <see cref="Puck.World.Authoring.CreationCanonicalizer"/> hashes. Formatting (indent/newlines) rides the outer canonical
 /// writer, which is deterministic — the ouroboros round-trip covers the composition.
 /// </summary>
-internal sealed class CreationDocumentJsonConverter : JsonConverter<Puck.Forge.Authoring.CreationDocument> {
+internal sealed class CreationDocumentJsonConverter : JsonConverter<Puck.World.Authoring.CreationDocument> {
     /// <inheritdoc/>
-    public override Puck.Forge.Authoring.CreationDocument? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
-        JsonSerializer.Deserialize<Puck.Forge.Authoring.CreationDocument>(
+    public override Puck.World.Authoring.CreationDocument? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+        JsonSerializer.Deserialize<Puck.World.Authoring.CreationDocument>(
             reader: ref reader,
             options: Puck.Assets.Documents.DocumentJsonOptions.Shared
         );
     /// <inheritdoc/>
-    public override void Write(Utf8JsonWriter writer, Puck.Forge.Authoring.CreationDocument value, JsonSerializerOptions options) =>
+    public override void Write(Utf8JsonWriter writer, Puck.World.Authoring.CreationDocument value, JsonSerializerOptions options) =>
         JsonSerializer.Serialize(
             writer: writer,
             value: value,

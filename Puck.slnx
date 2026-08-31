@@ -1,6 +1,7 @@
 <Solution>
     <Folder Name="/src/">
         <Project Path="src/Puck.Abstractions/Puck.Abstractions.csproj" />
+        <Project Path="src/Puck.AdvancedGamingBrick.Forge/Puck.AdvancedGamingBrick.Forge.csproj" />
         <Project Path="src/Puck.AdvancedGamingBrick.Post/Puck.AdvancedGamingBrick.Post.csproj" />
         <Project Path="src/Puck.AdvancedGamingBrick/Puck.AdvancedGamingBrick.csproj" />
         <Project Path="src/Puck.Analyzers/Puck.Analyzers.csproj" />
@@ -11,10 +12,10 @@
         <Project Path="src/Puck.Commands/Puck.Commands.csproj" />
         <Project Path="src/Puck.DirectX.Presentation/Puck.DirectX.Presentation.csproj" />
         <Project Path="src/Puck.DirectX/Puck.DirectX.csproj" />
-        <Project Path="src/Puck.World.Forge/Puck.World.Forge.csproj" />
         <Project Path="src/Puck.GamingBricks/Puck.GamingBricks.csproj" />
         <Project Path="src/Puck.GamingBricks.Post/Puck.GamingBricks.Post.csproj" />
         <Project Path="src/Puck.Hosting/Puck.Hosting.csproj" />
+        <Project Path="src/Puck.HumbleGamingBrick.Forge/Puck.HumbleGamingBrick.Forge.csproj" />
         <Project Path="src/Puck.HumbleGamingBrick.Post/Puck.HumbleGamingBrick.Post.csproj" />
         <Project Path="src/Puck.HumbleGamingBrick/Puck.HumbleGamingBrick.csproj" />
         <Project Path="src/Puck.Input/Puck.Input.csproj" />
@@ -40,6 +41,7 @@
         <Project Path="src/Puck.Vulkan.Presentation/Puck.Vulkan.Presentation.csproj" />
         <Project Path="src/Puck.Vulkan/Puck.Vulkan.csproj" />
         <Project Path="src/Puck.World.Addons/Puck.World.Addons.csproj" />
+        <Project Path="src/Puck.World.Authoring/Puck.World.Authoring.csproj" />
         <Project Path="src/Puck.World.Client/Puck.World.Client.csproj" />
         <Project Path="src/Puck.World.Console/Puck.World.Console.csproj" />
         <Project Path="src/Puck.World.Protocol/Puck.World.Protocol.csproj" />
@@ -50,6 +52,7 @@
     </Folder>
     <Folder Name="/tests/">
         <Project Path="tests/Puck.Abstractions.Tests/Puck.Abstractions.Tests.csproj" />
+        <Project Path="tests/Puck.AdvancedGamingBrick.Forge.Tests/Puck.AdvancedGamingBrick.Forge.Tests.csproj" />
         <Project Path="tests/Puck.Analyzers.Tests/Puck.Analyzers.Tests.csproj" />
         <Project Path="tests/Puck.Assets.Tests/Puck.Assets.Tests.csproj" />
         <Project Path="tests/Puck.Attestation.Tests/Puck.Attestation.Tests.csproj" />
@@ -57,6 +60,7 @@
         <Project Path="tests/Puck.Cli.Tests/Puck.Cli.Tests.csproj" />
         <Project Path="tests/Puck.Commands.Tests/Puck.Commands.Tests.csproj" />
         <Project Path="tests/Puck.GamingBricks.Tests/Puck.GamingBricks.Tests.csproj" />
+        <Project Path="tests/Puck.HumbleGamingBrick.Forge.Tests/Puck.HumbleGamingBrick.Forge.Tests.csproj" />
         <Project Path="tests/Puck.Hosting.Tests/Puck.Hosting.Tests.csproj" />
         <Project Path="tests/Puck.Input.Tests/Puck.Input.Tests.csproj" />
         <Project Path="tests/Puck.Launcher.Tests/Puck.Launcher.Tests.csproj" />

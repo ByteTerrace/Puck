@@ -239,7 +239,7 @@ internal sealed class StrictEnumReachability {
         if (IsExplicitlyConverted(type: type)) {
             // The whole value rides a converter that never touches System.Text.Json's own property serialization,
             // so nothing under this type is reachable through property serialization at all — this is what excuses
-            // GrantSubjectKind/PrincipalKind (nested inside GrantSubject/WorldPrincipal) and the Puck.Forge.Authoring
+            // GrantSubjectKind/PrincipalKind (nested inside GrantSubject/WorldPrincipal) and the Puck.World.Authoring
             // document family (bridged through CreationDocumentJsonConverter and its siblings) with no allowlist.
             return;
         }

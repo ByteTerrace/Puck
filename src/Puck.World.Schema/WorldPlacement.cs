@@ -1,7 +1,7 @@
 using Puck.Assets.Documents;
 using System.Numerics;
 using System.Text.Json.Serialization;
-using Puck.Forge.Authoring;
+using Puck.World.Authoring;
 using Puck.Maths;
 
 namespace Puck.World;
@@ -28,17 +28,17 @@ public sealed record WorldPrototype(
     private CreationDocument? m_engineDocument;
 
     /// <summary>Gets <see cref="Document"/> converted once from the author frame to the engine frame
-    /// (<see cref="Puck.Forge.Authoring.CreationFrame.ToEngine"/>) — every render, collision, and anchor consumer
+    /// (<see cref="Puck.World.Authoring.CreationFrame.ToEngine"/>) — every render, collision, and anchor consumer
     /// reads this, never <see cref="Document"/>, which stays the author's own bytes (what <see cref="Hash"/> pins).
     /// Cached on first read since <see cref="WorldPrototype"/> rows are replaced, not mutated, on edit.</summary>
     [JsonIgnore]
-    public CreationDocument EngineDocument => (m_engineDocument ??= Puck.Forge.Authoring.CreationFrame.ToEngine(document: Document));
+    public CreationDocument EngineDocument => (m_engineDocument ??= Puck.World.Authoring.CreationFrame.ToEngine(document: Document));
     /// <summary>Gets the SHA-256 hex64 of <see cref="Document"/>'s canonical bytes — <see cref="HashRaw"/> when
     /// authored, else computed fresh through the same pipeline the validator re-verifies every hash against
-    /// (<see cref="Puck.Forge.Authoring.CreationCanonicalizer"/>), so an absent hash is trivially self-consistent
+    /// (<see cref="Puck.World.Authoring.CreationCanonicalizer"/>), so an absent hash is trivially self-consistent
     /// with no validator special case.</summary>
     [JsonIgnore]
-    public string Hash => (HashRaw ?? Puck.Forge.Authoring.CreationCanonicalizer.Canonicalize(
+    public string Hash => (HashRaw ?? Puck.World.Authoring.CreationCanonicalizer.Canonicalize(
         document: Document,
         source: Id
     ).Hash);
@@ -53,7 +53,7 @@ public sealed record WorldPlacementMirror(DocumentVector3 Normal, float Offset);
 /// of the row's static transform; the row's position/yaw become its spawn pose. Absent (null) = decoration, the
 /// unchanged furniture behaviour.</summary>
 /// <param name="Kit">The <see cref="WorldKit.Name"/> the bodies move under. Null resolves the creation's own
-/// <see cref="Puck.Forge.Authoring.CreationBehaviorDocument.Locomotion"/> token AS a kit name — a creation declaring "swim"
+/// <see cref="Puck.World.Authoring.CreationBehaviorDocument.Locomotion"/> token AS a kit name — a creation declaring "swim"
 /// inhabits the world's kit row named "swim". Neither resolving is a loud rejection naming every kit the world
 /// declares.</param>
 /// <param name="Look">The <see cref="WorldLook.Name"/> the bodies wear, or null to wear an implicit creation look on
@@ -71,7 +71,7 @@ public sealed record WorldPlacementInhabit(
 );
 /// <summary>A per-instance override of one declared creation face's feed — the face twin of the emission facet's
 /// per-instance override channel.</summary>
-/// <param name="Face">The declared <see cref="Puck.Forge.Authoring.CreationFaceDocument.Name"/> to override.</param>
+/// <param name="Face">The declared <see cref="Puck.World.Authoring.CreationFaceDocument.Name"/> to override.</param>
 /// <param name="Source">The screen source the face shows, in the existing <see cref="WorldScreenSource"/> vocabulary.</param>
 /// <param name="Portal">The face's portal facet (see <see cref="WorldPlacementPortal"/>) — absent (the default)
 /// means this face is not a door. Optional and trailing deliberately: a face authored before this facet existed

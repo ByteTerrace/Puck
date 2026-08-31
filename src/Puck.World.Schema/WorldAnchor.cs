@@ -28,7 +28,7 @@ public abstract record WorldAnchor {
     /// <param name="PartId">The ordinal, case-sensitive part identifier published by the entity's active look.</param>
     public sealed record EntityPart(int Index, string PartId) : WorldAnchor;
     /// <summary>Rides a placement INSTANCE's stamped transform — a creation stamped into the world by reference (the
-    /// same placement-reference shape <see cref="Puck.Forge.Authoring.CreationCameraDocument"/> uses), optionally narrowed
+    /// same placement-reference shape <see cref="Puck.World.Authoring.CreationCameraDocument"/> uses), optionally narrowed
     /// to one of its own authored shapes rather than the stamp's root.</summary>
     /// <param name="PlacementId">The referenced <see cref="WorldPlacement.Id"/> (must resolve).</param>
     /// <param name="ShapeId">The referenced creation's <c>ShapeDocument.Id</c> to ride, or <see langword="null"/> for

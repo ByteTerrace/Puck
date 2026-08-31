@@ -1,5 +1,5 @@
 using System.Numerics;
-using Puck.Forge.Authoring;
+using Puck.World.Authoring;
 using Puck.Maths;
 using Puck.SdfVm;
 using Puck.SdfVm.Views;

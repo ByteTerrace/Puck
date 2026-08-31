@@ -1,7 +1,8 @@
 using Xunit;
 
-using Puck.Forge.Authoring;
-using Puck.Forge.Tune;
+using Puck.Assets.Documents;
+using Puck.World.Authoring;
+using Puck.HumbleGamingBrick.Forge.Tune;
 using Puck.World.Protocol;
 
 namespace Puck.World.Tests;

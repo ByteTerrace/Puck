@@ -1,6 +1,6 @@
 using Puck.Audio.Mixing;
-using Puck.Forge.Authoring;
-using Puck.Forge.Tune;
+using Puck.Assets.Documents;
+using Puck.HumbleGamingBrick.Forge.Tune;
 using Puck.HumbleGamingBrick;
 using Puck.HumbleGamingBrick.Interfaces;
 using MachineInstance = Puck.GamingBricks.MachineInstance<Puck.HumbleGamingBrick.Machine, Puck.HumbleGamingBrick.MachineConfiguration>;

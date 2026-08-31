@@ -20,8 +20,9 @@ process that composes everything is [`Puck.World`](../Puck.World/README.md).
 ## The dependency firewall
 
 `Puck.World.Schema` references only `Puck.Abstractions`, `Puck.Assets`,
-`Puck.Attestation`, `Puck.Commands`, `Puck.Maths`, `Puck.Physics`, `Puck.Text`,
-and `Puck.World.Forge` (see `Puck.World.Schema.csproj`). An architecture lane profile in
+`Puck.Attestation`, `Puck.Commands`, `Puck.Hosting`, `Puck.Maths`,
+`Puck.Physics`, `Puck.Text`, and `Puck.World.Authoring` (see
+`Puck.World.Schema.csproj`). An architecture lane profile in
 `build/Architecture.props` enforces the absences that matter: no GPU backend,
 no presentation project, no `Puck.Overlays`, no `Puck.Input`, no
 `Puck.World.Protocol`, and no `Puck.World.Server`. Adding a forbidden

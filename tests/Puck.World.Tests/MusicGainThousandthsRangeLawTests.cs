@@ -1,6 +1,7 @@
 using Xunit;
 
-using Puck.Forge.Authoring;
+using Puck.Assets.Documents;
+using Puck.World.Authoring;
 
 namespace Puck.World.Tests;
 

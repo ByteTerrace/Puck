@@ -867,7 +867,7 @@ public sealed partial class WorldServer {
                         id: m.Creation.Id,
                         hash: m.Creation.HashRaw,
                         kind: "creation",
-                        canonicalize: static (document, source) => Puck.Forge.Authoring.CreationCanonicalizer.Canonicalize(
+                        canonicalize: static (document, source) => Puck.World.Authoring.CreationCanonicalizer.Canonicalize(
                             document: document,
                             source: source
                         ),
@@ -991,13 +991,13 @@ public sealed partial class WorldServer {
 
                 return true;
             case WorldMutation.UpsertTune m: {
-                    if (!TryVerifyReferencedAsset<WorldTune, Puck.Forge.Authoring.AudioDocument>(
+                    if (!TryVerifyReferencedAsset<WorldTune, Puck.Assets.Documents.AudioDocument>(
                         row: m.Tune,
                         id: m.Tune.Name,
                         hash: m.Tune.Hash,
                         kind: "tune",
                         tryLoad: WorldAssetRowLoader.TryLoadTune,
-                        canonicalize: static (document, source) => Puck.Forge.Authoring.AudioCanonicalizer.Canonicalize(
+                        canonicalize: static (document, source) => Puck.Assets.Documents.AudioCanonicalizer.Canonicalize(
                             document: document,
                             source: source
                         ),
@@ -1050,13 +1050,13 @@ public sealed partial class WorldServer {
                     return true;
                 }
             case WorldMutation.UpsertPatch m: {
-                    if (!TryVerifyReferencedAsset<WorldPatch, Puck.Forge.Authoring.SynthPatchDocument>(
+                    if (!TryVerifyReferencedAsset<WorldPatch, Puck.Assets.Documents.SynthPatchDocument>(
                         row: m.Patch,
                         id: m.Patch.Name,
                         hash: m.Patch.Hash,
                         kind: "patch",
                         tryLoad: WorldAssetRowLoader.TryLoadPatch,
-                        canonicalize: static (document, source) => Puck.Forge.Authoring.SynthPatchCanonicalizer.Canonicalize(
+                        canonicalize: static (document, source) => Puck.Assets.Documents.SynthPatchCanonicalizer.Canonicalize(
                             document: document,
                             source: source
                         ),

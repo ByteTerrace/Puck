@@ -11,10 +11,10 @@ public static class MusicDirectorFactory {
     /// sense family by construction: the world schema validator refuses any token outside
     /// <see cref="WorldAudioCue.MusicWhenTokens"/>, the single source <see cref="ParseFamily"/> mirrors. Neither a
     /// layer's authored <c>gainThousandths</c> nor an embellishment's is compiled here — see
-    /// <c>Puck.Forge.Authoring.MusicLayerDocument.GainThousandths</c>'s remarks.</summary>
+    /// <c>Puck.Assets.Documents.MusicLayerDocument.GainThousandths</c>'s remarks.</summary>
     /// <param name="document">The validated, normalized music document.</param>
     /// <returns>The compiled segment graph.</returns>
-    public static MusicSegmentGraph CompileGraph(Puck.Forge.Authoring.MusicDocument document) {
+    public static MusicSegmentGraph CompileGraph(Puck.World.Authoring.MusicDocument document) {
         var segments = new List<MusicSegment>(capacity: document.Segments.Count);
 
         foreach (var segment in document.Segments) {
@@ -22,7 +22,7 @@ public static class MusicDirectorFactory {
 
             foreach (var transition in (segment.Transitions ?? [])) {
                 transitions.Add(item: new MusicTransition(
-                    At: CompileBoundary(boundary: (transition.At ?? Puck.Forge.Authoring.MusicTransitionBoundary.BarEnd)),
+                    At: CompileBoundary(boundary: (transition.At ?? Puck.World.Authoring.MusicTransitionBoundary.BarEnd)),
                     ToSegmentId: transition.To,
                     When: ParseFamily(token: transition.When)
                 ));
@@ -57,7 +57,7 @@ public static class MusicDirectorFactory {
     /// <summary>Compiles an authored judge document into a sim-side window list.</summary>
     /// <param name="document">The validated, normalized judge document.</param>
     /// <returns>The compiled windows, in authored order.</returns>
-    public static IReadOnlyList<JudgeWindow> CompileWindows(Puck.Forge.Authoring.JudgeDocument document) {
+    public static IReadOnlyList<JudgeWindow> CompileWindows(Puck.World.Authoring.JudgeDocument document) {
         var windows = new List<JudgeWindow>(capacity: document.Windows.Count);
 
         foreach (var window in document.Windows) {
@@ -94,9 +94,9 @@ public static class MusicDirectorFactory {
         return projected;
     }
 
-    private static MusicTransitionBoundary CompileBoundary(Puck.Forge.Authoring.MusicTransitionBoundary boundary) => (boundary switch {
-        Puck.Forge.Authoring.MusicTransitionBoundary.Immediate => MusicTransitionBoundary.Immediate,
-        Puck.Forge.Authoring.MusicTransitionBoundary.BeatEnd => MusicTransitionBoundary.BeatEnd,
+    private static MusicTransitionBoundary CompileBoundary(Puck.World.Authoring.MusicTransitionBoundary boundary) => (boundary switch {
+        Puck.World.Authoring.MusicTransitionBoundary.Immediate => MusicTransitionBoundary.Immediate,
+        Puck.World.Authoring.MusicTransitionBoundary.BeatEnd => MusicTransitionBoundary.BeatEnd,
         _ => MusicTransitionBoundary.BarEnd,
     });
     // Null for a world-event family the music sense vocabulary does not name — the same open-set posture ParseFamily

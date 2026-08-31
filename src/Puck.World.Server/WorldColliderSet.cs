@@ -1,4 +1,4 @@
-using Puck.Forge.Authoring;
+using Puck.World.Authoring;
 using Puck.Maths;
 using Puck.Physics;
 using Puck.SignedDistance;

@@ -67,8 +67,8 @@ render device) documented in [`Puck.World`'s Audio/ folder](../Puck.World/Audio/
 
 `Puck.Audio` sits on Engine services, same row as `Puck.Physics`, with an
 exact-equality closure the architecture gate enforces:
-`Puck.Abstractions;Puck.Commands;Puck.Hosting;Puck.Maths` — no
-`Puck.World.Forge`/`Puck.Assets` edge (no document parsing), no presentation
+`Puck.Abstractions;Puck.Assets;Puck.Commands;Puck.Hosting;Puck.Maths` — no
+`Puck.World.Authoring` edge (no document parsing), no presentation
 or backend row. The authoritative server references it directly (its machine
 host boots every machine at `MachineAudioRate.SampleRate`).
 

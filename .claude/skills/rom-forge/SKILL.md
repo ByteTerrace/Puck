@@ -1,9 +1,9 @@
 ---
 name: rom-forge
-description: Working on the ROM forge — src/Puck.World.Forge (the SM83 game framework in Framework/, the authoring document families and sculpt model in Authoring/, Sm83Emitter, HgbImage, AudioDocumentCompiler, the Tune cart, VerifyMachineSettle). Use whenever hand-authoring SM83 cartridge ROMs, touching the game framework (kernel, WRAM map, saves, PRNG, input, text, OAM, sound), or the cart/save/title-art seams.
+description: Working on the ROM forges — src/Puck.HumbleGamingBrick.Forge (the SM83 game framework in Framework/, Sm83Emitter, HgbImage, AudioDocumentCompiler, the Tune cart, the Games/ worked examples, VerifyMachineSettle) and src/Puck.AdvancedGamingBrick.Forge (the ARM7TDMI/Thumb emitters, direct-boot cartridge builder, polling kernel). Use whenever hand-authoring SM83 or AGB cartridge ROMs, touching a game framework (kernel, memory map, saves, PRNG, input, text, OAM, sound), or the cart/save/title-art seams.
 ---
 
-# The ROM forge: hand-authored games onto real brick hardware
+# The ROM forges: hand-authored games onto real brick hardware
 
 Factual and procedural only: settled contracts and how to verify. The user's
 current instruction outranks this file — if it argues against a demanded
@@ -11,11 +11,30 @@ change, it is stale; update it in the same change.
 
 ## What exists, and what does not
 
-**`src/Puck.World.Forge` is a normal solution project and it is live.**
-`src/Puck.World` carries a `ProjectReference` to it, and
-`src/Puck.World/Audio/TuneMachineSource.cs` calls `TuneRom.Build` to synthesize
-a CGB cartridge that a Humble core steps cycle-exactly for world audio. That is
-the forge's one live consumer, and it is a real one.
+**Two per-brick forge projects, both packable to NuGet:**
+
+- `src/Puck.HumbleGamingBrick.Forge` (`ByteTerrace.Puck.HumbleGamingBrick.Forge`)
+  — the SM83/CGB forge. Its live consumer inside the repo is `Puck.World`:
+  `src/Puck.World/Audio/TuneMachineSource.cs` calls `TuneRom.Build` to
+  synthesize a CGB cartridge that a Humble core steps cycle-exactly for world
+  audio.
+- `src/Puck.AdvancedGamingBrick.Forge` (`ByteTerrace.Puck.AdvancedGamingBrick.Forge`)
+  — the ARM7TDMI/AGB forge: Thumb/ARM emitters, direct-boot cartridge builder,
+  polling kernel, worked-example cart. Read its README for the direct-boot
+  constraint (zeroed replacement BIOS: no SWIs, no IRQ dispatch, logo field
+  unread) and the EWRAM map.
+
+The forge types are public — the packages are the authoring surface. Each
+forge has a build+verify test project (`tests/Puck.HumbleGamingBrick.Forge.Tests`,
+`tests/Puck.AdvancedGamingBrick.Forge.Tests`) asserting the worked-example
+cart builds byte-identically and passes its verify-by-running gate.
+
+**The authored-content documents live elsewhere:** `puck.audio.v1`
+(`AudioDocument`) and `puck.synth.v1` (`SynthPatchDocument`) are in
+`Puck.Assets` (`Puck.Assets.Documents`, beside the shared
+`DocumentCanonicalizer` core) so a forge package never drags a world assembly;
+the world-facing families (`puck.creation.v1`, `puck.music.v1`,
+`puck.judge.v1`) are in `src/Puck.World.Authoring`.
 
 **Everything that turned art into cartridges is gone.** The following lived only
 in `Puck.Demo`, which is quarantined under `experimental/`. Read it as prior
@@ -35,11 +54,11 @@ art; never build it, run it, or revive a capability in place:
 "forge" something, say plainly that the CLI does not exist rather than looking
 for it.
 
-**Hand-authored games are NOT gone, though.** `src/Puck.World.Forge/Games/` holds
-`ArcadeQuest*` (`ArcadeQuestGame`, `ArcadeQuestRom`, `ArcadeQuestProtocol`,
-`ArcadeQuestVerify`, plus its own README), and its built 32 KiB cartridge is
-committed at `src/Puck.World/Assets/roms/arcade-quest.gbc`. That is the live
-worked example of the framework below — read it before authoring a new cart.
+**Hand-authored games:** `src/Puck.HumbleGamingBrick.Forge/Games/` holds
+`ArcadeQuest*` (game, ROM facade, protocol, verify, README), with its built
+32 KiB cartridge committed at `src/Puck.World/Assets/roms/arcade-quest.gbc`.
+Read it before authoring a new SM83 cart; the AGB forge's `Games/` worked
+example plays the same role for AGB carts.
 
 **One consequence worth stating outright:** `Framework/PbakBundle.Parse` and
 `AssetLinker` are READERS of the PBAK wire form, and **nothing in the tree can
@@ -48,16 +67,16 @@ produce a PBAK blob any more** — the baker was the only producer.
 have no reachable input. The code is correct and unreachable; treat baked art as
 an absent capability.
 
-## The map (`src/Puck.World.Forge`)
+## The SM83 forge map (`src/Puck.HumbleGamingBrick.Forge`)
 
-- `Framework/` — the SM83 game framework in `Puck.Forge.Framework`, dependent
-  only on `Sm83Emitter` + the `HgbImage` encoders: `FrameworkCartridge`,
-  `FrameworkKernel`, `FrameworkMemoryMap` (the WRAM source of truth),
-  `GameFramework` (the facade — wires every module, `BuildRom` assembles),
-  `RomDataBuilder`, `Hw`, `InputModule` (edges + attract-script override),
-  `BgModule` (queue + LCD-off paints), `OamManager` (shadow OAM +
-  metasprites), `PrngModule`, `SaveModule`, `TextModule` (39-glyph font),
-  `GameStateMachine` (pending-state dispatch), `VictoryModule`.
+- `Framework/` — the SM83 game framework, dependent only on `Sm83Emitter` +
+  the `HgbImage` encoders: `FrameworkCartridge`, `FrameworkKernel`,
+  `FrameworkMemoryMap` (the WRAM source of truth), `GameFramework` (the facade
+  — wires every module, `BuildRom` assembles), `RomDataBuilder`, `Hw`,
+  `InputModule` (edges + attract-script override), `BgModule` (queue + LCD-off
+  paints), `OamManager` (shadow OAM + metasprites), `PrngModule`, `SaveModule`,
+  `TextModule` (39-glyph font), `GameStateMachine` (pending-state dispatch),
+  `VictoryModule`.
   The LINKER LAYER: `PbakBundle` (the PBAK wire-form READER — raw bytes, no
   bake types; see the note above, it has no producer), `AssetLinker` (on the
   facade as `GameFramework.Assets`: allocates the 256-tile bank + 8/8 palette
@@ -78,39 +97,12 @@ an absent capability.
   effects, `MusicLoop`/`MusicStop` ids) whose `DefineIn(manifest)` declares
   every stream as an ordinary manifest table — the REUSABLE surface games
   trigger via `Sound.EmitEffect`.
-- `Authoring/` — the authored-content half, in `Puck.Forge.Authoring`. It is
-  where the forge's INPUT is defined, and `Puck.World` consumes it directly
-  (the world document embeds these documents inline; there is no file store —
-  both folder-backed stores were dead and were deleted when this folder merged
-  in from its own project). Three document families, each a record plus a static
-  canonicalizer: `puck.creation.v1` (`CreationDocument`/`CreationCanonicalizer`
-  — shapes, palette, hold-style timeline frames, IK chains, anchored camera
-  eyes, faces, sounds, engraved text runs), `puck.audio.v1`
-  (`AudioDocument`/`AudioCanonicalizer` — what `AudioDocumentCompiler` and the
-  Tune cart consume), and `puck.synth.v1`
-  (`SynthPatchDocument`/`SynthPatchCanonicalizer`, embedded inline in a
-  creation's sounds). All three ride ONE document-neutral core,
-  `DocumentCanonicalizer`: canonical bytes + SHA-256 from the same call, the
-  strict-schema rule, the extensions-shadowing rule, the raise rule
-  (`ThrowIfInvalid`), and the single shared `DocumentJsonOptions.Shared`
-  (`IncludeFields = true` is LOAD-BEARING — `Vector3`/`Quaternion` expose
-  fields, and omitting it silently zeroes every transform). Alongside them:
-  `SdfSolidGeometry` (in `Puck.SignedDistance`: the canonical primitive
-  dimension table every stamp, workbench and bake emits through — changing a
-  value changes the meaning of every persisted creation; `CreationGeometry`
-  keeps only the whole-document reach), `SculptModel` (the frame-rate editor model — a
-  held `CreationDocument` IS the model, edited generically through
-  `CreationDocumentPatcher`'s dotted/indexed path walker) + `ChainRig`/
-  `ChainSolver` (its analytic two-bone/spine IK rest-geometry cache and
-  solver), `EditHistory<T>` (the bounded undo/redo ring), and `GridSnap`. Host-side
-  float on purpose: this is authoring/presentation math, outside the
-  simulation-state determinism contract.
 - `Tune/` — `TuneRom`/`TuneGame`/`TuneProtocol`/`TuneVerify`: the live cart.
   `TuneRom.Build(AudioDocument, string)` is what `Puck.World` calls.
 - Top level: `Sm83Emitter` (the machine-code emitter everything shares),
   `HgbImage` (pure-C# RGBA8 → 2bpp/RGB555 encoders — every byte layout the
   INVERSE of the emulator's `Ppu.cs` decode; no external image library, on
-  purpose), `AudioDocumentCompiler` (compiles a `Puck.Forge.Authoring`
+  purpose), `AudioDocumentCompiler` (compiles a `Puck.Assets.Documents`
   `AudioDocument` into driver streams; shares `ApuNotePeriod`'s integer math
   exactly, so the document path and the hand-authored path cannot drift),
   `VerifyMachineSettle`.
@@ -171,11 +163,13 @@ BG write queue → FrameCounter16++ → `reti`.
 
 ## Verify on a real machine
 
-A cart self-verifies by driving a REAL Humble machine and asserting observable
-WRAM/framebuffer behavior BEFORE writing bytes — that discipline is the forge's
-whole verification story, and it survives: `TuneVerify` is its live instance.
+A cart self-verifies by driving a REAL emulated machine and asserting
+observable memory/framebuffer behavior BEFORE writing bytes — that discipline
+is the forges' whole verification story. `TuneVerify` and `ArcadeQuestVerify`
+are the live SM83 instances; the AGB forge's verify driver is the live AGB
+instance; the per-forge test projects run them in CI.
 
-**Every verify driver MUST call the shared
+**Every SM83 verify driver MUST call the shared
 `VerifyMachineSettle.SettleOutOfOamDma` after stepping frames.** A fixed-size
 `Run` can phase-lock its boundary inside the VBlank handler's OAM DMA, where the
 emulated bus conflict returns the transfer's in-flight bytes — a battery that
@@ -187,11 +181,11 @@ hold acts once); LCD-off board repaints span multiple frames, so settle a few
 frames after state flips before pressing.
 
 The eight game batteries that set this bar are gone with their games, and the
-design record that described what they asserted was deleted 2026-08-02. What
-they proved — independent C# checksums over SRAM, cross-machine seed-replay
-determinism, deal prediction by walking the PRNG backwards, byte-for-byte
-evaluator oracles — is recorded nowhere now except Git history. Reconstruct the
-technique from `TuneVerify`, not from memory of those batteries.
+design record that described what they asserted was deleted. What they proved —
+independent C# checksums over SRAM, cross-machine seed-replay determinism, deal
+prediction by walking the PRNG backwards, byte-for-byte evaluator oracles — is
+recorded nowhere now except Git history. Reconstruct the technique from
+`TuneVerify`, not from memory of those batteries.
 
 ## House style
 

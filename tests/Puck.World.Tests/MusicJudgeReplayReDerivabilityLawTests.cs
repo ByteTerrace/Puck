@@ -1,6 +1,7 @@
 using Xunit;
 
-using Puck.Forge.Authoring;
+using Puck.Assets.Documents;
+using Puck.World.Authoring;
 using Puck.World.Protocol;
 using Puck.World.Server;
 

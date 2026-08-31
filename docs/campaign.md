@@ -42,9 +42,10 @@ generic layer beneath them. `Puck.Networking` carries the transport, hello, iden
 authenticator that `Puck.World.Protocol` builds on, and it carries no `World` token — a world concept
 never leaks down into what is meant to stay reusable transport.
 
-**Forge is a world project.** `Puck.World.Forge` authors game content — SM83 cartridges and the authoring
-document families — for `Puck.World`; the name says so. Its C# namespace still reads `Puck.Forge` until
-the one-time namespace normalization.
+**Authoring is a world project; the forges are brick projects.** `Puck.World.Authoring` holds the authored-content
+document families `Puck.World` embeds inline; the ROM forges live beside their machines as
+`Puck.HumbleGamingBrick.Forge` (SM83/CGB) and `Puck.AdvancedGamingBrick.Forge` (ARM7TDMI/AGB), each packable on
+its own. The audio/synth document families sit in `Puck.Assets` so a forge package never drags a world assembly.
 
 **Everything is v1.** `puck.world.def.v1`, `puck.world.projection.v1`, `puck.world.counterpart.v1` — no
 schema in this repository carries a v2, and none is planned. Supergreen holds: zero consumers, so a

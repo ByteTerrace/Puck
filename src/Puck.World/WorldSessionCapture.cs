@@ -98,7 +98,7 @@ internal static class WorldSessionCapture {
             assets: creations,
             id: static creation => creation.Id,
             document: static creation => creation.Document,
-            canonicalize: static (document, source) => Puck.Forge.Authoring.CreationCanonicalizer.Canonicalize(
+            canonicalize: static (document, source) => Puck.World.Authoring.CreationCanonicalizer.Canonicalize(
                 document: document,
                 source: source
             ),

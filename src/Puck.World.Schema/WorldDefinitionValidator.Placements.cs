@@ -1,6 +1,6 @@
 using System.Globalization;
 using Puck.Abstractions.Presentation;
-using Puck.Forge.Authoring;
+using Puck.World.Authoring;
 using Puck.SignedDistance;
 using Puck.Text;
 using Puck.Physics.Motion;
@@ -33,7 +33,7 @@ public static partial class WorldDefinitionValidator {
     )
         ? creation.Document.Behavior?.Locomotion
         : null);
-    private static bool ShapesContain(IReadOnlyList<Puck.Forge.Authoring.ShapeDocument> shapes, int id) {
+    private static bool ShapesContain(IReadOnlyList<Puck.World.Authoring.ShapeDocument> shapes, int id) {
         for (var index = 0; (index < shapes.Count); index++) {
             if (shapes[index].Id == id) {
                 return true;
@@ -46,7 +46,7 @@ public static partial class WorldDefinitionValidator {
     // Entity/EntityPart are index bounded; an EntityPart also requires the authored id its look resolves at runtime.
     // Placement resolves its row and, when ShapeId is present, that the id
     // names a real shape in the referenced placement's creation document, the same rule
-    // Puck.Forge.Authoring.CreationCameraDocument enforces.
+    // Puck.World.Authoring.CreationCameraDocument enforces.
     private static void ValidateAnchor(WorldAnchor anchor, IReadOnlyList<WorldPlacement> placements, HashSet<string> placementIds, IReadOnlyList<WorldPrototype> creations, int populationCapacity, string path, List<string> errors) {
         switch (anchor) {
             case null:
@@ -351,7 +351,7 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            var violations = Puck.Forge.Authoring.CreationCanonicalizer.Validate(document: creation.Document);
+            var violations = Puck.World.Authoring.CreationCanonicalizer.Validate(document: creation.Document);
 
             if (violations.Count > 0) {
                 foreach (var violation in violations) {
@@ -363,7 +363,7 @@ public static partial class WorldDefinitionValidator {
 
             // The hash pin: recompute through the ONE pipeline and compare — the only accepted hash is the one the
             // pipeline itself computes over this document's canonical bytes.
-            var canonical = Puck.Forge.Authoring.CreationCanonicalizer.Canonicalize(
+            var canonical = Puck.World.Authoring.CreationCanonicalizer.Canonicalize(
                 document: creation.Document,
                 source: creation.Id
             );
@@ -1277,10 +1277,10 @@ public static partial class WorldDefinitionValidator {
                 (placement.Inhabit is null)
             ) {
                 // A scope-free static stamp materializes one engine instance PER SHAPE (the tight-bound emission
-                // split — Puck.Forge.Authoring.CreationStampEmitter.PerCopyInstanceCount), so the ceiling charges
+                // split — Puck.World.Authoring.CreationStampEmitter.PerCopyInstanceCount), so the ceiling charges
                 // copies × that factor.
                 var perCopyInstances = ((animatedCreation is { } staticCreation)
-                    ? Puck.Forge.Authoring.CreationStampEmitter.PerCopyInstanceCount(document: staticCreation.Document)
+                    ? Puck.World.Authoring.CreationStampEmitter.PerCopyInstanceCount(document: staticCreation.Document)
                     : 1
                 );
                 var contribution = checked((WorldPlacementStamp.MaterializedCopyCeiling(

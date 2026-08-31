@@ -1,6 +1,6 @@
 using System.Numerics;
 using Puck.Assets.Documents;
-using Puck.Forge.Authoring;
+using Puck.World.Authoring;
 using Puck.SignedDistance;
 using Puck.World.Protocol;
 using Xunit;

@@ -1,6 +1,6 @@
 using Puck.Abstractions.Machines;
 using Puck.AdvancedGamingBrick;
-using Puck.Forge.Tune;
+using Puck.HumbleGamingBrick.Forge.Tune;
 using Puck.HumbleGamingBrick;
 
 namespace Puck.World;
