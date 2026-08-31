@@ -1,6 +1,6 @@
 using Puck.Assets.Documents;
 using System.Text.Json.Serialization;
-using Puck.Forge.Authoring;
+using Puck.World.Authoring;
 
 namespace Puck.World;
 

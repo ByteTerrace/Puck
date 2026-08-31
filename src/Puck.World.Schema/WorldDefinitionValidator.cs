@@ -1,7 +1,8 @@
 using System.Numerics;
 using System.Text.Json;
 using Puck.Abstractions.Presentation;
-using Puck.Forge.Authoring;
+using Puck.Assets.Documents;
+using Puck.World.Authoring;
 using Puck.Maths;
 using Puck.SignedDistance;
 using Puck.World.Protocol;
@@ -86,8 +87,8 @@ public static partial class WorldDefinitionValidator {
     // Loads the referenced document (never required to exist until here — the row itself is a plain Name/Source/Hash
     // triple with nothing to validate offline), then runs the SAME structural check CheckAsset already gives every
     // embedded family, plus two facts JudgeCanonicalizer/MusicCanonicalizer alone cannot check: they validate one
-    // document at a time against only what Puck.Forge.Authoring itself can see. ticksPerBeat's divisibility
-    // duplicates ValidateSimulation's own FixedTickConversion.TicksPerSecond reasoning (Puck.Forge.Authoring cannot
+    // document at a time against only what Puck.World.Authoring itself can see. ticksPerBeat's divisibility
+    // duplicates ValidateSimulation's own FixedTickConversion.TicksPerSecond reasoning (Puck.World.Authoring cannot
     // reference that constant's true owner either); a transition's `when` token resolves against WorldAudioCue's
     // closed vocabulary, which this document family's own project cannot reference without inverting the dependency.
     private static AssetCheck? CheckJudge(WorldJudgeRow row) {

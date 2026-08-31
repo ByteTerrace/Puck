@@ -12,6 +12,7 @@
         <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
         <ProjectReference Include="..\Puck.Physics\Puck.Physics.csproj" />
         <ProjectReference Include="..\Puck.Text\Puck.Text.csproj" />
-        <ProjectReference Include="..\Puck.World.Forge\Puck.World.Forge.csproj" />
+        <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
+        <ProjectReference Include="..\Puck.World.Authoring\Puck.World.Authoring.csproj" />
     </ItemGroup>
 </Project>

@@ -320,7 +320,7 @@ arguments.
 | `ValueNoise01(cellX, cellZ, noiseCells, seed)` | One octave of quintic-smoothed value noise over the cell index, in `[0, 1)`. A caller sums octaves itself, as `WorldFieldLattice.ApplyNoiseFill` and `CreationStampSampling.ResolveNoise` both do. |
 
 Both `Puck.World.Server.WorldFieldLattice` (a world's live `fields` section)
-and `Puck.Forge.Authoring.CreationStampSampling` (a placement's Noise/Scatter
+and `Puck.World.Authoring.CreationStampSampling` (a placement's Noise/Scatter
 distribution regions) route their cell fills through this type instead of
 each keeping its own copy, so the two agree on what "the same seed" means by
 construction rather than by two hand-kept copies staying in sync.

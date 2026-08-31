@@ -5,7 +5,7 @@ using System.Text.Json.Nodes;
 using Xunit;
 
 using Puck.Assets.Documents;
-using Puck.Forge.Authoring;
+using Puck.World.Authoring;
 using Puck.Hosting;
 using Puck.Maths;
 using Puck.SignedDistance;
@@ -419,7 +419,7 @@ internal static class Fixtures {
     /// <see cref="BuildGradientUpDocument"/> relocates.</summary>
     public const int GradientUpSeatSlot = 0;
 
-    /// <summary><c>Puck.Forge.Authoring.CreationGeometry</c>'s own canonical <c>SdfSolidPrimitive.Sphere</c> local
+    /// <summary><c>Puck.World.Authoring.CreationGeometry</c>'s own canonical <c>SdfSolidPrimitive.Sphere</c> local
     /// radius — that table's constant is private, so this mirrors its grepped value rather than referencing it, to
     /// size <see cref="BuildBallCreation"/>'s shape <c>Scale</c> against a known local unit. A change to the
     /// upstream table's value is exactly the kind of drift <see cref="BuildBallCreation"/>'s canonicalize-at-build

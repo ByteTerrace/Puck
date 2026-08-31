@@ -15,6 +15,6 @@
         <!-- The domain-specific SDF ISA this project's programs are measured against. Test-only: Puck.ShaderVm itself
              references neither. -->
         <ProjectReference Include="..\..\src\Puck.SignedDistance\Puck.SignedDistance.csproj" />
-        <ProjectReference Include="..\..\src\Puck.World.Forge\Puck.World.Forge.csproj" />
+        <ProjectReference Include="..\..\src\Puck.World.Authoring\Puck.World.Authoring.csproj" />
     </ItemGroup>
 </Project>

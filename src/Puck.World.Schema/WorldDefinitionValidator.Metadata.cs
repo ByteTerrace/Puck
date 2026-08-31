@@ -1,6 +1,6 @@
 using System.Numerics;
 using System.Text.Json;
-using Puck.Forge.Authoring;
+using Puck.World.Authoring;
 using Puck.Maths;
 using Puck.SignedDistance;
 
@@ -1372,8 +1372,7 @@ public static partial class WorldDefinitionValidator {
         }
     }
     // An authored simulation rate must be exactly 0 (resident, non-stepping — see WorldSimulationDefaults.RateHz) or
-    // a positive divisor of the fixed 50400 engine-tick base (FixedTickConversion.TicksPerSecond; duplicated here
-    // because Puck.World.Schema cannot reference Puck.Hosting, where EngineTicks lives), so EngineTicks.PerRate always
+    // a positive divisor of the fixed 50400 engine-tick base (FixedTickConversion.TicksPerSecond), so EngineTicks.PerRate always
     // derives a whole engine-tick step width. A negative rate is refused outright; the divisor check applies only to
     // a positive rate (0 divides nothing).
     private static void ValidateSimulation(WorldSimulationDefaults? simulation, List<string> errors) {

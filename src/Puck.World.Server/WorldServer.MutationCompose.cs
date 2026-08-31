@@ -821,7 +821,7 @@ public sealed partial class WorldServer {
                         id: m.Creation.Id,
                         hash: m.Creation.HashRaw,
                         kind: "creation",
-                        canonicalize: static (document, source) => Puck.Forge.Authoring.CreationCanonicalizer.Canonicalize(
+                        canonicalize: static (document, source) => Puck.World.Authoring.CreationCanonicalizer.Canonicalize(
                             document: document,
                             source: source
                         ),
@@ -950,7 +950,7 @@ public sealed partial class WorldServer {
                         id: m.Tune.Id,
                         hash: m.Tune.Hash,
                         kind: "tune",
-                        canonicalize: static (document, source) => Puck.Forge.Authoring.AudioCanonicalizer.Canonicalize(
+                        canonicalize: static (document, source) => Puck.Assets.Documents.AudioCanonicalizer.Canonicalize(
                             document: document,
                             source: source
                         ),
@@ -1009,7 +1009,7 @@ public sealed partial class WorldServer {
                         id: m.Patch.Id,
                         hash: m.Patch.Hash,
                         kind: "patch",
-                        canonicalize: static (document, source) => Puck.Forge.Authoring.SynthPatchCanonicalizer.Canonicalize(
+                        canonicalize: static (document, source) => Puck.Assets.Documents.SynthPatchCanonicalizer.Canonicalize(
                             document: document,
                             source: source
                         ),

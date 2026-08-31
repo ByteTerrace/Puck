@@ -98,7 +98,7 @@ internal static class WorldSessionCapture {
             assets: creations,
             id: static creation => creation.Id,
             document: static creation => creation.Document,
-            canonicalize: static (document, source) => Puck.Forge.Authoring.CreationCanonicalizer.Canonicalize(
+            canonicalize: static (document, source) => Puck.World.Authoring.CreationCanonicalizer.Canonicalize(
                 document: document,
                 source: source
             ),
@@ -132,7 +132,7 @@ internal static class WorldSessionCapture {
             assets: patches,
             id: static patch => patch.Id,
             document: static patch => patch.Document,
-            canonicalize: static (document, source) => Puck.Forge.Authoring.SynthPatchCanonicalizer.Canonicalize(
+            canonicalize: static (document, source) => Puck.Assets.Documents.SynthPatchCanonicalizer.Canonicalize(
                 document: document,
                 source: source
             ),
@@ -251,7 +251,7 @@ internal static class WorldSessionCapture {
             assets: tunes,
             id: static tune => tune.Id,
             document: static tune => tune.Document,
-            canonicalize: static (document, source) => Puck.Forge.Authoring.AudioCanonicalizer.Canonicalize(
+            canonicalize: static (document, source) => Puck.Assets.Documents.AudioCanonicalizer.Canonicalize(
                 document: document,
                 source: source
             ),

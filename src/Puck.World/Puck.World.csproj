@@ -37,7 +37,8 @@
         <ProjectReference Include="..\Puck.World.Addons\Puck.World.Addons.csproj" />
         <ProjectReference Include="..\Puck.World.Client\Puck.World.Client.csproj" />
         <ProjectReference Include="..\Puck.World.Console\Puck.World.Console.csproj" />
-        <ProjectReference Include="..\Puck.World.Forge\Puck.World.Forge.csproj" />
+        <ProjectReference Include="..\Puck.HumbleGamingBrick.Forge\Puck.HumbleGamingBrick.Forge.csproj" />
+        <ProjectReference Include="..\Puck.World.Authoring\Puck.World.Authoring.csproj" />
         <ProjectReference Include="..\Puck.World.Protocol\Puck.World.Protocol.csproj" />
         <ProjectReference Include="..\Puck.World.Schema\Puck.World.Schema.csproj" />
         <ProjectReference Include="..\Puck.World.Server\Puck.World.Server.csproj" />

@@ -32,8 +32,8 @@
       },
       "Azure.Storage.Blobs": {
         "type": "Transitive",
-        "resolved": "12.29.1",
-        "contentHash": "pWh7xZBto8YcwiO853AB3uijTfVqs9PDte0Bu9/Zd8O9nwKiitWm0Jej1vsNkmYUzeG1552f8vJPjmtW30pBUQ==",
+        "resolved": "12.29.2",
+        "contentHash": "NeZmk7bphspT2BYn8XaNCTV4/9vQG+ea79F85MBTi2o2WiXIIJNsRBtFyeBrzK2HIk476rfSqLNwPt4vXgOEkQ==",
         "dependencies": {
           "Azure.Core": "1.55.0",
           "Azure.Storage.Common": "12.28.0"
@@ -304,11 +304,10 @@
           "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.*, )"
         }
       },
-      "puck.world.forge": {
+      "puck.world.authoring": {
         "type": "Project",
         "dependencies": {
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.HumbleGamingBrick": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.SignedDistance": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Text": "[0.1.0-alpha, )"
         }
@@ -330,10 +329,11 @@
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Attestation": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Physics": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Text": "[0.1.0-alpha, )",
-          "Puck.World.Forge": "[1.0.0, )"
+          "Puck.World.Authoring": "[1.0.0, )"
         }
       }
     }

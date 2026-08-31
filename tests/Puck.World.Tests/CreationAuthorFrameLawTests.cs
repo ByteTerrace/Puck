@@ -1,7 +1,7 @@
 using System.Numerics;
 using System.Text;
 
-using Puck.Forge.Authoring;
+using Puck.World.Authoring;
 using Puck.Maths;
 using Puck.SignedDistance;
 using Puck.SignedDistance.Queries;

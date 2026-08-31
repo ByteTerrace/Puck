@@ -1564,22 +1564,22 @@ internal sealed class WorldPrincipalJsonConverter : JsonConverter<WorldPrincipal
     }
 }
 /// <summary>
-/// Bridges an embedded <see cref="Puck.Forge.Authoring.CreationDocument"/> (a <see cref="WorldPrototype.Document"/>) through
+/// Bridges an embedded <see cref="Puck.World.Authoring.CreationDocument"/> (a <see cref="WorldPrototype.Document"/>) through
 /// the creation contract's own serializer shape (<see cref="Puck.Assets.Documents.DocumentJsonOptions.Shared"/> — member
 /// order, string enums, and the Vector2/Vector3/Quaternion array converters) instead of this context's
 /// policies, so the inline-canonical embed carries exactly the member vocabulary
-/// <see cref="Puck.Forge.Authoring.CreationCanonicalizer"/> hashes. Formatting (indent/newlines) rides the outer canonical
+/// <see cref="Puck.World.Authoring.CreationCanonicalizer"/> hashes. Formatting (indent/newlines) rides the outer canonical
 /// writer, which is deterministic — the ouroboros round-trip covers the composition.
 /// </summary>
-internal sealed class CreationDocumentJsonConverter : JsonConverter<Puck.Forge.Authoring.CreationDocument> {
+internal sealed class CreationDocumentJsonConverter : JsonConverter<Puck.World.Authoring.CreationDocument> {
     /// <inheritdoc/>
-    public override Puck.Forge.Authoring.CreationDocument? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
-        JsonSerializer.Deserialize<Puck.Forge.Authoring.CreationDocument>(
+    public override Puck.World.Authoring.CreationDocument? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+        JsonSerializer.Deserialize<Puck.World.Authoring.CreationDocument>(
             reader: ref reader,
             options: Puck.Assets.Documents.DocumentJsonOptions.Shared
         );
     /// <inheritdoc/>
-    public override void Write(Utf8JsonWriter writer, Puck.Forge.Authoring.CreationDocument value, JsonSerializerOptions options) =>
+    public override void Write(Utf8JsonWriter writer, Puck.World.Authoring.CreationDocument value, JsonSerializerOptions options) =>
         JsonSerializer.Serialize(
             writer: writer,
             value: value,
@@ -1587,20 +1587,20 @@ internal sealed class CreationDocumentJsonConverter : JsonConverter<Puck.Forge.A
         );
 }
 /// <summary>
-/// Bridges an embedded <see cref="Puck.Forge.Authoring.AudioDocument"/> (a <see cref="WorldTune.Document"/>) through the
+/// Bridges an embedded <see cref="Puck.Assets.Documents.AudioDocument"/> (a <see cref="WorldTune.Document"/>) through the
 /// audio contract's own serializer shape (<see cref="Puck.Assets.Documents.DocumentJsonOptions.Shared"/>) instead of this
 /// context's policies, so the inline-canonical embed carries exactly the member vocabulary
-/// <see cref="Puck.Forge.Authoring.AudioCanonicalizer"/> hashes, matching <see cref="CreationDocumentJsonConverter"/>'s approach.
+/// <see cref="Puck.Assets.Documents.AudioCanonicalizer"/> hashes, matching <see cref="CreationDocumentJsonConverter"/>'s approach.
 /// </summary>
-internal sealed class AudioDocumentJsonConverter : JsonConverter<Puck.Forge.Authoring.AudioDocument> {
+internal sealed class AudioDocumentJsonConverter : JsonConverter<Puck.Assets.Documents.AudioDocument> {
     /// <inheritdoc/>
-    public override Puck.Forge.Authoring.AudioDocument? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
-        JsonSerializer.Deserialize<Puck.Forge.Authoring.AudioDocument>(
+    public override Puck.Assets.Documents.AudioDocument? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+        JsonSerializer.Deserialize<Puck.Assets.Documents.AudioDocument>(
             reader: ref reader,
             options: Puck.Assets.Documents.DocumentJsonOptions.Shared
         );
     /// <inheritdoc/>
-    public override void Write(Utf8JsonWriter writer, Puck.Forge.Authoring.AudioDocument value, JsonSerializerOptions options) =>
+    public override void Write(Utf8JsonWriter writer, Puck.Assets.Documents.AudioDocument value, JsonSerializerOptions options) =>
         JsonSerializer.Serialize(
             writer: writer,
             value: value,
@@ -1608,18 +1608,18 @@ internal sealed class AudioDocumentJsonConverter : JsonConverter<Puck.Forge.Auth
         );
 }
 /// <summary>
-/// Bridges an embedded <see cref="Puck.Forge.Authoring.SynthPatchDocument"/> (a <see cref="WorldPatch.Document"/>) through
+/// Bridges an embedded <see cref="Puck.Assets.Documents.SynthPatchDocument"/> (a <see cref="WorldPatch.Document"/>) through
 /// the synth contract's own serializer shape — see <see cref="AudioDocumentJsonConverter"/>.
 /// </summary>
-internal sealed class SynthPatchDocumentJsonConverter : JsonConverter<Puck.Forge.Authoring.SynthPatchDocument> {
+internal sealed class SynthPatchDocumentJsonConverter : JsonConverter<Puck.Assets.Documents.SynthPatchDocument> {
     /// <inheritdoc/>
-    public override Puck.Forge.Authoring.SynthPatchDocument? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
-        JsonSerializer.Deserialize<Puck.Forge.Authoring.SynthPatchDocument>(
+    public override Puck.Assets.Documents.SynthPatchDocument? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+        JsonSerializer.Deserialize<Puck.Assets.Documents.SynthPatchDocument>(
             reader: ref reader,
             options: Puck.Assets.Documents.DocumentJsonOptions.Shared
         );
     /// <inheritdoc/>
-    public override void Write(Utf8JsonWriter writer, Puck.Forge.Authoring.SynthPatchDocument value, JsonSerializerOptions options) =>
+    public override void Write(Utf8JsonWriter writer, Puck.Assets.Documents.SynthPatchDocument value, JsonSerializerOptions options) =>
         JsonSerializer.Serialize(
             writer: writer,
             value: value,

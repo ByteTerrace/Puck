@@ -1,4 +1,4 @@
-using Puck.Forge.Authoring;
+using Puck.World.Authoring;
 
 namespace Puck.World;
 

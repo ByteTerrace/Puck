@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Puck.Forge.Authoring;
+using Puck.World.Authoring;
 
 namespace Puck.World;
 

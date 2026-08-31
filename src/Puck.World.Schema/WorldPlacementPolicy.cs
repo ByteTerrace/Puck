@@ -23,7 +23,7 @@ public static class WorldPlacementPolicy {
     public const int MaxAnimatedStampShapes = MaxShapesPerStamp;
     /// <summary>The most derived-face slots a world may reserve in the engine surface table.</summary>
     public const int MaxDerivedFaceScreens = (Puck.SignedDistance.SdfProgramBuilder.MaxScreenSurfaces - DerivedFaceBase);
-    /// <summary>The per-stamp shape budget: the largest <see cref="Puck.Forge.Authoring.CreationDocument.StampShapeCount"/>
+    /// <summary>The per-stamp shape budget: the largest <see cref="Puck.World.Authoring.CreationDocument.StampShapeCount"/>
     /// (authored shapes + expanded text-run glyphs) a creation row may carry. CONTRACT INVARIANT: feeds
     /// <see cref="MaxAnimatedStampShapes"/>, which sizes <c>Client.WorldStampPool</c>'s per-slot
     /// stackalloc spans and (via <c>Client.WorldStampPool.SlotsPerPlacement</c>) the

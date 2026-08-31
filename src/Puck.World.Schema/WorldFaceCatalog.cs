@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
-using Puck.Forge.Authoring;
+using Puck.World.Authoring;
 using Puck.Maths;
 using Puck.SignedDistance;
 
@@ -12,7 +12,7 @@ namespace Puck.World;
 /// and the slot that source claims.
 /// </summary>
 /// <param name="PlacementId">The owning placement's id.</param>
-/// <param name="FaceName">The declared <see cref="Puck.Forge.Authoring.CreationFaceDocument.Name"/>.</param>
+/// <param name="FaceName">The declared <see cref="Puck.World.Authoring.CreationFaceDocument.Name"/>.</param>
 /// <param name="ShapeId">The named shape id, or <see langword="null"/> when the face names none.</param>
 /// <param name="ShapeType">The named shape's primitive kind, or <see langword="null"/> when the face names none.</param>
 /// <param name="Frame">The face's derived geometry.</param>
@@ -63,7 +63,7 @@ public sealed class WorldFaceCatalog {
     private readonly Dictionary<(string PlacementId, string FaceName), int> m_index;
 
     private static readonly ConditionalWeakTable<WorldDefinition, WorldFaceCatalog> PerDefinition = new();
-    // Puck.Forge.Authoring.CreationFrame's 180°-about-+Y conversion quaternion, built the same way (an exact axis
+    // Puck.World.Authoring.CreationFrame's 180°-about-+Y conversion quaternion, built the same way (an exact axis
     // swap/negate, never Quaternion.CreateFromAxisAngle) — the value every author-frame shape's own rotation carries
     // when the author declared none.
     private static readonly Quaternion EngineFrameHalfTurn = new(
@@ -224,7 +224,7 @@ public sealed class WorldFaceCatalog {
         // angles through pi, SinCos, quaternion rotation, and normalization introduces a small perpendicular
         // component, so reciprocal quilt faces that occupy the same plane derive different seam points. Preserve the
         // exact authored geometry. A shape's own rotation is HalfTurn (0,1,0,0), never Identity, whenever it entered
-        // the engine through Puck.Forge.Authoring.CreationFrame — the author-frame conversion pre-multiplies every
+        // the engine through Puck.World.Authoring.CreationFrame — the author-frame conversion pre-multiplies every
         // shape by exactly that quaternion, so an author's OWN unrotated shape is this exact value, not Identity, on
         // every real creation. Both are pure Y rotations Right/Normal negate under exactly, so both stay on this path.
         var shapeIsIdentity = ((shape is null) || shape.Rotation.Equals(other: Quaternion.Identity));

@@ -1,7 +1,7 @@
 using System.Numerics;
 using Puck.Assets.Documents;
 using System.Text.Json.Serialization;
-using Puck.Forge.Authoring;
+using Puck.World.Authoring;
 using Puck.Abstractions.Documents;
 using Puck.Maths;
 using Puck.Physics;

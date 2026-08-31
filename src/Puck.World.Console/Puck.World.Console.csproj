@@ -2,8 +2,8 @@
     <PropertyGroup>
         <!-- WorldRowFieldStepper reflects an arbitrary document-row Type at runtime (world.row.step's generic
              field walk) to resolve a leaf's declared CLR type — an enum-cycle target's vocabulary can only be
-             read that way. The SAME reflection-based shape Puck.World.Forge already opts out for
-             (DocumentJsonOptions.Shared serializes the creation/audio/synth document families outside any
+             read that way. The SAME reflection-based shape the authoring document families already opt out for
+             (Puck.Assets' DocumentJsonOptions.Shared serializes the creation/audio/synth document families outside any
              source-generated context), reached transitively the moment a step path walks into a WorldCreation
              row's embedded CreationDocument. -->
         <IsAotCompatible>false</IsAotCompatible>

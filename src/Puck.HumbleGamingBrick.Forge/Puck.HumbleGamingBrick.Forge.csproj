@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <Description>The SM83 ROM forge for the Humble GamingBrick: hand-author CGB cartridges in C# through Sm83Emitter, the interrupt-driven game framework (input, BG queue, shadow OAM, PRNG, battery saves, text, APU sound driver), the declarative GameManifest/AssetLinker layer, and pure-C# RGBA8 tile/palette encoders. Every cart self-verifies by driving a real emulated machine and asserting observable WRAM/framebuffer behavior before the bytes are written.</Description>
+        <IsAotCompatible>false</IsAotCompatible>
+        <IsPackable>true</IsPackable>
+        <PackageId>ByteTerrace.Puck.HumbleGamingBrick.Forge</PackageId>
+        <PackageTags>authoring;cgb;determinism;dmg;homebrew;rom;sm83</PackageTags>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Engine services</PuckLayer>
+        <RootNamespace>Puck.HumbleGamingBrick.Forge</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
+        <ProjectReference Include="..\Puck.HumbleGamingBrick\Puck.HumbleGamingBrick.csproj" />
+    </ItemGroup>
+</Project>

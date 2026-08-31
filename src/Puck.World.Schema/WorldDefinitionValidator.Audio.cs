@@ -20,7 +20,7 @@ public static partial class WorldDefinitionValidator {
         RequireRange(
             value: audio.MasterGain,
             min: 0f,
-            max: Puck.Forge.Authoring.CreationSoundDocument.MaxLevel,
+            max: Puck.World.Authoring.CreationSoundDocument.MaxLevel,
             name: "audio.masterGain",
             errors: errors
         );
@@ -113,9 +113,9 @@ public static partial class WorldDefinitionValidator {
 
             if (
                 (cue.GainThousandths is { } gain) &&
-                ((gain < 0) || (gain > ((int)(Puck.Forge.Authoring.CreationSoundDocument.MaxLevel * 1000f))))
+                ((gain < 0) || (gain > ((int)(Puck.World.Authoring.CreationSoundDocument.MaxLevel * 1000f))))
             ) {
-                errors.Add(item: $"{path}.gainThousandths {gain} must be within [0, {((int)(Puck.Forge.Authoring.CreationSoundDocument.MaxLevel * 1000f))}].");
+                errors.Add(item: $"{path}.gainThousandths {gain} must be within [0, {((int)(Puck.World.Authoring.CreationSoundDocument.MaxLevel * 1000f))}].");
             }
 
             switch (cue.Placement) {
@@ -159,7 +159,7 @@ public static partial class WorldDefinitionValidator {
         RequireRange(
             value: emission.Level,
             min: 0f,
-            max: Puck.Forge.Authoring.CreationSoundDocument.MaxLevel,
+            max: Puck.World.Authoring.CreationSoundDocument.MaxLevel,
             name: $"{path}.level",
             errors: errors
         );
@@ -186,7 +186,7 @@ public static partial class WorldDefinitionValidator {
         RequireRange(
             value: feed.Gain,
             min: 0f,
-            max: Puck.Forge.Authoring.CreationSoundDocument.MaxLevel,
+            max: Puck.World.Authoring.CreationSoundDocument.MaxLevel,
             name: $"{path}.gain",
             errors: errors
         );
