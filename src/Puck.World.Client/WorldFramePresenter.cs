@@ -150,7 +150,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     private readonly IWorldCameraProgramRig?[] m_cameraModeCompiledRig = new IWorldCameraProgramRig?[PlayerRoster.MaxSlots];
     // ResolveNamedCamera's compiled-rig cache, keyed by camera row name (several named cameras may resolve in one
     // frame — a camera-bearing layout slot). Same reference-equality invalidation as the seat cache above.
-    private readonly Dictionary<string, (WorldCameraProgram Program, IReadOnlyList<WorldDynamicsRow> Dynamics, IReadOnlyList<WorldCamera> Cameras, IWorldCameraProgramRig Rig)> m_namedCameraRigCache = new(comparer: StringComparer.Ordinal);
+    private readonly Dictionary<string, (WorldCameraProgram Program, IReadOnlyList<WorldDynamicsRow> Dynamics, IReadOnlyList<WorldCurveRow> Curves, IReadOnlyList<WorldCamera> Cameras, IWorldCameraProgramRig Rig)> m_namedCameraRigCache = new(comparer: StringComparer.Ordinal);
     private readonly WorldGroupAnchors m_groupAnchors = new();
     private readonly List<SdfViewSnapshot> m_views = new(capacity: PlayerRoster.MaxSlots);
     private DynamicTransform[] m_transforms = [];
@@ -1066,6 +1066,10 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
                 objB: definition.Dynamics
             ) &&
             ReferenceEquals(
+                objA: cached.Curves,
+                objB: definition.Curves
+            ) &&
+            ReferenceEquals(
                 objA: cached.Cameras,
                 objB: definition.Cameras
             )
@@ -1080,7 +1084,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             program: program
         );
 
-        m_namedCameraRigCache[name] = (program, definition.Dynamics, definition.Cameras, rig);
+        m_namedCameraRigCache[name] = (program, definition.Dynamics, definition.Curves, definition.Cameras, rig);
 
         return rig;
     }

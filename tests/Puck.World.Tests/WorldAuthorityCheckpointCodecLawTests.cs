@@ -2,7 +2,9 @@ using System.Numerics;
 
 using Xunit;
 
+using Puck.Assets.Documents;
 using Puck.Maths;
+using Puck.Physics.Motion;
 using Puck.Storage;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -298,6 +300,82 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
         );
     }
     [Fact]
+    public void Curve_follow_producer_with_nonzero_arc_state_round_trips_structurally() {
+        var curveRow = new WorldCurveRow(
+            Name: "path",
+            Knots: [
+                new WorldCurveKnot(Position: new DocumentVector3(x: 0f, y: 0f, z: 0f), TangentYaw: 0f, Curvature: 0f),
+                new WorldCurveKnot(Position: new DocumentVector3(x: 20f, y: 0f, z: 0f), TangentYaw: 0f, Curvature: 0f),
+            ],
+            Closed: false
+        );
+        var document = (Fixtures.BuildDocument() with { CurvesRaw = [curveRow] });
+        var kit = document.Kits[0];
+        var followProgram = new BodyMotionProgram(
+            Name: "follow",
+            Version: "puck.body-motion.v1",
+            Kind: BodyProgramKind.Producer,
+            Operations: [BodyMotionOp.SenseNearestInCone, BodyMotionOp.FaceSensorTarget, BodyMotionOp.ProduceAttendIntent],
+            Target: new BodyTargetSource.CurveFollow(Curve: "path", Rate: 2f)
+        );
+
+        document = (document with {
+            BodyMotionProgramsRaw = [.. document.BodyMotionPrograms, followProgram],
+            KitRowsRaw = [kit with {
+                ProducersRaw = new Dictionary<string, BodyProgramParameters>(kit.Producers) {
+                    ["follow"] = new BodyProgramParameters(
+                        Scalars: new Dictionary<string, float> {
+                            ["standoffRadius"] = 0.1f,
+                            ["approach"] = 1f,
+                            ["orbit"] = 0f,
+                            ["altitudeGain"] = 0f,
+                            ["inwardGain"] = 3f,
+                            ["turnScale"] = 3f,
+                        },
+                        Channels: new Dictionary<string, string>()
+                    ),
+                },
+            }],
+        });
+
+        using var fixture = Fixtures.FreshServer(definition: document);
+
+        _ = fixture.Server.ApplySession(request: new SessionRequest.Join(
+            IdentityName: null,
+            Principal: WorldPrincipal.Seat(slot: 0),
+            Slot: 0,
+            WireProtocolKey: WorldProtocol.WireProtocolKey
+        ));
+
+        fixture.Server.Body(index: 0)!.SetIntentSource(source: IntentSource.Producer(name: "follow"));
+
+        for (var tick = 0; (tick < 24); tick++) {
+            fixture.Step();
+        }
+
+        Assert.True(condition: fixture.Server.TryCaptureCheckpoint(
+            checkpoint: out var checkpoint,
+            hostRow: EmptyHostRow(),
+            reason: out var reason
+        ), userMessage: reason);
+
+        var entry = checkpoint!.Population.Entries.Single(predicate: static row => (row.Index == 0));
+
+        Assert.True(condition: (entry.ProducerCurveArcRaw != 0L), userMessage: "the driven curve-follow arc position must be off rest before this law proves anything");
+
+        var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
+
+        Assert.True(condition: WorldAuthorityCheckpointCodec.TryDecode(
+            bytes: encoded,
+            checkpoint: out var decoded,
+            reason: out var decodeReason
+        ), userMessage: decodeReason);
+        Assert.True(
+            condition: DeepEqual.Compare(a: checkpoint, b: decoded),
+            userMessage: DeepEqual.LastMismatchPath
+        );
+    }
+    [Fact]
     public void Version_two_envelope_refuses_by_name() {
         var checkpoint = CapturedCheckpoint();
         var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
@@ -333,6 +411,24 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
             reason: out var reason
         ));
         Assert.Contains(actualString: reason, expectedSubstring: "version 4");
+    }
+    [Fact]
+    public void Version_five_envelope_refuses_by_name() {
+        var checkpoint = CapturedCheckpoint();
+        var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
+        var downgraded = ((byte[])encoded.Clone());
+
+        // Version 5 predates the curve-follow producer's arc-position state on the population entry. The current
+        // decoder must reject that exact prior layout instead of reading its shorter population residue.
+        downgraded[4] = 5;
+        downgraded[5] = 0;
+
+        Assert.False(condition: WorldAuthorityCheckpointCodec.TryDecode(
+            bytes: downgraded,
+            checkpoint: out _,
+            reason: out var reason
+        ));
+        Assert.Contains(actualString: reason, expectedSubstring: "version 5");
     }
     [Fact]
     public async Task Capture_encode_write_load_decode_restore_reaches_an_identical_second_checkpoint() {

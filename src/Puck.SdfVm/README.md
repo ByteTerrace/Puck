@@ -93,7 +93,17 @@ pole-matched second-order response `SdfCameraBoomFollower` applies as the
 seat-rig boom's ease; `Views/SecondOrderFollower.cs` is the presentation-only
 float twin of `Puck.Maths.SecondOrderDynamics` this and every stamped-part
 follower (`Puck.World.Client`) share — document-blind, allocation-free, never
-feeding back into simulation state.
+feeding back into simulation state. `SdfCameraProgram.cs`'s `path` op samples
+a named `curves` row by arc-length fraction and re-seeds the subject/eye
+there, facing the sampled tangent; `Views/SdfCurvePath.cs` is the same kind of
+presentation twin, but of `Puck.Maths.CurvatureSpline` — it converts an
+already-solved `CompiledCurvatureSpline`'s Q32 raws once at construction, so
+it carries no solver of its own and cannot diverge from the fixed-point
+primitive's tangent-length branch pick. Every intermediate (converted control
+points, arc table, wrap/clamp/lookup) is carried in `double`, not `float` — a
+legal curve can accumulate arc well past `2^24` units, where a `float` ULP
+already exceeds a legal short segment; `float` appears only at the two public
+seams, the total length and `Sample`'s returned position/yaw.
 
 `SdfCameraView.ExportFactory` puts that view's offscreen engine into export
 mode (`SdfWorldEngineOptions.CreateOutputImage` returning an

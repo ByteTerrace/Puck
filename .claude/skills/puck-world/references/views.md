@@ -175,6 +175,7 @@ never a new engine type. `version` is `puck.camera.v1`; the op-count ceiling is
 | `offset` | places the eye at `value` from the subject — in the subject's own axes unless `worldAxes`. `spreadPullback` widens it by the group spread (only meaningful when the caller's reference is a `group` anchor). |
 | `lookAt` | aims. `subject: null` looks along the current subject's forward at `focusDistance`; a subject aims at its pose plus `targetOffset`. |
 | `orbit` | places the eye by orbiting the subject at `distance`/`yaw`/`pitch` about `pivotOffset`. At most one. On `views.seatRig` the seat's live look adds to yaw/pitch; everywhere else the authored angles render unchanged. |
+| `path` | sets the current SUBJECT to a point sampled from a named `curves` row (see documents.md) by arc-length `fraction` (bindable), facing the curve's own tangent, and re-seeds the eye there. `anchor`'s subject-seeding role; at most one, and it must lead (refused together with `anchor`). No `rate` field — a constant-rate dolly binds `fraction` to a `state` row carrying the `advance` trait. |
 | `clampPitch` | bounds the pitch a later `orbit` resolves with, live delta included. At most one, and it must precede the orbit. |
 | `fov` | the rendered vertical FOV, radians. Every program needs one (or a `blend` that reaches ones that do). Bindable: a literal, or `state.<row>[.<key>]`. |
 | `dynamics` | names a `dynamics` row (see documents.md); the resolver REPORTS the response, the caller applies it as a second-order boom ease (`SdfCameraBoomFollower`). No op is no ease — the boom passes through untouched. At most one. |
@@ -188,8 +189,8 @@ namespace are all refused by name.
 `views.seatRig` must contain an `orbit` op: `seatControl` declares a live
 yaw/pitch band, and only an orbit can express it. `views.cameraRig` — the
 first-person framing a camera control application resolves through — must author
-neither `orbit` nor `offset`, because it sits exactly at the possessed camera
-body's own pose.
+none of `orbit`, `offset`, or `path`, because it sits exactly at the possessed
+camera body's own pose.
 
 Named `cameras` resolve through authored anchors independently of the seat
 state. `views.layouts` maps normalized slots to joined seats or named cameras.

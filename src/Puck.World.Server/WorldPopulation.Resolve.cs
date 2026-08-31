@@ -46,6 +46,11 @@ public sealed partial class WorldPopulation {
             registers: definition.TargetRegisters,
             channelCount: m_channels.ChannelCount
         );
+        // The LIVE row list — a curve-follow producer's per-tick Evaluate reads m_curveRows[CurveIndex].Compiled
+        // straight off this reference, so a curve upsert (which reassigns definition.Curves and re-runs Rebuild)
+        // retargets every follower on delivery without a second per-tick indirection.
+        m_curveRows = definition.Curves;
+        m_curves = WorldCurveTable.Compile(curves: definition.Curves);
         m_kits = new FixedWorldKit[definition.Kits.Count];
 
         for (var kit = 0; (kit < m_kits.Length); kit++) {
@@ -53,6 +58,7 @@ public sealed partial class WorldPopulation {
                 kit: definition.Kits[kit],
                 channels: m_channels,
                 targets: m_targets,
+                curves: m_curves,
                 programs: m_bodyMotionPrograms,
                 programRows: programRows,
                 creations: definition.Creations,

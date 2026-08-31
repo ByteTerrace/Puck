@@ -105,6 +105,10 @@
           "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpOrbitNullable",
           "description": "Gets the program\u0027s Orbit op, or null."
         },
+        "pathOp": {
+          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpPathNullable",
+          "description": "Gets the program\u0027s Path op, or null."
+        },
         "dynamicsOp": {
           "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpDynamicsNullable",
           "description": "Gets the program\u0027s Dynamics op, or null."

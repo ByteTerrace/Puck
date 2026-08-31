@@ -156,6 +156,8 @@ public sealed partial class WorldServer {
         WorldMutation.RemoveLook m => $"RemoveLook '{m.Name}'",
         WorldMutation.UpsertDynamics m => $"UpsertDynamics '{m.Row.Name}'",
         WorldMutation.RemoveDynamics m => $"RemoveDynamics '{m.Name}'",
+        WorldMutation.UpsertCurve m => $"UpsertCurve '{m.Row.Name}'",
+        WorldMutation.RemoveCurve m => $"RemoveCurve '{m.Name}'",
         WorldMutation.SetLookAssignment m => $"SetLookAssignment '{m.Assignment.Sequence.Name}'",
         WorldMutation.UpsertGrant m => $"UpsertGrant {m.Row.Principal.Describe()} {m.Row.Capability.ToString().ToLowerInvariant()} {m.Row.Subject.Describe()}",
         WorldMutation.RemoveGrant m => $"RemoveGrant {m.Target.Principal.Describe()} {m.Target.Capability.ToString().ToLowerInvariant()} {m.Target.Subject.Describe()}",

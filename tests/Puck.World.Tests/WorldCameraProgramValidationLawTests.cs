@@ -344,7 +344,7 @@ public sealed class WorldCameraProgramValidationLawTests {
         });
 
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: denied, reason: out var reason));
-        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "views.cameraRig must author no 'orbit' or 'offset' op");
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "views.cameraRig must author no 'orbit', 'offset', or 'path' op");
         Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(definition: control, reason: out var controlReason), userMessage: controlReason);
     }
 }

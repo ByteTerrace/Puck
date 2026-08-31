@@ -33,7 +33,10 @@ public sealed partial class WorldServer {
         WorldMutation.UpsertCreation or WorldMutation.RemoveCreation or
         // A dynamics row retune must recompile every fixed-point table that resolved it (a kit's planar shaping
         // among them), the same live-recompile rule a motion/collision edit already rides.
-        WorldMutation.UpsertDynamics or WorldMutation.RemoveDynamics);
+        WorldMutation.UpsertDynamics or WorldMutation.RemoveDynamics or
+        // A curves row retune must recompile the population's curve table index a body-motion producer's curve
+        // target source resolves by ordinal, the same live-recompile rule a dynamics retune already rides.
+        WorldMutation.UpsertCurve or WorldMutation.RemoveCurve);
     // Whether a mutation touches the addons section — the only door WorldAddonRow row content (or document order)
     // moves through OUTSIDE a whole-document rebuild (ApplyRebuild carries its own unconditional prepare, which
     // also covers a channel-table change by restaging the whole host), so a per-row structural diff gated on JUST
@@ -552,6 +555,7 @@ public sealed partial class WorldServer {
         WorldMutation.SetPlayerDefaults => WorldSection.PlayerDefaults,
         WorldMutation.UpsertLook or WorldMutation.RemoveLook or WorldMutation.SetLookAssignment => WorldSection.Looks,
         WorldMutation.UpsertDynamics or WorldMutation.RemoveDynamics => WorldSection.Dynamics,
+        WorldMutation.UpsertCurve or WorldMutation.RemoveCurve => WorldSection.Curves,
         WorldMutation.UpsertGrant or WorldMutation.RemoveGrant => WorldSection.Grants,
         WorldMutation.UpsertHudPanel or WorldMutation.RemoveHudPanel or WorldMutation.UpsertHudElement or WorldMutation.RemoveHudElement or WorldMutation.SetHudDefaults => WorldSection.Hud,
         // Generate's OBSERVABLE effect is a state write, so it shares the state section's coarse hold; its narrower
@@ -1192,6 +1196,32 @@ public sealed partial class WorldServer {
                 }
 
                 candidate = (current with { DynamicsRaw = dynamics });
+
+                return true;
+            case WorldMutation.UpsertCurve m:
+                candidate = (current with {
+                    CurvesRaw = Upsert(
+                    list: current.Curves,
+                    item: m.Row,
+                    keyOf: static row => row.Name
+                ),
+                });
+
+                return true;
+            case WorldMutation.RemoveCurve m:
+                if (!Remove(
+                    list: current.Curves,
+                    key: m.Name,
+                    keyOf: static row => row.Name,
+                    result: out var curves
+                )) {
+                    candidate = current;
+                    reason = $"no curves row named '{m.Name}'";
+
+                    return false;
+                }
+
+                candidate = (current with { CurvesRaw = curves });
 
                 return true;
             case WorldMutation.UpsertGrant m:

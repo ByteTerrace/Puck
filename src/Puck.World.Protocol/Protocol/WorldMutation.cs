@@ -679,4 +679,17 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Name">The dynamics row name to remove.</param>
     [MutationKind(ordinal: 72, section: WorldSection.Dynamics)]
     public sealed record RemoveDynamics(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
+    /// <summary>Upserts a curves row (whole-row, keyed by name) into the <see cref="WorldSection.Curves"/> section.
+    /// Applies live — a camera path op and a sim curve-follow target both read the resolved row's compiled spline
+    /// fresh on their next compile/step.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Row">The whole curves row.</param>
+    [MutationKind(ordinal: 73, section: WorldSection.Curves)]
+    public sealed record UpsertCurve(WorldPrincipal Principal, WorldCurveRow Row) : WorldMutation(Principal);
+    /// <summary>Removes a curves row by name. Rejected loudly by full-document revalidation while any consumer (a
+    /// camera program, a body-motion program) still names it.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Name">The curves row name to remove.</param>
+    [MutationKind(ordinal: 74, section: WorldSection.Curves)]
+    public sealed record RemoveCurve(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
 }

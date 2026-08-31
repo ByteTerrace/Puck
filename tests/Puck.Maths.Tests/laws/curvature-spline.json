@@ -1,0 +1,332 @@
+[
+  {
+    "Id": "curvature-spline.endpoint-curvature-oracle",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.CurvatureSpline", "Name": "Compile" },
+      { "Type": "Puck.Maths.CurvatureSplineKnot", "Name": "X" },
+      { "Type": "Puck.Maths.CurvatureSplineKnot", "Name": "Z" },
+      { "Type": "Puck.Maths.CurvatureSplineKnot", "Name": "Elevation" },
+      { "Type": "Puck.Maths.CurvatureSplineKnot", "Name": "TangentYaw" },
+      { "Type": "Puck.Maths.CurvatureSplineKnot", "Name": "Curvature" },
+      { "Type": "Puck.Maths.CurvatureSplineKnot", "Name": ".ctor" },
+      { "Type": "Puck.Maths.CompiledCurvatureSpline", "Name": "GetSegment" },
+      { "Type": "Puck.Maths.CurvatureSplineSegment", "Name": "P0X" },
+      { "Type": "Puck.Maths.CurvatureSplineSegment", "Name": "P0Z" },
+      { "Type": "Puck.Maths.CurvatureSplineSegment", "Name": "P1X" },
+      { "Type": "Puck.Maths.CurvatureSplineSegment", "Name": "P1Z" },
+      { "Type": "Puck.Maths.CurvatureSplineSegment", "Name": "P2X" },
+      { "Type": "Puck.Maths.CurvatureSplineSegment", "Name": "P2Z" },
+      { "Type": "Puck.Maths.CurvatureSplineSegment", "Name": "P3X" },
+      { "Type": "Puck.Maths.CurvatureSplineSegment", "Name": "P3Z" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "compiled endpoint curvature (κ0 at t=0, κ1 at t=1) over a hand-verified battery (straight, a symmetric quarter turn, the constructed multi-root segment, and a gentle asymmetric S)",
+        "Against": "Oracles.CurvatureSplineEndpointCurvatureDouble — an independent double-precision reconstruction of κ = cross2(B',B'')/|B'|³ from B'(0)=3(P1-P0), B''(0)=6(P0-2P1+P2) applied directly to the compiled Q32 control points, sharing no code with CurvatureSplineExactMath's s0/s1/w system, quartic, or Sturm chain",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the same endpoint curvature reconstruction, over the same battery, in exact BigInteger arithmetic up to the final narrowing to double for the envelope comparison",
+        "Against": "Oracles.CurvatureSplineEndpointCurvatureExact — the identical cubic-Bézier definition re-derived in System.Numerics.BigInteger from the compiled Q32 raws, proving the solve reproduces the authored curvature independent of any double-precision rounding on the reference side",
+        "Shared": "",
+        "Citation": "ENVELOPE: agreement is checked at 1e-4, frozen with margin over the measured maximum observed error (~6e-6) across the battery; both oracle legs read the ROUNDED compiled Q32 control points rather than the exact pre-rounding geometry CurvatureSplineExactMath.CompileSegment solves with internally (that intermediate is not part of the public surface), so this pins Compile's whole pipeline — solve plus one Q32 rounding — rather than isolating the solve alone",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "curvature-spline.g2-joint",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.CompiledCurvatureSpline", "Name": "GetSegment" },
+      { "Type": "Puck.Maths.CompiledCurvatureSpline", "Name": "EvaluateRaw" },
+      { "Type": "Puck.Maths.CompiledCurvatureSpline", "Name": "SegmentCount" },
+      { "Type": "Puck.Maths.CurvatureSplineSegment", "Name": "StationRaw" },
+      { "Type": "Puck.Maths.CurvatureSplineSample", "Name": "Curvature" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "at every interior joint of a 3-knot curve, evaluating exactly one Q32 raw before the joint's own StationRaw (the left segment's own near-t=1 curvature) and exactly at StationRaw (the right segment's own t=0 curvature) — both read through the subject's own public EvaluateRaw at the true Q32 station scale, never re-derived — agree within 2 raw Q16 units",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "curvature-spline.arc-length-table",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.CompiledCurvatureSpline", "Name": "GetSegment" },
+      { "Type": "Puck.Maths.CompiledCurvatureSpline", "Name": "TotalLength" },
+      { "Type": "Puck.Maths.CompiledCurvatureSpline", "Name": "KnotStation" },
+      { "Type": "Puck.Maths.CompiledCurvatureSpline", "Name": "SegmentCount" },
+      { "Type": "Puck.Maths.CurvatureSplineSegment", "Name": "ArcTable" },
+      { "Type": "Puck.Maths.CurvatureSplineSegment", "Name": "LengthRaw" },
+      { "Type": "Puck.Maths.CurvatureSplineSegment", "Name": "StationRaw" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "every compiled segment's arc table (panel count adaptively derived, not fixed) is strictly increasing on raws, its last entry equals LengthRaw, segment stations chain exactly from the running total, knot stations strictly increase, and the last knot station equals TotalLength (closing segment covered for a 3-knot open curve)",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "each segment's compiled arc length (LengthRaw)",
+        "Against": "Oracles.CurvatureSplineArcLengthByChordSubdivision — an independent 20000-subdivision chord-sum flattening of the compiled Q32 control points in double precision, which sums chords rather than integrating |B'(t)| by Simpson's rule the way CurvatureSplineExactMath's arc table does",
+        "Shared": "",
+        "Citation": "ENVELOPE: agreement is checked at a 1e-6 relative tolerance, frozen with margin over the measured relative error (~1.8e-10) on the battery below; the oracle reads the compiled (post-rounding) control points, so it certifies the arc-length INTEGRATION step rather than independently re-solving the tangent lengths — that independence is curvature-spline.endpoint-curvature-oracle's job",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "curvature-spline.evaluate-continuity-and-totality",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.CompiledCurvatureSpline", "Name": "Evaluate" },
+      { "Type": "Puck.Maths.CompiledCurvatureSpline", "Name": "EvaluateRaw" },
+      { "Type": "Puck.Maths.CompiledCurvatureSpline", "Name": "TotalLength" },
+      { "Type": "Puck.Maths.CompiledCurvatureSpline", "Name": "GetSegment" },
+      { "Type": "Puck.Maths.CurvatureSplineSegment", "Name": "StationRaw" },
+      { "Type": "Puck.Maths.CompiledCurvatureSpline", "Name": "SegmentCount" },
+      { "Type": "Puck.Maths.CompiledCurvatureSpline", "Name": "Closed" },
+      { "Type": "Puck.Maths.CurvatureSplineSample", "Name": "Position" },
+      { "Type": "Puck.Maths.CurvatureSplineSample", "Name": "Tangent" },
+      { "Type": "Puck.Maths.CurvatureSplineSample", "Name": "Grade" },
+      { "Type": "Puck.Maths.CurvatureSplineSample", "Name": ".ctor" },
+      { "Type": "Puck.Maths.CurvatureSplineSegment", "Name": "D0X" },
+      { "Type": "Puck.Maths.CurvatureSplineSegment", "Name": "D0Z" },
+      { "Type": "Puck.Maths.CurvatureSplineSegment", "Name": "D1X" },
+      { "Type": "Puck.Maths.CurvatureSplineSegment", "Name": "D1Z" },
+      { "Type": "Puck.Maths.CurvatureSplineSegment", "Name": "D2X" },
+      { "Type": "Puck.Maths.CurvatureSplineSegment", "Name": "D2Z" },
+      { "Type": "Puck.Maths.CurvatureSplineSegment", "Name": "E0X" },
+      { "Type": "Puck.Maths.CurvatureSplineSegment", "Name": "E0Z" },
+      { "Type": "Puck.Maths.CurvatureSplineSegment", "Name": "E1X" },
+      { "Type": "Puck.Maths.CurvatureSplineSegment", "Name": "E1Z" },
+      { "Type": "Puck.Maths.CurvatureSplineSegment", "Name": "Y0Raw" },
+      { "Type": "Puck.Maths.CurvatureSplineSegment", "Name": "Y1Raw" },
+      { "Type": "Puck.Maths.CurvatureSplineSegment", "Name": "GradeRaw" },
+      { "Type": "Puck.Maths.CurvatureSplineKnot", "Name": "Elevation" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Evaluate never throws and never reports a MinValue-sentinel component (position, tangent, grade, curvature) at −L, −L/4, 0, L/2, L and 2L, for both an open and a closed curve; Closed reports the authored flag; position (including the elevation-carried Y) does not jump by more than 4 raw across a genuine one-Q32-raw step (EvaluateRaw at a segment's own StationRaw and StationRaw − 1) at any interior knot station",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "curvature-spline.evaluate-raw-station-boundaries",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.CompiledCurvatureSpline", "Name": "EvaluateRaw" },
+      { "Type": "Puck.Maths.CompiledCurvatureSpline", "Name": "TotalLengthRaw" },
+      { "Type": "Puck.Maths.CompiledCurvatureSpline", "Name": "GetSegment" },
+      { "Type": "Puck.Maths.CurvatureSplineSegment", "Name": "P0X" },
+      { "Type": "Puck.Maths.CurvatureSplineSegment", "Name": "P0Z" },
+      { "Type": "Puck.Maths.CurvatureSplineSegment", "Name": "P3X" },
+      { "Type": "Puck.Maths.CurvatureSplineSegment", "Name": "P3Z" },
+      { "Type": "Puck.Maths.CurvatureSplineSample", "Name": "Position" },
+      { "Type": "Puck.Maths.CurvatureSplineSample", "Name": "Tangent" },
+      { "Type": "Puck.Maths.CurvatureSplineSample", "Name": "Grade" },
+      { "Type": "Puck.Maths.CurvatureSplineSample", "Name": "Curvature" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "on an open and a closed curve each engineered so TotalLengthRaw's low 16 bits are nonzero (asserted, not assumed): EvaluateRaw(0) reproduces segment 0's own P0 narrowed to Q16 exactly; a closed curve's EvaluateRaw(TotalLengthRaw) reproduces EvaluateRaw(0) bit-for-bit, EvaluateRaw(TotalLengthRaw + 1) reproduces EvaluateRaw(1) bit-for-bit, and — since both of those pairs sit on or one raw from the shared seam knot, indistinguishable at Q16 resolution from EACH OTHER regardless of whether a wrap ran at all — EvaluateRaw(TotalLengthRaw + TotalLengthRaw/4) additionally reproduces EvaluateRaw(TotalLengthRaw/4) bit-for-bit, a quarter-length offset landing in a different segment than the seam, where a clamp-instead-of-wrap defect reports the curve's own end rather than the true wrapped point; an open curve's EvaluateRaw(TotalLengthRaw) reproduces the last segment's own P3 narrowed to Q16 exactly and EvaluateRaw(TotalLengthRaw + 1) stays clamped to it bit-for-bit; EvaluateRaw(TotalLengthRaw − 1) stays total (finite, no MinValue-sentinel component) on both — its Q16-narrowed position may legally coincide with the boundary's own, one Q32 raw being far below a Q16 grid step, so that coincidence is not itself checked",
+        "Against": "",
+        "Shared": "",
+        "Citation": "ENVELOPE: the exact-match checks read EvaluateRaw's own Q32 → Q16 narrowing through FixedPointRounding.TryRoundRational, the SAME shared exact rounding kernel CompiledCurvatureSpline narrows through — legitimate because this law certifies the wrap/clamp SEAM (which segment/t a raw station resolves into), not the rounding kernel itself, which curvature-spline.endpoint-curvature-oracle and curvature-spline.arc-length-table already pin against independent oracles",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "curvature-spline.deterministic-recompile",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.CurvatureSpline", "Name": "Compile" },
+      { "Type": "Puck.Maths.CompiledCurvatureSpline", "Name": "GetSegment" },
+      { "Type": "Puck.Maths.CompiledCurvatureSpline", "Name": "SegmentCount" },
+      { "Type": "Puck.Maths.CompiledCurvatureSpline", "Name": "TotalLengthRaw" },
+      { "Type": "Puck.Maths.CurvatureSplineSegment", "Name": "Tangent0LengthRaw" },
+      { "Type": "Puck.Maths.CurvatureSplineSegment", "Name": "Tangent1LengthRaw" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "compiling the identical authored knots (the constructed multi-root geometry, so the general branch's quartic solve and root isolation genuinely run three times) three times from scratch reproduces every compiled Q32 raw — every control point, derivative point, tangent length, station, elevation raw and arc-table entry, plus TotalLengthRaw — bit-identically",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "curvature-spline.deterministic-multi-root-pick",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.CurvatureSpline", "Name": "Compile" },
+      { "Type": "Puck.Maths.CurvatureSpline", "Name": "MaxTangentChordRatio" },
+      { "Type": "Puck.Maths.CurvatureSpline", "Name": "MinTangentLength" },
+      { "Type": "Puck.Maths.CompiledCurvatureSpline", "Name": "GetSegment" },
+      { "Type": "Puck.Maths.CurvatureSplineSegment", "Name": "Tangent0LengthRaw" },
+      { "Type": "Puck.Maths.CurvatureSplineSegment", "Name": "Tangent1LengthRaw" }
+    ],
+    "Legs": [
+      {
+        "Kind": "InTreeIndependent",
+        "Flavor": "None",
+        "Subject": "the subject's picked (l0, l1) for a constructed segment (chord (0,0)-(4,0), tangent yaws −1.4/0.4 rad, κ0=1.0, κ1=0.25) whose tangent-length quartic is CERTIFIED (by the oracle itself) to have at least two admissible roots",
+        "Against": "Oracles.CurvatureSplineAdmissibleTangentLengths — an independently written double sign-change-and-bisection root finder over the same quartic coefficients, sharing no code with CurvatureSplineExactMath's exact Sturm-sequence isolation; the subject's pick must agree with the oracle's own minimum-l0²+l1² admissible root, within 1e-3, among the admissible roots the oracle itself certifies",
+        "Shared": "",
+        "Citation": "ENVELOPE: this proves the RULE (minimal l0²+l1², not merely the first root an isolation order visits) at one constructed configuration found by an offline grid search over yaw/curvature pairs; curvature-spline.deterministic-recompile proves the pick is STABLE (same inputs, same branch, three times) at this same configuration",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "curvature-spline.degenerate-branches",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.CurvatureSpline", "Name": "Compile" },
+      { "Type": "Puck.Maths.CompiledCurvatureSpline", "Name": "GetSegment" },
+      { "Type": "Puck.Maths.CurvatureSplineSegment", "Name": "Tangent0LengthRaw" },
+      { "Type": "Puck.Maths.CurvatureSplineSegment", "Name": "Tangent1LengthRaw" },
+      { "Type": "Puck.Maths.CurvatureSplineException", "Name": "Refusal" }
+    ],
+    "Legs": [
+      {
+        "Kind": "InTreeIndependent",
+        "Flavor": "None",
+        "Subject": "five hand-constructed geometries admit: w≠0 with both curvatures zero, w≠0 with only κ0 zero, w≠0 with only κ1 zero, and w=0 with both curvatures nonzero at the correct admitting sign, each compiling to the tangent lengths the branch's own closed form predicts",
+        "Against": "a per-case hand-derived closed-form (l0, l1) computed independently in double from s0/s1/w — the same formulas CurvatureSplineExactMath's own remarks state, but re-derived from the constructed geometry's tangent yaws and chord rather than read back from any compiled raw",
+        "Shared": "",
+        "Citation": "ENVELOPE: agreement is checked at 1e-3, comfortably inside the branches' own well-conditioned magnitudes (tangent lengths 0.6-4 over a chord of 5)",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "two more geometries refuse TangentCurvatureInconsistent at w=0 with a zero curvature and a nonzero s on either side — one reached immediately (κ0=0, s0≠0), the other only after the OTHER side (κ0=0.2) admits, so the w=0 branch's second half is exercised and not merely its first",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "curvature-spline.refusal-ladder",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.CurvatureSpline", "Name": "Compile" },
+      { "Type": "Puck.Maths.CurvatureSpline", "Name": "MinChordLength" },
+      { "Type": "Puck.Maths.CurvatureSpline", "Name": "MaxCurvature" },
+      { "Type": "Puck.Maths.CurvatureSpline", "Name": "MinSpeedFloor" },
+      { "Type": "Puck.Maths.CurvatureSplineException", "Name": "Refusal" },
+      { "Type": "Puck.Maths.CurvatureSplineException", "Name": "SegmentIndex" },
+      { "Type": "Puck.Maths.CurvatureSplineRefusal", "Name": "TooFewKnots" },
+      { "Type": "Puck.Maths.CurvatureSplineRefusal", "Name": "ZeroLengthChord" },
+      { "Type": "Puck.Maths.CurvatureSplineRefusal", "Name": "TangentCurvatureInconsistent" },
+      { "Type": "Puck.Maths.CurvatureSplineRefusal", "Name": "CurvatureUnreachable" },
+      { "Type": "Puck.Maths.CurvatureSplineRefusal", "Name": "KnotOutOfRange" },
+      { "Type": "Puck.Maths.CurvatureSplineRefusal", "Name": "InteriorCusp" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "one authored geometry per named refusal (TooFewKnots open and closed, ZeroLengthChord, TangentCurvatureInconsistent, CurvatureUnreachable, KnotOutOfRange, InteriorCusp), each confirmed against the live implementation to land on exactly that refusal — a wrong-reason refusal fails the case — and SegmentIndex is negative exactly for the whole-curve TooFewKnots refusal, non-negative for every per-segment refusal",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: CarrierOverflow is not exercised here — every knot pair inside KnotOutOfRange's own coordinate bound compiles or refuses by an earlier, more specific name first, so the derived §1.6 bounds make the Q32 carrier's own overflow unreachable through legal authored knots (a random 30000-draw sweep at the coordinate cap found zero CarrierOverflow occurrences); this is the intended safety margin, and curvature-spline.carrier-extremes covers behavior at the coordinate cap the ladder itself does not reach",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "curvature-spline.arc-station-oracle",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.CurvatureSpline", "Name": "Compile" },
+      { "Type": "Puck.Maths.CurvatureSpline", "Name": "MaxCoordinate" },
+      { "Type": "Puck.Maths.CurvatureSpline", "Name": "ArcLengthRelativeErrorShift" },
+      { "Type": "Puck.Maths.CurvatureSpline", "Name": "ArcLengthMinimumErrorBoundRaw" },
+      { "Type": "Puck.Maths.CompiledCurvatureSpline", "Name": "EvaluateRaw" },
+      { "Type": "Puck.Maths.CompiledCurvatureSpline", "Name": "TotalLengthRaw" },
+      { "Type": "Puck.Maths.CompiledCurvatureSpline", "Name": "GetSegment" },
+      { "Type": "Puck.Maths.CompiledCurvatureSpline", "Name": "SegmentCount" },
+      { "Type": "Puck.Maths.CurvatureSplineSegment", "Name": "StationRaw" },
+      { "Type": "Puck.Maths.CurvatureSplineSample", "Name": "Position" }
+    ],
+    "Legs": [
+      {
+        "Kind": "InTreeIndependent",
+        "Flavor": "None",
+        "Subject": "position at seven requested stations (0, 1/8, 1/4, 1/2, 3/4, 7/8, 1 of TotalLengthRaw) on a small well-conditioned curve and an adversarial large-scale curve (four knots on a circle at 0.9·MaxCoordinate's own radius)",
+        "Against": "Oracles.CurvatureSplinePositionAtStation — a fine (100000-step) chord-walking inverse lookup over the compiled Q32 control points, a different METHOD from the subject's own composite-Simpson quadrature plus arc-table binary-search inversion, and a fresh numerical search rather than a transcription of it",
+        "Shared": "",
+        "Citation": "ENVELOPE: agreement is checked at 1e-4 relative (scaled by the larger of 1 and the sampled position's own magnitude, so the large-scale case is not held to an unreachable absolute tolerance), margin over the chord walk's own O(1/steps) discretization error; ArcLengthRelativeErrorShift/ArcLengthMinimumErrorBoundRaw govern how tightly the subject's own arc table converges — a materially looser bound would widen the subject/oracle disagreement this law would then need to catch",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "curvature-spline.carrier-extremes",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.CurvatureSpline", "Name": "Compile" },
+      { "Type": "Puck.Maths.CurvatureSpline", "Name": "MaxCoordinate" },
+      { "Type": "Puck.Maths.CompiledCurvatureSpline", "Name": "Evaluate" },
+      { "Type": "Puck.Maths.CompiledCurvatureSpline", "Name": "TotalLength" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "knots placed at exactly ±MaxCoordinate with admissible (straight, zero-curvature) geometry compile, and Evaluate stays finite (no MinValue-sentinel component) at every eighth of the arc; one raw past MaxCoordinate refuses KnotOutOfRange by name",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

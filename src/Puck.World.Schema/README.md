@@ -82,7 +82,7 @@ screens, cameras, spawns, motion, population, render, addons,
 bindings, creations, placements, authoring, speakers, tunes, patches, audio,
 collision, host, views, looks, grants, hud, state, input hold, rules,
 groups, properties, interactions, player defaults, market, probes,
-dynamics). Worlds live as data
+dynamics, curves). Worlds live as data
 under `../Puck.World/Assets/worlds/`. Four are the four-world charter's whole
 game roster: `nexus` (the overworld hub — a floating island above a field of
 planetoids, and the shipped boot default; carries the `references` section
@@ -1006,6 +1006,37 @@ with `world.row.set dynamics <row-json>` / `world.row.remove dynamics <name>`;
 read back with `world.dynamics` (`Puck.World.Console`), which reports the
 derived decay/oscillation/k3 constants through the identical fixed-point
 derivation the simulation uses, plus a live reference count.
+
+## The `curves` section — the curvature-first spline table
+
+`WorldCurveRow` (`WorldCurves.cs`): named `{name, closed, knots}` rows. An
+author declares intent per knot (position, tangent direction, signed
+curvature); `WorldCurveRow.Compiled` derives the machinery — the cubic-Bézier
+tangent lengths that reproduce it exactly, via `Puck.Maths.CurvatureSpline`
+(Steven Wittens' curvature-continuous construction) — so no control-point
+document shape ever ships. Knot `tangentYaw`/`curvature` are validated against
+`CurvatureSpline`'s own ceilings (`MaxCurvature`, `MaxCoordinate`), the ONE
+source both the document validator and the compiled primitive read; row/knot
+counts are validated against `WorldCurves`' own (`MaxKnots`, `MaxRows`). The
+section is optional and every reference is nullable, so an unauthored world is
+unchanged; every reference resolves through `WorldDefinitionRows.FindCurve`
+and refuses a dangling name, and removing a still-referenced row is refused
+naming the referrer. `WorldCurveRow.Compiled` caches the row's
+`Puck.Maths.CurvatureSpline.Compile` derivation per row instance
+(`ConditionalWeakTable`, the `WorldDynamicsRow.Compiled` precedent) — the SAME
+derivation `WorldDefinitionValidator` runs at the door as its own last
+compile-refusal gate, so a validated row always compiles again for free.
+Authored with `world.row.set curves <row-json>` /
+`world.row.remove curves <name>`; read back with `world.curves`
+(`Puck.World.Console`), which reports every row's authored shape, its
+compiled segment count and total arc length, and a live reference count split
+by camera/follow consumer. Consumers: a camera program's `path` op (dollies
+the eye/pivot along the curve by arc-length fraction, `Puck.World.Client`'s
+`WorldCameraRigCompiler` + `Puck.SdfVm.Views.SdfCurvePath`, the float twin
+converted once from the compiled Q32 raws — never a second solver) and a
+body-motion program's `curve` target source
+(`Puck.Physics.Motion.BodyTargetSource.CurveFollow`, `Puck.World.Server`'s
+per-tick arc advance) — the seed the kart-track charter inherits.
 
 ## The egress documents — what leaves an authority
 

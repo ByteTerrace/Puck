@@ -179,6 +179,9 @@
     "attachment": {
       "$ref": "./schema/attachment.schema.json"
     },
+    "curves": {
+      "$ref": "./schema/curves.schema.json"
+    },
     "basis": {
       "$ref": "./schema/basis.schema.json"
     },

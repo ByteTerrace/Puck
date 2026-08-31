@@ -101,7 +101,7 @@ public static partial class WorldDefinitionValidator {
 
         return rows;
     }
-    private static Dictionary<string, CompiledBodyMotionProgram> ValidateBodyMotionPrograms(IReadOnlyList<BodyMotionProgram> programs, ISet<string> targetRegisterNames, List<string> errors) {
+    private static Dictionary<string, CompiledBodyMotionProgram> ValidateBodyMotionPrograms(IReadOnlyList<BodyMotionProgram> programs, ISet<string> targetRegisterNames, ISet<string> curveNames, int simulationRateHz, List<string> errors) {
         var compiled = new Dictionary<string, CompiledBodyMotionProgram>(comparer: StringComparer.Ordinal);
 
         for (var index = 0; (index < programs.Count); index++) {
@@ -172,6 +172,28 @@ public static partial class WorldDefinitionValidator {
                             break;
                         case BodyTargetSource.Designated designated when (string.IsNullOrWhiteSpace(value: designated.Register) || !targetRegisterNames.Contains(item: designated.Register)):
                             errors.Add(item: $"{path}.target.register '{designated.Register}' names no target register.");
+                            break;
+                        case BodyTargetSource.CurveFollow curve:
+                            RequireDeclared(
+                                value: curve.Curve,
+                                declaredSet: curveNames,
+                                path: path,
+                                field: "target.curve",
+                                rowNoun: "curves",
+                                errors: errors
+                            );
+                            RequireRange(
+                                value: curve.Rate,
+                                min: -WorldCurves.MaxFollowRate,
+                                max: WorldCurves.MaxFollowRate,
+                                name: $"{path}.target.rate",
+                                errors: errors
+                            );
+
+                            if (simulationRateHz <= 0) {
+                                errors.Add(item: $"{path}.target.curve '{curve.Curve}' cannot compile — the world authors no simulation rate (simulation.rateHz), and a curve-follow target's per-tick arc step is bound to one.");
+                            }
+
                             break;
                     }
                 } else if (program.Target is not null) {

@@ -1,0 +1,60 @@
+{
+  "type": [
+    "array",
+    "null"
+  ],
+  "items": {
+    "description": "One named curves row: an ordered list of curvature-declaring knots that Compiled derives into a curvature-continuous cubic-B\u00E9zier spline (Steven Wittens\u0027 construction \u2014 see CurvatureSpline). The author declares intent (positions, tangent directions, endpoint curvatures); the engine derives the machinery (tangent lengths) at compile time, exactly \u2014 no control-point document shape ever ships. The section is OPTIONAL and every reference to a row is nullable, so an unauthored world is unchanged.",
+    "type": [
+      "object",
+      "null"
+    ],
+    "properties": {
+      "name": {
+        "description": "The row\u0027s stable name, unique within the section \u2014 the spelling every consumer\u0027s own curve reference resolves against.",
+        "type": "string"
+      },
+      "knots": {
+        "description": "The authored knots, in curve order. An open curve needs at least two; a closed curve at least three; at most MaxKnots.",
+        "type": "array",
+        "items": {
+          "description": "One authored knot of a named curves row: a planar position with elevation, a tangent direction, and the signed curvature the compiled spline reaches there \u2014 see CurvatureSplineKnot for the compiled fixed-point form and the exact cross2 convention.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "position": {
+              "description": "The knot\u0027s world position \u2014 X/Z are the planar curvature-solve inputs, Y is the elevation lift (outside the planar curvature and arc-length solve; carried through as a linear grade over each segment\u0027s arc length \u2014 see CurvatureSpline\u0027s remarks). A DocumentVector3, the SAME spelling every other authored position in this document uses \u2014 no bespoke 2-vector shape."
+            },
+            "tangentYaw": {
+              "description": "The tangent direction, in radians, reduced to the canonical interval [-\u03C0, \u03C0] (a small validator slack absorbs float round-trip of a double \u03C0 literal); the unit tangent is (cos, sin) in the XZ plane \u2014 the SAME facing convention SinCos and the engine\u0027s own facing path use, pinned once here: every consumer (the camera path op, the sim curve-follow target) reads this convention rather than re-deriving one. An angle outside the canonical interval is refused rather than normalized: FromDouble saturates a finite value outside its representable range instead of wrapping it, so silently accepting one would compile a direction unrelated to the authored angle.",
+              "type": "number"
+            },
+            "curvature": {
+              "description": "The signed planar curvature at this knot, under the cross2(a, b) = a.X\u00B7b.Z \u2212 a.Z\u00B7b.X convention: positive curvature turns from the tangent toward \u002BZ faster than toward \u2212Z. Must fall within \u00B1MaxCurvature.",
+              "type": "number"
+            }
+          },
+          "required": [
+            "position",
+            "tangentYaw",
+            "curvature"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "closed": {
+        "description": "Whether the last knot connects back to the first. Defaults to false (open).",
+        "type": "boolean",
+        "default": false
+      }
+    },
+    "required": [
+      "name",
+      "knots"
+    ],
+    "additionalProperties": false
+  },
+  "default": null
+}

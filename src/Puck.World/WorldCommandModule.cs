@@ -934,7 +934,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.budget",
-            description: "Prints the compose-time cost sheet (Immediate): the live render program's packed words and instances against their frozen envelopes, the program's Lipschitz step scale with its march multiplier (1.00 = unclamped), the lattice program's node/cadence counts plus exact full-cell and body-slot passes, gravity's static source count and last deterministic solve work, the derived static placement instance count (including any Noise/Scatter distribution's resolved copies) against its authored row count, and the state row count. Every number is DERIVED from what the document declares — the sheet is how an authored choice's price becomes legible instead of a silent frame tax.",
+            description: "Prints the compose-time cost sheet (Immediate): the live render program's packed words and instances against their frozen envelopes, the program's Lipschitz step scale with its march multiplier (1.00 = unclamped), the lattice program's node/cadence counts plus exact full-cell and body-slot passes, gravity's static source count and last deterministic solve work, the derived static placement instance count (including any Noise/Scatter distribution's resolved copies) against its authored row count, the state row count, and the number of active bodies currently following a curves row (one CompiledCurvatureSpline.Evaluate per follower, per tick). Every number is DERIVED from what the document declares — the sheet is how an authored choice's price becomes legible instead of a silent frame tax.",
             handler: (_, args) => {
                 if (CommandResult.RequireNoArguments(args: args, verb: "world.budget") is { } refusal) {
                     return refusal;
@@ -962,8 +962,9 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                     worldSeed: (server.Definition.Generation?.WorldSeed ?? 0UL)
                 );
                 var placements = $"placements {placementInstances} static instance(s) ({server.Definition.Placements.Count} row(s))";
+                var curves = $"curves {population.CountCurveFollowers()} follower(s)";
 
-                return new CommandResult(Output: $"[world.budget: {render} | {lattice} | {gravity} | {placements} | state {rows} row(s)]");
+                return new CommandResult(Output: $"[world.budget: {render} | {lattice} | {gravity} | {placements} | state {rows} row(s) | {curves}]");
             }
         );
         yield return CommandDefinition.WithWireArgs(

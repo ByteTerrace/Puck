@@ -858,6 +858,13 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
 
+        // Curves validates before every consumer that names a row by curves/curve — today the camera path op — the
+        // same ordering dynamicsNames already gives dynamics consumers.
+        var curveNames = ValidateCurves(
+            curves: definition.Curves,
+            errors: errors
+        );
+
         ValidatePlayerDefaults(
             defaults: definition.PlayerDefaults,
             errors: errors
@@ -1048,6 +1055,8 @@ public static partial class WorldDefinitionValidator {
         var programs = ValidateBodyMotionPrograms(
             programs: definition.BodyMotionPrograms,
             targetRegisterNames: targetRegisterNames,
+            curveNames: curveNames,
+            simulationRateHz: definition.SimulationRateHz,
             errors: errors
         );
 
@@ -1401,6 +1410,7 @@ public static partial class WorldDefinitionValidator {
                 }
 
                 ValidateProgram(
+                    curveNames: curveNames,
                     definition: definition,
                     dynamicsNames: dynamicsNames,
                     errors: errors,
@@ -1457,6 +1467,7 @@ public static partial class WorldDefinitionValidator {
         ValidateViews(
             capacity: definition.Population.Capacity,
             cameras: cameras,
+            curveNames: curveNames,
             definition: definition,
             dynamicsNames: dynamicsNames,
             errors: errors,

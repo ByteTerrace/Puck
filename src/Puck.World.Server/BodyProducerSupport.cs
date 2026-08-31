@@ -27,4 +27,16 @@ internal struct BodyProducerState {
     public FixedQ4816 Phase;
     public FixedQ4816 PreferredAltitude;
     public FixedQ4816 WeaveFrequency;
+    // Q32 raw — a curve-follow target's travelled arc length, wrapped/clamped to the compiled curve's own
+    // TotalLengthRaw every advance. Held at the compiled solve's own scale (rather than FixedQ4816's Q16) so a
+    // sub-Q16 authored rate still accumulates across ticks instead of rounding to a standstill; read straight into
+    // CompiledCurvatureSpline.EvaluateRaw, never narrowed.
+    public long CurveArcRaw;
+    // The (producer name, compiled curve index) CurveArcRaw was last advanced under. Selecting a producer starts
+    // it: WorldPopulation.StageProducer resets CurveArcRaw to zero whenever either differs from this tick's
+    // resolved producer, which covers a plain producer switch, a same-name kit retune onto a different curve row,
+    // and switching away and back (the prior selection is never matched again, since re-selecting it is itself a
+    // transition). ActiveProducerCurveIndex is -1 while the active producer is not a curve-follow source.
+    public string? ActiveProducerName;
+    public int ActiveProducerCurveIndex;
 }

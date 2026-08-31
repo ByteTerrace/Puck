@@ -25,11 +25,13 @@ public sealed class WorldSeatViewState {
     private Vector3 m_alignedUp = Vector3.UnitY;
 
     private WorldCameraProgram? m_authoredRig;
-    // The Dynamics op's coefficients are baked into the compiled ops at translate time (see
-    // WorldCameraRigCompiler), never re-read per frame — so a `dynamics` row mutation with the authored program
-    // instance unchanged still needs a recompile. KEEP IN SYNC: only the section's own compose path may reuse this
-    // list's reference across deliveries; anything that clones it unconditionally defeats this cache check.
+    // The Dynamics op's coefficients and a Path op's SdfCurvePath are both baked into the compiled ops at translate
+    // time (see WorldCameraRigCompiler), never re-read per frame — so a `dynamics`/`curves` row mutation with the
+    // authored program instance unchanged still needs a recompile. KEEP IN SYNC: only each section's own compose
+    // path may reuse its list's reference across deliveries; anything that clones it unconditionally defeats this
+    // cache check.
     private IReadOnlyList<WorldDynamicsRow>? m_authoredDynamics;
+    private IReadOnlyList<WorldCurveRow>? m_authoredCurves;
     private IWorldCameraProgramRig? m_compiledRig;
     private float m_pitch;
     private float m_yaw;
@@ -223,10 +225,15 @@ public sealed class WorldSeatViewState {
             !ReferenceEquals(
                 objA: m_authoredDynamics,
                 objB: definition.Dynamics
+            ) ||
+            !ReferenceEquals(
+                objA: m_authoredCurves,
+                objB: definition.Curves
             )
         ) {
             m_authoredRig = views.SeatRig;
             m_authoredDynamics = definition.Dynamics;
+            m_authoredCurves = definition.Curves;
             m_compiledRig = WorldCameraRigCompiler.Compile(
                 definition: definition,
                 interactive: true,

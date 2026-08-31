@@ -180,6 +180,8 @@ public readonly record struct FixedWorldKit(
     /// <param name="kit">The authored kit row.</param>
     /// <param name="channels">The world's compiled channel table.</param>
     /// <param name="targets">The world's compiled target-register table.</param>
+    /// <param name="curves">The world's compiled curves-row table — a producer's curve-follow target resolves
+    /// against it the same way <paramref name="targets"/> resolves a designated register.</param>
     /// <param name="programs">The world's compiled body motion programs keyed by stable name.</param>
     /// <param name="programRows">The world's authored body motion program rows keyed by the same names — the target
     /// source a producer senses is authored vocabulary, so it is read here rather than carried on the compiled
@@ -190,8 +192,9 @@ public readonly record struct FixedWorldKit(
     /// <param name="dynamics">The world's declared <c>dynamics</c> rows, resolved against <paramref name="kit"/>'s
     /// motion model's own declared row name (validation has already refused a dangling name).</param>
     /// <param name="simulationRateHz">The world's own simulation rate — the step width a resolved dynamics row's
-    /// propagator compiles against (validation has already refused a resolved name at rate 0).</param>
-    public static FixedWorldKit Compile(WorldKit kit, WorldChannelTable channels, WorldTargetRegisterTable targets, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, IReadOnlyDictionary<string, BodyMotionProgram> programRows, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<ActionStateSlot> bodyState, IReadOnlyList<ActionStateSlot> identityState, IReadOnlyList<WorldDynamicsRow> dynamics, int simulationRateHz) {
+    /// propagator compiles against (validation has already refused a resolved name at rate 0), and a curve-follow
+    /// producer's per-tick arc step divisor.</param>
+    public static FixedWorldKit Compile(WorldKit kit, WorldChannelTable channels, WorldTargetRegisterTable targets, WorldCurveTable curves, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, IReadOnlyDictionary<string, BodyMotionProgram> programRows, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<ActionStateSlot> bodyState, IReadOnlyList<ActionStateSlot> identityState, IReadOnlyList<WorldDynamicsRow> dynamics, int simulationRateHz) {
         var actions = new CompiledActionSpec?[ChannelLimits.MaxChannels];
         var thresholds = new FixedQ4816[ChannelLimits.MaxChannels];
         // Every ordinal, not just bound ones — a composition channel's shape is a WORLD property, not a per-kit one,
@@ -261,7 +264,9 @@ public readonly record struct FixedWorldKit(
                     source: programRows[name].Target,
                     parameters: parameters,
                     channels: channels,
-                    targets: targets
+                    targets: targets,
+                    curves: curves,
+                    simulationRateHz: simulationRateHz
                 )
             );
         }

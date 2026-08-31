@@ -10,6 +10,7 @@ public sealed partial class WorldPopulation {
 
         if (resetPhase) {
             entry.ProducerState.AcquiredTarget = -1;
+            entry.ProducerState.CurveArcRaw = 0L;
             entry.ProducerState.Phase = phase;
             entry.ProducerState.ActivityPhase = (phase + (TwoPi * activityUnit));
             entry.ProducerState.ActivityRate = (producer.Scalar(name: "activityRateBase") + (producer.Scalar(name: "activityRateRange") * activityUnit));
@@ -140,6 +141,26 @@ public sealed partial class WorldPopulation {
                     );
                 }
             }
+        } else if (targetSource?.Source is BodyTargetSource.CurveFollow) {
+            var fixedSource = targetSource.Value;
+
+            if (((uint)fixedSource.CurveIndex) < ((uint)m_curveRows.Count)) {
+                var compiled = m_curveRows[fixedSource.CurveIndex].Compiled;
+
+                entry.ProducerState.CurveArcRaw = AdvanceCurveArc(
+                    arcRaw: entry.ProducerState.CurveArcRaw,
+                    stepRaw: fixedSource.ArcStepRaw,
+                    totalLengthRaw: compiled.TotalLengthRaw,
+                    closed: compiled.Closed
+                );
+
+                var position = compiled.EvaluateRaw(arcRaw: entry.ProducerState.CurveArcRaw).Position;
+
+                candidate = BodySensorTarget.Point(
+                    position: position,
+                    distanceSquared: (position - self).LengthSquared
+                );
+            }
         }
 
         var current = (((currentTarget >= 0) && (currentTarget < Capacity) && m_entries[currentTarget].Active && (m_entries[currentTarget].Body is { } held))
@@ -155,6 +176,67 @@ public sealed partial class WorldPopulation {
             Candidate: candidate,
             CurrentTarget: current
         );
+    }
+    // Advances a curve-follow arc position by one compiled step, then wraps (closed) or clamps (open) it back inside
+    // [0, totalLengthRaw] — the persisted state never grows past the curve's own length, so it stays bounded across
+    // an arbitrarily long run and CompiledCurvatureSpline.EvaluateRaw's own wrap/clamp is redundant with, never a
+    // substitute for, this one (EvaluateRaw wraps its ARGUMENT; this wraps the STORED accumulator). Both arcRaw and
+    // stepRaw arrive already bounded well under long's range (CurvatureSpline's own MaxCoordinate/
+    // MaxTangentChordRatio caps bound totalLengthRaw far below 2^62), so the addition itself cannot overflow.
+    private static long AdvanceCurveArc(long arcRaw, long stepRaw, long totalLengthRaw, bool closed) {
+        var next = unchecked(arcRaw + stepRaw);
+
+        if (!closed) {
+            return Math.Clamp(
+                value: next,
+                min: 0L,
+                max: totalLengthRaw
+            );
+        }
+
+        if (totalLengthRaw <= 0L) {
+            return 0L;
+        }
+
+        next %= totalLengthRaw;
+
+        if (next < 0L) {
+            next += totalLengthRaw;
+        }
+
+        return next;
+    }
+    /// <summary>Counts active bodies whose currently selected producer follows a <c>curves</c> row — the
+    /// <c>world.budget</c> cost sheet's own per-tick price for the feature (one
+    /// <see cref="Puck.Maths.CompiledCurvatureSpline.Evaluate"/> per follower, per tick).</summary>
+    public int CountCurveFollowers() {
+        var count = 0;
+
+        for (var index = 0; (index < Capacity); index++) {
+            var entry = m_entries[index];
+
+            if (
+                !entry.Active ||
+                (entry.Body is not { } body) ||
+                (body.Source.ProducerName is not { } name)
+            ) {
+                continue;
+            }
+
+            var kitIndex = ((entry.Kind == PopulationKind.LocalSeat) ? m_seatKit : entry.KitIndex);
+
+            if (
+                m_kits[kitIndex].Producers.TryGetValue(
+                key: name,
+                value: out var producer
+            ) &&
+                (producer.Target?.Source is BodyTargetSource.CurveFollow)
+            ) {
+                count++;
+            }
+        }
+
+        return count;
     }
     // The altitude a wander entity holds: a free kit's authored base plus its per-index range sample; a grounded kit
     // starts at the authored spawn point or the world origin and lets contact geometry settle it.
@@ -311,6 +393,24 @@ public sealed partial class WorldPopulation {
         )
         ) {
             return;
+        }
+
+        // Selecting a producer starts it: a plain producer switch, or a same-name kit retune onto a different
+        // curve row, resets the travelled arc rather than resuming a foreign curve's station — see
+        // BodyProducerState.ActiveProducerName's remarks.
+        var curveIndex = -1;
+
+        if (producer.Target?.Source is BodyTargetSource.CurveFollow) {
+            curveIndex = producer.Target.Value.CurveIndex;
+        }
+
+        if (
+            !string.Equals(a: entry.ProducerState.ActiveProducerName, b: name, comparisonType: StringComparison.Ordinal) ||
+            (entry.ProducerState.ActiveProducerCurveIndex != curveIndex)
+        ) {
+            entry.ProducerState.ActiveProducerCurveIndex = curveIndex;
+            entry.ProducerState.ActiveProducerName = name;
+            entry.ProducerState.CurveArcRaw = 0L;
         }
 
         var sensors = ReadProducerSensors(

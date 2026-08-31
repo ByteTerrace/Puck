@@ -100,6 +100,15 @@ public abstract record SdfCameraOp {
     /// <paramref name="Yaw"/>/<paramref name="Pitch"/> — an interactive rig sets this; a scripted framing does
     /// not.</param>
     public sealed record Orbit(SdfCameraScalar Distance, SdfCameraScalar Yaw, SdfCameraScalar Pitch, Vector3 PivotOffset, bool AppliesLook) : SdfCameraOp;
+    /// <summary>Establishes the CURRENT subject at a point sampled from <paramref name="Curve"/> by arc-length
+    /// fraction, and re-seeds the eye there — <see cref="Anchor"/>'s subject-seeding role, played by a curve sample
+    /// instead of a resolved subject slot. The sampled subject's orientation faces the curve's own tangent direction
+    /// (see <see cref="SdfCurvePath.Sample"/>), so a following <see cref="LookAt"/> with no subject of its own looks
+    /// ahead along the curve.</summary>
+    /// <param name="Curve">The float twin of the compiled curve to sample.</param>
+    /// <param name="Fraction">The curve's arc-length fraction to resolve this frame, wrapped (a closed curve) or
+    /// clamped (an open one) against <see cref="SdfCurvePath.TotalLength"/> before sampling.</param>
+    public sealed record Path(SdfCurvePath Curve, SdfCameraScalar Fraction) : SdfCameraOp;
     /// <summary>Sets the second-order response reported as <see cref="SdfCameraPose.Dynamics"/>;
     /// <see cref="SdfCameraDynamics.None"/> reports no easing. It never moves the resolved pose — the eased result is
     /// the CALLER's to apply (see <see cref="SdfCameraBoomFollower"/>), because where in a host's pipeline the ease
@@ -306,6 +315,16 @@ public static class SdfCameraProgramEvaluator {
                         frame: in frame,
                         reference: in reference,
                         slot: anchor.SubjectSlot
+                    );
+                    eye = subject.Position;
+
+                    break;
+                case SdfCameraOp.Path pathOp:
+                    var (pathPosition, pathTangentYaw) = pathOp.Curve.Sample(arcLength: (pathOp.Fraction.Resolve(scalars: scalars) * pathOp.Curve.TotalLength));
+
+                    subject = new SdfAnchor(
+                        Orientation: Quaternion.CreateFromYawPitchRoll(yaw: pathTangentYaw, pitch: 0f, roll: 0f),
+                        Position: pathPosition
                     );
                     eye = subject.Position;
 

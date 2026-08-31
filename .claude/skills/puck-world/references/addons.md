@@ -166,7 +166,7 @@ acts through it with a JSON payload (kind ordinal + guest-memory pointer +
 length in the request cell's `A`/`B`/`C` lanes) rather than a query.
 **A guest CAN edit the document at the ABI/authority level** — this is not
 withheld/inert. `Addons.WorldAddonMutationDecoder` wires 10 of
-the 71 declared kinds today: the 5 HUD kinds
+the 73 declared kinds today: the 5 HUD kinds
 (`UpsertHudPanel`/`RemoveHudPanel`/`UpsertHudElement`/`RemoveHudElement`/
 `SetHudDefaults`, ordinals 41-45), the 2 placement kinds
 (`UpsertPlacement`/`RemovePlacement`, ordinals 19-20 — the FULL

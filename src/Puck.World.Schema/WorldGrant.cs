@@ -194,6 +194,11 @@ public enum WorldSection : byte {
     /// look, a camera boom, a kit, a state cell) names by row, targeted by <c>WorldMutation.UpsertDynamics</c> /
     /// <c>WorldMutation.RemoveDynamics</c>.</summary>
     Dynamics,
+
+    /// <summary>The named <c>curves</c> rows — the curvature-first spline table a camera path op or a sim
+    /// curve-follow target names by row, targeted by <c>WorldMutation.UpsertCurve</c> /
+    /// <c>WorldMutation.RemoveCurve</c>.</summary>
+    Curves,
 }
 /// <summary>Which flavor of subject a <see cref="GrantSubject"/> addresses.</summary>
 public enum GrantSubjectKind : byte {

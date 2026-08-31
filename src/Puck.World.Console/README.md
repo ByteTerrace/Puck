@@ -8,7 +8,10 @@ of [`Puck.World`](../Puck.World/README.md): `world.grant`/`.revoke`/`.grants`/
 authored and filled through `world.row.set placements`, so it carries no
 mutating verb), `world.dynamics` (`WorldDynamicsCommandModule` — the
 `dynamics` section's read-back: every row's authored triple, the derived
-fixed-point constants, and its live reference count), `world.group.*`/`world.ownership.*`/
+fixed-point constants, and its live reference count), `world.curves`
+(`WorldCurveCommandModule` — the `curves` section's read-back: every row's
+authored shape, its compiled segment count and total arc length, and its live
+reference count), `world.group.*`/`world.ownership.*`/
 `world.groups` (`WorldGroupCommandModule`), `world.population.spawn`/
 `world.looks` (`WorldLookCommandModule`), `market.*`/`world.market`
 (`WorldMarketCommandModule`), `world.peers`/`world.projection`

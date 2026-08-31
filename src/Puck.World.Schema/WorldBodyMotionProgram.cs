@@ -509,8 +509,11 @@ public sealed class CompiledBodyProducer {
     /// <param name="parameters">The kit's authored arguments for the program.</param>
     /// <param name="channels">The world's compiled channel table.</param>
     /// <param name="targets">The world's compiled target-register table.</param>
+    /// <param name="curves">The world's compiled curves-row table.</param>
+    /// <param name="simulationRateHz">The world's own simulation rate — a curve-follow target's per-tick arc step
+    /// divisor.</param>
     /// <returns>The compiled producer binding.</returns>
-    public static CompiledBodyProducer Compile(CompiledBodyMotionProgram program, BodyTargetSource? source, BodyProgramParameters parameters, WorldChannelTable channels, WorldTargetRegisterTable targets) {
+    public static CompiledBodyProducer Compile(CompiledBodyMotionProgram program, BodyTargetSource? source, BodyProgramParameters parameters, WorldChannelTable channels, WorldTargetRegisterTable targets, WorldCurveTable curves, int simulationRateHz) {
         var scalars = new Dictionary<string, FixedQ4816>(
             capacity: parameters.Scalars.Count,
             comparer: StringComparer.Ordinal
@@ -546,7 +549,9 @@ public sealed class CompiledBodyProducer {
             channels: channelOrdinals,
             target: ((source is { } target)
             ? FixedBodyTargetSource.Compile(
+                    curves: curves,
                     registers: targets,
+                    simulationRateHz: simulationRateHz,
                     source: target
                 )
             : null)

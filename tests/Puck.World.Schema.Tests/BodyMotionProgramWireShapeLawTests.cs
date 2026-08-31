@@ -30,7 +30,55 @@ public sealed class BodyMotionProgramWireShapeLawTests {
   }
 }
 """;
+    private const string CurveFollowProducerJson = """
+{
+  "name": "track",
+  "version": "puck.body-motion.v1",
+  "kind": "Producer",
+  "operations": [
+    "SenseNearestInCone",
+    "ProduceAttendIntent"
+  ],
+  "target": {
+    "$type": "curve",
+    "curve": "loop",
+    "rate": 2
+  }
+}
+""";
 
+    [Fact]
+    public void AuthoredCurveFollowRowRoundTripsThroughItsPinnedSpelling() {
+        var program = new BodyMotionProgram(
+            Name: "track",
+            Version: BodyMotionProgram.CurrentVersion,
+            Kind: BodyProgramKind.Producer,
+            Operations: [BodyMotionOp.SenseNearestInCone, BodyMotionOp.ProduceAttendIntent],
+            Target: new BodyTargetSource.CurveFollow(
+                Curve: "loop",
+                Rate: 2f
+            )
+        );
+        var written = JsonSerializer.Serialize(
+            value: program,
+            jsonTypeInfo: WorldJsonContext.Default.BodyMotionProgram
+        );
+
+        Assert.Equal(
+            expected: CurveFollowProducerJson.ReplaceLineEndings(replacementText: "\n"),
+            actual: written.ReplaceLineEndings(replacementText: "\n")
+        );
+
+        var read = JsonSerializer.Deserialize(
+            json: CurveFollowProducerJson,
+            jsonTypeInfo: WorldJsonContext.Default.BodyMotionProgram
+        )!;
+
+        Assert.Equal(
+            expected: program.Target,
+            actual: read.Target
+        );
+    }
     [Fact]
     public void AuthoredRowRoundTripsThroughItsPinnedSpelling() {
         var program = new BodyMotionProgram(

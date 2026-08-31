@@ -211,6 +211,10 @@ public sealed partial class WorldPopulation {
     private WorldChannelTable m_channels = WorldChannelTable.Empty;
     private IReadOnlyList<WorldTargetRegister> m_targetRows = [];
     private WorldTargetRegisterTable m_targets = WorldTargetRegisterTable.Empty;
+    // The LIVE curves-row list a curve-follow producer's per-tick Evaluate reads through — see CompileFixedTables'
+    // own remarks on why this is the definition's own reference, never a copy.
+    private IReadOnlyList<WorldCurveRow> m_curveRows = [];
+    private WorldCurveTable m_curves = WorldCurveTable.Empty;
     // The definition's LOOK rows (empty ⇒ the implicit single catalog look), resolved by CompileFixedTables. Each
     // entry's LookIndex points into this list. PRESENTATION-ONLY — the snapshot carries it to the client's renderer.
     private IReadOnlyList<WorldLook> m_lookRows = [WorldLook.Implicit];

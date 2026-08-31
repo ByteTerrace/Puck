@@ -210,6 +210,24 @@ public static class WorldCameraRigCompiler {
                         ));
 
                         break;
+                    case WorldCameraProgramOp.Path pathOp:
+                        // A row a mid-mutation document no longer declares emits no op, the same rule Dynamics/Blend
+                        // follow below — the validator refuses a dangling row at author time, so this can only
+                        // transiently miss during a live document swap.
+                        if (WorldDefinitionRows.FindCurve(
+                            curves: definition.Curves,
+                            name: pathOp.Curve
+                        ) is { } curveRow) {
+                            operations.Add(item: new SdfCameraOp.Path(
+                                Curve: new SdfCurvePath(compiled: curveRow.Compiled),
+                                Fraction: Scalar(
+                                    fallback: 0f,
+                                    scalar: pathOp.Fraction
+                                )
+                            ));
+                        }
+
+                        break;
                     case WorldCameraProgramOp.Dynamics dynamicsOp:
                         // A row a mid-mutation document no longer declares emits no op, the same rule Blend's
                         // dangling-name case follows below — the validator refuses a dangling row at author time, so

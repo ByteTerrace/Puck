@@ -85,7 +85,9 @@ selectively: `Motion`, `SpawnPoints`, `Render`, `Screens`, `Cameras`,
 `BodyMotionPrograms`, `Kits`, `DefaultSeatKit`, `Assignment`, `Addons`,
 `BindingOverlays`, `Storage`, `Creations`, `Placements`, `Authoring`,
 `Speakers`, `Tunes`, `Patches`, `Audio`, `Collision`, `Gravity`, `Host`, `Views`,
-`Looks`, `LookAssignment`, `Dynamics` (see below), `Grants`, `Hud`, `State`,
+`Looks`, `LookAssignment`, `Dynamics` (see below), `Curves` (`WorldCurves.cs` — the named
+curvature-first spline table; see `maths-usage` for `Puck.Maths.CurvatureSpline`, the
+compiled primitive each row's `Compiled` property derives from), `Grants`, `Hud`, `State`,
 `InputHold` (its own type, `WorldInputHoldAuthoring`, is the AUTHORED seconds
 shape — `WorldDefinition.CompiledInputHold` is the compiled ticks form
 runtime code consumes; see `WorldInputHoldSettings`'s remarks), `Rules` (see
@@ -192,11 +194,12 @@ mutates them in session and no grant subject names them:
   `$drop`/`$replace` refuses at validation, and a JSON `null` under a key in
   a delta deletes the inherited key rather than storing a literal null.
 
-The `WorldSection` enum (`Protocol/WorldGrant.cs`, 32 members, declared
+The `WorldSection` enum (`Protocol/WorldGrant.cs`, 33 members, declared
 order): `Kits, Screens, Cameras, Spawns, Motion, Population, Render, Addons,
 Bindings, Creations, Placements, Authoring, Speakers, Tunes, Patches, Audio,
 Collision, Host, Views, Looks, Grants, Hud, State, InputHold, Rules,
-Groups, Properties, Interactions, PlayerDefaults, Market, Probes, Dynamics`.
+Groups, Properties, Interactions, PlayerDefaults, Market, Probes, Dynamics,
+Curves`.
 It is the grant subject vocabulary
 (`section:<name>`) and the mutation dispatch axis — narrower than
 `WorldDefinition`'s own member list above: `Channels`,
@@ -415,6 +418,45 @@ followers), a camera program's `dynamics` op (the boom ease), a grounded/swim
 kit's `motion.dynamics` (planar velocity shaping — exactly one of `dynamics`
 or the engage/release `response` table, never both, never neither), and a
 `state` row/cell's `dynamics` trait (the eased read, above).
+
+### `curves` — the curvature-first spline table
+
+`WorldCurveRow` (`WorldCurves.cs`): named rows of `{name, closed, knots}`. An
+author declares intent per knot — position, tangent direction, signed
+curvature — and `Compiled` derives the machinery (the cubic-Bézier tangent
+lengths that reproduce it exactly, Steven Wittens' curvature-continuous
+construction; see the `maths-usage` skill for `Puck.Maths.CurvatureSpline`)
+rather than authoring control points directly — no control-point document
+shape ever ships. A knot's `position` is a `DocumentVector3` — X/Z the planar
+curvature-solve inputs, Y an elevation lift carried outside the curvature/
+arc-length solve as a linear grade; `tangentYaw` (radians, unit tangent
+`(cos, sin)` in XZ) and `curvature` (signed, within
+±`CurvatureSpline.MaxCurvature`, under the `cross2(a, b) = a.X·b.Z − a.Z·b.X`
+convention) complete it — the SAME facing convention the engine's own facing
+path uses, pinned once here so the camera `path` op and the sim curve-follow
+target both read it rather than re-deriving one. An open curve needs at least
+two knots, a closed one at least three, and at most `WorldCurves.MaxKnots`
+(64); the section holds at most `WorldCurves.MaxRows` (64) rows. The section
+is OPTIONAL and every reference to a row is nullable, so an unauthored world
+is unchanged. The validator's per-field checks (coordinate/curvature range,
+knot counts) catch authoring mistakes; the exact solve itself — chord length,
+tangent/curvature consistency, an unreachable curvature, an interior cusp, Q32
+carrier overflow — is the LAST gate, run once by compiling the row
+(`WorldCurveRow.Compiled`, cached per row instance, the
+`WorldDynamicsRow.Compiled` precedent) rather than duplicated in the
+validator. Every reference resolves through `WorldDefinitionRows.FindCurve`
+and refuses a dangling name; removing a still-referenced row is refused naming
+the referrer (`WorldDefinitionRows.EnumerateCurveReferences`). Authored with
+`world.row.set curves {"name":"dolly","knots":[…]}` /
+`world.row.remove curves <name>`; read back with `world.curves`, which reports
+every row's authored shape, its compiled segment count and total arc length
+through the SAME derivation the consumers read, and a live reference count
+split by `cameras`/`follows`. Consumers: a camera program's `path` op (dollies
+the eye/pivot along the curve by arc-length fraction; see views.md) and a
+body-motion program's `curve` target source
+(`Puck.Physics.Motion.BodyTargetSource.CurveFollow`) — a fixed-point, per-tick
+arc-length follower feeding the SAME planar target-consuming op vocabulary a
+`designated`/`sensed` target does.
 
 ### `state.lattices` + the `lattice` row trait — the lattice (scalar rows, reactions, lattice-derived geometry)
 

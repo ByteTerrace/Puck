@@ -291,6 +291,25 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
             select: static server => server.Definition.Dynamics
         )
     ),
+        ["curves"] = new RowSection(
+        RowType: typeof(WorldCurveRow),
+        Upsert: Upsert(
+            info: WorldJsonContext.Default.WorldCurveRow,
+            toMutation: static (principal, row) => new WorldMutation.UpsertCurve(
+                Row: row,
+                Principal: principal
+            )
+        ),
+        Remove: RemoveByName(remove: static (principal, name) => new WorldMutation.RemoveCurve(
+            Name: name,
+            Principal: principal
+        )),
+        Read: ReadRowByKey(
+            info: WorldJsonContext.Default.WorldCurveRow,
+            keyOf: static row => row.Name,
+            select: static server => server.Definition.Curves
+        )
+    ),
         ["addons"] = new RowSection(
         RowType: typeof(WorldAddonRow),
         Upsert: Upsert(

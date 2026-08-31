@@ -81,7 +81,8 @@ public sealed record WorldDefinition(
     [property: JsonPropertyName("seatModes"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldSeatModeFamily>? SeatModesRaw = null,
     [property: JsonPropertyName("probes"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldProbe>? ProbesRaw = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCapturesSection? Captures = null,
-    [property: JsonPropertyName("attachment"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldAttachmentSection? AttachmentRaw = null
+    [property: JsonPropertyName("attachment"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldAttachmentSection? AttachmentRaw = null,
+    [property: JsonPropertyName("curves"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldCurveRow>? CurvesRaw = null
 ) {
     /// <summary>The document schema version. A loader rejects any other value; the canonical writer always emits it.</summary>
     public const string SchemaVersion = "puck.world.def.v1";
@@ -196,6 +197,10 @@ public sealed record WorldDefinition(
     /// unauthored world is unchanged.</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldDynamicsRow> Dynamics => (DynamicsRaw ?? []);
+    /// <summary>Gets the named curvature-first spline rows a camera path op or a sim curve-follow target names by
+    /// <see cref="WorldCurveRow.Name"/> — ABSENT resolves to none, so an unauthored world is unchanged.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<WorldCurveRow> Curves => (CurvesRaw ?? []);
     /// <summary>Gets the unknown top-level members captured during deserialization, declared identically on every versioned
     /// document root here and validated
     /// through the shared <see cref="DocumentExtensionsPolicy"/> regime (see <see cref="WorldDefinitionValidator"/>): a

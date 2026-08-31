@@ -26,7 +26,7 @@ public static partial class WorldAuthorityCheckpointCodec {
     // WritePrincipal/ReadPrincipal, WriteSubject/ReadSubject, and the capability leaf carry WorldWireTags's pinned
     // bytes rather than raw enum ordinals, so a mapping change is a layout change too and must refuse by version
     // instead of decoding a different principal, subject, or capability kind.
-    private const ushort SupportedVersion = 5;
+    private const ushort SupportedVersion = 6;
 
     private delegate T ReadItem<T>(ref WireReader reader);
     private delegate T ReadStructItem<T>(ref WireReader reader) where T : struct;

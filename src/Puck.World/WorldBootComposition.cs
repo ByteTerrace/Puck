@@ -332,6 +332,9 @@ internal static class WorldBootComposition {
         // The DYNAMICS section's census read-back — world.dynamics. Rows are authored through
         // world.row.set dynamics/world.row.remove dynamics.
         services.AddSingleton<ICommandModule, WorldDynamicsCommandModule>();
+        // The CURVES section's census read-back — world.curves. Rows are authored through
+        // world.row.set curves/world.row.remove curves.
+        services.AddSingleton<ICommandModule, WorldCurveCommandModule>();
         // The inhabitation + creation-facet READ-BACK surface — world.inhabitants, world.faces,
         // world.attachments, world.portals. The facets themselves are authored through
         // world.row.set placements <json>.

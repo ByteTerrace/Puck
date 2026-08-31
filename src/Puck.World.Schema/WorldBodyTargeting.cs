@@ -66,12 +66,22 @@ public sealed class WorldTargetRegisterTable {
 }
 /// <summary>The fixed-point target source a producer executes.</summary>
 /// <param name="Source">The authored source declaration.</param>
-/// <param name="Range">The sensed cone range, or zero for a designated source.</param>
-/// <param name="MinimumDot">The cosine of the sensed cone half-angle, or zero for a designated source.</param>
-/// <param name="RegisterIndex">The designated register index, or <c>-1</c> for a sensed source.</param>
-public readonly record struct FixedBodyTargetSource(BodyTargetSource Source, FixedQ4816 Range, FixedQ4816 MinimumDot, int RegisterIndex) {
+/// <param name="Range">The sensed cone range, or zero for a designated/curve source.</param>
+/// <param name="MinimumDot">The cosine of the sensed cone half-angle, or zero for a designated/curve source.</param>
+/// <param name="RegisterIndex">The designated register index, or <c>-1</c> for a sensed/curve source.</param>
+/// <param name="CurveIndex">The curve row's compact index, or <c>-1</c> for a sensed/designated source.</param>
+/// <param name="ArcStepRaw">The per-tick arc-length increment, Q32 raw — the exact rational
+/// <see cref="BodyTargetSource.CurveFollow.Rate"/><c> / simulationRateHz</c> rounded once at compile time so the
+/// runtime step is a single addition, never a division. Zero for a sensed/designated source.</param>
+public readonly record struct FixedBodyTargetSource(BodyTargetSource Source, FixedQ4816 Range, FixedQ4816 MinimumDot, int RegisterIndex, int CurveIndex = -1, long ArcStepRaw = 0L) {
     /// <summary>Compiles one validated target declaration.</summary>
-    public static FixedBodyTargetSource Compile(BodyTargetSource source, WorldTargetRegisterTable registers) => source switch {
+    /// <param name="source">The authored source declaration.</param>
+    /// <param name="registers">The world's compiled target-register table.</param>
+    /// <param name="curves">The world's compiled curves-row table.</param>
+    /// <param name="simulationRateHz">The world's own simulation rate — the per-tick arc step's divisor. A
+    /// <see cref="BodyTargetSource.CurveFollow"/> source at rate 0 (never validated through) compiles a zero step
+    /// rather than dividing.</param>
+    public static FixedBodyTargetSource Compile(BodyTargetSource source, WorldTargetRegisterTable registers, WorldCurveTable curves, int simulationRateHz) => source switch {
         BodyTargetSource.Sensed sensed => new FixedBodyTargetSource(
         Source: source,
         Range: FixedQ4816.FromDouble(value: sensed.Range),
@@ -89,8 +99,40 @@ public readonly record struct FixedBodyTargetSource(BodyTargetSource Source, Fix
         ? index
         : -1)
     ),
+        BodyTargetSource.CurveFollow curve => new FixedBodyTargetSource(
+        Source: source,
+        Range: FixedQ4816.Zero,
+        MinimumDot: FixedQ4816.Zero,
+        RegisterIndex: -1,
+        CurveIndex: (curves.TryGetIndex(
+            name: curve.Curve,
+            index: out var curveIndex
+        )
+        ? curveIndex
+        : -1),
+        ArcStepRaw: CompileArcStepRaw(
+            rate: curve.Rate,
+            simulationRateHz: simulationRateHz
+        )
+    ),
         _ => throw new InvalidOperationException(message: $"Unknown body target source '{source.GetType().Name}'."),
     };
+    // rate/simulationRateHz rounded once to Q32: rate parses to Q16 at the authoring boundary (the same one rounding
+    // every authored float takes), then the division to Q32 is the ONE further rounding — never repeated per tick.
+    // simulationRateHz <= 0 (an unvalidated caller) rounds to zero rather than dividing by zero.
+    private static long CompileArcStepRaw(float rate, int simulationRateHz) {
+        var rateRaw = FixedQ4816.FromDouble(value: rate).Value;
+
+        return (FixedPointRounding.TryRoundRational(
+            numerator: rateRaw,
+            denominator: simulationRateHz,
+            fractionBitCount: 16,
+            result: out var arcStepRaw
+        )
+            ? arcStepRaw
+            : 0L
+        );
+    }
 }
 /// <summary>The shared fixed-point body-forward cone predicate used by client proposals and authoritative senses.</summary>
 public static class BodyTargetConeSense {

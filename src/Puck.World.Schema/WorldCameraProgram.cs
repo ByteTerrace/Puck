@@ -46,6 +46,7 @@ public abstract record WorldCameraSubject {
 [System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraProgramOp.Offset), typeDiscriminator: "offset")]
 [System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraProgramOp.LookAt), typeDiscriminator: "lookAt")]
 [System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraProgramOp.Orbit), typeDiscriminator: "orbit")]
+[System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraProgramOp.Path), typeDiscriminator: "path")]
 [System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraProgramOp.Dynamics), typeDiscriminator: "dynamics")]
 [System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraProgramOp.ClampPitch), typeDiscriminator: "clampPitch")]
 [System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraProgramOp.Fov), typeDiscriminator: "fov")]
@@ -67,6 +68,7 @@ public abstract record WorldCameraProgramOp {
         LookAt => "lookAt",
         Offset => "offset",
         Orbit => "orbit",
+        Path => "path",
         Select => "select",
         _ => "unknown",
     });
@@ -104,6 +106,22 @@ public abstract record WorldCameraProgramOp {
     /// <param name="Pitch">The orbit tilt in radians, as a literal or numeric state binding.</param>
     /// <param name="PivotOffset">The world-axis offset from the current subject's origin to the pivot.</param>
     public sealed record Orbit(float Distance, BindableScalar Yaw, BindableScalar Pitch, DocumentVector3? PivotOffset = null) : WorldCameraProgramOp;
+    /// <summary>Establishes the CURRENT subject at a point sampled from a named <c>curves</c> row by arc-length
+    /// fraction, and re-seeds the eye there — the same subject-seeding role <see cref="Anchor"/> plays, so at most one
+    /// of the two may appear in a program, and when present this must be the first operation. The sampled subject's
+    /// orientation faces the curve's own tangent direction at that point. A following <see cref="Offset"/> with
+    /// <c>WorldAxes: false</c> (the default) rotates its offset into that tangent frame, and a following
+    /// <see cref="LookAt"/> with no subject of its own looks ahead along it; a following <see cref="Orbit"/> pivots
+    /// at the traveling point but resolves its own yaw/pitch as literal world-frame angles regardless of the
+    /// tangent — it never reads the subject's orientation. A dollied eye is <c>path</c> + <see cref="LookAt"/> +
+    /// <see cref="Fov"/>; a dollied pivot is <c>path</c> + <see cref="Orbit"/> with an authored yaw that already
+    /// accounts for the curve's own heading. Composes with <see cref="Dynamics"/>'s boom follower untouched.
+    /// Carries no rate field: a constant-rate dolly binds <see cref="Fraction"/> to a <c>state</c> row carrying the
+    /// <c>advance</c> trait (base + rate·ticks) rather than duplicating a rate spelling here.</summary>
+    /// <param name="Curve">The referenced <c>curves</c> row name; must resolve.</param>
+    /// <param name="Fraction">The curve's arc-length fraction to sample, in <c>[0, 1]</c> for an open row (values
+    /// outside clamp) or unrestricted for a closed row (values wrap) — a literal, or a state binding.</param>
+    public sealed record Path(string Curve, BindableScalar Fraction) : WorldCameraProgramOp;
     /// <summary>Sets the second-order response the resolved eye/target boom eases through. Read by the caller after
     /// resolving a frame — never affects the resolved pose itself. At most one per program.</summary>
     /// <param name="Row">The referenced <c>dynamics</c> row name; must resolve.</param>
@@ -174,6 +192,8 @@ public sealed record WorldCameraProgram(string Name, string Version, IReadOnlyLi
     public WorldCameraProgramOp.Offset? OffsetOp => FirstOrDefault<WorldCameraProgramOp.Offset>();
     /// <summary>Gets the program's <see cref="WorldCameraProgramOp.Orbit"/> op, or <see langword="null"/>.</summary>
     public WorldCameraProgramOp.Orbit? OrbitOp => FirstOrDefault<WorldCameraProgramOp.Orbit>();
+    /// <summary>Gets the program's <see cref="WorldCameraProgramOp.Path"/> op, or <see langword="null"/>.</summary>
+    public WorldCameraProgramOp.Path? PathOp => FirstOrDefault<WorldCameraProgramOp.Path>();
     /// <summary>Gets the program's <see cref="WorldCameraProgramOp.Dynamics"/> op, or <see langword="null"/>.</summary>
     public WorldCameraProgramOp.Dynamics? DynamicsOp => FirstOrDefault<WorldCameraProgramOp.Dynamics>();
     /// <summary>Gets the program's <see cref="WorldCameraProgramOp.Select"/> op, or <see langword="null"/>.</summary>

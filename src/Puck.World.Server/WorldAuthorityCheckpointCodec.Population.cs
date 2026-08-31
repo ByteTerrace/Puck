@@ -71,6 +71,9 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteFixed(value: entry.ProducerPhase);
         writer.WriteFixed(value: entry.ProducerPreferredAltitude);
         writer.WriteFixed(value: entry.ProducerWeaveFrequency);
+        writer.WriteInt64(value: entry.ProducerCurveArcRaw);
+        writer.WriteNullableString(value: entry.ProducerActiveName);
+        writer.WriteInt32(value: entry.ProducerActiveCurveIndex);
         writer.WriteFixedVector(value: entry.Position);
         writer.WriteFixed(value: entry.Yaw);
         WriteTransferState(
@@ -145,6 +148,12 @@ public static partial class WorldAuthorityCheckpointCodec {
         var producerPhase = reader.ReadFixed();
         var producerPreferredAltitude = reader.ReadFixed();
         var producerWeaveFrequency = reader.ReadFixed();
+        var producerCurveArcRaw = reader.ReadInt64();
+        var producerActiveName = reader.ReadNullableString(
+            field: "population entry producer active name",
+            maxBytes: MaxStringBytes
+        );
+        var producerActiveCurveIndex = reader.ReadInt32();
         var position = reader.ReadFixedVector();
         var yaw = reader.ReadFixed();
         var dynamicState = ReadTransferState(reader: ref reader);
@@ -180,6 +189,9 @@ public static partial class WorldAuthorityCheckpointCodec {
             ProducerPhase: producerPhase,
             ProducerPreferredAltitude: producerPreferredAltitude,
             ProducerWeaveFrequency: producerWeaveFrequency,
+            ProducerCurveArcRaw: producerCurveArcRaw,
+            ProducerActiveName: producerActiveName,
+            ProducerActiveCurveIndex: producerActiveCurveIndex,
             Profile: profile,
             Residue: residue,
             SpawnPosition: spawnPosition,

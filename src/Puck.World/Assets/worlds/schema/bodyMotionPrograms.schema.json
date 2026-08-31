@@ -116,6 +116,24 @@
               "register"
             ],
             "additionalProperties": false
+          },
+          {
+            "properties": {
+              "$type": {
+                "const": "curve"
+              },
+              "curve": {
+                "type": "string"
+              },
+              "rate": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "curve",
+              "rate"
+            ],
+            "additionalProperties": false
           }
         ],
         "default": null

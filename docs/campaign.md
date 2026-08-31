@@ -60,6 +60,19 @@ state) and `Puck.SdfVm.Views` (a `MathF` twin, presentation-only, never fed back
 third derivation. Falsifiable by `world.dynamics` on any world authoring the section and the `dynamics`
 law family in `tests/Puck.Maths.Tests`.
 
+**A curve is authored by knot curvature, never by control points.** The same declare/derive shape as
+`dynamics`: a `curves` row's knots carry position, tangent direction, and signed curvature; `Puck.Maths.
+CurvatureSpline.Compile` derives the cubic-Bézier tangent lengths that reproduce them exactly (Steven
+Wittens' curvature-continuous construction) — no control-point document shape ever ships, so there is
+nothing to migrate off later. The same two-homes pattern as `dynamics`: `Puck.Maths` (fixed-point,
+exact `BigInteger`/`Rational` compile, Q32 runtime) and `Puck.SdfVm.Views.SdfCurvePath` (a float twin
+converted once from the compiled raws, never re-solving). Two consumers land with it: a camera
+program's `path` op dollies the eye/pivot along a curve by arc-length fraction, and a body-motion
+program's `curve` target source (`Puck.Physics.Motion.BodyTargetSource.CurveFollow`) feeds a body's
+planar target from a curve at an authored arc-rate — the seed the kart-track charter inherits.
+Falsifiable by `world.curves` on any world authoring the section and the `curvature-spline` law family
+in `tests/Puck.Maths.Tests`.
+
 **Injection draws on state rows only; fields fold into state as lattice rows.** The draw facet's one
 home is `WorldStateRow.Draw`; `bodies.capacityRow`/`host.backendRow` are boot-time reads of an
 already-resolved row rather than sites of their own, and nothing settles-and-clears any more — a

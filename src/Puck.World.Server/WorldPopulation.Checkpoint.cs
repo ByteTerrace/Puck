@@ -34,6 +34,9 @@ public sealed partial class WorldPopulation {
         FixedQ4816 ProducerPhase,
         FixedQ4816 ProducerPreferredAltitude,
         FixedQ4816 ProducerWeaveFrequency,
+        long ProducerCurveArcRaw,
+        string? ProducerActiveName,
+        int ProducerActiveCurveIndex,
         FixedVector3 Position,
         FixedQ4816 Yaw,
         WorldBody.TransferState DynamicState,
@@ -102,6 +105,9 @@ public sealed partial class WorldPopulation {
                 ProducerPhase: entry.ProducerState.Phase,
                 ProducerPreferredAltitude: entry.ProducerState.PreferredAltitude,
                 ProducerWeaveFrequency: entry.ProducerState.WeaveFrequency,
+                ProducerCurveArcRaw: entry.ProducerState.CurveArcRaw,
+                ProducerActiveName: entry.ProducerState.ActiveProducerName,
+                ProducerActiveCurveIndex: entry.ProducerState.ActiveProducerCurveIndex,
                 Position: body.FixedPosition,
                 Yaw: body.FixedYaw,
                 DynamicState: body.CaptureTransferState(),
@@ -214,6 +220,9 @@ public sealed partial class WorldPopulation {
                 Phase = captured.ProducerPhase,
                 PreferredAltitude = captured.ProducerPreferredAltitude,
                 WeaveFrequency = captured.ProducerWeaveFrequency,
+                CurveArcRaw = captured.ProducerCurveArcRaw,
+                ActiveProducerName = captured.ProducerActiveName,
+                ActiveProducerCurveIndex = captured.ProducerActiveCurveIndex,
             };
 
             if (

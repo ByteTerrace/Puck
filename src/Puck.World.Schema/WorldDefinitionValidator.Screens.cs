@@ -234,7 +234,7 @@ public static partial class WorldDefinitionValidator {
     // op-ordering rules an evaluator relies on (an anchor op — if any — leads, and a clampPitch op — if any —
     // precedes the orbit op it governs). Blend's cross-program name/cycle check runs once over the whole document's
     // program table (ValidateCameraPrograms), not here — no single program's own validation can see its siblings.
-    private static void ValidateProgram(WorldCameraProgram program, WorldDefinition definition, string path, ISet<string> placementIds, ISet<string> dynamicsNames, List<string> errors) {
+    private static void ValidateProgram(WorldCameraProgram program, WorldDefinition definition, string path, ISet<string> placementIds, ISet<string> dynamicsNames, ISet<string> curveNames, List<string> errors) {
         if (program is null) {
             errors.Add(item: $"{path} is required.");
 
@@ -269,6 +269,7 @@ public static partial class WorldDefinitionValidator {
         var seenClampPitch = false;
         var seenFov = false;
         var seenOrbit = false;
+        var seenPath = false;
         var seenDynamics = false;
         var seenBlend = false;
         var seenSelect = false;
@@ -363,6 +364,31 @@ public static partial class WorldDefinitionValidator {
                     if ((orbit.PivotOffset is { } pivotOffset) && !IsFinite(value: pivotOffset)) {
                         errors.Add(item: $"{opPath} needs a finite pivotOffset.");
                     }
+
+                    break;
+                case WorldCameraProgramOp.Path pathOp:
+                    if (seenPath) {
+                        errors.Add(item: $"{opPath} is a second 'path' op — at most one is admitted.");
+                    } else if (index != 0) {
+                        errors.Add(item: $"{opPath} 'path' must be the first operation.");
+                    }
+
+                    seenPath = true;
+
+                    RequireDeclared(
+                        declaredSet: curveNames,
+                        errors: errors,
+                        field: "curve",
+                        path: opPath,
+                        rowNoun: "curves",
+                        value: pathOp.Curve
+                    );
+                    RequireBindableScalar(
+                        definition: definition,
+                        errors: errors,
+                        path: $"{opPath}.fraction",
+                        scalar: pathOp.Fraction
+                    );
 
                     break;
                 case WorldCameraProgramOp.Dynamics dynamicsOp:
@@ -507,6 +533,10 @@ public static partial class WorldDefinitionValidator {
             !seenSelect
         ) {
             errors.Add(item: $"{path}.operations must include a 'fov' op (or a 'blend'/'select' op resolving to programs that do) — every rig needs a rendered field of view.");
+        }
+
+        if (seenAnchor && seenPath) {
+            errors.Add(item: $"{path}.operations authors both 'anchor' and 'path' — each establishes its own subject; author only one.");
         }
     }
     // Cross-program blend references: every cameras[].rig, views.seatRig, and views.cameraRig shares ONE name
@@ -1090,7 +1120,7 @@ public static partial class WorldDefinitionValidator {
     // The window composition (PRESENTATION-ONLY): the seat rig valid, layout names unique, slot rects inside
     // [0,1] and non-degenerate, and every named-camera slot resolving against the authored camera set. ABSENT is a
     // seatless document's right — the engine ships no rig, so a census implying a body must author one.
-    private static void ValidateViews(WorldViewDefaults? views, WorldDefinition definition, int capacity, HashSet<string> cameras, ISet<string> placementIds, ISet<string> dynamicsNames, List<string> errors) {
+    private static void ValidateViews(WorldViewDefaults? views, WorldDefinition definition, int capacity, HashSet<string> cameras, ISet<string> placementIds, ISet<string> dynamicsNames, ISet<string> curveNames, List<string> errors) {
         if (views is null) {
             if (capacity > 0) {
                 errors.Add(item: $"views is required when bodies.capacity ({capacity}) is nonzero; the engine declares no seat rig (author one, or name a basis document that does).");
@@ -1100,6 +1130,7 @@ public static partial class WorldDefinitionValidator {
         }
 
         ValidateProgram(
+            curveNames: curveNames,
             definition: definition,
             dynamicsNames: dynamicsNames,
             errors: errors,
@@ -1118,6 +1149,7 @@ public static partial class WorldDefinitionValidator {
 
         if (views.CameraRig is { } cameraRig) {
             ValidateProgram(
+                curveNames: curveNames,
                 definition: definition,
                 dynamicsNames: dynamicsNames,
                 errors: errors,
@@ -1128,9 +1160,10 @@ public static partial class WorldDefinitionValidator {
 
             if (
                 (cameraRig.OrbitOp is not null) ||
-                (cameraRig.OffsetOp is not null)
+                (cameraRig.OffsetOp is not null) ||
+                (cameraRig.PathOp is not null)
             ) {
-                errors.Add(item: "views.cameraRig must author no 'orbit' or 'offset' op — it is the first-person rig a camera-targeting mode state resolves through, sitting exactly at the possessed body's own pose.");
+                errors.Add(item: "views.cameraRig must author no 'orbit', 'offset', or 'path' op — it is the first-person rig a camera-targeting mode state resolves through, sitting exactly at the possessed body's own pose.");
             }
         }
 

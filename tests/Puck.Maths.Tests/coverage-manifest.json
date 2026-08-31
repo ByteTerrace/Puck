@@ -2561,6 +2561,82 @@
       ]
     },
     {
+      "Id": "Puck.Maths.CompiledCurvatureSpline.Closed",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.evaluate-continuity-and-totality"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CompiledCurvatureSpline.Evaluate(Puck.Maths.FixedQ4816)",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.carrier-extremes",
+        "curvature-spline.evaluate-continuity-and-totality"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CompiledCurvatureSpline.EvaluateRaw(System.Int64)",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.arc-station-oracle",
+        "curvature-spline.evaluate-continuity-and-totality",
+        "curvature-spline.evaluate-raw-station-boundaries",
+        "curvature-spline.g2-joint"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CompiledCurvatureSpline.GetSegment(System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.arc-length-table",
+        "curvature-spline.arc-station-oracle",
+        "curvature-spline.degenerate-branches",
+        "curvature-spline.deterministic-multi-root-pick",
+        "curvature-spline.deterministic-recompile",
+        "curvature-spline.endpoint-curvature-oracle",
+        "curvature-spline.evaluate-continuity-and-totality",
+        "curvature-spline.evaluate-raw-station-boundaries",
+        "curvature-spline.g2-joint"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CompiledCurvatureSpline.KnotStation(System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.arc-length-table"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CompiledCurvatureSpline.SegmentCount",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.arc-length-table",
+        "curvature-spline.arc-station-oracle",
+        "curvature-spline.deterministic-recompile",
+        "curvature-spline.evaluate-continuity-and-totality",
+        "curvature-spline.g2-joint"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CompiledCurvatureSpline.TotalLength",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.arc-length-table",
+        "curvature-spline.carrier-extremes",
+        "curvature-spline.evaluate-continuity-and-totality"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CompiledCurvatureSpline.TotalLengthRaw",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.arc-station-oracle",
+        "curvature-spline.deterministic-recompile",
+        "curvature-spline.evaluate-raw-station-boundaries"
+      ]
+    },
+    {
       "Id": "Puck.Maths.CompiledDiscreteMeasure64.AmountAt(System.Int64)",
       "State": "covered",
       "CoveredBy": [
@@ -3135,6 +3211,429 @@
         "presented.unit-interval-star-licensing",
         "presented.zeta-limits-refuse",
         "smoke.presented-star-unguarded-refuses"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSpline.ArcLengthMinimumErrorBoundRaw",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.arc-station-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSpline.ArcLengthRelativeErrorShift",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.arc-station-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSpline.CoefficientFractionBitCount",
+      "State": "waived",
+      "Reason": "A documentation constant naming the scale every CurvatureSplineSegment raw is carried at; every law in the curvature-spline family reads and compares those raws, so a wrong value here would desynchronize every comparison in the family rather than fail one case that names it — the constant has no operand domain, subject shape or oracle of its own."
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSpline.Compile(System.ReadOnlySpan<Puck.Maths.CurvatureSplineKnot>,System.Boolean)",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.arc-station-oracle",
+        "curvature-spline.carrier-extremes",
+        "curvature-spline.degenerate-branches",
+        "curvature-spline.deterministic-multi-root-pick",
+        "curvature-spline.deterministic-recompile",
+        "curvature-spline.endpoint-curvature-oracle",
+        "curvature-spline.refusal-ladder"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSpline.MaxCoordinate",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.arc-station-oracle",
+        "curvature-spline.carrier-extremes"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSpline.MaxCurvature",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.refusal-ladder"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSpline.MaxTangentChordRatio",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.deterministic-multi-root-pick"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSpline.MinChordLength",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.refusal-ladder"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSpline.MinSpeedFloor",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.refusal-ladder"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSpline.MinTangentLength",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.deterministic-multi-root-pick"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineException.Refusal",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.degenerate-branches",
+        "curvature-spline.refusal-ladder"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineException.SegmentIndex",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.refusal-ladder"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineKnot..ctor(Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816)",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.endpoint-curvature-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineKnot.Curvature",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.endpoint-curvature-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineKnot.Elevation",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.endpoint-curvature-oracle",
+        "curvature-spline.evaluate-continuity-and-totality"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineKnot.TangentYaw",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.endpoint-curvature-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineKnot.X",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.endpoint-curvature-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineKnot.Z",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.endpoint-curvature-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineRefusal.ArcLengthErrorUnbounded",
+      "State": "waived",
+      "Reason": "Named refusal with no reachable trigger through legal authored knots: composite-Simpson error scales with the FOURTH power of the panel width, so each doubling divides the Richardson error estimate by roughly sixteen; CheckInteriorCusp already certifies every admitted segment's speed stays at or above MinSpeedFloor everywhere on [0, 1] (an exact, interval-isolated bound), which keeps the integrand's own higher derivatives from the kind of near-singular blowup that would demand many doublings, so the panel count converges within a handful of doublings for every admitted segment this suite or a hand-constructed adversarial one has reached — nowhere near the 65,536-panel budget. The refusal stays as the defensive catch-all a bounded search demands, not because a law can drive it."
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineRefusal.CarrierOverflow",
+      "State": "waived",
+      "Reason": "Named refusal with no reachable trigger through legal authored knots: every §1.6 derived bound (MaxCoordinate, MaxTangentChordRatio, MinTangentLength) exists specifically to keep the Q32 raw carrier from overflowing, and a knot pair inside KnotOutOfRange's own coordinate bound compiles or refuses by an earlier, more specific name first (curvature-spline.refusal-ladder's own leg records a 30000-draw sweep at the coordinate cap finding zero occurrences). The refusal stays in the ladder as the defensive catch-all TryRoundRational's own Try-shape demands, not because a law can drive it."
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineRefusal.CurvatureUnreachable",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.refusal-ladder"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineRefusal.InteriorCusp",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.refusal-ladder"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineRefusal.KnotOutOfRange",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.refusal-ladder"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineRefusal.TangentCurvatureInconsistent",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.refusal-ladder"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineRefusal.TooFewKnots",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.refusal-ladder"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineRefusal.ZeroLengthChord",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.refusal-ladder"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineRefusal.value__",
+      "State": "waived",
+      "Reason": "The compiler-generated enum storage field, not authored API."
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineSample..ctor(Puck.Maths.FixedVector3,Puck.Maths.FixedVector3,Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816)",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.evaluate-continuity-and-totality"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineSample.Curvature",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.evaluate-raw-station-boundaries",
+        "curvature-spline.g2-joint"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineSample.Grade",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.evaluate-continuity-and-totality",
+        "curvature-spline.evaluate-raw-station-boundaries"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineSample.Position",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.arc-station-oracle",
+        "curvature-spline.evaluate-continuity-and-totality",
+        "curvature-spline.evaluate-raw-station-boundaries"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineSample.Tangent",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.evaluate-continuity-and-totality",
+        "curvature-spline.evaluate-raw-station-boundaries"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineSegment.ArcTable",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.arc-length-table"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineSegment.D0X",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.evaluate-continuity-and-totality"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineSegment.D0Z",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.evaluate-continuity-and-totality"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineSegment.D1X",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.evaluate-continuity-and-totality"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineSegment.D1Z",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.evaluate-continuity-and-totality"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineSegment.D2X",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.evaluate-continuity-and-totality"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineSegment.D2Z",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.evaluate-continuity-and-totality"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineSegment.E0X",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.evaluate-continuity-and-totality"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineSegment.E0Z",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.evaluate-continuity-and-totality"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineSegment.E1X",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.evaluate-continuity-and-totality"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineSegment.E1Z",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.evaluate-continuity-and-totality"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineSegment.GradeRaw",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.evaluate-continuity-and-totality"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineSegment.LengthRaw",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.arc-length-table"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineSegment.P0X",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.endpoint-curvature-oracle",
+        "curvature-spline.evaluate-raw-station-boundaries"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineSegment.P0Z",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.endpoint-curvature-oracle",
+        "curvature-spline.evaluate-raw-station-boundaries"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineSegment.P1X",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.endpoint-curvature-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineSegment.P1Z",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.endpoint-curvature-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineSegment.P2X",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.endpoint-curvature-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineSegment.P2Z",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.endpoint-curvature-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineSegment.P3X",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.endpoint-curvature-oracle",
+        "curvature-spline.evaluate-raw-station-boundaries"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineSegment.P3Z",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.endpoint-curvature-oracle",
+        "curvature-spline.evaluate-raw-station-boundaries"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineSegment.StationRaw",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.arc-length-table",
+        "curvature-spline.arc-station-oracle",
+        "curvature-spline.evaluate-continuity-and-totality",
+        "curvature-spline.g2-joint"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineSegment.Tangent0LengthRaw",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.degenerate-branches",
+        "curvature-spline.deterministic-multi-root-pick",
+        "curvature-spline.deterministic-recompile"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineSegment.Tangent1LengthRaw",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.degenerate-branches",
+        "curvature-spline.deterministic-multi-root-pick",
+        "curvature-spline.deterministic-recompile"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineSegment.Y0Raw",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.evaluate-continuity-and-totality"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CurvatureSplineSegment.Y1Raw",
+      "State": "covered",
+      "CoveredBy": [
+        "curvature-spline.evaluate-continuity-and-totality"
       ]
     },
     {

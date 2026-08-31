@@ -1,3 +1,5 @@
+using Puck.Physics.Motion;
+
 namespace Puck.World;
 
 /// <summary>Resolves stable row names in world-definition collections.</summary>
@@ -66,6 +68,15 @@ public static class WorldDefinitionRows {
     /// <returns>The row, or <see langword="null"/> when the section declares none by that name.</returns>
     public static WorldDynamicsRow? FindDynamics(IReadOnlyList<WorldDynamicsRow>? dynamics, string name) => Find(
         rows: dynamics,
+        name: name,
+        selector: static row => row.Name
+    );
+    /// <summary>Finds a curves row by stable name.</summary>
+    /// <param name="curves">The section's curve rows.</param>
+    /// <param name="name">The curve row name to find.</param>
+    /// <returns>The row, or <see langword="null"/> when the section declares none by that name.</returns>
+    public static WorldCurveRow? FindCurve(IReadOnlyList<WorldCurveRow>? curves, string name) => Find(
+        rows: curves,
         name: name,
         selector: static row => row.Name
     );
@@ -224,6 +235,45 @@ public static class WorldDefinitionRows {
                 if (cell.Dynamics?.Row is { } cellDynamics) {
                     yield return ("state", $"state.{row.Name}.{cell.Key}", cellDynamics);
                 }
+            }
+        }
+    }
+    /// <summary>Enumerates every declared reference to a <c>curves</c> row across the document: a camera's own rig and
+    /// the world's <c>views.seatRig</c>/<c>views.cameraRig</c> <c>path</c> op (<c>Section</c> <c>"cameras"</c>), plus
+    /// whatever a body-motion program's <c>curve</c> target source contributes (<c>"follows"</c>) — the one walk both
+    /// a <c>world.curves</c> census and a dangling-reference check can share. Yields nothing for a reference that is
+    /// absent; never yields a section/row pairing that names no curves row.</summary>
+    /// <param name="definition">The document to walk.</param>
+    /// <returns>One entry per declared reference, in authored order: <c>Section</c> is the referencing area,
+    /// <c>Path</c> locates the specific reference within it, and <c>RowName</c> is the <c>curves</c> row name it
+    /// names.</returns>
+    public static IEnumerable<(string Section, string Path, string RowName)> EnumerateCurveReferences(WorldDefinition definition) {
+        foreach (var camera in definition.Cameras) {
+            if (camera is null) {
+                continue;
+            }
+
+            if (camera.Rig.PathOp is { } cameraOp) {
+                yield return ("cameras", $"cameras.{camera.Name}", cameraOp.Curve);
+            }
+        }
+
+        if (definition.ViewsRaw is { } views) {
+            if (views.SeatRig.PathOp is { } seatOp) {
+                yield return ("cameras", "views.seatRig", seatOp.Curve);
+            }
+
+            if (views.CameraRig?.PathOp is { } viewCameraOp) {
+                yield return ("cameras", "views.cameraRig", viewCameraOp.Curve);
+            }
+        }
+
+        foreach (var program in definition.BodyMotionPrograms) {
+            if (
+                (program is not null) &&
+                (program.Target is BodyTargetSource.CurveFollow curve)
+            ) {
+                yield return ("follows", $"bodyMotionPrograms.{program.Name}", curve.Curve);
             }
         }
     }

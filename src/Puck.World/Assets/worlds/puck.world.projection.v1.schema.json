@@ -2197,6 +2197,37 @@
                       "additionalProperties": false
                     },
                     {
+                      "description": "Establishes the CURRENT subject at a point sampled from a named curves row by arc-length fraction, and re-seeds the eye there \u2014 the same subject-seeding role Anchor plays, so at most one of the two may appear in a program, and when present this must be the first operation. The sampled subject\u0027s orientation faces the curve\u0027s own tangent direction at that point. A following Offset with WorldAxes: false (the default) rotates its offset into that tangent frame, and a following LookAt with no subject of its own looks ahead along it; a following Orbit pivots at the traveling point but resolves its own yaw/pitch as literal world-frame angles regardless of the tangent \u2014 it never reads the subject\u0027s orientation. A dollied eye is path \u002B LookAt \u002B Fov; a dollied pivot is path \u002B Orbit with an authored yaw that already accounts for the curve\u0027s own heading. Composes with Dynamics\u0027s boom follower untouched. Carries no rate field: a constant-rate dolly binds Fraction to a state row carrying the advance trait (base \u002B rate\u00B7ticks) rather than duplicating a rate spelling here.",
+                      "properties": {
+                        "$type": {
+                          "const": "path"
+                        },
+                        "curve": {
+                          "description": "The referenced curves row name; must resolve.",
+                          "type": "string"
+                        },
+                        "fraction": {
+                          "description": "The curve\u0027s arc-length fraction to sample, in [0, 1] for an open row (values outside clamp) or unrestricted for a closed row (values wrap) \u2014 a literal, or a state binding.",
+                          "type": [
+                            "number",
+                            "string"
+                          ]
+                        },
+                        "opcode": {
+                          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "curve",
+                        "fraction"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
                       "description": "Sets the second-order response the resolved eye/target boom eases through. Read by the caller after resolving a frame \u2014 never affects the resolved pose itself. At most one per program.",
                       "properties": {
                         "$type": {
@@ -2600,6 +2631,38 @@
                 ],
                 "additionalProperties": false
               },
+              "pathOp": {
+                "description": "Gets the program\u0027s Path op, or null.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "curve": {
+                    "description": "The referenced curves row name; must resolve.",
+                    "type": "string"
+                  },
+                  "fraction": {
+                    "description": "The curve\u0027s arc-length fraction to sample, in [0, 1] for an open row (values outside clamp) or unrestricted for a closed row (values wrap) \u2014 a literal, or a state binding.",
+                    "type": [
+                      "number",
+                      "string"
+                    ]
+                  },
+                  "opcode": {
+                    "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "curve",
+                  "fraction"
+                ],
+                "additionalProperties": false
+              },
               "dynamicsOp": {
                 "description": "Gets the program\u0027s Dynamics op, or null.",
                 "type": [
@@ -2639,7 +2702,7 @@
                     ]
                   },
                   "cases": {
-                    "$ref": "#/properties/cameras/items/properties/rig/properties/operations/items/anyOf/8/properties/cases"
+                    "$ref": "#/properties/cameras/items/properties/rig/properties/operations/items/anyOf/9/properties/cases"
                   },
                   "default": {
                     "description": "The program resolved when no case\u0027s value matches Key.",
@@ -7958,6 +8021,9 @@
             "orbitOp": {
               "$ref": "#/properties/cameras/items/properties/rig/properties/orbitOp"
             },
+            "pathOp": {
+              "$ref": "#/properties/cameras/items/properties/rig/properties/pathOp"
+            },
             "dynamicsOp": {
               "$ref": "#/properties/cameras/items/properties/rig/properties/dynamicsOp"
             },
@@ -8060,6 +8126,9 @@
             },
             "orbitOp": {
               "$ref": "#/properties/cameras/items/properties/rig/properties/orbitOp"
+            },
+            "pathOp": {
+              "$ref": "#/properties/cameras/items/properties/rig/properties/pathOp"
             },
             "dynamicsOp": {
               "$ref": "#/properties/cameras/items/properties/rig/properties/dynamicsOp"

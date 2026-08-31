@@ -140,6 +140,7 @@ give each type its full contract.
 | `FixedRateAccumulator` | `struct` | Exact-tick integration of a Q48.16 per-second rate. The part of the division too small to represent is kept as a remainder across calls, so a constant rate advances by exactly one unit after `ticksPerSecond` one-tick steps. That remainder is authoritative simulation state. |
 | `FixedVector3RateAccumulator` | `struct` | Three independent axes of the same integration under one shared time base, bound once. Four readers, four selective resets. |
 | `SecondOrderDynamics` (with `SecondOrderStep`, `SecondOrderState`/`SecondOrderState3`, `SecondOrderSample`) | `readonly record struct` | A pole-matched second-order response — `Create(f, ζ, r)` derives the coefficients from an authored frequency, damping ratio, and initial response; `Compile`+`Step` advance per tick/frame, `Evaluate`+`Retarget` read a closed form from initial conditions. Q32 authoritative state; a `MathF` float twin lives in `Puck.SdfVm.Views` for presentation-only followers. |
+| `CurvatureSpline` (with `CompiledCurvatureSpline`, `CurvatureSplineKnot`, `CurvatureSplineSample`, `CurvatureSplineSegment`, `CurvatureSplineException`/`CurvatureSplineRefusal`) | `static` class + `readonly record struct`s | A curve authored by knot curvature rather than control points — `Compile` derives the cubic-Bézier tangent lengths that reproduce declared endpoint curvatures exactly, at Q32, plus a Simpson arc-length table; `Evaluate(arcLength)` reads position, tangent, elevation grade, and curvature back per tick/frame. Zero-allocation, exception-free evaluation; a float twin (`Puck.SdfVm.Views.SdfCurvePath`) converts the compiled raws once for presentation. |
 | `FixedVectorMath` | `internal static` | **Substrate.** The scale-free normalizers and norm helpers that every direction and length operation in the folder routes through: the common power-of-two preconditioner, the exact sums of squares, the restoring per-component division (restoring division is schoolbook long division, one bit at a time), and the `Try…` boundary reports. |
 | `FusedArithmetic` (with `LimbBig`) | `public static` | The public refusing faces provide one-rounding mixed-scale products, three-lane dot products, scaled reciprocals, and the generalized `TryDivideMagnitudeRounded` divider. Their sign-plus-`UInt128` accumulation and wrapping siblings remain internal substrate. `LimbBig`, sharing the file, remains the internal exact signed multi-limb accumulator serving `Algebra/MonogenicAlgebra`'s higher-degree lanes. |
 | `FixedSymmetricSolve` | `public static` | Scale-free 2×2/3×3 symmetric apply, solve, and invert for the effective-mass matrices a rigid-body solver uses. `TryApplySymmetric3`, `TryApplySymmetric2` and `TryInvertSymmetric2` are public; the 2×2/3×3 solve kernels and `TryInvertSymmetric3` stay internal until a consumer needs them. Raw-`long` operands may use any shared caller scale; each output rounds exactly once and every refusing call clears its outputs. |
@@ -147,7 +148,7 @@ give each type its full contract.
 | `IWorldQuery` (with `RayHit`, `WorldQueryConfidence`, `QueryCapabilities`) | `interface` | The five geometric verbs over a world — raycast, sphere cast, overlap, ground height, line of sight — each answer tagged `Exact` or `Bounded` so a caller knows whether it read a live field or a quantized bake. Declared here for the same reason as `IFieldEvaluator`: it names no representation. |
 | `IFieldEvaluator` (with `FieldEvaluatorCapabilities`) | `interface` | A scalar field and its gradient over `FixedPosition`, read as `TryDistance` (signed: negative inside geometry) and `TryFieldGradient` (unit-length, pointing away from the nearest surface). It names no representation, so a field's producer and its gravity, contact or wind consumers can sit in sibling libraries that never reference each other; a consumer wanting "down" computes `-gradient.Normalize()`. |
 | `FixedPointRounding` | `public static` | The shared nearest-result decision for integer kernels: compare the exact distance to the truncated result with the exact distance to its next neighbour, then resolve an equal-distance tie toward the even raw. `TryRoundRational` applies that decision to a whole exact `BigInteger` rational — the scale shift folded onto the numerator, one division, one rounding, refusing rather than wrapping — and is where both the mass-property chain here and Physics's softness chain round, so simulation subsystems cannot drift onto different tie rules. |
-| `Rational` | `readonly record struct` | An exact `BigInteger` numerator/denominator pair, never narrowed until a caller's own closing rounding through `FixedPointRounding`. Every `BigInteger`-exact authoring/compile-time derivation in this folder, and `Puck.Physics`'s soft-constraint chain, forms its intermediates here — `SecondOrderDynamics`'s exact-transition-matrix derivation and `FixedSoftConstraint`'s stiffness/damping algebra both round through the same core rather than hand-inlining numerator/denominator pairs. |
+| `Rational` | `readonly record struct` | An exact `BigInteger` numerator/denominator pair, never narrowed until a caller's own closing rounding through `FixedPointRounding`. Every `BigInteger`-exact authoring/compile-time derivation in this folder, and `Puck.Physics`'s soft-constraint chain, forms its intermediates here — `SecondOrderDynamics`'s exact-transition-matrix derivation, `CurvatureSpline`'s tangent-length solve and Sturm-sequence root isolation, and `FixedSoftConstraint`'s stiffness/damping algebra all round through the same core rather than hand-inlining numerator/denominator pairs. |
 | `SignedFixedPointArithmetic` | `internal static` | **Substrate.** The common signed-raw division, fused interpolation, and magnitude selection for Q48.16, Q32.32 and Q16.48. The binary-point count is an input where the operation depends on it; the x64 division fast path, `UInt128` fallback, tie comparison, sign application, checked narrowing, and shared generic-math tie rules each live once. |
 | `FixedPointText` | `internal static` | **Substrate.** Exact decimal parsing and rendering shared by all six formattable carriers. Rendering is always allocation-free. Parsing is allocation-free too, in `UInt128`, for every carrier at or below thirty-seven fraction bits — `FixedQ4816`, `UFixedQ4816`, `UnitFraction16`, `UnitFraction32` and `FixedQ3232` all sit under that today. Only `FixedQ1648`'s Q16.48 crosses it: a format reads `F + 1` decimal digits, and forty-nine of them no longer fit `UInt128`, so its accumulation and rounding alone route through `BigInteger` (and therefore allocate) — a strict generalization of the narrow path that changes no result where both could run. The platform parser validates the culture syntax and supplies only the sign; the original digits are then quantized directly, so an arbitrarily long run of digits sitting on a midpoint cannot get rounded twice. On the rendering side it owns the format-specifier check and terminating fraction digits for every carrier, plus the raw prefix, exact length check, and culture-token splicing shared by the four Q formats as an unsigned magnitude plus a sign flag. |
 | `FixedPointConvert` | `internal static` | **Substrate.** The single `INumberBase<T>` conversion body for all three signed Q formats, including their signed/unsigned or cross-width peer seams, plus the recognized-source predicates and exact scaling steps. A known BCL numeric is expressed at the target scale with no range clamp before the requested checked, saturating or truncating policy is applied. Decimal sources are read from their own bits and rounded once; Q16.48 and Q32.32 use the wide `BigInteger` lane their fraction counts require, while Q48.16 stays on `Int128`. |
@@ -821,6 +822,121 @@ never feed back into the tick.
 
 ---
 
+## `CurvatureSpline`
+
+A curve authored by declaring **curvature at each knot** rather than raw
+Bézier control points — Steven Wittens' curvature-continuous cubic-Bézier
+construction ("Making Curvature Front and Center"). A `CurvatureSplineKnot` is
+a planar `(X, Z)` position, an `Elevation` (the `Y` lift, carried outside the
+planar curvature and arc-length solve as a linear grade per segment), a
+`TangentYaw` (radians; the unit tangent is `(cos, sin)` in the XZ plane, the
+same convention `FixedQ4816.SinCos` uses), and the signed `Curvature` the
+compiled segments on either side of the knot must reach there, under
+`cross2(a, b) = a.X·b.Z − a.Z·b.X`: positive curvature turns from the tangent
+toward `+Z` faster than toward `−Z`. `Compile(knots, closed)` derives the two
+tangent lengths a cubic Bézier segment needs to reproduce each endpoint's
+declared curvature exactly — a quadratic system in the two lengths, reduced to
+a quartic in the general case — so the author never touches a control point.
+
+**Root isolation is exact; admissibility and the tie are certified, not
+guessed at from a single point.** `Compile` never runs on a per-tick path: it
+works in `System.Numerics.BigInteger`/`Rational` throughout
+(`CurvatureSpline.Exact.cs`, internal), isolating every real root of the
+tangent-length quartic with a Sturm sequence over exact rational coefficients
+— no float, no iteration-order dependence. For each isolated root, whether its
+(l0, l1) pair is admissible is decided by refining the isolating interval
+(never searching for a different root — exactly one is already certified
+inside it) until every admissibility inequality holds, or fails, across the
+WHOLE interval, up to a bounded budget; a root whose admissibility cannot be
+decided within that budget refuses rather than picking a side of the
+boundary. When more than one root is admissible, the pair minimizing
+`l0² + l1²` is picked the same way — refining both candidates' objective
+intervals until they separate, or, on an unresolved tie after the budget, by
+the documented policy of keeping the smaller `l0` (the ascending isolation
+order's own first candidate) rather than an unproved exact tie rule. The
+single-root branches (one or both curvatures zero) need no such refinement:
+their `(l0, l1)` is an exact closed-form rational, decided outright against
+the same bounds. Every step is a pure function of the authored knots and the
+segment index: the same knots compile to bit-identical raws every time, from
+scratch, on every machine. Every compiled raw — control points, quadratic
+derivative points, linear second-derivative points, the arc-length table, the
+tangent lengths — rounds exactly ONCE, from a representative point of its
+final certified interval, to `CoefficientFractionBitCount` (Q32), through
+`FixedPointRounding.TryRoundRational`; that interval is always many orders of
+magnitude narrower than the Q32 rounding grid, which is what makes rounding
+from a representative point safe, not a claim that the point IS the algebraic
+root — `SinCosExact` and `ExactSqrt` are themselves guard-precision roundings
+of transcendental and irrational values, so no step in this pipeline carries
+an unrounded real number end to end.
+
+**The arc-length table is a composite-Simpson integral of exact geometry,
+adaptively subdivided to a declared error bound.** Each segment carries a
+cumulative table over uniform-`t` subintervals of `|B′(t)|`, each node
+evaluated exactly from the pre-rounding derivative control points before the
+one Q32 rounding per cumulative entry. The panel count starts at 64 and
+doubles — always a power of two, so
+`CompiledCurvatureSpline`'s own per-tick lookup keeps dividing by it with a
+shift — until two successive doublings agree at every matching station to
+within a bound RELATIVE to the segment's own arc length (`ArcLengthRelativeErrorShift`,
+floored at `ArcLengthMinimumErrorBoundRaw` so a short segment is never held to
+an unreachable absolute precision — a fixed absolute bound is unreachable
+within any sane panel budget on a million-unit segment, since Simpson's own
+error term scales with the integrand's magnitude) — a Richardson estimate of
+the Simpson quadrature error — AND a per-panel midpoint-vs-chord check (a
+conservative proxy for the linear-in-`t` interpolation error `Evaluate`
+itself commits to within an accepted panel) falls under the same bound, or
+refuses `ArcLengthErrorUnbounded` if neither holds within 65,536 panels.
+`CompiledCurvatureSpline.EvaluateRaw(arcRaw)` binary-searches the accepted
+table to invert arc length back to a Bézier parameter, so callers work in arc
+length — the units a follow-rate or a dolly fraction actually wants — rather
+than the non-uniform-speed `t`; `Evaluate(FixedQ4816)` is the Q16-typed
+convenience overload that promotes exactly and delegates to it. A caller
+already holding a Q32 raw (a curve-follow producer's per-tick accumulator)
+must call `EvaluateRaw` directly — narrowing to Q16 first loses up to 65,535
+Q32 raws of precision at the wrap/clamp boundary.
+
+**The refusal ladder is named, ordered, and total.** `Compile` never returns a
+NaN-shaped result and never falls back silently; every input either compiles
+or throws `CurvatureSplineException` naming a `CurvatureSplineRefusal`:
+`TooFewKnots` (an open curve needs two, a closed one three), `KnotOutOfRange`
+(a coordinate past `MaxCoordinate` or a curvature past `MaxCurvature`),
+`ZeroLengthChord` (consecutive knots closer than `MinChordLength`),
+`TangentCurvatureInconsistent` (the tangent-length system's cross term
+`w = cross2(T0, T1)` is zero and the remaining linear equation on the
+affected side cannot meet the declared curvature), `CurvatureUnreachable` (no
+tangent-length pair within the authoring bounds solves the curvature system),
+`InteriorCusp` (the segment's speed `|B′(t)|` dips below `MinSpeedFloor`
+somewhere on `[0, 1]`, found by the same exact root isolation applied to the
+speed-squared polynomial's derivative), `ArcLengthErrorUnbounded` (the
+arc-length table's estimated error would not fall under its scaled bound
+within the panel-doubling budget), and `CarrierOverflow` (an exact rational
+does not fit the Q32 carrier).
+`CurvatureSplineException.SegmentIndex` names the offending segment, or `-1`
+for a whole-curve refusal.
+
+**`CompiledCurvatureSpline.Evaluate` is the zero-allocation per-tick/per-frame
+form.** It never throws and never returns a non-finite component over its
+whole domain: a closed curve wraps the arc-length argument modulo
+`TotalLength` (the canonical non-negative residue), an open curve clamps to
+`[0, TotalLength]`. `MinTangentLength`, `MinChordLength`, `MaxCurvature`, and
+`MaxTangentChordRatio` are each derived limits rather than free knobs — the
+member remarks on `CurvatureSpline` state what each one bounds (a Q32
+rounding's perturbation of reconstructed curvature, the arc-table's increment
+floor, the solve's sensitivity to declared curvature, the quartic
+root-search interval — respectively). A presentation twin
+(`Puck.SdfVm.Views.SdfCurvePath.cs`, `Puck.SdfVm` project) converts an
+already-compiled spline's Q32 raws once at construction — it carries no
+solver of its own, so it cannot diverge from the fixed-point primitive's
+tangent-length branch pick or refusal ladder, only from its own
+de Casteljau/table-inversion arithmetic. It carries every intermediate
+(converted control points, arc table, wrap/clamp/lookup) in `double`, never
+`float` — a legal curve can accumulate arc well past `2^24` units, where a
+`float` ULP already exceeds a legal short segment and would collapse distinct
+Q32 stations onto the same value; `float` appears only at the two public
+seams, `TotalLength` and `Sample`'s returned position/yaw.
+
+---
+
 ## Substrate
 
 Three internal types carry the arithmetic that the public surface is a thin
@@ -1017,8 +1133,10 @@ types. Each one is a real dependency in the sources, not a resemblance.
   `FixedVector2.Dot`/`Wedge`, `FixedVector3.Dot`/`Cross`, and both of
   `FixedDual<TValue>`'s fused kernels all call. The `Int128` overload is
   `RoundProduct`, the arbitrary-shift form, at shift 16;
-  `FixedRigidTransform.Exp` reaches `RoundProduct` directly at Q62 and
-  `FusedArithmetic.RoundQ48SumToRaw` at shift 32. That one
+  `FixedRigidTransform.Exp` reaches `RoundProduct` directly at Q62,
+  `FusedArithmetic.RoundQ48SumToRaw` at shift 32, and
+  `CompiledCurvatureSpline.Evaluate` at shift 32 for its de Casteljau lerp and
+  its Q32 → Q16 narrowing. That one
   member is why "one rounding per returned component" is a single fact rather
   than eleven parallel ones — and it is also why a *leg*, one named piece of
   evidence a law stands on, that proves it in one type proves the *kernel*

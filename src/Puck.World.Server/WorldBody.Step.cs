@@ -1132,6 +1132,7 @@ public sealed partial class WorldBody {
             ? producer.Scalar(name: "approach")
             : FixedQ4816.Zero
         );
+        var strafe = producer.Scalar(name: "orbit");
         var up = (m_bodyMotionProgram.Contains(operation: BodyMotionOp.IntegrateLocalAttitude)
             ? FixedQ4816.Clamp(
                 value: ((scratch.ProducerState.PreferredAltitude - m_position.Y) * producer.Scalar(name: "altitudeGain")),
@@ -1141,11 +1142,32 @@ public sealed partial class WorldBody {
             : FixedQ4816.Zero
         );
 
-        scratch.Intent = m_roleOrdinals.Intent(
-            moveAdvance: forward,
-            moveStrafe: producer.Scalar(name: "orbit"),
-            moveUp: up
-        );
+        if (m_tuning.MoveFrame == MotionMoveFrame.World) {
+            // Under World, MoveAdvance/MoveStrafe are raw world axes (a seat rotates its stick through camera yaw
+            // before submission); a producer must rotate its own body-relative approach/orbit pair the same way,
+            // using the bearing TO the sensed target — the same atan2 convention FaceSensorTarget's Turn write
+            // steers the drawn attitude toward, since that Turn value never reaches the World-frame translation
+            // basis (ResolveYawAttitudeAndPlanarFrame). This is what steers movement.
+            var dx = (scratch.SensorTarget.Position.X - m_position.X);
+            var dz = (scratch.SensorTarget.Position.Z - m_position.Z);
+            var targetYaw = FixedQ4816.Atan2(
+                x: -dz,
+                y: -dx
+            );
+            var (sinYaw, cosYaw) = FixedQ4816.SinCos(angle: targetYaw);
+
+            scratch.Intent = m_roleOrdinals.Intent(
+                moveAdvance: ((forward * cosYaw) + (strafe * sinYaw)),
+                moveStrafe: ((-forward * sinYaw) + (strafe * cosYaw)),
+                moveUp: up
+            );
+        } else {
+            scratch.Intent = m_roleOrdinals.Intent(
+                moveAdvance: forward,
+                moveStrafe: strafe,
+                moveUp: up
+            );
+        }
     }
     private void ProduceWanderIntent(ref BodyMotionScratch scratch) {
         var producer = scratch.Producer!;
@@ -1845,7 +1867,10 @@ public sealed partial class WorldBody {
         var producer = scratch.Producer!;
         var current = scratch.ProducerSensors.CurrentTarget;
 
-        if (producer.Target?.Source is BodyTargetSource.Designated) {
+        // Release-radius hysteresis exists to damp flicker among a COMPETITIVELY sensed population (Sensed alone);
+        // a Designated register and a Curve follow-point are each a single deterministic candidate every tick with
+        // nothing to flicker against, so both take the fresh candidate outright.
+        if (producer.Target?.Source is not BodyTargetSource.Sensed) {
             scratch.SensorTarget = candidate;
         } else {
             var release = producer.Scalar(name: "releaseRadius");

@@ -150,6 +150,9 @@ namespace Puck.World;
 // The dynamics section rows (the world.row.set dynamics payload shape). Also reachable from WorldDefinition already;
 // this entry exposes the typed WorldJsonContext.Default.WorldDynamicsRow accessor the verb deserializes through.
 [JsonSerializable(typeof(WorldDynamicsRow))]
+// The curves section rows (the world.row.set curves payload shape). Also reachable from WorldDefinition already;
+// this entry exposes the typed WorldJsonContext.Default.WorldCurveRow accessor the verb deserializes through.
+[JsonSerializable(typeof(WorldCurveRow))]
 [JsonSerializable(typeof(WorldDistribution))]
 [JsonSerializable(typeof(WorldDistributionRegion.Disc), TypeInfoPropertyName = "WorldDistributionRegionDisc")]
 [JsonSerializable(typeof(WorldDistributionRegion.Points), TypeInfoPropertyName = "WorldDistributionRegionPoints")]
