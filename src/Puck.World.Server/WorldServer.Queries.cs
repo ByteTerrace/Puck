@@ -593,6 +593,11 @@ public sealed partial class WorldServer {
             Text: $"[judge.state: player {state.Index} is not an active population entry — see world.population]",
             Refused: true
         ),
+            WorldQuery.InstrumentState state when (Body(index: (state.Index - 1)) is not null) => new QueryAnswer(Text: DescribeInstrumentState(seatSlot: (state.Index - 1))),
+            WorldQuery.InstrumentState state => new QueryAnswer(
+            Text: $"[instrument.state: player {state.Index} is not an active population entry — see world.population]",
+            Refused: true
+        ),
             _ => new QueryAnswer(Text: string.Empty),
         };
     }

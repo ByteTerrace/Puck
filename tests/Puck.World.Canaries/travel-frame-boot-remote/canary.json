@@ -15,21 +15,21 @@
     "commands": [
       { "verb": "console", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "player.where", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "body.where", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.view.camera", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
-      { "verb": "player.fly", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "body.fly", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
-      { "verb": "player.where", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "body.where", "occurrence": 2, "outcome": "accepted" },
       { "verb": "world.view.camera", "occurrence": 2, "outcome": "accepted" },
       { "verb": "world.screenshot", "occurrence": 2, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" },
       { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" }
     ],
     "expect": [
-      { "type": "response", "name": "remote pose before move", "stream": "stdout", "verb": "player.where", "occurrence": 1, "count": 2, "extract": [{ "name": "beforeZ", "field": "pos", "component": 2 }] },
-      { "type": "response", "name": "remote pose after move", "stream": "stdout", "verb": "player.where", "occurrence": 2, "count": 2, "extract": [{ "name": "afterZ", "field": "pos", "component": 2 }] },
+      { "type": "response", "name": "remote pose before move", "stream": "stdout", "verb": "body.where", "occurrence": 1, "count": 2, "extract": [{ "name": "beforeZ", "field": "pos", "component": 2 }] },
+      { "type": "response", "name": "remote pose after move", "stream": "stdout", "verb": "body.where", "occurrence": 2, "count": 2, "extract": [{ "name": "afterZ", "field": "pos", "component": 2 }] },
       { "type": "relation", "name": "remote authority moved the body", "left": { "value": "beforeZ" }, "operator": "minimumMargin", "right": { "value": "afterZ" }, "margin": 1 },
       { "type": "framesAgree", "name": "moving the remote boot body changes the composed frame", "before": "before.png", "after": "after.png", "agree": false },
       { "type": "line", "name": "both captures resolved", "stream": "stderr", "match": "contains", "text": "after.png", "present": true },
@@ -44,18 +44,18 @@
     "commands": [
       { "verb": "console", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "player.where", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "body.where", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
-      { "verb": "player.where", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "body.where", "occurrence": 2, "outcome": "accepted" },
       { "verb": "world.screenshot", "occurrence": 2, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" },
       { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" }
     ],
     "expect": [
-      { "type": "response", "name": "remote pose before control wait", "stream": "stdout", "verb": "player.where", "occurrence": 1, "count": 2, "extract": [{ "name": "beforeZ", "field": "pos", "component": 2 }] },
-      { "type": "response", "name": "remote pose after control wait", "stream": "stdout", "verb": "player.where", "occurrence": 2, "count": 2, "extract": [{ "name": "afterZ", "field": "pos", "component": 2 }] },
+      { "type": "response", "name": "remote pose before control wait", "stream": "stdout", "verb": "body.where", "occurrence": 1, "count": 2, "extract": [{ "name": "beforeZ", "field": "pos", "component": 2 }] },
+      { "type": "response", "name": "remote pose after control wait", "stream": "stdout", "verb": "body.where", "occurrence": 2, "count": 2, "extract": [{ "name": "afterZ", "field": "pos", "component": 2 }] },
       { "type": "relation", "name": "without input the remote body stays put", "left": { "value": "beforeZ" }, "operator": "equal", "right": { "value": "afterZ" } },
       { "type": "line", "name": "no unhandled exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
     ]

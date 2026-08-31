@@ -77,14 +77,18 @@ public sealed class LoopbackTransport : IServerLink {
 
     // Mints the next envelope for the LOCAL connection (id 0, generation 0) — Sequence/CorrelationId both simple
     // monotonic counters (see their own field remarks).
-    private void Submit(WorldPrincipal principal, WorldSubmissionPayload payload) {
+    private long Submit(WorldPrincipal principal, WorldSubmissionPayload payload) {
         if (TryNextEnvelope(
             envelope: out var envelope,
             payload: payload,
             principal: principal
         )) {
             m_server.Submit(envelope: envelope);
+
+            return envelope.CorrelationId;
         }
+
+        return 0;
     }
     // The ALWAYS-BYTES rule: even the in-process link is defined by the same canonical frame a future socket carries.
     // A refusal is a transport verdict printed by name; invalid caller state never escapes as an invariant exception.
@@ -120,7 +124,7 @@ public sealed class LoopbackTransport : IServerLink {
     }
     // Encodes and decodes a typed payload, taps its canonical value with the envelope's principal, then submits it.
     // The payload's concrete leaf type proves that decoding returned the expected union case.
-    private void SubmitTapped<TPayload, TValue>(TPayload payload, WorldPrincipal principal, Func<TPayload, TValue> selectValue, Action<TValue, WorldPrincipal>? tap) where TPayload : WorldSubmissionPayload {
+    private long SubmitTapped<TPayload, TValue>(TPayload payload, WorldPrincipal principal, Func<TPayload, TValue> selectValue, Action<TValue, WorldPrincipal>? tap) where TPayload : WorldSubmissionPayload {
         if (
             TryNextEnvelope(
             envelope: out var envelope,
@@ -134,7 +138,11 @@ public sealed class LoopbackTransport : IServerLink {
                 arg2: envelope.Principal
             );
             m_server.Submit(envelope: envelope);
+
+            return envelope.CorrelationId;
         }
+
+        return 0;
     }
 
     /// <summary>Binds the client sink the server delivers each tick's snapshot to.</summary>
@@ -184,7 +192,7 @@ public sealed class LoopbackTransport : IServerLink {
     // (WorldServer.MutationTap), the one ingress the loopback, an admitted socket peer, and a forwarded traveller's
     // submission all share.
     /// <inheritdoc/>
-    public void SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal) {
+    public long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal) {
         switch (payload) {
             // CommandTap is single-arg (Action<WorldCommand>, no principal), unlike the two-arg taps below —
             // inlined rather than forced through SubmitTapped's Action<TValue, WorldPrincipal> shape.
@@ -199,59 +207,55 @@ public sealed class LoopbackTransport : IServerLink {
                 ) {
                     CommandTap?.Invoke(obj: canonicalCommand.Value);
                     m_server.Submit(envelope: commandEnvelope);
+
+                    return commandEnvelope.CorrelationId;
                 }
-                return;
+                return 0;
             case WorldSubmissionPayload.Composition composition:
-                SubmitTapped<WorldSubmissionPayload.Composition, WorldComposition>(
+                return SubmitTapped<WorldSubmissionPayload.Composition, WorldComposition>(
                     payload: composition,
                     principal: principal,
                     selectValue: static p => p.Value,
                     tap: CompositionTap
                 );
-                return;
             case WorldSubmissionPayload.Designation designation:
-                SubmitTapped<WorldSubmissionPayload.Designation, WorldDesignation>(
+                return SubmitTapped<WorldSubmissionPayload.Designation, WorldDesignation>(
                     payload: designation,
                     principal: principal,
                     selectValue: static p => p.Value,
                     tap: DesignationTap
                 );
-                return;
             // The tap fires before the envelope reaches the server, which is where WorldGrants.Conflicts actually
             // rules — so the tape records the submitted grant, including one the door goes on to refuse. That is
             // deliberate: replay re-applies a Grant entry through this identical door (WorldReplaySnapshot.Replay
             // calls server.Grant, never a bypass), so a refusal on tape reproduces as the identical refusal on
             // replay rather than silently vanishing or silently becoming accepted.
             case WorldSubmissionPayload.Grant grant:
-                SubmitTapped<WorldSubmissionPayload.Grant, WorldGrant>(
+                return SubmitTapped<WorldSubmissionPayload.Grant, WorldGrant>(
                     payload: grant,
                     principal: principal,
                     selectValue: static p => p.Value,
                     tap: GrantTap
                 );
-                return;
             case WorldSubmissionPayload.Revoke revoke:
-                SubmitTapped<WorldSubmissionPayload.Revoke, WorldGrant>(
+                return SubmitTapped<WorldSubmissionPayload.Revoke, WorldGrant>(
                     payload: revoke,
                     principal: principal,
                     selectValue: static p => p.Value,
                     tap: RevokeTap
                 );
-                return;
             case WorldSubmissionPayload.Undo undo:
-                SubmitTapped<WorldSubmissionPayload.Undo, int>(
+                return SubmitTapped<WorldSubmissionPayload.Undo, int>(
                     payload: undo,
                     principal: principal,
                     selectValue: static p => p.Count,
                     tap: UndoTap
                 );
-                return;
             default:
-                Submit(
+                return Submit(
                     principal: principal,
                     payload: payload
                 );
-                return;
         }
     }
     /// <inheritdoc/>

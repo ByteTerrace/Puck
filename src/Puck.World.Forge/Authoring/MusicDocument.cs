@@ -24,17 +24,55 @@ public sealed record MusicTempoDocument(int? BeatsPerBar, int TicksPerBeat);
 /// boundary it waits for before committing.</summary>
 /// <param name="To">The destination segment's <see cref="MusicSegmentDocument.Id"/> (must resolve to a sibling
 /// segment).</param>
-/// <param name="When">The event token that arms this transition (must be one of the published
-/// vocabulary — validated against the world schema's own closed event-token list, not here, since this document
+/// <param name="When">The event token that arms this transition (must be one of the world schema's sense-mappable
+/// <c>when</c> subset, <c>WorldAudioCue.MusicWhenTokens</c> — validated one layer up, not here, since this document
 /// layer cannot reference that vocabulary's owner).</param>
 /// <param name="At">The boundary the armed transition waits for (null = <see cref="MusicTransitionBoundary.BarEnd"/>).</param>
 public sealed record MusicTransitionDocument(string To, string When, MusicTransitionBoundary? At);
-/// <summary>One authored segment: its stable id and the transitions it can arm, evaluated in declared order.</summary>
+/// <summary>One authored conditional audio layer: a tune that plays as a simultaneous bed alongside the segment's own
+/// score while its condition holds — a segment can declare several, layering (an "alert" segment might always carry
+/// a percussion bed plus a brass layer that only joins while a boss body is present). Never queues or waits for a
+/// boundary like <see cref="MusicTransitionDocument"/>: a layer is level-triggered, active exactly the ticks its
+/// condition holds.</summary>
+/// <param name="TuneId">The referenced tune's declared name (must resolve to a sibling <c>WorldTune</c> row —
+/// validated one layer up, not here, since this document layer cannot reference that vocabulary's owner).</param>
+/// <param name="GainThousandths">The layer's authored gain in thousandths (1000 = unity), or <see langword="null"/>
+/// for unity; range-checked against the shared audio gain ceiling one layer up, not here (same reason as
+/// <see cref="MusicTransitionDocument.When"/>). Reserved for a future presentation wiring pass — round-trips through
+/// validation/canonicalization but does not yet affect the derived bed's live gain (the same "authored, not yet a
+/// producer" posture <c>WorldAudioCue.PlayerJump</c> already carries).</param>
+/// <param name="When">The event token gating this layer on top of segment membership (same sense-mappable
+/// vocabulary <see cref="MusicTransitionDocument.When"/> already uses — validated one layer up), or
+/// <see langword="null"/> for "active whenever this segment is current" (the base, unconditional case).</param>
+public sealed record MusicLayerDocument(string TuneId, int? GainThousandths, string? When);
+/// <summary>One authored director embellishment: a one-shot stinger voiced the instant its condition is observed —
+/// never queued, never waiting for a beat/bar boundary like <see cref="MusicTransitionDocument"/>, and never a
+/// looping bed like <see cref="MusicLayerDocument"/>. A segment can declare several, each with its own patch (a
+/// jump-scare cue, a fanfare on an objective edge).</summary>
+/// <param name="PatchId">The referenced synth patch's declared name (must resolve to a sibling <c>WorldPatch</c> row —
+/// validated one layer up, not here).</param>
+/// <param name="When">The event token that fires this embellishment (same sense-mappable vocabulary
+/// <see cref="MusicTransitionDocument.When"/> already uses — validated one layer up). Required: an embellishment
+/// with no firing condition can never sound.</param>
+/// <param name="GainThousandths">The embellishment's authored gain in thousandths (1000 = unity), or
+/// <see langword="null"/> for unity; range-checked one layer up, not here — see
+/// <see cref="MusicLayerDocument.GainThousandths"/>'s remarks. Reserved for a future presentation wiring pass — see
+/// the same remarks.</param>
+public sealed record MusicEmbellishmentDocument(string PatchId, string When, int? GainThousandths);
+/// <summary>One authored segment: its stable id, the transitions it can arm, the conditional audio layers it can
+/// carry, and the one-shot embellishments it can fire — evaluated in declared order.</summary>
 /// <param name="Id">The segment's stable id, unique within the document.</param>
 /// <param name="Transitions">The segment's outgoing transitions (null = none — a terminal segment).</param>
-public sealed record MusicSegmentDocument(string Id, IReadOnlyList<MusicTransitionDocument>? Transitions);
+/// <param name="Layers">The segment's conditional audio layers (null = none — the segment's own score plays alone).</param>
+/// <param name="Embellishments">The segment's one-shot director embellishments (null = none).</param>
+public sealed record MusicSegmentDocument(
+    string Id,
+    IReadOnlyList<MusicTransitionDocument>? Transitions,
+    IReadOnlyList<MusicLayerDocument>? Layers = null,
+    IReadOnlyList<MusicEmbellishmentDocument>? Embellishments = null
+);
 /// <summary>
-/// The <c>puck.music.v1</c> document — the iMUSE-style structural layer over the tracker grain
+/// The <c>puck.music.v1</c> document — the adaptive segment-transition layer over the tracker grain
 /// <see cref="AudioDocument"/> already establishes: a tempo map plus named segments and the conditions that
 /// transition between them. Sits one layer above <see cref="AudioDocument"/>; does not replace it. Every field is
 /// tick-denominated — no wall-clock, no float — so a <c>MusicClock</c> renders the document without a conversion
@@ -60,9 +98,10 @@ public sealed record MusicDocument(
 /// <summary>
 /// THE strict validate → normalize → canonicalize boundary every <see cref="MusicDocument"/> crosses before it is
 /// trusted, persisted, or embedded — mirrors <see cref="SynthPatchCanonicalizer"/>'s shape exactly. Structural
-/// checks only (schema tag, tempo positivity, segment/transition shape, cross-segment reference resolution): the
-/// closed event-token vocabulary a transition's <see cref="MusicTransitionDocument.When"/> must belong to, and the
-/// tempo's engine-tick divisibility, are checked one layer up, by the world schema that owns both facts.
+/// checks only (schema tag, tempo positivity, segment/transition/layer/embellishment shape, cross-segment reference
+/// resolution): the sense-mappable <c>when</c> vocabulary a transition/layer/embellishment must name
+/// (<c>WorldAudioCue.MusicWhenTokens</c>), the tune/patch ids a layer/embellishment references, and the tempo's
+/// engine-tick divisibility, are all checked one layer up, by the world schema that owns those facts.
 /// </summary>
 public static class MusicCanonicalizer {
     private static readonly HashSet<string> KnownMemberNames = new(comparer: StringComparer.OrdinalIgnoreCase) {
@@ -137,6 +176,44 @@ public static class MusicCanonicalizer {
 
                     if ((transition.At is { } at) && !Enum.IsDefined(value: at)) {
                         errors.Add(item: new(Message: $"'{((int)at)}' is not a defined boundary.", Path: $"{transitionPath}.at"));
+                    }
+                }
+
+                var layers = (segment.Layers ?? []);
+
+                for (var layerIndex = 0; (layerIndex < layers.Count); layerIndex++) {
+                    var layer = layers[layerIndex];
+                    var layerPath = $"{path}.layers[{layerIndex}]";
+
+                    if (layer is null) {
+                        errors.Add(item: new(Message: "is required.", Path: layerPath));
+
+                        continue;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(value: layer.TuneId)) {
+                        errors.Add(item: new(Message: "tuneId is required.", Path: $"{layerPath}.tuneId"));
+                    }
+                }
+
+                var embellishments = (segment.Embellishments ?? []);
+
+                for (var embellishmentIndex = 0; (embellishmentIndex < embellishments.Count); embellishmentIndex++) {
+                    var embellishment = embellishments[embellishmentIndex];
+                    var embellishmentPath = $"{path}.embellishments[{embellishmentIndex}]";
+
+                    if (embellishment is null) {
+                        errors.Add(item: new(Message: "is required.", Path: embellishmentPath));
+
+                        continue;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(value: embellishment.PatchId)) {
+                        errors.Add(item: new(Message: "patchId is required.", Path: $"{embellishmentPath}.patchId"));
+                    }
+
+                    if (string.IsNullOrWhiteSpace(value: embellishment.When)) {
+                        errors.Add(item: new(Message: "when is required.", Path: $"{embellishmentPath}.when"));
                     }
                 }
             }

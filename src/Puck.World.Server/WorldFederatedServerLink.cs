@@ -85,6 +85,7 @@ internal sealed class WorldFederatedServerLink(WorldRemoteAuthority authority) :
             WorldQuery.Contacts contacts => (contacts.Index - 1),
             WorldQuery.MusicState music => (music.Index - 1),
             WorldQuery.JudgeState judge => (judge.Index - 1),
+            WorldQuery.InstrumentState instrument => (instrument.Index - 1),
             _ => -1,
         };
         var reply = Submit(
@@ -121,8 +122,9 @@ internal sealed class WorldFederatedServerLink(WorldRemoteAuthority authority) :
     // routes by BODY, never by principal (the credential IS the authority — see TryCredential); Command/Designation
     // carry their own entity index, so route on it directly, everything else goes out under the traveler's own
     // committed body ("any"). principal is unused here — it never rode this transport; the interface parameter
-    // exists for the loopback side, which routes on it for real.
-    public void SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal) {
+    // exists for the loopback side, which routes on it for real. Returns 0: the remote authority mints the envelope,
+    // so no local correlation exists for a deferred verdict to address.
+    public long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal) {
         _ = (payload switch {
             WorldSubmissionPayload.Command command => Submit(
                 bodyIndex: command.Value.EntityIndex,
@@ -134,6 +136,8 @@ internal sealed class WorldFederatedServerLink(WorldRemoteAuthority authority) :
             ),
             _ => SubmitAny(payload: payload),
         });
+
+        return 0;
     }
     public void SubmitIntent(in IntentSubmission submission) {
         if (m_authority.TryForwardIntent(

@@ -15,7 +15,8 @@ namespace Puck.World;
 /// The post-build wiring step every boot shape runs: the affordance vocabulary install, the boot document's genuine
 /// binding-vocabulary re-validation (see the remarks on <see cref="Install"/>), the accepted-session-lever
 /// attachment, the outstanding-capture drain (see the end of <see cref="Install"/>), and the server's
-/// <see cref="WorldServer.EchoTap"/>/<see cref="WorldServer.SaveEffectTap"/>/
+/// <see cref="WorldServer.EchoTap"/>/<see cref="WorldServer.SaveEffectTap"/>/<see cref="WorldServer.MusicTransitionTap"/>/
+/// <see cref="WorldServer.MusicLayerTap"/>/<see cref="WorldServer.MusicEmbellishmentTap"/>/
 /// <see cref="WorldMachineHost.MachineLifecycleTap"/> closures — moved out of the old presentation-only render-root
 /// factory so <c>wire.errors</c> stays honest headless (a deferred Simulation-routed refusal is counted regardless of
 /// boot shape). Called once from <c>Program.cs</c> right after <c>IHost.Build()</c>, for both boot shapes. The
@@ -204,8 +205,24 @@ internal static class WorldPostBuildWiring {
         var consoleSessions = services.GetRequiredService<TerminalConsoleSessions>();
         var audioDirector = services.GetRequiredService<WorldAudioDirector>();
         var definitionSource = services.GetRequiredService<WorldDefinitionSource>();
+        var deferredVerbEchoes = services.GetRequiredService<WorldDeferredVerbEchoes>();
 
         services.GetRequiredService<WorldServer>().EchoTap = echo => {
+            // The per-verb half of a deferred verdict: a buffered mutation verb registered its minted correlation at
+            // submit, so a LOCAL submission's rejection prints an accountable "[<verb>: …]" line on stderr beside the
+            // verb-agnostic "[world.mutation rejected: …]" narration. An accepted verdict takes its entry silently —
+            // echo model 3 stays applied-line-free.
+            if (
+                (echo.ConnectionId == SubmissionEnvelope.LocalConnectionId) &&
+                deferredVerbEchoes.TryTake(
+                correlationId: echo.CorrelationId,
+                verb: out var submittingVerb
+            ) &&
+                echo.Rejected
+            ) {
+                Console.Error.WriteLine(value: $"[{submittingVerb}: {echo.Message}]");
+            }
+
             // world.load/world.reload move what the console considers "the current origin" — but only once the
             // SERVER's own echo confirms the rebuild actually applied (this tap fires from the tick boundary, after
             // every gate — authority, dirty-guard, validation, capacity, solids — has already passed), never eagerly
@@ -336,6 +353,31 @@ internal static class WorldPostBuildWiring {
                 : WorldAudioCue.ScreenBoot),
                 site: site
             );
+        };
+
+        // THE MUSIC-TRANSITION CUE LANE: a committed segment transition fires music.transition, listener-placed (a
+        // transition carries no world site) — the SAME tap-and-wiring shape the machine lifecycle lane above uses.
+        // CORE: WorldServer and the audio director are both core-registered, so this runs unconditionally in EVERY
+        // boot shape; a headless boot's cue accumulates harmlessly like every other cue here.
+        worldServer.MusicTransitionTap = _ => {
+            audioDirector.SubmitCue(
+                eventToken: WorldAudioCue.MusicTransition,
+                site: null
+            );
+        };
+
+        // THE MUSIC-LAYER LANE: the active conditional-layer tune id set is level-triggered (never queued), so the
+        // audio director re-derives its bed plan against it EVERY tick the set changes — see
+        // WorldAudioDirector.SetActiveMusicLayers. CORE, same posture as the transition lane above.
+        worldServer.MusicLayerTap = tuneIds => {
+            audioDirector.SetActiveMusicLayers(tuneIds: tuneIds);
+        };
+
+        // THE MUSIC-EMBELLISHMENT CUE LANE: a fired director embellishment voices its OWN authored patch directly —
+        // see WorldAudioDirector.SubmitEmbellishment's remarks for why this cannot ride the ordinary SubmitCue
+        // token→row lookup the transition lane above uses. CORE, same posture as the transition lane above.
+        worldServer.MusicEmbellishmentTap = patchId => {
+            audioDirector.SubmitEmbellishment(patchId: patchId);
         };
 
         // THE CAPTURE-REQUEST DRAIN: world.screenshot arms a readback of the NEXT composed frame, so a run that ends

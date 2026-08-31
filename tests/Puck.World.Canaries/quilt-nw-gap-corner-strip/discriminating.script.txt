@@ -1,7 +1,7 @@
 wire.errors reset
 world.collision.probe 2 0 2
-player.pose 2 0.5 2 0 0 0 1
+body.pose 2 0.5 2 0 0 0 0
 world.wait 120
-player.where 1
+body.where 0
 world.contacts 1
 wire.errors

@@ -696,7 +696,7 @@ public sealed partial class WorldPopulation {
         }
     }
     /// <summary>Looks up a declared body motion program by name — the same table every kit's <see cref="WorldBody"/>
-    /// resolves against, exposed so a caller (the <c>player.motion</c> switch door) can validate coherence before
+    /// resolves against, exposed so a caller (the <c>body.motion</c> switch door) can validate coherence before
     /// asking a body to switch.</summary>
     /// <param name="name">The declared program name.</param>
     /// <param name="program">The compiled program, or <see langword="null"/> when <paramref name="name"/> is undeclared.</param>

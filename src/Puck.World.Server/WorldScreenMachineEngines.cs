@@ -1,5 +1,6 @@
 using Puck.Abstractions.Machines;
 using Puck.AdvancedGamingBrick;
+using Puck.Forge.Tune;
 using Puck.HumbleGamingBrick;
 
 namespace Puck.World;
@@ -23,6 +24,7 @@ public static class WorldScreenMachineEngines {
     public static IReadOnlyList<IScreenMachineEngine> All { get; } = [
         new GamingBrickEngine(),
         new AdvancedGamingBrickEngine(),
+        new TuneInstrumentEngine(),
     ];
 
     private static readonly WorldExtensionRegistry<IScreenMachineEngine> Registry = new(

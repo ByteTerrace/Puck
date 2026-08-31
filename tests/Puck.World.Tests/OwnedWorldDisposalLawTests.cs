@@ -10,6 +10,7 @@ namespace Puck.World.Tests;
 /// leaves the catalog's own glob ONCE and is named once with its own reason, a refusal that can answer differently on
 /// the next boot leaves its bytes exactly where they are, and a document that still parses is never touched by the
 /// sweep.</summary>
+[Collection(name: ConsoleRedirectionCollection.Name)]
 public sealed class OwnedWorldDisposalLawTests {
     private static string[] CatalogFiles(string directory) => [.. Directory
         .GetFiles(

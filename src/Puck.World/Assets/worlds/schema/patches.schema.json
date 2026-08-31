@@ -4,27 +4,28 @@
     "null"
   ],
   "items": {
-    "description": "One synth-patch asset row \u2014 a whole puck.synth.v1 document embedded inline-canonical with its identity hash pinned beside it via SynthPatchCanonicalizer, the same pin/restart contract as WorldPrototype; see WorldTune for the shared pin/restart semantics.",
+    "description": "One synth-patch asset reference row \u2014 the puck.synth.v1 twin of WorldTune, same name/source/hash shape and load-then-pin discipline.",
     "type": [
       "object",
       "null"
     ],
     "properties": {
-      "id": {
-        "description": "The row\u0027s stable string id \u2014 its mutation address; referenced by Synth and by PatchId facets.",
+      "name": {
+        "description": "The row\u0027s stable name \u2014 its mutation address; referenced by Synth and by PatchId facets.",
         "type": "string"
       },
-      "document": {
-        "description": "The canonical (validated \u002B normalized) synth patch document."
+      "source": {
+        "description": "The referenced document\u0027s file path.",
+        "type": "string"
       },
       "hash": {
-        "description": "The SHA-256 hex64 of the document\u0027s canonical bytes.",
+        "description": "The SHA-256 hex64 of the referenced document\u0027s canonical bytes.",
         "type": "string"
       }
     },
     "required": [
-      "id",
-      "document",
+      "name",
+      "source",
       "hash"
     ],
     "additionalProperties": false

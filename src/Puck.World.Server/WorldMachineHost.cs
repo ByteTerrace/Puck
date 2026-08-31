@@ -571,6 +571,18 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
             ? audio
             : null
         );
+    /// <summary>Returns the live machine's authored tempo, in engine ticks per beat, when the screen slot carries a
+    /// booted machine with the <see cref="IInstrumentClockSource"/> capability — <see langword="null"/> for an empty
+    /// slot, a machine without the capability, or a capability reporting zero (no content loaded).</summary>
+    /// <param name="index">The engine screen-surface index.</param>
+    public long? InstrumentTicksPerBeat(int index) =>
+        ((m_slots.TryGetValue(
+            key: index,
+            value: out var slot
+        ) && (slot.Machine is IInstrumentClockSource instrument) && (instrument.TicksPerBeat > 0))
+            ? instrument.TicksPerBeat
+            : null
+        );
     /// <summary>Returns the live cable-link set as derived groups (cable order preserved) — the <c>world.save</c>
     /// fold source: each group folds back into its member screens rows' machine-source cable ports (see
     /// <c>Puck.World.WorldSessionCapture</c>).</summary>

@@ -369,6 +369,12 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
         writer.WriteNullableString(value: section.MusicDirectorLastTransitionFromSegmentId);
         writer.WriteNullableString(value: section.MusicDirectorLastTransitionToSegmentId);
+        writer.WriteNullableString(value: section.MusicDirectorLastEmbellishmentPatchId);
+        WriteOptional(
+            writer: writer,
+            value: section.MusicDirectorLastEmbellishmentTick,
+            writeValue: static (w, v) => w.WriteUInt64(value: v)
+        );
         WriteArray(
             writer: writer,
             items: section.JudgeGrades,
@@ -494,6 +500,14 @@ public static partial class WorldAuthorityCheckpointCodec {
             field: "music director last to segment",
             maxBytes: MaxStringBytes
         );
+        var musicDirectorLastEmbellishmentPatchId = reader.ReadNullableString(
+            field: "music director last embellishment patch",
+            maxBytes: MaxStringBytes
+        );
+        var musicDirectorLastEmbellishmentTick = ReadOptional(
+            reader: ref reader,
+            readValue: static (ref WireReader r) => r.ReadUInt64()
+        );
         var judgeGrades = ReadArray(
             reader: ref reader,
             field: "server judge grades",
@@ -535,6 +549,8 @@ public static partial class WorldAuthorityCheckpointCodec {
             MusicClockElapsedTicks: musicClockElapsedTicks,
             MusicDirectorArmed: musicDirectorArmed,
             MusicDirectorCurrentSegmentId: musicDirectorCurrentSegmentId,
+            MusicDirectorLastEmbellishmentPatchId: musicDirectorLastEmbellishmentPatchId,
+            MusicDirectorLastEmbellishmentTick: musicDirectorLastEmbellishmentTick,
             MusicDirectorLastTransitionFromSegmentId: musicDirectorLastTransitionFromSegmentId,
             MusicDirectorLastTransitionTick: musicDirectorLastTransitionTick,
             MusicDirectorLastTransitionToSegmentId: musicDirectorLastTransitionToSegmentId,

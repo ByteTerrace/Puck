@@ -1,0 +1,93 @@
+{
+  "schema": "puck.audio.v1",
+  "name": "fast-instrument",
+  "tempo": 1,
+  "patterns": [
+    [
+      {
+        "note": "---",
+        "duty": 2,
+        "envelope": null
+      },
+      {
+        "note": "---",
+        "duty": 2,
+        "envelope": null
+      },
+      {
+        "note": "---",
+        "duty": 2,
+        "envelope": null
+      },
+      {
+        "note": "---",
+        "duty": 2,
+        "envelope": null
+      },
+      {
+        "note": "---",
+        "duty": 2,
+        "envelope": null
+      },
+      {
+        "note": "---",
+        "duty": 2,
+        "envelope": null
+      },
+      {
+        "note": "---",
+        "duty": 2,
+        "envelope": null
+      },
+      {
+        "note": "---",
+        "duty": 2,
+        "envelope": null
+      },
+      {
+        "note": "---",
+        "duty": 2,
+        "envelope": null
+      },
+      {
+        "note": "---",
+        "duty": 2,
+        "envelope": null
+      },
+      {
+        "note": "---",
+        "duty": 2,
+        "envelope": null
+      },
+      {
+        "note": "---",
+        "duty": 2,
+        "envelope": null
+      },
+      {
+        "note": "---",
+        "duty": 2,
+        "envelope": null
+      },
+      {
+        "note": "---",
+        "duty": 2,
+        "envelope": null
+      },
+      {
+        "note": "---",
+        "duty": 2,
+        "envelope": null
+      },
+      {
+        "note": "---",
+        "duty": 2,
+        "envelope": null
+      }
+    ]
+  ],
+  "order": [
+    0
+  ],
+  "effects": {}
+}

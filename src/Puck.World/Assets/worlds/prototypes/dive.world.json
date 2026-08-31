@@ -87,7 +87,7 @@
       "renderHeight": 240
     }
   ],
-  "population": {
+  "bodies": {
     "capacity": 128,
     "reconnectGraceSeconds": 3.0,
     "seatActivation": [
@@ -219,100 +219,102 @@
       ]
     }
   ],
-  "kits": [
-    {
-      "name": "defaultKit",
-      "$drop": true
-    },
-    {
-      "name": "diver",
-      "bodyMotionProgram": "swim",
-      "motion": {
-        "$type": "swim",
-        "thrustSpeed": 3.2,
-        "turnSpeed": 2.2,
-        "verticalThrustFraction": 0.75,
-        "response": [
-          {
-            "gate": {
-              "$type": "now",
-              "fact": "AtSurface"
+  "kits": {
+    "rows": [
+      {
+        "name": "defaultKit",
+        "$drop": true
+      },
+      {
+        "name": "diver",
+        "bodyMotionProgram": "swim",
+        "motion": {
+          "$type": "swim",
+          "thrustSpeed": 3.2,
+          "turnSpeed": 2.2,
+          "verticalThrustFraction": 0.75,
+          "response": [
+            {
+              "gate": {
+                "$type": "now",
+                "fact": "AtSurface"
+              },
+              "engageRate": 9,
+              "releaseRate": 5
             },
-            "engageRate": 9,
-            "releaseRate": 5
-          },
-          {
-            "engageRate": 7,
-            "releaseRate": 3.5
+            {
+              "engageRate": 7,
+              "releaseRate": 3.5
+            }
+          ],
+          "buoyancy": 0.5,
+          "maxRiseSpeed": 2.4,
+          "maxSinkSpeed": 3,
+          "surfaceSettleRate": 6,
+          "floatDepth": 1,
+          "sprintMultiplier": 1.5,
+          "sprintChannel": "run",
+          "moveFrame": "World",
+          "facingSnap": true,
+          "thrustSpeedEnvelope": {
+            "min": 3.2,
+            "max": 3.2
           }
-        ],
-        "buoyancy": 0.5,
-        "maxRiseSpeed": 2.4,
-        "maxSinkSpeed": 3,
-        "surfaceSettleRate": 6,
-        "floatDepth": 1,
-        "sprintMultiplier": 1.5,
-        "sprintChannel": "run",
-        "moveFrame": "World",
-        "facingSnap": true,
-        "thrustSpeedEnvelope": {
-          "min": 3.2,
-          "max": 3.2
+        },
+        "producers": {
+          "wander": {
+            "scalars": {
+              "forward": 0.3,
+              "softRadius": 16,
+              "weaveAmplitude": 0.5,
+              "inwardGain": 1.6,
+              "turnScale": 2.5,
+              "weaveFrequencyBase": 0.3,
+              "weaveFrequencyRange": 0.2,
+              "altitudeGain": 0.32,
+              "activityRateBase": 2.2,
+              "activityRateRange": 1.3,
+              "strafeWave": 0,
+              "turnWave": 0,
+              "upWave": 0,
+              "pitchWave": 0,
+              "rollTurn": 0,
+              "pressThreshold": 0,
+              "altitudeBase": -4,
+              "altitudeRange": 3
+            },
+            "channels": {}
+          }
+        },
+        "actions": {},
+        "collider": {
+          "$type": "capsule",
+          "endpoint": [
+            0,
+            1,
+            0
+          ],
+          "radius": 0.35
         }
-      },
-      "producers": {
-        "wander": {
-          "scalars": {
-            "forward": 0.3,
-            "softRadius": 16,
-            "weaveAmplitude": 0.5,
-            "inwardGain": 1.6,
-            "turnScale": 2.5,
-            "weaveFrequencyBase": 0.3,
-            "weaveFrequencyRange": 0.2,
-            "altitudeGain": 0.32,
-            "activityRateBase": 2.2,
-            "activityRateRange": 1.3,
-            "strafeWave": 0,
-            "turnWave": 0,
-            "upWave": 0,
-            "pitchWave": 0,
-            "rollTurn": 0,
-            "pressThreshold": 0,
-            "altitudeBase": -4,
-            "altitudeRange": 3
-          },
-          "channels": {}
-        }
-      },
-      "actions": {},
-      "collider": {
-        "$type": "capsule",
-        "endpoint": [
-          0,
-          1,
-          0
-        ],
-        "radius": 0.35
       }
+    ],
+    "assignment": {
+      "sequence": {
+        "name": "r1",
+        "offset": 1,
+        "step": 0
+      },
+      "rows": []
     }
-  ],
-  "defaultSeatKit": "diver",
-  "assignment": {
-    "sequence": {
-      "name": "r1",
-      "offset": 1,
-      "step": 0
-    },
-    "rows": []
   },
+  "defaultSeatKit": "diver",
   "addons": [],
   "storage": {
     "endpoint": null,
     "userId": null,
     "discoveryEndpoint": null
   },
-  "creations": [
+  "prototypes": [
     {
       "id": "basin",
       "document": {
@@ -589,79 +591,81 @@
       }
     }
   ],
-  "placements": [
-    {
-      "id": "basin",
-      "creationId": "basin",
-      "position": [
-        0,
-        0,
-        0
-      ],
-      "yawDegrees": 0,
-      "scale": 1,
-      "distribution": null,
-      "mirror": null,
-      "solid": {
-        "margin": 0
-      }
-    },
-    {
-      "id": "home-portal",
-      "creationId": "portal-frame",
-      "position": [
-        1,
-        -1.5,
-        -9
-      ],
-      "yawDegrees": 0,
-      "scale": 1,
-      "distribution": null,
-      "mirror": null,
-      "faceSources": [
-        {
-          "face": "screen",
-          "source": {
-            "$type": "session",
-            "destination": "home"
-          },
-          "portal": {
-            "destination": "home"
+  "placements": {
+    "rows": [
+      {
+        "id": "basin",
+        "prototypeId": "basin",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "distribution": null,
+        "mirror": null,
+        "solid": {
+          "margin": 0
+        }
+      },
+      {
+        "id": "home-portal",
+        "prototypeId": "portal-frame",
+        "position": [
+          1,
+          -1.5,
+          -9
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "distribution": null,
+        "mirror": null,
+        "faceSources": [
+          {
+            "face": "screen",
+            "source": {
+              "$type": "session",
+              "destination": "home"
+            },
+            "portal": {
+              "destination": "home"
+            }
+          }
+        ]
+      },
+      {
+        "id": "camera-seat-0",
+        "prototypeId": "camera-body",
+        "position": [
+          0,
+          3,
+          -6
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "inhabit": {
+          "count": 1,
+          "kit": "diver",
+          "source": "Live",
+          "look": null,
+          "distribution": {
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            },
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.618034
+            }
           }
         }
-      ]
-    },
-    {
-      "id": "camera-seat-0",
-      "creationId": "camera-body",
-      "position": [
-        0,
-        3,
-        -6
-      ],
-      "yawDegrees": 0,
-      "scale": 1,
-      "inhabit": {
-        "count": 1,
-        "kit": "diver",
-        "source": "Live",
-        "look": null,
-        "distribution": {
-          "region": {
-            "$type": "disc",
-            "radius": 0.01
-          },
-          "fill": {
-            "name": "additive",
-            "offset": 0,
-            "step": 0.618034
-          }
-        }
       }
+    ],
+    "policy": {
+      "maxPlacementScale": 5
     }
-  ],
-  "authoring": {
-    "maxPlacementScale": 5
   },
   "speakers": [],
   "tunes": [],
@@ -672,14 +676,16 @@
     "fullscreen": true,
     "authority": null
   },
-  "looks": [],
-  "lookAssignment": {
-    "sequence": {
-      "name": "r1",
-      "offset": 129,
-      "step": 0
-    },
-    "rows": []
+  "looks": {
+    "rows": [],
+    "assignment": {
+      "sequence": {
+        "name": "r1",
+        "offset": 129,
+        "step": 0
+      },
+      "rows": []
+    }
   },
   "grants": [],
   "hud": {
@@ -693,7 +699,7 @@
   },
   "schema": "puck.world.def.v1",
   "documentId": "dive",
-  "playerDefaults": {
+  "seatDefaults": {
     "identities": [
       {
         "id": "amber",
@@ -729,7 +735,7 @@
     "pickerThreshold": 0.6,
     "pickerNeutralColor": "#8C8C8C",
     "pickerNeutralBlend": 0.5,
-    "seatLook": {
+    "seatCameraFeel": {
       "yawSensitivity": 0.001,
       "pitchSensitivity": 0.001,
       "invertYaw": false,

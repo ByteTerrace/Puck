@@ -6,6 +6,51 @@ using Puck.Physics.Motion;
 namespace Puck.World.Server;
 
 public sealed partial class WorldServer {
+    /// <summary>Observes a music segment transition the instant it commits (the same tick <c>MusicDirector</c>
+    /// records it, from the music-step call site in <see cref="StepCore"/>) — mirroring
+    /// <see cref="SaveEffectTap"/>/<see cref="WorldMachineHost.MachineLifecycleTap"/>'s "the server calls out, the
+    /// composition root supplies the capability" shape: this project references no audio director, so it cannot fire
+    /// the <c>music.transition</c> cue itself. Carries nothing but the tick — the committed segment ids are already
+    /// re-derivable from <c>MusicDirector.LastTransitionFromSegmentId</c>/<c>LastTransitionToSegmentId</c>, so no
+    /// second value need round-trip through the tap. A <see langword="null"/> tap is a silent no-op, the same
+    /// convention every other tap here follows; every live boot shape wires one (<c>WorldPostBuildWiring.Install</c>).
+    /// Never taped — see <c>MusicJudgeReplayReDerivabilityLawTests</c>: the director's own state is purely
+    /// re-derivable from the document plus tick, so a fresh replay boot re-fires the identical sequence of
+    /// invocations without a recorded entry.</summary>
+    public Action<ulong>? MusicTransitionTap { get; set; }
+    /// <summary>Observes the active conditional-layer set the instant it CHANGES tick over tick (the same music-step
+    /// call site <see cref="MusicTransitionTap"/> fires from) — level-triggered, so unlike a transition this can
+    /// fire on any tick, not only a commit. Carries the whole new set (never a delta): a layer is level-triggered,
+    /// so the composition root's own consumer re-derives from the current set every time regardless. A
+    /// <see langword="null"/> tap is a silent no-op; every live boot shape wires one.</summary>
+    public Action<IReadOnlyList<string>>? MusicLayerTap { get; set; }
+    /// <summary>Observes a director embellishment the instant it fires (the same music-step call site
+    /// <see cref="MusicTransitionTap"/> fires from) — carries the patch id, since (unlike a transition) an
+    /// embellishment's PATCH is authored per-embellishment and not re-derivable from any fixed cue-table row. A
+    /// <see langword="null"/> tap is a silent no-op; every live boot shape wires one.</summary>
+    public Action<string>? MusicEmbellishmentTap { get; set; }
+
+    // The active-layer set observed as of the end of the PREVIOUS Step call — MusicLayerTap fires only when this
+    // tick's set differs, so a level-triggered layer that stays active for many ticks in a row costs one comparison
+    // per tick, not one tap invocation per tick.
+    private IReadOnlyList<string> m_lastTappedActiveLayerTuneIds = [];
+
+    // MusicDirector.ActiveLayerTuneIds is recomputed in stable declared order every Step, so an ordinal sequence
+    // compare is exact — never a set compare, which would treat a reorder as a no-op.
+    private static bool ActiveLayerSetsEqual(IReadOnlyList<string> a, IReadOnlyList<string> b) {
+        if (a.Count != b.Count) {
+            return false;
+        }
+
+        for (var index = 0; (index < a.Count); index++) {
+            if (!string.Equals(a: a[index], b: b[index], comparisonType: StringComparison.Ordinal)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     private void DispatchServerEvent(WorldServerEvent serverEvent, bool ordered) {
         if (ordered) {
             EnqueueOrdered(entry: new OrderedEntry.ServerEvent(Value: serverEvent));
@@ -968,13 +1013,40 @@ public sealed partial class WorldServer {
         // tick's) drive this tick's transition arming, and before anything else reads m_events.Edges (one call site,
         // one reader, no second-consumer ordering to pin).
         if ((m_musicClock is { } musicClock) && (m_musicDirector is { } musicDirector)) {
+            var previousElapsedTicks = musicClock.ElapsedTicks;
             var boundary = musicClock.Advance(stepTicks: context.StepTicks);
+
+            // Diegetic-instrument clock fold — see InstrumentClockBoundary's own remarks for why holding the screen
+            // application is the whole gate (never a WorldSessionLever) and why only Beat, never Bar, is contributed.
+            boundary |= InstrumentClockBoundary(
+                previousElapsedTicks: previousElapsedTicks,
+                currentElapsedTicks: musicClock.ElapsedTicks
+            );
 
             musicDirector.Step(
                 boundary: boundary,
                 edges: MusicDirectorFactory.ProjectSenseEdges(edges: m_events.Edges),
                 tick: tick
             );
+
+            // Fire the music.transition cue lane on the SAME tick the transition committed — never a later tick's
+            // read-back of LastTransitionTick, which would fire once per subsequent Step call instead of once.
+            if (musicDirector.LastTransitionTick == tick) {
+                MusicTransitionTap?.Invoke(obj: tick);
+            }
+
+            // The active-layer set is level-triggered (never queued), so the tap fires on ANY tick the set differs
+            // from what was last tapped — not only a transition-commit tick, and not gated to only fire once.
+            if (!ActiveLayerSetsEqual(a: musicDirector.ActiveLayerTuneIds, b: m_lastTappedActiveLayerTuneIds)) {
+                m_lastTappedActiveLayerTuneIds = [.. musicDirector.ActiveLayerTuneIds];
+                MusicLayerTap?.Invoke(obj: m_lastTappedActiveLayerTuneIds);
+            }
+
+            // Fire the music.embellishment cue lane on the SAME tick it fired — the same reasoning as the transition
+            // tap immediately above.
+            if (musicDirector.LastEmbellishmentTick == tick) {
+                MusicEmbellishmentTap?.Invoke(obj: musicDirector.LastEmbellishmentPatchId!);
+            }
         }
 
         // World rules evaluate HERE — after the event feed (so a $region gate reads this tick's settled occupancy)

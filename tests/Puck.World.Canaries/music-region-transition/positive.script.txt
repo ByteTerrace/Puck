@@ -1,10 +1,11 @@
 console off 1
 world.wait 30
 music.state
-player.pose 10 0 3 - - - 1
+body.pose 10 0 3 - - - 0
 world.wait 90
 music.state
-player.pose 0 0 0 - - - 1
+speaker.state
+body.pose 0 0 0 - - - 0
 world.wait 90
 music.state
 wire.errors

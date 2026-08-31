@@ -601,24 +601,13 @@ public sealed class WorldOwnedWorlds {
         TurnSpeedState: TurnSpeedState
     ),
         StateRaw = ((template.StateRaw ?? new WorldStateSection()) with {
-            World = [
-            new WorldStateRow(
-            Name: MoveSpeedState,
-            Kind: CellKind.Fixed,
-            Cells: [new WorldStateCell(
-                    Key: WorldStateRow.SlotKey,
-                    Value: Puck.Maths.FixedQ4816.FromDouble(value: motion.MoveSpeed).Value
-                )]
+            // The identity rows FOLD OVER the template's authored world rows rather than replacing the list — the
+            // template's views/camera programs may reference its own state rows (e.g. a seatRig yaw reading a
+            // state.<row>.<key> cell), and a seeded document that drops them refuses validation on its next load.
+            World = SeedWorldState(
+            templateRows: template.StateRaw?.World,
+            motion: motion
         ),
-            new WorldStateRow(
-            Name: TurnSpeedState,
-            Kind: CellKind.Fixed,
-            Cells: [new WorldStateCell(
-                    Key: WorldStateRow.SlotKey,
-                    Value: Puck.Maths.FixedQ4816.FromDouble(value: motion.TurnSpeed).Value
-                )]
-        ),
-        ],
         }),
         BindingOverlaysRaw = [],
         // The template's own hud policy (enabled/cursor) survives; only its authored panels are stripped — an owned
@@ -629,6 +618,38 @@ public sealed class WorldOwnedWorlds {
         ),
         Adjacencies = null,
     };
+    // The seeded world-state rows: the template's authored rows with the two identity speed slots folded over any
+    // same-named rows.
+    private static IReadOnlyList<WorldStateRow> SeedWorldState(IReadOnlyList<WorldStateRow>? templateRows, WorldMotionDefaults motion) {
+        var rows = new List<WorldStateRow>(capacity: ((templateRows?.Count ?? 0) + 2));
+
+        if (templateRows is not null) {
+            foreach (var row in templateRows) {
+                if ((row.Name != MoveSpeedState) && (row.Name != TurnSpeedState)) {
+                    rows.Add(item: row);
+                }
+            }
+        }
+
+        rows.Add(item: new WorldStateRow(
+            Name: MoveSpeedState,
+            Kind: CellKind.Fixed,
+            Cells: [new WorldStateCell(
+                Key: WorldStateRow.SlotKey,
+                Value: Puck.Maths.FixedQ4816.FromDouble(value: motion.MoveSpeed).Value
+            )]
+        ));
+        rows.Add(item: new WorldStateRow(
+            Name: TurnSpeedState,
+            Kind: CellKind.Fixed,
+            Cells: [new WorldStateCell(
+                Key: WorldStateRow.SlotKey,
+                Value: Puck.Maths.FixedQ4816.FromDouble(value: motion.TurnSpeed).Value
+            )]
+        ));
+
+        return rows;
+    }
 
     // The result is a GROUPING KEY as well as a narration, so it must carry nothing that varies per file: the loader
     // spells the path at the head of some reasons ("{path} is not a valid …") and mid-sentence in others ("no file

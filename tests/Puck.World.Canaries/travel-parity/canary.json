@@ -13,11 +13,11 @@
     "script": "cross-ne.script.txt",
     "commands": [
       { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "player.pose", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "player.press", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "body.pose", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "body.press", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.view.camera", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "player.where", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "body.where", "occurrence": 1, "outcome": "accepted" },
       { "verb": "wire.errors", "occurrence": 2, "outcome": "accepted" }
     ],
     "expect": [
@@ -33,7 +33,7 @@
         "type": "response",
         "name": "routed where answered after crossing",
         "stream": "stdout",
-        "verb": "player.where",
+        "verb": "body.where",
         "occurrence": 1,
         "count": 1,
         "extract": []
@@ -70,11 +70,11 @@
     "script": "cross-ne-local-control.script.txt",
     "commands": [
       { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "player.pose", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "player.press", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "body.pose", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "body.press", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.view.camera", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "player.where", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "body.where", "occurrence": 1, "outcome": "accepted" },
       { "verb": "wire.errors", "occurrence": 2, "outcome": "accepted" }
     ],
     "expect": [
@@ -90,7 +90,7 @@
         "type": "response",
         "name": "local routed where still answers",
         "stream": "stdout",
-        "verb": "player.where",
+        "verb": "body.where",
         "occurrence": 1,
         "count": 1,
         "extract": []

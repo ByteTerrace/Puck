@@ -7,16 +7,6 @@
     "listener": "focus",
     "masterGain": 1
   },
-  "authoring": {
-    "authoringHeadroomPlacements": 8,
-    "authoringHeadroomScreens": 4,
-    "candidateCap": 16,
-    "candidateRadius": 32,
-    "derivedFaceScreens": 4,
-    "maxPlacementScale": 5.0,
-    "minPlacementScale": 0.2,
-    "previewDeadlineFrames": 12
-  },
   "bindingOverlays": [
     {
       "bindingBar": {
@@ -877,7 +867,7 @@
                   ]
                 },
                 {
-                  "command": "player.where",
+                  "command": "body.where",
                   "id": "where",
                   "sources": [
                     "gamepad.buttonWest"
@@ -1246,7 +1236,7 @@
     ]
   },
   "icons": {
-    "icons": [
+    "rows": [
       {
         "name": "dpad.up",
         "glyph": {
@@ -1670,171 +1660,173 @@
       }
     ]
   },
-  "kits": [
-    {
-      "actions": {
-        "airLeap": {
-          "onPress": {
-            "effects": [
-              {
-                "$type": "planarImpulse",
-                "bodyDirection": [
-                  0,
-                  0,
-                  -1
-                ],
-                "durationSeconds": 1.0,
-                "speed": 9
-              },
-              {
-                "$type": "startTimer",
-                "seconds": 1.0,
-                "state": "globalCooldown"
-              }
-            ],
-            "gate": {
-              "$type": "all",
-              "predicates": [
+  "kits": {
+    "rows": [
+      {
+        "actions": {
+          "airLeap": {
+            "onPress": {
+              "effects": [
                 {
-                  "$type": "timerElapsed",
-                  "state": "globalCooldown"
+                  "$type": "planarImpulse",
+                  "bodyDirection": [
+                    0,
+                    0,
+                    -1
+                  ],
+                  "durationSeconds": 1.0,
+                  "speed": 9
                 },
                 {
-                  "$type": "now",
-                  "fact": "Airborne"
+                  "$type": "startTimer",
+                  "seconds": 1.0,
+                  "state": "globalCooldown"
                 }
-              ]
+              ],
+              "gate": {
+                "$type": "all",
+                "predicates": [
+                  {
+                    "$type": "timerElapsed",
+                    "state": "globalCooldown"
+                  },
+                  {
+                    "$type": "now",
+                    "fact": "Airborne"
+                  }
+                ]
+              }
+            }
+          },
+          "dash": {
+            "onPress": {
+              "effects": [
+                {
+                  "$type": "planarImpulse",
+                  "bodyDirection": [
+                    0,
+                    0,
+                    -1
+                  ],
+                  "durationSeconds": 0.25,
+                  "speed": 14
+                },
+                {
+                  "$type": "startTimer",
+                  "seconds": 1.0,
+                  "state": "globalCooldown"
+                }
+              ],
+              "gate": {
+                "$type": "timerElapsed",
+                "state": "globalCooldown"
+              },
+              "latchSeconds": 0.1
+            }
+          },
+          "jump": {
+            "onPress": {
+              "effects": [
+                {
+                  "$type": "setVerticalVelocity",
+                  "velocity": 11
+                },
+                {
+                  "$type": "addState",
+                  "state": "jumpCounter",
+                  "value": 1
+                }
+              ],
+              "gate": {
+                "$type": "compareState",
+                "comparison": "Less",
+                "state": "jumpCounter",
+                "value": 2
+              },
+              "latchSeconds": 0.1
+            },
+            "onRelease": {
+              "effects": [
+                {
+                  "$type": "scaleVerticalVelocity",
+                  "factor": 0.45
+                }
+              ],
+              "gate": {
+                "$type": "now",
+                "fact": "Rising"
+              },
+              "latchSeconds": 0
+            }
+          },
+          "leap": {
+            "onPress": {
+              "effects": [
+                {
+                  "$type": "setVerticalVelocity",
+                  "velocity": 16
+                },
+                {
+                  "$type": "planarImpulse",
+                  "bodyDirection": [
+                    0,
+                    0,
+                    -1
+                  ],
+                  "durationSeconds": 1.0,
+                  "speed": 9
+                },
+                {
+                  "$type": "startTimer",
+                  "seconds": 1.0,
+                  "state": "globalCooldown"
+                }
+              ],
+              "gate": {
+                "$type": "all",
+                "predicates": [
+                  {
+                    "$type": "timerElapsed",
+                    "state": "globalCooldown"
+                  },
+                  {
+                    "$type": "recently",
+                    "fact": "Grounded",
+                    "windowSeconds": 0.09
+                  }
+                ]
+              },
+              "latchSeconds": 0.1
             }
           }
         },
-        "dash": {
-          "onPress": {
-            "effects": [
-              {
-                "$type": "planarImpulse",
-                "bodyDirection": [
-                  0,
-                  0,
-                  -1
-                ],
-                "durationSeconds": 0.25,
-                "speed": 14
-              },
-              {
-                "$type": "startTimer",
-                "seconds": 1.0,
-                "state": "globalCooldown"
-              }
-            ],
-            "gate": {
-              "$type": "timerElapsed",
-              "state": "globalCooldown"
-            },
-            "latchSeconds": 0.1
-          }
+        "bodyContact": "Solid",
+        "bodyMotionProgram": "defaultMotionProgram",
+        "collider": {
+          "$type": "capsule",
+          "endpoint": [
+            0,
+            1,
+            0
+          ],
+          "radius": 0.35
         },
-        "jump": {
-          "onPress": {
-            "effects": [
-              {
-                "$type": "setVerticalVelocity",
-                "velocity": 11
-              },
-              {
-                "$type": "addState",
-                "state": "jumpCounter",
-                "value": 1
-              }
-            ],
-            "gate": {
-              "$type": "compareState",
-              "comparison": "Less",
-              "state": "jumpCounter",
-              "value": 2
-            },
-            "latchSeconds": 0.1
-          },
-          "onRelease": {
-            "effects": [
-              {
-                "$type": "scaleVerticalVelocity",
-                "factor": 0.45
-              }
-            ],
-            "gate": {
-              "$type": "now",
-              "fact": "Rising"
-            },
-            "latchSeconds": 0
-          }
+        "motion": {
+          "$type": "grounded",
+          "facingSnap": false,
+          "fallGravity": 46,
+          "maxFallSpeed": 40,
+          "moveSpeed": 4,
+          "response": [],
+          "riseGravity": 28,
+          "sprintChannel": "run",
+          "sprintMultiplier": 1.6,
+          "turnSpeed": 2.5
         },
-        "leap": {
-          "onPress": {
-            "effects": [
-              {
-                "$type": "setVerticalVelocity",
-                "velocity": 16
-              },
-              {
-                "$type": "planarImpulse",
-                "bodyDirection": [
-                  0,
-                  0,
-                  -1
-                ],
-                "durationSeconds": 1.0,
-                "speed": 9
-              },
-              {
-                "$type": "startTimer",
-                "seconds": 1.0,
-                "state": "globalCooldown"
-              }
-            ],
-            "gate": {
-              "$type": "all",
-              "predicates": [
-                {
-                  "$type": "timerElapsed",
-                  "state": "globalCooldown"
-                },
-                {
-                  "$type": "recently",
-                  "fact": "Grounded",
-                  "windowSeconds": 0.09
-                }
-              ]
-            },
-            "latchSeconds": 0.1
-          }
-        }
-      },
-      "bodyContact": "Solid",
-      "bodyMotionProgram": "defaultMotionProgram",
-      "collider": {
-        "$type": "capsule",
-        "endpoint": [
-          0,
-          1,
-          0
-        ],
-        "radius": 0.35
-      },
-      "motion": {
-        "$type": "grounded",
-        "facingSnap": false,
-        "fallGravity": 46,
-        "maxFallSpeed": 40,
-        "moveSpeed": 4,
-        "response": [],
-        "riseGravity": 28,
-        "sprintChannel": "run",
-        "sprintMultiplier": 1.6,
-        "turnSpeed": 2.5
-      },
-      "name": "defaultKit"
-    }
-  ],
+        "name": "defaultKit"
+      }
+    ]
+  },
   "render": {
     "shadows": "Off",
     "shadowCrowdRadius": 15,
@@ -2246,6 +2238,18 @@
       "wheelMarkerHalf": 3.5,
       "wheelMarkerGapRatio": 1.6,
       "wheelHubLabelGap": 2
+    }
+  },
+  "placements": {
+    "policy": {
+      "authoringHeadroomPlacements": 8,
+      "authoringHeadroomScreens": 4,
+      "candidateCap": 16,
+      "candidateRadius": 32,
+      "derivedFaceScreens": 4,
+      "maxPlacementScale": 5.0,
+      "minPlacementScale": 0.2,
+      "previewDeadlineFrames": 12
     }
   }
 }

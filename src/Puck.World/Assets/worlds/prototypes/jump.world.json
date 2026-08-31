@@ -84,7 +84,7 @@
       "renderHeight": 240
     }
   ],
-  "population": {
+  "bodies": {
     "capacity": 5,
     "reconnectGraceSeconds": 3.0,
     "seatActivation": [
@@ -242,151 +242,153 @@
       ]
     }
   ],
-  "kits": [
-    {
-      "name": "defaultKit",
-      "$drop": true
-    },
-    {
-      "name": "vaulter",
-      "bodyMotionProgram": "grounded",
-      "motion": {
-        "$type": "grounded",
-        "moveSpeed": 6,
-        "moveSpeedEnvelope": {
-          "min": 6,
-          "max": 6
+  "kits": {
+    "rows": [
+      {
+        "name": "defaultKit",
+        "$drop": true
+      },
+      {
+        "name": "vaulter",
+        "bodyMotionProgram": "grounded",
+        "motion": {
+          "$type": "grounded",
+          "moveSpeed": 6,
+          "moveSpeedEnvelope": {
+            "min": 6,
+            "max": 6
+          },
+          "turnSpeed": 2.5,
+          "riseGravity": 20,
+          "fallGravity": 34,
+          "maxFallSpeed": 24,
+          "response": [
+            {
+              "gate": {
+                "$type": "now",
+                "fact": "Rising"
+              },
+              "engageRate": 12,
+              "releaseRate": 2
+            },
+            {
+              "gate": {
+                "$type": "now",
+                "fact": "Falling"
+              },
+              "engageRate": 12,
+              "releaseRate": 2
+            },
+            {
+              "engageRate": 50,
+              "releaseRate": 60
+            }
+          ],
+          "sprintMultiplier": 1.5,
+          "sprintChannel": "run",
+          "moveFrame": "World",
+          "facingSnap": true
         },
-        "turnSpeed": 2.5,
-        "riseGravity": 20,
-        "fallGravity": 34,
-        "maxFallSpeed": 24,
-        "response": [
-          {
-            "gate": {
-              "$type": "now",
-              "fact": "Rising"
+        "producers": {
+          "wander": {
+            "scalars": {
+              "forward": 0.375,
+              "softRadius": 18,
+              "weaveAmplitude": 0.5,
+              "inwardGain": 1.6,
+              "turnScale": 2.5,
+              "weaveFrequencyBase": 0.3,
+              "weaveFrequencyRange": 0.2,
+              "altitudeGain": 0.32,
+              "activityRateBase": 2.2,
+              "activityRateRange": 1.3,
+              "strafeWave": 0,
+              "turnWave": 0,
+              "upWave": 0,
+              "pitchWave": 0,
+              "rollTurn": 0,
+              "pressThreshold": 0,
+              "altitudeBase": 0,
+              "altitudeRange": 0
             },
-            "engageRate": 12,
-            "releaseRate": 2
-          },
-          {
-            "gate": {
-              "$type": "now",
-              "fact": "Falling"
-            },
-            "engageRate": 12,
-            "releaseRate": 2
-          },
-          {
-            "engageRate": 50,
-            "releaseRate": 60
+            "channels": {}
           }
-        ],
-        "sprintMultiplier": 1.5,
-        "sprintChannel": "run",
-        "moveFrame": "World",
-        "facingSnap": true
-      },
-      "producers": {
-        "wander": {
-          "scalars": {
-            "forward": 0.375,
-            "softRadius": 18,
-            "weaveAmplitude": 0.5,
-            "inwardGain": 1.6,
-            "turnScale": 2.5,
-            "weaveFrequencyBase": 0.3,
-            "weaveFrequencyRange": 0.2,
-            "altitudeGain": 0.32,
-            "activityRateBase": 2.2,
-            "activityRateRange": 1.3,
-            "strafeWave": 0,
-            "turnWave": 0,
-            "upWave": 0,
-            "pitchWave": 0,
-            "rollTurn": 0,
-            "pressThreshold": 0,
-            "altitudeBase": 0,
-            "altitudeRange": 0
-          },
-          "channels": {}
-        }
-      },
-      "actions": {
-        "jump": {
-          "onPress": {
-            "gate": {
-              "$type": "all",
-              "predicates": [
+        },
+        "actions": {
+          "jump": {
+            "onPress": {
+              "gate": {
+                "$type": "all",
+                "predicates": [
+                  {
+                    "$type": "recently",
+                    "fact": "Grounded",
+                    "windowSeconds": 0.09
+                  },
+                  {
+                    "$type": "compareState",
+                    "state": "jumpUses",
+                    "comparison": "Less",
+                    "value": 1
+                  }
+                ]
+              },
+              "latchSeconds": 0.1,
+              "effects": [
                 {
-                  "$type": "recently",
-                  "fact": "Grounded",
-                  "windowSeconds": 0.09
+                  "$type": "setVerticalVelocity",
+                  "velocity": 9
                 },
                 {
-                  "$type": "compareState",
+                  "$type": "addState",
                   "state": "jumpUses",
-                  "comparison": "Less",
                   "value": 1
                 }
               ]
             },
-            "latchSeconds": 0.1,
-            "effects": [
-              {
-                "$type": "setVerticalVelocity",
-                "velocity": 9
+            "onRelease": {
+              "gate": {
+                "$type": "now",
+                "fact": "Rising"
               },
-              {
-                "$type": "addState",
-                "state": "jumpUses",
-                "value": 1
-              }
-            ]
-          },
-          "onRelease": {
-            "gate": {
-              "$type": "now",
-              "fact": "Rising"
-            },
-            "latchSeconds": 0,
-            "effects": [
-              {
-                "$type": "scaleVerticalVelocity",
-                "factor": 0.4
-              }
-            ]
+              "latchSeconds": 0,
+              "effects": [
+                {
+                  "$type": "scaleVerticalVelocity",
+                  "factor": 0.4
+                }
+              ]
+            }
           }
+        },
+        "collider": {
+          "$type": "capsule",
+          "endpoint": [
+            0,
+            1,
+            0
+          ],
+          "radius": 0.35
         }
-      },
-      "collider": {
-        "$type": "capsule",
-        "endpoint": [
-          0,
-          1,
-          0
-        ],
-        "radius": 0.35
       }
+    ],
+    "assignment": {
+      "sequence": {
+        "name": "r1",
+        "offset": 1,
+        "step": 0
+      },
+      "rows": []
     }
-  ],
-  "defaultSeatKit": "vaulter",
-  "assignment": {
-    "sequence": {
-      "name": "r1",
-      "offset": 1,
-      "step": 0
-    },
-    "rows": []
   },
+  "defaultSeatKit": "vaulter",
   "addons": [],
   "storage": {
     "endpoint": null,
     "userId": null,
     "discoveryEndpoint": null
   },
-  "creations": [
+  "prototypes": [
     {
       "id": "ground",
       "document": {
@@ -597,143 +599,145 @@
       }
     }
   ],
-  "placements": [
-    {
-      "id": "ground",
-      "creationId": "ground",
-      "position": [
-        0,
-        0,
-        0
-      ],
-      "yawDegrees": 0,
-      "scale": 1,
-      "distribution": null,
-      "mirror": null,
-      "solid": {
-        "margin": 0
-      }
-    },
-    {
-      "id": "wall-north",
-      "creationId": "wall",
-      "position": [
-        0,
-        0,
-        -24
-      ],
-      "yawDegrees": 0,
-      "scale": 1,
-      "distribution": null,
-      "mirror": null,
-      "solid": {
-        "margin": 0
-      }
-    },
-    {
-      "id": "wall-south",
-      "creationId": "wall",
-      "position": [
-        0,
-        0,
-        24
-      ],
-      "yawDegrees": 0,
-      "scale": 1,
-      "distribution": null,
-      "mirror": null,
-      "solid": {
-        "margin": 0
-      }
-    },
-    {
-      "id": "wall-east",
-      "creationId": "wall",
-      "position": [
-        24,
-        0,
-        0
-      ],
-      "yawDegrees": 90,
-      "scale": 1,
-      "distribution": null,
-      "mirror": null,
-      "solid": {
-        "margin": 0
-      }
-    },
-    {
-      "id": "wall-west",
-      "creationId": "wall",
-      "position": [
-        -24,
-        0,
-        0
-      ],
-      "yawDegrees": 90,
-      "scale": 1,
-      "distribution": null,
-      "mirror": null,
-      "solid": {
-        "margin": 0
-      }
-    },
-    {
-      "id": "home-portal",
-      "creationId": "portal-frame",
-      "position": [
-        1,
-        1.5,
-        -10
-      ],
-      "yawDegrees": 0,
-      "scale": 1,
-      "distribution": null,
-      "mirror": null,
-      "faceSources": [
-        {
-          "face": "screen",
-          "source": {
-            "$type": "session",
-            "destination": "home"
-          },
-          "portal": {
-            "destination": "home"
+  "placements": {
+    "rows": [
+      {
+        "id": "ground",
+        "prototypeId": "ground",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "distribution": null,
+        "mirror": null,
+        "solid": {
+          "margin": 0
+        }
+      },
+      {
+        "id": "wall-north",
+        "prototypeId": "wall",
+        "position": [
+          0,
+          0,
+          -24
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "distribution": null,
+        "mirror": null,
+        "solid": {
+          "margin": 0
+        }
+      },
+      {
+        "id": "wall-south",
+        "prototypeId": "wall",
+        "position": [
+          0,
+          0,
+          24
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "distribution": null,
+        "mirror": null,
+        "solid": {
+          "margin": 0
+        }
+      },
+      {
+        "id": "wall-east",
+        "prototypeId": "wall",
+        "position": [
+          24,
+          0,
+          0
+        ],
+        "yawDegrees": 90,
+        "scale": 1,
+        "distribution": null,
+        "mirror": null,
+        "solid": {
+          "margin": 0
+        }
+      },
+      {
+        "id": "wall-west",
+        "prototypeId": "wall",
+        "position": [
+          -24,
+          0,
+          0
+        ],
+        "yawDegrees": 90,
+        "scale": 1,
+        "distribution": null,
+        "mirror": null,
+        "solid": {
+          "margin": 0
+        }
+      },
+      {
+        "id": "home-portal",
+        "prototypeId": "portal-frame",
+        "position": [
+          1,
+          1.5,
+          -10
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "distribution": null,
+        "mirror": null,
+        "faceSources": [
+          {
+            "face": "screen",
+            "source": {
+              "$type": "session",
+              "destination": "home"
+            },
+            "portal": {
+              "destination": "home"
+            }
+          }
+        ]
+      },
+      {
+        "id": "camera-seat-0",
+        "prototypeId": "camera-body",
+        "position": [
+          0,
+          1.2,
+          -6
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "inhabit": {
+          "count": 1,
+          "kit": "vaulter",
+          "source": "Live",
+          "look": null,
+          "distribution": {
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            },
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.618034
+            }
           }
         }
-      ]
-    },
-    {
-      "id": "camera-seat-0",
-      "creationId": "camera-body",
-      "position": [
-        0,
-        1.2,
-        -6
-      ],
-      "yawDegrees": 0,
-      "scale": 1,
-      "inhabit": {
-        "count": 1,
-        "kit": "vaulter",
-        "source": "Live",
-        "look": null,
-        "distribution": {
-          "region": {
-            "$type": "disc",
-            "radius": 0.01
-          },
-          "fill": {
-            "name": "additive",
-            "offset": 0,
-            "step": 0.618034
-          }
-        }
       }
+    ],
+    "policy": {
+      "maxPlacementScale": 5
     }
-  ],
-  "authoring": {
-    "maxPlacementScale": 5
   },
   "speakers": [],
   "tunes": [],
@@ -749,14 +753,16 @@
     "fullscreen": true,
     "authority": null
   },
-  "looks": [],
-  "lookAssignment": {
-    "sequence": {
-      "name": "r1",
-      "offset": 129,
-      "step": 0
-    },
-    "rows": []
+  "looks": {
+    "rows": [],
+    "assignment": {
+      "sequence": {
+        "name": "r1",
+        "offset": 129,
+        "step": 0
+      },
+      "rows": []
+    }
   },
   "grants": [],
   "hud": {
@@ -778,7 +784,7 @@
   },
   "schema": "puck.world.def.v1",
   "documentId": "jump",
-  "playerDefaults": {
+  "seatDefaults": {
     "identities": [
       {
         "id": "amber",
@@ -814,7 +820,7 @@
     "pickerThreshold": 0.6,
     "pickerNeutralColor": "#8C8C8C",
     "pickerNeutralBlend": 0.5,
-    "seatLook": {
+    "seatCameraFeel": {
       "yawSensitivity": 0.001,
       "pitchSensitivity": 0.001,
       "invertYaw": false,

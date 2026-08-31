@@ -107,7 +107,7 @@
       "yawDegrees": 0
     }
   ],
-  "population": {
+  "bodies": {
     "capacity": 128,
     "reconnectGraceSeconds": 3,
     "seatActivation": [
@@ -179,7 +179,7 @@
       "step": 0.618034
     }
   },
-  "playerDefaults": {
+  "seatDefaults": {
     "identities": [
       {
         "id": "amber",
@@ -215,7 +215,7 @@
     "pickerThreshold": 0.6,
     "pickerNeutralColor": "#8C8C8C",
     "pickerNeutralBlend": 0.5,
-    "seatLook": {
+    "seatCameraFeel": {
       "yawSensitivity": 0.001,
       "pitchSensitivity": 0.001,
       "invertYaw": false,
@@ -263,157 +263,159 @@
       ]
     }
   ],
-  "kits": [
-    {
-      "name": "defaultKit",
-      "$drop": true
-    },
-    {
-      "name": "vaulter",
-      "bodyMotionProgram": "grounded",
-      "motion": {
-        "$type": "grounded",
-        "moveSpeed": 6,
-        "moveSpeedEnvelope": {
-          "min": 6,
-          "max": 6
+  "kits": {
+    "rows": [
+      {
+        "name": "defaultKit",
+        "$drop": true
+      },
+      {
+        "name": "vaulter",
+        "bodyMotionProgram": "grounded",
+        "motion": {
+          "$type": "grounded",
+          "moveSpeed": 6,
+          "moveSpeedEnvelope": {
+            "min": 6,
+            "max": 6
+          },
+          "turnSpeed": 2.6,
+          "riseGravity": 28,
+          "fallGravity": 46,
+          "maxFallSpeed": 40,
+          "response": [
+            {
+              "gate": {
+                "$type": "now",
+                "fact": "Rising"
+              },
+              "engageRate": 60,
+              "releaseRate": 35
+            },
+            {
+              "gate": {
+                "$type": "now",
+                "fact": "Falling"
+              },
+              "engageRate": 60,
+              "releaseRate": 35
+            },
+            {
+              "engageRate": 90,
+              "releaseRate": 110
+            }
+          ],
+          "sprintMultiplier": 1.6,
+          "sprintChannel": "run",
+          "moveFrame": "World",
+          "facingSnap": false
         },
-        "turnSpeed": 2.6,
-        "riseGravity": 28,
-        "fallGravity": 46,
-        "maxFallSpeed": 40,
-        "response": [
-          {
-            "gate": {
-              "$type": "now",
-              "fact": "Rising"
+        "producers": {
+          "wander": {
+            "scalars": {
+              "forward": 0.375,
+              "softRadius": 11,
+              "weaveAmplitude": 0.5,
+              "inwardGain": 1.6,
+              "turnScale": 2.5,
+              "weaveFrequencyBase": 0.3,
+              "weaveFrequencyRange": 0.2,
+              "altitudeGain": 0.32,
+              "activityRateBase": 2.2,
+              "activityRateRange": 1.3,
+              "strafeWave": 0,
+              "turnWave": 0,
+              "upWave": 0,
+              "pitchWave": 0,
+              "rollTurn": 0,
+              "pressThreshold": 0,
+              "altitudeBase": 0,
+              "altitudeRange": 0
             },
-            "engageRate": 60,
-            "releaseRate": 35
-          },
-          {
-            "gate": {
-              "$type": "now",
-              "fact": "Falling"
-            },
-            "engageRate": 60,
-            "releaseRate": 35
-          },
-          {
-            "engageRate": 90,
-            "releaseRate": 110
+            "channels": {}
           }
-        ],
-        "sprintMultiplier": 1.6,
-        "sprintChannel": "run",
-        "moveFrame": "World",
-        "facingSnap": false
-      },
-      "producers": {
-        "wander": {
-          "scalars": {
-            "forward": 0.375,
-            "softRadius": 11,
-            "weaveAmplitude": 0.5,
-            "inwardGain": 1.6,
-            "turnScale": 2.5,
-            "weaveFrequencyBase": 0.3,
-            "weaveFrequencyRange": 0.2,
-            "altitudeGain": 0.32,
-            "activityRateBase": 2.2,
-            "activityRateRange": 1.3,
-            "strafeWave": 0,
-            "turnWave": 0,
-            "upWave": 0,
-            "pitchWave": 0,
-            "rollTurn": 0,
-            "pressThreshold": 0,
-            "altitudeBase": 0,
-            "altitudeRange": 0
-          },
-          "channels": {}
-        }
-      },
-      "actions": {
-        "jump": {
-          "onPress": {
-            "gate": {
-              "$type": "all",
-              "predicates": [
+        },
+        "actions": {
+          "jump": {
+            "onPress": {
+              "gate": {
+                "$type": "all",
+                "predicates": [
+                  {
+                    "$type": "recently",
+                    "fact": "Grounded",
+                    "windowSeconds": 0.09
+                  },
+                  {
+                    "$type": "compareState",
+                    "state": "jumpUses",
+                    "comparison": "Less",
+                    "value": 1
+                  }
+                ]
+              },
+              "latchSeconds": 0.1,
+              "effects": [
                 {
-                  "$type": "recently",
-                  "fact": "Grounded",
-                  "windowSeconds": 0.09
+                  "$type": "setVerticalVelocity",
+                  "velocity": 11
                 },
                 {
-                  "$type": "compareState",
+                  "$type": "addState",
                   "state": "jumpUses",
-                  "comparison": "Less",
                   "value": 1
                 }
               ]
             },
-            "latchSeconds": 0.1,
-            "effects": [
-              {
-                "$type": "setVerticalVelocity",
-                "velocity": 11
+            "onRelease": {
+              "gate": {
+                "$type": "now",
+                "fact": "Rising"
               },
-              {
-                "$type": "addState",
-                "state": "jumpUses",
-                "value": 1
-              }
-            ]
+              "latchSeconds": 0,
+              "effects": [
+                {
+                  "$type": "scaleVerticalVelocity",
+                  "factor": 0.45
+                }
+              ]
+            }
           },
-          "onRelease": {
-            "gate": {
-              "$type": "now",
-              "fact": "Rising"
-            },
-            "latchSeconds": 0,
-            "effects": [
-              {
-                "$type": "scaleVerticalVelocity",
-                "factor": 0.45
-              }
-            ]
+          "judge": {
+            "onPress": {
+              "gate": null,
+              "latchSeconds": 0,
+              "effects": [
+                {
+                  "$type": "judge",
+                  "judgeRef": "nexus-drum-easy"
+                }
+              ]
+            }
           }
         },
-        "judge": {
-          "onPress": {
-            "gate": null,
-            "latchSeconds": 0,
-            "effects": [
-              {
-                "$type": "judge",
-                "judgeRef": "nexus-drum-easy"
-              }
-            ]
-          }
-        }
+        "collider": {
+          "$type": "capsule",
+          "endpoint": [
+            0,
+            1,
+            0
+          ],
+          "radius": 0.35
+        },
+        "bodyContact": "Solid"
+      }
+    ],
+    "assignment": {
+      "sequence": {
+        "name": "r1",
+        "offset": 1,
+        "step": 0
       },
-      "collider": {
-        "$type": "capsule",
-        "endpoint": [
-          0,
-          1,
-          0
-        ],
-        "radius": 0.35
-      },
-      "bodyContact": "Solid"
+      "rows": []
     }
-  ],
-  "defaultSeatKit": "vaulter",
-  "assignment": {
-    "sequence": {
-      "name": "r1",
-      "offset": 1,
-      "step": 0
-    },
-    "rows": []
   },
+  "defaultSeatKit": "vaulter",
   "cameras": [
     {
       "name": "overview",
@@ -579,7 +581,7 @@
       }
     ]
   },
-  "creations": [
+  "prototypes": [
     {
       "id": "island",
       "document": {
@@ -1219,338 +1221,368 @@
       }
     }
   ],
-  "placements": [
-    {
-      "id": "island",
-      "creationId": "island",
-      "position": [
-        0,
-        0,
-        0
-      ],
-      "yawDegrees": 0,
-      "scale": 1,
-      "distribution": null,
-      "mirror": null,
-      "solid": {
-        "margin": 0
-      }
-    },
-    {
-      "id": "dive-portal",
-      "creationId": "portal-arch",
-      "position": [
-        -6,
-        2,
-        -10
-      ],
-      "yawDegrees": 180,
-      "scale": 1,
-      "distribution": null,
-      "mirror": null,
-      "faceSources": [
-        {
-          "face": "screen",
-          "source": {
-            "$type": "session",
-            "destination": "dive",
-            "camera": "overview"
-          },
-          "portal": {
-            "destination": "dive",
-            "arrival": "spawn"
-          }
+  "placements": {
+    "rows": [
+      {
+        "id": "island",
+        "prototypeId": "island",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "distribution": null,
+        "mirror": null,
+        "solid": {
+          "margin": 0
         }
-      ]
-    },
-    {
-      "id": "kart-portal",
-      "creationId": "portal-arch",
-      "position": [
-        10,
-        2,
-        -6
-      ],
-      "yawDegrees": 90,
-      "scale": 1,
-      "distribution": null,
-      "mirror": null,
-      "faceSources": [
-        {
-          "face": "screen",
-          "source": {
-            "$type": "session",
-            "destination": "kart",
-            "camera": "overview"
-          },
-          "portal": {
-            "destination": "kart",
-            "arrival": "spawn"
-          }
-        }
-      ]
-    },
-    {
-      "id": "jump-portal",
-      "creationId": "portal-arch",
-      "position": [
-        6,
-        2,
-        10
-      ],
-      "yawDegrees": 0,
-      "scale": 1,
-      "distribution": null,
-      "mirror": null,
-      "faceSources": [
-        {
-          "face": "screen",
-          "source": {
-            "$type": "session",
-            "destination": "jump",
-            "camera": "overview"
-          },
-          "portal": {
-            "destination": "jump",
-            "arrival": "spawn"
-          }
-        }
-      ]
-    },
-    {
-      "id": "studio-portal",
-      "creationId": "portal-arch",
-      "position": [
-        -10,
-        2,
-        6
-      ],
-      "yawDegrees": -90,
-      "scale": 1,
-      "distribution": null,
-      "mirror": null,
-      "faceSources": [
-        {
-          "face": "screen",
-          "source": {
-            "$type": "session",
-            "destination": "studio"
-          },
-          "portal": {
-            "destination": "studio",
-            "arrival": "mapped",
-            "counterpart": "home-portal/screen"
-          }
-        }
-      ]
-    },
-    {
-      "id": "dive-backstop",
-      "creationId": "portal-backstop",
-      "position": [
-        -6,
-        1.5,
-        -10.85
-      ],
-      "yawDegrees": 0,
-      "scale": 1,
-      "distribution": null,
-      "mirror": null,
-      "solid": {
-        "margin": 0
-      }
-    },
-    {
-      "id": "kart-backstop",
-      "creationId": "portal-backstop",
-      "position": [
-        10.85,
-        1.5,
-        -6
-      ],
-      "yawDegrees": -90,
-      "scale": 1,
-      "distribution": null,
-      "mirror": null,
-      "solid": {
-        "margin": 0
-      }
-    },
-    {
-      "id": "jump-backstop",
-      "creationId": "portal-backstop",
-      "position": [
-        6,
-        1.5,
-        10.85
-      ],
-      "yawDegrees": 180,
-      "scale": 1,
-      "distribution": null,
-      "mirror": null,
-      "solid": {
-        "margin": 0
-      }
-    },
-    {
-      "id": "studio-backstop",
-      "creationId": "portal-backstop",
-      "position": [
-        -10.85,
-        1.5,
-        6
-      ],
-      "yawDegrees": 90,
-      "scale": 1,
-      "distribution": null,
-      "mirror": null,
-      "solid": {
-        "margin": 0
-      }
-    },
-    {
-      "id": "arcade-cabinet",
-      "creationId": "arcade-cabinet",
-      "position": [
-        10,
-        0.9,
-        6
-      ],
-      "yawDegrees": 150,
-      "scale": 1,
-      "distribution": null,
-      "mirror": null,
-      "solid": {
-        "margin": 0
       },
-      "faceSources": [
-        {
-          "face": "screen",
-          "source": {
-            "$type": "none"
+      {
+        "id": "dive-portal",
+        "prototypeId": "portal-arch",
+        "position": [
+          -6,
+          2,
+          -10
+        ],
+        "yawDegrees": 180,
+        "scale": 1,
+        "distribution": null,
+        "mirror": null,
+        "faceSources": [
+          {
+            "face": "screen",
+            "source": {
+              "$type": "session",
+              "destination": "dive",
+              "camera": "overview"
+            },
+            "portal": {
+              "destination": "dive",
+              "arrival": "spawn"
+            }
+          }
+        ]
+      },
+      {
+        "id": "kart-portal",
+        "prototypeId": "portal-arch",
+        "position": [
+          10,
+          2,
+          -6
+        ],
+        "yawDegrees": 90,
+        "scale": 1,
+        "distribution": null,
+        "mirror": null,
+        "faceSources": [
+          {
+            "face": "screen",
+            "source": {
+              "$type": "session",
+              "destination": "kart",
+              "camera": "overview"
+            },
+            "portal": {
+              "destination": "kart",
+              "arrival": "spawn"
+            }
+          }
+        ]
+      },
+      {
+        "id": "jump-portal",
+        "prototypeId": "portal-arch",
+        "position": [
+          6,
+          2,
+          10
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "distribution": null,
+        "mirror": null,
+        "faceSources": [
+          {
+            "face": "screen",
+            "source": {
+              "$type": "session",
+              "destination": "jump",
+              "camera": "overview"
+            },
+            "portal": {
+              "destination": "jump",
+              "arrival": "spawn"
+            }
+          }
+        ]
+      },
+      {
+        "id": "studio-portal",
+        "prototypeId": "portal-arch",
+        "position": [
+          -10,
+          2,
+          6
+        ],
+        "yawDegrees": -90,
+        "scale": 1,
+        "distribution": null,
+        "mirror": null,
+        "faceSources": [
+          {
+            "face": "screen",
+            "source": {
+              "$type": "session",
+              "destination": "studio"
+            },
+            "portal": {
+              "destination": "studio",
+              "arrival": "mapped",
+              "counterpart": "home-portal/screen"
+            }
+          }
+        ]
+      },
+      {
+        "id": "dive-backstop",
+        "prototypeId": "portal-backstop",
+        "position": [
+          -6,
+          1.5,
+          -10.85
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "distribution": null,
+        "mirror": null,
+        "solid": {
+          "margin": 0
+        }
+      },
+      {
+        "id": "kart-backstop",
+        "prototypeId": "portal-backstop",
+        "position": [
+          10.85,
+          1.5,
+          -6
+        ],
+        "yawDegrees": -90,
+        "scale": 1,
+        "distribution": null,
+        "mirror": null,
+        "solid": {
+          "margin": 0
+        }
+      },
+      {
+        "id": "jump-backstop",
+        "prototypeId": "portal-backstop",
+        "position": [
+          6,
+          1.5,
+          10.85
+        ],
+        "yawDegrees": 180,
+        "scale": 1,
+        "distribution": null,
+        "mirror": null,
+        "solid": {
+          "margin": 0
+        }
+      },
+      {
+        "id": "studio-backstop",
+        "prototypeId": "portal-backstop",
+        "position": [
+          -10.85,
+          1.5,
+          6
+        ],
+        "yawDegrees": 90,
+        "scale": 1,
+        "distribution": null,
+        "mirror": null,
+        "solid": {
+          "margin": 0
+        }
+      },
+      {
+        "id": "arcade-cabinet",
+        "prototypeId": "arcade-cabinet",
+        "position": [
+          10,
+          0.9,
+          6
+        ],
+        "yawDegrees": 150,
+        "scale": 1,
+        "distribution": null,
+        "mirror": null,
+        "solid": {
+          "margin": 0
+        },
+        "faceSources": [
+          {
+            "face": "screen",
+            "source": {
+              "$type": "none"
+            }
+          }
+        ],
+        "region": {
+          "radius": 5
+        }
+      },
+      {
+        "id": "planetoid-east",
+        "prototypeId": "planetoid",
+        "position": [
+          18,
+          -34,
+          12
+        ],
+        "yawDegrees": 0,
+        "scale": 4,
+        "distribution": null,
+        "mirror": null,
+        "solid": {
+          "margin": 0
+        }
+      },
+      {
+        "id": "planetoid-west",
+        "prototypeId": "planetoid",
+        "position": [
+          -22,
+          -41,
+          -6
+        ],
+        "yawDegrees": 0,
+        "scale": 4.4,
+        "distribution": null,
+        "mirror": null,
+        "solid": {
+          "margin": 0
+        }
+      },
+      {
+        "id": "planetoid-north",
+        "prototypeId": "planetoid",
+        "position": [
+          6,
+          -46,
+          -24
+        ],
+        "yawDegrees": 0,
+        "scale": 3.2,
+        "distribution": null,
+        "mirror": null,
+        "solid": {
+          "margin": 0
+        }
+      },
+      {
+        "id": "planetoid-south",
+        "prototypeId": "planetoid",
+        "position": [
+          -9,
+          -37,
+          22
+        ],
+        "yawDegrees": 0,
+        "scale": 4.6,
+        "distribution": null,
+        "mirror": null,
+        "solid": {
+          "margin": 0
+        }
+      },
+      {
+        "id": "planetoid-hub",
+        "prototypeId": "planetoid",
+        "position": [
+          2,
+          -54,
+          3
+        ],
+        "yawDegrees": 0,
+        "scale": 5,
+        "distribution": null,
+        "mirror": null,
+        "solid": {
+          "margin": 0
+        }
+      },
+      {
+        "id": "camera-seat-0",
+        "prototypeId": "camera-body",
+        "position": [
+          0,
+          1.2,
+          -12
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "inhabit": {
+          "count": 1,
+          "kit": "vaulter",
+          "source": "Live",
+          "look": null,
+          "distribution": {
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            },
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.618034
+            }
           }
         }
-      ],
-      "region": {
-        "radius": 5
       }
-    },
-    {
-      "id": "planetoid-east",
-      "creationId": "planetoid",
-      "position": [
-        18,
-        -34,
-        12
-      ],
-      "yawDegrees": 0,
-      "scale": 4,
-      "distribution": null,
-      "mirror": null,
-      "solid": {
-        "margin": 0
-      }
-    },
-    {
-      "id": "planetoid-west",
-      "creationId": "planetoid",
-      "position": [
-        -22,
-        -41,
-        -6
-      ],
-      "yawDegrees": 0,
-      "scale": 4.4,
-      "distribution": null,
-      "mirror": null,
-      "solid": {
-        "margin": 0
-      }
-    },
-    {
-      "id": "planetoid-north",
-      "creationId": "planetoid",
-      "position": [
-        6,
-        -46,
-        -24
-      ],
-      "yawDegrees": 0,
-      "scale": 3.2,
-      "distribution": null,
-      "mirror": null,
-      "solid": {
-        "margin": 0
-      }
-    },
-    {
-      "id": "planetoid-south",
-      "creationId": "planetoid",
-      "position": [
-        -9,
-        -37,
-        22
-      ],
-      "yawDegrees": 0,
-      "scale": 4.6,
-      "distribution": null,
-      "mirror": null,
-      "solid": {
-        "margin": 0
-      }
-    },
-    {
-      "id": "planetoid-hub",
-      "creationId": "planetoid",
-      "position": [
-        2,
-        -54,
-        3
-      ],
-      "yawDegrees": 0,
-      "scale": 5,
-      "distribution": null,
-      "mirror": null,
-      "solid": {
-        "margin": 0
-      }
-    },
-    {
-      "id": "camera-seat-0",
-      "creationId": "camera-body",
-      "position": [
-        0,
-        1.2,
-        -12
-      ],
-      "yawDegrees": 0,
-      "scale": 1,
-      "inhabit": {
-        "count": 1,
-        "kit": "vaulter",
-        "source": "Live",
-        "look": null,
-        "distribution": {
-          "region": {
-            "$type": "disc",
-            "radius": 0.01
-          },
-          "fill": {
-            "name": "additive",
-            "offset": 0,
-            "step": 0.618034
-          }
-        }
-      }
-    }
-  ],
+    ]
+  },
   "music": [
     {
       "name": "nexus-ambient",
       "source": "Assets/worlds/music/nexus-ambient.music.json",
-      "hash": "19e1f988e3b770d51962516a9ef617da719f7f4d0c2ae9f31df9c8b53b49266f"
+      "hash": "445ef3ce62869bd4089a07fe4752718eb1dd61d39842a92900b2fc6feca9793f"
     }
   ],
+  "tunes": [
+    {
+      "name": "nexus-alert-bed",
+      "source": "Assets/worlds/tunes/nexus-alert-bed.audio.json",
+      "hash": "032829625156503abd6837dc9b6da9c2c37757612a9adc1e81d7ff5459bfda14"
+    }
+  ],
+  "patches": [
+    {
+      "name": "music-transition-stinger",
+      "source": "Assets/worlds/patches/music-transition-stinger.synth.json",
+      "hash": "b8b065a1d7a27bac9bb7eaf7fc5eece356bfb565c12abf426020de7fb2b85f9b"
+    },
+    {
+      "name": "music-embellishment-stinger",
+      "source": "Assets/worlds/patches/music-embellishment-stinger.synth.json",
+      "hash": "f1dc3846281da559ab4e1c9aef76a55106c75ca2f50bbc0d6d2f5eafaa8651d2"
+    }
+  ],
+  "audio": {
+    "cues": [
+      {
+        "event": "music.transition",
+        "patchId": "music-transition-stinger",
+        "placement": "listener"
+      }
+    ]
+  },
   "judges": [
     {
       "name": "nexus-drum-easy",

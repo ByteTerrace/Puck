@@ -1,0 +1,7 @@
+console off 1
+world.status
+voice.state
+world.wait 2400
+voice.state
+audio.state
+wire.errors

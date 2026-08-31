@@ -53,6 +53,33 @@
         "additionalProperties": false
       },
       "default": null
+    },
+    "voice": {
+      "description": "The identity\u0027s authored voice-babble selectors, or null for none (see WorldVoiceProfile).",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "patchId": {
+          "description": "The referenced Name (must resolve when declared).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "cadenceTicks": {
+          "description": "The base inter-syllable tick spacing (must be positive when declared).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "default": null
     }
   },
   "required": [

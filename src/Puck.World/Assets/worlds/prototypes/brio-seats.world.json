@@ -13,7 +13,7 @@
     ],
     "title": "BRIO Seats"
   },
-  "population": {
+  "bodies": {
     "capacity": 2,
     "localSeats": 2
   }

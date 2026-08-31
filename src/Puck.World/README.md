@@ -558,6 +558,22 @@ currency, translated once into a neutral pad image through the named kit's
 `WorldMachineHost.Advance` inside `WorldServer.Step`; the authority to compose
 rides the grant table's `Control` capability. See [`Puck.World.Server`](../Puck.World.Server/README.md) for the full contract.
 
+A THIRD registered engine, `tune-instrument`
+(`Puck.Forge.Tune.TuneInstrumentEngine`), is a diegetic, player-operated
+instrument: its content is a `puck.audio.v1` document rather than a
+cartridge ROM, compiled to the same jukebox cart `Audio/TuneMachineSource.cs`
+plays passively and booted on a real `Puck.HumbleGamingBrick.MachineHost`, so
+`body.engage` reaches it exactly like any other screen machine. While a seat
+holds the application, `WorldServer.InstrumentClockBoundary` folds the
+instrument's own authored tempo into the world's `MusicClock` boundary each
+tick — holding the application is the whole gate; the `world.instrument-clock`
+session lever (`WorldSessionLevers.InstrumentClock`) is a presentation-only
+echo of that fact for a future HUD cue, never a second gate (`WorldSessionLever`'s
+own remarks: a knob the simulation reads is a mutation, not a lever).
+`instrument.state` reads which screen (if any) the routed seat is engaged
+with, whether it carries the capability, and its tempo. See
+[`Audio/README.md`](Audio/README.md) for the instrument host itself.
+
 A placeable camera's offscreen view can also be EXPORTED — read as a GPU
 texture by a consumer outside the render engine (a probe kernel, see
 `## Probes` below) rather than only sampled by a jumbotron screen.

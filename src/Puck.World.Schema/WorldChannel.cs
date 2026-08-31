@@ -232,7 +232,7 @@ public sealed class WorldChannelTable {
     public bool IsRole(int ordinal) => ((ordinal >= 0) && (ordinal < ChannelLimits.MaxChannels) && m_roles[ordinal]);
     /// <summary>Returns the declared channel name at this ordinal, or <see langword="null"/> when <see cref="IsDeclared"/> is
     /// <see langword="false"/> for it — the reverse of name-to-ordinal resolution, for a read-back that must name a
-    /// channel (<c>player.channels</c>) rather than address it.</summary>
+    /// channel (<c>body.channels</c>) rather than address it.</summary>
     public string? Name(int ordinal) => m_names[ordinal];
     /// <summary>Returns the declared shape at this ordinal (meaningful only when <see cref="IsDeclared"/>).</summary>
     public ChannelShape Shape(int ordinal) => m_shapes[ordinal];

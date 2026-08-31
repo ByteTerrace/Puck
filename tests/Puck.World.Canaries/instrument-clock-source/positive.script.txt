@@ -1,0 +1,8 @@
+console off 1
+world.status
+body.engage 0
+world.instrument-clock 1
+world.wait 15
+instrument.state
+music.state
+wire.errors

@@ -17,7 +17,7 @@
     ],
     "expect": [
       { "type": "line", "name": "recompose-succeeded-seat", "stream": "stdout", "match": "contains", "text": "seat 1 'keyboard.p'" },
-      { "type": "line", "name": "recompose-succeeded-destination", "stream": "stdout", "match": "contains", "text": "'player.where'" },
+      { "type": "line", "name": "recompose-succeeded-destination", "stream": "stdout", "match": "contains", "text": "'body.where'" },
       { "type": "line", "name": "no-unregistered-command-refusal", "stream": "stderr", "match": "contains", "text": "names no registered command", "present": false },
       { "type": "line", "name": "no-binding-narration", "stream": "stderr", "match": "contains", "text": "[player.bindings]", "present": false },
       { "type": "line", "name": "world-save-wrote", "stream": "stdout", "match": "contains", "text": "[world.save: " }

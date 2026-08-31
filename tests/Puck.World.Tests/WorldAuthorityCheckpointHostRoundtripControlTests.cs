@@ -15,6 +15,7 @@ namespace Puck.World.Tests;
 /// already runs for <c>Generation</c>. Every control here is discriminating: reverting the production change it
 /// targets turns the assertion red (verified by hand while landing each one; see the report for the transcript).
 /// </summary>
+[Collection(name: ConsoleRedirectionCollection.Name)]
 public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
     private static WorldAuthorityHostRowCheckpoint EmptyHostRow() => new(
         AnnouncedCrossingHolds: [],

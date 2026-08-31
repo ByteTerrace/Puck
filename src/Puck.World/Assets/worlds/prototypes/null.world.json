@@ -109,12 +109,12 @@
                     "sources": []
                   },
                   {
-                    "command": "player.where",
+                    "command": "body.where",
                     "id": "where",
                     "sources": []
                   },
                   {
-                    "command": "player.disengage",
+                    "command": "body.disengage",
                     "id": "disengage",
                     "sources": []
                   }
@@ -225,12 +225,12 @@
                     "sources": []
                   },
                   {
-                    "command": "player.where",
+                    "command": "body.where",
                     "id": "where",
                     "sources": []
                   },
                   {
-                    "command": "player.disengage",
+                    "command": "body.disengage",
                     "id": "disengage",
                     "sources": []
                   }
@@ -361,7 +361,7 @@
     "maxSlopeDegrees": 60.0,
     "gradientProbe": 0.0
   },
-  "creations": [
+  "prototypes": [
     {
       "document": {
         "name": "groundNorthEast",
@@ -960,227 +960,306 @@
   },
   "icons": {
     "badges": [
-      { "source": "gamepad.dpadUp", "icon": "dpad.up" },
-      { "source": "gamepad.dpadRight", "icon": "dpad.right" },
-      { "source": "gamepad.dpadDown", "icon": "dpad.down" },
-      { "source": "gamepad.dpadLeft", "icon": "dpad.left" },
-      { "source": "gamepad.buttonNorth", "icon": "face.north" },
-      { "source": "gamepad.buttonEast", "icon": "face.east" },
-      { "source": "gamepad.buttonSouth", "icon": "face.south" },
-      { "source": "gamepad.buttonWest", "icon": "face.west" },
-      { "source": "gamepad.leftShoulder", "icon": "bumper.left" },
-      { "source": "gamepad.rightShoulder", "icon": "bumper.right" },
-      { "source": "gamepad.leftTrigger", "icon": "trigger.left" },
-      { "source": "gamepad.rightTrigger", "icon": "trigger.right" },
-      { "source": "gamepad.leftStickPress", "icon": "stick.left" },
-      { "source": "gamepad.rightStickPress", "icon": "stick.right" },
-      { "source": "gamepad.back", "icon": "menu.back" },
-      { "source": "gamepad.start", "icon": "menu.start" },
-      { "source": "gamepad.guide", "icon": "menu.guide" },
-      { "source": "gamepad.touchpad", "icon": "menu.touchpad" },
-      { "source": "gamepad.mute", "icon": "menu.mute" },
-      { "source": "gamepad.leftGrip", "icon": "grip.left" },
-      { "source": "gamepad.rightGrip", "icon": "grip.right" },
-      { "source": "gamepad.leftUpperGrip", "icon": "grip.leftUpper" },
-      { "source": "gamepad.rightUpperGrip", "icon": "grip.rightUpper" },
+      {
+        "source": "gamepad.dpadUp",
+        "icon": "dpad.up"
+      },
+      {
+        "source": "gamepad.dpadRight",
+        "icon": "dpad.right"
+      },
+      {
+        "source": "gamepad.dpadDown",
+        "icon": "dpad.down"
+      },
+      {
+        "source": "gamepad.dpadLeft",
+        "icon": "dpad.left"
+      },
+      {
+        "source": "gamepad.buttonNorth",
+        "icon": "face.north"
+      },
+      {
+        "source": "gamepad.buttonEast",
+        "icon": "face.east"
+      },
+      {
+        "source": "gamepad.buttonSouth",
+        "icon": "face.south"
+      },
+      {
+        "source": "gamepad.buttonWest",
+        "icon": "face.west"
+      },
+      {
+        "source": "gamepad.leftShoulder",
+        "icon": "bumper.left"
+      },
+      {
+        "source": "gamepad.rightShoulder",
+        "icon": "bumper.right"
+      },
+      {
+        "source": "gamepad.leftTrigger",
+        "icon": "trigger.left"
+      },
+      {
+        "source": "gamepad.rightTrigger",
+        "icon": "trigger.right"
+      },
+      {
+        "source": "gamepad.leftStickPress",
+        "icon": "stick.left"
+      },
+      {
+        "source": "gamepad.rightStickPress",
+        "icon": "stick.right"
+      },
+      {
+        "source": "gamepad.back",
+        "icon": "menu.back"
+      },
+      {
+        "source": "gamepad.start",
+        "icon": "menu.start"
+      },
+      {
+        "source": "gamepad.guide",
+        "icon": "menu.guide"
+      },
+      {
+        "source": "gamepad.touchpad",
+        "icon": "menu.touchpad"
+      },
+      {
+        "source": "gamepad.mute",
+        "icon": "menu.mute"
+      },
+      {
+        "source": "gamepad.leftGrip",
+        "icon": "grip.left"
+      },
+      {
+        "source": "gamepad.rightGrip",
+        "icon": "grip.right"
+      },
+      {
+        "source": "gamepad.leftUpperGrip",
+        "icon": "grip.leftUpper"
+      },
+      {
+        "source": "gamepad.rightUpperGrip",
+        "icon": "grip.rightUpper"
+      },
       {
         "source": "gamepad.quickAccess",
         "icon": "menu.quickAccess",
         "overrides": [
-          { "family": "SteamControllerTriton", "icon": "action.target" }
+          {
+            "family": "SteamControllerTriton",
+            "icon": "action.target"
+          }
         ]
       },
-      { "source": "gamepad.touchpadLeft", "icon": "touchpad.left" }
+      {
+        "source": "gamepad.touchpadLeft",
+        "icon": "touchpad.left"
+      }
     ]
   },
-  "lookAssignment": {
+  "looks": {
     "rows": [
-      "state.identifiers.pip"
+      {
+        "motion": {
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "state.identifiers.pip",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "state.identifiers.pip"
+        }
+      }
     ],
-    "sequence": {
-      "name": "r1",
-      "offset": 0,
-      "step": 0
-    }
-  },
-  "looks": [
-    {
-      "motion": {
-        "gaitAmplitude": 0,
-        "replayFrames": false,
-        "secondsPerFrame": 0
-      },
-      "name": "state.identifiers.pip",
-      "scale": 1,
-      "source": {
-        "$type": "creation",
-        "creationId": "state.identifiers.pip"
+    "assignment": {
+      "rows": [
+        "state.identifiers.pip"
+      ],
+      "sequence": {
+        "name": "r1",
+        "offset": 0,
+        "step": 0
       }
     }
-  ],
-  "placements": [
-    {
-      "creationId": "groundNorthEast",
-      "id": "groundNorthEast",
-      "position": [
-        0,
-        0,
-        0
-      ],
-      "scale": 1,
-      "yawDegrees": 0
-    },
-    {
-      "creationId": "groundSouthEast",
-      "id": "groundSouthEast",
-      "position": [
-        0,
-        0,
-        0
-      ],
-      "scale": 1,
-      "yawDegrees": 0
-    },
-    {
-      "creationId": "groundSouthWest",
-      "id": "groundSouthWest",
-      "position": [
-        0,
-        0,
-        0
-      ],
-      "scale": 1,
-      "yawDegrees": 0
-    },
-    {
-      "creationId": "groundNorthWest",
-      "id": "groundNorthWest",
-      "position": [
-        0,
-        0,
-        0
-      ],
-      "scale": 1,
-      "solid": {
-        "margin": 0
+  },
+  "placements": {
+    "rows": [
+      {
+        "prototypeId": "groundNorthEast",
+        "id": "groundNorthEast",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "scale": 1,
+        "yawDegrees": 0
       },
-      "yawDegrees": 0
-    },
-    {
-      "creationId": "pillar",
-      "id": "cornerPillars",
-      "position": [
-        0,
-        0,
-        0
-      ],
-      "scale": 1,
-      "solid": {
-        "margin": 0
+      {
+        "prototypeId": "groundSouthEast",
+        "id": "groundSouthEast",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "scale": 1,
+        "yawDegrees": 0
       },
-      "yawDegrees": 0
-    },
-    {
-      "creationId": "planetoid",
-      "id": "planetoidNE",
-      "position": [
-        6,
-        17,
-        6
-      ],
-      "scale": 1.0,
-      "solid": {
-        "margin": 0
+      {
+        "prototypeId": "groundSouthWest",
+        "id": "groundSouthWest",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "scale": 1,
+        "yawDegrees": 0
       },
-      "yawDegrees": 0
-    },
-    {
-      "creationId": "planetoid",
-      "id": "planetoidNW",
-      "position": [
-        -6,
-        17,
-        6
-      ],
-      "scale": 1.0,
-      "solid": {
-        "margin": 0
-      },
-      "yawDegrees": 0
-    },
-    {
-      "creationId": "planetoid",
-      "id": "planetoidSE",
-      "position": [
-        6,
-        17,
-        -6
-      ],
-      "scale": 1.0,
-      "solid": {
-        "margin": 0
-      },
-      "yawDegrees": 0
-    },
-    {
-      "creationId": "planetoid",
-      "id": "planetoidSW",
-      "position": [
-        -6,
-        17,
-        -6
-      ],
-      "scale": 1.0,
-      "solid": {
-        "margin": 0
-      },
-      "yawDegrees": 0
-    },
-    {
-      "creationId": "planetoid",
-      "id": "planetoidHub",
-      "position": [
-        0,
-        24,
-        0
-      ],
-      "scale": 1.8,
-      "solid": {
-        "margin": 0
-      },
-      "yawDegrees": 0
-    },
-    {
-      "creationId": "pillar",
-      "id": "camera-seat-0",
-      "inhabit": {
-        "count": 1,
-        "distribution": {
-          "fill": {
-            "name": "additive",
-            "offset": 0,
-            "step": 0.618034
-          },
-          "region": {
-            "$type": "disc",
-            "radius": 0.01
-          }
+      {
+        "prototypeId": "groundNorthWest",
+        "id": "groundNorthWest",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "scale": 1,
+        "solid": {
+          "margin": 0
         },
-        "kit": "defaultKit",
-        "look": null,
-        "source": "Live"
+        "yawDegrees": 0
       },
-      "position": [
-        0,
-        3,
-        0
-      ],
-      "scale": 1,
-      "yawDegrees": 0
-    }
-  ],
-  "playerDefaults": {
-    "seatLook": {
+      {
+        "prototypeId": "pillar",
+        "id": "cornerPillars",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "scale": 1,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0
+      },
+      {
+        "prototypeId": "planetoid",
+        "id": "planetoidNE",
+        "position": [
+          6,
+          17,
+          6
+        ],
+        "scale": 1.0,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0
+      },
+      {
+        "prototypeId": "planetoid",
+        "id": "planetoidNW",
+        "position": [
+          -6,
+          17,
+          6
+        ],
+        "scale": 1.0,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0
+      },
+      {
+        "prototypeId": "planetoid",
+        "id": "planetoidSE",
+        "position": [
+          6,
+          17,
+          -6
+        ],
+        "scale": 1.0,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0
+      },
+      {
+        "prototypeId": "planetoid",
+        "id": "planetoidSW",
+        "position": [
+          -6,
+          17,
+          -6
+        ],
+        "scale": 1.0,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0
+      },
+      {
+        "prototypeId": "planetoid",
+        "id": "planetoidHub",
+        "position": [
+          0,
+          24,
+          0
+        ],
+        "scale": 1.8,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0
+      },
+      {
+        "prototypeId": "pillar",
+        "id": "camera-seat-0",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.618034
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "defaultKit",
+          "look": null,
+          "source": "Live"
+        },
+        "position": [
+          0,
+          3,
+          0
+        ],
+        "scale": 1,
+        "yawDegrees": 0
+      }
+    ]
+  },
+  "seatDefaults": {
+    "seatCameraFeel": {
       "gyro": {
         "deadZone": [
           0.02,
@@ -1209,7 +1288,7 @@
       "yawSensitivity": 0.001
     }
   },
-  "population": {
+  "bodies": {
     "capacity": 2,
     "localSeats": 1
   },
@@ -1710,12 +1789,18 @@
     {
       "$type": "bed",
       "name": "ambientBed",
-      "center": [0, 1, -4],
+      "center": [
+        0,
+        1,
+        -4
+      ],
       "radius": 3,
       "innerRadius": 1,
       "fadeSeconds": null,
       "feed": {
-        "source": { "$type": "none" },
+        "source": {
+          "$type": "none"
+        },
         "channel": "mix",
         "gain": 1
       }
@@ -1724,9 +1809,13 @@
   "markers": [
     {
       "id": "speakers",
-      "source": { "$type": "speakers" },
+      "source": {
+        "$type": "speakers"
+      },
       "icon": "edit.bed",
-      "ring": { "field": "radius" },
+      "ring": {
+        "field": "radius"
+      },
       "style": {
         "chipAlpha": 0.9,
         "size": 12,

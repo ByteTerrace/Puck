@@ -1,10 +1,10 @@
 console off 1
 world.wait 120
-player.where
+body.where
 world.screenshot {run}/before.png
 world.wait 30
 world.wait 60
-player.where
+body.where
 world.screenshot {run}/after.png
 world.wait 30
 wire.errors

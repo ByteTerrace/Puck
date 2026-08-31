@@ -5,7 +5,7 @@
   "requirements": [],
   "seconds": 3,
   "timeoutSeconds": 20,
-  "binding": "world.refusals scans five assemblies; Client/Sdf/SdfRefusal.cs living in Puck.World.Client rather than this composition root must not drop the sdf.decode door. The positive leg calls world.refusals and asserts the current census (98 across 8 doors) plus a known SdfRefusal member; the discriminating leg never calls world.refusals, so the census text is absent there and the runner's cross-check proves the positive assertions are sensitive to it.",
+  "binding": "world.refusals scans five assemblies; Client/Sdf/SdfRefusal.cs living in Puck.World.Client rather than this composition root must not drop the sdf.decode door. The positive leg calls world.refusals and asserts the current census (114 across 8 doors) plus a known SdfRefusal member; the discriminating leg never calls world.refusals, so the census text is absent there and the runner's cross-check proves the positive assertions are sensitive to it.",
   "fixtures": [],
   "positive": {
     "world": "src/Puck.World/Assets/worlds/prototypes/nexus.world.json",
@@ -16,7 +16,7 @@
       { "verb": "wire.errors", "occurrence": 2, "outcome": "accepted" }
     ],
     "expect": [
-      { "type": "line", "name": "census matches the five-assembly scan", "stream": "stdout", "match": "contains", "text": "[world.refusals: 98 across 8 door(s)", "present": true },
+      { "type": "line", "name": "census matches the five-assembly scan", "stream": "stdout", "match": "contains", "text": "[world.refusals: 114 across 8 door(s)", "present": true },
       { "type": "line", "name": "a known SdfRefusal member is present", "stream": "stdout", "match": "contains", "text": "sdf.decode/UnknownOpName", "present": true },
       { "type": "line", "name": "no unhandled exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
     ]

@@ -208,7 +208,8 @@ internal static class WorldBootComposition {
             settings: sp.GetRequiredService<WorldRenderSettings>(),
             pacing: sp.GetRequiredService<PresentPacingControl>(),
             audio: sp.GetRequiredService<WorldAudioDirector>(),
-            bindingBar: sp.GetRequiredService<WorldBindingBarVisibility>()
+            bindingBar: sp.GetRequiredService<WorldBindingBarVisibility>(),
+            instrumentClock: sp.GetRequiredService<WorldAudioDirector>()
         ));
 
         // The frame-rate witness (a plain 2-second rolling window over presentation-fed deltas — no device
@@ -321,7 +322,11 @@ internal static class WorldBootComposition {
         // The general document-row verb pair — world.row.set/.remove — that replaced the one-verb-per-section RMW
         // sugar the console had accumulated (a dotted document member path selects the section), plus world.kits
         // (the kit section's own census, which had none). CORE, like the mutation module above: no presentation
-        // dependency, and a headless script wants the same general row door a windowed one has.
+        // dependency, and a headless script wants the same general row door a windowed one has. The pending-verb
+        // table beside it is how a buffered submission's tick-boundary refusal reaches back to the submitting verb:
+        // the module registers each minted correlation id, and WorldPostBuildWiring's EchoTap subscriber prints the
+        // per-verb refusal line.
+        services.AddSingleton<WorldDeferredVerbEchoes>();
         services.AddSingleton<ICommandModule, WorldRowCommandModule>();
         // The contact/solidity verb surface — world.collision.probe/.status and the world.contacts read. Authoring
         // the field or a kit's collider goes through world.row.set collision/world.row.set kits.

@@ -167,7 +167,7 @@ public sealed class ActionEffectJudgeLawTests {
     /// <summary>Builds <see cref="JudgeActionDocument"/> further, with a REAL <c>puck.music.v1</c>/<c>puck.judge.v1</c>
     /// pair written to <paramref name="assetDirectory"/> and referenced by absolute path — the only way a
     /// <see cref="WorldServer"/> construction actually resolves <see cref="Puck.Audio.Simulation.MusicClock"/>/the
-    /// judge window set this law grades against (see <c>WorldMusicJudgeAssetLoader</c>: a rooted <c>Source</c>
+    /// judge window set this law grades against (see <c>WorldAssetRowLoader</c>: a rooted <c>Source</c>
     /// bypasses <see cref="AppContext.BaseDirectory"/> resolution entirely).</summary>
     internal static WorldDefinition BuildJudgePressDocument(string assetDirectory) {
         var music = MusicCanonicalizer.Canonicalize(document: new MusicDocument(

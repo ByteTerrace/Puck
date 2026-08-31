@@ -31,11 +31,11 @@ public abstract record WorldSpeakerSource {
     public sealed record Machine(int ScreenIndex) : WorldSpeakerSource;
     /// <summary>A tune asset (<see cref="WorldTune"/>) played through a headless machine host — acquired while any
     /// speaker references it, released when orphaned (a runtime derivation, never a data concept).</summary>
-    /// <param name="TuneId">The referenced <see cref="WorldTune.Id"/> (must resolve).</param>
+    /// <param name="TuneId">The referenced <see cref="WorldTune.Name"/> (must resolve).</param>
     public sealed record Tune(string TuneId) : WorldSpeakerSource;
     /// <summary>The world voice synth playing a patch asset (<see cref="WorldPatch"/>). Patches are mono by
     /// construction: the feed's channel selectors degenerate to <c>mix</c> — documented, never rejected.</summary>
-    /// <param name="PatchId">The referenced <see cref="WorldPatch.Id"/> (must resolve).</param>
+    /// <param name="PatchId">The referenced <see cref="WorldPatch.Name"/> (must resolve).</param>
     public sealed record Synth(string PatchId) : WorldSpeakerSource;
 }
 /// <summary>A speaker's feed — what it plays: a shared source identity, a stereo channel selector,
@@ -132,33 +132,33 @@ public abstract record WorldSpeaker(
     );
 }
 /// <summary>
-/// One tune asset row — a whole <c>puck.audio.v1</c> document embedded inline-canonical with its identity hash
-/// pinned beside it (the same hash-pin/canonicalize contract as <see cref="WorldPrototype"/>): the compose boundary
-/// canonicalizes on upsert through <see cref="AudioCanonicalizer"/> and rejects a hash the pipeline did not itself compute; the
-/// validator re-verifies the pin on every candidate; <c>world.save</c> re-canonicalizes. The hash doubles as the
-/// runtime restart discriminator: a content change restarts the tune's headless host, a rename does not.
+/// One tune asset reference row — a <c>puck.audio.v1</c> document's stable name, its file path (relative to
+/// <see cref="AppContext.BaseDirectory"/>, the same convention <see cref="WorldMusicRow"/> uses), and the SHA-256
+/// hex64 pin of the referenced document's own canonical bytes. Never embedded: the document is loaded,
+/// canonicalized, and hash-verified where it is compiled, the same load-then-pin discipline <see cref="WorldMusicRow"/>
+/// already applies. The hash doubles as the runtime restart discriminator: a content change restarts the tune's
+/// headless host, a rename does not.
 /// </summary>
-/// <param name="Id">The row's stable string id — its mutation address and the handle a speaker's
+/// <param name="Name">The row's stable name — its mutation address and the handle a speaker's
 /// <see cref="WorldSpeakerSource.Tune"/> references.</param>
-/// <param name="Document">The canonical (validated + normalized) audio document.</param>
-/// <param name="Hash">The SHA-256 hex64 of the document's canonical bytes.</param>
-public sealed record WorldTune(string Id, AudioDocument Document, string Hash);
+/// <param name="Source">The referenced document's file path.</param>
+/// <param name="Hash">The SHA-256 hex64 of the referenced document's canonical bytes.</param>
+public sealed record WorldTune(string Name, string Source, string Hash);
 /// <summary>
-/// One synth-patch asset row — a whole <c>puck.synth.v1</c> document embedded inline-canonical with its identity
-/// hash pinned beside it via <see cref="SynthPatchCanonicalizer"/>, the same pin/restart contract as
-/// <see cref="WorldPrototype"/>; see <see cref="WorldTune"/> for the shared pin/restart semantics.
+/// One synth-patch asset reference row — the <c>puck.synth.v1</c> twin of <see cref="WorldTune"/>, same
+/// name/source/hash shape and load-then-pin discipline.
 /// </summary>
-/// <param name="Id">The row's stable string id — its mutation address; referenced by
+/// <param name="Name">The row's stable name — its mutation address; referenced by
 /// <see cref="WorldSpeakerSource.Synth"/> and by <see cref="WorldEmission.PatchId"/> facets.</param>
-/// <param name="Document">The canonical (validated + normalized) synth patch document.</param>
-/// <param name="Hash">The SHA-256 hex64 of the document's canonical bytes.</param>
-public sealed record WorldPatch(string Id, SynthPatchDocument Document, string Hash);
+/// <param name="Source">The referenced document's file path.</param>
+/// <param name="Hash">The SHA-256 hex64 of the referenced document's canonical bytes.</param>
+public sealed record WorldPatch(string Name, string Source, string Hash);
 /// <summary>An emission facet — a synth voice a world row itself makes (phenomena sound like
 /// themselves; a creek is not a speaker). Nullable on <see cref="WorldPlacement"/>
 /// — a facet edit is the row's existing whole-row upsert. Under a repeat facet the
 /// emission binds to the placement root only (an 8×8 lattice must not become 64 voices; a per-copy flag is a future
 /// facet field, not a schema fork).</summary>
-/// <param name="PatchId">The referenced <see cref="WorldPatch.Id"/> (must resolve).</param>
+/// <param name="PatchId">The referenced <see cref="WorldPatch.Name"/> (must resolve).</param>
 /// <param name="Level">The emitter level (1 = unity), bounded by <see cref="CreationSoundDocument.MaxLevel"/>.</param>
 /// <param name="Radius">The audible support radius in world units, or <see langword="null"/> for the audio
 /// defaults' <c>DefaultSpeakerRadius</c>.</param>
@@ -170,7 +170,7 @@ public sealed record WorldEmission(string PatchId, float Level, float? Radius = 
 /// different cue rows; new tokens appear only when the engine grows new mechanisms.
 /// </summary>
 /// <param name="Event">The event token (must be one of <see cref="EventTokens"/>).</param>
-/// <param name="PatchId">The referenced <see cref="WorldPatch.Id"/> the cue voices (must resolve).</param>
+/// <param name="PatchId">The referenced <see cref="WorldPatch.Name"/> the cue voices (must resolve).</param>
 /// <param name="Placement">Where the cue sounds: <see cref="PlacementAtSite"/> (spatial, at the event's world
 /// position — the shimmer's audio twin; events with no derivable site fall back to the listener),
 /// <see cref="PlacementListener"/> (UI feedback — rides the listener pose, so distance 0 renders full gain and the
@@ -187,9 +187,17 @@ public sealed record WorldAudioCue(
 ) {
     /// <summary>A capability denial — a mutate attempt without its grant, or a refused grant acquisition.</summary>
     public const string GrantDenied = "grant.denied";
-    /// <summary>A music segment transition committed. Reserved: no cue row consumes it yet (the same posture as
-    /// <see cref="PlayerJump"/>), but a <c>puck.music.v1</c> transition's own <c>when</c> field never uses this
-    /// token — it names the transition FIRING, not a condition a transition arms on.</summary>
+    /// <summary>A director embellishment fired — fired the tick <c>MusicDirector</c> voices it, listener-placed (an
+    /// embellishment carries no world site). This token is never targeted by an authored <c>audio.cues</c> row (see
+    /// <see cref="ProducerBypassedTokens"/>): the voiced patch is chosen per embellishment in the <c>puck.music.v1</c>
+    /// document itself (<c>MusicEmbellishmentDocument.PatchId</c>), so <c>WorldAudioDirector.SubmitEmbellishment</c>
+    /// fires the transient directly rather than resolving this token against the cue table. A <c>puck.music.v1</c>
+    /// transition/layer/embellishment's own <c>when</c> field never uses this token — it names the embellishment
+    /// FIRING, not a condition anything arms on.</summary>
+    public const string MusicEmbellishment = "music.embellishment";
+    /// <summary>A music segment transition committed — fired the tick <c>MusicDirector</c> commits it, listener-
+    /// placed (a transition carries no world site). A <c>puck.music.v1</c> transition's own <c>when</c> field never
+    /// uses this token — it names the transition FIRING, not a condition a transition arms on.</summary>
     public const string MusicTransition = "music.transition";
     /// <summary>A world mutation applied (the edit-echo lane — fired beside the loud accept line).</summary>
     public const string MutationApplied = "mutation.applied";
@@ -221,6 +229,14 @@ public sealed record WorldAudioCue(
     public const string ScreenFault = "screen.fault";
     /// <summary>A local seat joined the roster.</summary>
     public const string SeatJoin = "seat.join";
+    /// <summary>One syllable of an identity's synthesized voice babble firing — see
+    /// <c>Puck.Audio.Simulation.VoiceBabbler</c> for the trigger-tick schedule and
+    /// <see cref="WorldIdentityDefinition.Voice"/> for the authored per-identity selectors. Fired directly by
+    /// <c>WorldAudioDirector.FireBabbleSyllable</c>, one seeded trigger per syllable, driven by
+    /// <c>WorldAudioDirector.TriggerBabble</c>. Like <see cref="MusicEmbellishment"/>, this token is never targeted
+    /// by an authored <c>audio.cues</c> row (see <see cref="ProducerBypassedTokens"/>) — the producer resolves it
+    /// itself, per syllable, rather than through the cue table.</summary>
+    public const string VoiceBabble = "voice.babble";
 
     /// <summary>The closed cue-event vocabulary: the validator rejects any token outside it, and this list is the
     /// published contract — new tokens appear only
@@ -236,14 +252,70 @@ public sealed record WorldAudioCue(
         ScreenFault,
         SeatJoin,
         MusicTransition,
+        MusicEmbellishment,
         RegionEnter,
         RegionExit,
+        VoiceBabble,
+    ];
+    /// <summary>The sense-mappable subset of <see cref="EventTokens"/> a <c>puck.music.v1</c>
+    /// transition/layer/embellishment <c>when</c> field may name — exactly the tokens the director compiler
+    /// (<c>Puck.World.Server.MusicDirectorFactory.ParseFamily</c>) maps to a sim-side sense family. Single-sourced
+    /// here so the validator's refusal and the compiler's mapping cannot drift: a cue-only token
+    /// (<see cref="GrantDenied"/>, <see cref="MutationApplied"/>, <see cref="PlayerJump"/>, …) refuses at world
+    /// validation instead of validating cleanly and then compiling to a lane that can never fire. Extend this list
+    /// and that mapping together, in the same change.</summary>
+    public static readonly IReadOnlyList<string> MusicWhenTokens = [
+        RegionEnter,
+        RegionExit,
+        SeatJoin,
+    ];
+    /// <summary>The subset of <see cref="EventTokens"/> a producer fires directly rather than resolving against an
+    /// authored <c>audio.cues</c> row: <see cref="MusicEmbellishment"/> (<c>WorldAudioDirector.SubmitEmbellishment</c>,
+    /// the <c>puck.music.v1</c>-authored patch) and <see cref="VoiceBabble"/>
+    /// (<c>WorldAudioDirector.FireBabbleSyllable</c>, driven by <see cref="WorldIdentityDefinition.Voice"/>).
+    /// Single-sourced here so the validator's refusal and each producer's bypass cannot drift: extend this list and
+    /// its producer together, in the same change.</summary>
+    public static readonly IReadOnlyList<string> ProducerBypassedTokens = [
+        MusicEmbellishment,
+        VoiceBabble,
     ];
 
     /// <summary>Determines whether <paramref name="token"/> is one of the published <see cref="EventTokens"/>.</summary>
     /// <param name="token">The candidate token.</param>
     public static bool IsEventToken(string? token) {
         foreach (var candidate in EventTokens) {
+            if (string.Equals(
+                a: candidate,
+                b: token,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    /// <summary>Determines whether <paramref name="token"/> is one of the <see cref="MusicWhenTokens"/> a
+    /// <c>puck.music.v1</c> <c>when</c> field may name.</summary>
+    /// <param name="token">The candidate token.</param>
+    public static bool IsMusicWhenToken(string? token) {
+        foreach (var candidate in MusicWhenTokens) {
+            if (string.Equals(
+                a: candidate,
+                b: token,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    /// <summary>Determines whether <paramref name="token"/> is one of the <see cref="ProducerBypassedTokens"/> a
+    /// producer fires directly, so an authored <c>audio.cues</c> row can never target it.</summary>
+    /// <param name="token">The candidate token.</param>
+    public static bool IsProducerBypassedToken(string? token) {
+        foreach (var candidate in ProducerBypassedTokens) {
             if (string.Equals(
                 a: candidate,
                 b: token,

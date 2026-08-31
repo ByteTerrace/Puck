@@ -1,13 +1,13 @@
 console off 1
-player.pose -2 0 -12 0 0 0 1
-player.press strafe 1 1 1
+body.pose -2 0 -12 0 0 0 0
+body.press strafe 1 1 0
 world.wait 90
-player.where
+body.where
 world.screenshot {run}/before.png
 world.wait 30
-player.fly 1 0 0 0 0 0 1
+body.fly 1 0 0 0 0 0 1
 world.wait 60
-player.where
+body.where
 world.screenshot {run}/after.png
 world.wait 30
 wire.errors

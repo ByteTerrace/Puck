@@ -181,6 +181,7 @@ public static class WorldSubmissionCodec {
         WorldQuery.PreferredControllerProfile => 18,
         WorldQuery.MusicState => 19,
         WorldQuery.JudgeState => 20,
+        WorldQuery.InstrumentState => 21,
         _ => throw UnknownLeaf(value: value),
     };
     private static Type? QueryType(byte kind) => kind switch {
@@ -204,6 +205,7 @@ public static class WorldSubmissionCodec {
         18 => typeof(WorldQuery.PreferredControllerProfile),
         19 => typeof(WorldQuery.MusicState),
         20 => typeof(WorldQuery.JudgeState),
+        21 => typeof(WorldQuery.InstrumentState),
         _ => null,
     };
     private static WorldCommand ReadCommand(BinaryReader reader) {

@@ -123,6 +123,121 @@ public sealed class MusicDirectorTests {
         Assert.Equal(expected: "calm", actual: director.CurrentSegmentId);
         Assert.Null(@object: director.PendingSegmentId);
     }
+
+    private static MusicSegmentGraph LayeredGraph() => new(Segments: [
+        new MusicSegment(
+            Id: "calm",
+            Transitions: [
+                new MusicTransition(At: MusicTransitionBoundary.BarEnd, ToSegmentId: "alert", When: MusicSenseFamily.RegionEnter),
+            ],
+            Layers: [
+                new MusicLayer(TuneId: "ambient-bed", When: null),
+                new MusicLayer(TuneId: "danger-bed", When: MusicSenseFamily.CollisionBegin),
+            ],
+            Embellishments: [
+                new MusicEmbellishment(PatchId: "stinger", When: MusicSenseFamily.SeatJoin),
+            ]
+        ),
+        new MusicSegment(Id: "alert", Transitions: [
+            new MusicTransition(At: MusicTransitionBoundary.BarEnd, ToSegmentId: "calm", When: MusicSenseFamily.RegionExit),
+        ]),
+    ]);
+    private static MusicSegmentGraph ImmediateTransitionWithEmbellishmentGraph() => new(Segments: [
+        new MusicSegment(
+            Id: "calm",
+            Transitions: [
+                new MusicTransition(At: MusicTransitionBoundary.Immediate, ToSegmentId: "alert", When: MusicSenseFamily.RegionEnter),
+            ],
+            Embellishments: [
+                new MusicEmbellishment(PatchId: "stinger", When: MusicSenseFamily.RegionEnter),
+            ]
+        ),
+        new MusicSegment(Id: "alert", Transitions: []),
+    ]);
+
+    [Fact]
+    public void ConditionalLayerIsInactiveWithoutItsEdge() {
+        var director = new MusicDirector(graph: LayeredGraph());
+
+        director.Step(tick: 1, boundary: MusicClockBoundary.None, edges: []);
+
+        Assert.DoesNotContain(expected: "danger-bed", collection: director.ActiveLayerTuneIds);
+    }
+    [Fact]
+    public void ConditionalLayerIsActiveTheTickItsEdgeAppears() {
+        var director = new MusicDirector(graph: LayeredGraph());
+
+        director.Step(tick: 1, boundary: MusicClockBoundary.None, edges: [new MusicSenseEdge(A: 0, B: 0, Family: MusicSenseFamily.CollisionBegin)]);
+
+        Assert.Contains(expected: "danger-bed", collection: director.ActiveLayerTuneIds);
+    }
+    [Fact]
+    public void ConditionalLayerStaysInactiveOnANonMatchingEdge() {
+        var director = new MusicDirector(graph: LayeredGraph());
+
+        director.Step(tick: 1, boundary: MusicClockBoundary.None, edges: [new MusicSenseEdge(A: 0, B: 0, Family: MusicSenseFamily.SeatLeave)]);
+
+        Assert.DoesNotContain(expected: "danger-bed", collection: director.ActiveLayerTuneIds);
+    }
+    [Fact]
+    public void UnconditionalLayerIsActiveWhileItsSegmentIsCurrent() {
+        var director = new MusicDirector(graph: LayeredGraph());
+
+        director.Step(tick: 1, boundary: MusicClockBoundary.None, edges: []);
+        Assert.Contains(expected: "ambient-bed", collection: director.ActiveLayerTuneIds);
+
+        director.Step(tick: 2, boundary: MusicClockBoundary.Beat, edges: []);
+        Assert.Contains(expected: "ambient-bed", collection: director.ActiveLayerTuneIds);
+    }
+    [Fact]
+    public void UnconditionalLayerLeavesWhenItsSegmentDoes() {
+        var director = new MusicDirector(graph: LayeredGraph());
+
+        director.Step(tick: 1, boundary: MusicClockBoundary.None, edges: []);
+        director.Step(tick: 2, boundary: MusicClockBoundary.None, edges: [new MusicSenseEdge(A: 0, B: 0, Family: MusicSenseFamily.RegionEnter)]);
+        director.Step(tick: 3, boundary: MusicClockBoundary.Bar, edges: []);
+
+        Assert.Equal(expected: "alert", actual: director.CurrentSegmentId);
+        Assert.DoesNotContain(expected: "ambient-bed", collection: director.ActiveLayerTuneIds);
+    }
+    [Fact]
+    public void EmbellishmentFiresOnceOnAMatchingEdge() {
+        var director = new MusicDirector(graph: LayeredGraph());
+
+        director.Step(tick: 1, boundary: MusicClockBoundary.None, edges: [new MusicSenseEdge(A: 0, B: 0, Family: MusicSenseFamily.SeatJoin)]);
+
+        Assert.Equal(expected: "stinger", actual: director.LastEmbellishmentPatchId);
+        Assert.Equal(expected: 1UL, actual: director.LastEmbellishmentTick);
+    }
+    [Fact]
+    public void EmbellishmentNeverFiresOnANonMatchingEdge() {
+        var director = new MusicDirector(graph: LayeredGraph());
+
+        director.Step(tick: 1, boundary: MusicClockBoundary.None, edges: [new MusicSenseEdge(A: 0, B: 0, Family: MusicSenseFamily.CollisionEnd)]);
+
+        Assert.Null(@object: director.LastEmbellishmentPatchId);
+        Assert.Null(@object: director.LastEmbellishmentTick);
+    }
+    [Fact]
+    public void EmbellishmentDoesNotReFireWithoutAFreshEdge() {
+        var director = new MusicDirector(graph: LayeredGraph());
+
+        director.Step(tick: 1, boundary: MusicClockBoundary.None, edges: [new MusicSenseEdge(A: 0, B: 0, Family: MusicSenseFamily.SeatJoin)]);
+        director.Step(tick: 2, boundary: MusicClockBoundary.None, edges: []);
+
+        Assert.Equal(expected: 1UL, actual: director.LastEmbellishmentTick);
+    }
+    [Fact]
+    public void EmbellishmentFiringNeverBlocksASameTickTransitionCommit() {
+        var director = new MusicDirector(graph: ImmediateTransitionWithEmbellishmentGraph());
+
+        director.Step(tick: 1, boundary: MusicClockBoundary.None, edges: [new MusicSenseEdge(A: 0, B: 0, Family: MusicSenseFamily.RegionEnter)]);
+
+        Assert.Equal(expected: "alert", actual: director.CurrentSegmentId);
+        Assert.Equal(expected: 1UL, actual: director.LastTransitionTick);
+        Assert.Equal(expected: "stinger", actual: director.LastEmbellishmentPatchId);
+        Assert.Equal(expected: 1UL, actual: director.LastEmbellishmentTick);
+    }
 }
 public sealed class RhythmJudgeTests {
     private static readonly JudgeWindow[] Windows = [

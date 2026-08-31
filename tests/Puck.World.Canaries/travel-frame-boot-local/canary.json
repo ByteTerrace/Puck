@@ -15,7 +15,7 @@
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
-      { "verb": "player.pose", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "body.pose", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
       { "verb": "world.screenshot", "occurrence": 2, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" },

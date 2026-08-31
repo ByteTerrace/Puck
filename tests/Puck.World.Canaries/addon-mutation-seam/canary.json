@@ -42,7 +42,8 @@
     ],
     "expect": [
       { "type": "line", "name": "no addon is mounted", "stream": "stdout", "match": "exact", "text": "[world.addons: no addons]", "present": true },
-      { "type": "line", "name": "no panel exists", "stream": "stdout", "match": "contains", "text": "panels 0/", "present": true },
+      { "type": "line", "name": "only the world-authored panel census remains", "stream": "stdout", "match": "contains", "text": "panels 1/", "present": true },
+      { "type": "line", "name": "the guest panel never exists", "stream": "stdout", "match": "contains", "text": "world.hud.panel 'hudbuilder'", "present": false },
       { "type": "line", "name": "with nothing ever pumped, replay.record arms cleanly", "stream": "stdout", "match": "contains", "text": "[replay.record: recording 'seamphase2disc'", "present": true },
       { "type": "line", "name": "the tape is genuinely armed", "stream": "stdout", "match": "contains", "text": "[replay.status: recording 'seamphase2disc'", "present": true },
       { "type": "line", "name": "no unhandled exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }

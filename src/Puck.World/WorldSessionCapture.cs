@@ -127,17 +127,6 @@ internal static class WorldSessionCapture {
 
         return map;
     }
-    private static IReadOnlyList<WorldPatch> CapturePatches(IReadOnlyList<WorldPatch> patches) =>
-        CaptureCanonicalAssets(
-            assets: patches,
-            id: static patch => patch.Id,
-            document: static patch => patch.Document,
-            canonicalize: static (document, source) => Puck.Forge.Authoring.SynthPatchCanonicalizer.Canonicalize(
-                document: document,
-                source: source
-            ),
-            replace: static (patch, canonical) => (patch with { Document = canonical.Document, Hash = canonical.Hash })
-        );
     // Fold the live peer-source default; the local-seat count and the networkPlayers CAP are durable document config, not
     // live figures (R-C: networkPlayers is a remote admission cap, not the live census count — the running count is
     // transient session state that world.save does not persist), so they stay as authored. This keeps a fresh default
@@ -244,19 +233,6 @@ internal static class WorldSessionCapture {
 
         return (((IReadOnlyList<WorldStateRow>?)captured) ?? rows);
     }
-    // The audio-asset twins of CaptureCreations: every tune/patch row re-crosses its ONE canonicalize pipeline so
-    // the persisted doc + hash come from the SAME canonical result — idempotent at compose time, drift-proof on disk.
-    private static IReadOnlyList<WorldTune> CaptureTunes(IReadOnlyList<WorldTune> tunes) =>
-        CaptureCanonicalAssets(
-            assets: tunes,
-            id: static tune => tune.Id,
-            document: static tune => tune.Document,
-            canonicalize: static (document, source) => Puck.Forge.Authoring.AudioCanonicalizer.Canonicalize(
-                document: document,
-                source: source
-            ),
-            replace: static (tune, canonical) => (tune with { Document = canonical.Document, Hash = canonical.Hash })
-        );
     // The nearest safe render-scale tier to a continuous live scale — the reverse of WorldRenderScaleTiers.Scale, matching
     // WorldCommandModule.RenderScaleName's tolerance so a tier round-trips exactly and a continuous override quantizes to
     // its closest tier (the document holds only tiers). WorldRenderScaleTiers lives with the document model, so the
@@ -467,8 +443,6 @@ internal static class WorldSessionCapture {
             binder: binder
         ),
             CreationsRaw = CaptureCreations(creations: definition.Creations),
-            TunesRaw = CaptureTunes(tunes: definition.Tunes),
-            PatchesRaw = CapturePatches(patches: definition.Patches),
             AudioRaw = CaptureAudio(
             audio: audio,
             defaults: definition.Audio

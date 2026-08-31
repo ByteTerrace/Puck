@@ -283,7 +283,19 @@ managed identity for the silo, authored as bicep in the sibling Azure.Resources 
 **Wave 4** is `Puck.Audio` — adaptive music, event voice, a rhythm judge, diegetic synthesizer machines.
 The decisions live in the sim (tick clock, director, judge, instrument machines); sound stays
 presentation, per the determinism split in [vision.md](vision.md#determinism-precisely). Its shape is
-ruled, not built:
+ruled; the mixer, the tick clock, the segment director (transitions, conditional layers, director
+embellishments), the rhythm judge, and a player-operated diegetic instrument are built. Voice babble is
+also landed end to end: `Puck.Audio.Simulation.VoiceBabbler` (a syllable-count-in,
+jittered-trigger-ticks-out sim primitive), the identity's authored selectors
+(`WorldIdentityDefinition.Voice`, a `WorldVoiceProfile` of `PatchId`/`CadenceTicks`), the reserved
+`voice.babble` cue token, and the playback wiring (`WorldAudioDirector.TriggerBabble` drives the babbler
+and fires one seeded `VoiceSynth` trigger per syllable through the mixer; `voice.state`/`voice.babble` are
+its read-back/debug-trigger verbs; `tests/Puck.World.Canaries/voice-babble` proves four distinct syllable
+triggers fire and the mix measurably produces signal, never one sustained tone) all exist. Two things stay
+open, both later work: no producer yet estimates an utterance's syllable count from dialogue/caption text
+(a presentation/content concern outside this wave), and a babbling identity has no live-body correlation
+yet, so every syllable voices listener-placed rather than at a resolved world position. The ruling for
+each piece:
 
 - **Music is synthesized end to end.** Authored music is tracker-style data — patterns, sequences,
   instrument patches — with an iMUSE-style structural layer over it: segments with transition markers,
@@ -292,11 +304,21 @@ ruled, not built:
   animates to the beat; judged windows are generous).
 - **The rhythm judge is a sim primitive any lane can opt into** — hit windows in ticks against the
   tick-denominated musical clock, authored per action lane or interaction. No fifth world.
+- **A diegetic instrument is a real, engageable screen machine.** A screen's `Machine` source names
+  engine id `tune-instrument` (`Puck.Forge.Tune.TuneInstrumentEngine`), whose content is a
+  `puck.audio.v1` document rather than a cartridge ROM, booted through `Puck.HumbleGamingBrick`; while a
+  seat holds the application, `WorldServer.InstrumentClockBoundary` folds the instrument's own authored
+  tempo into the world's `MusicClock` boundary each tick (holding the application is the whole gate — a
+  session lever cannot feed simulation state). `instrument.state`/`world.instrument-clock` are its
+  read-back/echo; `tests/Puck.World.Canaries/instrument-clock-source` proves the path end to end.
 - **Voice is synthesized babble**, not recorded lines: pitch, timbre, and cadence authored on the
   identity; text renders as babble plus caption. Deterministic, asset-free, localization-free.
-- **Music, instrument, and voice documents are identity-owned libraries in storage**, referenced from a
-  world's audio section by content address and hash — the same shape as items and cartridges. A world
-  document never embeds them.
+- **Music, instrument, and voice documents are identity-owned libraries**, referenced from a world's audio
+  section as `{Name, Source, Hash}` rows — a stable name, a file path resolved off disk, and a SHA-256 pin
+  of the referenced document's own canonical bytes (the font-source-pin convention
+  `Puck.Text.FontAtlasSourceResolver` established first). `WorldMusicRow`/`WorldJudgeRow`/`WorldTune`/
+  `WorldPatch` all carry this one shape; `WorldAssetRowLoader` resolves every one of them. A world document
+  never embeds them.
 - `Puck.Audio` parses no document (the `Puck.Physics` boundary); document families live in world
   projects.
 

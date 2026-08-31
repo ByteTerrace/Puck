@@ -1,0 +1,90 @@
+{
+  "schema": "puck.world.def.v1",
+  "documentId": "voice-babble-canary",
+  "bodies": { "localSeats": 1 },
+  "simulation": { "rateHz": 240 },
+  "spawnPoints": [{ "id": "origin", "position": [0, 0, 0] }],
+  "channels": [
+    { "name": "forward", "shape": "Bipolar", "role": "MoveAdvance" },
+    { "name": "strafe", "shape": "Bipolar", "role": "MoveStrafe" },
+    { "name": "turn", "shape": "Bipolar", "role": "Turn" }
+  ],
+  "collision": { "requirements": [], "contactSkin": 0.02, "maxIterations": 4, "maxSlopeDegrees": 60, "gradientProbe": 0 },
+  "bodyMotionPrograms": [
+    {
+      "name": "grounded",
+      "version": "puck.body-motion.v1",
+      "kind": "Motion",
+      "operations": [
+        "ResolveYawAttitudeAndPlanarFrame",
+        "ComputePlanarTargetVelocity",
+        "ShapePlanarVelocity",
+        "SnapYawToPlanarIntent",
+        "ApplyVerticalGravity",
+        "IntegratePlanarAndVerticalVelocity",
+        "CommitPose"
+      ]
+    }
+  ],
+  "kits": {
+    "rows": [
+      {
+        "name": "idle",
+        "bodyMotionProgram": "grounded",
+        "motion": {
+          "$type": "grounded",
+          "moveSpeed": 4,
+          "turnSpeed": 2,
+          "riseGravity": 20,
+          "fallGravity": 30,
+          "maxFallSpeed": 30,
+          "response": [],
+          "sprintMultiplier": 1
+        }
+      }
+    ]
+  },
+  "defaultSeatKit": "idle",
+  "views": {
+    "layouts": [],
+    "seatControl": { "yawReference": "World", "minPitch": -0.35, "maxPitch": 1.2 },
+    "seatRig": {
+      "name": "seatChase",
+      "version": "puck.camera.v1",
+      "operations": [
+        { "$type": "orbit", "distance": 5.4626001, "yaw": 0, "pitch": 0.4145069, "pivotOffset": [0, 0, 0] },
+        { "$type": "lookAt", "subject": { "$type": "reference" }, "targetOffset": [0, 1, 0], "worldAxes": false },
+        { "$type": "fov", "fieldOfViewRadians": 0.9599311 }
+      ]
+    }
+  },
+  "state": {
+    "world": [
+      { "name": "identity-move-speed", "kind": "fixed", "value": "4" },
+      { "name": "identity-turn-speed", "kind": "fixed", "value": "2" }
+    ]
+  },
+  "identity": {
+    "id": "voice-babble-canary-identity",
+    "name": "Canary",
+    "color": "#3388CC",
+    "moveSpeedState": "identity-move-speed",
+    "turnSpeedState": "identity-turn-speed",
+    "voice": { "patchId": "stinger", "cadenceTicks": 200 }
+  },
+  "patches": [
+    {
+      "name": "stinger",
+      "source": "Assets/worlds/patches/stinger.synth.json",
+      "hash": "801610fca95dd3fc7b848f11d7f0faedc1b8f9a38737c697e981a80aeb406a03"
+    }
+  ],
+  "audio": {
+    "masterGain": 1,
+    "defaultSpeakerRadius": 8,
+    "defaultCurve": "smoothstep",
+    "defaultBedFadeSeconds": 0.5,
+    "listener": "focus",
+    "cues": []
+  }
+}

@@ -3451,7 +3451,7 @@
       ],
       "properties": {
         "patchId": {
-          "description": "The referenced Id (must resolve).",
+          "description": "The referenced Name (must resolve).",
           "type": "string"
         },
         "level": {
@@ -4275,7 +4275,7 @@
           "const": "tune"
         },
         "tuneId": {
-          "description": "The referenced Id (must resolve).",
+          "description": "The referenced Name (must resolve).",
           "type": "string"
         }
       },
@@ -4291,7 +4291,7 @@
           "const": "synth"
         },
         "patchId": {
-          "description": "The referenced Id (must resolve).",
+          "description": "The referenced Name (must resolve).",
           "type": "string"
         }
       },

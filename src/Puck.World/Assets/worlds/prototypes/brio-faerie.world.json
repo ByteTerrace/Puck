@@ -54,7 +54,7 @@
       "renderHeight": 240
     }
   ],
-  "creations": [
+  "prototypes": [
     {
       "id": "faerie-glow",
       "document": {
@@ -141,74 +141,76 @@
       ]
     }
   ],
-  "kits": [
-    {
-      "name": "faerieKit",
-      "bodyMotionProgram": "hover",
-      "motion": {
-        "$type": "grounded",
-        "moveSpeed": 6,
-        "turnSpeed": 2.5,
-        "riseGravity": 20,
-        "fallGravity": 34,
-        "maxFallSpeed": 24,
-        "response": [
-          {
-            "gate": {
-              "$type": "now",
-              "fact": "Rising"
+  "kits": {
+    "rows": [
+      {
+        "name": "faerieKit",
+        "bodyMotionProgram": "hover",
+        "motion": {
+          "$type": "grounded",
+          "moveSpeed": 6,
+          "turnSpeed": 2.5,
+          "riseGravity": 20,
+          "fallGravity": 34,
+          "maxFallSpeed": 24,
+          "response": [
+            {
+              "gate": {
+                "$type": "now",
+                "fact": "Rising"
+              },
+              "engageRate": 12,
+              "releaseRate": 2
             },
-            "engageRate": 12,
-            "releaseRate": 2
-          },
-          {
-            "gate": {
-              "$type": "now",
-              "fact": "Falling"
+            {
+              "gate": {
+                "$type": "now",
+                "fact": "Falling"
+              },
+              "engageRate": 12,
+              "releaseRate": 2
             },
-            "engageRate": 12,
-            "releaseRate": 2
-          },
-          {
-            "engageRate": 50,
-            "releaseRate": 60
+            {
+              "engageRate": 50,
+              "releaseRate": 60
+            }
+          ],
+          "sprintMultiplier": 1,
+          "moveFrame": "World",
+          "facingSnap": true
+        },
+        "producers": {
+          "attend": {
+            "scalars": {
+              "forward": 0.375,
+              "softRadius": 18,
+              "weaveAmplitude": 0.5,
+              "inwardGain": 1.6,
+              "turnScale": 2.5,
+              "weaveFrequencyBase": 0.3,
+              "weaveFrequencyRange": 0.2,
+              "altitudeGain": 0.32,
+              "activityRateBase": 2.2,
+              "activityRateRange": 1.3,
+              "strafeWave": 0,
+              "turnWave": 0,
+              "upWave": 0,
+              "pitchWave": 0,
+              "rollTurn": 0,
+              "pressThreshold": 0,
+              "altitudeBase": 0,
+              "altitudeRange": 0,
+              "standoffRadius": 1.5,
+              "approach": 0.6,
+              "orbit": 0.3,
+              "releaseRadius": 20
+            },
+            "channels": {}
           }
-        ],
-        "sprintMultiplier": 1,
-        "moveFrame": "World",
-        "facingSnap": true
-      },
-      "producers": {
-        "attend": {
-          "scalars": {
-            "forward": 0.375,
-            "softRadius": 18,
-            "weaveAmplitude": 0.5,
-            "inwardGain": 1.6,
-            "turnScale": 2.5,
-            "weaveFrequencyBase": 0.3,
-            "weaveFrequencyRange": 0.2,
-            "altitudeGain": 0.32,
-            "activityRateBase": 2.2,
-            "activityRateRange": 1.3,
-            "strafeWave": 0,
-            "turnWave": 0,
-            "upWave": 0,
-            "pitchWave": 0,
-            "rollTurn": 0,
-            "pressThreshold": 0,
-            "altitudeBase": 0,
-            "altitudeRange": 0,
-            "standoffRadius": 1.5,
-            "approach": 0.6,
-            "orbit": 0.3,
-            "releaseRadius": 20
-          },
-          "channels": {}
         }
       }
-    }
-  ],
+    ]
+  },
   "channels": [
     {
       "name": "portal",
@@ -258,7 +260,7 @@
           "$type": "upsertPlacement",
           "placement": {
             "id": "faerie",
-            "creationId": "faerie-glow",
+            "prototypeId": "faerie-glow",
             "position": [
               0,
               2.5,
@@ -613,18 +615,20 @@
   "simulation": {
     "rateHz": 30
   },
-  "authoring": {
-    "authoringHeadroomPlacements": 8,
-    "authoringHeadroomScreens": 4,
-    "candidateCap": 16,
-    "candidateRadius": 32,
-    "derivedFaceScreens": 4,
-    "maxPlacementScale": 5.0,
-    "minPlacementScale": 0.1,
-    "previewDeadlineFrames": 12
-  },
-  "population": {
+  "bodies": {
     "capacity": 2,
     "localSeats": 1
+  },
+  "placements": {
+    "policy": {
+      "authoringHeadroomPlacements": 8,
+      "authoringHeadroomScreens": 4,
+      "candidateCap": 16,
+      "candidateRadius": 32,
+      "derivedFaceScreens": 4,
+      "maxPlacementScale": 5.0,
+      "minPlacementScale": 0.1,
+      "previewDeadlineFrames": 12
+    }
   }
 }

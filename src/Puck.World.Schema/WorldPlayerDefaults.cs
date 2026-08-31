@@ -60,10 +60,23 @@ public sealed record WorldIdentitySeed(WorldSafeName Id, string Name, string Col
 /// <param name="MoveSpeedState">The fixed state row supplying locomotion speed.</param>
 /// <param name="TurnSpeedState">The fixed state row supplying turn speed.</param>
 /// <param name="Controllers">Machine/device state-slot references used for controller pre-selection.</param>
+/// <param name="Voice">The identity's authored voice-babble selectors, or <see langword="null"/> for none (see
+/// <see cref="WorldVoiceProfile"/>).</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldIdentityDefinition(WorldSafeName Id, string Name, string Color, WorldCellName MoveSpeedState, WorldCellName TurnSpeedState, IReadOnlyList<WorldControllerStateSlots>? Controllers = null);
+public sealed record WorldIdentityDefinition(WorldSafeName Id, string Name, string Color, WorldCellName MoveSpeedState, WorldCellName TurnSpeedState, IReadOnlyList<WorldControllerStateSlots>? Controllers = null, WorldVoiceProfile? Voice = null);
 /// <summary>Two text state rows that identify one reconnect-stable controller.</summary>
 /// <param name="MachineState">The row containing the machine id.</param>
 /// <param name="DeviceState">The row containing the device id.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldControllerStateSlots(WorldCellName MachineState, WorldCellName DeviceState);
+/// <summary>The document-authored selectors driving an identity's synthesized voice babble (text renders as babble
+/// plus caption; there is no spoken-audio asset). Both fields select into already-declared audio vocabulary rather
+/// than carry raw pitch/timbre floats — <paramref name="PatchId"/> names the <see cref="WorldPatch"/> row voicing
+/// each syllable (pitch/timbre/envelope already live on that patch), and <paramref name="CadenceTicks"/> is the
+/// tick-integer base spacing <c>Puck.Audio.Simulation.VoiceBabbler</c> jitters around. Either field left
+/// <see langword="null"/>, or the whole profile absent from <see cref="WorldIdentityDefinition.Voice"/>, means the
+/// identity has no authored voice yet; nothing babbles for it.</summary>
+/// <param name="PatchId">The referenced <see cref="WorldPatch.Name"/> (must resolve when declared).</param>
+/// <param name="CadenceTicks">The base inter-syllable tick spacing (must be positive when declared).</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldVoiceProfile(string? PatchId = null, int? CadenceTicks = null);

@@ -157,31 +157,31 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Name">The speaker name to remove.</param>
     [MutationKind(ordinal: 22, section: WorldSection.Speakers)]
     public sealed record RemoveSpeaker(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
-    /// <summary>Upserts a tune asset row addressed by <see cref="WorldTune.Id"/>. The compose boundary
-    /// re-canonicalizes the embedded <c>puck.audio.v1</c> document and rejects a hash the pipeline did not itself
-    /// compute, the same rule as <see cref="UpsertCreation"/>.</summary>
+    /// <summary>Upserts a tune asset row addressed by <see cref="WorldTune.Name"/>. The compose boundary loads the
+    /// referenced <c>puck.audio.v1</c> document, canonicalizes it, and rejects a hash the pipeline did not itself
+    /// compute — the referenced twin of <see cref="UpsertCreation"/>'s embedded-document rule.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Tune">The whole tune row.</param>
     [MutationKind(ordinal: 23, section: WorldSection.Tunes)]
     public sealed record UpsertTune(WorldPrincipal Principal, WorldTune Tune) : WorldMutation(Principal);
-    /// <summary>Removes the tune row with id <paramref name="Id"/>. Rejected loudly while speakers still reference it
+    /// <summary>Removes the tune row named <paramref name="Name"/>. Rejected loudly while speakers still reference it
     /// (the conservative no-cascade ruling — retarget or remove the speakers first).</summary>
     /// <param name="Principal">The acting identity.</param>
-    /// <param name="Id">The tune id to remove.</param>
+    /// <param name="Name">The tune name to remove.</param>
     [MutationKind(ordinal: 24, section: WorldSection.Tunes)]
-    public sealed record RemoveTune(WorldPrincipal Principal, string Id) : WorldMutation(Principal);
-    /// <summary>Upserts a synth-patch asset row addressed by <see cref="WorldPatch.Id"/> — the <c>puck.synth.v1</c>
-    /// twin of <see cref="UpsertTune"/>, same canonicalize + hash-pin boundary.</summary>
+    public sealed record RemoveTune(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
+    /// <summary>Upserts a synth-patch asset row addressed by <see cref="WorldPatch.Name"/> — the <c>puck.synth.v1</c>
+    /// twin of <see cref="UpsertTune"/>, same load + canonicalize + hash-pin boundary.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Patch">The whole patch row.</param>
     [MutationKind(ordinal: 25, section: WorldSection.Patches)]
     public sealed record UpsertPatch(WorldPrincipal Principal, WorldPatch Patch) : WorldMutation(Principal);
-    /// <summary>Removes the patch row with id <paramref name="Id"/>. Rejected loudly while speakers or emission
+    /// <summary>Removes the patch row named <paramref name="Name"/>. Rejected loudly while speakers or emission
     /// facets still reference it (no cascade — the dependents are named).</summary>
     /// <param name="Principal">The acting identity.</param>
-    /// <param name="Id">The patch id to remove.</param>
+    /// <param name="Name">The patch name to remove.</param>
     [MutationKind(ordinal: 26, section: WorldSection.Patches)]
-    public sealed record RemovePatch(WorldPrincipal Principal, string Id) : WorldMutation(Principal);
+    public sealed record RemovePatch(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
     /// <summary>Replaces the audio host-section defaults (the whole <see cref="WorldAudioDefaults"/> row). Applies
     /// live: the emitter-derivation coalescing, the listener policy, and the cue table read the delivered row.
     /// <c>MasterGain</c> follows the lever-precedence rule: it flows live only until the <c>world.volume</c> session

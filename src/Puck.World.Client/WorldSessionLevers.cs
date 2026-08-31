@@ -23,6 +23,11 @@ public static class WorldSessionLevers {
     public const string BindingBar = "binding-bar";
     /// <summary>The per-tile far-bound cull (<c>world.far-field bound</c>).</summary>
     public const string FarBound = "far-field.bound";
+    /// <summary>Whether a seat's engaged instrument is treated as the session's reference clock
+    /// (<c>world.instrument-clock</c>), folding into <c>audio</c>. Presentation echo only — see
+    /// <see cref="IWorldInstrumentClockLever"/>'s own remarks for the simulation-side gate this is NOT.
+    /// Seat-scoped: <see cref="WorldSessionLever.Seat"/> names the 0-based local seat.</summary>
+    public const string InstrumentClock = "instrument-clock";
     /// <summary>The audio mix master gain (<c>world.volume</c>), folding into <c>audio</c>.</summary>
     public const string MasterVolume = "volume";
     /// <summary>The render scale (<c>world.render-scale</c>).</summary>
@@ -51,19 +56,39 @@ public static class WorldSessionLevers {
     /// <param name="pacing">The live present-rate control the window pump reads.</param>
     /// <param name="audio">The audio director owning the master-volume knob.</param>
     /// <param name="bindingBar">The live per-seat binding-bar visibility overrides.</param>
+    /// <param name="instrumentClock">The audio director owning the instrument-clock echo.</param>
     /// <returns>The composed applier.</returns>
     /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
-    public static WorldSessionLeverSink Compose(WorldRenderSettings settings, PresentPacingControl pacing, IWorldAudioLever audio, WorldBindingBarVisibility bindingBar) {
+    public static WorldSessionLeverSink Compose(WorldRenderSettings settings, PresentPacingControl pacing, IWorldAudioLever audio, WorldBindingBarVisibility bindingBar, IWorldInstrumentClockLever instrumentClock) {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(pacing);
         ArgumentNullException.ThrowIfNull(audio);
         ArgumentNullException.ThrowIfNull(bindingBar);
+        ArgumentNullException.ThrowIfNull(instrumentClock);
 
         var sink = new WorldSessionLeverSink();
 
         sink.Register(
             name: MasterVolume,
             setter: lever => audio.SetMasterVolume(value: ((float)lever.A))
+        );
+        sink.Register(
+            name: InstrumentClock,
+            setter: lever => {
+                if (
+                    (lever.Seat < 0) ||
+                    (lever.Seat >= PlayerRoster.MaxSlots)
+                ) {
+                    Console.Error.WriteLine(value: $"[world.instrument-clock: seat {lever.Seat} is outside 0..{(PlayerRoster.MaxSlots - 1)} — lever dropped]");
+
+                    return;
+                }
+
+                instrumentClock.SetInstrumentClockEngaged(
+                    engaged: Flag(lever: lever),
+                    seat: lever.Seat
+                );
+            }
         );
         sink.Register(
             name: Shadows,

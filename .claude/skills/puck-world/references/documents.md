@@ -1022,9 +1022,12 @@ reserved derived-face band (`WorldPlacementPolicy.DerivedFaceBase` +
   round-trip numbers, exactly one trailing newline. A load→save of an
   untouched world reproduces the file byte-for-byte — a useful observation,
   never an acceptance gate.
-- Embedded Forge documents (creations/tunes/patches) bridge through
+- Embedded Forge documents (creations) bridge through
   `Puck.Assets.Documents.DocumentJsonOptions.Shared` so the inline embed
-  carries exactly the vocabulary its canonicalizer hashes.
+  carries exactly the vocabulary its canonicalizer hashes. Tunes/patches are
+  never embedded — `WorldTune`/`WorldPatch` are name/source/hash reference
+  rows resolved off disk by `WorldAssetRowLoader`, the same shape
+  `WorldMusicRow`/`WorldJudgeRow` already use.
 
 **Adding a schema field — the sweep direction.** Adding a top-level SECTION
 refuses at boot until every shipped world carries it (through its own
@@ -1201,12 +1204,22 @@ unique ignoring case, hex color — `ValidatePlayerDefaults` in
 **`WorldIdentity`** (`Puck.World.Schema/WorldIdentity.cs`) is the runtime
 handle over one owned document's `identity` section
 (`WorldIdentityDefinition(Id, Name, Color, MoveSpeedState, TurnSpeedState,
-Controllers)`): `MoveSpeed`/`TurnSpeed` read
+Controllers, Voice)`): `MoveSpeed`/`TurnSpeed` read
 and write the owned document's OWN `state` rows named by those state-row
 references; `Bindings` is the owned document's own first `bindingOverlays`
 row's document (the seat's profile binding layer — see "Binding composition"
 below); `Hud` is the owned document's first `Hud` panel (the identity's
-PRIVATE seat-scope HUD panel, see `hud.md`).
+PRIVATE seat-scope HUD panel, see `hud.md`). `Voice` (`WorldVoiceProfile?` —
+a `PatchId` resolving against declared `patches` rows, plus a positive
+`CadenceTicks`) selects the identity's synthesized voice-babble pitch/timbre
+and cadence. `WorldAudioDirector.TriggerBabble` reads it, drives
+`Puck.Audio.Simulation.VoiceBabbler` for the cadence-jittered per-syllable
+trigger schedule, resolves the patch, and fires one seeded trigger per
+syllable under the `voice.babble` cue token (`voice.state`/`voice.babble` are
+its read-back/debug-trigger verbs). Two things stay open: no producer yet
+estimates an utterance's syllable count from dialogue/caption text, and a
+babbling identity has no live-body correlation, so every syllable voices
+listener-placed rather than at a resolved world position.
 
 **Seating.** `SessionRequest.SetIdentity` (gated on `WorldCapability.Drive`
 over the targeted slot's body — the same grant `Join`/`Leave` use) sets a

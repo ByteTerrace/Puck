@@ -1,0 +1,8 @@
+console off 1
+world.status
+voice.state
+voice.babble voice-babble-canary-identity 4 1
+world.wait 2400
+voice.state
+audio.state
+wire.errors

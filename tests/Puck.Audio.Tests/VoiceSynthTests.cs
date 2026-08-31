@@ -1,4 +1,5 @@
 using Puck.Audio.Mixing;
+using Puck.Audio.Simulation;
 using Puck.Maths;
 
 namespace Puck.Audio.Tests;
@@ -139,6 +140,51 @@ public sealed class WorldVoiceSynthTests {
         // Slew bound: 65536*200/4800 = 2730 coefficient/block -> <= ~683 on a 16384 source; unbounded ramps to ~11585.
         Assert.True(condition: (fadedPeak <= 700));
         Assert.True(condition: (instantPeak >= 11_000));
+    }
+    [Fact]
+    public void BabbleUtteranceFiresOneDistinctSeededTriggerPerSyllableBitIdenticalAcrossTwoFreshPairings() {
+        var (slotsFirst, renderFirst) = RunBabbleUtterance(syllableCount: 6, cadenceTicks: 600, identitySeed: 0x1234UL, utteranceOrdinal: 3UL, baseTick: 1_000UL);
+        var (slotsSecond, renderSecond) = RunBabbleUtterance(syllableCount: 6, cadenceTicks: 600, identitySeed: 0x1234UL, utteranceOrdinal: 3UL, baseTick: 1_000UL);
+
+        Assert.Equal(expected: 6, actual: slotsFirst.Distinct().Count());
+        Assert.True(condition: renderFirst.AsSpan().SequenceEqual(other: renderSecond));
+        Assert.True(condition: slotsFirst.SequenceEqual(second: slotsSecond));
+    }
+    [Theory]
+    [InlineData(2)]
+    [InlineData(5)]
+    [InlineData(10)]
+    public void BabbleUtteranceNeverCollapsesToASingleSustainedToneForMultipleSyllables(int syllableCount) {
+        var (slots, _) = RunBabbleUtterance(syllableCount: syllableCount, cadenceTicks: 500, identitySeed: 7UL, utteranceOrdinal: 1UL, baseTick: 0UL);
+
+        Assert.Equal(expected: syllableCount, actual: slots.Count);
+        Assert.NotEqual(expected: 1, actual: slots.Count);
+        Assert.Equal(expected: syllableCount, actual: slots.Distinct().Count());
+    }
+    // Composes VoiceBabbler's deterministic tick schedule with VoiceSynth.Trigger: one seeded voice per syllable,
+    // never a single collapsed trigger for the whole utterance. Each syllable's seed folds the identity seed, the
+    // utterance ordinal, and the syllable index — never wall-clock or the tick value itself — mirroring
+    // WorldAudioDirector.TriggerBabble's own seed-derivation discipline.
+    private static (List<int> Slots, short[] Render) RunBabbleUtterance(int syllableCount, long cadenceTicks, ulong identitySeed, ulong utteranceOrdinal, ulong baseTick) {
+        var synth = new VoiceSynth();
+        var ticks = new ulong[syllableCount];
+
+        VoiceBabbler.ComputeTriggerTicks(baseTick: baseTick, cadenceTicks: cadenceTicks, destination: ticks, identitySeed: identitySeed, syllableCount: syllableCount, utteranceOrdinal: utteranceOrdinal);
+
+        var patch = Chirp();
+        var slots = new List<int>(capacity: syllableCount);
+
+        for (var syllableIndex = 0; (syllableIndex < syllableCount); syllableIndex++) {
+            var seedHash = Fnv1aHash.Create();
+
+            seedHash.Add(value: identitySeed);
+            seedHash.Add(value: utteranceOrdinal);
+            seedHash.Add(value: ((ulong)syllableIndex));
+
+            slots.Add(item: synth.Trigger(patch: in patch, seed: seedHash.Value, gainQ16: UnityQ16));
+        }
+
+        return (Slots: slots, Render: Render(synth: synth, totalFrames: 4800));
     }
 
     private static VoicePatch Chirp() => new(

@@ -2,8 +2,9 @@
 namespace Puck.World.Server;
 
 public sealed partial class WorldServer {
-    // The music.state echo: segment, any pending transition, and the most recent committed transition's tick/from/to
-    // (none= before the first one). No music section authored reads as a fixed, honest "no music" line rather than an
+    // The music.state echo: segment, any pending transition, the most recent committed transition's tick/from/to
+    // (none= before the first one), the currently active conditional-layer tune ids, and the most recent
+    // embellishment's patch/tick. No music section authored reads as a fixed, honest "no music" line rather than an
     // empty/refused answer, matching audio.state's "device=unsupported" posture for an absent capability.
     private string DescribeMusicState() {
         if (
@@ -13,7 +14,12 @@ public sealed partial class WorldServer {
             return "[music.state: none declared]";
         }
 
-        return $"[music.state: segment={director.CurrentSegmentId} pending={(director.PendingSegmentId ?? "none")} elapsedTicks={clock.ElapsedTicks} transitions={director.TransitionCount} lastTick={(director.LastTransitionTick?.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) ?? "none")} lastFrom={(director.LastTransitionFromSegmentId ?? "none")} lastTo={(director.LastTransitionToSegmentId ?? "none")}]";
+        var layers = ((director.ActiveLayerTuneIds.Count > 0)
+            ? string.Join(separator: ",", values: director.ActiveLayerTuneIds)
+            : "none"
+        );
+
+        return $"[music.state: segment={director.CurrentSegmentId} pending={(director.PendingSegmentId ?? "none")} elapsedTicks={clock.ElapsedTicks} transitions={director.TransitionCount} lastTick={(director.LastTransitionTick?.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) ?? "none")} lastFrom={(director.LastTransitionFromSegmentId ?? "none")} lastTo={(director.LastTransitionToSegmentId ?? "none")} layers={layers} lastEmbellishment={(director.LastEmbellishmentPatchId ?? "none")} lastEmbellishmentTick={(director.LastEmbellishmentTick?.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) ?? "none")}]";
     }
     // The judge.state echo: every declared window set, plus the last graded (body, judge) fact per body an
     // ActionEffect.Judge press has ever staged. A world with no bodies pressed and no judges declared reads "none

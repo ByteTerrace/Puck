@@ -88,9 +88,10 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldCollision))]
 [JsonSerializable(typeof(WorldCollider))]
 [JsonSerializable(typeof(MotionResponse[]))]
-// The audio sections: the speaker row + tune/patch asset rows + the audio defaults (the world.row.set speakers /
-// world.row.set tunes / world.row.set patches / world.row.set audio payload shapes). The embedded puck.audio.v1 / puck.synth.v1
-// documents ride their families' OWN canonical serializer shape, matching CreationDocumentJsonConverter's.
+// The audio sections: the speaker row + tune/patch asset REFERENCE rows + the audio defaults (the world.row.set
+// speakers / world.row.set tunes / world.row.set patches / world.row.set audio payload shapes). WorldTune/WorldPatch
+// are plain name/source/hash rows — no embedded document, no bridging converter (see WorldMusicRow/WorldJudgeRow,
+// registered below, for the same shape).
 [JsonSerializable(typeof(WorldSpeaker))]
 // The speaker union's nested kinds collide by simple name with the camera/screen-source unions' (Fixed/Anchored and
 // None/Machine); explicit TypeInfoPropertyName entries resolve the source-gen collision (SYSLIB1031).
@@ -223,7 +224,7 @@ namespace Puck.World;
     // CommandPhase (Puck.Commands) cannot carry a [JsonConverter] attribute at its own declaration without a new
     // ProjectReference to Puck.Abstractions from that leaner project; registering its CLOSED StrictEnumConverter<T>
     // instance here instead keeps the strict posture without that edge.
-    Converters = new[] { typeof(Puck.Assets.Documents.Vector2JsonConverter), typeof(Puck.Assets.Documents.Vector3JsonConverter), typeof(Puck.Assets.Documents.QuaternionJsonConverter), typeof(CommandValueJsonConverter), typeof(CreationDocumentJsonConverter), typeof(AudioDocumentJsonConverter), typeof(SynthPatchDocumentJsonConverter), typeof(WorldBackendPreferenceJsonConverter), typeof(SurfaceFormatJsonConverter), typeof(GrantSubjectJsonConverter), typeof(WorldPrincipalJsonConverter), typeof(ChannelReachMaskJsonConverter), typeof(ChannelConsentMaskJsonConverter), typeof(MutationKindMaskJsonConverter), typeof(DocumentWriteMaskJsonConverter), typeof(WorldStateRowJsonConverter), typeof(WorldSafeNameJsonConverter), typeof(WorldCellNameJsonConverter), typeof(WorldDestinationDurabilityJsonConverter), typeof(WorldPortalTravelJsonConverter), typeof(WorldPortalArrivalJsonConverter), typeof(WorldDestinationScopeJsonConverter), typeof(StrictEnumConverter<CommandPhase>), typeof(StrictEnumConverter<ChannelRole>), typeof(StrictEnumConverter<BindingActivatorMode>), typeof(StrictEnumConverter<BindingEntryMode>), typeof(StrictEnumConverter<BindingWheelSpatialSelectionMode>), typeof(StrictEnumConverter<BindingWheelPlacement>), typeof(StrictEnumConverter<BindingBarEdge>), typeof(StrictEnumConverter<ActionStateComparison>), typeof(StrictEnumConverter<BindingWheelRingSelectionMode>) },
+    Converters = new[] { typeof(Puck.Assets.Documents.Vector2JsonConverter), typeof(Puck.Assets.Documents.Vector3JsonConverter), typeof(Puck.Assets.Documents.QuaternionJsonConverter), typeof(CommandValueJsonConverter), typeof(CreationDocumentJsonConverter), typeof(WorldBackendPreferenceJsonConverter), typeof(SurfaceFormatJsonConverter), typeof(GrantSubjectJsonConverter), typeof(WorldPrincipalJsonConverter), typeof(ChannelReachMaskJsonConverter), typeof(ChannelConsentMaskJsonConverter), typeof(MutationKindMaskJsonConverter), typeof(DocumentWriteMaskJsonConverter), typeof(WorldStateRowJsonConverter), typeof(WorldSafeNameJsonConverter), typeof(WorldCellNameJsonConverter), typeof(WorldDestinationDurabilityJsonConverter), typeof(WorldPortalTravelJsonConverter), typeof(WorldPortalArrivalJsonConverter), typeof(WorldDestinationScopeJsonConverter), typeof(StrictEnumConverter<CommandPhase>), typeof(StrictEnumConverter<ChannelRole>), typeof(StrictEnumConverter<BindingActivatorMode>), typeof(StrictEnumConverter<BindingEntryMode>), typeof(StrictEnumConverter<BindingWheelSpatialSelectionMode>), typeof(StrictEnumConverter<BindingWheelPlacement>), typeof(StrictEnumConverter<BindingBarEdge>), typeof(StrictEnumConverter<ActionStateComparison>), typeof(StrictEnumConverter<BindingWheelRingSelectionMode>) },
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     // The OTHER half of strict parse. UnmappedMemberHandling below refuses a member the model does not have; this
     // refuses a member the model REQUIRES and the document does not carry. Without it, a constructor parameter with
@@ -1580,46 +1581,6 @@ internal sealed class CreationDocumentJsonConverter : JsonConverter<Puck.Forge.A
         );
     /// <inheritdoc/>
     public override void Write(Utf8JsonWriter writer, Puck.Forge.Authoring.CreationDocument value, JsonSerializerOptions options) =>
-        JsonSerializer.Serialize(
-            writer: writer,
-            value: value,
-            options: Puck.Assets.Documents.DocumentJsonOptions.Shared
-        );
-}
-/// <summary>
-/// Bridges an embedded <see cref="Puck.Forge.Authoring.AudioDocument"/> (a <see cref="WorldTune.Document"/>) through the
-/// audio contract's own serializer shape (<see cref="Puck.Assets.Documents.DocumentJsonOptions.Shared"/>) instead of this
-/// context's policies, so the inline-canonical embed carries exactly the member vocabulary
-/// <see cref="Puck.Forge.Authoring.AudioCanonicalizer"/> hashes, matching <see cref="CreationDocumentJsonConverter"/>'s approach.
-/// </summary>
-internal sealed class AudioDocumentJsonConverter : JsonConverter<Puck.Forge.Authoring.AudioDocument> {
-    /// <inheritdoc/>
-    public override Puck.Forge.Authoring.AudioDocument? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
-        JsonSerializer.Deserialize<Puck.Forge.Authoring.AudioDocument>(
-            reader: ref reader,
-            options: Puck.Assets.Documents.DocumentJsonOptions.Shared
-        );
-    /// <inheritdoc/>
-    public override void Write(Utf8JsonWriter writer, Puck.Forge.Authoring.AudioDocument value, JsonSerializerOptions options) =>
-        JsonSerializer.Serialize(
-            writer: writer,
-            value: value,
-            options: Puck.Assets.Documents.DocumentJsonOptions.Shared
-        );
-}
-/// <summary>
-/// Bridges an embedded <see cref="Puck.Forge.Authoring.SynthPatchDocument"/> (a <see cref="WorldPatch.Document"/>) through
-/// the synth contract's own serializer shape — see <see cref="AudioDocumentJsonConverter"/>.
-/// </summary>
-internal sealed class SynthPatchDocumentJsonConverter : JsonConverter<Puck.Forge.Authoring.SynthPatchDocument> {
-    /// <inheritdoc/>
-    public override Puck.Forge.Authoring.SynthPatchDocument? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
-        JsonSerializer.Deserialize<Puck.Forge.Authoring.SynthPatchDocument>(
-            reader: ref reader,
-            options: Puck.Assets.Documents.DocumentJsonOptions.Shared
-        );
-    /// <inheritdoc/>
-    public override void Write(Utf8JsonWriter writer, Puck.Forge.Authoring.SynthPatchDocument value, JsonSerializerOptions options) =>
         JsonSerializer.Serialize(
             writer: writer,
             value: value,

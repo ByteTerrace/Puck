@@ -1,0 +1,16 @@
+{
+  "schema": "puck.synth.v1",
+  "name": "stinger",
+  "oscillator": "Sine",
+  "dutyThousandths": null,
+  "polynomial": null,
+  "attackFrames": 240,
+  "decayFrames": 4800,
+  "sustainThousandths": 0,
+  "releaseFrames": 2400,
+  "pitchMillihertz": 880000,
+  "sweepMillihertzPerFrame": null,
+  "vibratoDepthMillihertz": null,
+  "vibratoRateMillihertz": null,
+  "durationFrames": null
+}

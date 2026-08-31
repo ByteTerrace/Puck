@@ -13,10 +13,10 @@
     "commands": [
       { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.collision.probe", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "player.pose", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "player.press", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "body.pose", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "body.press", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "player.where", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "body.where", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.contacts", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.adjacencies", "occurrence": 1, "outcome": "accepted" },
       { "verb": "wire.errors", "occurrence": 2, "outcome": "accepted" }
@@ -24,7 +24,7 @@
     "expect": [
       { "type": "response", "name": "ground reaches the invisible seam", "stream": "stdout", "verb": "world.collision.probe", "occurrence": 1, "count": 1, "extract": [{ "name": "seamGroundDistance", "field": "distance" }] },
       { "type": "relation", "name": "seam point is within contact skin of ground", "left": { "value": "seamGroundDistance" }, "operator": "atMost", "maximum": 0.02 },
-      { "type": "response", "name": "arrived body has a resting height", "stream": "stdout", "verb": "player.where", "occurrence": 1, "count": 1, "extract": [{ "name": "restY", "field": "pos", "component": 1 }] },
+      { "type": "response", "name": "arrived body has a resting height", "stream": "stdout", "verb": "body.where", "occurrence": 1, "count": 1, "extract": [{ "name": "restY", "field": "pos", "component": 1 }] },
       { "type": "relation", "name": "arrived body rests on the authored floor", "left": { "value": "restY" }, "operator": "betweenInclusive", "minimum": 0.119, "maximum": 0.121 },
       { "type": "response", "name": "contacts follows the seat authority", "stream": "stdout", "verb": "world.contacts", "occurrence": 1, "count": 1, "extract": [{ "name": "grounded", "field": "grounded" }] },
       { "type": "relation", "name": "arrived body remains grounded", "left": { "value": "grounded" }, "operator": "equal", "right": { "literal": "true" } },
@@ -39,9 +39,9 @@
     "commands": [
       { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.collision.probe", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "player.pose", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "body.pose", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "player.where", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "body.where", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.contacts", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.adjacencies", "occurrence": 1, "outcome": "accepted" },
       { "verb": "wire.errors", "occurrence": 2, "outcome": "accepted" }
@@ -49,7 +49,7 @@
     "expect": [
       { "type": "response", "name": "control ground reaches the invisible seam", "stream": "stdout", "verb": "world.collision.probe", "occurrence": 1, "count": 1, "extract": [{ "name": "seamGroundDistance", "field": "distance" }] },
       { "type": "relation", "name": "control seam point is within contact skin of ground", "left": { "value": "seamGroundDistance" }, "operator": "atMost", "maximum": 0.02 },
-      { "type": "response", "name": "control body has a resting height", "stream": "stdout", "verb": "player.where", "occurrence": 1, "count": 1, "extract": [{ "name": "restY", "field": "pos", "component": 1 }] },
+      { "type": "response", "name": "control body has a resting height", "stream": "stdout", "verb": "body.where", "occurrence": 1, "count": 1, "extract": [{ "name": "restY", "field": "pos", "component": 1 }] },
       { "type": "relation", "name": "control body rests on the authored floor", "left": { "value": "restY" }, "operator": "betweenInclusive", "minimum": 0.119, "maximum": 0.121 },
       { "type": "response", "name": "control contacts answers", "stream": "stdout", "verb": "world.contacts", "occurrence": 1, "count": 1, "extract": [{ "name": "grounded", "field": "grounded" }] },
       { "type": "relation", "name": "control body remains grounded", "left": { "value": "grounded" }, "operator": "equal", "right": { "literal": "true" } },

@@ -57,8 +57,10 @@ the seven above): the deterministic fixed-point mixer/voice-synth core
 (`Puck.Audio.Simulation` — `MusicClock`/`MusicDirector`/`RhythmJudge`/
 `MusicSenseEdge`, stepped from `WorldServer.Step` right after
 `WorldEventFeed.Collect()`), referenced by `Puck.World.Server` (machine audio
-rate; `WorldMusicJudgeAssetLoader` resolves each `WorldMusicRow`/`WorldJudgeRow`
-reference's `puck.music.v1`/`puck.judge.v1` document off disk, and
+rate; `WorldAssetRowLoader` resolves each `WorldMusicRow`/`WorldJudgeRow`/
+`WorldTune`/`WorldPatch` reference's document off disk (`puck.music.v1`,
+`puck.judge.v1`, `puck.audio.v1`, `puck.synth.v1` — the same name/source/hash
+shape every world audio asset row carries), and
 `MusicDirectorFactory` compiles the loaded documents into the sim-side shapes
 and projects `WorldEventFeed.Edges` into `MusicSenseEdge`) and `Puck.World`
 (presentation glue). It parses no document. `music.state`/`judge.state` are

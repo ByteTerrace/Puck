@@ -1,3 +1,3 @@
 replay.status
-player.bind 1 keyboard.p player.where
+player.bind 1 keyboard.p body.where
 world.save {run}\saved.world.json

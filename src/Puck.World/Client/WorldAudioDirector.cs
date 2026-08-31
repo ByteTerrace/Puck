@@ -6,6 +6,7 @@ using Puck.Hosting;
 using Puck.Maths;
 using Puck.SignedDistance;
 using Puck.Audio.Mixing;
+using Puck.Audio.Simulation;
 using Puck.World.Audio;
 using Puck.World.Protocol;
 
@@ -27,10 +28,17 @@ namespace Puck.World.Client;
 /// <para><b>The v1 trigger policy (deliberate, documented):</b> every synth-fed emitter fires exactly one seeded
 /// trigger on emitter arrival (a new or identity-recreated key) — a looping patch (no duration) sustains until the
 /// emitter departs (the mixer frees unbound voices); a one-shot patch plays once. Periodic/behavioral retriggering
-/// is deferred. Seeds derive from the emitter key + content signature, so a voice reproduces bit for bit
-/// across runs. A pending trigger rides the next <see cref="TriggerPublishRetention"/> published snapshots: the
-/// publish buffer keeps only the latest, so retention ≥ two device quanta guarantees a consumer sees the event once,
-/// and the mixer's high-water sequence makes repeats free.</para>
+/// of an ORDINARY emitter is still deferred. Seeds derive from the emitter key + content signature, so a voice
+/// reproduces bit for bit across runs. A pending trigger rides the next <see cref="TriggerPublishRetention"/>
+/// published snapshots: the publish buffer keeps only the latest, so retention ≥ two device quanta guarantees a
+/// consumer sees the event once, and the mixer's high-water sequence makes repeats free. <see cref="TriggerBabble"/>
+/// is this policy's one N-per-utterance exception: given an identity, an estimated syllable count, and an utterance
+/// ordinal, it drives <see cref="VoiceBabbler.ComputeTriggerTicks"/> for a cadence-jittered per-syllable tick
+/// schedule, converts each tick offset to a deterministic audio-frame delay (<see cref="AudioMixer.FramesPerSimStep"/>),
+/// and fires one seeded trigger PER SYLLABLE as its delay elapses (<see cref="AdvanceBabbleSchedule"/>) — never one
+/// sustained tone for a whole utterance. Every syllable's seed folds the identity id, the utterance ordinal, and the
+/// syllable index (never wall-clock), so a babbled utterance reproduces bit-identically across runs the same way an
+/// ordinary emitter's arrival trigger does.</para>
 /// <para><b>Source hosting:</b> patch registration and headless tune hosting (acquire while referenced, release when
 /// orphaned, the tune hash as the restart discriminator) activate when a mixer is attached
 /// (<see cref="AttachMixer"/> — the offline proof and the device pump); unattached, the director only derives and
@@ -45,7 +53,7 @@ namespace Puck.World.Client;
 /// plan serializes on one reentrant gate. The gate is uncontended in steady state (reconciles are rare, a mix block
 /// is microseconds), which is the deliberate trade: one honest lock instead of a lock-free mixer-mutation protocol.</para>
 /// </remarks>
-internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFeed {
+internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFeed, IWorldInstrumentClockLever {
     /// <summary>The default per-publish clock advance for cue aging: one 240 Hz sim step (the offline drivers'
     /// cadence — one publish per mixed 200-frame block). The live frame source passes its real presentation delta.</summary>
     public const float DefaultPublishDeltaSeconds = (1f / 240f);
@@ -63,6 +71,15 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
     public const int TransientCueCapacity = 4;
     /// <summary>How many published snapshots a pending trigger rides (see the type remarks).</summary>
     public const int TriggerPublishRetention = 8;
+    /// <summary>The music-layer bed's support radius: a music layer carries no world position (it is presence
+    /// everywhere, not a region), so its derived <see cref="AudioEmitterKind.Bed"/> emitter is anchored at the world
+    /// origin with a radius many orders larger than any authored world extent — forcing the listener's distance
+    /// always inside the full-presence band, an approximation of "no envelope" rather than an authorable value
+    /// (every genre wants layered music equally global).</summary>
+    public const long MusicLayerBedRadius = 1_000_000L;
+    /// <summary>The <c>speaker:</c>/<c>placement:</c> derived-plan key prefixes' sibling for a music-layer bed —
+    /// the tune id follows.</summary>
+    private const string MusicLayerKeyPrefix = "musicLayer:";
 
     private readonly WorldStampPool? m_animator;
     private readonly WorldClient? m_client;
@@ -82,6 +99,9 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
     // once set, the lever owns "now" for the rest of the session and world.save folds it back into the document.
     private float? m_sessionMasterVolume;
     private int m_slabIndex;
+    // The world.instrument-clock session lever's echo, by 0-based local seat — presentation only (see
+    // IWorldInstrumentClockLever's own remarks); the simulation-side clock fold never reads this.
+    private readonly HashSet<int> m_instrumentClockSeats = new();
 
     private readonly PublishBuffer<AudioSnapshot> m_buffer = new();
     private readonly List<EmitterPlan> m_plan = new();
@@ -89,6 +109,13 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
     // their mixer ramp state; an identity change re-keys (a fresh id ramps in from silence).
     private readonly Dictionary<string, EmitterIdentity> m_registry = new(comparer: StringComparer.Ordinal);
     private readonly List<PendingTrigger> m_pendingTriggers = new();
+    // The pending voice-babble syllable schedule, aged by AdvanceBabbleSchedule — one entry per syllable still
+    // waiting to fire.
+    private readonly List<ScheduledBabbleTrigger> m_scheduledBabble = new();
+    // The cumulative babble-syllable fire count this session — the voice.state echo's one monotone fact (never
+    // reset), so a caller can prove multiple distinct syllables fired without racing the live transient pool's own
+    // expiry.
+    private ulong m_babbleFiredTotal;
     // The mixer-facing patch registration set (world patch rows by id + inline creation-sound patches by emitter
     // key) — applied on attach and on every reconcile while attached.
     private readonly List<(string Id, VoicePatch Patch)> m_patchSet = new();
@@ -105,9 +132,16 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
     private readonly Dictionary<string, List<CueRow>> m_cueRows = new(comparer: StringComparer.Ordinal);
     // The live transient cue emitters (bounded by TransientCueCapacity; aged by the publish clock).
     private readonly List<TransientCue> m_transients = new(capacity: TransientCueCapacity);
+    // The last patch fired per cue token — the speaker.state echo's monotone cue fact (never reset, ordinal-sorted
+    // for a stable echo), so a caller can prove a cue FIRED without racing the live transient pool's own expiry —
+    // the same anti-race posture m_babbleFiredTotal takes for voice.state.
+    private readonly SortedDictionary<string, string> m_lastCueByToken = new(comparer: StringComparer.Ordinal);
     private int m_nextEmitterId = 1;
     private FixedQ4816 m_defaultCueRadius = FixedQ4816.FromInteger(value: 8L);
     private FixedComplex m_lastListenerYaw = FixedComplex.MultiplicativeIdentity;
+    // The most recently tapped active-layer tune id set (WorldServer.MusicLayerTap) — re-reconciled against whenever
+    // it changes so the derived layer-bed plan tracks it without waiting for the next definition delivery.
+    private IReadOnlyList<string> m_activeMusicLayerTuneIds = [];
 
     /// <summary>The live master gain in Q16 — the value an attached mixer's <c>MasterGainQ16</c> follows: the
     /// document master gain until the <c>world.volume</c> session lever engages, the lever thereafter (see
@@ -238,6 +272,35 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
                 patchId: emission.PatchId
             )}"
         );
+    }
+    // Ages the pending babble schedule by this publish's clock advance (see ElapsedFrames) and fires every syllable
+    // whose scheduled delay has elapsed — one FireBabbleSyllable call per syllable, never a single collapsed
+    // trigger for the whole utterance. Runs BEFORE PublishTransients so a syllable firing this publish lands in the
+    // SAME snapshot's transient emission.
+    private void AdvanceBabbleSchedule(float deltaSeconds) {
+        if (m_scheduledBabble.Count == 0) {
+            return;
+        }
+
+        var elapsedFrames = ElapsedFrames(deltaSeconds: deltaSeconds);
+
+        for (var index = (m_scheduledBabble.Count - 1); (index >= 0); index--) {
+            var pending = m_scheduledBabble[index];
+
+            pending.RemainingFrames -= elapsedFrames;
+
+            if (pending.RemainingFrames > 0) {
+                m_scheduledBabble[index] = pending;
+
+                continue;
+            }
+
+            m_scheduledBabble.RemoveAt(index: index);
+            FireBabbleSyllable(
+                patchId: pending.PatchId,
+                seed: pending.Seed
+            );
+        }
     }
     private static string AnchorKindToken(WorldAnchor anchor) => anchor switch {
         WorldAnchor.Entity => "entity",
@@ -457,16 +520,26 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
 
         return seen.Count;
     }
+    // The row's Source/Hash were already proven to load, canonicalize, and pin-verify by WorldDefinitionValidator —
+    // this load is expected to succeed by construction, the same discipline WorldServer's music/judge loads take.
     private static TuneHost CreateTuneHost(WorldTune tune, AudioMixer mixer) {
-        var source = new TuneMachineSource(document: tune.Document);
+        if (!WorldAssetRowLoader.TryLoadTune(
+            document: out var document,
+            error: out var loadError,
+            row: tune
+        )) {
+            throw new InvalidOperationException(message: $"tune[{tune.Name}]: {loadError} (a validated document must still resolve at construction)");
+        }
+
+        var source = new TuneMachineSource(document: document!);
 
         mixer.SetSource(
-            key: AudioSourceKey.Tune(id: tune.Id),
+            key: AudioSourceKey.Tune(id: tune.Name),
             source: source
         );
 
         return new TuneHost(
-            TuneId: tune.Id,
+            TuneId: tune.Name,
             Hash: tune.Hash,
             Source: source
         );
@@ -645,6 +718,43 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
             }
         }
     }
+    // One continuous Bed emitter per tune id in m_activeMusicLayerTuneIds — a tune not (yet) declared on this
+    // definition is skipped rather than admitted silent (the server only taps ids MusicDirectorFactory already
+    // compiled off a validated document, so this is a defensive skip, never a policy). A key that drops out because
+    // its tune left the active set also drops out of m_plan (Admit is never called for it this reconcile), so the
+    // NEXT time the same tune re-activates it re-enters the registry as a fresh id and ramps in from silence — the
+    // same "absent this reconcile = departs" contract every other derived row already follows.
+    private void DeriveMusicLayers(WorldDefinition definition, WorldAudioDefaults audio) {
+        foreach (var tuneId in m_activeMusicLayerTuneIds) {
+            if (FindTune(
+                definition: definition,
+                tuneId: tuneId
+            ) is not { } tune) {
+                continue;
+            }
+
+            Admit(
+                plan: new EmitterPlan {
+                    Key = $"{MusicLayerKeyPrefix}{tuneId}",
+                    Kind = AudioEmitterKind.Bed,
+                    Anchor = EmitterAnchor.FixedPoint(position: Vector3.Zero),
+                    MinRadius = FixedQ4816.FromInteger(value: MusicLayerBedRadius),
+                    MaxRadius = FixedQ4816.FromInteger(value: MusicLayerBedRadius),
+                    FadeFrames = FadeFrames(seconds: audio.DefaultBedFadeSeconds),
+                    GainQ16 = 65536,
+                    Channel = AudioChannel.Mix,
+                    Source = AudioSourceKey.Tune(id: tuneId),
+                },
+                signatureToken: $"musicLayer|tune:{tuneId}:{tune.Hash}"
+            );
+        }
+    }
+    // The publish clock's real-time advance in audio frames — shared by PublishTransients (ages the live cue pool)
+    // and AdvanceBabbleSchedule (ages the pending syllable schedule).
+    private static long ElapsedFrames(float deltaSeconds) => ((long)MathF.Round(x: (MathF.Max(
+        x: deltaSeconds,
+        y: 0f
+    ) * AudioMixer.SampleRate)));
     private void EvictNearestExpiry() {
         var victim = 0;
 
@@ -657,6 +767,38 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
         m_transients.RemoveAt(index: victim);
     }
     private static int FadeFrames(float seconds) => ((int)MathF.Round(x: (seconds * AudioMixer.SampleRate)));
+    // Fires one babble syllable through the same transient-cue mechanism SubmitEmbellishment uses for a
+    // fire-time-chosen patch: a short-lived listener-placed emitter plus one seeded trigger, recorded under
+    // WorldAudioCue.VoiceBabble so speaker.state's live cue tail (and a future HUD caption reading the same cue —
+    // see the type remarks) resolve it the same way every other cue resolves. No per-syllable world site is
+    // resolvable yet (an identity is not correlated to a live body here), so every syllable is listener-placed —
+    // the same honest simplification SubmitEmbellishment already takes.
+    private void FireBabbleSyllable(string patchId, ulong seed) {
+        var id = m_nextEmitterId++;
+
+        if (m_transients.Count >= TransientCueCapacity) {
+            EvictNearestExpiry();
+        }
+
+        m_transients.Add(item: new TransientCue {
+            Id = id,
+            Token = WorldAudioCue.VoiceBabble,
+            PatchId = patchId,
+            GainQ16 = 65536,
+            Placement = CuePlacement.Listener,
+            Site = default,
+            SpeakerName = null,
+            RemainingFrames = CueLifeFrames(patchId: patchId),
+        });
+        m_lastCueByToken[key: WorldAudioCue.VoiceBabble] = patchId;
+        SubmitTrigger(
+            patchId: patchId,
+            seed: seed,
+            gainQ16: 65536,
+            emitterId: id
+        );
+        m_babbleFiredTotal++;
+    }
     private WorldTune? FindReferencedTune(WorldDefinition definition, string tuneId) {
         foreach (var plan in m_plan) {
             if (
@@ -679,7 +821,7 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
     private static WorldTune? FindTune(WorldDefinition definition, string tuneId) {
         foreach (var tune in definition.Tunes) {
             if (string.Equals(
-                a: tune.Id,
+                a: tune.Name,
                 b: tuneId,
                 comparisonType: StringComparison.Ordinal
             )) {
@@ -706,7 +848,7 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
     private static string PatchHash(WorldDefinition definition, string patchId) {
         foreach (var patch in definition.Patches) {
             if (string.Equals(
-                a: patch.Id,
+                a: patch.Name,
                 b: patchId,
                 comparisonType: StringComparison.Ordinal
             )) {
@@ -740,10 +882,7 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
             return;
         }
 
-        var elapsedFrames = ((long)MathF.Round(x: (MathF.Max(
-            x: deltaSeconds,
-            y: 0f
-        ) * AudioMixer.SampleRate)));
+        var elapsedFrames = ElapsedFrames(deltaSeconds: deltaSeconds);
 
         for (var index = (m_transients.Count - 1); (index >= 0); index--) {
             var transient = m_transients[index];
@@ -1272,13 +1411,16 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
         }
     }
     /// <summary>The <c>speaker.state</c> echo — the live per-row status joining <c>audio.state</c>'s device facts:
-    /// for every derived speaker row and every placement emission facet (the two point-position facts a live pose
-    /// can drive; a placement's attach facet is what makes the latter move) its kind, source token, binding status
-    /// (bound / silent-with-reason / faulted), the last published resolved position (or <c>unresolved</c> for an
-    /// absent anchor — the verdict for an inactive attach carrier too, since an unresolvable anchor is an absent
-    /// emitter), and whether the listener currently sits inside its finite support (<c>inMix</c>); then the live
-    /// transient-cue tail (token + remaining life). Live facts move frame to frame — a proof asserts presence/shape,
-    /// never exact poses.</summary>
+    /// for every derived speaker row, every placement emission facet (the two point-position facts a live pose
+    /// can drive; a placement's attach facet is what makes the latter move), and every active music-layer bed
+    /// its kind, source token, binding status (bound / silent-with-reason / faulted), the last published resolved
+    /// position (or <c>unresolved</c> for an absent anchor — the verdict for an inactive attach carrier too, since an
+    /// unresolvable anchor is an absent emitter), and whether the listener currently sits inside its finite support
+    /// (<c>inMix</c>) — always <c>y</c> for a music-layer bed, whose radius is engineered to be unconditional; then
+    /// the live transient-cue tail (token + remaining life, an embellishment included) and the monotone
+    /// <c>lastCue:&lt;token&gt;=&lt;patch&gt;</c> tail (the last patch fired per cue token, never reset — the fact a
+    /// proof reads to show a cue fired without racing the live pool's expiry). Live facts move frame to
+    /// frame — a proof asserts presence/shape, never exact poses.</summary>
     public string DescribeSpeakerState() {
         lock (m_gate) {
             var builder = new StringBuilder(value: "[speaker.state:");
@@ -1293,10 +1435,15 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
                     comparisonType: StringComparison.Ordinal,
                     value: "placement:"
                 );
+                var isMusicLayer = plan.Key.StartsWith(
+                    comparisonType: StringComparison.Ordinal,
+                    value: MusicLayerKeyPrefix
+                );
 
                 if (
                     !isSpeaker &&
-                    !isEmission
+                    !isEmission &&
+                    !isMusicLayer
                 ) {
                     continue;
                 }
@@ -1342,7 +1489,46 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
                 );
             }
 
+            foreach (var lastCue in m_lastCueByToken) {
+                _ = builder.Append(
+                    provider: CultureInfo.InvariantCulture,
+                    handler: $" lastCue:{lastCue.Key}={lastCue.Value}"
+                );
+            }
+
             return builder.Append(value: ']').ToString();
+        }
+    }
+    /// <summary>The <c>voice.state</c> echo — the live voice-babble status beside <c>audio.state</c>'s device facts
+    /// and <c>speaker.state</c>'s per-row facts: the delivered definition's single identity id (or <c>none</c>),
+    /// its authored voice selectors (<c>none</c> or <c>patch:&lt;id&gt;/cadence:&lt;ticks&gt;</c>), how many
+    /// syllable triggers remain scheduled, how many <c>voice.babble</c> cue transients are currently live, and the
+    /// cumulative fired count (monotone — never resets, so a caller can prove multiple distinct syllables fired
+    /// without racing the live pool's own expiry). A pure presentation read — no server routing needed, the same
+    /// local-read posture <c>speaker.state</c>/<c>audio.emitters</c> already take.</summary>
+    public string DescribeVoiceState() {
+        lock (m_gate) {
+            var identityId = (m_definition?.Identity?.Id.Value ?? "none");
+            var voiceToken = ((m_definition?.Identity?.Voice is { PatchId: { } patchId, CadenceTicks: { } cadenceTicks })
+                ? $"patch:{patchId}/cadence:{cadenceTicks}"
+                : "none"
+            );
+            var liveCount = 0;
+
+            foreach (var transient in m_transients) {
+                if (string.Equals(
+                    a: transient.Token,
+                    b: WorldAudioCue.VoiceBabble,
+                    comparisonType: StringComparison.Ordinal
+                )) {
+                    liveCount++;
+                }
+            }
+
+            return string.Create(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"[voice.state: identity={identityId} voice={voiceToken} scheduled={m_scheduledBabble.Count} live={liveCount} fired={m_babbleFiredTotal}]"
+            );
         }
     }
     /// <summary>Releases every hosted tune source, unbinds every machine source, and detaches the mixer.</summary>
@@ -1394,6 +1580,9 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
                 seats: seats,
                 transforms: transforms
             ));
+            // Babble firings BEFORE transients — a syllable due this publish must already be in the pool by the
+            // time transients emit.
+            AdvanceBabbleSchedule(deltaSeconds: deltaSeconds);
             // Transients FIRST — the reserved pool must land even when the derived plan overfills the table.
             PublishTransients(
                 deltaSeconds: deltaSeconds,
@@ -1496,7 +1685,17 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
             BuildCueTable(audio: audio);
 
             foreach (var patch in definition.Patches) {
-                m_patchSet.Add(item: (Id: patch.Id, Patch: WorldVoicePatchFactory.FromDocument(document: patch.Document)));
+                // The row's Source/Hash were already proven to load, canonicalize, and pin-verify by
+                // WorldDefinitionValidator — this load is expected to succeed by construction.
+                if (!WorldAssetRowLoader.TryLoadPatch(
+                    document: out var document,
+                    error: out var loadError,
+                    row: patch
+                )) {
+                    throw new InvalidOperationException(message: $"patch[{patch.Name}]: {loadError} (a validated document must still resolve at reconcile)");
+                }
+
+                m_patchSet.Add(item: (Id: patch.Name, Patch: WorldVoicePatchFactory.FromDocument(document: document!)));
             }
 
             DeriveSpeakers(
@@ -1508,6 +1707,10 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
                 definition: definition
             );
             DeriveCreationSounds(
+                audio: audio,
+                definition: definition
+            );
+            DeriveMusicLayers(
                 audio: audio,
                 definition: definition
             );
@@ -1535,6 +1738,32 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
             ApplyMixerBindings();
         }
     }
+    /// <summary>Applies a new active conditional-layer tune id set (<c>WorldServer.MusicLayerTap</c>) — layers are
+    /// level-triggered, so this is called on every tick the server's own active set changes, never once per
+    /// definition delivery. A no-op when the set is unchanged; otherwise re-runs <see cref="ReconcileSpeakers"/>
+    /// against the cached definition so the derived layer-bed plan tracks it immediately (fading in/out over the
+    /// existing Bed presence slew — see <see cref="DeriveMusicLayers"/>), without waiting for the next document
+    /// mutation. A no-op before the first <see cref="ReconcileSpeakers"/> call (nothing to re-derive against yet;
+    /// the coming first reconcile picks up whatever was last applied here).</summary>
+    /// <param name="tuneIds">The whole new active set, in the director's own declared order.</param>
+    public void SetActiveMusicLayers(IReadOnlyList<string> tuneIds) {
+        ArgumentNullException.ThrowIfNull(argument: tuneIds);
+
+        lock (m_gate) {
+            if (
+                (tuneIds.Count == m_activeMusicLayerTuneIds.Count) &&
+                tuneIds.SequenceEqual(second: m_activeMusicLayerTuneIds, comparer: StringComparer.Ordinal)
+            ) {
+                return;
+            }
+
+            m_activeMusicLayerTuneIds = tuneIds;
+
+            if (m_definition is { } definition) {
+                ReconcileSpeakers(definition: definition);
+            }
+        }
+    }
     // ---- the master-volume session lever --------------------------------------------------------------------------
 
     /// <summary>Engages the <c>world.volume</c> session lever: the live mix gain applies now and owns every later
@@ -1553,10 +1782,30 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
             }
         }
     }
+    // ---- the instrument-clock session lever's presentation echo -------------------------------------------------
+
+    /// <inheritdoc/>
+    public void SetInstrumentClockEngaged(int seat, bool engaged) {
+        lock (m_gate) {
+            if (engaged) {
+                _ = m_instrumentClockSeats.Add(item: seat);
+            } else {
+                _ = m_instrumentClockSeats.Remove(item: seat);
+            }
+        }
+    }
+    /// <summary>Gets whether <paramref name="seat"/>'s <c>world.instrument-clock</c> lever last engaged — the
+    /// echo <c>world.instrument-clock</c>'s own no-argument read reports. Carries no simulation effect.</summary>
+    /// <param name="seat">The 0-based local seat.</param>
+    public bool InstrumentClockEngaged(int seat) {
+        lock (m_gate) {
+            return m_instrumentClockSeats.Contains(item: seat);
+        }
+    }
     // ---- the cue engine ----------------------------------------------------------------------------------------------
 
     /// <summary>Fires a world-event cue — the producers' one entry (the edit-echo lane, the binder lifecycle, the
-    /// gait derivation, the seat roster), gate-safe from any thread: every cue row bound to
+    /// music director, the gait derivation, the seat roster), gate-safe from any thread: every cue row bound to
     /// <paramref name="eventToken"/> allocates a short-lived transient point emitter (placed per the row) and one
     /// seeded trigger. The trigger and its transient land in the same next published snapshot, so the mixer's
     /// unbound-voice release can never race the voice's own emitter. An unknown or cue-less token is a no-op — cue
@@ -1594,6 +1843,7 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
                     SpeakerName = row.SpeakerName,
                     RemainingFrames = CueLifeFrames(patchId: row.PatchId),
                 });
+                m_lastCueByToken[key: eventToken] = row.PatchId;
                 // Voice gain stays unity — the transient emitter's own gain carries the cue level; a voice gain here
                 // would double-scale. The seed folds the token with a session ordinal:
                 // repeated cues of one event get distinct noise streams.
@@ -1604,6 +1854,44 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
                     emitterId: id
                 );
             }
+        }
+    }
+    /// <summary>Fires a director embellishment — the same transient-cue mechanism <see cref="SubmitCue"/> uses,
+    /// generalized to a patch chosen at FIRE time (the compiled <c>MusicEmbellishment.PatchId</c>, authored per
+    /// embellishment) rather than looked up from a fixed <c>audio.cues</c> row keyed on a shared token: several
+    /// embellishments in one world can each voice a different patch, which the token→row cue table cannot express.
+    /// Listener-placed, like <see cref="WorldAudioCue.MusicTransition"/> — a director embellishment carries no world
+    /// site. Recorded under <see cref="WorldAudioCue.MusicEmbellishment"/> so <c>speaker.state</c>'s live transient-
+    /// cue tail (<c>cue:&lt;token&gt;=&lt;patch&gt;</c>) reads it the same way every other cue reads.</summary>
+    /// <param name="patchId">The patch to voice (must resolve to a declared <c>WorldPatch</c> row — an unresolved id
+    /// renders silent, the same posture an emission facet or speaker feed already takes for a dangling reference).</param>
+    public void SubmitEmbellishment(string patchId) {
+        ArgumentException.ThrowIfNullOrEmpty(argument: patchId);
+
+        lock (m_gate) {
+            var id = m_nextEmitterId++;
+
+            if (m_transients.Count >= TransientCueCapacity) {
+                EvictNearestExpiry();
+            }
+
+            m_transients.Add(item: new TransientCue {
+                Id = id,
+                Token = WorldAudioCue.MusicEmbellishment,
+                PatchId = patchId,
+                GainQ16 = 65536,
+                Placement = CuePlacement.Listener,
+                Site = default,
+                SpeakerName = null,
+                RemainingFrames = CueLifeFrames(patchId: patchId),
+            });
+            m_lastCueByToken[key: WorldAudioCue.MusicEmbellishment] = patchId;
+            SubmitTrigger(
+                patchId: patchId,
+                seed: Fnv1aHash.Compute(values: WorldAudioCue.MusicEmbellishment) ^ ++m_cueOrdinal,
+                gainQ16: 65536,
+                emitterId: id
+            );
         }
     }
     /// <summary>Submits one seeded synth trigger request — the one trigger-production seam: stamps the
@@ -1626,6 +1914,76 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
             ),
                 RemainingPublishes = TriggerPublishRetention,
             });
+        }
+    }
+    /// <summary>Schedules one babbled utterance's syllable triggers: resolves the world's single authored
+    /// <see cref="WorldIdentityDefinition.Voice"/> selectors off the delivered definition, drives
+    /// <see cref="VoiceBabbler.ComputeTriggerTicks"/> for the utterance's cadence-jittered per-syllable tick
+    /// schedule, and stages one <see cref="FireBabbleSyllable"/> firing per syllable at its own deterministic delay
+    /// — never one sustained tone for the whole utterance (see the type remarks). Producing the syllable count from
+    /// dialogue/caption text, and correlating the babbling identity to a live body for spatial placement, are both
+    /// later work: every syllable voices listener-placed, the same simplification <see cref="SubmitEmbellishment"/>
+    /// already takes for a fire-time-chosen patch with no world site.</summary>
+    /// <param name="identityId">The babbling identity — must match the delivered definition's own
+    /// <see cref="WorldIdentityDefinition.Id"/> (a world carries at most one). Any other value, an undeclared
+    /// identity, an unauthored <see cref="WorldVoiceProfile"/> (either field left <see langword="null"/>), or a
+    /// dangling patch reference all resolve to silence — the same posture every other dangling-reference case in
+    /// this director already takes.</param>
+    /// <param name="syllableCount">The caller's estimated syllable count (non-negative). Zero schedules
+    /// nothing.</param>
+    /// <param name="utteranceOrdinal">This utterance's ordinal within the identity's own babble history — folds
+    /// into both <see cref="VoiceBabbler"/>'s jitter draw and every syllable's voice seed (with the identity id and
+    /// the syllable index — never wall-clock), so the SAME utterance replays bit-identically while a fresh one
+    /// draws a fresh sequence.</param>
+    public void TriggerBabble(string identityId, int syllableCount, ulong utteranceOrdinal) {
+        ArgumentException.ThrowIfNullOrEmpty(argument: identityId);
+        ArgumentOutOfRangeException.ThrowIfNegative(value: syllableCount);
+
+        if (syllableCount == 0) {
+            return;
+        }
+
+        lock (m_gate) {
+            if (
+                (m_definition?.Identity is not { } identity) ||
+                !string.Equals(
+                a: identity.Id.Value,
+                b: identityId,
+                comparisonType: StringComparison.Ordinal
+            ) ||
+                (identity.Voice is not { PatchId: { } patchId, CadenceTicks: { } cadenceTicks }) ||
+                !HasPatch(patchId: patchId)
+            ) {
+                return;
+            }
+
+            // Masked to Pcg32XshRr.MaxStream: VoiceBabbler feeds this straight through as the jitter stream id,
+            // which refuses past 2^63-1 — a raw 64-bit hash can set that top bit.
+            var identitySeed = (Fnv1aHash.Compute(values: identityId) & Pcg32XshRr.MaxStream);
+            var ticks = new ulong[syllableCount];
+
+            VoiceBabbler.ComputeTriggerTicks(
+                baseTick: 0UL,
+                cadenceTicks: cadenceTicks,
+                destination: ticks,
+                identitySeed: identitySeed,
+                syllableCount: syllableCount,
+                utteranceOrdinal: utteranceOrdinal
+            );
+
+            for (var syllableIndex = 0; (syllableIndex < syllableCount); syllableIndex++) {
+                var seedHash = Fnv1aHash.Create();
+
+                seedHash.Add(value: identitySeed);
+                seedHash.Add(value: utteranceOrdinal);
+                seedHash.Add(value: ((ulong)syllableIndex));
+
+                m_scheduledBabble.Add(item: new ScheduledBabbleTrigger {
+                    PatchId = patchId,
+                    Seed = seedHash.Value,
+                    RemainingFrames = (((long)ticks[syllableIndex]) * AudioMixer.FramesPerSimStep),
+                });
+            }
         }
     }
     /// <summary>Mixes one block from the latest published snapshot into the attached mixer — the device pump's
@@ -1763,6 +2121,14 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
         public CuePlacement Placement;
         public Vector3 Site;
         public string? SpeakerName;
+        public long RemainingFrames;
+    }
+    // One scheduled babble-syllable firing: the patch, a seed already folded from identity + utterance + syllable
+    // index (never re-derived at fire time), and its remaining delay in audio frames — aged by the same publish
+    // clock PublishTransients ages the live transient pool by (see AdvanceBabbleSchedule).
+    private struct ScheduledBabbleTrigger {
+        public string PatchId;
+        public ulong Seed;
         public long RemainingFrames;
     }
     private readonly record struct TuneHost(string TuneId, string Hash, TuneMachineSource Source);

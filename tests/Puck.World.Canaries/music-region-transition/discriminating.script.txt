@@ -3,6 +3,7 @@ world.wait 30
 music.state
 world.wait 90
 music.state
+speaker.state
 world.wait 90
 music.state
 wire.errors

@@ -355,7 +355,7 @@
       "renderHeight": 144
     }
   ],
-  "population": {
+  "bodies": {
     "capacity": 128,
     "seatActivation": [
       "Eager",
@@ -553,618 +553,620 @@
       ]
     }
   ],
-  "kits": [
-    {
-      "name": "flyer",
-      "bodyMotionProgram": "free",
-      "motion": {
-        "$type": "grounded",
-        "moveSpeed": 4,
-        "turnSpeed": 2.5,
-        "riseGravity": 14,
-        "fallGravity": 23,
-        "maxFallSpeed": 20,
-        "sprintMultiplier": 1,
-        "response": []
-      },
-      "producers": {
-        "wander": {
-          "scalars": {
-            "forward": 0.62,
-            "softRadius": 45,
-            "weaveAmplitude": 0.5,
-            "inwardGain": 1.6,
-            "turnScale": 2.5,
-            "weaveFrequencyBase": 0.3,
-            "weaveFrequencyRange": 0.2,
-            "altitudeGain": 0.32,
-            "activityRateBase": 2.2,
-            "activityRateRange": 1.3,
-            "strafeWave": 0.18,
-            "turnWave": 0,
-            "upWave": 0.1,
-            "pitchWave": 0.14,
-            "rollTurn": 0.32,
-            "pressThreshold": 0,
-            "altitudeBase": 4.5,
-            "altitudeRange": 3
-          },
-          "channels": {}
-        }
-      },
-      "actions": {
-        "dash": {
-          "onPress": {
-            "gate": {
-              "$type": "timerElapsed",
-              "state": "dashCooldown"
+  "kits": {
+    "rows": [
+      {
+        "name": "flyer",
+        "bodyMotionProgram": "free",
+        "motion": {
+          "$type": "grounded",
+          "moveSpeed": 4,
+          "turnSpeed": 2.5,
+          "riseGravity": 14,
+          "fallGravity": 23,
+          "maxFallSpeed": 20,
+          "sprintMultiplier": 1,
+          "response": []
+        },
+        "producers": {
+          "wander": {
+            "scalars": {
+              "forward": 0.62,
+              "softRadius": 45,
+              "weaveAmplitude": 0.5,
+              "inwardGain": 1.6,
+              "turnScale": 2.5,
+              "weaveFrequencyBase": 0.3,
+              "weaveFrequencyRange": 0.2,
+              "altitudeGain": 0.32,
+              "activityRateBase": 2.2,
+              "activityRateRange": 1.3,
+              "strafeWave": 0.18,
+              "turnWave": 0,
+              "upWave": 0.1,
+              "pitchWave": 0.14,
+              "rollTurn": 0.32,
+              "pressThreshold": 0,
+              "altitudeBase": 4.5,
+              "altitudeRange": 3
             },
-            "latchSeconds": 0.05,
-            "effects": [
-              {
-                "$type": "setVerticalVelocity",
-                "velocity": 5.5
-              },
-              {
-                "$type": "startTimer",
-                "state": "dashCooldown",
-                "seconds": 1.5
-              }
-            ]
-          },
-          "onRelease": null
-        }
-      }
-    },
-    {
-      "name": "swimmer",
-      "bodyMotionProgram": "free",
-      "motion": {
-        "$type": "grounded",
-        "moveSpeed": 4,
-        "turnSpeed": 2.5,
-        "riseGravity": 14,
-        "fallGravity": 23,
-        "maxFallSpeed": 20,
-        "sprintMultiplier": 1,
-        "response": []
-      },
-      "producers": {
-        "wander": {
-          "scalars": {
-            "forward": 0.38,
-            "softRadius": 45,
-            "weaveAmplitude": 0.5,
-            "inwardGain": 1.6,
-            "turnScale": 2.5,
-            "weaveFrequencyBase": 0.3,
-            "weaveFrequencyRange": 0.2,
-            "altitudeGain": 0.32,
-            "activityRateBase": 2.2,
-            "activityRateRange": 1.3,
-            "strafeWave": 0.28,
-            "turnWave": 0,
-            "upWave": 0.16,
-            "pitchWave": 0.22,
-            "rollTurn": 0.18,
-            "pressThreshold": 0,
-            "altitudeBase": 0.8,
-            "altitudeRange": 1.2
-          },
-          "channels": {}
-        }
-      },
-      "actions": {
-        "dash": {
-          "onPress": {
-            "gate": {
-              "$type": "timerElapsed",
-              "state": "dashCooldown"
-            },
-            "latchSeconds": 0.05,
-            "effects": [
-              {
-                "$type": "setVerticalVelocity",
-                "velocity": 5.5
-              },
-              {
-                "$type": "startTimer",
-                "state": "dashCooldown",
-                "seconds": 1.5
-              }
-            ]
-          },
-          "onRelease": null
-        }
-      }
-    },
-    {
-      "name": "jumper",
-      "bodyMotionProgram": "grounded",
-      "motion": {
-        "$type": "grounded",
-        "moveSpeed": 4,
-        "turnSpeed": 2.5,
-        "riseGravity": 14,
-        "fallGravity": 23,
-        "maxFallSpeed": 20,
-        "sprintMultiplier": 1,
-        "response": [
-          {
-            "gate": {
-              "$type": "recently",
-              "fact": "Grounded",
-              "windowSeconds": 0.09
-            },
-            "engageRate": 45,
-            "releaseRate": 55
-          },
-          {
-            "gate": {
-              "$type": "now",
-              "fact": "Falling"
-            },
-            "engageRate": 34,
-            "releaseRate": 18
-          },
-          {
-            "engageRate": 30,
-            "releaseRate": 17
+            "channels": {}
           }
-        ]
-      },
-      "producers": {
-        "wander": {
-          "scalars": {
-            "forward": 0.375,
-            "softRadius": 45,
-            "weaveAmplitude": 0.5,
-            "inwardGain": 1.6,
-            "turnScale": 2.5,
-            "weaveFrequencyBase": 0.3,
-            "weaveFrequencyRange": 0.2,
-            "altitudeGain": 0.32,
-            "activityRateBase": 2.2,
-            "activityRateRange": 1.3,
-            "strafeWave": 0,
-            "turnWave": 0,
-            "upWave": 0,
-            "pitchWave": 0,
-            "rollTurn": 0,
-            "pressThreshold": 0.45,
-            "altitudeBase": 0,
-            "altitudeRange": 0
-          },
-          "channels": {
-            "press": "jump"
-          }
-        }
-      },
-      "actions": {
-        "jump": {
-          "onPress": {
-            "gate": {
-              "$type": "all",
-              "predicates": [
+        },
+        "actions": {
+          "dash": {
+            "onPress": {
+              "gate": {
+                "$type": "timerElapsed",
+                "state": "dashCooldown"
+              },
+              "latchSeconds": 0.05,
+              "effects": [
                 {
-                  "$type": "recently",
-                  "fact": "Grounded",
-                  "windowSeconds": 0.09
+                  "$type": "setVerticalVelocity",
+                  "velocity": 5.5
                 },
                 {
-                  "$type": "compareState",
+                  "$type": "startTimer",
+                  "state": "dashCooldown",
+                  "seconds": 1.5
+                }
+              ]
+            },
+            "onRelease": null
+          }
+        }
+      },
+      {
+        "name": "swimmer",
+        "bodyMotionProgram": "free",
+        "motion": {
+          "$type": "grounded",
+          "moveSpeed": 4,
+          "turnSpeed": 2.5,
+          "riseGravity": 14,
+          "fallGravity": 23,
+          "maxFallSpeed": 20,
+          "sprintMultiplier": 1,
+          "response": []
+        },
+        "producers": {
+          "wander": {
+            "scalars": {
+              "forward": 0.38,
+              "softRadius": 45,
+              "weaveAmplitude": 0.5,
+              "inwardGain": 1.6,
+              "turnScale": 2.5,
+              "weaveFrequencyBase": 0.3,
+              "weaveFrequencyRange": 0.2,
+              "altitudeGain": 0.32,
+              "activityRateBase": 2.2,
+              "activityRateRange": 1.3,
+              "strafeWave": 0.28,
+              "turnWave": 0,
+              "upWave": 0.16,
+              "pitchWave": 0.22,
+              "rollTurn": 0.18,
+              "pressThreshold": 0,
+              "altitudeBase": 0.8,
+              "altitudeRange": 1.2
+            },
+            "channels": {}
+          }
+        },
+        "actions": {
+          "dash": {
+            "onPress": {
+              "gate": {
+                "$type": "timerElapsed",
+                "state": "dashCooldown"
+              },
+              "latchSeconds": 0.05,
+              "effects": [
+                {
+                  "$type": "setVerticalVelocity",
+                  "velocity": 5.5
+                },
+                {
+                  "$type": "startTimer",
+                  "state": "dashCooldown",
+                  "seconds": 1.5
+                }
+              ]
+            },
+            "onRelease": null
+          }
+        }
+      },
+      {
+        "name": "jumper",
+        "bodyMotionProgram": "grounded",
+        "motion": {
+          "$type": "grounded",
+          "moveSpeed": 4,
+          "turnSpeed": 2.5,
+          "riseGravity": 14,
+          "fallGravity": 23,
+          "maxFallSpeed": 20,
+          "sprintMultiplier": 1,
+          "response": [
+            {
+              "gate": {
+                "$type": "recently",
+                "fact": "Grounded",
+                "windowSeconds": 0.09
+              },
+              "engageRate": 45,
+              "releaseRate": 55
+            },
+            {
+              "gate": {
+                "$type": "now",
+                "fact": "Falling"
+              },
+              "engageRate": 34,
+              "releaseRate": 18
+            },
+            {
+              "engageRate": 30,
+              "releaseRate": 17
+            }
+          ]
+        },
+        "producers": {
+          "wander": {
+            "scalars": {
+              "forward": 0.375,
+              "softRadius": 45,
+              "weaveAmplitude": 0.5,
+              "inwardGain": 1.6,
+              "turnScale": 2.5,
+              "weaveFrequencyBase": 0.3,
+              "weaveFrequencyRange": 0.2,
+              "altitudeGain": 0.32,
+              "activityRateBase": 2.2,
+              "activityRateRange": 1.3,
+              "strafeWave": 0,
+              "turnWave": 0,
+              "upWave": 0,
+              "pitchWave": 0,
+              "rollTurn": 0,
+              "pressThreshold": 0.45,
+              "altitudeBase": 0,
+              "altitudeRange": 0
+            },
+            "channels": {
+              "press": "jump"
+            }
+          }
+        },
+        "actions": {
+          "jump": {
+            "onPress": {
+              "gate": {
+                "$type": "all",
+                "predicates": [
+                  {
+                    "$type": "recently",
+                    "fact": "Grounded",
+                    "windowSeconds": 0.09
+                  },
+                  {
+                    "$type": "compareState",
+                    "state": "jumpUses",
+                    "comparison": "Less",
+                    "value": 1
+                  }
+                ]
+              },
+              "latchSeconds": 0.1,
+              "effects": [
+                {
+                  "$type": "setVerticalVelocity",
+                  "velocity": 5.5
+                },
+                {
+                  "$type": "addState",
                   "state": "jumpUses",
-                  "comparison": "Less",
                   "value": 1
                 }
               ]
             },
-            "latchSeconds": 0.1,
-            "effects": [
-              {
-                "$type": "setVerticalVelocity",
-                "velocity": 5.5
+            "onRelease": {
+              "gate": {
+                "$type": "now",
+                "fact": "Rising"
               },
-              {
-                "$type": "addState",
-                "state": "jumpUses",
-                "value": 1
-              }
-            ]
-          },
-          "onRelease": {
-            "gate": {
-              "$type": "now",
-              "fact": "Rising"
-            },
-            "latchSeconds": 0,
-            "effects": [
-              {
-                "$type": "scaleVerticalVelocity",
-                "factor": 0.45
-              }
-            ]
-          }
-        },
-        "dash": {
-          "onPress": {
-            "gate": {
-              "$type": "all",
-              "predicates": [
+              "latchSeconds": 0,
+              "effects": [
                 {
-                  "$type": "now",
-                  "fact": "Grounded"
+                  "$type": "scaleVerticalVelocity",
+                  "factor": 0.45
+                }
+              ]
+            }
+          },
+          "dash": {
+            "onPress": {
+              "gate": {
+                "$type": "all",
+                "predicates": [
+                  {
+                    "$type": "now",
+                    "fact": "Grounded"
+                  },
+                  {
+                    "$type": "timerElapsed",
+                    "state": "dashCooldown"
+                  }
+                ]
+              },
+              "latchSeconds": 0.05,
+              "effects": [
+                {
+                  "$type": "planarImpulse",
+                  "bodyDirection": [
+                    0,
+                    0,
+                    -1
+                  ],
+                  "speed": 10,
+                  "durationSeconds": 0.25
                 },
                 {
-                  "$type": "timerElapsed",
-                  "state": "dashCooldown"
+                  "$type": "startTimer",
+                  "state": "dashCooldown",
+                  "seconds": 1.5
                 }
               ]
             },
-            "latchSeconds": 0.05,
-            "effects": [
-              {
-                "$type": "planarImpulse",
-                "bodyDirection": [
-                  0,
-                  0,
-                  -1
-                ],
-                "speed": 10,
-                "durationSeconds": 0.25
-              },
-              {
-                "$type": "startTimer",
-                "state": "dashCooldown",
-                "seconds": 1.5
-              }
-            ]
-          },
-          "onRelease": null
-        }
-      },
-      "collider": {
-        "$type": "capsule",
-        "endpoint": [
-          0,
-          1,
-          0
-        ],
-        "radius": 0.35
-      }
-    },
-    {
-      "name": "runner",
-      "bodyMotionProgram": "grounded",
-      "motion": {
-        "$type": "grounded",
-        "moveSpeed": 4,
-        "turnSpeed": 2.5,
-        "riseGravity": 14,
-        "fallGravity": 23,
-        "maxFallSpeed": 20,
-        "sprintMultiplier": 1,
-        "response": [
-          {
-            "gate": {
-              "$type": "recently",
-              "fact": "Grounded",
-              "windowSeconds": 0.09
-            },
-            "engageRate": 45,
-            "releaseRate": 55
-          },
-          {
-            "gate": {
-              "$type": "now",
-              "fact": "Falling"
-            },
-            "engageRate": 34,
-            "releaseRate": 18
-          },
-          {
-            "engageRate": 30,
-            "releaseRate": 17
+            "onRelease": null
           }
-        ]
-      },
-      "producers": {
-        "wander": {
-          "scalars": {
-            "forward": 0.375,
-            "softRadius": 45,
-            "weaveAmplitude": 0.5,
-            "inwardGain": 1.6,
-            "turnScale": 2.5,
-            "weaveFrequencyBase": 0.3,
-            "weaveFrequencyRange": 0.2,
-            "altitudeGain": 0.32,
-            "activityRateBase": 2.2,
-            "activityRateRange": 1.3,
-            "strafeWave": 0,
-            "turnWave": 0,
-            "upWave": 0,
-            "pitchWave": 0,
-            "rollTurn": 0,
-            "pressThreshold": 0,
-            "altitudeBase": 0,
-            "altitudeRange": 0
-          },
-          "channels": {}
         },
-        "designated": {
-          "scalars": {
-            "standoffRadius": 2,
-            "approach": 0.75,
-            "orbit": 0,
-            "altitudeGain": 0,
-            "inwardGain": 1.6,
-            "turnScale": 2.5
-          },
-          "channels": {}
+        "collider": {
+          "$type": "capsule",
+          "endpoint": [
+            0,
+            1,
+            0
+          ],
+          "radius": 0.35
         }
       },
-      "actions": {
-        "jump": {
-          "onPress": {
-            "gate": {
-              "$type": "all",
-              "predicates": [
+      {
+        "name": "runner",
+        "bodyMotionProgram": "grounded",
+        "motion": {
+          "$type": "grounded",
+          "moveSpeed": 4,
+          "turnSpeed": 2.5,
+          "riseGravity": 14,
+          "fallGravity": 23,
+          "maxFallSpeed": 20,
+          "sprintMultiplier": 1,
+          "response": [
+            {
+              "gate": {
+                "$type": "recently",
+                "fact": "Grounded",
+                "windowSeconds": 0.09
+              },
+              "engageRate": 45,
+              "releaseRate": 55
+            },
+            {
+              "gate": {
+                "$type": "now",
+                "fact": "Falling"
+              },
+              "engageRate": 34,
+              "releaseRate": 18
+            },
+            {
+              "engageRate": 30,
+              "releaseRate": 17
+            }
+          ]
+        },
+        "producers": {
+          "wander": {
+            "scalars": {
+              "forward": 0.375,
+              "softRadius": 45,
+              "weaveAmplitude": 0.5,
+              "inwardGain": 1.6,
+              "turnScale": 2.5,
+              "weaveFrequencyBase": 0.3,
+              "weaveFrequencyRange": 0.2,
+              "altitudeGain": 0.32,
+              "activityRateBase": 2.2,
+              "activityRateRange": 1.3,
+              "strafeWave": 0,
+              "turnWave": 0,
+              "upWave": 0,
+              "pitchWave": 0,
+              "rollTurn": 0,
+              "pressThreshold": 0,
+              "altitudeBase": 0,
+              "altitudeRange": 0
+            },
+            "channels": {}
+          },
+          "designated": {
+            "scalars": {
+              "standoffRadius": 2,
+              "approach": 0.75,
+              "orbit": 0,
+              "altitudeGain": 0,
+              "inwardGain": 1.6,
+              "turnScale": 2.5
+            },
+            "channels": {}
+          }
+        },
+        "actions": {
+          "jump": {
+            "onPress": {
+              "gate": {
+                "$type": "all",
+                "predicates": [
+                  {
+                    "$type": "recently",
+                    "fact": "Grounded",
+                    "windowSeconds": 0.09
+                  },
+                  {
+                    "$type": "compareState",
+                    "state": "jumpUses",
+                    "comparison": "Less",
+                    "value": 1
+                  }
+                ]
+              },
+              "latchSeconds": 0.1,
+              "effects": [
                 {
-                  "$type": "recently",
-                  "fact": "Grounded",
-                  "windowSeconds": 0.09
+                  "$type": "setVerticalVelocity",
+                  "velocity": 5.5
                 },
                 {
-                  "$type": "compareState",
+                  "$type": "addState",
                   "state": "jumpUses",
-                  "comparison": "Less",
                   "value": 1
                 }
               ]
             },
-            "latchSeconds": 0.1,
-            "effects": [
-              {
-                "$type": "setVerticalVelocity",
-                "velocity": 5.5
+            "onRelease": {
+              "gate": {
+                "$type": "now",
+                "fact": "Rising"
               },
-              {
-                "$type": "addState",
-                "state": "jumpUses",
-                "value": 1
-              }
-            ]
-          },
-          "onRelease": {
-            "gate": {
-              "$type": "now",
-              "fact": "Rising"
-            },
-            "latchSeconds": 0,
-            "effects": [
-              {
-                "$type": "scaleVerticalVelocity",
-                "factor": 0.45
-              }
-            ]
-          }
-        },
-        "dash": {
-          "onPress": {
-            "gate": {
-              "$type": "all",
-              "predicates": [
+              "latchSeconds": 0,
+              "effects": [
                 {
-                  "$type": "now",
-                  "fact": "Grounded"
+                  "$type": "scaleVerticalVelocity",
+                  "factor": 0.45
+                }
+              ]
+            }
+          },
+          "dash": {
+            "onPress": {
+              "gate": {
+                "$type": "all",
+                "predicates": [
+                  {
+                    "$type": "now",
+                    "fact": "Grounded"
+                  },
+                  {
+                    "$type": "timerElapsed",
+                    "state": "dashCooldown"
+                  }
+                ]
+              },
+              "latchSeconds": 0.05,
+              "effects": [
+                {
+                  "$type": "planarImpulse",
+                  "bodyDirection": [
+                    0,
+                    0,
+                    -1
+                  ],
+                  "speed": 10,
+                  "durationSeconds": 0.25
                 },
                 {
-                  "$type": "timerElapsed",
-                  "state": "dashCooldown"
+                  "$type": "startTimer",
+                  "state": "dashCooldown",
+                  "seconds": 1.5
                 }
               ]
             },
-            "latchSeconds": 0.05,
-            "effects": [
-              {
-                "$type": "planarImpulse",
-                "bodyDirection": [
-                  0,
-                  0,
-                  -1
-                ],
-                "speed": 10,
-                "durationSeconds": 0.25
-              },
-              {
-                "$type": "startTimer",
-                "state": "dashCooldown",
-                "seconds": 1.5
-              }
-            ]
-          },
-          "onRelease": null
-        }
-      },
-      "collider": {
-        "$type": "capsule",
-        "endpoint": [
-          0,
-          1,
-          0
-        ],
-        "radius": 0.35
-      },
-      "pad": {
-        "forward": "LeftStickY",
-        "strafe": "LeftStickX",
-        "jump": "South"
-      }
-    },
-    {
-      "name": "kart",
-      "bodyMotionProgram": "grounded",
-      "motion": {
-        "$type": "grounded",
-        "moveSpeed": 4,
-        "turnSpeed": 2.5,
-        "riseGravity": 14,
-        "fallGravity": 23,
-        "maxFallSpeed": 20,
-        "sprintMultiplier": 1,
-        "response": [
-          {
-            "gate": {
-              "$type": "recently",
-              "fact": "Grounded",
-              "windowSeconds": 0.09
-            },
-            "engageRate": 45,
-            "releaseRate": 55
-          },
-          {
-            "gate": {
-              "$type": "now",
-              "fact": "Falling"
-            },
-            "engageRate": 34,
-            "releaseRate": 18
-          },
-          {
-            "engageRate": 30,
-            "releaseRate": 17
+            "onRelease": null
           }
-        ]
-      },
-      "producers": {
-        "wander": {
-          "scalars": {
-            "forward": 0.88,
-            "softRadius": 45,
-            "weaveAmplitude": 0.5,
-            "inwardGain": 1.6,
-            "turnScale": 2.5,
-            "weaveFrequencyBase": 0.3,
-            "weaveFrequencyRange": 0.2,
-            "altitudeGain": 0.32,
-            "activityRateBase": 2.2,
-            "activityRateRange": 1.3,
-            "strafeWave": 0.24,
-            "turnWave": 0.42,
-            "upWave": 0,
-            "pitchWave": 0,
-            "rollTurn": 0,
-            "pressThreshold": 0,
-            "altitudeBase": 0,
-            "altitudeRange": 0
-          },
-          "channels": {}
+        },
+        "collider": {
+          "$type": "capsule",
+          "endpoint": [
+            0,
+            1,
+            0
+          ],
+          "radius": 0.35
+        },
+        "pad": {
+          "forward": "LeftStickY",
+          "strafe": "LeftStickX",
+          "jump": "South"
         }
       },
-      "actions": {
-        "jump": {
-          "onPress": {
-            "gate": {
-              "$type": "all",
-              "predicates": [
+      {
+        "name": "kart",
+        "bodyMotionProgram": "grounded",
+        "motion": {
+          "$type": "grounded",
+          "moveSpeed": 4,
+          "turnSpeed": 2.5,
+          "riseGravity": 14,
+          "fallGravity": 23,
+          "maxFallSpeed": 20,
+          "sprintMultiplier": 1,
+          "response": [
+            {
+              "gate": {
+                "$type": "recently",
+                "fact": "Grounded",
+                "windowSeconds": 0.09
+              },
+              "engageRate": 45,
+              "releaseRate": 55
+            },
+            {
+              "gate": {
+                "$type": "now",
+                "fact": "Falling"
+              },
+              "engageRate": 34,
+              "releaseRate": 18
+            },
+            {
+              "engageRate": 30,
+              "releaseRate": 17
+            }
+          ]
+        },
+        "producers": {
+          "wander": {
+            "scalars": {
+              "forward": 0.88,
+              "softRadius": 45,
+              "weaveAmplitude": 0.5,
+              "inwardGain": 1.6,
+              "turnScale": 2.5,
+              "weaveFrequencyBase": 0.3,
+              "weaveFrequencyRange": 0.2,
+              "altitudeGain": 0.32,
+              "activityRateBase": 2.2,
+              "activityRateRange": 1.3,
+              "strafeWave": 0.24,
+              "turnWave": 0.42,
+              "upWave": 0,
+              "pitchWave": 0,
+              "rollTurn": 0,
+              "pressThreshold": 0,
+              "altitudeBase": 0,
+              "altitudeRange": 0
+            },
+            "channels": {}
+          }
+        },
+        "actions": {
+          "jump": {
+            "onPress": {
+              "gate": {
+                "$type": "all",
+                "predicates": [
+                  {
+                    "$type": "recently",
+                    "fact": "Grounded",
+                    "windowSeconds": 0.09
+                  },
+                  {
+                    "$type": "compareState",
+                    "state": "jumpUses",
+                    "comparison": "Less",
+                    "value": 1
+                  }
+                ]
+              },
+              "latchSeconds": 0.1,
+              "effects": [
                 {
-                  "$type": "recently",
-                  "fact": "Grounded",
-                  "windowSeconds": 0.09
+                  "$type": "setVerticalVelocity",
+                  "velocity": 5.5
                 },
                 {
-                  "$type": "compareState",
+                  "$type": "addState",
                   "state": "jumpUses",
-                  "comparison": "Less",
                   "value": 1
                 }
               ]
             },
-            "latchSeconds": 0.1,
-            "effects": [
-              {
-                "$type": "setVerticalVelocity",
-                "velocity": 5.5
+            "onRelease": {
+              "gate": {
+                "$type": "now",
+                "fact": "Rising"
               },
-              {
-                "$type": "addState",
-                "state": "jumpUses",
-                "value": 1
-              }
-            ]
-          },
-          "onRelease": {
-            "gate": {
-              "$type": "now",
-              "fact": "Rising"
-            },
-            "latchSeconds": 0,
-            "effects": [
-              {
-                "$type": "scaleVerticalVelocity",
-                "factor": 0.45
-              }
-            ]
-          }
-        },
-        "dash": {
-          "onPress": {
-            "gate": {
-              "$type": "all",
-              "predicates": [
+              "latchSeconds": 0,
+              "effects": [
                 {
-                  "$type": "now",
-                  "fact": "Grounded"
+                  "$type": "scaleVerticalVelocity",
+                  "factor": 0.45
+                }
+              ]
+            }
+          },
+          "dash": {
+            "onPress": {
+              "gate": {
+                "$type": "all",
+                "predicates": [
+                  {
+                    "$type": "now",
+                    "fact": "Grounded"
+                  },
+                  {
+                    "$type": "timerElapsed",
+                    "state": "dashCooldown"
+                  }
+                ]
+              },
+              "latchSeconds": 0.05,
+              "effects": [
+                {
+                  "$type": "planarImpulse",
+                  "bodyDirection": [
+                    0,
+                    0,
+                    -1
+                  ],
+                  "speed": 10,
+                  "durationSeconds": 0.25
                 },
                 {
-                  "$type": "timerElapsed",
-                  "state": "dashCooldown"
+                  "$type": "startTimer",
+                  "state": "dashCooldown",
+                  "seconds": 1.5
                 }
               ]
             },
-            "latchSeconds": 0.05,
-            "effects": [
-              {
-                "$type": "planarImpulse",
-                "bodyDirection": [
-                  0,
-                  0,
-                  -1
-                ],
-                "speed": 10,
-                "durationSeconds": 0.25
-              },
-              {
-                "$type": "startTimer",
-                "state": "dashCooldown",
-                "seconds": 1.5
-              }
-            ]
-          },
-          "onRelease": null
+            "onRelease": null
+          }
+        },
+        "collider": {
+          "$type": "capsule",
+          "endpoint": [
+            0,
+            1,
+            0
+          ],
+          "radius": 0.35
         }
-      },
-      "collider": {
-        "$type": "capsule",
-        "endpoint": [
-          0,
-          1,
-          0
-        ],
-        "radius": 0.35
       }
+    ],
+    "assignment": {
+      "sequence": {
+        "name": "r1",
+        "offset": 1,
+        "step": 0
+      },
+      "rows": []
     }
-  ],
-  "defaultSeatKit": "runner",
-  "assignment": {
-    "sequence": {
-      "name": "r1",
-      "offset": 1,
-      "step": 0
-    },
-    "rows": []
   },
+  "defaultSeatKit": "runner",
   "addons": [
     {
       "name": "spam",
@@ -1238,8 +1240,7 @@
                   ],
                   "channel": "jump",
                   "activateOn": null,
-                  "label": null,
-                  "icon": null
+                  "label": null
                 },
                 {
                   "sources": [
@@ -1247,8 +1248,7 @@
                   ],
                   "channel": "jump",
                   "activateOn": "Completed",
-                  "label": null,
-                  "icon": null
+                  "label": null
                 },
                 {
                   "sources": [
@@ -1256,8 +1256,7 @@
                   ],
                   "channel": "jump",
                   "activateOn": null,
-                  "label": null,
-                  "icon": null
+                  "label": null
                 },
                 {
                   "sources": [
@@ -1265,8 +1264,7 @@
                   ],
                   "channel": "jump",
                   "activateOn": "Completed",
-                  "label": null,
-                  "icon": null
+                  "label": null
                 },
                 {
                   "sources": [
@@ -1274,8 +1272,7 @@
                   ],
                   "channel": "dash",
                   "activateOn": null,
-                  "label": null,
-                  "icon": null
+                  "label": null
                 },
                 {
                   "sources": [
@@ -1283,8 +1280,7 @@
                   ],
                   "channel": "dash",
                   "activateOn": "Completed",
-                  "label": null,
-                  "icon": null
+                  "label": null
                 }
               ],
               "label": null,
@@ -1300,7 +1296,7 @@
     "endpoint": null,
     "userId": null
   },
-  "creations": [
+  "prototypes": [
     {
       "id": "ground",
       "document": {
@@ -1620,113 +1616,115 @@
       "hash": "a7c15ebde24f2942d5ff33f92c9347c3e62ddc7673c21e3ebd0adb645db5acfd"
     }
   ],
-  "placements": [
-    {
-      "id": "boulder-1",
-      "prototypeId": "boulder-1",
-      "position": [
-        -1.2,
-        0.72,
-        -0.3
-      ],
-      "yawDegrees": 0,
-      "scale": 1,
-      "distribution": null,
-      "mirror": null,
-      "solid": {
-        "margin": 0
+  "placements": {
+    "rows": [
+      {
+        "id": "boulder-1",
+        "prototypeId": "boulder-1",
+        "position": [
+          -1.2,
+          0.72,
+          -0.3
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "distribution": null,
+        "mirror": null,
+        "solid": {
+          "margin": 0
+        }
+      },
+      {
+        "id": "boulder-2",
+        "prototypeId": "boulder-2",
+        "position": [
+          0.6,
+          0.88,
+          0.5
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "distribution": null,
+        "mirror": null,
+        "solid": {
+          "margin": 0
+        }
+      },
+      {
+        "id": "boulder-3",
+        "prototypeId": "boulder-3",
+        "position": [
+          1.9,
+          0.48,
+          -0.7
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "distribution": null,
+        "mirror": null,
+        "solid": {
+          "margin": 0
+        }
+      },
+      {
+        "id": "boulder-4",
+        "prototypeId": "boulder-4",
+        "position": [
+          -0.3,
+          0.38,
+          1.3
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "distribution": null,
+        "mirror": null,
+        "solid": {
+          "margin": 0
+        }
+      },
+      {
+        "id": "boulder-5",
+        "prototypeId": "boulder-5",
+        "position": [
+          2.4,
+          0.62,
+          0.7
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "distribution": null,
+        "mirror": null,
+        "solid": {
+          "margin": 0
+        }
+      },
+      {
+        "id": "ground",
+        "prototypeId": "ground",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "distribution": null,
+        "mirror": null,
+        "solid": {
+          "margin": 0
+        }
       }
-    },
-    {
-      "id": "boulder-2",
-      "prototypeId": "boulder-2",
-      "position": [
-        0.6,
-        0.88,
-        0.5
-      ],
-      "yawDegrees": 0,
-      "scale": 1,
-      "distribution": null,
-      "mirror": null,
-      "solid": {
-        "margin": 0
-      }
-    },
-    {
-      "id": "boulder-3",
-      "prototypeId": "boulder-3",
-      "position": [
-        1.9,
-        0.48,
-        -0.7
-      ],
-      "yawDegrees": 0,
-      "scale": 1,
-      "distribution": null,
-      "mirror": null,
-      "solid": {
-        "margin": 0
-      }
-    },
-    {
-      "id": "boulder-4",
-      "prototypeId": "boulder-4",
-      "position": [
-        -0.3,
-        0.38,
-        1.3
-      ],
-      "yawDegrees": 0,
-      "scale": 1,
-      "distribution": null,
-      "mirror": null,
-      "solid": {
-        "margin": 0
-      }
-    },
-    {
-      "id": "boulder-5",
-      "prototypeId": "boulder-5",
-      "position": [
-        2.4,
-        0.62,
-        0.7
-      ],
-      "yawDegrees": 0,
-      "scale": 1,
-      "distribution": null,
-      "mirror": null,
-      "solid": {
-        "margin": 0
-      }
-    },
-    {
-      "id": "ground",
-      "prototypeId": "ground",
-      "position": [
-        0,
-        0,
-        0
-      ],
-      "yawDegrees": 0,
-      "scale": 1,
-      "distribution": null,
-      "mirror": null,
-      "solid": {
-        "margin": 0
-      }
+    ],
+    "policy": {
+      "authoringHeadroomScreens": 4,
+      "authoringHeadroomPlacements": 8,
+      "minPlacementScale": 0.2,
+      "maxPlacementScale": 5,
+      "candidateRadius": 32,
+      "candidateCap": 16,
+      "previewDeadlineFrames": 12,
+      "derivedFaceScreens": 4
     }
-  ],
-  "authoring": {
-    "authoringHeadroomScreens": 4,
-    "authoringHeadroomPlacements": 8,
-    "minPlacementScale": 0.2,
-    "maxPlacementScale": 5,
-    "candidateRadius": 32,
-    "candidateCap": 16,
-    "previewDeadlineFrames": 12,
-    "derivedFaceScreens": 4
   },
   "speakers": [],
   "tunes": [],
@@ -1798,21 +1796,23 @@
           "fieldOfViewRadians": 0.9599311
         },
         {
-          "$type": "smooth",
-          "rate": 4
+          "$type": "dynamics",
+          "row": "chase"
         }
       ]
     },
     "layouts": []
   },
-  "looks": [],
-  "lookAssignment": {
-    "sequence": {
-      "name": "r1",
-      "offset": 129,
-      "step": 0
-    },
-    "rows": []
+  "looks": {
+    "rows": [],
+    "assignment": {
+      "sequence": {
+        "name": "r1",
+        "offset": 129,
+        "step": 0
+      },
+      "rows": []
+    }
   },
   "grants": [],
   "hud": {
@@ -1839,7 +1839,7 @@
   },
   "schema": "puck.world.def.v1",
   "documentId": "hudbuilder-refusals-world",
-  "playerDefaults": {
+  "seatDefaults": {
     "identities": [
       {
         "id": "amber",
@@ -1875,12 +1875,20 @@
     "pickerThreshold": 0.6,
     "pickerNeutralColor": "#8C8C8C",
     "pickerNeutralBlend": 0.5,
-    "seatLook": {
+    "seatCameraFeel": {
       "yawSensitivity": 0.001,
       "pitchSensitivity": 0.001,
       "invertYaw": false,
       "invertPitch": false,
       "stickLookRate": 2.6
     }
-  }
+  },
+  "dynamics": [
+    {
+      "name": "chase",
+      "f": 0.9549,
+      "zeta": 1,
+      "r": 1
+    }
+  ]
 }

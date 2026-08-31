@@ -1,11 +1,11 @@
 {
   "id": "music-region-transition",
-  "title": "A region crossing fires exactly one music segment transition",
+  "title": "A region crossing fires exactly one music segment transition, toggles a conditional layer, and fires an embellishment",
   "bootShape": "windowed",
   "requirements": ["gpu"],
   "seconds": 15,
   "timeoutSeconds": 30,
-  "binding": "Both legs boot the Play world over real stdin; only the positive leg teleports the driven body into and back out of arcade-cabinet's authored region.",
+  "binding": "Both legs boot the Play world over real stdin; only the positive leg teleports the driven body into and back out of arcade-cabinet's authored region. nexus-ambient.music.json authors alert's own conditional layer (nexus-alert-bed, unconditional within alert) and calm's region.enter embellishment (music-embellishment-stinger).",
   "fixtures": [],
   "positive": {
     "world": "src/Puck.World/Assets/worlds/prototypes/nexus.world.json",
@@ -14,10 +14,11 @@
       { "verb": "console", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
       { "verb": "music.state", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "player.pose", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "body.pose", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
       { "verb": "music.state", "occurrence": 2, "outcome": "accepted" },
-      { "verb": "player.pose", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "speaker.state", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "body.pose", "occurrence": 2, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
       { "verb": "music.state", "occurrence": 3, "outcome": "accepted" },
       { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" }
@@ -25,32 +26,46 @@
     "expect": [
       { "type": "response", "name": "music state before entering the region", "stream": "stdout", "verb": "music.state", "occurrence": 1, "count": 3, "extract": [
         { "name": "beforeSegment", "field": "segment" },
-        { "name": "beforeTransitions", "field": "transitions" }
+        { "name": "beforeTransitions", "field": "transitions" },
+        { "name": "beforeLayers", "field": "layers" },
+        { "name": "beforeEmbellishment", "field": "lastEmbellishment" }
       ] },
       { "type": "response", "name": "music state after entering the region", "stream": "stdout", "verb": "music.state", "occurrence": 2, "count": 3, "extract": [
         { "name": "afterEnterSegment", "field": "segment" },
         { "name": "afterEnterTransitions", "field": "transitions" },
         { "name": "afterEnterFrom", "field": "lastFrom" },
         { "name": "afterEnterTo", "field": "lastTo" },
-        { "name": "afterEnterTick", "field": "lastTick" }
+        { "name": "afterEnterTick", "field": "lastTick" },
+        { "name": "afterEnterLayers", "field": "layers" },
+        { "name": "afterEnterEmbellishment", "field": "lastEmbellishment" }
       ] },
       { "type": "response", "name": "music state after leaving the region", "stream": "stdout", "verb": "music.state", "occurrence": 3, "count": 3, "extract": [
         { "name": "afterExitSegment", "field": "segment" },
         { "name": "afterExitTransitions", "field": "transitions" },
         { "name": "afterExitFrom", "field": "lastFrom" },
-        { "name": "afterExitTo", "field": "lastTo" }
+        { "name": "afterExitTo", "field": "lastTo" },
+        { "name": "afterExitLayers", "field": "layers" },
+        { "name": "afterExitEmbellishment", "field": "lastEmbellishment" }
       ] },
       { "type": "relation", "name": "starts calm", "left": { "value": "beforeSegment" }, "operator": "equal", "right": { "literal": "calm" } },
       { "type": "relation", "name": "no transition before entering", "left": { "value": "beforeTransitions" }, "operator": "equal", "right": { "literal": "0" } },
+      { "type": "relation", "name": "calm carries no active layer", "left": { "value": "beforeLayers" }, "operator": "equal", "right": { "literal": "none" } },
+      { "type": "relation", "name": "no embellishment before entering", "left": { "value": "beforeEmbellishment" }, "operator": "equal", "right": { "literal": "none" } },
       { "type": "relation", "name": "entering the region transitions to alert", "left": { "value": "afterEnterSegment" }, "operator": "equal", "right": { "literal": "alert" } },
       { "type": "relation", "name": "the transition fired exactly once", "left": { "value": "afterEnterTransitions" }, "operator": "equal", "right": { "literal": "1" } },
       { "type": "relation", "name": "the transition's from is calm", "left": { "value": "afterEnterFrom" }, "operator": "equal", "right": { "literal": "calm" } },
       { "type": "relation", "name": "the transition names alert as its destination", "left": { "value": "afterEnterTo" }, "operator": "equal", "right": { "literal": "alert" } },
       { "type": "relation", "name": "the transition names the tick it fired on", "left": { "value": "afterEnterTick" }, "operator": "notEqual", "right": { "literal": "none" } },
+      { "type": "relation", "name": "alert's conditional layer becomes active", "left": { "value": "afterEnterLayers" }, "operator": "equal", "right": { "literal": "nexus-alert-bed" } },
+      { "type": "relation", "name": "the region.enter embellishment fires", "left": { "value": "afterEnterEmbellishment" }, "operator": "equal", "right": { "literal": "music-embellishment-stinger" } },
       { "type": "relation", "name": "leaving the region transitions back to calm", "left": { "value": "afterExitSegment" }, "operator": "equal", "right": { "literal": "calm" } },
       { "type": "relation", "name": "the round trip fires exactly two transitions total", "left": { "value": "afterExitTransitions" }, "operator": "equal", "right": { "literal": "2" } },
       { "type": "relation", "name": "the second transition's from is alert", "left": { "value": "afterExitFrom" }, "operator": "equal", "right": { "literal": "alert" } },
       { "type": "relation", "name": "the second transition names calm as its destination", "left": { "value": "afterExitTo" }, "operator": "equal", "right": { "literal": "calm" } },
+      { "type": "relation", "name": "leaving alert deactivates its conditional layer", "left": { "value": "afterExitLayers" }, "operator": "equal", "right": { "literal": "none" } },
+      { "type": "relation", "name": "the embellishment's last-fired fact survives leaving the region (it never re-fired)", "left": { "value": "afterExitEmbellishment" }, "operator": "equal", "right": { "literal": "music-embellishment-stinger" } },
+      { "type": "line", "name": "entering the region fires the music.transition cue", "stream": "stdout", "match": "contains", "text": "lastCue:music.transition=music-transition-stinger", "present": true },
+      { "type": "line", "name": "entering the region fires the music.embellishment cue", "stream": "stdout", "match": "contains", "text": "lastCue:music.embellishment=music-embellishment-stinger", "present": true },
       { "type": "line", "name": "no unhandled exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false },
       { "type": "line", "name": "no codec refusal", "stream": "stderr", "match": "contains", "text": "codec refused", "present": false }
     ]
@@ -64,6 +79,7 @@
       { "verb": "music.state", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
       { "verb": "music.state", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "speaker.state", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
       { "verb": "music.state", "occurrence": 3, "outcome": "accepted" },
       { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" }
@@ -71,10 +87,16 @@
     "expect": [
       { "type": "response", "name": "music state stays calm without a crossing", "stream": "stdout", "verb": "music.state", "occurrence": 3, "count": 3, "extract": [
         { "name": "stillSegment", "field": "segment" },
-        { "name": "stillTransitions", "field": "transitions" }
+        { "name": "stillTransitions", "field": "transitions" },
+        { "name": "stillLayers", "field": "layers" },
+        { "name": "stillEmbellishment", "field": "lastEmbellishment" }
       ] },
       { "type": "relation", "name": "without a crossing the segment never leaves calm", "left": { "value": "stillSegment" }, "operator": "equal", "right": { "literal": "calm" } },
       { "type": "relation", "name": "without a crossing no transition ever fires", "left": { "value": "stillTransitions" }, "operator": "equal", "right": { "literal": "0" } },
+      { "type": "relation", "name": "without a crossing alert's conditional layer never activates", "left": { "value": "stillLayers" }, "operator": "equal", "right": { "literal": "none" } },
+      { "type": "relation", "name": "without a crossing the embellishment never fires", "left": { "value": "stillEmbellishment" }, "operator": "equal", "right": { "literal": "none" } },
+      { "type": "line", "name": "without a crossing the music.transition cue never fires", "stream": "stdout", "match": "contains", "text": "lastCue:music.transition=", "present": false },
+      { "type": "line", "name": "without a crossing the music.embellishment cue never fires", "stream": "stdout", "match": "contains", "text": "lastCue:music.embellishment=", "present": false },
       { "type": "line", "name": "no unhandled exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
     ]
   }

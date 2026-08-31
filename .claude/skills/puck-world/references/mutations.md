@@ -220,8 +220,9 @@ machine cable linking is authored on the `Machine` source itself
 
 Rules the catalog encodes:
 
-- **Asset hash pinning.** `UpsertCreation`/`UpsertTune`/`UpsertPatch`
-  re-canonicalize the embedded document at the compose boundary and REJECT a
+- **Asset hash pinning.** `UpsertCreation` re-canonicalizes its embedded
+  document at the compose boundary; `UpsertTune`/`UpsertPatch` load their
+  referenced document off disk and canonicalize it there. Both REJECT a
   carried hash the pipeline did not itself compute.
 - **No cascades.** `RemoveCreation`/`RemoveTune`/`RemovePatch` refuse while
   dependents reference them, naming the dependents — remove or retarget the

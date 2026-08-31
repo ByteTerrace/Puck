@@ -1,0 +1,28 @@
+{
+  "schema": "puck.music.v1",
+  "name": "instrument-clock-source-canary",
+  "tempo": {
+    "beatsPerBar": 4,
+    "ticksPerBeat": 50400
+  },
+  "segments": [
+    {
+      "id": "idle",
+      "transitions": [
+        {
+          "to": "driven",
+          "when": "seat.join",
+          "at": "BeatEnd"
+        }
+      ],
+      "layers": null,
+      "embellishments": null
+    },
+    {
+      "id": "driven",
+      "transitions": [],
+      "layers": null,
+      "embellishments": null
+    }
+  ]
+}

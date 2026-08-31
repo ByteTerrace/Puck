@@ -337,6 +337,8 @@ public sealed partial class WorldServer {
         ulong? MusicDirectorLastTransitionTick,
         string? MusicDirectorLastTransitionFromSegmentId,
         string? MusicDirectorLastTransitionToSegmentId,
+        string? MusicDirectorLastEmbellishmentPatchId,
+        ulong? MusicDirectorLastEmbellishmentTick,
         IReadOnlyList<(int EntityIndex, string JudgeRef, string? Grade, ulong Tick)> JudgeGrades
     );
 
@@ -451,6 +453,8 @@ public sealed partial class WorldServer {
                 MusicDirectorLastTransitionTick: m_musicDirector?.LastTransitionTick,
                 MusicDirectorLastTransitionFromSegmentId: m_musicDirector?.LastTransitionFromSegmentId,
                 MusicDirectorLastTransitionToSegmentId: m_musicDirector?.LastTransitionToSegmentId,
+                MusicDirectorLastEmbellishmentPatchId: m_musicDirector?.LastEmbellishmentPatchId,
+                MusicDirectorLastEmbellishmentTick: m_musicDirector?.LastEmbellishmentTick,
                 JudgeGrades: [.. m_judgeGrades.Select(selector: pair => (pair.Key.EntityIndex, pair.Key.JudgeRef, pair.Value.Grade, pair.Value.Tick))]
             );
 
@@ -532,6 +536,8 @@ public sealed partial class WorldServer {
             m_musicDirector.Restore(
                 armed: server.MusicDirectorArmed,
                 currentSegmentId: segmentId,
+                lastEmbellishmentPatchId: server.MusicDirectorLastEmbellishmentPatchId,
+                lastEmbellishmentTick: server.MusicDirectorLastEmbellishmentTick,
                 lastTransitionFromSegmentId: server.MusicDirectorLastTransitionFromSegmentId,
                 lastTransitionTick: server.MusicDirectorLastTransitionTick,
                 lastTransitionToSegmentId: server.MusicDirectorLastTransitionToSegmentId,

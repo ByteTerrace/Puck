@@ -72,26 +72,45 @@ public static partial class WorldDefinitionValidator {
             : null)
         );
     }
-    private static AssetCheck? CheckPatch(WorldPatch patch) => CheckAsset(
-        document: patch.Document,
-        source: patch.Id,
-        validate: static document => SynthPatchCanonicalizer.Validate(document: document),
-        path: static violation => violation.Path,
-        message: static violation => violation.Message,
-        canonicalHash: static (document, source) => SynthPatchCanonicalizer.Canonicalize(
-            document: document,
-            source: source
-        ).Hash
-    );
     // Loads the referenced document (never required to exist until here — the row itself is a plain Name/Source/Hash
     // triple with nothing to validate offline), then runs the SAME structural check CheckAsset already gives every
-    // embedded family, plus two facts JudgeCanonicalizer/MusicCanonicalizer alone cannot check: they validate one
+    // embedded family — see CheckJudge's remarks, the same load-then-check shape.
+    private static AssetCheck? CheckPatch(WorldPatch patch) {
+        if (!WorldAssetRowLoader.TryLoadPatch(
+            document: out var document,
+            error: out var loadError,
+            row: patch
+        )) {
+            return new AssetCheck(
+                CanonicalHash: null,
+                Violations: [("source", loadError!)]
+            );
+        }
+
+        return CheckAsset(
+            document: document,
+            source: patch.Name,
+            validate: static document => SynthPatchCanonicalizer.Validate(document: document),
+            path: static violation => violation.Path,
+            message: static violation => violation.Message,
+            canonicalHash: static (document, source) => SynthPatchCanonicalizer.Canonicalize(
+                document: document,
+                source: source
+            ).Hash
+        );
+    }
+    // Loads the referenced document (never required to exist until here — the row itself is a plain Name/Source/Hash
+    // triple with nothing to validate offline), then runs the SAME structural check CheckAsset already gives every
+    // embedded family, plus facts JudgeCanonicalizer/MusicCanonicalizer alone cannot check: they validate one
     // document at a time against only what Puck.Forge.Authoring itself can see. ticksPerBeat's divisibility
     // duplicates ValidateSimulation's own FixedTickConversion.TicksPerSecond reasoning (Puck.Forge.Authoring cannot
-    // reference that constant's true owner either); a transition's `when` token resolves against WorldAudioCue's
-    // closed vocabulary, which this document family's own project cannot reference without inverting the dependency.
+    // reference that constant's true owner either); a transition/layer/embellishment `when` token resolves against
+    // WorldAudioCue.MusicWhenTokens — the sense-mappable subset the director compiler maps, not the full cue
+    // vocabulary — which this document family's own project cannot reference without inverting the dependency; and a
+    // layer/embellishment `gainThousandths` rides the same CreationSoundDocument.MaxLevel ceiling ValidateCues
+    // enforces on a cue row, so the ceiling stays the one place — this validator — that enforces it everywhere.
     private static AssetCheck? CheckJudge(WorldJudgeRow row) {
-        if (!WorldMusicJudgeAssetLoader.TryLoadJudge(
+        if (!WorldAssetRowLoader.TryLoadJudge(
             document: out var document,
             error: out var loadError,
             row: row
@@ -114,8 +133,8 @@ public static partial class WorldDefinitionValidator {
             ).Hash
         );
     }
-    private static AssetCheck? CheckMusic(WorldMusicRow row) {
-        if (!WorldMusicJudgeAssetLoader.TryLoadMusic(
+    private static AssetCheck? CheckMusic(WorldMusicRow row, HashSet<string> tuneIds, HashSet<string> patchIds) {
+        if (!WorldAssetRowLoader.TryLoadMusic(
             document: out var document,
             error: out var loadError,
             row: row
@@ -149,9 +168,65 @@ public static partial class WorldDefinitionValidator {
                 if (
                     (transition is not null) &&
                     !string.IsNullOrWhiteSpace(value: transition.When) &&
-                    !WorldAudioCue.IsEventToken(token: transition.When)
+                    !WorldAudioCue.IsMusicWhenToken(token: transition.When)
                 ) {
-                    violations.Add(item: ($"segments[{segment.Id}].transitions.when", $"'{transition.When}' is not a published event token."));
+                    violations.Add(item: ($"segments[{segment.Id}].transitions.when", $"'{transition.When}' is not a sense-mappable when token ({string.Join(separator: " | ", values: WorldAudioCue.MusicWhenTokens)})."));
+                }
+            }
+
+            foreach (var layer in (segment.Layers ?? [])) {
+                if (layer is null) {
+                    continue;
+                }
+
+                if (
+                    !string.IsNullOrWhiteSpace(value: layer.TuneId) &&
+                    !tuneIds.Contains(item: layer.TuneId)
+                ) {
+                    violations.Add(item: ($"segments[{segment.Id}].layers.tuneId", $"'{layer.TuneId}' does not resolve to a declared tune."));
+                }
+
+                // A null When is the unconditional layer; any non-null token — whitespace included — must be
+                // sense-mappable, so nothing the director compiler cannot arm survives validation.
+                if (
+                    (layer.When is { } when) &&
+                    !WorldAudioCue.IsMusicWhenToken(token: when)
+                ) {
+                    violations.Add(item: ($"segments[{segment.Id}].layers.when", $"'{when}' is not a sense-mappable when token ({string.Join(separator: " | ", values: WorldAudioCue.MusicWhenTokens)})."));
+                }
+
+                if (
+                    (layer.GainThousandths is { } layerGain) &&
+                    ((layerGain < 0) || (layerGain > ((int)(CreationSoundDocument.MaxLevel * 1000f))))
+                ) {
+                    violations.Add(item: ($"segments[{segment.Id}].layers.gainThousandths", $"{layerGain} must be within [0, {((int)(CreationSoundDocument.MaxLevel * 1000f))}]."));
+                }
+            }
+
+            foreach (var embellishment in (segment.Embellishments ?? [])) {
+                if (embellishment is null) {
+                    continue;
+                }
+
+                if (
+                    !string.IsNullOrWhiteSpace(value: embellishment.PatchId) &&
+                    !patchIds.Contains(item: embellishment.PatchId)
+                ) {
+                    violations.Add(item: ($"segments[{segment.Id}].embellishments.patchId", $"'{embellishment.PatchId}' does not resolve to a declared patch."));
+                }
+
+                if (
+                    !string.IsNullOrWhiteSpace(value: embellishment.When) &&
+                    !WorldAudioCue.IsMusicWhenToken(token: embellishment.When)
+                ) {
+                    violations.Add(item: ($"segments[{segment.Id}].embellishments.when", $"'{embellishment.When}' is not a sense-mappable when token ({string.Join(separator: " | ", values: WorldAudioCue.MusicWhenTokens)})."));
+                }
+
+                if (
+                    (embellishment.GainThousandths is { } embellishmentGain) &&
+                    ((embellishmentGain < 0) || (embellishmentGain > ((int)(CreationSoundDocument.MaxLevel * 1000f))))
+                ) {
+                    violations.Add(item: ($"segments[{segment.Id}].embellishments.gainThousandths", $"{embellishmentGain} must be within [0, {((int)(CreationSoundDocument.MaxLevel * 1000f))}]."));
                 }
             }
         }
@@ -166,17 +241,31 @@ public static partial class WorldDefinitionValidator {
             Violations: [.. violations]
         );
     }
-    private static AssetCheck? CheckTune(WorldTune tune) => CheckAsset(
-        document: tune.Document,
-        source: tune.Id,
-        validate: static document => AudioCanonicalizer.Validate(document: document),
-        path: static violation => violation.Path,
-        message: static violation => violation.Message,
-        canonicalHash: static (document, source) => AudioCanonicalizer.Canonicalize(
+    // See CheckPatch's remarks — the same load-then-check shape.
+    private static AssetCheck? CheckTune(WorldTune tune) {
+        if (!WorldAssetRowLoader.TryLoadTune(
+            document: out var document,
+            error: out var loadError,
+            row: tune
+        )) {
+            return new AssetCheck(
+                CanonicalHash: null,
+                Violations: [("source", loadError!)]
+            );
+        }
+
+        return CheckAsset(
             document: document,
-            source: source
-        ).Hash
-    );
+            source: tune.Name,
+            validate: static document => AudioCanonicalizer.Validate(document: document),
+            path: static violation => violation.Path,
+            message: static violation => violation.Message,
+            canonicalHash: static (document, source) => AudioCanonicalizer.Canonicalize(
+                document: document,
+                source: source
+            ).Hash
+        );
+    }
     // THIS document's channel table, for the binding-overlay vocabulary check — or null when the channels section is
     // itself too malformed to compile (a null row, or more rows than ordinals exist). Null is safe rather than
     // permissive: every condition that produces it is already an error ValidateChannels added, so the document is
@@ -942,7 +1031,7 @@ public static partial class WorldDefinitionValidator {
         var tuneIds = ValidateAssets(
             rows: definition.Tunes,
             section: "tunes",
-            id: static tune => tune.Id,
+            id: static tune => tune.Name,
             hash: static tune => tune.Hash,
             check: CheckTune,
             errors: errors
@@ -950,7 +1039,7 @@ public static partial class WorldDefinitionValidator {
         var patchIds = ValidateAssets(
             rows: definition.Patches,
             section: "patches",
-            id: static patch => patch.Id,
+            id: static patch => patch.Name,
             hash: static patch => patch.Hash,
             check: CheckPatch,
             errors: errors
@@ -964,9 +1053,20 @@ public static partial class WorldDefinitionValidator {
             section: "music",
             id: static row => row.Name,
             hash: static row => row.Hash,
-            check: CheckMusic,
+            check: row => CheckMusic(
+                row: row,
+                tuneIds: tuneIds,
+                patchIds: patchIds
+            ),
             errors: errors
         );
+
+        // The one-live-score ceiling: WorldServer's constructor reads only music[0], so a second authored row would
+        // validate cleanly and boot silently truncated.
+        if (definition.Music is { Count: > 1 } musicRows) {
+            errors.Add(item: $"music declares {musicRows.Count} rows, but at most one is honored — the server reads only music[0].");
+        }
+
         var judgeRowNames = ValidateOptionalAssets(
             rows: definition.Judges,
             section: "judges",
@@ -1139,6 +1239,11 @@ public static partial class WorldDefinitionValidator {
         ValidateIdentityMotionState(
             identity: definition.Identity,
             stateRows: stateRows,
+            errors: errors
+        );
+        ValidateIdentityVoiceProfile(
+            identity: definition.Identity,
+            patchIds: patchIds,
             errors: errors
         );
 
@@ -1825,7 +1930,7 @@ public static partial class WorldDefinitionValidator {
     }
     /// <summary>Determines whether <paramref name="model"/> supplies every tuning facet <paramref name="program"/>'s
     /// selected operations read — the one check <see cref="ValidateMotionModel"/> (at boot) and the runtime
-    /// body-motion-program switch (the <c>player.motion</c> door) share, so a document-legal kit can never
+    /// body-motion-program switch (the <c>body.motion</c> door) share, so a document-legal kit can never
     /// runtime-switch into a program its declared model cannot back.</summary>
     /// <param name="model">The kit's declared locomotion model.</param>
     /// <param name="program">The compiled body motion program the switch targets.</param>

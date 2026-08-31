@@ -1,7 +1,7 @@
 wire.errors reset
-player.pose -2 0 -12 0 0 0 1
-player.press strafe 1 1 1
+body.pose -2 0 -12 0 0 0 0
+body.press strafe 1 1 0
 world.wait 120
 world.view.camera 1
-player.where 1
+body.where 0
 wire.errors

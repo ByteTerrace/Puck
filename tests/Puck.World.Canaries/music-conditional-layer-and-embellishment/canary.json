@@ -1,0 +1,54 @@
+{
+  "id": "music-conditional-layer-and-embellishment",
+  "title": "A director embellishment fires off the seat-join sense edge and an unconditional audio layer stays active throughout",
+  "bootShape": "windowed",
+  "requirements": ["gpu"],
+  "seconds": 6,
+  "timeoutSeconds": 20,
+  "binding": "A minimal one-seat fixture whose sole segment declares an unconditional layer (ambient-tune, always active), a layer conditioned on seat.join (arrival-tune), and an embellishment conditioned on seat.join (stinger). The local seat joins at boot, so the embellishment's own sticky last-fired fact and the unconditional layer are reliably observable however many ticks have elapsed by the time music.state is read; the conditional layer's own activation is level-triggered for the exact tick its edge appears (proved with exact tick control by MusicDirectorTests/the re-derivability law, not re-proved here against wall-clock-uncertain async pacing). The discriminating leg runs the IDENTICAL script against the SAME fixture with the conditional layer/embellishment authored on region.exit instead — an edge this fixture never produces — so the embellishment never fires and the conditional layer never activates even once.",
+  "fixtures": [],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/music-conditional-layer-and-embellishment/fixture.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      { "verb": "console", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.status", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "music.state", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "speaker.state", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "response", "name": "music state after the seat joins", "stream": "stdout", "verb": "music.state", "occurrence": 1, "count": 1, "extract": [
+        { "name": "lastEmbellishment", "field": "lastEmbellishment" }
+      ] },
+      { "type": "relation", "name": "the seat.join embellishment fired", "left": { "value": "lastEmbellishment" }, "operator": "equal", "right": { "literal": "stinger" } },
+      { "type": "line", "name": "the unconditional layer is active", "stream": "stdout", "match": "contains", "text": "layers=ambient-tune", "present": true },
+      { "type": "line", "name": "the embellishment's cue record names its own patch", "stream": "stdout", "match": "contains", "text": "lastCue:music.embellishment=stinger", "present": true },
+      { "type": "line", "name": "no unhandled exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false },
+      { "type": "line", "name": "no mutation rejected", "stream": "stderr", "match": "contains", "text": "world.mutation rejected", "present": false }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/music-conditional-layer-and-embellishment/discriminating.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      { "verb": "console", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.status", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "music.state", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "speaker.state", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "response", "name": "music state without a region.exit edge", "stream": "stdout", "verb": "music.state", "occurrence": 1, "count": 1, "extract": [
+        { "name": "lastEmbellishment", "field": "lastEmbellishment" }
+      ] },
+      { "type": "relation", "name": "the region.exit embellishment never fires", "left": { "value": "lastEmbellishment" }, "operator": "equal", "right": { "literal": "none" } },
+      { "type": "line", "name": "the unconditional layer is still active", "stream": "stdout", "match": "contains", "text": "layers=ambient-tune", "present": true },
+      { "type": "line", "name": "the conditional layer never activates", "stream": "stdout", "match": "contains", "text": "layers=ambient-tune,arrival-tune", "present": false },
+      { "type": "line", "name": "no embellishment cue ever fires", "stream": "stdout", "match": "contains", "text": "lastCue:music.embellishment=", "present": false },
+      { "type": "line", "name": "no unhandled exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
+    ]
+  }
+}

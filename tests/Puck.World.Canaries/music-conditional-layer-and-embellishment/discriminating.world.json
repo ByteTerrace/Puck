@@ -1,0 +1,88 @@
+{
+  "schema": "puck.world.def.v1",
+  "documentId": "music-conditional-layer-and-embellishment-canary",
+  "bodies": { "localSeats": 1 },
+  "simulation": { "rateHz": 240 },
+  "audio": { "masterGain": 1, "defaultSpeakerRadius": 8, "defaultCurve": "smoothstep", "defaultBedFadeSeconds": 0.5, "listener": "focus", "cues": [] },
+  "spawnPoints": [{ "id": "origin", "position": [0, 0, 0] }],
+  "channels": [
+    { "name": "forward", "shape": "Bipolar", "role": "MoveAdvance" },
+    { "name": "strafe", "shape": "Bipolar", "role": "MoveStrafe" },
+    { "name": "turn", "shape": "Bipolar", "role": "Turn" }
+  ],
+  "collision": { "requirements": [], "contactSkin": 0.02, "maxIterations": 4, "maxSlopeDegrees": 60, "gradientProbe": 0 },
+  "bodyMotionPrograms": [
+    {
+      "name": "grounded",
+      "version": "puck.body-motion.v1",
+      "kind": "Motion",
+      "operations": [
+        "ResolveYawAttitudeAndPlanarFrame",
+        "ComputePlanarTargetVelocity",
+        "ShapePlanarVelocity",
+        "SnapYawToPlanarIntent",
+        "ApplyVerticalGravity",
+        "IntegratePlanarAndVerticalVelocity",
+        "CommitPose"
+      ]
+    }
+  ],
+  "kits": {
+    "rows": [
+      {
+        "name": "idle",
+        "bodyMotionProgram": "grounded",
+        "motion": {
+          "$type": "grounded",
+          "moveSpeed": 4,
+          "turnSpeed": 2,
+          "riseGravity": 20,
+          "fallGravity": 30,
+          "maxFallSpeed": 30,
+          "response": [],
+          "sprintMultiplier": 1
+        }
+      }
+    ]
+  },
+  "defaultSeatKit": "idle",
+  "views": {
+    "layouts": [],
+    "seatControl": { "yawReference": "World", "minPitch": -0.35, "maxPitch": 1.2 },
+    "seatRig": {
+      "name": "seatChase",
+      "version": "puck.camera.v1",
+      "operations": [
+        { "$type": "orbit", "distance": 5.4626001, "yaw": 0, "pitch": 0.4145069, "pivotOffset": [0, 0, 0] },
+        { "$type": "lookAt", "subject": { "$type": "reference" }, "targetOffset": [0, 1, 0], "worldAxes": false },
+        { "$type": "fov", "fieldOfViewRadians": 0.9599311 }
+      ]
+    }
+  },
+  "music": [
+    {
+      "name": "canary-conditional-layers-discriminating",
+      "source": "Assets/worlds/music/canary-conditional-layers-discriminating.music.json",
+      "hash": "2a166309b1855a961e56b93a8d2bf8da758e132ac186efed5711ce6edc904ebc"
+    }
+  ],
+  "tunes": [
+    {
+      "name": "ambient-tune",
+      "source": "Assets/worlds/tunes/ambient-tune.audio.json",
+      "hash": "f2b82f5f2228bb3719eefcaa0f9b77f2fef8323a7e78d7352a8f53d2f3598d2a"
+    },
+    {
+      "name": "arrival-tune",
+      "source": "Assets/worlds/tunes/arrival-tune.audio.json",
+      "hash": "2fa8d8fcbf9d63b008645454a1c22dd6bc1a2139bf49fe47e0cd53e32f287363"
+    }
+  ],
+  "patches": [
+    {
+      "name": "stinger",
+      "source": "Assets/worlds/patches/stinger.synth.json",
+      "hash": "801610fca95dd3fc7b848f11d7f0faedc1b8f9a38737c697e981a80aeb406a03"
+    }
+  ]
+}

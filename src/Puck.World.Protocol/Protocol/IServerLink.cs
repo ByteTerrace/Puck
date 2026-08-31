@@ -30,7 +30,10 @@ public interface IServerLink {
     /// submission machinery.</summary>
     /// <param name="payload">The submission payload, already wrapped in its <see cref="WorldSubmissionPayload"/> leaf.</param>
     /// <param name="principal">The acting identity.</param>
-    void SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal);
+    /// <returns>The correlation id the submission's envelope minted — the coordinate a deferred verdict's
+    /// <c>WorldEditEcho</c> carries back — or <c>0</c> when none exists (a codec refusal, a link whose envelope is
+    /// minted remotely).</returns>
+    long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal);
     /// <summary>Submits a session/identity request. <paramref name="completion"/> receives the server's reply (assigned
     /// index / rejection / roster echo) — for a local submitter it fires inline, before this call returns, so a
     /// caller may format its console echo entirely inside the callback with no observable difference from a
@@ -87,7 +90,8 @@ public static class ServerLinkSubmissions {
     /// deliver the new definition to the client.</summary>
     /// <param name="link">The link.</param>
     /// <param name="mutation">The world mutation to apply.</param>
-    public static void SubmitWorldMutation(this IServerLink link, WorldMutation mutation) => link.SubmitEnvelope(
+    /// <returns>The minted correlation id (see <see cref="IServerLink.SubmitEnvelope"/>).</returns>
+    public static long SubmitWorldMutation(this IServerLink link, WorldMutation mutation) => link.SubmitEnvelope(
         payload: new WorldSubmissionPayload.Mutation(Value: mutation),
         principal: mutation.Principal
     );
@@ -172,7 +176,24 @@ public static class ServerLinkSubmissions {
     /// <param name="mutation">The world mutation to apply.</param>
     /// <returns><see cref="CommandResult.None"/>.</returns>
     public static CommandResult Submit(this IServerLink link, WorldMutation mutation) {
-        link.SubmitWorldMutation(mutation: mutation);
+        _ = link.SubmitWorldMutation(mutation: mutation);
+
+        return CommandResult.None;
+    }
+    /// <summary>Submits a live world edit like <see cref="Submit(IServerLink, WorldMutation)"/> and registers the
+    /// submitting verb against the minted correlation id, so the composition root's <c>WorldServer.EchoTap</c>
+    /// subscriber can print a per-verb <c>[&lt;verb&gt;: …]</c> refusal line the submitting script can account when
+    /// the tick-boundary drain rejects the mutation. An accepted verdict stays narration-only.</summary>
+    /// <param name="link">The link.</param>
+    /// <param name="mutation">The world mutation to apply.</param>
+    /// <param name="echoes">The pending-verb table the echo subscriber consumes.</param>
+    /// <param name="verb">The submitting verb, exactly as its response line spells it.</param>
+    /// <returns><see cref="CommandResult.None"/>.</returns>
+    public static CommandResult Submit(this IServerLink link, WorldMutation mutation, WorldDeferredVerbEchoes echoes, string verb) {
+        echoes.Register(
+            correlationId: link.SubmitWorldMutation(mutation: mutation),
+            verb: verb
+        );
 
         return CommandResult.None;
     }

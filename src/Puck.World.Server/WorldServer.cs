@@ -616,7 +616,7 @@ public sealed partial class WorldServer : IWorldServerHost {
         if ((definition.Music is { Count: > 0 } music) && (music[0] is { } row)) {
             // The row's Source/Hash were already proven to load, canonicalize, and pin-verify by
             // WorldDefinitionValidator — this load is expected to succeed by construction.
-            if (!WorldMusicJudgeAssetLoader.TryLoadMusic(
+            if (!WorldAssetRowLoader.TryLoadMusic(
                 document: out var score,
                 error: out var loadError,
                 row: row
@@ -635,7 +635,7 @@ public sealed partial class WorldServer : IWorldServerHost {
 
         m_judgeWindowSets = ((definition.Judges is { Count: > 0 } judges)
             ? [.. judges.Select(selector: row => {
-                if (!WorldMusicJudgeAssetLoader.TryLoadJudge(
+                if (!WorldAssetRowLoader.TryLoadJudge(
                     document: out var windowSet,
                     error: out var loadError,
                     row: row

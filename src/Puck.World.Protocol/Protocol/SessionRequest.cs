@@ -76,6 +76,7 @@ public abstract record WorldQuery {
         GrantAllows allows => allows.Subject,
         MusicState state => GrantSubject.Body(index: (state.Index - 1)),
         JudgeState state => GrantSubject.Body(index: (state.Index - 1)),
+        InstrumentState state => GrantSubject.Body(index: (state.Index - 1)),
         _ => GrantSubject.All,
     };
 
@@ -168,6 +169,12 @@ public abstract record WorldQuery {
     /// observing seat, the same subject its own <see cref="ObservationSubject"/> checks Observe against.</summary>
     /// <param name="Index">The 1-based observing player display index.</param>
     public sealed record JudgeState(int Index) : WorldQuery;
+    /// <summary>Which diegetic instrument screen (if any) the observing seat is engaged with, whether the booted
+    /// machine there carries the instrument-clock capability, and its authored tempo (<c>instrument.state</c>).
+    /// World-wide, not per-entity; <see cref="Index"/> names only the observing seat, the same subject its own
+    /// <see cref="ObservationSubject"/> checks Observe against.</summary>
+    /// <param name="Index">The 1-based observing player display index.</param>
+    public sealed record InstrumentState(int Index) : WorldQuery;
 }
 /// <summary>The server's composed answer to a <see cref="WorldQuery"/> — the read-back string the client prints verbatim
 /// (a byte-identical echo of the authoritative pose/roster state), plus the verdict that says whether the answer is a

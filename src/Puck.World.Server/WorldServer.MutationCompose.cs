@@ -628,6 +628,52 @@ public sealed partial class WorldServer {
 
         return true;
     }
+    /// <summary>Owns load + canonical hash verification for a name/source/hash reference row at the mutation
+    /// composition boundary (<see cref="WorldTune"/>/<see cref="WorldPatch"/>) — the referenced twin of <see
+    /// cref="TryCanonicalizeDocument{TDocument}"/>: the row carries no document to write back, so a successful
+    /// verify only proves the row is admissible, never returns a payload.</summary>
+    private delegate bool AssetRowLoader<in TRow, TDocument>(TRow row, out TDocument? document, out string? error);
+    private static bool TryVerifyReferencedAsset<TRow, TDocument>(
+        TRow row,
+        string id,
+        string hash,
+        string kind,
+        AssetRowLoader<TRow, TDocument> tryLoad,
+        Func<TDocument, string, Puck.Assets.Documents.CanonicalDocument<TDocument>> canonicalize,
+        out string reason) where TDocument : class {
+        if (!tryLoad(row, out var document, out var loadError)) {
+            reason = $"{kind} '{id}': {loadError}";
+
+            return false;
+        }
+
+        Puck.Assets.Documents.CanonicalDocument<TDocument> canonical;
+
+        try {
+            canonical = canonicalize(
+                arg1: document!,
+                arg2: id
+            );
+        } catch (Exception exception) when (exception is Puck.Assets.Documents.DocumentValidationException or InvalidOperationException) {
+            reason = exception.Message.ReplaceLineEndings(replacementText: " ");
+
+            return false;
+        }
+
+        if (!string.Equals(
+            a: hash,
+            b: canonical.Hash,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            reason = $"{kind} '{id}' hash '{hash}' does not match the canonical sha256 '{canonical.Hash}' — a hash must come from the canonicalize pipeline";
+
+            return false;
+        }
+
+        reason = string.Empty;
+
+        return true;
+    }
     // Compose a candidate definition from the current one and a mutation — a with-expression over the coarse section,
     // whole-row upsert addressed by stable id. A remove of a missing id fails here (before validation) with a reason.
     // `tick` is the tick this mutation APPLIES at — the live tick boundary, or a journal entry's own tick during
@@ -945,16 +991,16 @@ public sealed partial class WorldServer {
 
                 return true;
             case WorldMutation.UpsertTune m: {
-                    if (!TryCanonicalizeDocument(
-                        document: m.Tune.Document,
-                        id: m.Tune.Id,
+                    if (!TryVerifyReferencedAsset<WorldTune, Puck.Forge.Authoring.AudioDocument>(
+                        row: m.Tune,
+                        id: m.Tune.Name,
                         hash: m.Tune.Hash,
                         kind: "tune",
+                        tryLoad: WorldAssetRowLoader.TryLoadTune,
                         canonicalize: static (document, source) => Puck.Forge.Authoring.AudioCanonicalizer.Canonicalize(
                             document: document,
                             source: source
                         ),
-                        canonicalDocument: out var canonicalDocument,
                         reason: out reason
                     )) {
                         candidate = current;
@@ -965,8 +1011,8 @@ public sealed partial class WorldServer {
                     candidate = (current with {
                         TunesRaw = Upsert(
                         list: current.Tunes,
-                        item: (m.Tune with { Document = canonicalDocument }),
-                        keyOf: static tune => tune.Id
+                        item: m.Tune,
+                        keyOf: static tune => tune.Name
                     ),
                     });
 
@@ -977,24 +1023,24 @@ public sealed partial class WorldServer {
                         speakers: current.Speakers,
                         matches: source => ((source is WorldSpeakerSource.Tune tune) && string.Equals(
                             a: tune.TuneId,
-                            b: m.Id,
+                            b: m.Name,
                             comparisonType: StringComparison.Ordinal
                         ))
                     ) is { } dependents) {
                         candidate = current;
-                        reason = $"tune '{m.Id}' feeds speaker(s) {dependents} — remove or re-source them first";
+                        reason = $"tune '{m.Name}' feeds speaker(s) {dependents} — remove or re-source them first";
 
                         return false;
                     }
 
                     if (!Remove(
                         list: current.Tunes,
-                        key: m.Id,
-                        keyOf: static tune => tune.Id,
+                        key: m.Name,
+                        keyOf: static tune => tune.Name,
                         result: out var tunes
                     )) {
                         candidate = current;
-                        reason = $"no tune with id '{m.Id}'";
+                        reason = $"no tune named '{m.Name}'";
 
                         return false;
                     }
@@ -1004,16 +1050,16 @@ public sealed partial class WorldServer {
                     return true;
                 }
             case WorldMutation.UpsertPatch m: {
-                    if (!TryCanonicalizeDocument(
-                        document: m.Patch.Document,
-                        id: m.Patch.Id,
+                    if (!TryVerifyReferencedAsset<WorldPatch, Puck.Forge.Authoring.SynthPatchDocument>(
+                        row: m.Patch,
+                        id: m.Patch.Name,
                         hash: m.Patch.Hash,
                         kind: "patch",
+                        tryLoad: WorldAssetRowLoader.TryLoadPatch,
                         canonicalize: static (document, source) => Puck.Forge.Authoring.SynthPatchCanonicalizer.Canonicalize(
                             document: document,
                             source: source
                         ),
-                        canonicalDocument: out var canonicalDocument,
                         reason: out reason
                     )) {
                         candidate = current;
@@ -1024,8 +1070,8 @@ public sealed partial class WorldServer {
                     candidate = (current with {
                         PatchesRaw = Upsert(
                         list: current.Patches,
-                        item: (m.Patch with { Document = canonicalDocument }),
-                        keyOf: static patch => patch.Id
+                        item: m.Patch,
+                        keyOf: static patch => patch.Name
                     ),
                     });
 
@@ -1034,22 +1080,22 @@ public sealed partial class WorldServer {
             case WorldMutation.RemovePatch m: {
                     if (DescribePatchDependents(
                         current: current,
-                        patchId: m.Id
+                        patchId: m.Name
                     ) is { } dependents) {
                         candidate = current;
-                        reason = $"patch '{m.Id}' is referenced by {dependents} — remove or re-source them first";
+                        reason = $"patch '{m.Name}' is referenced by {dependents} — remove or re-source them first";
 
                         return false;
                     }
 
                     if (!Remove(
                         list: current.Patches,
-                        key: m.Id,
-                        keyOf: static patch => patch.Id,
+                        key: m.Name,
+                        keyOf: static patch => patch.Name,
                         result: out var patches
                     )) {
                         candidate = current;
-                        reason = $"no patch with id '{m.Id}'";
+                        reason = $"no patch named '{m.Name}'";
 
                         return false;
                     }

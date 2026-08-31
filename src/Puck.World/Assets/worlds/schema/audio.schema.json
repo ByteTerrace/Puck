@@ -39,7 +39,7 @@
             "type": "string"
           },
           "patchId": {
-            "description": "The referenced Id the cue voices (must resolve).",
+            "description": "The referenced Name the cue voices (must resolve).",
             "type": "string"
           },
           "placement": {

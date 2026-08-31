@@ -100,6 +100,8 @@ public static partial class WorldDefinitionValidator {
                     separator: " | ",
                     values: WorldAudioCue.EventTokens
                 )}).");
+            } else if (WorldAudioCue.IsProducerBypassedToken(token: cue.Event)) {
+                errors.Add(item: $"{path}.event '{cue.Event}' is fired directly by its producer and can never be targeted by an authored audio.cues row.");
             }
 
             RequireDeclared(

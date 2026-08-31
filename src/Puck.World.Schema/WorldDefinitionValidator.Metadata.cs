@@ -723,6 +723,30 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
     }
+    // The voice-babble document vocabulary: both selectors are optional (ABSENT means the identity has no
+    // authored voice yet — see WorldVoiceProfile's remarks), but a DECLARED one must resolve/range-check, the same
+    // posture ValidateIdentityMotionState takes for its two state-slot fields. patchIds is the same asset-row id
+    // set every other patchId reference (speaker sources, emission facets, cue rows, embellishments) resolves
+    // against, computed once before row validation runs (see this file's caller).
+    private static void ValidateIdentityVoiceProfile(WorldIdentityDefinition? identity, HashSet<string> patchIds, List<string> errors) {
+        if (identity?.Voice is not { } voice) {
+            return;
+        }
+
+        if (
+            (voice.PatchId is { } patchId) &&
+            (string.IsNullOrWhiteSpace(value: patchId) || !patchIds.Contains(item: patchId))
+        ) {
+            errors.Add(item: $"identity.voice.patchId '{patchId}' names no patch row.");
+        }
+
+        if (
+            (voice.CadenceTicks is { } cadenceTicks) &&
+            (cadenceTicks <= 0)
+        ) {
+            errors.Add(item: $"identity.voice.cadenceTicks {cadenceTicks} must be positive.");
+        }
+    }
     private static void ValidateLattice(WorldDistributionRegion.Lattice lattice, string path, List<string> errors) {
         if (
             (lattice.CountA < 1) ||

@@ -600,13 +600,15 @@ internal static class Fixtures {
     /// <see cref="DefaultWorldBytes"/>'s own doc names as the fixture's trustworthiness proof. Callers own disposal
     /// via <see cref="WorldFixture.Dispose"/>.</summary>
     /// <param name="definition">The document to boot the server from, or <see langword="null"/> for <see cref="BuildDocument"/>.</param>
-    public static WorldFixture FreshServer(WorldDefinition? definition = null) {
+    /// <param name="engines">The screen-machine engines a declared <c>screens</c> row resolves against, or
+    /// <see langword="null"/> for none (no screen ever boots a machine) — every existing caller's behavior.</param>
+    public static WorldFixture FreshServer(WorldDefinition? definition = null, IEnumerable<Puck.Abstractions.Machines.IScreenMachineEngine>? engines = null) {
         var bytes = WorldDefinitionSerialization.Serialize(definition: (definition ?? BuildDocument()));
 
         definition = WorldDefinitionSerialization.Deserialize(utf8Json: bytes);
 
         var population = new WorldPopulation(definition: definition);
-        var machines = new WorldMachineHost(screens: definition.Screens, engines: []);
+        var machines = new WorldMachineHost(screens: definition.Screens, engines: (engines ?? []));
         var stateDirectory = Directory.CreateTempSubdirectory(prefix: "puck-world-tests-").FullName;
         var profiles = new WorldOwnedWorlds(template: definition, directory: stateDirectory, machineId: Guid.NewGuid());
         var server = new WorldServer(definition: definition, population: population, profiles: profiles, envelope: new WorldRenderEnvelope(), machines: machines);

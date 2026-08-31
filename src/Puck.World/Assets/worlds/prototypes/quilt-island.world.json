@@ -43,7 +43,7 @@
       "id": "npc-spawn"
     }
   ],
-  "creations": [
+  "prototypes": [
     {
       "id": "island",
       "document": {
@@ -62,9 +62,22 @@
             "id": 0,
             "name": "island",
             "type": "Box",
-            "position": [0, 0, 0],
-            "rotation": [0, 0, 0, 1],
-            "scale": [24, 0.5, 24],
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              24,
+              0.5,
+              24
+            ],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
@@ -90,36 +103,38 @@
       "$drop": true
     }
   ],
-  "placements": [
-    {
-      "id": "island",
-      "creationId": "island",
-      "position": [
-        0,
-        0,
-        0
-      ],
-      "yawDegrees": 0,
-      "scale": 1,
-      "distribution": null,
-      "mirror": null,
-      "solid": {
-        "margin": 0
+  "placements": {
+    "rows": [
+      {
+        "id": "island",
+        "prototypeId": "island",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "distribution": null,
+        "mirror": null,
+        "solid": {
+          "margin": 0
+        }
+      },
+      {
+        "id": "ground",
+        "$drop": true
+      },
+      {
+        "id": "wall-west",
+        "$drop": true
+      },
+      {
+        "id": "wall-north",
+        "$drop": true
       }
-    },
-    {
-      "id": "ground",
-      "$drop": true
-    },
-    {
-      "id": "wall-west",
-      "$drop": true
-    },
-    {
-      "id": "wall-north",
-      "$drop": true
-    }
-  ],
+    ]
+  },
   "collision": {
     "requirements": []
   },

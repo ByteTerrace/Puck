@@ -14,6 +14,12 @@
           "when": "region.enter",
           "at": "BarEnd"
         }
+      ],
+      "embellishments": [
+        {
+          "patchId": "music-embellishment-stinger",
+          "when": "region.enter"
+        }
       ]
     },
     {
@@ -23,6 +29,12 @@
           "to": "calm",
           "when": "region.exit",
           "at": "BarEnd"
+        }
+      ],
+      "layers": [
+        {
+          "tuneId": "nexus-alert-bed",
+          "when": null
         }
       ]
     }

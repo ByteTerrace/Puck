@@ -39,7 +39,7 @@ namespace Puck.World;
 /// wraps the built <see cref="WorldRowAssignment"/> and what additive offset the r1 sequence takes.</para>
 /// <para><c>world.kits</c> is a plain census read-back, not a row verb — the kits section's only listing.</para>
 /// </remarks>
-public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, IServerLink link) : ICommandModule {
+public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, IServerLink link, WorldDeferredVerbEchoes echoes) : ICommandModule {
     private const string PropertiesNamesPath = "properties.names";
 
     // world.row.step read-your-writes guard (see WorldRowStepWindowGuard). Console-side control state, single-threaded
@@ -61,17 +61,21 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
             index: 1,
             value: WorldSequence.R1
         )) {
-            return link.Submit(mutation: toMutation(
-                principal,
-                new WorldRowAssignment(
-                    Sequence: new WorldSequence(
-                        Name: WorldSequence.R1,
-                        Offset: r1Offset,
-                        Step: 0f
-                    ),
-                    Rows: []
-                )
-            ));
+            return link.Submit(
+                mutation: toMutation(
+                    principal,
+                    new WorldRowAssignment(
+                        Sequence: new WorldSequence(
+                            Name: WorldSequence.R1,
+                            Offset: r1Offset,
+                            Step: 0f
+                        ),
+                        Rows: []
+                    )
+                ),
+                echoes: echoes,
+                verb: "world.assign"
+            );
         }
 
         if (args.Is(
@@ -82,20 +86,24 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
                 return CommandResult.Error(output: $"[{verb}: cycle needs at least one name]");
             }
 
-            return link.Submit(mutation: toMutation(
-                principal,
-                new WorldRowAssignment(
-                    Sequence: new WorldSequence(
-                        Name: WorldSequence.Index,
-                        Offset: 0,
-                        Step: 0f
-                    ),
-                    Rows: TailIdentifiers(
-                        args: args,
-                        start: 2
+            return link.Submit(
+                mutation: toMutation(
+                    principal,
+                    new WorldRowAssignment(
+                        Sequence: new WorldSequence(
+                            Name: WorldSequence.Index,
+                            Offset: 0,
+                            Step: 0f
+                        ),
+                        Rows: TailIdentifiers(
+                            args: args,
+                            start: 2
+                        )
                     )
-                )
-            ));
+                ),
+                echoes: echoes,
+                verb: "world.assign"
+            );
         }
 
         return CommandResult.Error(output: $"[{verb}: unknown sequence '{args[1].ToString()}' — r1 | cycle]");
@@ -224,13 +232,13 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
                 Tune: tune
             )
         ),
-        Remove: RemoveByName(remove: static (principal, id) => new WorldMutation.RemoveTune(
-            Id: id,
+        Remove: RemoveByName(remove: static (principal, name) => new WorldMutation.RemoveTune(
+            Name: name,
             Principal: principal
         )),
         Read: ReadRowByKey(
             info: WorldJsonContext.Default.WorldTune,
-            keyOf: static row => row.Id,
+            keyOf: static row => row.Name,
             select: static server => server.Definition.Tunes
         )
     ),
@@ -243,13 +251,13 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
                 Principal: principal
             )
         ),
-        Remove: RemoveByName(remove: static (principal, id) => new WorldMutation.RemovePatch(
-            Id: id,
+        Remove: RemoveByName(remove: static (principal, name) => new WorldMutation.RemovePatch(
+            Name: name,
             Principal: principal
         )),
         Read: ReadRowByKey(
             info: WorldJsonContext.Default.WorldPatch,
-            keyOf: static row => row.Id,
+            keyOf: static row => row.Name,
             select: static server => server.Definition.Patches
         )
     ),
@@ -753,11 +761,15 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
             b: PropertiesNamesPath,
             comparisonType: StringComparison.Ordinal
         )) {
-            return link.Submit(mutation: new WorldMutation.SetProperty(
-                Name: key,
-                Principal: principal,
-                Remove: true
-            ));
+            return link.Submit(
+                mutation: new WorldMutation.SetProperty(
+                    Name: key,
+                    Principal: principal,
+                    Remove: true
+                ),
+                echoes: echoes,
+                verb: "world.row.remove"
+            );
         }
 
         if (!s_sections.TryGetValue(
@@ -782,7 +794,11 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
 
         return ((outcome.Error is { } error)
             ? CommandResult.Error(output: $"[world.row.remove: {path}: {error}]")
-            : link.Submit(mutation: outcome.Mutation!)
+            : link.Submit(
+                mutation: outcome.Mutation!,
+                echoes: echoes,
+                verb: "world.row.remove"
+            )
         );
     }
     private CommandResult HandleSet(WorldServer server, CommandContext context, WireArgs args) {
@@ -808,11 +824,15 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
                 );
             }
 
-            return link.Submit(mutation: new WorldMutation.SetProperty(
-                Principal: principal,
-                Name: args[1].ToString(),
-                Remove: false
-            ));
+            return link.Submit(
+                mutation: new WorldMutation.SetProperty(
+                    Principal: principal,
+                    Name: args[1].ToString(),
+                    Remove: false
+                ),
+                echoes: echoes,
+                verb: "world.row.set"
+            );
         }
 
         if (!s_sections.TryGetValue(
@@ -846,7 +866,11 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
 
         return ((outcome.Error is { } error)
             ? CommandResult.Error(output: $"[world.row.set: {path}: {error}]")
-            : link.Submit(mutation: outcome.Mutation!)
+            : link.Submit(
+                mutation: outcome.Mutation!,
+                echoes: echoes,
+                verb: "world.row.set"
+            )
         );
     }
     // rules and interactions key their Remove mutation by the validated WorldCellName type rather than a plain
@@ -1195,12 +1219,17 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         // Claim the row for this window only once the upsert is genuinely buffered — a step that refused above never
         // blocks a later well-formed one.
         m_stepGuard.Claim(rowIdentity: rowIdentity);
-        link.SubmitWorldMutation(mutation: outcome.Mutation!);
 
         // A buffered mutation verb (echo model 3): no synchronous applied-result line — the whole-row upsert composes
-        // and revalidates at the tick boundary, and WorldServer.EchoTap narrates the accept/reject there. Asserting
-        // old -> new here would claim an outcome the drain can still reject.
-        return CommandResult.None;
+        // and revalidates at the tick boundary, where WorldServer.EchoTap narrates the accept/reject. Asserting
+        // old -> new here would claim an outcome the drain can still reject. A drain REJECTION additionally prints a
+        // per-verb "[world.row.step: …]" line through the registered correlation, so a script can account the refusal
+        // against the verb that submitted it.
+        return link.Submit(
+            mutation: outcome.Mutation!,
+            echoes: echoes,
+            verb: "world.row.step"
+        );
     }
     // Resolves a step path against the SAME section table world.row.set uses, one level deeper: the longest
     // section-key prefix (dot-boundary match) wins, so a dotted section name (hud.panels, views.seatRig) is never

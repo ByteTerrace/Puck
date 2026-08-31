@@ -200,7 +200,7 @@
       "renderHeight": 720
     }
   ],
-  "creations": [
+  "prototypes": [
     {
       "document": {
         "palette": [
@@ -215,87 +215,89 @@
       "id": "ground"
     }
   ],
-  "placements": [
-    {
-      "$replace": true
-    },
-    {
-      "id": "ground",
-      "creationId": "ground",
-      "position": [
-        12,
-        0,
-        -12
-      ],
-      "yawDegrees": 0,
-      "scale": 1,
-      "distribution": null,
-      "mirror": null,
-      "solid": {
-        "margin": 0
-      }
-    },
-    {
-      "id": "wall-east",
-      "creationId": "wall",
-      "position": [
-        24,
-        0,
-        -12
-      ],
-      "yawDegrees": 90,
-      "scale": 1,
-      "distribution": null,
-      "mirror": null,
-      "solid": {
-        "margin": 0
-      }
-    },
-    {
-      "id": "wall-north",
-      "creationId": "wall",
-      "position": [
-        12,
-        0,
-        -24
-      ],
-      "yawDegrees": 0,
-      "scale": 1,
-      "distribution": null,
-      "mirror": null,
-      "solid": {
-        "margin": 0
-      }
-    },
-    {
-      "id": "camera-seat-0",
-      "creationId": "camera-body",
-      "position": [
-        17,
-        1.2,
-        -17
-      ],
-      "yawDegrees": 0,
-      "scale": 1,
-      "inhabit": {
-        "count": 1,
-        "kit": "vaulter",
-        "source": "Live",
-        "look": null,
-        "distribution": {
-          "region": {
-            "$type": "disc",
-            "radius": 0.01
-          },
-          "fill": {
-            "name": "additive",
-            "offset": 0,
-            "step": 0.618034
+  "placements": {
+    "rows": [
+      {
+        "$replace": true
+      },
+      {
+        "id": "ground",
+        "prototypeId": "ground",
+        "position": [
+          12,
+          0,
+          -12
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "distribution": null,
+        "mirror": null,
+        "solid": {
+          "margin": 0
+        }
+      },
+      {
+        "id": "wall-east",
+        "prototypeId": "wall",
+        "position": [
+          24,
+          0,
+          -12
+        ],
+        "yawDegrees": 90,
+        "scale": 1,
+        "distribution": null,
+        "mirror": null,
+        "solid": {
+          "margin": 0
+        }
+      },
+      {
+        "id": "wall-north",
+        "prototypeId": "wall",
+        "position": [
+          12,
+          0,
+          -24
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "distribution": null,
+        "mirror": null,
+        "solid": {
+          "margin": 0
+        }
+      },
+      {
+        "id": "camera-seat-0",
+        "prototypeId": "camera-body",
+        "position": [
+          17,
+          1.2,
+          -17
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "inhabit": {
+          "count": 1,
+          "kit": "vaulter",
+          "source": "Live",
+          "look": null,
+          "distribution": {
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            },
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.618034
+            }
           }
         }
       }
-    }
-  ],
+    ]
+  },
   "documentId": "quilt-ne",
   "references": [
     {
