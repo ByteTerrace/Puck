@@ -314,16 +314,12 @@ public static class FusedArithmetic {
             }
         }
 
-        var distanceToNext = (denominatorMagnitude - remainder);
-
-        if (
-            (remainder > distanceToNext) ||
-            ((remainder == distanceToNext) && ((quotient & 1UL) != 0UL))
-        ) {
-            ++quotient;
-        }
-
-        var result = unchecked((long)quotient);
+        var rounded = FixedPointRounding.RoundToNearestTiesToEven(
+            distanceToNext: (denominatorMagnitude - remainder),
+            distanceToTruncated: remainder,
+            truncated: ((UInt128)quotient)
+        );
+        var result = unchecked((long)rounded);
 
         return (resultNegative
             ? unchecked(-result)
@@ -433,16 +429,11 @@ public static class FusedArithmetic {
             }
         }
 
-        var distanceToNext = (denominatorMagnitude - remainder);
-
-        if (
-            (remainder > distanceToNext) ||
-            ((remainder == distanceToNext) && ((result & UInt128.One) != UInt128.Zero))
-        ) {
-            ++result;
-        }
-
-        quotient = result;
+        quotient = FixedPointRounding.RoundToNearestTiesToEven(
+            distanceToNext: (denominatorMagnitude - remainder),
+            distanceToTruncated: remainder,
+            truncated: result
+        );
         return true;
     }
     /// <summary>Rounds the dot product of two three-component raw vectors carried at independent fixed-point scales

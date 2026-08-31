@@ -181,29 +181,15 @@ public sealed class CurveFollowLawTests {
         Assert.Equal(expected: 0, actual: controlFixture.Server.Population.CountCurveFollowers());
     }
 
-    private static ulong[] DriveHashTrace(WorldDefinition document, bool selectFollower, int ticks) {
-        using var fixture = Fixtures.FreshServer(definition: document);
-        var hashes = new ulong[ticks];
-
-        _ = (selectFollower ? JoinFollower(fixture: fixture) : JoinBody(fixture: fixture));
-
-        for (var tick = 0; (tick < ticks); tick++) {
-            fixture.Step();
-            hashes[tick] = WorldReplaySnapshot.HashState(population: fixture.Server.Population);
-        }
-
-        return hashes;
-    }
-
     [Fact]
     public void CurveFollowProducer_ProducesIdenticalHashTraces_WhileDivergingFromANoProducerControl() {
         var document = WithFollower(rate: 2f);
-        var first = DriveHashTrace(document: document, selectFollower: true, ticks: 240);
-        var second = DriveHashTrace(document: document, selectFollower: true, ticks: 240);
+        var first = Fixtures.DriveHashTrace(document: document, ticks: 240, join: JoinFollower);
+        var second = Fixtures.DriveHashTrace(document: document, ticks: 240, join: JoinFollower);
 
         Assert.Equal(expected: first, actual: second);
 
-        var control = DriveHashTrace(document: document, selectFollower: false, ticks: 240);
+        var control = Fixtures.DriveHashTrace(document: document, ticks: 240, join: JoinBody);
 
         Assert.NotEqual(expected: first, actual: control);
     }

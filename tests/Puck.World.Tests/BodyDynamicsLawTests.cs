@@ -102,32 +102,19 @@ public sealed class BodyDynamicsLawTests {
         Assert.False(condition: criticalOvershot, userMessage: "critical damping should never overshoot the partial target");
     }
 
-    private static ulong[] DriveHashTrace(WorldDefinition document, ulong? stepTicks, int ticks) {
-        using var fixture = Fixtures.FreshServer(definition: document);
-        var body = JoinBody(fixture: fixture);
-        var hashes = new ulong[ticks];
-
-        for (var tick = 0; (tick < ticks); tick++) {
-            body.SubmitIntent(intent: default(PlayerIntent).WithChannel(ordinal: ForwardOrdinal, value: FixedQ4816.One));
-            fixture.Step(stepTicks: stepTicks);
-            hashes[tick] = WorldReplaySnapshot.HashState(population: fixture.Server.Population);
-        }
-
-        return hashes;
-    }
-
     [Fact]
     public void IdenticalIntentReplays_ProduceIdenticalHashTraces_WhileADifferentSimulationRateDiverges() {
+        Action<WorldBody, int> holdForward = static (body, _) => body.SubmitIntent(intent: default(PlayerIntent).WithChannel(ordinal: ForwardOrdinal, value: FixedQ4816.One));
         var document = WithKitDynamics(dynamicsRow: "settle", damping: 1f);
-        var first = DriveHashTrace(document: document, stepTicks: null, ticks: 240);
-        var second = DriveHashTrace(document: document, stepTicks: null, ticks: 240);
+        var first = Fixtures.DriveHashTrace(document: document, ticks: 240, join: JoinBody, perTick: holdForward);
+        var second = Fixtures.DriveHashTrace(document: document, ticks: 240, join: JoinBody, perTick: holdForward);
 
         Assert.Equal(expected: first, actual: second);
 
         const int slowRateHz = 120;
         var slowDocument = document with { Simulation = new WorldSimulationDefaults(RateHz: slowRateHz) };
         var slowStepTicks = checked((ulong)(FixedTickConversion.TicksPerSecond / ((ulong)slowRateHz)));
-        var third = DriveHashTrace(document: slowDocument, stepTicks: slowStepTicks, ticks: 240);
+        var third = Fixtures.DriveHashTrace(document: slowDocument, ticks: 240, join: JoinBody, perTick: holdForward, stepTicks: slowStepTicks);
 
         Assert.NotEqual(expected: first, actual: third);
     }

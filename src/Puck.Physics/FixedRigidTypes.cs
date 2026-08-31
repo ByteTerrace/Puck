@@ -209,7 +209,7 @@ public readonly record struct FixedContactCandidate(
     FixedVector3 Anchor,
     FixedVector3 Normal,
     FixedQ4816 Separation
-) {
+) : IManifoldCandidate {
     /// <summary>Sorts a candidate list into canonical order in place.</summary>
     /// <param name="candidates">The candidates to order.</param>
     /// <remarks>An explicit insertion sort rather than a library sort: the ordering is part of the contract the D4 law

@@ -1,9 +1,10 @@
 using Puck.Abstractions.Recording;
 
-namespace Puck.Platform.Windows.Recording;
+namespace Puck.Platform.Recording;
 
-/// <summary>An <see cref="IVideoEncoderFactory"/> that always declines — the non-Windows registration, so the recording
-/// graph degrades to an honest status line instead of a missing service.</summary>
+/// <summary>An <see cref="IVideoEncoderFactory"/> that always declines with a platform-supplied reason, so a platform
+/// without a video-encoder backend degrades the recording graph to an honest status line instead of a missing
+/// service.</summary>
 public sealed class DecliningVideoEncoderFactory : IVideoEncoderFactory {
     private readonly string m_reason;
 
@@ -18,7 +19,8 @@ public sealed class DecliningVideoEncoderFactory : IVideoEncoderFactory {
         return null;
     }
 }
-/// <summary>An <see cref="IAudioCaptureSourceFactory"/> that always declines — the non-Windows registration.</summary>
+/// <summary>An <see cref="IAudioCaptureSourceFactory"/> that always declines with a platform-supplied reason — the
+/// registration for a platform without an audio-capture backend.</summary>
 public sealed class DecliningAudioCaptureSourceFactory : IAudioCaptureSourceFactory {
     private readonly string m_reason;
 

@@ -1,5 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Puck.Memory;
 using Puck.Platform;
 using Puck.Platform.Linux;
@@ -25,12 +24,7 @@ public static class LinuxPresentationRegistration {
         services.AddPlatformWindowing();
         services.AddLinuxPlatformWindowing();
         services.AddPuckAllocator();
-        services.AddVulkanPresenter();
-        services.TryAddSingleton<IGpuDeviceContext>(implementationFactory: static sp => sp.GetRequiredService<VulkanRenderer>());
-        services.AddSingleton(implementationFactory: static sp => new SurfacePresenterDescriptor(
-            Name: "vulkan",
-            Presenter: sp.GetRequiredService<VulkanSurfacePresenter>()
-        ));
+        services.AddVulkanHostedPresentation();
 
         return services;
     }

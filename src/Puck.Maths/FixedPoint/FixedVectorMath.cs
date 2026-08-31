@@ -26,14 +26,11 @@ internal static class FixedVectorMath {
         var numerator = (((UInt128)magnitude) << (FixedQ4816.FractionBitCount * 2));
         var quotient = (numerator / squaredSum);
         var remainder = (numerator - (quotient * squaredSum));
-        var distanceToNext = (squaredSum - remainder);
-
-        if (
-            (remainder > distanceToNext) ||
-            ((remainder == distanceToNext) && ((quotient & UInt128.One) != UInt128.Zero))
-        ) {
-            ++quotient;
-        }
+        quotient = FixedPointRounding.RoundToNearestTiesToEven(
+            distanceToNext: (squaredSum - remainder),
+            distanceToTruncated: remainder,
+            truncated: quotient
+        );
 
         var raw = unchecked((long)((ulong)quotient));
 
@@ -477,14 +474,11 @@ internal static class FixedVectorMath {
         var numerator = (((UInt128)RawMagnitude(value: value)) << FixedQ4816.FractionBitCount);
         var quotient = (numerator / rawMagnitude);
         var remainder = ((ulong)(numerator - (quotient * rawMagnitude)));
-        var distanceToNext = (rawMagnitude - remainder);
-
-        if (
-            (remainder > distanceToNext) ||
-            ((remainder == distanceToNext) && ((quotient & UInt128.One) != UInt128.Zero))
-        ) {
-            ++quotient;
-        }
+        quotient = FixedPointRounding.RoundToNearestTiesToEven(
+            distanceToNext: ((UInt128)(rawMagnitude - remainder)),
+            distanceToTruncated: ((UInt128)remainder),
+            truncated: quotient
+        );
 
         var raw = ((long)((ulong)quotient));
 
@@ -538,14 +532,11 @@ internal static class FixedVectorMath {
             remainder = ((ulong)(partial - (((UInt128)quotient) * denominator)));
         }
 
-        var distanceToNext = (denominator - remainder);
-
-        if (
-            (remainder > distanceToNext) ||
-            ((remainder == distanceToNext) && ((quotient & 1UL) != 0UL))
-        ) {
-            ++quotient;
-        }
+        quotient = FixedPointRounding.RoundToNearestTiesToEven(
+            distanceToNext: (denominator - remainder),
+            distanceToTruncated: remainder,
+            truncated: quotient
+        );
 
         var raw = unchecked((long)quotient);
 

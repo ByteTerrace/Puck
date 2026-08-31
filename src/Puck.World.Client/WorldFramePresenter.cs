@@ -136,21 +136,12 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     private readonly bool[] m_missingSeatAnchorNarrated = new bool[PlayerRoster.MaxSlots];
     // The seat.join cue's edge detector: a slot's roster presence last frame.
     private readonly bool[] m_seatWasJoined = new bool[PlayerRoster.MaxSlots];
-    // views.cameraRig's compiled-rig cache, one slot per seat — the same reference-equality cache shape
-    // WorldSeatViewState.ResolveChase already applies to the ordinary chase rig (see ResolveCameraModeRig): a
-    // recompile only when the authored program instance or definition.Dynamics actually moved, otherwise the far
-    // cheaper Retarget. Slot-indexed rather than owned by WorldSeatViewState because camera-mode framing is resolved
-    // here, not per-seat state.
-    private readonly WorldCameraProgram?[] m_cameraModeAuthoredRig = new WorldCameraProgram?[PlayerRoster.MaxSlots];
-    private readonly IReadOnlyList<WorldDynamicsRow>?[] m_cameraModeAuthoredDynamics = new IReadOnlyList<WorldDynamicsRow>?[PlayerRoster.MaxSlots];
-    // Compilation embeds named Blend/Select dependencies resolved from definition.Cameras, so the cameras list
-    // reference is part of the key: an upsert of any camera row moves it, forcing the recompile a stale embedded
-    // dependency would otherwise survive.
-    private readonly IReadOnlyList<WorldCamera>?[] m_cameraModeAuthoredCameras = new IReadOnlyList<WorldCamera>?[PlayerRoster.MaxSlots];
-    private readonly IWorldCameraProgramRig?[] m_cameraModeCompiledRig = new IWorldCameraProgramRig?[PlayerRoster.MaxSlots];
+    // views.cameraRig's compiled-rig cache, one slot per seat. Slot-indexed rather than owned by WorldSeatViewState
+    // because camera-mode framing is resolved here, not per-seat state.
+    private readonly WorldCameraRigCompiler.Cache?[] m_cameraModeRigCache = new WorldCameraRigCompiler.Cache?[PlayerRoster.MaxSlots];
     // ResolveNamedCamera's compiled-rig cache, keyed by camera row name (several named cameras may resolve in one
-    // frame — a camera-bearing layout slot). Same reference-equality invalidation as the seat cache above.
-    private readonly Dictionary<string, (WorldCameraProgram Program, IReadOnlyList<WorldDynamicsRow> Dynamics, IReadOnlyList<WorldCurveRow> Curves, IReadOnlyList<WorldCamera> Cameras, IWorldCameraProgramRig Rig)> m_namedCameraRigCache = new(comparer: StringComparer.Ordinal);
+    // frame — a camera-bearing layout slot).
+    private readonly Dictionary<string, WorldCameraRigCompiler.Cache> m_namedCameraRigCache = new(comparer: StringComparer.Ordinal);
     private readonly WorldGroupAnchors m_groupAnchors = new();
     private readonly List<SdfViewSnapshot> m_views = new(capacity: PlayerRoster.MaxSlots);
     private DynamicTransform[] m_transforms = [];
@@ -952,38 +943,11 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             )
         );
     }
-    // views.cameraRig's compiled-rig cache for one seat slot: a recompile only when the authored program instance
-    // or definition.Dynamics has actually moved since the last resolve (Compile is a full op-graph rebuild —
-    // WorldSeatViewState.ResolveChase applies the identical cache shape to the ordinary chase rig), otherwise the
-    // far cheaper Retarget, which only repoints the live document reference the evaluator reads at Resolve time.
-    private IWorldCameraProgramRig ResolveCameraModeRig(WorldCameraProgram cameraRig, WorldDefinition definition, int slot) {
-        if (
-            !ReferenceEquals(
-                objA: m_cameraModeAuthoredRig[slot],
-                objB: cameraRig
-            ) ||
-            !ReferenceEquals(
-                objA: m_cameraModeAuthoredDynamics[slot],
-                objB: definition.Dynamics
-            ) ||
-            !ReferenceEquals(
-                objA: m_cameraModeAuthoredCameras[slot],
-                objB: definition.Cameras
-            )
-        ) {
-            m_cameraModeAuthoredRig[slot] = cameraRig;
-            m_cameraModeAuthoredDynamics[slot] = definition.Dynamics;
-            m_cameraModeAuthoredCameras[slot] = definition.Cameras;
-            m_cameraModeCompiledRig[slot] = WorldCameraRigCompiler.Compile(
-                definition: definition,
-                program: cameraRig
-            );
-        } else {
-            m_cameraModeCompiledRig[slot]!.Retarget(definition: definition);
-        }
-
-        return m_cameraModeCompiledRig[slot]!;
-    }
+    private IWorldCameraProgramRig ResolveCameraModeRig(WorldCameraProgram cameraRig, WorldDefinition definition, int slot) =>
+        (m_cameraModeRigCache[slot] ??= new WorldCameraRigCompiler.Cache()).Resolve(
+            definition: definition,
+            program: cameraRig
+        );
     // The one shared anchor→pose resolver the camera path reads: entity/part ride the live snapshot pose, a
     // placement rides its stamped transform (WorldAnchorGeometry, the same math speakers read), a group rides its
     // smoothed centroid + spread, a seat-relative anchor rides the seat's perceived body (or the recent speaker),
@@ -1049,44 +1013,19 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
                 return (Vector3.Zero, Quaternion.Identity, 0f);
         }
     }
-    // A named authored camera's compiled-rig cache entry, keyed by camera row name (several may resolve in one
-    // frame). Same reference-equality invalidation as ResolveCameraModeRig.
     private IWorldCameraProgramRig ResolveNamedCameraRig(WorldDefinition definition, string name, WorldCameraProgram program) {
-        if (
-            m_namedCameraRigCache.TryGetValue(
-                key: name,
-                value: out var cached
-            ) &&
-            ReferenceEquals(
-                objA: cached.Program,
-                objB: program
-            ) &&
-            ReferenceEquals(
-                objA: cached.Dynamics,
-                objB: definition.Dynamics
-            ) &&
-            ReferenceEquals(
-                objA: cached.Curves,
-                objB: definition.Curves
-            ) &&
-            ReferenceEquals(
-                objA: cached.Cameras,
-                objB: definition.Cameras
-            )
-        ) {
-            cached.Rig.Retarget(definition: definition);
-
-            return cached.Rig;
+        if (!m_namedCameraRigCache.TryGetValue(
+            key: name,
+            value: out var cache
+        )) {
+            cache = new WorldCameraRigCompiler.Cache();
+            m_namedCameraRigCache[name] = cache;
         }
 
-        var rig = WorldCameraRigCompiler.Compile(
+        return cache.Resolve(
             definition: definition,
             program: program
         );
-
-        m_namedCameraRigCache[name] = (program, definition.Dynamics, definition.Curves, definition.Cameras, rig);
-
-        return rig;
     }
     // Resolves a named authored camera into a CameraSnapshot framed in `region`: its anchor pose (entity/part/placement/
     // group, or null = world), motion, aim, lens, and group spread. Returns

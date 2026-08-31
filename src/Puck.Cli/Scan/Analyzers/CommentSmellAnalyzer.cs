@@ -85,14 +85,6 @@ internal sealed class CommentSmellAnalyzer : ISourceAnalyzer {
     // STEP with ShaderFilePattern: an extension the pattern cites but this set omits would be reported
     // dangling on every citation.
     private static readonly string[] ShaderExtensions = [".glsl", ".comp", ".frag", ".vert", ".hlsl", ".hlsli"];
-    // Build output and vendored trees, whose markdown would resolve a citation nobody can act on.
-    private static readonly string[] DocumentSearchExclusions = [
-        $"{Path.DirectorySeparatorChar}artifacts{Path.DirectorySeparatorChar}",
-        $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}",
-        $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
-        $"{Path.DirectorySeparatorChar}node_modules{Path.DirectorySeparatorChar}",
-        $"{Path.DirectorySeparatorChar}.git{Path.DirectorySeparatorChar}",
-    ];
 
     public (string Jsonl, string Grouped) Analyze(SourceCorpus corpus, ScanOptions options) {
         var haystack = BuildReferentHaystack(corpus: corpus, shaderRoot: options.ShaderRoot, shaderFileNames: out var shaderFileNames);
@@ -237,10 +229,8 @@ internal sealed class CommentSmellAnalyzer : ISourceAnalyzer {
             return names;
         }
 
-        foreach (var path in Directory.EnumerateFiles(path: repositoryRoot, searchOption: SearchOption.AllDirectories, searchPattern: "*.md")) {
-            if (!DocumentSearchExclusions.Any(predicate: excluded => path.Contains(comparisonType: StringComparison.OrdinalIgnoreCase, value: excluded))) {
-                names.Add(item: Path.GetFileName(path: path));
-            }
+        foreach (var path in (FileWalk.Enumerate(verb: "scan", roots: [repositoryRoot], include: [], exclude: [], extension: ".md") ?? [])) {
+            names.Add(item: Path.GetFileName(path: path));
         }
 
         return names;

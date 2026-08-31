@@ -40,6 +40,13 @@ public static unsafe class DirectXConstants {
     /// <summary><c>D3D12_TEXTURE_DATA_PITCH_ALIGNMENT</c>: the required row-pitch alignment for buffer-texture copies.</summary>
     public const uint TextureRowPitchAlignment = 256;
 
+    /// <summary>Rounds a packed row-byte count up to <see cref="TextureRowPitchAlignment"/> — the padded row
+    /// pitch buffer-texture copies require.</summary>
+    /// <param name="packedRowBytes">The tightly packed row size, in bytes.</param>
+    /// <returns>The row pitch, rounded up to the copy alignment.</returns>
+    public static uint AlignRowPitch(uint packedRowBytes) {
+        return (((packedRowBytes + TextureRowPitchAlignment) - 1) & ~(TextureRowPitchAlignment - 1));
+    }
     /// <summary>Gets a descriptor heap's CPU handle for its first descriptor, via the direct vtable-slot call the
     /// hidden-pointer x64 COM ABI requires (see <see cref="GetCpuDescriptorHandleSlot"/>).</summary>
     /// <param name="heap">The descriptor heap.</param>

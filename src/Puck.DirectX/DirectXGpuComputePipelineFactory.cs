@@ -195,23 +195,13 @@ public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelin
                 continue;
             }
 
-            staticSamplers[((int)samplerRegister)] = new D3D12_STATIC_SAMPLER_DESC {
-                AddressU = D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
-                AddressV = D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
-                AddressW = D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
-                BorderColor = D3D12_STATIC_BORDER_COLOR.D3D12_STATIC_BORDER_COLOR_OPAQUE_BLACK,
-                ComparisonFunc = D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_NEVER,
-                Filter = ((samplerFilter == GpuSamplerFilter.Nearest)
+            staticSamplers[((int)samplerRegister)] = DirectXRootSignatures.ClampStaticSampler(
+                filter: ((samplerFilter == GpuSamplerFilter.Nearest)
                     ? D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_POINT
                     : D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_LINEAR),
-                MaxAnisotropy = 0,
-                MaxLOD = float.MaxValue,
-                MinLOD = 0f,
-                MipLODBias = 0f,
-                RegisterSpace = 0,
-                ShaderRegister = samplerRegister,
-                ShaderVisibility = D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_ALL,
-            };
+                shaderRegister: samplerRegister,
+                shaderVisibility: D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_ALL
+            );
 
             samplerRegister++;
         }

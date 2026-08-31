@@ -22,22 +22,6 @@ public readonly record struct FixedContactPush(FixedVector3 Normal, FixedQ4816 P
 /// <param name="Center">The sphere/box center or a point on the half-space boundary.</param>
 /// <param name="Extent">The radius carrier, box half-extents, or half-space normal.</param>
 public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, FixedVector3 Center, FixedVector3 Extent) {
-    private static readonly FixedVector3 UnitX = new(
-        X: FixedQ4816.One,
-        Y: FixedQ4816.Zero,
-        Z: FixedQ4816.Zero
-    );
-    private static readonly FixedVector3 UnitY = new(
-        X: FixedQ4816.Zero,
-        Y: FixedQ4816.One,
-        Z: FixedQ4816.Zero
-    );
-    private static readonly FixedVector3 UnitZ = new(
-        X: FixedQ4816.Zero,
-        Y: FixedQ4816.Zero,
-        Z: FixedQ4816.One
-    );
-
     private static FixedQ4816 BoxMinimumProjection(
         FixedVector3 position,
         in FixedQuaternion orientation,
@@ -78,10 +62,6 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
 
         return (start + (segment * amount));
     }
-    private static FixedQ4816 Sign(FixedQ4816 value) => ((value < FixedQ4816.Zero)
-        ? -FixedQ4816.One
-        : FixedQ4816.One
-    );
     private bool TryBoxPush(
         FixedVector3 position,
         in FixedQuaternion orientation,
@@ -113,17 +93,17 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
             (overlapX <= overlapZ)
         ) {
             push = new FixedContactPush(
-                Normal: (UnitX * Sign(value: delta.X)),
+                Normal: (FixedAxisMath.UnitX * FixedAxisMath.Sign(value: delta.X)),
                 Penetration: overlapX
             );
         } else if (overlapY <= overlapZ) {
             push = new FixedContactPush(
-                Normal: (UnitY * Sign(value: delta.Y)),
+                Normal: (FixedAxisMath.UnitY * FixedAxisMath.Sign(value: delta.Y)),
                 Penetration: overlapY
             );
         } else {
             push = new FixedContactPush(
-                Normal: (UnitZ * Sign(value: delta.Z)),
+                Normal: (FixedAxisMath.UnitZ * FixedAxisMath.Sign(value: delta.Z)),
                 Penetration: overlapZ
             );
         }
@@ -228,21 +208,9 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
                     bodyRadius = FixedQ4816.Zero;
 
                     if (closest == Center) {
-                        var gapX = (volume.HalfExtents.X - FixedQ4816.Abs(value: local.X));
-                        var gapY = (volume.HalfExtents.Y - FixedQ4816.Abs(value: local.Y));
-                        var gapZ = (volume.HalfExtents.Z - FixedQ4816.Abs(value: local.Z));
-                        var localNormal = (((gapX <= gapY) && (gapX <= gapZ))
-                            ? (UnitX * Sign(value: local.X))
-                            : ((gapY <= gapZ)
-                                ? (UnitY * Sign(value: local.Y))
-                                : (UnitZ * Sign(value: local.Z))
-                        ));
-                        var gap = FixedQ4816.Min(
-                            x: gapX,
-                            y: FixedQ4816.Min(
-                                x: gapY,
-                                y: gapZ
-                            )
+                        var (localNormal, _, gap) = FixedAxisMath.BoxInteriorExit(
+                            halfExtents: volume.HalfExtents,
+                            local: local
                         );
 
                         push = new FixedContactPush(

@@ -158,34 +158,6 @@ internal sealed class NintendoSwitchController : IGamepadParser, IRumbleParser {
         destination[2] = ((byte)(LowFrequencyEncoded + ((lowAmplitude >> 8) & 0xFF)));
         destination[3] = ((byte)(lowAmplitude & 0xFF));
     }
-    // Integrates the three IMU sub-samples this report carries into the fused orientation, one tracker step per
-    // sub-sample at the fixed 5 ms cadence each spans — so the fusion is timed by the sensor's own constant sample
-    // rate, not a wall clock, and stays correct regardless of how fast reports arrive. (The Gyro/Accelerometer
-    // state fields keep the averaged value, which is the frame-rate-independent angular velocity a consumer reads;
-    // bias learning therefore runs once per sub-sample, harmless since it is a slow still-only adaptation.)
-    private Quaternion FuseImu(ReadOnlySpan<byte> report) {
-        for (var sample = 0; (sample < ImuSampleCount); ++sample) {
-            var baseOffset = (ImuOffset + (sample * ImuSampleSize));
-            var accelerometer = (new Vector3(
-                x: BinaryPrimitives.ReadInt16LittleEndian(source: report[baseOffset..]),
-                y: BinaryPrimitives.ReadInt16LittleEndian(source: report[(baseOffset + 2)..]),
-                z: BinaryPrimitives.ReadInt16LittleEndian(source: report[(baseOffset + 4)..])
-            ) * AccelerometerGPerLsb);
-            var gyro = (new Vector3(
-                x: BinaryPrimitives.ReadInt16LittleEndian(source: report[(baseOffset + 6)..]),
-                y: BinaryPrimitives.ReadInt16LittleEndian(source: report[(baseOffset + 8)..]),
-                z: BinaryPrimitives.ReadInt16LittleEndian(source: report[(baseOffset + 10)..])
-            ) * GyroRadiansPerSecondPerLsb);
-
-            _ = m_tracker.Update(
-                gyroRadiansPerSecond: ToFusionFrame(sensor: gyro),
-                accelerometerG: ToFusionFrame(sensor: accelerometer),
-                deltaSeconds: ImuSampleSeconds
-            );
-        }
-
-        return m_tracker.Orientation;
-    }
     private async ValueTask<StickCalibration> LoadOneStickCalibrationAsync(
         uint factoryAddress,
         uint userAddress,
@@ -282,37 +254,43 @@ internal sealed class NintendoSwitchController : IGamepadParser, IRumbleParser {
 
         return ((byte)((1 << (slot + 1)) - 1));
     }
-    private static Vector3 ReadAccelerometer(ReadOnlySpan<byte> report) {
-        var sum = Vector3.Zero;
+    // Decodes the three 5 ms IMU sub-samples this report carries in one pass (each leads with accel xyz, then
+    // gyro xyz; int16 LE). The averaged outputs are the frame-rate-independent readings a consumer gets; the
+    // fused orientation advances one tracker step per sub-sample at the sensor's own fixed cadence — never a
+    // wall clock — so fusion stays correct regardless of how fast reports arrive. (Bias learning therefore runs
+    // once per sub-sample, harmless since it is a slow still-only adaptation.) Sub-samples are read raw (scale
+    // one) so the average is taken before the nominal scale is applied.
+    private Quaternion ReadImu(ReadOnlySpan<byte> report, out Vector3 accelerometer, out Vector3 gyro) {
+        var accelerometerSum = Vector3.Zero;
+        var gyroSum = Vector3.Zero;
 
-        // Each IMU sub-sample leads with accel xyz (int16 LE); average the three carried per report.
         for (var sample = 0; (sample < ImuSampleCount); ++sample) {
             var baseOffset = (ImuOffset + (sample * ImuSampleSize));
+            var accelerometerSample = GamepadNormalization.ReadVector3Int16(
+                offset: baseOffset,
+                scale: 1f,
+                source: report
+            );
+            var gyroSample = GamepadNormalization.ReadVector3Int16(
+                offset: (baseOffset + 6),
+                scale: 1f,
+                source: report
+            );
 
-            sum += new Vector3(
-                x: BinaryPrimitives.ReadInt16LittleEndian(source: report[baseOffset..]),
-                y: BinaryPrimitives.ReadInt16LittleEndian(source: report[(baseOffset + 2)..]),
-                z: BinaryPrimitives.ReadInt16LittleEndian(source: report[(baseOffset + 4)..])
+            accelerometerSum += accelerometerSample;
+            gyroSum += gyroSample;
+
+            _ = m_tracker.Update(
+                accelerometerG: ToFusionFrame(sensor: (accelerometerSample * AccelerometerGPerLsb)),
+                deltaSeconds: ImuSampleSeconds,
+                gyroRadiansPerSecond: ToFusionFrame(sensor: (gyroSample * GyroRadiansPerSecondPerLsb))
             );
         }
 
-        return ((sum / ImuSampleCount) * AccelerometerGPerLsb);
-    }
-    private static Vector3 ReadGyro(ReadOnlySpan<byte> report) {
-        var sum = Vector3.Zero;
+        accelerometer = ((accelerometerSum / ImuSampleCount) * AccelerometerGPerLsb);
+        gyro = ((gyroSum / ImuSampleCount) * GyroRadiansPerSecondPerLsb);
 
-        // Average the three 5ms IMU sub-samples carried in each report.
-        for (var sample = 0; (sample < ImuSampleCount); ++sample) {
-            var baseOffset = (ImuOffset + (sample * ImuSampleSize));
-
-            sum += new Vector3(
-                x: BinaryPrimitives.ReadInt16LittleEndian(source: report[(baseOffset + 6)..]),
-                y: BinaryPrimitives.ReadInt16LittleEndian(source: report[(baseOffset + 8)..]),
-                z: BinaryPrimitives.ReadInt16LittleEndian(source: report[(baseOffset + 10)..])
-            );
-        }
-
-        return ((sum / ImuSampleCount) * GyroRadiansPerSecondPerLsb);
+        return m_tracker.Orientation;
     }
     private static Vector2 ReadStick(ReadOnlySpan<byte> report, int offset, in StickCalibration calibration) {
         var rawX = report[offset] | ((report[(offset + 1)] & 0x0F) << 8);
@@ -762,8 +740,11 @@ internal sealed class NintendoSwitchController : IGamepadParser, IRumbleParser {
         // Intentionally unmapped: Capture (buttonsShared 0x20) and the SR/SL rail buttons (buttonsRight/Left 0x10
         // /0x20) — the latter exist only on detached Joy-Cons, and neither has a GamepadButtons slot.
 
-        var accelerometer = ReadAccelerometer(report: report);
-        var gyro = ReadGyro(report: report);
+        var orientation = ReadImu(
+            accelerometer: out var accelerometer,
+            gyro: out var gyro,
+            report: report
+        );
 
         state = new GamepadState(
             Accelerometer: accelerometer,
@@ -777,7 +758,7 @@ internal sealed class NintendoSwitchController : IGamepadParser, IRumbleParser {
             LeftTrigger: ((0 != (buttonsLeft & 0x80))
             ? 1f
             : 0f),   // ZL is digital
-            Orientation: FuseImu(report: report),
+            Orientation: orientation,
             RightStick: ReadStick(
                 calibration: in m_rightStickCalibration,
                 offset: RightStickOffset,

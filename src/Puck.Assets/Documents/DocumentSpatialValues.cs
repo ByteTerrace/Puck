@@ -6,32 +6,26 @@ namespace Puck.Assets.Documents;
 
 /// <summary>A state-resolvable document value whose literal form is a spatial JSON array.</summary>
 public interface IDocumentSpatialValue : IDocumentStateValue;
-/// <summary>A <see cref="Vector2"/> authored as <c>[x, y]</c> or as a symbolic reference string.</summary>
-[JsonConverter(typeof(DocumentVector2JsonConverter))]
-public sealed class DocumentVector2 : IDocumentSpatialValue, IEquatable<DocumentVector2> {
+/// <summary>A state-resolvable document value wrapping a <typeparamref name="TValue"/> literal.</summary>
+public abstract class DocumentSpatialValue<TValue> : IDocumentSpatialValue
+    where TValue : struct, IEquatable<TValue> {
     private bool m_isResolved;
-    private Vector2 m_value;
+    private TValue m_value;
 
-    /// <summary>Creates a literal value.</summary>
-    public DocumentVector2(Vector2 value) {
+    private protected DocumentSpatialValue(TValue value) {
         m_isResolved = true;
         m_value = value;
     }
-
-    internal DocumentVector2(string reference) => Reference = reference;
+    private protected DocumentSpatialValue(string reference) => Reference = reference;
 
     /// <inheritdoc/>
     public string? Reference { get; private set; }
     /// <inheritdoc/>
-    public string ExpectedValue => "a Vector2 array [x, y]";
+    public abstract string ExpectedValue { get; }
     /// <summary>The resolved value.</summary>
-    public Vector2 Value => (m_isResolved
+    public TValue Value => (m_isResolved
         ? m_value
         : throw new InvalidOperationException(message: $"document spatial reference '{Reference}' has not been resolved by its containing document."));
-    /// <summary>The resolved X component.</summary>
-    public float X => Value.X;
-    /// <summary>The resolved Y component.</summary>
-    public float Y => Value.Y;
 
     /// <inheritdoc/>
     public void Detach() {
@@ -41,7 +35,7 @@ public sealed class DocumentVector2 : IDocumentSpatialValue, IEquatable<Document
     /// <inheritdoc/>
     public bool TryResolve(string text, out string reason) {
         try {
-            m_value = JsonSerializer.Deserialize<Vector2>(json: text, options: DocumentJsonOptions.Shared);
+            m_value = JsonSerializer.Deserialize<TValue>(json: text, options: DocumentJsonOptions.Shared);
             m_isResolved = true;
             reason = string.Empty;
             return true;
@@ -51,47 +45,57 @@ public sealed class DocumentVector2 : IDocumentSpatialValue, IEquatable<Document
         }
     }
 
+    private protected bool EqualsCore(DocumentSpatialValue<TValue>? other) => ((other is not null) && ((Reference is { } reference)
+        ? string.Equals(a: reference, b: other.Reference, comparisonType: StringComparison.Ordinal)
+        : ((other.Reference is null) && m_value.Equals(other: other.m_value))));
+    private protected int GetHashCodeCore() => ((Reference is { } reference)
+        ? StringComparer.Ordinal.GetHashCode(obj: reference)
+        : m_value.GetHashCode());
+}
+/// <summary>A <see cref="Vector2"/> authored as <c>[x, y]</c> or as a symbolic reference string.</summary>
+[JsonConverter(typeof(DocumentVector2JsonConverter))]
+public sealed class DocumentVector2 : DocumentSpatialValue<Vector2>, IEquatable<DocumentVector2> {
+    /// <summary>Creates a literal value.</summary>
+    public DocumentVector2(Vector2 value) : base(value: value) {
+    }
+
+    internal DocumentVector2(string reference) : base(reference: reference) {
+    }
+
+    /// <inheritdoc/>
+    public override string ExpectedValue => "a Vector2 array [x, y]";
+    /// <summary>The resolved X component.</summary>
+    public float X => Value.X;
+    /// <summary>The resolved Y component.</summary>
+    public float Y => Value.Y;
+
     /// <summary>Wraps a literal without allocation at call sites.</summary>
     public static implicit operator DocumentVector2(Vector2 value) => new(value: value);
     /// <summary>Reads the resolved value.</summary>
     public static implicit operator Vector2(DocumentVector2 value) => value.Value;
 
     /// <inheritdoc/>
-    public bool Equals(DocumentVector2? other) => ((other is not null) && ((Reference is { } reference)
-        ? string.Equals(a: reference, b: other.Reference, comparisonType: StringComparison.Ordinal)
-        : ((other.Reference is null) && m_value.Equals(other: other.m_value))));
+    public bool Equals(DocumentVector2? other) => EqualsCore(other: other);
     /// <inheritdoc/>
     public override bool Equals(object? obj) => ((obj is DocumentVector2 other) && Equals(other: other));
     /// <inheritdoc/>
-    public override int GetHashCode() => ((Reference is { } reference)
-        ? StringComparer.Ordinal.GetHashCode(obj: reference)
-        : m_value.GetHashCode());
+    public override int GetHashCode() => GetHashCodeCore();
 }
 /// <summary>A <see cref="Vector3"/> authored as <c>[x, y, z]</c> or as a symbolic reference string.</summary>
 [JsonConverter(typeof(DocumentVector3JsonConverter))]
-public sealed class DocumentVector3 : IDocumentSpatialValue, IEquatable<DocumentVector3> {
-    private bool m_isResolved;
-    private Vector3 m_value;
-
+public sealed class DocumentVector3 : DocumentSpatialValue<Vector3>, IEquatable<DocumentVector3> {
     /// <summary>Creates a literal value.</summary>
-    public DocumentVector3(Vector3 value) {
-        m_isResolved = true;
-        m_value = value;
+    public DocumentVector3(Vector3 value) : base(value: value) {
     }
     /// <summary>Creates a literal value from its components.</summary>
     public DocumentVector3(float x, float y, float z) : this(value: new Vector3(x: x, y: y, z: z)) {
     }
 
-    internal DocumentVector3(string reference) => Reference = reference;
+    internal DocumentVector3(string reference) : base(reference: reference) {
+    }
 
     /// <inheritdoc/>
-    public string? Reference { get; private set; }
-    /// <inheritdoc/>
-    public string ExpectedValue => "a Vector3 array [x, y, z]";
-    /// <summary>The resolved value.</summary>
-    public Vector3 Value => (m_isResolved
-        ? m_value
-        : throw new InvalidOperationException(message: $"document spatial reference '{Reference}' has not been resolved by its containing document."));
+    public override string ExpectedValue => "a Vector3 array [x, y, z]";
     /// <summary>The resolved X component.</summary>
     public float X => Value.X;
     /// <summary>The resolved Y component.</summary>
@@ -103,23 +107,6 @@ public sealed class DocumentVector3 : IDocumentSpatialValue, IEquatable<Document
     public float Length() => Value.Length();
     /// <summary>Returns the resolved vector's squared length.</summary>
     public float LengthSquared() => Value.LengthSquared();
-    /// <inheritdoc/>
-    public void Detach() {
-        _ = Value;
-        Reference = null;
-    }
-    /// <inheritdoc/>
-    public bool TryResolve(string text, out string reason) {
-        try {
-            m_value = JsonSerializer.Deserialize<Vector3>(json: text, options: DocumentJsonOptions.Shared);
-            m_isResolved = true;
-            reason = string.Empty;
-            return true;
-        } catch (Exception exception) when ((exception is JsonException or NotSupportedException or InvalidOperationException or ArgumentException)) {
-            reason = exception.Message.ReplaceLineEndings(replacementText: " ");
-            return false;
-        }
-    }
 
     /// <summary>Wraps a literal without allocation at call sites.</summary>
     public static implicit operator DocumentVector3(Vector3 value) => new(value: value);
@@ -129,41 +116,27 @@ public sealed class DocumentVector3 : IDocumentSpatialValue, IEquatable<Document
     public static Vector3 operator *(DocumentVector3 value, float scale) => (value.Value * scale);
 
     /// <inheritdoc/>
-    public bool Equals(DocumentVector3? other) => ((other is not null) && ((Reference is { } reference)
-        ? string.Equals(a: reference, b: other.Reference, comparisonType: StringComparison.Ordinal)
-        : ((other.Reference is null) && m_value.Equals(other: other.m_value))));
+    public bool Equals(DocumentVector3? other) => EqualsCore(other: other);
     /// <inheritdoc/>
     public override bool Equals(object? obj) => ((obj is DocumentVector3 other) && Equals(other: other));
     /// <inheritdoc/>
-    public override int GetHashCode() => ((Reference is { } reference)
-        ? StringComparer.Ordinal.GetHashCode(obj: reference)
-        : m_value.GetHashCode());
+    public override int GetHashCode() => GetHashCodeCore();
 }
 /// <summary>A <see cref="Quaternion"/> authored as <c>[x, y, z, w]</c> or as a symbolic reference string.</summary>
 [JsonConverter(typeof(DocumentQuaternionJsonConverter))]
-public sealed class DocumentQuaternion : IDocumentSpatialValue, IEquatable<DocumentQuaternion> {
-    private bool m_isResolved;
-    private Quaternion m_value;
-
+public sealed class DocumentQuaternion : DocumentSpatialValue<Quaternion>, IEquatable<DocumentQuaternion> {
     /// <summary>Creates a literal value.</summary>
-    public DocumentQuaternion(Quaternion value) {
-        m_isResolved = true;
-        m_value = value;
+    public DocumentQuaternion(Quaternion value) : base(value: value) {
     }
     /// <summary>Creates a literal value from its components.</summary>
     public DocumentQuaternion(float x, float y, float z, float w) : this(value: new Quaternion(w: w, x: x, y: y, z: z)) {
     }
 
-    internal DocumentQuaternion(string reference) => Reference = reference;
+    internal DocumentQuaternion(string reference) : base(reference: reference) {
+    }
 
     /// <inheritdoc/>
-    public string? Reference { get; private set; }
-    /// <inheritdoc/>
-    public string ExpectedValue => "a Quaternion array [x, y, z, w]";
-    /// <summary>The resolved value.</summary>
-    public Quaternion Value => (m_isResolved
-        ? m_value
-        : throw new InvalidOperationException(message: $"document spatial reference '{Reference}' has not been resolved by its containing document."));
+    public override string ExpectedValue => "a Quaternion array [x, y, z, w]";
     /// <summary>The resolved X component.</summary>
     public float X => Value.X;
     /// <summary>The resolved Y component.</summary>
@@ -175,23 +148,6 @@ public sealed class DocumentQuaternion : IDocumentSpatialValue, IEquatable<Docum
 
     /// <summary>Returns the resolved quaternion's squared length.</summary>
     public float LengthSquared() => Value.LengthSquared();
-    /// <inheritdoc/>
-    public void Detach() {
-        _ = Value;
-        Reference = null;
-    }
-    /// <inheritdoc/>
-    public bool TryResolve(string text, out string reason) {
-        try {
-            m_value = JsonSerializer.Deserialize<Quaternion>(json: text, options: DocumentJsonOptions.Shared);
-            m_isResolved = true;
-            reason = string.Empty;
-            return true;
-        } catch (Exception exception) when ((exception is JsonException or NotSupportedException or InvalidOperationException or ArgumentException)) {
-            reason = exception.Message.ReplaceLineEndings(replacementText: " ");
-            return false;
-        }
-    }
 
     /// <summary>Wraps a literal without allocation at call sites.</summary>
     public static implicit operator DocumentQuaternion(Quaternion value) => new(value: value);
@@ -199,15 +155,11 @@ public sealed class DocumentQuaternion : IDocumentSpatialValue, IEquatable<Docum
     public static implicit operator Quaternion(DocumentQuaternion value) => value.Value;
 
     /// <inheritdoc/>
-    public bool Equals(DocumentQuaternion? other) => ((other is not null) && ((Reference is { } reference)
-        ? string.Equals(a: reference, b: other.Reference, comparisonType: StringComparison.Ordinal)
-        : ((other.Reference is null) && m_value.Equals(other: other.m_value))));
+    public bool Equals(DocumentQuaternion? other) => EqualsCore(other: other);
     /// <inheritdoc/>
     public override bool Equals(object? obj) => ((obj is DocumentQuaternion other) && Equals(other: other));
     /// <inheritdoc/>
-    public override int GetHashCode() => ((Reference is { } reference)
-        ? StringComparer.Ordinal.GetHashCode(obj: reference)
-        : m_value.GetHashCode());
+    public override int GetHashCode() => GetHashCodeCore();
 }
 
 internal static class DocumentSpatialValueJson {

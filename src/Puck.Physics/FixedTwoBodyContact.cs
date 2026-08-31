@@ -24,7 +24,7 @@ public readonly record struct FixedTwoBodyContact(
     FixedQ4816 Separation,
     int SourceId,
     int FeatureId
-) {
+) : IManifoldCandidate {
     /// <summary>Sorts a candidate list into canonical order in place.</summary>
     /// <param name="candidates">The candidates to order.</param>
     /// <remarks>An explicit insertion sort rather than a library sort, matching <see cref="FixedContactCandidate.Canonicalize"/>:

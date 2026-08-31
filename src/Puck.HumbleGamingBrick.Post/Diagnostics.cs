@@ -1,5 +1,5 @@
+using System.Runtime.InteropServices;
 using Puck.Assets;
-using Puck.GamingBricks;
 using Puck.HumbleGamingBrick.Interfaces;
 using Puck.HumbleGamingBrick.Timing;
 using Puck.Maths;
@@ -457,104 +457,34 @@ internal static class Diagnostics {
             height: framebuffer.Height
         );
 
-        Console.WriteLine(value: $"  rendered {Path.GetFileName(path: romPath)} ({model}, {frames} frames, {speedDetail}) -> {outputPath} [fb-hash 0x{HashPixels(pixels: pixels):X16}]");
-    }
-    private static ulong HashPixels(ReadOnlySpan<uint> pixels) {
-        var hash = 14_695_981_039_346_656_037ul;
+        var pixelHash = Fnv1aHash.Compute(values: MemoryMarshal.AsBytes(span: pixels));
 
-        foreach (var pixel in pixels) {
-            hash = ((hash ^ pixel) * 1_099_511_628_211ul);
-        }
-
-        return hash;
+        Console.WriteLine(value: $"  rendered {Path.GetFileName(path: romPath)} ({model}, {frames} frames, {speedDetail}) -> {outputPath} [fb-hash 0x{pixelHash:X16}]");
     }
     // Parses --dump-snapshot's knobs, boots the machine, runs the requested frames, and writes the snapshot image plus
     // its section-table sidecar. Returns 2 when --rom names a missing file, otherwise 0.
-    private static int DumpSnapshot(string[] args) {
-        var romPath = CommandLineArguments.Value(
+    private static int DumpSnapshot(string[] args) =>
+        SnapshotDumpDiagnostic.Run<MachineSnapshot, MachineIdentity, Tick>(
             args: args,
-            name: "--rom"
+            capture: static (rom, isSynthetic, frames) => {
+                var model = (isSynthetic
+                    ? ConsoleModel.Dmg
+                    : ModelFromHeader(rom: rom));
+
+                using var machine = PostMachine.Build(
+                    model: model,
+                    rom: rom
+                );
+
+                PostMachine.RunFrames(
+                    frames: frames,
+                    instance: machine
+                );
+
+                return (machine.Machine.Snapshot(), $"{model}, {frames} frames");
+            },
+            defaultArtifactsSubpath: "gb-post",
+            defaultFrames: DefaultDumpSnapshotFrames,
+            syntheticRom: static () => SyntheticRom.Create()
         );
-        byte[] rom;
-        string romLabel;
-        var model = ConsoleModel.Dmg;
-
-        if (string.IsNullOrEmpty(value: romPath)) {
-            rom = SyntheticRom.Create();
-            romLabel = "synthetic";
-        } else if (File.Exists(path: romPath)) {
-            rom = File.ReadAllBytes(path: romPath);
-            romLabel = Path.GetFileName(path: romPath);
-            model = ModelFromHeader(rom: rom);
-        } else {
-            Console.WriteLine(value: $"  [SKIP] --dump-snapshot: rom not found at {romPath}");
-
-            return 2;
-        }
-
-        var framesArg = CommandLineArguments.Value(
-            args: args,
-            name: "--frames"
-        );
-        var frames = (((framesArg is not null) && int.TryParse(
-            result: out var parsedFrames,
-            s: framesArg
-        ))
-            ? parsedFrames
-            : DefaultDumpSnapshotFrames);
-        var imagePath = (CommandLineArguments.Value(
-            args: args,
-            name: "--out"
-        ) ?? Path.Combine(
-            path1: "artifacts",
-            path2: "gb-post",
-            path3: "snapshot.bin"
-        ));
-        var imageDirectory = Path.GetDirectoryName(path: Path.GetFullPath(path: imagePath));
-
-        if (!string.IsNullOrEmpty(value: imageDirectory)) {
-            Directory.CreateDirectory(path: imageDirectory);
-        }
-
-        using var machine = PostMachine.Build(
-            model: model,
-            rom: rom
-        );
-
-        PostMachine.RunFrames(
-            frames: frames,
-            instance: machine
-        );
-
-        var snapshot = machine.Machine.Snapshot();
-
-        File.WriteAllBytes(
-            path: imagePath,
-            bytes: snapshot.Data.ToArray()
-        );
-
-        var sectionsPath = $"{imagePath}.sections.txt";
-
-        WriteSectionTable(
-            path: sectionsPath,
-            sections: snapshot.Sections
-        );
-
-        // The same repo fingerprint HashDivergenceProbe hashes a snapshot with, so a --dump-snapshot fingerprint and a
-        // --hash-divergence report describe the same instant the same way.
-        var fingerprint = Fnv1aHash.Compute(values: snapshot.Data);
-
-        Console.WriteLine(value: $"  dump-snapshot {romLabel} ({model}, {frames} frames) -> {imagePath} ({snapshot.Size:N0} bytes) [fingerprint 0x{fingerprint:X16}], sections -> {sectionsPath}");
-
-        return 0;
-    }
-    // One line per section: name, offset, length — enough to localize an offline byte-shift between two snapshot
-    // images to the component that owns it (a cross-build diff has no running machine to walk).
-    private static void WriteSectionTable(string path, IReadOnlyList<SnapshotSection> sections) {
-        using var writer = new StreamWriter(path: path);
-
-        foreach (var section in sections) {
-            writer.WriteLine(value: $"{section.Name}\t{section.Offset}\t{section.Length}");
-        }
-    }
 }

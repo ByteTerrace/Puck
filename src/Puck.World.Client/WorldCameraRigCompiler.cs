@@ -75,6 +75,79 @@ public static class WorldCameraRigCompiler {
         );
     }
 
+    /// <summary>One compiled-rig cache slot: <see cref="Resolve"/> recompiles only when the authored program
+    /// instance or a definition collection <see cref="Compile"/> reads has been replaced, otherwise the far cheaper
+    /// <see cref="IWorldCameraProgramRig.Retarget"/>. Dynamics coefficients, a Path op's compiled curve, and
+    /// Blend/Select program references are baked in at translate time — never re-read on retarget — so every
+    /// collection they resolve against (<c>cameras</c>, <c>curves</c>, <c>dynamics</c>, and <c>views</c> for the
+    /// seat/camera rig names) is part of the key. KEEP IN SYNC: only each section's own compose path may reuse its
+    /// list's reference across deliveries; anything that clones one unconditionally defeats this check.</summary>
+    public sealed class Cache {
+        private IReadOnlyList<WorldCamera>? m_cameras;
+        private IReadOnlyList<WorldCurveRow>? m_curves;
+        private IReadOnlyList<WorldDynamicsRow>? m_dynamics;
+        private bool m_interactive;
+        private WorldCameraProgram? m_program;
+        private IWorldCameraProgramRig? m_rig;
+        private WorldViewDefaults? m_views;
+
+        /// <summary>Returns the cached rig retargeted at the live document, or a fresh <see cref="Compile"/> when
+        /// any input it read has moved.</summary>
+        /// <param name="program">The authored op list.</param>
+        /// <param name="definition">The current live document.</param>
+        /// <param name="interactive">Whether the program's orbit op folds in the live look (see
+        /// <see cref="Compile"/>).</param>
+        /// <returns>The rig.</returns>
+        /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+        public IWorldCameraProgramRig Resolve(WorldCameraProgram program, WorldDefinition definition, bool interactive = false) {
+            ArgumentNullException.ThrowIfNull(argument: definition);
+            ArgumentNullException.ThrowIfNull(argument: program);
+
+            if (
+                (m_rig is { } rig) &&
+                (m_interactive == interactive) &&
+                ReferenceEquals(
+                    objA: m_program,
+                    objB: program
+                ) &&
+                ReferenceEquals(
+                    objA: m_cameras,
+                    objB: definition.Cameras
+                ) &&
+                ReferenceEquals(
+                    objA: m_curves,
+                    objB: definition.Curves
+                ) &&
+                ReferenceEquals(
+                    objA: m_dynamics,
+                    objB: definition.Dynamics
+                ) &&
+                ReferenceEquals(
+                    objA: m_views,
+                    objB: definition.ViewsRaw
+                )
+            ) {
+                rig.Retarget(definition: definition);
+
+                return rig;
+            }
+
+            m_cameras = definition.Cameras;
+            m_curves = definition.Curves;
+            m_dynamics = definition.Dynamics;
+            m_interactive = interactive;
+            m_program = program;
+            m_views = definition.ViewsRaw;
+            m_rig = Compile(
+                definition: definition,
+                interactive: interactive,
+                program: program
+            );
+
+            return m_rig;
+        }
+    }
+
     // One per-frame scalar slot's source: an authored state binding read at the frame's tick, or the group-spread
     // widening an offset op's pullback applies. Exactly one arm is live per slot.
     private readonly record struct ScalarSource(BindableScalar? Binding, float Fallback, float SpreadPullback);

@@ -28,8 +28,22 @@ var nameFilter = CommandLineArguments.Value(
     args: args,
     name: "--filter"
 );
-var testRomRoot = ResolveTestRomRoot(args: args);
-var sstRoot = ResolveSstRoot(args: args);
+// The reference-ROM corpus root: --roms wins, else PUCK_GB_TESTROMS, else the known corpus location on the development
+// machine (so the POST finds it without configuration); Tier-B stages skip when it is absent.
+var testRomRoot = CommandLineArguments.ResolveDirectoryRoot(
+    args: args,
+    fallback: @"D:\Source\ByteTerrace\Temp\GBC Test Suites",
+    flag: "--roms",
+    variable: "PUCK_GB_TESTROMS"
+);
+// The SingleStepTests/sm83 vector corpus root: --sst wins, else PUCK_GB_SST, else the known development-machine
+// location (the established corpus-clone location pattern); the sst stage skips when it is absent.
+var sstRoot = CommandLineArguments.ResolveDirectoryRoot(
+    args: args,
+    fallback: @"D:\Source\ByteTerrace\Temp\sm83-sst",
+    flag: "--sst",
+    variable: "PUCK_GB_SST"
+);
 var stages = PostStages.Create()
     .Where(predicate: stage => PostStageFilters.TierMatches(
     stage: stage,
@@ -51,58 +65,3 @@ var report = new PostBattery<PostContext>(
 ).Run(context: context);
 report.Write(artifactsDirectory: artifactsDirectory);
 return report.ExitCode;
-// The reference-ROM corpus root: --roms wins, else PUCK_GB_TESTROMS, else null (Tier-B stages skip when it is absent).
-static string? ResolveTestRomRoot(string[] args) {
-    var explicitRoot = CommandLineArguments.Value(
-        args: args,
-        name: "--roms"
-    );
-
-    if (!string.IsNullOrEmpty(value: explicitRoot)) {
-        return explicitRoot;
-    }
-
-    var fromEnvironment = Environment.GetEnvironmentVariable(variable: "PUCK_GB_TESTROMS");
-
-    if (
-        !string.IsNullOrEmpty(value: fromEnvironment) &&
-        Directory.Exists(path: fromEnvironment)
-    ) {
-        return fromEnvironment;
-    }
-
-    // The known corpus location on the development machine, so the POST finds it without configuration; absent it,
-    // the Tier-B stages skip.
-    const string Fallback = @"D:\Source\ByteTerrace\Temp\GBC Test Suites";
-
-    return (Directory.Exists(path: Fallback)
-        ? Fallback
-        : null);
-}
-// The SingleStepTests/sm83 vector corpus root: PUCK_GB_SST, else the known development-machine location (the
-// established corpus-clone location pattern), else null (the sst stage skips when it is absent).
-static string? ResolveSstRoot(string[] args) {
-    var explicitRoot = CommandLineArguments.Value(
-        args: args,
-        name: "--sst"
-    );
-
-    if (!string.IsNullOrEmpty(value: explicitRoot)) {
-        return explicitRoot;
-    }
-
-    var fromEnvironment = Environment.GetEnvironmentVariable(variable: "PUCK_GB_SST");
-
-    if (
-        !string.IsNullOrEmpty(value: fromEnvironment) &&
-        Directory.Exists(path: fromEnvironment)
-    ) {
-        return fromEnvironment;
-    }
-
-    const string Fallback = @"D:\Source\ByteTerrace\Temp\sm83-sst";
-
-    return (Directory.Exists(path: Fallback)
-        ? Fallback
-        : null);
-}

@@ -1,5 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Puck.DirectX.Presentation;
 using Puck.Memory;
 using Puck.Platform;
@@ -45,16 +44,7 @@ public static class WindowsPresentationRegistration {
                     : throw new PlatformNotSupportedException(message: "The Direct3D 12 host requires Windows 10 or newer."))
             ));
         } else {
-            services.AddVulkanPresenter();
-            // The Vulkan block publishes its device context in DI as IVulkanDeviceContext only (the neutral
-            // interface rides a HostCapabilityContribution instead). Alias the neutral seam here so backend-neutral
-            // consumers resolve the SAME device either backend registers — the DirectX block already registers
-            // IGpuDeviceContext itself.
-            services.TryAddSingleton<IGpuDeviceContext>(implementationFactory: static sp => sp.GetRequiredService<VulkanRenderer>());
-            services.AddSingleton(implementationFactory: static sp => new SurfacePresenterDescriptor(
-                Name: "vulkan",
-                Presenter: sp.GetRequiredService<VulkanSurfacePresenter>()
-            ));
+            services.AddVulkanHostedPresentation();
         }
 
         return services;

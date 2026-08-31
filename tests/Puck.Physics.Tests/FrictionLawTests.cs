@@ -15,14 +15,6 @@ namespace Puck.Physics.Tests;
 /// the tested run saw too.
 /// </summary>
 public sealed class FrictionLawTests {
-    private static void AssertNear(FixedQ4816 actual, double expected, double tolerance, string subject) {
-        var difference = Math.Abs(value: (((double)actual) - expected));
-
-        Assert.True(
-            condition: (difference <= tolerance),
-            userMessage: $"{subject}: expected {expected}, measured {MeasurementReport.Format(value: actual)}"
-        );
-    }
     private static void AssertWithinRelativeTolerance(long expected, long actual, double relativeTolerance, string subject) {
         var scale = Math.Max(
             val1: Math.Abs(value: expected),
@@ -405,7 +397,7 @@ public sealed class FrictionLawTests {
         // touches it, so at SubstepCount=1 the horizontal slide distance is exactly slideSpeed/RateHz regardless of
         // the coefficient: friction cannot have removed any of it yet. A friction call that fires during the biased
         // pass would arrest some of that speed early and fall short of this closed form.
-        AssertNear(
+        MeasurementAssert.Near(
             actual: run.Pose.Center.X,
             expected: (SlideSpeed / 60d),
             tolerance: 0.0002d,

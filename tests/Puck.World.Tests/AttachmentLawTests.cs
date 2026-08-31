@@ -301,12 +301,11 @@ public sealed class AttachmentLawTests {
     }
     [Fact]
     public void IdenticalAttachClimbDetachReplays_ProduceIdenticalHashTraces_WhileOmittingAttachDiverges() {
-        static ulong[] DriveHashTrace(bool attach) {
-            using var fixture = Fixtures.FreshServer(definition: BuildAttachmentDocument());
-            var body = JoinBody(fixture: fixture);
-            var hashes = new ulong[240];
-
-            for (var tick = 0; (tick < 240); tick++) {
+        static ulong[] DriveHashTrace(bool attach) => Fixtures.DriveHashTrace(
+            document: BuildAttachmentDocument(),
+            ticks: 240,
+            join: static fixture => JoinBody(fixture: fixture),
+            perTick: (body, tick) => {
                 var intent = default(PlayerIntent);
 
                 if (attach && (tick == 0)) {
@@ -318,12 +317,8 @@ public sealed class AttachmentLawTests {
                 }
 
                 body.SubmitIntent(intent: intent);
-                fixture.Step();
-                hashes[tick] = WorldReplaySnapshot.HashState(population: fixture.Server.Population);
             }
-
-            return hashes;
-        }
+        );
 
         var first = DriveHashTrace(attach: true);
         var second = DriveHashTrace(attach: true);

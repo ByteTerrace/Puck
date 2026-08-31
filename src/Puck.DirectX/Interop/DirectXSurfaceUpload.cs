@@ -306,7 +306,7 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
         m_texture = ((nint)texture);
         m_textureState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST;
 
-        m_paddedRowPitch = (((width * FormatByteSize(format: format)) + TextureRowPitchAlignment) - 1) & ~(TextureRowPitchAlignment - 1);
+        m_paddedRowPitch = AlignRowPitch(packedRowBytes: (width * FormatByteSize(format: format)));
 
         var uploadHeapProperties = new D3D12_HEAP_PROPERTIES {
             Type = D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_UPLOAD,

@@ -68,26 +68,6 @@ public readonly record struct FixedSurfaceAttachCandidate(
 /// by-value running best; nothing here allocates, boxes, or retains a reference into either span.</para>
 /// </remarks>
 public static class FixedSurfaceQuery {
-    private static readonly FixedVector3 UnitX = new(
-        X: FixedQ4816.One,
-        Y: FixedQ4816.Zero,
-        Z: FixedQ4816.Zero
-    );
-    private static readonly FixedVector3 UnitY = new(
-        X: FixedQ4816.Zero,
-        Y: FixedQ4816.One,
-        Z: FixedQ4816.Zero
-    );
-    private static readonly FixedVector3 UnitZ = new(
-        X: FixedQ4816.Zero,
-        Y: FixedQ4816.Zero,
-        Z: FixedQ4816.One
-    );
-
-    private static FixedQ4816 Sign(FixedQ4816 value) => ((value < FixedQ4816.Zero)
-        ? -FixedQ4816.One
-        : FixedQ4816.One
-    );
     // Exact for every face, edge, and corner: a componentwise clamp always lands `clamped` on the box's boundary
     // whenever the probe is outside on at least one axis (the interior case below is the only one where clamping
     // alone is not enough, because clamping a point already inside the range changes nothing). The normal is exact
@@ -123,13 +103,13 @@ public static class FixedSurfaceQuery {
             // Face case: the probe is outside on exactly one axis, so the outward normal is that axis's unit
             // vector — no square root, no rounding.
             if (clampedX && !clampedY && !clampedZ) {
-                return (Point: point, Normal: (UnitX * Sign(value: delta.X)));
+                return (Point: point, Normal: (FixedAxisMath.UnitX * FixedAxisMath.Sign(value: delta.X)));
             }
             if (clampedY && !clampedX && !clampedZ) {
-                return (Point: point, Normal: (UnitY * Sign(value: delta.Y)));
+                return (Point: point, Normal: (FixedAxisMath.UnitY * FixedAxisMath.Sign(value: delta.Y)));
             }
             if (clampedZ && !clampedX && !clampedY) {
-                return (Point: point, Normal: (UnitZ * Sign(value: delta.Z)));
+                return (Point: point, Normal: (FixedAxisMath.UnitZ * FixedAxisMath.Sign(value: delta.Z)));
             }
 
             // Edge or corner: `delta` already points from the nearest boundary point straight at the probe, which
@@ -138,29 +118,14 @@ public static class FixedSurfaceQuery {
         }
 
         // Interior (including exactly ON a face, where the gap on that axis is zero): no axis needed clamping, so
-        // project out through the nearest exit face — the axis with the smallest gap to its half-extent. Ties break
-        // X, then Y, then Z, the same order TrySpherePush's interior branch already uses for this collider kind.
-        var gapX = (halfExtents.X - FixedQ4816.Abs(value: local.X));
-        var gapY = (halfExtents.Y - FixedQ4816.Abs(value: local.Y));
-        var gapZ = (halfExtents.Z - FixedQ4816.Abs(value: local.Z));
+        // project out through the nearest exit face — the shared rule TrySpherePush's interior branch resolves this
+        // collider kind with too.
+        var (normal, surfaceLocal, _) = FixedAxisMath.BoxInteriorExit(
+            halfExtents: halfExtents,
+            local: local
+        );
 
-        if ((gapX <= gapY) && (gapX <= gapZ)) {
-            var axisSign = Sign(value: local.X);
-
-            return (Point: (center + new FixedVector3(X: (halfExtents.X * axisSign), Y: local.Y, Z: local.Z)), Normal: (UnitX * axisSign));
-        }
-
-        if (gapY <= gapZ) {
-            var axisSign = Sign(value: local.Y);
-
-            return (Point: (center + new FixedVector3(X: local.X, Y: (halfExtents.Y * axisSign), Z: local.Z)), Normal: (UnitY * axisSign));
-        }
-
-        {
-            var axisSign = Sign(value: local.Z);
-
-            return (Point: (center + new FixedVector3(X: local.X, Y: local.Y, Z: (halfExtents.Z * axisSign))), Normal: (UnitZ * axisSign));
-        }
+        return (Point: (center + surfaceLocal), Normal: normal);
     }
     private static (FixedVector3 Point, FixedVector3 Normal) NearestOnHalfSpace(FixedVector3 boundaryPoint, FixedVector3 normal, FixedVector3 probe) {
         // A plane projection: exact by construction, the same single-rounded dot/multiply/subtract every other
@@ -180,7 +145,7 @@ public static class FixedSurfaceQuery {
         // The center itself has no defined gradient; report the canonical up rather than an arbitrary or
         // discontinuous direction (see the type's remarks).
         if (normal == FixedVector3.Zero) {
-            normal = UnitY;
+            normal = FixedAxisMath.UnitY;
         }
 
         return (Point: (center + (normal * radius)), Normal: normal);

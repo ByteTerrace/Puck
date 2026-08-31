@@ -1,5 +1,7 @@
 using System.Text.RegularExpressions;
 
+using Puck.Cli.Source;
+
 namespace Puck.Cli.DocLinks;
 
 /// <summary><c>puck doc-links</c> — checks every relative markdown link and cited repository path in a fixed
@@ -164,17 +166,18 @@ internal static class DocLinksCommand {
             || Directory.Exists(path: Path.Combine(path1: repositoryRoot, path2: target)));
     private static HashSet<string> BuildFileNameIndex(string repositoryRoot) {
         var index = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
+        var roots = new List<string>();
 
         foreach (var tree in IndexedTrees) {
             var treePath = Path.Combine(path1: repositoryRoot, path2: tree.Replace(newChar: Path.DirectorySeparatorChar, oldChar: '/'));
 
-            if (!Directory.Exists(path: treePath)) {
-                continue;
+            if (Directory.Exists(path: treePath)) {
+                roots.Add(item: treePath);
             }
+        }
 
-            foreach (var file in Directory.EnumerateFiles(path: treePath, searchOption: SearchOption.AllDirectories, searchPattern: "*")) {
-                index.Add(item: Path.GetFileName(path: file));
-            }
+        foreach (var file in (FileWalk.Enumerate(verb: "doc-links", roots: roots, include: [], exclude: []) ?? [])) {
+            index.Add(item: Path.GetFileName(path: file));
         }
 
         foreach (var file in Directory.EnumerateFiles(path: repositoryRoot, searchOption: SearchOption.TopDirectoryOnly, searchPattern: "*")) {

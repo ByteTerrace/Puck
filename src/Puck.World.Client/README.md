@@ -142,6 +142,10 @@ root-crossing dependency was the audio director, narrowed to
   ordering step. `Retarget` repoints a cached rig at a newly delivered document;
   `Look` carries the seat's live orbit delta (inert on a program compiled
   non-interactive); `Spread` feeds an authored `spreadPullback`.
+  `WorldCameraRigCompiler.Cache` is the one compiled-rig cache slot every
+  caching call site holds: it recompiles when the authored program instance or
+  any definition collection `Compile` reads (`cameras`, `curves`, `dynamics`,
+  `views`) has been replaced, and retargets otherwise.
 - Free Cam is a possession, not a second integrator: a `seatModes` state
   targeting `"camera"` possesses the seat's `camera-seat-<slot>` inhabited
   placement through the ordinary Engage door, and the seat's view resolves

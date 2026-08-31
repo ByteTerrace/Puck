@@ -48,7 +48,54 @@ internal static class Wasapi {
     [DllImport("Ole32.dll")]
     public static extern int CoCreateInstance(ref Guid rclsid, nint pUnkOuter, uint dwClsContext, ref Guid riid, out nint ppv);
     [DllImport("Ole32.dll")]
+    public static extern int CoInitializeEx(nint pvReserved, uint dwCoInit);
+    [DllImport("Ole32.dll")]
     public static extern void CoTaskMemFree(nint pv);
+    [DllImport("Ole32.dll")]
+    public static extern void CoUninitialize();
+    [DllImport("Kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool CloseHandle(nint hObject);
+    [DllImport("Kernel32.dll", SetLastError = true)]
+    public static extern nint CreateEventW(nint lpEventAttributes, [MarshalAs(UnmanagedType.Bool)] bool bManualReset, [MarshalAs(UnmanagedType.Bool)] bool bInitialState, [MarshalAs(UnmanagedType.LPWStr)] string? lpName);
+    [DllImport("Kernel32.dll", SetLastError = true)]
+    public static extern uint WaitForSingleObject(nint hHandle, uint dwMilliseconds);
+
+    /// <summary>Creates the device enumerator, resolves the endpoint (by id when one is given, otherwise the default
+    /// for the data flow), and activates its <see cref="IAudioClient"/>. The enumerator and device are released before
+    /// returning; the caller owns the client.</summary>
+    public static IAudioClient ActivateAudioClient(int dataFlow, string? deviceId) {
+        var enumeratorClsid = CLSID_MMDeviceEnumerator;
+        var enumeratorIid = IID_IMMDeviceEnumerator;
+
+        Check(hr: CoCreateInstance(dwClsContext: ClsCtxAll, pUnkOuter: 0, ppv: out var enumeratorObject, rclsid: ref enumeratorClsid, riid: ref enumeratorIid));
+
+        var enumerator = ((IMMDeviceEnumerator)Marshal.GetObjectForIUnknown(pUnk: enumeratorObject));
+
+        _ = Marshal.Release(pUnk: enumeratorObject);
+
+        try {
+            IMMDevice device;
+
+            if (deviceId is not null) {
+                Check(hr: enumerator.GetDevice(ppDevice: out device, pwstrId: deviceId));
+            } else {
+                Check(hr: enumerator.GetDefaultAudioEndpoint(dataFlow: dataFlow, ppDevice: out device, role: RoleConsole));
+            }
+
+            try {
+                var audioClientIid = IID_IAudioClient;
+
+                Check(hr: device.Activate(dwClsCtx: ClsCtxAll, iid: ref audioClientIid, pActivationParams: 0, ppInterface: out var audioClientObject));
+
+                return ((IAudioClient)audioClientObject);
+            } finally {
+                _ = Marshal.ReleaseComObject(o: device);
+            }
+        } finally {
+            _ = Marshal.ReleaseComObject(o: enumerator);
+        }
+    }
 
     // WAVEFORMATEX header; a WAVEFORMATEXTENSIBLE follows it in memory when wFormatTag is 0xFFFE.
     [StructLayout(LayoutKind.Sequential, Pack = 1)]

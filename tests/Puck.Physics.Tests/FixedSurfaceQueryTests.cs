@@ -14,12 +14,6 @@ public sealed class FixedSurfaceQueryTests {
             Z: FixedQ4816.FromDouble(value: z)
         );
     private static FixedQ4816 Q(double value) => FixedQ4816.FromDouble(value: value);
-    private static void AssertNear(double actual, double expected, double tolerance, string subject) {
-        Assert.True(
-            condition: (Math.Abs(value: (actual - expected)) <= tolerance),
-            userMessage: $"{subject}: expected {expected}, measured {actual}"
-        );
-    }
     // An independent (test-only, non-SUT) containment check per collider kind — the oracle the "normal is outward"
     // law measures against, so it cannot pass merely by agreeing with the query's own internal branching.
     private static bool IsStrictlyOutside(FixedStaticCollider collider, FixedVector3 point) => collider.Kind switch {
@@ -303,7 +297,7 @@ public sealed class FixedSurfaceQueryTests {
                 );
 
                 Assert.True(condition: found);
-                AssertNear(
+                MeasurementAssert.Near(
                     actual: (double)candidate.Normal.Length,
                     expected: 1d,
                     subject: $"{collider.Kind} normal length for probe {probe}",

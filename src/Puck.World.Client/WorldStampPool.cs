@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Forge.Authoring;
+using Puck.Maths;
 using Puck.SdfVm;
 using Puck.SdfVm.Views;
 using Puck.SignedDistance;
@@ -720,22 +721,19 @@ public sealed class WorldStampPool {
             scale
         );
     }
-    // The rest before a cue's next self-fire: a uniform draw in min..max from a splitmix of (body, fire count) — the
-    // same body blinks the same way on every run, and no two bodies in step. Infinity for a demand-only cue.
+    // The rest before a cue's next self-fire: a uniform draw in min..max keyed by (body, fire count) — the same body
+    // blinks the same way on every run, and no two bodies in step (each body is its own stream). Infinity for a
+    // demand-only cue.
     private static float CueRest(WorldLookCue cue, uint fires, uint seed) {
         if ((cue.MinSeconds is not { } min) || (cue.MaxSeconds is not { } max)) {
             return float.PositiveInfinity;
         }
 
-        var state = ((((ulong)seed + 1UL) * 0x9E3779B97F4A7C15UL) ^ (((ulong)fires + 1UL) * 0xBF58476D1CE4E5B9UL));
-
-        state ^= (state >> 30);
-        state *= 0xBF58476D1CE4E5B9UL;
-        state ^= (state >> 27);
-        state *= 0x94D049BB133111EBUL;
-        state ^= (state >> 31);
-
-        var unit = ((state >> 40) * (1f / (1UL << 24)));
+        var rng = Pcg32XshRr.Create(
+            state: fires,
+            stream: seed
+        );
+        var unit = ((float)((double)rng.NextUnitFraction32()));
 
         return (min + ((max - min) * unit));
     }

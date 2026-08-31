@@ -142,6 +142,22 @@ public static class VulkanPresenterServiceRegistration {
 
         return services;
     }
+    /// <summary>Registers the full Vulkan host block a launcher selects: the backend
+    /// (<see cref="AddVulkanPresenter"/>), the neutral <see cref="IGpuDeviceContext"/> alias (the backend
+    /// publishes its device in DI as <see cref="IVulkanDeviceContext"/> only, with the neutral interface riding
+    /// a <see cref="HostCapabilityContribution"/>, so backend-neutral consumers need this alias to resolve the
+    /// same device), and the <c>"vulkan"</c> <see cref="SurfacePresenterDescriptor"/>.</summary>
+    /// <param name="services">The service collection.</param>
+    public static IServiceCollection AddVulkanHostedPresentation(this IServiceCollection services) {
+        services.AddVulkanPresenter();
+        services.TryAddSingleton<IGpuDeviceContext>(implementationFactory: static sp => sp.GetRequiredService<VulkanRenderer>());
+        services.AddSingleton(implementationFactory: static sp => new SurfacePresenterDescriptor(
+            Name: "vulkan",
+            Presenter: sp.GetRequiredService<VulkanSurfacePresenter>()
+        ));
+
+        return services;
+    }
     /// <summary>Registers one native API per Vulkan capability the renderer, compositor, and engine use.</summary>
     /// <param name="services">The service collection.</param>
     public static IServiceCollection AddVulkanNativeApis(this IServiceCollection services) {

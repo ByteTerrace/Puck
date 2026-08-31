@@ -34,12 +34,12 @@ var nameFilter = CommandLineArguments.Value(
     args: args,
     name: "--filter"
 );
-var testRomRoot = ResolveRoot(
+var testRomRoot = CommandLineArguments.ResolveDirectoryRoot(
     args: args,
     flag: "--roms",
     variable: "PUCK_AGB_TESTROMS"
 );
-var gamesRoot = ResolveRoot(
+var gamesRoot = CommandLineArguments.ResolveDirectoryRoot(
     args: args,
     flag: "--games",
     variable: "PUCK_AGB_GAMES"
@@ -91,22 +91,4 @@ static ReadOnlyMemory<byte> LoadBios() {
     }
 
     return new byte[ReplacementBios.ImageSize];
-}
-// A directory root: the CLI flag wins, else the environment variable (when it names an existing directory), else null
-// (the stages that need it skip when it is absent).
-static string? ResolveRoot(string[] args, string flag, string variable) {
-    var explicitRoot = CommandLineArguments.Value(
-        args: args,
-        name: flag
-    );
-
-    if (!string.IsNullOrEmpty(value: explicitRoot)) {
-        return explicitRoot;
-    }
-
-    var fromEnvironment = Environment.GetEnvironmentVariable(variable: variable);
-
-    return ((!string.IsNullOrEmpty(value: fromEnvironment) && Directory.Exists(path: fromEnvironment))
-        ? fromEnvironment
-        : null);
 }

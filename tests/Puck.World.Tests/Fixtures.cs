@@ -619,6 +619,31 @@ internal static class Fixtures {
     /// the identical amount.</summary>
     public static ulong StepTicks { get; } = EngineTicks.PerRate(ratePerSecond: SimulationRateHz);
 
+    /// <summary>Boots a fresh server over <paramref name="document"/>, joins one body via <paramref name="join"/>,
+    /// then steps <paramref name="ticks"/> times collecting the per-tick
+    /// <see cref="WorldReplaySnapshot.HashState"/> trace — the raw material for every "an identical replay
+    /// reproduces identical hashes, a control diverges" law. <paramref name="perTick"/>, when supplied, runs before
+    /// each step (submitting that tick's intent); when omitted, nothing is ever submitted, so the joined body sits
+    /// on its source's own resolution.</summary>
+    /// <param name="document">The document to boot the server from.</param>
+    /// <param name="ticks">How many steps to drive and hash.</param>
+    /// <param name="join">Joins (and optionally configures) the one body the trace drives.</param>
+    /// <param name="perTick">The per-tick intent submission, or <see langword="null"/> to submit nothing.</param>
+    /// <param name="stepTicks">The per-step tick width, or <see langword="null"/> for <see cref="StepTicks"/>.</param>
+    public static ulong[] DriveHashTrace(WorldDefinition document, int ticks, Func<WorldFixture, WorldBody> join, Action<WorldBody, int>? perTick = null, ulong? stepTicks = null) {
+        using var fixture = FreshServer(definition: document);
+        var body = join(fixture);
+        var hashes = new ulong[ticks];
+
+        for (var tick = 0; (tick < ticks); tick++) {
+            perTick?.Invoke(body, tick);
+            fixture.Step(stepTicks: stepTicks);
+            hashes[tick] = WorldReplaySnapshot.HashState(population: fixture.Server.Population);
+        }
+
+        return hashes;
+    }
+
     /// <summary>Skips the calling law, by name, when <see cref="WorldReplayTape"/>'s REAL on-disk
     /// <c>Replays</c> directory (under <see cref="WorldStateRoot.Resolve"/> — this test project has no seam to
     /// redirect it, and <c>WorldStateRoot.Override</c> can only ever be applied ONCE per process, so no individual

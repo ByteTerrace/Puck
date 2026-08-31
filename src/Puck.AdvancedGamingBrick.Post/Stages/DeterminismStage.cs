@@ -26,30 +26,15 @@ internal sealed class DeterminismStage : IPostStage<PostContext> {
     public PostStageOutcome Run(PostContext context) {
         var rom = SyntheticRom.Create();
 
-        using var first = PostMachine.Build(
-            bios: context.BiosImage,
-            rom: rom
+        return MachineStageProbes.VerifyDeterminism<PostMachine, AgbMachineSnapshot, AgbMachineIdentity, long>(
+            build: () => PostMachine.Build(
+                bios: context.BiosImage,
+                rom: rom
+            ),
+            describeDivergence: HashDivergenceProbe.DescribeDivergence,
+            frames: Frames,
+            runFrames: static (machine, frames) => machine.RunFrames(frames: frames),
+            snapshot: static machine => machine.Machine.Snapshot()
         );
-        using var second = PostMachine.Build(
-            bios: context.BiosImage,
-            rom: rom
-        );
-
-        first.RunFrames(frames: Frames);
-        second.RunFrames(frames: Frames);
-
-        var firstSnapshot = first.Machine.Snapshot();
-        var secondSnapshot = second.Machine.Snapshot();
-
-        if (!firstSnapshot.ContentEquals(other: secondSnapshot)) {
-            var detail = HashDivergenceProbe.DescribeDivergence(
-                a: firstSnapshot,
-                b: secondSnapshot
-            );
-
-            return PostStageOutcome.Fail(detail: $"two independent machines diverged after {Frames} frames — {detail}");
-        }
-
-        return PostStageOutcome.Pass(detail: $"two independent machines byte-identical after {Frames} frames ({firstSnapshot.Size} state bytes)");
     }
 }

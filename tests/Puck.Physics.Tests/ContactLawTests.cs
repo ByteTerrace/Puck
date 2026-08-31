@@ -29,8 +29,8 @@ public sealed class ContactLawTests {
         Assert.True(condition: (wall.NormalImpulseRaw > 0L), userMessage: "the wall contact must carry an accumulated impulse");
 
         // The sphere rests exactly one radius from both surfaces, to within the soft constraint's own slop.
-        AssertNear(actual: world.Pose.Center.X, expected: 0.5d, tolerance: 0.002d, subject: "resting distance from the wall");
-        AssertNear(actual: world.Pose.Center.Y, expected: 0.5d, tolerance: 0.002d, subject: "resting distance from the floor");
+        MeasurementAssert.Near(actual: world.Pose.Center.X, expected: 0.5d, tolerance: 0.002d, subject: "resting distance from the wall");
+        MeasurementAssert.Near(actual: world.Pose.Center.Y, expected: 0.5d, tolerance: 0.002d, subject: "resting distance from the floor");
     }
     [Fact]
     public void KeyingASlotByTheBodyFeatureAloneCollapsesTheCornerAndLosesTheFloor() {
@@ -99,7 +99,7 @@ public sealed class ContactLawTests {
         }
 
         Assert.Equal(expected: 0, actual: world.Solver.RefusalCount);
-        AssertNear(actual: settled, expected: 0.25d, subject: "resting height of the box", tolerance: 0.002d);
+        MeasurementAssert.Near(actual: settled, expected: 0.25d, subject: "resting height of the box", tolerance: 0.002d);
 
         // Jitter is the quantity being measured: a settled contact must not breathe by more than the fixed-point
         // resolution the pose is carried at.
@@ -135,7 +135,7 @@ public sealed class ContactLawTests {
             condition: (world.LastStepActivationBound > FixedQ4816.FromInteger(value: 6L)),
             userMessage: $"the swept activation bound was only {MeasurementReport.Format(value: world.LastStepActivationBound)}"
         );
-        AssertNear(actual: world.Pose.Center.Y, expected: 0.1d, tolerance: 0.001d, subject: "height after the caught step");
+        MeasurementAssert.Near(actual: world.Pose.Center.Y, expected: 0.1d, tolerance: 0.001d, subject: "height after the caught step");
     }
     [Fact]
     public void RemovingThePredictedBoundTunnelsThroughTheSurface() {
@@ -214,10 +214,5 @@ public sealed class ContactLawTests {
         Assert.Fail(message: $"no slot is associated with surface {sourceId}");
 
         return default;
-    }
-    private static void AssertNear(FixedQ4816 actual, double expected, double tolerance, string subject) {
-        var difference = Math.Abs(value: (((double)actual) - expected));
-
-        Assert.True(condition: (difference <= tolerance), userMessage: $"{subject}: expected {expected}, measured {MeasurementReport.Format(value: actual)}");
     }
 }

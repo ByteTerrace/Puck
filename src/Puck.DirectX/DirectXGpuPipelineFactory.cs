@@ -203,21 +203,11 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
         var staticSamplers = stackalloc D3D12_STATIC_SAMPLER_DESC[((int)staticSamplerCount)];
 
         for (var register = 0u; (register < textureSamplerCount); register++) {
-            staticSamplers[((int)register)] = new D3D12_STATIC_SAMPLER_DESC {
-                AddressU = D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
-                AddressV = D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
-                AddressW = D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
-                BorderColor = D3D12_STATIC_BORDER_COLOR.D3D12_STATIC_BORDER_COLOR_OPAQUE_BLACK,
-                ComparisonFunc = D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_NEVER,
-                Filter = D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_LINEAR,
-                MaxAnisotropy = 0,
-                MaxLOD = float.MaxValue,
-                MinLOD = 0f,
-                MipLODBias = 0f,
-                RegisterSpace = 0,
-                ShaderRegister = register,
-                ShaderVisibility = D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_PIXEL,
-            };
+            staticSamplers[((int)register)] = DirectXRootSignatures.ClampStaticSampler(
+                filter: D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_LINEAR,
+                shaderRegister: register,
+                shaderVisibility: D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_PIXEL
+            );
         }
 
         var desc = new D3D12_ROOT_SIGNATURE_DESC {

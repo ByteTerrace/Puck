@@ -1,5 +1,7 @@
+using System.Runtime.InteropServices;
 using Puck.Assets;
 using Puck.HumbleGamingBrick.Interfaces;
+using Puck.Maths;
 
 namespace Puck.HumbleGamingBrick.Post;
 
@@ -187,16 +189,7 @@ internal static class LinkExplore {
             width: framebuffer.Width,
             height: framebuffer.Height
         );
-        Console.WriteLine(value: $"    [{frame:D5}] {tag} -> {Path.GetFileName(path: path)} (fb 0x{HashPixels(pixels: pixels):X16})");
-    }
-    private static ulong HashPixels(ReadOnlySpan<uint> pixels) {
-        var hash = 14_695_981_039_346_656_037ul;
-
-        foreach (var pixel in pixels) {
-            hash = ((hash ^ pixel) * 1_099_511_628_211ul);
-        }
-
-        return hash;
+        Console.WriteLine(value: $"    [{frame:D5}] {tag} -> {Path.GetFileName(path: path)} (fb 0x{Fnv1aHash.Compute(values: MemoryMarshal.AsBytes(span: pixels)):X16})");
     }
     private static List<string> Positionals(string[] args, int afterIndex) {
         var positionals = new List<string>();

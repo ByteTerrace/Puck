@@ -18,22 +18,14 @@ internal sealed class AllocationStage : IPostStage<PostContext> {
         PostTier.A;
 
     /// <inheritdoc/>
-    public PostStageOutcome Run(PostContext context) {
-        using var machine = PostMachine.Build(
-            bios: context.BiosImage,
-            rom: SyntheticRom.Create()
+    public PostStageOutcome Run(PostContext context) =>
+        MachineStageProbes.VerifyZeroAllocation(
+            build: () => PostMachine.Build(
+                bios: context.BiosImage,
+                rom: SyntheticRom.Create()
+            ),
+            measureFrames: MeasureFrames,
+            runFrames: static (machine, frames) => machine.RunFrames(frames: frames),
+            warmFrames: WarmFrames
         );
-
-        machine.RunFrames(frames: WarmFrames);
-
-        var before = GC.GetAllocatedBytesForCurrentThread();
-
-        machine.RunFrames(frames: MeasureFrames);
-
-        var delta = (GC.GetAllocatedBytesForCurrentThread() - before);
-
-        return ((delta == 0)
-            ? PostStageOutcome.Pass(detail: $"0 B allocated over {MeasureFrames} frames after {WarmFrames}-frame warm-up")
-            : PostStageOutcome.Fail(detail: $"{delta:N0} B allocated over {MeasureFrames} frames after {WarmFrames}-frame warm-up (expected 0)"));
-    }
 }

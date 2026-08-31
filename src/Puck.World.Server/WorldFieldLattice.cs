@@ -381,12 +381,11 @@ public sealed class WorldFieldLattice {
         var quotient = (magnitude / divisorMagnitude);
         var remainder = (magnitude % divisorMagnitude);
 
-        if (
-            ((remainder * 2U) > divisorMagnitude) ||
-            (((remainder * 2U) == divisorMagnitude) && ((quotient & 1U) != 0U))
-        ) {
-            quotient++;
-        }
+        quotient = FixedPointRounding.RoundToNearestTiesToEven(
+            distanceToNext: (divisorMagnitude - remainder),
+            distanceToTruncated: remainder,
+            truncated: quotient
+        );
 
         return (negative ? -((Int128)quotient) : ((Int128)quotient));
     }

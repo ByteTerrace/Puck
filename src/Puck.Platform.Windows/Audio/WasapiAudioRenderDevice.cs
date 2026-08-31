@@ -106,12 +106,12 @@ internal sealed class WasapiAudioRenderDevice : IAudioRenderDevice {
         m_initDone.Dispose();
 
         if (m_eventHandle != 0) {
-            _ = CloseHandle(hObject: m_eventHandle);
+            _ = Wasapi.CloseHandle(hObject: m_eventHandle);
         }
     }
 
     private void RenderThread() {
-        _ = CoInitializeEx(dwCoInit: 0, pvReserved: 0); // COINIT_MULTITHREADED
+        _ = Wasapi.CoInitializeEx(dwCoInit: 0, pvReserved: 0); // COINIT_MULTITHREADED
 
         IAudioClient? audioClient = null;
         IAudioRenderClient? renderClient = null;
@@ -143,24 +143,10 @@ internal sealed class WasapiAudioRenderDevice : IAudioRenderDevice {
             _ = Marshal.ReleaseComObject(o: audioClient);
         }
 
-        CoUninitialize();
+        Wasapi.CoUninitialize();
     }
     private (IAudioClient AudioClient, IAudioRenderClient RenderClient) Initialize() {
-        var enumeratorClsid = Wasapi.CLSID_MMDeviceEnumerator;
-        var enumeratorIid = Wasapi.IID_IMMDeviceEnumerator;
-
-        Wasapi.Check(hr: Wasapi.CoCreateInstance(dwClsContext: Wasapi.ClsCtxAll, pUnkOuter: 0, ppv: out var enumeratorObject, rclsid: ref enumeratorClsid, riid: ref enumeratorIid));
-
-        var enumerator = ((IMMDeviceEnumerator)Marshal.GetObjectForIUnknown(pUnk: enumeratorObject));
-
-        _ = Marshal.Release(pUnk: enumeratorObject);
-        Wasapi.Check(hr: enumerator.GetDefaultAudioEndpoint(dataFlow: Wasapi.DataFlowRender, ppDevice: out var device, role: Wasapi.RoleConsole));
-
-        var audioClientIid = Wasapi.IID_IAudioClient;
-
-        Wasapi.Check(hr: device.Activate(dwClsCtx: Wasapi.ClsCtxAll, iid: ref audioClientIid, pActivationParams: 0, ppInterface: out var audioClientObject));
-
-        var audioClient = ((IAudioClient)audioClientObject);
+        var audioClient = Wasapi.ActivateAudioClient(dataFlow: Wasapi.DataFlowRender, deviceId: null);
 
         // The endpoint's own mix format is only released, not consumed: the stream requests OUR format below and the
         // AUTOCONVERT flags absorb any difference. Calling it first also fails fast on a half-present endpoint.
@@ -194,7 +180,7 @@ internal sealed class WasapiAudioRenderDevice : IAudioRenderDevice {
             Marshal.FreeHGlobal(hglobal: formatPointer);
         }
 
-        m_eventHandle = CreateEventW(bInitialState: false, bManualReset: false, lpEventAttributes: 0, lpName: null);
+        m_eventHandle = Wasapi.CreateEventW(bInitialState: false, bManualReset: false, lpEventAttributes: 0, lpName: null);
 
         if (m_eventHandle == 0) {
             throw new COMException(message: "failed to create the render event", errorCode: Marshal.GetHRForLastWin32Error());
@@ -207,8 +193,6 @@ internal sealed class WasapiAudioRenderDevice : IAudioRenderDevice {
         var renderClientIid = Wasapi.IID_IAudioRenderClient;
 
         Wasapi.Check(hr: audioClient.GetService(ppv: out var renderClientObject, riid: ref renderClientIid));
-        _ = Marshal.ReleaseComObject(o: enumerator);
-        _ = Marshal.ReleaseComObject(o: device);
 
         return (audioClient, ((IAudioRenderClient)renderClientObject));
     }
@@ -228,7 +212,7 @@ internal sealed class WasapiAudioRenderDevice : IAudioRenderDevice {
         }
 
         while (!m_stop) {
-            _ = WaitForSingleObject(dwMilliseconds: EventTimeoutMilliseconds, hHandle: m_eventHandle);
+            _ = Wasapi.WaitForSingleObject(dwMilliseconds: EventTimeoutMilliseconds, hHandle: m_eventHandle);
 
             if (m_stop || !TryFillAvailable(audioClient: audioClient, prime: false, renderClient: renderClient)) {
                 break;
@@ -293,15 +277,4 @@ internal sealed class WasapiAudioRenderDevice : IAudioRenderDevice {
     private void Park(int hr, string where) =>
         Volatile.Write(location: ref m_fault, value: $"{where} failed: 0x{hr:X8}{((hr == Wasapi.AudclntEDeviceInvalidated) ? " (device invalidated)" : "")}");
     private static unsafe Span<short> SampleSpan(nint data, int samples) => new(length: samples, pointer: ((void*)data));
-    [DllImport("Ole32.dll")]
-    private static extern int CoInitializeEx(nint pvReserved, uint dwCoInit);
-    [DllImport("Ole32.dll")]
-    private static extern void CoUninitialize();
-    [DllImport("Kernel32.dll", SetLastError = true)]
-    private static extern nint CreateEventW(nint lpEventAttributes, [MarshalAs(UnmanagedType.Bool)] bool bManualReset, [MarshalAs(UnmanagedType.Bool)] bool bInitialState, [MarshalAs(UnmanagedType.LPWStr)] string? lpName);
-    [DllImport("Kernel32.dll", SetLastError = true)]
-    private static extern uint WaitForSingleObject(nint hHandle, uint dwMilliseconds);
-    [DllImport("Kernel32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool CloseHandle(nint hObject);
 }

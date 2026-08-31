@@ -6,21 +6,6 @@ namespace Puck.Physics;
 /// consumer reads, so dynamic-vs-dynamic and dynamic-vs-static pairs cannot disagree about the same volume.</summary>
 internal static class FixedColliderBounds {
     private static readonly FixedQ4816 Two = FixedQ4816.FromInteger(value: 2L);
-    private static readonly FixedVector3 UnitX = new(
-        X: FixedQ4816.One,
-        Y: FixedQ4816.Zero,
-        Z: FixedQ4816.Zero
-    );
-    private static readonly FixedVector3 UnitY = new(
-        X: FixedQ4816.Zero,
-        Y: FixedQ4816.One,
-        Z: FixedQ4816.Zero
-    );
-    private static readonly FixedVector3 UnitZ = new(
-        X: FixedQ4816.Zero,
-        Y: FixedQ4816.Zero,
-        Z: FixedQ4816.One
-    );
 
     internal static (FixedVector3 Center, FixedVector3 Extent) WorldBounds(
         FixedVector3 position,
@@ -56,9 +41,9 @@ internal static class FixedColliderBounds {
         if (volume.Kind == FixedBodyColliderKind.Box) {
             var center = (position + orientation.Rotate(vector: volume.Center));
             var rotation = (orientation * volume.Rotation).Normalize();
-            var axisX = rotation.Rotate(vector: UnitX);
-            var axisY = rotation.Rotate(vector: UnitY);
-            var axisZ = rotation.Rotate(vector: UnitZ);
+            var axisX = rotation.Rotate(vector: FixedAxisMath.UnitX);
+            var axisY = rotation.Rotate(vector: FixedAxisMath.UnitY);
+            var axisZ = rotation.Rotate(vector: FixedAxisMath.UnitZ);
             var extent = new FixedVector3(
                 X: (((FixedQ4816.Abs(value: axisX.X) * volume.HalfExtents.X) + (FixedQ4816.Abs(value: axisY.X) * volume.HalfExtents.Y)) + (FixedQ4816.Abs(value: axisZ.X) * volume.HalfExtents.Z)),
                 Y: (((FixedQ4816.Abs(value: axisX.Y) * volume.HalfExtents.X) + (FixedQ4816.Abs(value: axisY.Y) * volume.HalfExtents.Y)) + (FixedQ4816.Abs(value: axisZ.Y) * volume.HalfExtents.Z)),

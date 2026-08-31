@@ -732,14 +732,10 @@ public static class WireFrame {
     public static async Task WriteAsync(Stream stream, byte kind, ReadOnlyMemory<byte> body, CancellationToken ct) {
         ArgumentNullException.ThrowIfNull(argument: stream);
 
-        var frame = new byte[checked((PrefixBytes + body.Length))];
-
-        BinaryPrimitives.WriteUInt32LittleEndian(
-            destination: frame,
-            value: checked((uint)(body.Length + sizeof(byte)))
+        var frame = FrameCodec.Join(
+            kind: kind,
+            payload: body.Span
         );
-        frame[sizeof(uint)] = kind;
-        body.Span.CopyTo(destination: frame.AsSpan(start: PrefixBytes));
 
         await stream.WriteAsync(
             buffer: frame,

@@ -13,7 +13,7 @@ internal enum FixedManifoldSlotDisposition {
 }
 /// <summary>One persistent manifold slot: the geometry a candidate wrote into it, and the impulse it accumulates
 /// across steps.</summary>
-internal struct FixedManifoldSlot : IManifoldSlotEvictionKey {
+internal struct FixedManifoldSlot : IManifoldSlot<FixedContactCandidate> {
     /// <summary>Whether the slot holds a live association.</summary>
     internal bool Occupied;
     /// <summary>The associated candidate's source identity.</summary>
@@ -68,6 +68,83 @@ internal struct FixedManifoldSlot : IManifoldSlotEvictionKey {
     readonly bool IManifoldSlotEvictionKey.Occupied => Occupied;
     readonly int IManifoldSlotEvictionKey.LastTouchedStep => LastTouchedStep;
     readonly long IManifoldSlotEvictionKey.NormalImpulseRaw => NormalImpulseRaw;
+    readonly int IManifoldSlotState.SourceId => SourceId;
+    readonly int IManifoldSlotState.FeatureId => FeatureId;
+    readonly FixedVector3 IManifoldSlotState.Normal => Normal;
+    readonly bool IManifoldSlotState.IsIdle => (Disposition == FixedManifoldSlotDisposition.Idle);
+    void IManifoldSlotState.MarkIdle() {
+        Disposition = FixedManifoldSlotDisposition.Idle;
+    }
+    void IManifoldSlotState.ClearWarmStart() {
+        NormalImpulseRaw = 0L;
+        FrictionImpulse = FixedVector3.Zero;
+    }
+    readonly ulong IManifoldSlotState.Fold(ulong digest, int step) {
+        digest = FixedRigidArithmetic.Fold(
+            digest: digest,
+            value: (Occupied
+            ? 1L
+            : 0L)
+        );
+        digest = FixedRigidArithmetic.Fold(
+            digest: digest,
+            value: SourceId
+        );
+        digest = FixedRigidArithmetic.Fold(
+            digest: digest,
+            value: FeatureId
+        );
+        digest = FixedRigidArithmetic.Fold(
+            digest: digest,
+            value: NormalImpulseRaw
+        );
+        digest = FixedRigidArithmetic.Fold(
+            digest: digest,
+            value: FrictionImpulse.X.Value
+        );
+        digest = FixedRigidArithmetic.Fold(
+            digest: digest,
+            value: FrictionImpulse.Y.Value
+        );
+        digest = FixedRigidArithmetic.Fold(
+            digest: digest,
+            value: FrictionImpulse.Z.Value
+        );
+        digest = FixedRigidArithmetic.Fold(
+            digest: digest,
+            value: Normal.X.Value
+        );
+        digest = FixedRigidArithmetic.Fold(
+            digest: digest,
+            value: Normal.Y.Value
+        );
+        digest = FixedRigidArithmetic.Fold(
+            digest: digest,
+            value: Normal.Z.Value
+        );
+
+        return FixedRigidArithmetic.Fold(
+            digest: digest,
+            value: ((long)(step - LastTouchedStep))
+        );
+    }
+    void IManifoldSlot<FixedContactCandidate>.Claim(in FixedContactCandidate candidate, int step) {
+        Occupied = true;
+        SourceId = candidate.SourceId;
+        FeatureId = candidate.FeatureId;
+        Anchor = candidate.Anchor;
+        Normal = candidate.Normal;
+        Separation = candidate.Separation;
+        TotalNormalImpulseRaw = 0L;
+        LastTouchedStep = step;
+        Disposition = FixedManifoldSlotDisposition.Constraint;
+    }
+    readonly bool IManifoldSlot<FixedContactCandidate>.TryMatchDistance(in FixedContactCandidate candidate, FixedQ4816 matchRadiusSquared, out FixedQ4816 distanceSquared) {
+        var offset = (Anchor - candidate.Anchor);
+
+        return (offset.TryLengthSquared(squaredLength: out distanceSquared) &&
+            (distanceSquared <= matchRadiusSquared));
+    }
 }
 
 /// <summary>
@@ -82,11 +159,6 @@ public sealed class FixedManifoldSlotTable {
     /// <summary>The number of steps a slot survives without being associated.</summary>
     internal const int IdleStepBudget = 4;
 
-    // Two candidates match one slot only when their normals agree to within this cosine — a slot is a persistent
-    // CONTACT, and a surface whose normal has swung this far is a different contact wearing the same identity.
-    private static readonly FixedQ4816 NormalAgreement = FixedQ4816.FromDouble(value: 0.9d);
-    // The largest anchor movement, squared, that still reads as the same contact point rather than a new one.
-    private static readonly FixedQ4816 MatchRadiusSquared = FixedQ4816.FromDouble(value: 0.09d);
     private readonly FixedManifoldSlot[] m_slots = new FixedManifoldSlot[Capacity];
     private readonly bool[] m_claimed = new bool[Capacity];
 
@@ -96,19 +168,10 @@ public sealed class FixedManifoldSlotTable {
     internal ref FixedManifoldSlot this[int index] => ref m_slots[index];
 
     /// <summary>Gets the number of slots associated with a candidate on the most recent step.</summary>
-    public int ActiveCount {
-        get {
-            var count = 0;
-
-            for (var index = 0; (index < Capacity); ++index) {
-                if (m_slots[index].Disposition != FixedManifoldSlotDisposition.Idle) {
-                    ++count;
-                }
-            }
-
-            return count;
-        }
-    }
+    public int ActiveCount => FixedManifoldSlotCore.ActiveCount(
+        capacity: Capacity,
+        slots: m_slots
+    );
 
     /// <summary>Associates one step's candidates into slots.</summary>
     /// <param name="candidates">The candidates, already canonically ordered when the options ask for it.</param>
@@ -120,170 +183,26 @@ public sealed class FixedManifoldSlotTable {
     /// evicts by the total key <c>(lastTouchedStep, accumulatedImpulse, slotIndex)</c>, never by access time. When
     /// every slot is already claimed this step, the overflow candidate is dropped rather than destroying a claimed
     /// contact and its warm-start impulse.</remarks>
-    internal void Associate(List<FixedContactCandidate> candidates, int step, bool compositeIdentity) {
-        ArgumentNullException.ThrowIfNull(argument: candidates);
-        Array.Clear(array: m_claimed);
-
-        for (var index = 0; (index < Capacity); ++index) {
-            m_slots[index].Disposition = FixedManifoldSlotDisposition.Idle;
-        }
-
-        for (var index = 0; (index < candidates.Count); ++index) {
-            var candidate = candidates[index];
-            var target = (compositeIdentity
-                ? FindMatch(candidate: candidate)
-                : (candidate.FeatureId % Capacity)
-            );
-            var retainImpulse = (target >= 0);
-
-            if (target < 0) {
-                target = FixedManifoldEviction.FindFree(
-                    capacity: Capacity,
-                    slots: m_slots
-                );
-            }
-
-            if (target < 0) {
-                target = FixedManifoldEviction.Evict(
-                    capacity: Capacity,
-                    claimed: m_claimed,
-                    slots: m_slots
-                );
-            }
-
-            if (target < 0) {
-                continue;
-            }
-
-            if (!compositeIdentity) {
-                retainImpulse = m_slots[target].Occupied;
-            }
-
-            ref var slot = ref m_slots[target];
-
-            if (!retainImpulse) {
-                slot.NormalImpulseRaw = 0L;
-                slot.FrictionImpulse = FixedVector3.Zero;
-            }
-
-            slot.Occupied = true;
-            slot.SourceId = candidate.SourceId;
-            slot.FeatureId = candidate.FeatureId;
-            slot.Anchor = candidate.Anchor;
-            slot.Normal = candidate.Normal;
-            slot.Separation = candidate.Separation;
-            slot.TotalNormalImpulseRaw = 0L;
-            slot.LastTouchedStep = step;
-            slot.Disposition = FixedManifoldSlotDisposition.Constraint;
-            m_claimed[target] = true;
-        }
-
-        FixedManifoldEviction.SweepIdle(
+    internal void Associate(List<FixedContactCandidate> candidates, int step, bool compositeIdentity) =>
+        FixedManifoldSlotCore.Associate(
+            candidates: candidates,
             capacity: Capacity,
             claimed: m_claimed,
+            compositeIdentity: compositeIdentity,
             idleStepBudget: IdleStepBudget,
             slots: m_slots,
             step: step
         );
-    }
     /// <summary>Folds every slot's persistent state into a running digest, in slot index order.</summary>
     /// <param name="digest">The running digest.</param>
     /// <param name="step">The current step ordinal, so the folded age is RELATIVE (<c>step - LastTouchedStep</c>)
     /// rather than absolute — two runs starting at different step offsets still fold the same age for the same
     /// history.</param>
     /// <returns>The updated digest.</returns>
-    internal ulong Fold(ulong digest, int step) {
-        for (var index = 0; (index < Capacity); ++index) {
-            ref readonly var slot = ref m_slots[index];
-
-            digest = FixedRigidArithmetic.Fold(
-                digest: digest,
-                value: (slot.Occupied
-                ? 1L
-                : 0L)
-            );
-            digest = FixedRigidArithmetic.Fold(
-                digest: digest,
-                value: slot.SourceId
-            );
-            digest = FixedRigidArithmetic.Fold(
-                digest: digest,
-                value: slot.FeatureId
-            );
-            digest = FixedRigidArithmetic.Fold(
-                digest: digest,
-                value: slot.NormalImpulseRaw
-            );
-            digest = FixedRigidArithmetic.Fold(
-                digest: digest,
-                value: slot.FrictionImpulse.X.Value
-            );
-            digest = FixedRigidArithmetic.Fold(
-                digest: digest,
-                value: slot.FrictionImpulse.Y.Value
-            );
-            digest = FixedRigidArithmetic.Fold(
-                digest: digest,
-                value: slot.FrictionImpulse.Z.Value
-            );
-            digest = FixedRigidArithmetic.Fold(
-                digest: digest,
-                value: slot.Normal.X.Value
-            );
-            digest = FixedRigidArithmetic.Fold(
-                digest: digest,
-                value: slot.Normal.Y.Value
-            );
-            digest = FixedRigidArithmetic.Fold(
-                digest: digest,
-                value: slot.Normal.Z.Value
-            );
-            digest = FixedRigidArithmetic.Fold(
-                digest: digest,
-                value: ((long)(step - slot.LastTouchedStep))
-            );
-        }
-
-        return digest;
-    }
-
-    private int FindMatch(FixedContactCandidate candidate) {
-        var best = -1;
-        var bestDistance = FixedQ4816.MaxValue;
-
-        for (var index = 0; (index < Capacity); ++index) {
-            ref readonly var slot = ref m_slots[index];
-
-            if (
-                !slot.Occupied ||
-                m_claimed[index] ||
-                (slot.FeatureId != candidate.FeatureId) ||
-                (slot.SourceId != candidate.SourceId) ||
-                (FixedVector3.Dot(
-                left: slot.Normal,
-                right: candidate.Normal
-            ) < NormalAgreement)
-            ) {
-                continue;
-            }
-
-            var offset = (slot.Anchor - candidate.Anchor);
-
-            if (
-                !offset.TryLengthSquared(squaredLength: out var distance) ||
-                (distance > MatchRadiusSquared)
-            ) {
-                continue;
-            }
-
-            // Nearest witness wins; the lowest slot index breaks an exact tie, so the winner never depends on which
-            // slot happened to be visited first.
-            if (distance < bestDistance) {
-                best = index;
-                bestDistance = distance;
-            }
-        }
-
-        return best;
-    }
+    internal ulong Fold(ulong digest, int step) => FixedManifoldSlotCore.Fold(
+        capacity: Capacity,
+        digest: digest,
+        slots: m_slots,
+        step: step
+    );
 }

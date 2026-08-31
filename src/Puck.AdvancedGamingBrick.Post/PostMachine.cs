@@ -35,7 +35,17 @@ internal sealed class PostMachine : IDisposable {
     /// <param name="bios">The 16&#160;KiB BIOS image (a zeroed stub is valid; only the stages that need a real BIOS check for one).</param>
     /// <param name="rom">The cartridge ROM image.</param>
     /// <returns>The assembled, direct-booted machine instance. The caller owns it and must dispose it.</returns>
-    public static PostMachine Build(ReadOnlyMemory<byte> bios, byte[] rom) {
+    public static PostMachine Build(ReadOnlyMemory<byte> bios, byte[] rom) =>
+        new(instance: BuildInstance(
+            bios: bios,
+            rom: rom
+        ));
+    /// <summary>Builds the underlying isolated, direct-booted machine instance — the fork-capable root a shared probe
+    /// drives directly.</summary>
+    /// <param name="bios">The 16&#160;KiB BIOS image.</param>
+    /// <param name="rom">The cartridge ROM image.</param>
+    /// <returns>The assembled, direct-booted machine instance. The caller owns it and must dispose it.</returns>
+    public static AgbMachineInstance BuildInstance(ReadOnlyMemory<byte> bios, byte[] rom) {
         var instance = AgbMachineFactory.Create(configuration: new AgbMachineConfiguration(
             bios: bios,
             rom: rom
@@ -43,7 +53,15 @@ internal sealed class PostMachine : IDisposable {
 
         instance.Machine.DirectBoot();
 
-        return new PostMachine(instance: instance);
+        return instance;
+    }
+    /// <summary>Advances a machine driver by a whole number of frames.</summary>
+    /// <param name="machine">The machine driver to advance.</param>
+    /// <param name="frames">The number of frames to run.</param>
+    public static void RunFrames(AdvancedGamingBrickMachine machine, int frames) {
+        for (var frame = 0; (frame < frames); ++frame) {
+            _ = machine.RunFrame();
+        }
     }
     /// <summary>Forks this machine: builds an independent sibling from the same configuration and loads this machine's
     /// current state into it, so the two run in lock-step from a common point until they are driven differently. Only a
@@ -53,11 +71,11 @@ internal sealed class PostMachine : IDisposable {
         new(fork: (m_instance ?? throw new InvalidOperationException(message: "Only a root PostMachine can be forked.")).Fork());
     /// <summary>Advances the machine by a whole number of frames.</summary>
     /// <param name="frames">The number of frames to run.</param>
-    public void RunFrames(int frames) {
-        for (var frame = 0; (frame < frames); ++frame) {
-            _ = Machine.RunFrame();
-        }
-    }
+    public void RunFrames(int frames) =>
+        RunFrames(
+            frames: frames,
+            machine: Machine
+        );
     /// <inheritdoc/>
     public void Dispose() {
         m_instance?.Dispose();

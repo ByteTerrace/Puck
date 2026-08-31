@@ -140,11 +140,7 @@ public sealed class SurfaceCompositor : IDisposable {
         var imageViewHandle = surface.ImageViewHandle;
 
         if (surface.IsSharedHandle) {
-            var vulkanFormat = surface.Format switch {
-                SurfaceFormat.B8G8R8A8Unorm => VulkanFormat.B8G8R8A8Unorm,
-                SurfaceFormat.R8G8B8A8Unorm => VulkanFormat.R8G8B8A8Unorm,
-                _ => throw new InvalidOperationException(message: "The surface format has no Vulkan mapping."),
-            };
+            var vulkanFormat = VulkanGpuFormats.ToVkFormat(gpuPixelFormat: GpuPixelFormats.FromSurfaceFormat(format: surface.Format));
 
             m_sharedImport ??= new VulkanSurfaceImport(
                 commandBufferRecordingApi: m_commandBufferRecordingApi,
@@ -161,11 +157,7 @@ public sealed class SurfaceCompositor : IDisposable {
                 width: surface.Width
             );
         } else if (surface.IsCpuPixels) {
-            var vulkanFormat = surface.Format switch {
-                SurfaceFormat.B8G8R8A8Unorm => VulkanFormat.B8G8R8A8Unorm,
-                SurfaceFormat.R8G8B8A8Unorm => VulkanFormat.R8G8B8A8Unorm,
-                _ => throw new InvalidOperationException(message: "The surface format has no Vulkan mapping."),
-            };
+            var vulkanFormat = VulkanGpuFormats.ToVkFormat(gpuPixelFormat: GpuPixelFormats.FromSurfaceFormat(format: surface.Format));
 
             m_rootUpload ??= new VulkanSurfaceUpload(
                 commandBufferRecordingApi: m_commandBufferRecordingApi,

@@ -172,7 +172,7 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
         ReleaseBuffer();
 
         var packedRowBytes = (width * bytesPerPixel);
-        var paddedRowPitch = ((packedRowBytes + TextureRowPitchAlignment) - 1) & ~(TextureRowPitchAlignment - 1);
+        var paddedRowPitch = AlignRowPitch(packedRowBytes: packedRowBytes);
         var readbackByteLength = (((ulong)paddedRowPitch) * height);
         var heapProperties = new D3D12_HEAP_PROPERTIES { Type = D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_READBACK };
         var bufferDesc = new D3D12_RESOURCE_DESC {

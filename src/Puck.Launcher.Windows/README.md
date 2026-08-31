@@ -13,10 +13,13 @@ Registers, in order:
    clipboard and window backend.
 3. `Puck.Memory.AddPuckAllocator` — the unmanaged allocator behind the
    Vulkan backend's `IAllocator` dependency (harmless on Direct3D 12).
-4. The launch-selected presenter: `AddDirectXPresenter` or
-   `AddVulkanPresenter`, plus its `SurfacePresenterDescriptor`. Only the
-   selected backend enters the service provider, so the neutral compute
-   services, device, presenter, and shader format can never disagree.
+4. The launch-selected presenter: `AddDirectXPresenter` plus its
+   `SurfacePresenterDescriptor`, or
+   `Puck.Vulkan.Presentation.AddVulkanHostedPresentation` (the shared
+   Vulkan block — presenter, neutral `IGpuDeviceContext` alias, and
+   descriptor — also called by `Puck.Launcher.Linux`). Only the selected
+   backend enters the service provider, so the neutral compute services,
+   device, presenter, and shader format can never disagree.
 
 Does **not** call `AddLauncherTerminal` or `AddBackendSwitcher` — those stay
 Engine-services calls the composition root makes itself, since this

@@ -118,12 +118,12 @@ internal sealed class WasapiAudioCaptureSource : IAudioCaptureSource {
         m_startSignal.Dispose();
 
         if (m_eventHandle != 0) {
-            _ = CloseHandle(hObject: m_eventHandle);
+            _ = Wasapi.CloseHandle(hObject: m_eventHandle);
         }
     }
 
     private void CaptureThread() {
-        _ = CoInitializeEx(dwCoInit: 0, pvReserved: 0); // COINIT_MULTITHREADED
+        _ = Wasapi.CoInitializeEx(dwCoInit: 0, pvReserved: 0); // COINIT_MULTITHREADED
 
         IAudioClient? audioClient = null;
         IAudioCaptureClient? captureClient = null;
@@ -144,7 +144,7 @@ internal sealed class WasapiAudioCaptureSource : IAudioCaptureSource {
         }
 
         if (!m_initOk || (audioClient is null) || (captureClient is null)) {
-            CoUninitialize();
+            Wasapi.CoUninitialize();
 
             return;
         }
@@ -157,34 +157,11 @@ internal sealed class WasapiAudioCaptureSource : IAudioCaptureSource {
 
         _ = Marshal.ReleaseComObject(o: captureClient);
         _ = Marshal.ReleaseComObject(o: audioClient);
-        CoUninitialize();
+        Wasapi.CoUninitialize();
     }
     private (IAudioClient AudioClient, IAudioCaptureClient CaptureClient) Initialize() {
-        var enumeratorClsid = Wasapi.CLSID_MMDeviceEnumerator;
-        var enumeratorIid = Wasapi.IID_IMMDeviceEnumerator;
-
-        Wasapi.Check(hr: Wasapi.CoCreateInstance(dwClsContext: Wasapi.ClsCtxAll, pUnkOuter: 0, ppv: out var enumeratorObject, rclsid: ref enumeratorClsid, riid: ref enumeratorIid));
-
-        var enumerator = ((IMMDeviceEnumerator)Marshal.GetObjectForIUnknown(pUnk: enumeratorObject));
-
-        _ = Marshal.Release(pUnk: enumeratorObject);
-
         // Loopback captures the render endpoint; the microphone captures a capture endpoint (named or default).
-        IMMDevice device;
-
-        if (m_deviceId is not null) {
-            Wasapi.Check(hr: enumerator.GetDevice(ppDevice: out device, pwstrId: m_deviceId));
-        } else {
-            var dataFlow = (m_loopback ? Wasapi.DataFlowRender : Wasapi.DataFlowCapture);
-
-            Wasapi.Check(hr: enumerator.GetDefaultAudioEndpoint(dataFlow: dataFlow, ppDevice: out device, role: Wasapi.RoleConsole));
-        }
-
-        var audioClientIid = Wasapi.IID_IAudioClient;
-
-        Wasapi.Check(hr: device.Activate(dwClsCtx: Wasapi.ClsCtxAll, iid: ref audioClientIid, pActivationParams: 0, ppInterface: out var audioClientObject));
-
-        var audioClient = ((IAudioClient)audioClientObject);
+        var audioClient = Wasapi.ActivateAudioClient(dataFlow: (m_loopback ? Wasapi.DataFlowRender : Wasapi.DataFlowCapture), deviceId: m_deviceId);
 
         Wasapi.Check(hr: audioClient.GetMixFormat(ppDeviceFormat: out var formatPointer));
 
@@ -206,7 +183,7 @@ internal sealed class WasapiAudioCaptureSource : IAudioCaptureSource {
             Wasapi.Check(hr: audioClient.Initialize(audioSessionGuid: 0, hnsBufferDuration: bufferDuration, hnsPeriodicity: 0, pFormat: formatPointer, shareMode: Wasapi.ShareModeShared, streamFlags: streamFlags));
 
             if (!m_loopback) {
-                m_eventHandle = CreateEventW(bInitialState: false, bManualReset: false, lpEventAttributes: 0, lpName: null);
+                m_eventHandle = Wasapi.CreateEventW(bInitialState: false, bManualReset: false, lpEventAttributes: 0, lpName: null);
 
                 if (m_eventHandle == 0) {
                     throw new COMException(message: "failed to create the capture event", errorCode: Marshal.GetHRForLastWin32Error());
@@ -223,8 +200,6 @@ internal sealed class WasapiAudioCaptureSource : IAudioCaptureSource {
             var captureClientIid = Wasapi.IID_IAudioCaptureClient;
 
             Wasapi.Check(hr: audioClient.GetService(ppv: out var captureClientObject, riid: ref captureClientIid));
-            _ = Marshal.ReleaseComObject(o: enumerator);
-            _ = Marshal.ReleaseComObject(o: device);
 
             return (audioClient, ((IAudioCaptureClient)captureClientObject));
         } finally {
@@ -255,7 +230,7 @@ internal sealed class WasapiAudioCaptureSource : IAudioCaptureSource {
                 if (m_loopback) {
                     Thread.Sleep(millisecondsTimeout: PollIntervalMilliseconds);
                 } else {
-                    _ = WaitForSingleObject(dwMilliseconds: 100, hHandle: m_eventHandle);
+                    _ = Wasapi.WaitForSingleObject(dwMilliseconds: 100, hHandle: m_eventHandle);
                 }
 
                 DrainPackets(captureClient: captureClient, scratch: scratch);
@@ -321,15 +296,4 @@ internal sealed class WasapiAudioCaptureSource : IAudioCaptureSource {
             }
         }
     }
-    [DllImport("Ole32.dll")]
-    private static extern int CoInitializeEx(nint pvReserved, uint dwCoInit);
-    [DllImport("Ole32.dll")]
-    private static extern void CoUninitialize();
-    [DllImport("Kernel32.dll", SetLastError = true)]
-    private static extern nint CreateEventW(nint lpEventAttributes, [MarshalAs(UnmanagedType.Bool)] bool bManualReset, [MarshalAs(UnmanagedType.Bool)] bool bInitialState, [MarshalAs(UnmanagedType.LPWStr)] string? lpName);
-    [DllImport("Kernel32.dll", SetLastError = true)]
-    private static extern uint WaitForSingleObject(nint hHandle, uint dwMilliseconds);
-    [DllImport("Kernel32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool CloseHandle(nint hObject);
 }

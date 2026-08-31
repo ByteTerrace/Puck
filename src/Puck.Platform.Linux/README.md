@@ -9,7 +9,8 @@ The Linux concrete backends behind `Puck.Platform`'s contracts.
   `Interop/WaylandClient.cs`, `Interop/Xcb.cs`. `AddLinuxPlatformWindowing`
   also registers `Puck.Platform.NullClipboardService` — there is no Linux
   clipboard backend.
-- **Declining recording** — `DecliningVideoEncoderFactory`/
+- **Declining recording** — `AddLinuxRecordingPlatform` registers
+  `Puck.Platform.Recording`'s `DecliningVideoEncoderFactory`/
   `DecliningAudioCaptureSourceFactory`: no Linux video-encoder or
   audio-capture backend exists yet, so the recording graph resolves an
   honest decline reason instead of a missing service.

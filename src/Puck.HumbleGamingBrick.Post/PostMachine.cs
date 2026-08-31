@@ -26,20 +26,20 @@ internal static class PostMachine {
         ),
         compose: static services => services.AddHumbleGamingBrickComponents()
     );
+    /// <summary>Advances a machine driver by a whole number of frames.</summary>
+    /// <param name="machine">The machine driver to advance.</param>
+    /// <param name="frames">The number of frames to run.</param>
+    public static void RunFrames(Machine machine, int frames) {
+        for (var frame = 0; (frame < frames); ++frame) {
+            machine.Run(tCycles: ((ulong)TCyclesPerFrame));
+        }
+    }
     /// <summary>Advances a machine by a whole number of frames.</summary>
     /// <param name="instance">The machine to advance.</param>
     /// <param name="frames">The number of frames to run.</param>
-    public static void RunFrames(MachineInstance instance, int frames) {
-        for (var frame = 0; (frame < frames); ++frame) {
-            instance.Machine.Run(tCycles: ((ulong)TCyclesPerFrame));
-        }
-    }
-    /// <summary>Advances a forked machine by a whole number of frames.</summary>
-    /// <param name="fork">The fork rental to advance.</param>
-    /// <param name="frames">The number of frames to run.</param>
-    public static void RunFrames(MachineFork fork, int frames) {
-        for (var frame = 0; (frame < frames); ++frame) {
-            fork.Machine.Run(tCycles: ((ulong)TCyclesPerFrame));
-        }
-    }
+    public static void RunFrames(MachineInstance instance, int frames) =>
+        RunFrames(
+            frames: frames,
+            machine: instance.Machine
+        );
 }
