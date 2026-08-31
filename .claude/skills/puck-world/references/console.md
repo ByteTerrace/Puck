@@ -98,7 +98,12 @@ Three echo models — do not conflate them:
 3. **Mutation verbs** return `CommandResult.None` with NO synchronous echo;
    the accept/reject narration arrives at the tick boundary through
    `WorldServer.EchoTap` (stderr + toast + mirror), and a rejection
-   increments `wire.errors` via `NoteDeferredRejection`.
+   increments `wire.errors` via `NoteDeferredRejection`. A verb that submits
+   through the registering `Submit(link, mutation, echoes, verb)` overload
+   (`WorldDeferredVerbEchoes`; the `world.row.*`/`world.assign` family) also
+   gets a per-verb `[<verb>: …]` stderr line when the drain REJECTS its
+   mutation — that is what lets a canary account a `refused` outcome against
+   the submitting verb. An accepted mutation still prints no per-verb line.
 
 `world.gravity` is the gravity decision's Immediate read-back: it echoes the
 authored solver, uniform acceleration, shared constant/softening, explicit-mass
@@ -136,6 +141,16 @@ fixed step), clocked by COMPLETED SIMULATION TICKS
 barrier holds `world.wait` itself until a preceding mutation lands, so its
 countdown starts from a tick that already contains it. Use it for
 read-after-write across ticks (e.g. asserting motion after input).
+
+**The release is AT LEAST, never exactly-at.** The host loop drains stdin
+once per iteration and `FixedStepPump.Advance` may run a catch-up burst of
+fixed steps in one call (bounded by `maxFrameTicks`, 1/4 s = 60 steps at
+240 Hz), so a read following a released wait can land tens of ticks past R
+on a loaded machine — and the sim is deliberately never console-paced. An
+exact-text assertion after a wait must therefore observe STATIONARY state
+(a settled pose, a rest value), never a still-moving quantity; a body in
+free fall or mid-decay reads differently per slipped tick and flakes under
+load.
 
 ## The tape
 

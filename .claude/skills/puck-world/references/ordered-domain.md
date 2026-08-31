@@ -154,11 +154,15 @@ CorrelationId)` (top of `WorldServer.cs`; `WorldEditEchoKind`: `Mutation`,
 `DocumentDefaults`, `GrantTable`). `ApplyEnvelope` stamps the envelope's
 connection/correlation identity onto every apply method; the BUFFERED kinds
 carry it inside their `PendingOp`, because their echo fires later (from
-`DrainPendingOps`) than their submission. Known limit: the one live
-`EchoTap` subscriber (`Program.cs` → toast store, console mirror, deferred
-rejection notes, drag-preview retirement) correlates rejections by the
-`Mutation` reference, not yet by connection/correlation — the addressing
-fields are plumbed for the wire, not consumed locally.
+`DrainPendingOps`) than their submission. The correlation IS consumed
+locally: `IServerLink.SubmitEnvelope` returns the minted correlation id
+(`0` = none — a codec refusal, a federated link), a buffered-mutation verb
+registers it against its verb name in `WorldDeferredVerbEchoes` (the
+registering `Submit(link, mutation, echoes, verb)` overload), and the
+`EchoTap` subscriber (`WorldPostBuildWiring`) takes the entry back when the
+verdict fires — a LOCAL submission's rejection prints an accountable
+`[<verb>: …]` stderr line beside the verb-agnostic narration; an accepted
+verdict takes its entry silently.
 
 ## The link
 

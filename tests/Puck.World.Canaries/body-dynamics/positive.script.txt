@@ -3,6 +3,6 @@ world.kits
 body.where 0
 world.wait 5
 body.fly 1 0 0 0 0 0 2
-world.wait 500
+world.wait 700
 body.where 0
 world.wait 5

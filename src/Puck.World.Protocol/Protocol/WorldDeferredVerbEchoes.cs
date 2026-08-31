@@ -37,6 +37,26 @@ public sealed class WorldDeferredVerbEchoes {
             while (m_verbs.Count > Capacity) {
                 _ = m_verbs.Remove(key: m_order.Dequeue());
             }
+
+            // Keep the id queue itself bounded: taken entries leave stale ids queued, so compact the head and,
+            // should stale ids pile up behind a long-lived head, rebuild from the live set (cold control-plane
+            // path — the allocation is fine here).
+            while (
+                (m_order.Count > 0) &&
+                !m_verbs.ContainsKey(key: m_order.Peek())
+            ) {
+                _ = m_order.Dequeue();
+            }
+
+            if (m_order.Count > (2 * Capacity)) {
+                var live = m_order.Where(predicate: m_verbs.ContainsKey).ToArray();
+
+                m_order.Clear();
+
+                foreach (var id in live) {
+                    m_order.Enqueue(item: id);
+                }
+            }
         }
     }
     /// <summary>Takes the registered verb for one correlation id, removing the entry.</summary>

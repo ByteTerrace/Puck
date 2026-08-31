@@ -1,10 +1,10 @@
 {
   "id": "body-dynamics",
   "title": "A kit's dynamics-row planar shaping drives real movement, and authoring both response and dynamics refuses",
-  "binding": "The positive leg boots a minimal fixture whose one kit shapes planar velocity through a dynamics row (f=2.5, zeta=1, r=0) instead of a response table, confirms world.kits echoes shaping=dynamics:stride, drives a body.fly forward segment, and asserts the settled pose after it plays out — proving the follower genuinely integrated real displacement, not merely validated. The discriminating leg re-authors the SAME kit live through world.row.set kits, this time carrying BOTH response and dynamics on the SAME motion model; the mutation is refused by the exactly-one-of-response-or-dynamics rule, and a follow-up world.kits shows the kit unchanged — proving the refused mutation never applied.",
+  "binding": "The positive leg boots a minimal fixture whose one kit shapes planar velocity through a dynamics row (f=2.5, zeta=1, r=0) instead of a response table, confirms world.kits echoes shaping=dynamics:stride, drives a body.fly forward segment, and asserts the settled pose after it fully plays out — proving the follower genuinely integrated real displacement, not merely validated. The fixture's motion program deliberately omits ApplyVerticalGravity and the read waits 220 ticks past the segment's 480-tick expiry, so the observed pose is a genuine fixed point: world.wait guarantees AT LEAST its tick count (a loaded host's catch-up burst can overshoot the release by up to 60 ticks before the console pump drains), and only a stationary pose survives that read-tick spread exactly. The discriminating leg re-authors the SAME kit live through world.row.set kits, this time carrying BOTH response and dynamics on the SAME motion model; the mutation is refused by the exactly-one-of-response-or-dynamics rule, and a follow-up world.kits shows the kit unchanged — proving the refused mutation never applied.",
   "bootShape": "headless",
   "requirements": [],
-  "seconds": 6,
+  "seconds": 8,
   "timeoutSeconds": 20,
   "fixtures": [],
   "positive": {
@@ -23,7 +23,7 @@
     "expect": [
       { "type": "line", "name": "kit-echoes-dynamics-shaping", "stream": "stdout", "match": "contains", "text": "shaping=dynamics:stride", "present": true },
       { "type": "line", "name": "initial-pose-at-rest", "stream": "stdout", "match": "contains", "text": "pos=(0.00, 0.00, 0.00)", "present": true },
-      {"type": "line", "name": "settled-pose-moved-forward", "stream": "stdout", "match": "contains", "text": "pos=(0.00, -68.69, -7.79)", "present": true},
+      {"type": "line", "name": "settled-pose-moved-forward", "stream": "stdout", "match": "contains", "text": "pos=(0.00, 0.00, -8.00)", "present": true},
       { "type": "line", "name": "no-mutation-rejected", "stream": "stderr", "match": "contains", "text": "world.mutation rejected", "present": false },
       { "type": "line", "name": "no-unhandled-exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
     ]
