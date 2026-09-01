@@ -5,7 +5,7 @@
   ],
   "properties": {
     "moveSpeed": {
-      "description": "Locomotion speed in world units per second \u2014 the profileless fallback a stand-in advances on (a seated player reads its live profile\u0027s speed instead, so identity.motion stays real-time).",
+      "description": "Locomotion speed in world units per second \u2014 the profileless fallback a stand-in advances on (a seated player whose identity CLAIMS a rate reads that claim instead, live, so identity.motion stays real-time; an identity claiming none rides the kit\u0027s own rate).",
       "type": "number"
     },
     "turnSpeed": {

@@ -465,7 +465,7 @@ internal static class CurvatureSplineExactMath {
 
     private static long[] BuildArcTable(Rational d0X, Rational d0Z, Rational d1X, Rational d1Z, Rational d2X, Rational d2Z, int segmentIndex) {
         var subintervalCount = MinSubintervalCount;
-        var (table, _) = BuildArcTableAt(subintervalCount: subintervalCount, d0X: d0X, d0Z: d0Z, d1X: d1X, d1Z: d1Z, d2X: d2X, d2Z: d2Z, segmentIndex: segmentIndex);
+        var (table, speeds) = BuildArcTableAt(subintervalCount: subintervalCount, coarseSpeeds: null, d0X: d0X, d0Z: d0Z, d1X: d1X, d1Z: d1Z, d2X: d2X, d2Z: d2Z, segmentIndex: segmentIndex);
 
         while (true) {
             var refinedCount = (subintervalCount * 2);
@@ -474,7 +474,7 @@ internal static class CurvatureSplineExactMath {
                 throw new CurvatureSplineException(refusal: CurvatureSplineRefusal.ArcLengthErrorUnbounded, segmentIndex: segmentIndex, detail: $"the arc-length table's estimated error did not fall under its scaled bound within {MaxSubintervalCount} panels.");
             }
 
-            var (refinedTable, refinedSpeeds) = BuildArcTableAt(subintervalCount: refinedCount, d0X: d0X, d0Z: d0Z, d1X: d1X, d1Z: d1Z, d2X: d2X, d2Z: d2Z, segmentIndex: segmentIndex);
+            var (refinedTable, refinedSpeeds) = BuildArcTableAt(subintervalCount: refinedCount, coarseSpeeds: speeds, d0X: d0X, d0Z: d0Z, d1X: d1X, d1Z: d1Z, d2X: d2X, d2Z: d2Z, segmentIndex: segmentIndex);
             var quadratureError = MaxQuadratureError(coarse: table, fine: refinedTable);
             var linearError = MaxLinearizationError(speeds: refinedSpeeds, subintervalCount: refinedCount);
             var boundRaw = ScaledErrorBoundRaw(lengthRaw: refinedTable[^1]);
@@ -485,6 +485,7 @@ internal static class CurvatureSplineExactMath {
             }
 
             table = refinedTable;
+            speeds = refinedSpeeds;
             subintervalCount = refinedCount;
         }
     }
@@ -493,10 +494,18 @@ internal static class CurvatureSplineExactMath {
     // the pre-rounding derivative control points, cumulative sums formed exactly and rounded ONCE each to Q32.
     // Returns the speed samples alongside the table — BuildArcTable's own Richardson/linearization checks read them
     // without re-evaluating |B'(t)|.
-    private static (long[] Table, Rational[] Speeds) BuildArcTableAt(int subintervalCount, Rational d0X, Rational d0Z, Rational d1X, Rational d1Z, Rational d2X, Rational d2Z, int segmentIndex) {
+    private static (long[] Table, Rational[] Speeds) BuildArcTableAt(int subintervalCount, Rational[]? coarseSpeeds, Rational d0X, Rational d0Z, Rational d1X, Rational d1Z, Rational d2X, Rational d2Z, int segmentIndex) {
         var speeds = new Rational[((2 * subintervalCount) + 1)];
 
         for (var j = 0; (j <= (2 * subintervalCount)); ++j) {
+            // A doubling's even-indexed samples sit exactly on the coarse grid, so the coarse speeds carry over and
+            // only the odd half is rooted afresh.
+            if ((coarseSpeeds is not null) && (0 == (j & 1))) {
+                speeds[j] = coarseSpeeds[(j >> 1)];
+
+                continue;
+            }
+
             var t = new Rational(BigInteger.One * j, BigInteger.One * (2 * subintervalCount));
             var oneMinusT = (Rational.One - t);
             var bx = ((oneMinusT * oneMinusT * d0X) + (RationalTwo * oneMinusT * t * d1X) + (t * t * d2X));
@@ -514,7 +523,9 @@ internal static class CurvatureSplineExactMath {
         for (var j = 0; (j < subintervalCount); ++j) {
             var increment = ((speeds[(2 * j)] + (RationalFour * speeds[((2 * j) + 1)]) + speeds[((2 * j) + 2)]) / panelTimesSix);
 
-            cumulative += increment;
+            // Reduced every step: Rational's operators never divide out a common factor, and an unreduced running sum
+            // of guard-scale roots grows its denominator multiplicatively with the panel index.
+            cumulative = Reduce(value: (cumulative + increment));
             table[(j + 1)] = RoundQ32(value: cumulative, segmentIndex: segmentIndex, detail: $"the arc-length table entry at t = {(j + 1)}/{subintervalCount}");
         }
 

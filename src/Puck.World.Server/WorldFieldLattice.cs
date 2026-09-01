@@ -1210,9 +1210,14 @@ public sealed class WorldFieldLattice {
                 }
             }
 
+            var color = (((m_document.Fields[field] is { HeightScale: > 0f } row) && (row.Color is { } token))
+                ? $" color={token}"
+                : string.Empty
+            );
+
             parts.Add(item: string.Create(
                 provider: CultureInfo.InvariantCulture,
-                handler: $"{m_names[field]} nonzero={nonzero} mean={(sum / CellCount):0.###}"
+                handler: $"{m_names[field]} nonzero={nonzero} mean={(sum / CellCount):0.###}{color}"
             ));
         }
 

@@ -890,9 +890,12 @@ public static partial class WorldDefinitionValidator {
 
                 if (
                     (row.Color is null) ||
-                    !IsHexColor(value: row.Color)
+                    !WorldColor.IsAuthorable(
+                    definition: definition,
+                    value: row.Color
+                )
                 ) {
-                    errors.Add(item: $"{path}.color must be #RRGGBB on a field carrying a heightScale.");
+                    errors.Add(item: $"{path}.color {WorldColor.Grammar} on a field carrying a heightScale.");
                 }
 
                 var maximumRaise = (((double)row.Max * row.HeightScale) * lattice.Layers);

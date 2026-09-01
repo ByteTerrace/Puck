@@ -328,5 +328,24 @@
         "Absolute": ""
       }
     ]
+  },
+  {
+    "Id": "curvature-spline.evaluate-curvature",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.CompiledCurvatureSpline", "Name": "EvaluateRaw" },
+      { "Type": "Puck.Maths.CurvatureSplineSample", "Name": "Curvature" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the curvature Evaluate reads back, not merely the endpoint curvature Compile reconstructs: on a twelve-knot circle of radius eight the sampled curvature stays within 1/64 of the authored 1/8 at sixty-four stations round the loop (the cubic's own approximation of the circle between knots, which is where the band comes from), lands within two raw of the authored value at every knot station, and is exactly zero at every station of a straight segment. Halving the evaluator's curvature scale, or rounding |v|³ to zero at the speed floor as a Q16 route does, reddens this case where the endpoint reconstruction stays green.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
   }
 ]

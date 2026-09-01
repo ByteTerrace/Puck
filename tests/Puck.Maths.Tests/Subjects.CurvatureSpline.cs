@@ -75,6 +75,54 @@ internal static partial class Subjects {
         return null;
     }
 
+    /// <summary>The curvature <see cref="CompiledCurvatureSpline.Evaluate"/> reads back: on a twelve-knot circle of
+    /// radius eight it stays within 1/64 of the authored 1/8 at sixty-four stations round the loop and lands within
+    /// two raw of the authored value at every knot station; on a straight segment it is exactly zero everywhere. The
+    /// circle band is the cubic's own approximation of the circle between knots, not the evaluator's rounding.</summary>
+    public static string? CurvatureSplineEvaluateCurvature() {
+        const double radius = 8.0;
+        const int knotCount = 12;
+        var turn = ((2.0 * Math.PI) / knotCount);
+        var knots = new CurvatureSplineKnot[knotCount];
+
+        for (var i = 0; (i < knotCount); ++i) {
+            knots[i] = CurvatureSplineCircleKnotAt(radius: radius, elevation: 0, knotIndex: i, turnRadians: turn, signedCurvature: (1.0 / radius));
+        }
+
+        var circle = CurvatureSpline.Compile(knots: knots, closed: true);
+        var authored = knots[0].Curvature.Value;
+        var band = (authored >> 6);
+
+        for (var station = 0; (station < 64); ++station) {
+            var arcRaw = ((long)((((Int128)circle.TotalLengthRaw) * station) / 64));
+            var sample = circle.EvaluateRaw(arcRaw: arcRaw);
+
+            if (Math.Abs(value: (sample.Curvature.Value - authored)) > band) {
+                return $"circle station {station}/64: curvature raw {sample.Curvature.Value}, authored {authored}, band {band}";
+            }
+        }
+
+        for (var segment = 0; (segment < circle.SegmentCount); ++segment) {
+            var atKnot = circle.EvaluateRaw(arcRaw: circle.GetSegment(index: segment).StationRaw);
+
+            if (Math.Abs(value: (atKnot.Curvature.Value - authored)) > 2L) {
+                return $"circle knot {segment}: curvature raw {atKnot.Curvature.Value} at the knot station, authored {authored}";
+            }
+        }
+
+        var line = CurvatureSpline.Compile(knots: [CurvatureSplineKnotAt(0, 0, 0, 0, 0), CurvatureSplineKnotAt(4, 0, 0, 0, 0)], closed: false);
+
+        for (var station = 0; (station <= 16); ++station) {
+            var arcRaw = ((long)((((Int128)line.TotalLengthRaw) * station) / 16));
+
+            if (line.EvaluateRaw(arcRaw: arcRaw).Curvature != FixedQ4816.Zero) {
+                return $"straight segment station {station}/16: curvature is not exactly zero";
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>At every interior joint of a multi-knot curve, the curvature one Q32 raw before the joint station
     /// (the left segment's own evaluation, essentially at its t=1) and exactly at the joint station (the right
     /// segment's own evaluation at its t=0) agree after Q16 rounding — both read through the subject's own public

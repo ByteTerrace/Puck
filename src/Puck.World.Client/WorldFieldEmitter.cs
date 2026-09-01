@@ -45,21 +45,6 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
             val2: ((int)MathF.Ceiling(tallest / document.Lattice.CellSize) + 3)
         );
     }
-    private static Vector3 ParseColor(string? hex) {
-        if (
-            (hex is null) ||
-            (hex.Length != 7) ||
-            (hex[0] != '#')
-        ) {
-            return Vector3.One;
-        }
-
-        return new Vector3(
-            x: (Convert.ToInt32(value: hex.Substring(startIndex: 1, length: 2), fromBase: 16) / 255f),
-            y: (Convert.ToInt32(value: hex.Substring(startIndex: 3, length: 2), fromBase: 16) / 255f),
-            z: (Convert.ToInt32(value: hex.Substring(startIndex: 5, length: 2), fromBase: 16) / 255f)
-        );
-    }
     // A sampled brick needs the pool dimension on every axis; a lattice wider than the brick edge renders its first
     // BrickDim columns only.
     private static int Clamp(int cells) => Math.Min(
@@ -139,7 +124,14 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
                 continue;
             }
 
-            var material = builder.AddMaterial(material: new SdfMaterial(Albedo: ParseColor(hex: row.Color)));
+            // The colour resolves here, at emit time, against the live delivered definition — the brick holds only
+            // distances, so a state-bound colour follows a state cell write on the next definition revision with no
+            // re-bake.
+            var material = builder.AddMaterial(material: new SdfMaterial(Albedo: WorldColor.Resolve(
+                definition: m_client.Definition,
+                fallback: Vector3.One,
+                value: row.Color
+            )));
 
             _ = builder.ResetPoint().SampledRegion(
                 boxMin: boxMin,

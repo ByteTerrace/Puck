@@ -309,6 +309,9 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             DisableFarBound = true,
             DisableShadowEscapeExit = true,
             DisableShadowAccumulation = true,
+            // The mirrored world's own far plane (its render.farDistance), so the panel frames the same depth its
+            // authority renders.
+            FarDistance = WorldRenderFarDistance.Resolve(defaults: m_mirror.Definition.Render),
         };
     }
     /// <inheritdoc/>

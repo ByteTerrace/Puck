@@ -850,6 +850,20 @@ public static partial class WorldDefinitionValidator {
             }
         }
     }
+    // The far distance is the depth every camera march ends at; the band is the representable one (see the constants'
+    // remarks), refused by name so a world authoring 0, a negative, or a depth past float's epsilon reach never boots
+    // into a renderer whose cone proofs would rest on rounding. Absent resolves to the engine's pinned default.
+    private static void ValidateRenderFarDistance(float? farDistance, List<string> errors) {
+        if (farDistance is { } value) {
+            RequireRange(
+                value: value,
+                min: WorldRenderDefaults.MinFarDistance,
+                max: WorldRenderDefaults.MaxFarDistance,
+                name: "render.farDistance",
+                errors: errors
+            );
+        }
+    }
     private static void ValidateRenderLighting(WorldDefinition definition, WorldRenderLighting? lighting, List<string> errors, string path = "render.lighting") {
         if (lighting is null) {
             return;

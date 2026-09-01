@@ -333,13 +333,18 @@ public sealed class CompiledCurvatureSpline {
     }
 
     private CurvatureSplineSample LookupAndSample(long local) {
-        var segmentIndex = 0;
+        // Stations ascend strictly, so the last segment whose station is at or below the local arc length is found by
+        // bisection over the same ascending table Compile wrote.
+        var lo = 0;
+        var hi = (_segments.Length - 1);
 
-        for (var i = (_segments.Length - 1); (i >= 0); --i) {
-            if (local >= _segments[i].StationRaw) { segmentIndex = i; break; }
+        while (lo < hi) {
+            var mid = (lo + (((hi - lo) + 1) >> 1));
+
+            if (local >= _segments[mid].StationRaw) { lo = mid; } else { hi = (mid - 1); }
         }
 
-        var segment = _segments[segmentIndex];
+        var segment = _segments[lo];
         var withinSegment = (local - segment.StationRaw);
         var t = InvertArcTable(table: segment.ArcTable, withinSegment: withinSegment);
 
@@ -394,24 +399,12 @@ public sealed class CompiledCurvatureSpline {
         var accelerationX = LinearAt(a0: segment.E0X, a1: segment.E1X, tRaw: tRaw);
         var accelerationZ = LinearAt(a0: segment.E0Z, a1: segment.E1Z, tRaw: tRaw);
 
-        var tangentX = NarrowToQ16(raw: velocityX);
-        var tangentZ = NarrowToQ16(raw: velocityZ);
-        var speed = FixedQ4816.Sqrt(value: ((tangentX * tangentX) + (tangentZ * tangentZ)));
-        FixedQ4816 unitTangentX, unitTangentZ;
-
-        if (speed.Value == 0L) {
-            unitTangentX = FixedQ4816.Zero;
-            unitTangentZ = FixedQ4816.Zero;
-        } else {
-            unitTangentX = (tangentX / speed);
-            unitTangentZ = (tangentZ / speed);
-        }
-
-        var accelX = NarrowToQ16(raw: accelerationX);
-        var accelZ = NarrowToQ16(raw: accelerationZ);
-        var cross = ((tangentX * accelZ) - (tangentZ * accelX));
-        var speedCubed = (speed * speed * speed);
-        var curvature = ((speedCubed.Value == 0L) ? FixedQ4816.Zero : (cross / speedCubed));
+        var (unitTangentX, unitTangentZ, curvature) = TangentAndCurvature(
+            accelerationX: accelerationX,
+            accelerationZ: accelerationZ,
+            velocityX: velocityX,
+            velocityZ: velocityZ
+        );
 
         var yRaw = (segment.Y0Raw + FixedQ4816.RoundProduct(product: (((Int128)segment.GradeRaw) * withinSegmentRaw), fractionBitCount: 32));
 
@@ -423,6 +416,67 @@ public sealed class CompiledCurvatureSpline {
         );
     }
 
+    // The unit tangent and the signed curvature κ = (v × a) / |v|³ from the Q32 velocity and acceleration, each output
+    // rounded once. The tangent is the shared scale-free normalizer on the Q32 raws. The curvature is formed as
+    // (û × a) / |v|² with û carried at Q30 — the velocity landed in [2^45, 2^46) and divided by its own norm — so the
+    // numerator is exact in Int128 and the single rounding is the closing division: at the speed floor (1/64) the
+    // Q16 route this replaces rounded |v|³ to zero and reported no curvature at all.
+    private static (FixedQ4816 UnitTangentX, FixedQ4816 UnitTangentZ, FixedQ4816 Curvature) TangentAndCurvature(long velocityX, long velocityZ, long accelerationX, long accelerationZ) {
+        if ((velocityX | velocityZ) == 0L) {
+            return (FixedQ4816.Zero, FixedQ4816.Zero, FixedQ4816.Zero);
+        }
+
+        var (tangentX, tangentZ) = FixedVectorMath.Normalize(
+            x: velocityX,
+            y: velocityZ
+        );
+        var maximum = Math.Max(
+            val1: FusedArithmetic.RawMagnitude(value: velocityX),
+            val2: FusedArithmetic.RawMagnitude(value: velocityZ)
+        );
+        var shift = FixedVectorMath.DirectionShift(rawMagnitude: maximum);
+        var landedX = FixedVectorMath.ScaleRaw(
+            shift: shift,
+            value: velocityX
+        );
+        var landedZ = FixedVectorMath.ScaleRaw(
+            shift: shift,
+            value: velocityZ
+        );
+        var landedNorm = (FusedArithmetic.SquareMagnitude(value: landedX) + FusedArithmetic.SquareMagnitude(value: landedZ)).SquareRoot();
+        // û at Q30: each component's raw times 2^30 over the landed norm, rounded once; below 2^31 in magnitude.
+        var unitX30 = FixedVectorMath.DivideRounded(
+            denominator: ((UInt128)landedNorm),
+            shift: 30,
+            value: landedX
+        );
+        var unitZ30 = FixedVectorMath.DivideRounded(
+            denominator: ((UInt128)landedNorm),
+            shift: 30,
+            value: landedZ
+        );
+        // (û × a) at Q62 — Q30 times Q32 — exact; |v|² at Q64 exact; κ at Q16 is their ratio times 2^18.
+        var cross = ((((Int128)unitX30) * accelerationZ) - (((Int128)unitZ30) * accelerationX));
+        var speedSquared = (FusedArithmetic.SquareMagnitude(value: velocityX) + FusedArithmetic.SquareMagnitude(value: velocityZ));
+        var negative = (cross < Int128.Zero);
+
+        if (!FusedArithmetic.TryDivideMagnitudeRounded(
+            denominatorMagnitude: speedSquared,
+            fractionBitCount: 18,
+            numeratorMagnitude: ((UInt128)(negative ? -cross : cross)),
+            quotient: out var curvatureMagnitude
+        ) || (curvatureMagnitude > ((UInt128)long.MaxValue))) {
+            curvatureMagnitude = UInt128.Zero; // unreachable inside the compiled speed floor; a total, finite fallback.
+        }
+
+        var curvatureRaw = ((long)curvatureMagnitude);
+
+        return (
+            FixedQ4816.FromRawBits(value: tangentX),
+            FixedQ4816.FromRawBits(value: tangentZ),
+            FixedQ4816.FromRawBits(value: (negative ? -curvatureRaw : curvatureRaw))
+        );
+    }
     // Cubic de Casteljau at a Q32 fraction `tRaw` (0 = t0, 2^32 = t1) — one rounding per lerp, through the shared
     // FixedQ4816.RoundProduct kernel, so every narrowing in the evaluate path rounds the same way.
     private static long DeCasteljau(long p0, long p1, long p2, long p3, long tRaw) {

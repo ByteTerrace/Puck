@@ -778,12 +778,14 @@ public static class CreationStampEmitter {
         var any = false;
 
         foreach (var shape in (document.Shapes ?? [])) {
+            // A domain fold carries the shape across its lattice, so the fold's displacement bound is charged
+            // beside the shape's own position — in creation units, scaled with them.
             reach = MathF.Max(
                 x: reach,
-                y: (((shape.Position.Length() + SdfSolidGeometry.Reach(
+                y: ((((shape.Position.Length() + SdfSolidGeometry.Reach(
                     type: shape.Type,
                     scale: shape.Scale
-                )) * scale) + (document.Noise?.Amplitude ?? 0f))
+                )) + ShapeDomainOps.Reach(domain: shape.Domain)) * scale) + (document.Noise?.Amplitude ?? 0f))
             );
             any = true;
         }

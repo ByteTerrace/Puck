@@ -657,7 +657,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "the octave overload\u0027s exact identity at one layer: Sample(seed, position, 1) is the plain lattice sample arithmetically halved, at every one of the 512 positions. One layer is the whole sum, so the identity pins the amplitude schedule\u0027s first term exactly rather than by a bound",
+        "Subject": "the octave overload\u0027s exact identity at one layer: Sample(seed, position, 1) is the plain lattice sample halved to nearest on its magnitude (half away from zero, then re-signed), at every one of the 512 positions. One layer is the whole sum, so the identity pins the amplitude schedule\u0027s first term exactly rather than by a bound \u2014 and pins the rounding, which a floor shift would bias downward by half a unit per layer",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -1049,6 +1049,14 @@
       {
         "Type": "Puck.Maths.FieldNoise",
         "Name": "Sample"
+      },
+      {
+        "Type": "Puck.Maths.FieldNoise",
+        "Name": "Prepare"
+      },
+      {
+        "Type": "Puck.Maths.FieldNoiseSeed",
+        "Name": "Seed"
       }
     ],
     "Legs": [
@@ -1065,6 +1073,15 @@
         "Kind": "Structural",
         "Flavor": "None",
         "Subject": "ENVELOPE: only the flat Sample(ulong, FixedVector3) overload is pinned at exact values here. Sample(ulong, FixedPosition) (the hierarchical wide-lattice overload) and the octave-summing Sample(ulong, FixedVector3, int) are not retranscribed -- sampling.field-noise-periodicity-canary-and-distribution's own legs are what the coverage citation on those two continues to rest on, alongside its octave-wrap and distribution statements; a defect confined to the wide-lattice or octave path would not redden this case",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the prepared-seed door is a pure re-plumbing: FieldNoise.Prepare(seed).Seed reads the seed back, and Sample (flat and three-octave), Hash and SampleGradient under the prepared seed return exactly the bits their ulong twins return at every ladder row \u2014 the three per-axis states are derived once by Prepare and read where the ulong overloads re-derive them, nothing else moves",
         "Against": "",
         "Shared": "",
         "Citation": "",

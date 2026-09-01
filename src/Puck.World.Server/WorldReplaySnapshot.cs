@@ -15,9 +15,11 @@ namespace Puck.World;
 /// only presentation reads is here: not the color or portable seat-look preference, which the client applies before intent
 /// production, upstream of the link, so a recorded intent already carries it.</summary>
 /// <param name="Name">The profile the seat was seated on.</param>
-/// <param name="MoveSpeed">The pinned locomotion rate (<see cref="WorldIdentity.FixedMoveSpeed"/> as recorded).</param>
+/// <param name="MoveSpeed">The pinned locomotion rate (<see cref="WorldIdentity.FixedMoveSpeed"/> as recorded —
+/// <see langword="null"/> pins an identity that claimed no rate, so the re-drive falls back to the kit's rate the
+/// same way the live run did).</param>
 /// <param name="TurnSpeed">The pinned angular rate (<see cref="WorldIdentity.FixedTurnSpeed"/> as recorded).</param>
-public readonly record struct WorldReplayProfilePin(string Name, FixedQ4816 MoveSpeed, FixedQ4816 TurnSpeed);
+public readonly record struct WorldReplayProfilePin(string Name, FixedQ4816? MoveSpeed, FixedQ4816? TurnSpeed);
 /// <summary>One local seat active at record-start — the seat slice of the captured starting state, re-joined into the
 /// replay's fresh world so its body exists to receive the recorded intent stream.</summary>
 /// <param name="Slot">The 0-based seat slot.</param>
@@ -180,6 +182,16 @@ public abstract record WorldReplayEntry {
 /// interleaved in submission order.</param>
 /// <param name="Intents">The per-entity intent submissions buffered this tick (seat driving), in submission order.</param>
 public readonly record struct WorldReplayTickInput(IReadOnlyList<WorldReplayEntry> Authority, IReadOnlyList<IntentSubmission> Intents);
+/// <summary>Where a forked tape came from — narration only, carried in the header so an operator reading a child
+/// tape can tell it was cut from a parent rather than recorded from boot. The child is STANDALONE: it carries the
+/// parent's whole boot image and the parent's leading <see cref="Tick"/> tick groups copied verbatim, so verify,
+/// inspect, and a further fork all work on it with no parent lookup; this record is never consulted by
+/// <see cref="WorldReplaySnapshot.Drive"/>.</summary>
+/// <param name="ParentName">The parent tape's name, as it was saved under (see <c>WorldReplayTape.PathFor</c>).</param>
+/// <param name="Tick">How many leading tick groups (ticks <c>0..Tick-1</c>) were copied from the parent — the child's
+/// tick <c>Tick</c> is its first live tick. Never greater than the child's own <see cref="WorldReplaySnapshot.TickCount"/>,
+/// which <see cref="WorldReplaySnapshot.Read"/> refuses by name.</param>
+public readonly record struct WorldReplayForkProvenance(string ParentName, int Tick);
 /// <summary>
 /// A deterministic world-state recording: the server starting state captured at record-start plus the per-tick
 /// server-input stream that drove the recorded span, so the recording replays through a fresh world. The starting state
@@ -259,7 +271,7 @@ public sealed class WorldReplaySnapshot {
     // artifact pins (Puck.Scripting.AddonAbi). A tape-shape change does not re-key the ABI, and an ABI break does
     // not re-key this constant — MountedAddons below records what actually mounted, so an ABI break invalidates an
     // existing tape through receipt mismatch without a byte-offset change here.
-    private const uint Magic = 0x504B_5754u; // "PKWT" — puck replay tape; re-keyed for the WorldWireTags PrincipalKind re-derivation (the pinned mapping now matches WorldSubmissionCodec's and can represent PrincipalKind.Group). Retired: 0x504B_4146 ("PKAF"), 0x504B_4C4B ("PKLK"), 0x504B_4341 ("PKCA").
+    private const uint Magic = 0x504B_464Bu; // "PKFK" — puck replay tape; re-keyed for the fork-provenance header slot (ForkedFrom). Retired: 0x504B_4146 ("PKAF"), 0x504B_4C4B ("PKLK"), 0x504B_4341 ("PKCA"), 0x504B_5754 ("PKWT").
     // A shape-identity token, not a version sequence, pinned at 1 permanently: this build writes and reads exactly
     // one tape shape, so there is no older shape to be newer than. A token that disagrees refuses the file by name
     // (found vs. expected) instead of decoding it as nonsense.
@@ -267,6 +279,10 @@ public sealed class WorldReplaySnapshot {
 
     /// <summary>Gets the record-start world definition as its canonical UTF-8 JSON — the rehydrated starting state.</summary>
     public required byte[] DefinitionJson { get; init; }
+    /// <summary>Gets the fork provenance — the parent tape and the count of leading tick groups copied from it —
+    /// or <see langword="null"/> for a tape recorded from boot. Header narration only; <see cref="Drive"/> never
+    /// reads it, because the copied prefix already sits in <see cref="Ticks"/> like any other recorded tick.</summary>
+    public WorldReplayForkProvenance? ForkedFrom { get; init; }
     /// <summary>Gets the guests mounted at record-start, in mount order — the recorded-at-mount receipts (name, module
     /// content hash, fuel, lane) the re-drive re-establishes before it runs a tick. Empty when the recorded session
     /// mounted nothing, which is itself pinned: a re-drive that mounts a guest against an empty set is refused.</summary>
@@ -338,10 +354,13 @@ public sealed class WorldReplaySnapshot {
     }
     // The rate as a readable decimal beside its exact raw lane. The decimal is for the operator; the raw is the number
     // the comparison actually ran on, printed so a drift the decimal rounds away is still legible in the report.
-    private static string Describe(FixedQ4816 rate) {
-        return string.Create(
-            provider: CultureInfo.InvariantCulture,
-            handler: $"{((double)rate):0.####} (raw {rate.Value})"
+    private static string Describe(FixedQ4816? rate) {
+        return ((rate is { } value)
+            ? string.Create(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"{((double)value):0.####} (raw {value.Value})"
+            )
+            : "kit (no claimed rate)"
         );
     }
     // Shared by VerifyMountedAddons for BOTH sides it compares (recorded and fresh) — see its call site's remarks for
@@ -675,8 +694,8 @@ public sealed class WorldReplaySnapshot {
         }
 
         var name = reader.ReadString();
-        var moveSpeed = new FixedQ4816(Value: reader.ReadInt64());
-        var turnSpeed = new FixedQ4816(Value: reader.ReadInt64());
+        var moveSpeed = ReadNullableRate(reader: reader);
+        var turnSpeed = ReadNullableRate(reader: reader);
 
         return new WorldReplayProfilePin(
             MoveSpeed: moveSpeed,
@@ -820,8 +839,8 @@ public sealed class WorldReplaySnapshot {
     }
     // Compared on the RAW fixed lane, never on the rendered decimal: a drift too small to show in four places is still
     // a different trajectory, and a comparison that reads the display string would miss exactly those.
-    private static void ReportRateDrift(string name, string field, FixedQ4816 pinned, FixedQ4816 live) {
-        if (pinned.Value == live.Value) {
+    private static void ReportRateDrift(string name, string field, FixedQ4816? pinned, FixedQ4816? live) {
+        if (pinned?.Value == live?.Value) {
             return;
         }
 
@@ -833,7 +852,7 @@ public sealed class WorldReplaySnapshot {
     // ordering, even though a guest's mounted INDEX no longer addresses it for completion routing (see
     // Addons.WorldAddonRuntime.MountedAddon.InstanceId). Duplicates are refused first and separately, so a
     // collision reports as itself rather than a confusing index mismatch.
-    private static void VerifyMountedAddons(IReadOnlyList<WorldAddonReceipt> recorded, IReadOnlyList<WorldAddonReceipt> fresh) {
+    internal static void VerifyMountedAddons(IReadOnlyList<WorldAddonReceipt> recorded, IReadOnlyList<WorldAddonReceipt> fresh) {
         // Read refuses a duplicate name in a TAPE'S OWN mounted set (a name identifies exactly one mounted guest), but
         // Drive can also run over an IN-PROCESS recording that never passed through Read at all —
         // WorldReplayTape.StopRecording's post-persist verify hands this method its recording straight from the live
@@ -1191,8 +1210,26 @@ public sealed class WorldReplaySnapshot {
 
         if (pin is { } value) {
             writer.Write(value: value.Name);
-            writer.Write(value: value.MoveSpeed.Value);
-            writer.Write(value: value.TurnSpeed.Value);
+            WriteNullableRate(
+                rate: value.MoveSpeed,
+                writer: writer
+            );
+            WriteNullableRate(
+                rate: value.TurnSpeed,
+                writer: writer
+            );
+        }
+    }
+    private static FixedQ4816? ReadNullableRate(BinaryReader reader) =>
+        (reader.ReadBoolean()
+            ? new FixedQ4816(Value: reader.ReadInt64())
+            : null
+        );
+    private static void WriteNullableRate(BinaryWriter writer, FixedQ4816? rate) {
+        writer.Write(value: rate.HasValue);
+
+        if (rate is { } value) {
+            writer.Write(value: value.Value);
         }
     }
     // Deliberately its OWN small leaf, never WorldSubmissionCodec's TryEncodeRebuild/TryDecodeRebuild: that leaf's
@@ -1335,38 +1372,12 @@ public sealed class WorldReplaySnapshot {
         // this drive compares never depends on whether the write occurred.
         server.SaveEffectTap = tick => Console.Error.WriteLine(value: $"[replay: save effect suppressed (tick {tick}) — replay verification is side-effect-free]");
 
-        foreach (var seat in Seats) {
-            // Seat(slot) is right here: this rehydrates an ISOLATED, fresh WorldServer offline — there is no
-            // PlayerRoster (and so no claim) in this rehydration at all to ask PrincipalOf of.
-            _ = server.ApplySession(request: new SessionRequest.Join(
-                Principal: WorldPrincipal.Seat(slot: seat.Slot),
-                Slot: seat.Slot,
-                IdentityName: seat.Profile?.Name,
-                WireProtocolKey: WorldProtocol.WireProtocolKey
-            ));
-
-            if (seat.Profile is not { } pin) {
-                continue;
-            }
-
-            // The join above resolved a live handle, and MoveSpeed/TurnSpeed are simulation input (WorldBody.Advance
-            // reads them off the seated profile every frame), so re-seat on a detached handle carrying the recorded
-            // rates instead: a replay reproduces what was recorded, never what the live catalog currently holds. The
-            // live catalog is only read here (the drift report below), never mutated.
-            ReportProfileDrift(
-                pin: pin,
-                profiles: profiles
-            );
-            population.SetSeatProfile(
-                slot: seat.Slot,
-                profile: WorldIdentity.Pinned(
-                    name: pin.Name,
-                    moveSpeed: pin.MoveSpeed,
-                    turnSpeed: pin.TurnSpeed,
-                    defaults: definition.PlayerDefaults
-                )
-            );
-        }
+        SeatRecordedSeats(
+            definition: definition,
+            population: population,
+            profiles: profiles,
+            server: server
+        );
 
         // Mounted AFTER the seats re-join and after the server's constructor applied the embedded document's grants —
         // the same order the live composition mounts in, so the mount-time disclosure reads the same settled table.
@@ -1406,154 +1417,16 @@ public sealed class WorldReplaySnapshot {
         var hashes = new ulong[Ticks.Count];
 
         for (var tick = 0; (tick < Ticks.Count); tick++) {
-            var input = Ticks[tick];
             var expectedMutationOutcomes = new List<bool>();
 
-            // In recorded order, at the same pre-Step position the live command-apply window applied them: a grant that
-            // preceded a command live must precede it here, or the command is checked against a table the live one
-            // never had.
-            foreach (var entry in input.Authority) {
-                switch (entry) {
-                    case WorldReplayEntry.Command command:
-                        server.ApplyCommand(command: command.Value);
-
-                        break;
-                    case WorldReplayEntry.Grant grant:
-                        server.Grant(
-                            grant: grant.Value,
-                            actor: grant.Actor
-                        );
-
-                        break;
-                    case WorldReplayEntry.Revoke revoke:
-                        server.Revoke(
-                            grant: revoke.Value,
-                            actor: revoke.Actor
-                        );
-
-                        break;
-                    case WorldReplayEntry.Session session:
-                        _ = server.ApplySession(request: session.Value);
-
-                        break;
-                    case WorldReplayEntry.Designation designation:
-                        server.ApplyDesignation(
-                            designation: designation.Value,
-                            principal: designation.Actor
-                        );
-
-                        break;
-                    case WorldReplayEntry.PeerAdmitted admitted:
-                        server.ApplyServerEvent(serverEvent: admitted.Value);
-
-                        break;
-                    case WorldReplayEntry.PeerDisconnected disconnected:
-                        server.ApplyServerEvent(serverEvent: disconnected.Value);
-
-                        break;
-                    case WorldReplayEntry.Rebuild rebuild:
-                        // Deliberately NO Definition: Load/Reload re-read rebuild.PathHint fresh inside
-                        // WorldServer.ApplyRebuild (called from DrainPendingOps below), which is the content-address
-                        // proof — a stored copy would let a moved file pass unnoticed. expectedContentHash is what
-                        // makes this a REPLAY drive rather than a live one: ApplyRebuild refuses BY NAME, before
-                        // installing anything, when the resolved candidate's hash disagrees with what was recorded.
-                        server.EnqueueRebuild(
-                            request: new WorldRebuildRequest(
-                                Kind: rebuild.Kind,
-                                Definition: null,
-                                PathHint: rebuild.PathHint,
-                                Force: rebuild.Force
-                            ),
-                            principal: rebuild.Actor,
-                            expectedContentHash: rebuild.ContentHash
-                        );
-
-                        break;
-                    case WorldReplayEntry.ScreenOp screenOp:
-                        // Synchronous, like Command/Grant/Revoke above — never buffered — mirroring the live apply
-                        // exactly. expectedContentHash is null for every kind but a recorded Insert or a
-                        // machine-booting Select (Select shares Insert's own CAS pin); WorldMachineHost.TryBootMachine
-                        // refuses BY NAME, before booting anything, when a fresh re-read of the content path disagrees
-                        // with it (including an engine-resolution failure, since content is signed before engine
-                        // resolution and is never left unpinned on that path) — the negative control an edited/moved
-                        // ROM exercises.
-                        server.ApplyScreenOp(
-                            op: screenOp.Value,
-                            principal: screenOp.Actor,
-                            expectedContentHash: screenOp.ContentHash
-                        );
-
-                        break;
-                    case WorldReplayEntry.Mutation mutation:
-                        // Buffered to the tick boundary through the ordinary door, drained by THIS tick's
-                        // server.Step call below (DrainPendingOps) — a live mutation never applies synchronously
-                        // either, so the whole apply pipeline (including addon preparation) re-executes at the same
-                        // point it did live. The completion queues this mutation's REPLAYED outcome; the recorded
-                        // one is queued alongside it and both are compared right after server.Step below.
-                        server.EnqueueMutation(
-                            mutation: mutation.Value,
-                            outcomeObserved: applied => replayedMutationOutcomes.Enqueue(item: applied)
-                        );
-                        expectedMutationOutcomes.Add(item: mutation.Outcome);
-
-                        break;
-                    case WorldReplayEntry.Undo undo:
-                        server.EnqueueUndo(
-                            count: undo.Count,
-                            principal: undo.Actor
-                        );
-
-                        break;
-                    case WorldReplayEntry.Composition composition:
-                        server.ApplyComposition(
-                            composition: composition.Value,
-                            principal: composition.Actor
-                        );
-
-                        break;
-                    case WorldReplayEntry.Query query:
-                        // Re-executed so any read-back state the composition touches is reproduced at the same
-                        // position it was live; the answer itself is discarded, since the tape's verdict is the pose
-                        // trace and a query moves no simulation state.
-                        _ = server.Answer(query: query.Value);
-
-                        break;
-                    case WorldReplayEntry.LinkDelivery linkDelivery:
-                        // The same entry point the live poll calls, at the same pre-step position, so this tick's
-                        // Collect sees the identical pending-refresh set. This shadow world holds no adjacency
-                        // source, so the live poll contributes nothing here and cannot double-count.
-                        server.Events.ObserveLinkDelivery(adjacencyName: linkDelivery.Adjacency);
-
-                        break;
-                    case WorldReplayEntry.RateLever:
-                        // Deliberately a no-op: a paused span recorded zero ticks live, so re-driving exactly
-                        // Ticks.Count steps already reproduces the identical stepping cadence with no lever to apply.
-                        break;
-                    case WorldReplayEntry.Transfer transferEvent:
-                        // Acts on the departure half only: this shadow world is the boot instance alone, with no
-                        // destination instance to move a body into, so an arrival is structurally unreachable. A
-                        // departed body must stop contributing to HashState here exactly as it did live. A slot
-                        // already inactive is a no-op by TryDetachSeatForTransfer's own contract, never a throw.
-                        foreach (var departedSlot in transferEvent.DepartedBootSlots) {
-                            _ = population.TryDetachSeatForTransfer(
-                                profile: out _,
-                                slot: departedSlot
-                            );
-                        }
-
-                        break;
-                    default:
-                        // A new entry kind that reaches here unhandled would be silently DROPPED from the re-drive,
-                        // which is a determinism hole wearing a robustness costume.
-                        throw new WorldReplayCodecException(message: $"no .puckreplay re-drive for authority entry kind '{entry.GetType().Name}'.");
-                }
-            }
-
-            foreach (var intent in input.Intents) {
-                var submission = intent;
-
-                server.EnqueueIntent(submission: in submission);
-            }
+            ApplyRecordedTick(
+                expectedMutationOutcomes: expectedMutationOutcomes,
+                input: Ticks[tick],
+                population: population,
+                rebuildContentPin: static rebuild => rebuild.ContentHash,
+                replayedMutationOutcomes: replayedMutationOutcomes,
+                server: server
+            );
 
             var context = new FixedStepContext(
                 ElapsedTicks: (((ulong)(tick + 1)) * stepTicks),
@@ -1562,35 +1435,243 @@ public sealed class WorldReplaySnapshot {
             );
 
             server.Step(context: in context);
-
-            // The outcome pin, right after the SAME tick's DrainPendingOps has resolved every mutation this tick
-            // enqueued: any disagreement — this tick's mutation count itself, or any one outcome within it — is a
-            // FATAL replay refusal, never a continue-with-divergence. Both directions matter: accepted live but now
-            // refused (e.g. a pinned module went missing), and refused live but now accepted.
-            for (var index = 0; (index < expectedMutationOutcomes.Count); index++) {
-                if (!replayedMutationOutcomes.TryDequeue(result: out var replayedOutcome)) {
-                    throw ReplayRefusal.MutationOutcomeMismatch.Raise(message: $"tick {tick}: {expectedMutationOutcomes.Count} mutation(s) were recorded this tick, but the replay produced only {index} outcome(s) — the mutation stream itself diverged, not merely a later tick's pose.");
-                }
-
-                var recordedOutcome = expectedMutationOutcomes[index];
-
-                if (replayedOutcome != recordedOutcome) {
-                    throw ReplayRefusal.MutationOutcomeMismatch.Raise(message: $"tick {tick}: mutation #{index} was {(recordedOutcome
-                        ? "ACCEPTED"
-                        : "REFUSED")} live but is {(replayedOutcome
-                        ? "ACCEPTED"
-                        : "REFUSED")} on replay — once acceptance can depend on module bytes on disk, this disagreement is a real determinism finding, never an ordinary later-tick pose drift.");
-                }
-            }
-
-            if (replayedMutationOutcomes.Count > 0) {
-                throw ReplayRefusal.MutationOutcomeMismatch.Raise(message: $"tick {tick}: the replay produced {replayedMutationOutcomes.Count} more mutation outcome(s) than were recorded — the mutation stream itself diverged, not merely a later tick's pose.");
-            }
-
+            VerifyRecordedMutationOutcomes(
+                expected: expectedMutationOutcomes,
+                replayed: replayedMutationOutcomes,
+                tick: tick
+            );
             hashes[tick] = HashState(population: population);
         }
 
         return hashes;
+    }
+    /// <summary>Feeds one recorded tick's input into <paramref name="server"/> through the same doors a live
+    /// submission uses, at the pre-step position the live command-apply window holds: the authority entries in
+    /// recorded order (a grant that preceded a command live must precede it here, or the command is checked against
+    /// a table the live one never had), then the tick's intents into the buffer the next <see cref="WorldServer.Step"/>
+    /// drains. Shared by the offline <see cref="Drive"/> and the live drive (<c>WorldReplayTape</c>), so the two can
+    /// never apply a tape differently.</summary>
+    /// <param name="server">The server the tick applies to — the offline shadow, or the running session's own.</param>
+    /// <param name="population">That server's population (a departure entry detaches seats from it directly).</param>
+    /// <param name="input">The recorded tick.</param>
+    /// <param name="expectedMutationOutcomes">Receives each recorded <see cref="WorldReplayEntry.Mutation"/>'s
+    /// pinned outcome, in entry order.</param>
+    /// <param name="replayedMutationOutcomes">Receives each re-enqueued mutation's actual outcome once the next
+    /// <see cref="WorldServer.Step"/> drains it, in the same order.</param>
+    /// <param name="rebuildContentPin">Resolves the CAS pin a recorded rebuild is enqueued under: the entry's own
+    /// hash for the offline drive (a disagreement then refuses by name from inside the step), or
+    /// <see langword="null"/> for the live drive, which must never let a refusal throw out of the running session's
+    /// step and narrates the disagreement itself instead.</param>
+    /// <exception cref="WorldReplayCodecException">An authority-entry kind this apply does not handle.</exception>
+    internal static void ApplyRecordedTick(WorldServer server, WorldPopulation population, WorldReplayTickInput input, List<bool> expectedMutationOutcomes, Queue<bool> replayedMutationOutcomes, Func<WorldReplayEntry.Rebuild, string?> rebuildContentPin) {
+        foreach (var entry in input.Authority) {
+            switch (entry) {
+                case WorldReplayEntry.Command command:
+                    server.ApplyCommand(command: command.Value);
+
+                    break;
+                case WorldReplayEntry.Grant grant:
+                    server.Grant(
+                        grant: grant.Value,
+                        actor: grant.Actor
+                    );
+
+                    break;
+                case WorldReplayEntry.Revoke revoke:
+                    server.Revoke(
+                        grant: revoke.Value,
+                        actor: revoke.Actor
+                    );
+
+                    break;
+                case WorldReplayEntry.Session session:
+                    _ = server.ApplySession(request: session.Value);
+
+                    break;
+                case WorldReplayEntry.Designation designation:
+                    server.ApplyDesignation(
+                        designation: designation.Value,
+                        principal: designation.Actor
+                    );
+
+                    break;
+                case WorldReplayEntry.PeerAdmitted admitted:
+                    server.ApplyServerEvent(serverEvent: admitted.Value);
+
+                    break;
+                case WorldReplayEntry.PeerDisconnected disconnected:
+                    server.ApplyServerEvent(serverEvent: disconnected.Value);
+
+                    break;
+                case WorldReplayEntry.Rebuild rebuild:
+                    // Deliberately NO Definition: Load/Reload re-read rebuild.PathHint fresh inside
+                    // WorldServer.ApplyRebuild (called from DrainPendingOps below), which is the content-address
+                    // proof — a stored copy would let a moved file pass unnoticed. expectedContentHash is what
+                    // makes this a REPLAY drive rather than a live one: ApplyRebuild refuses BY NAME, before
+                    // installing anything, when the resolved candidate's hash disagrees with what was recorded.
+                    server.EnqueueRebuild(
+                        request: new WorldRebuildRequest(
+                            Kind: rebuild.Kind,
+                            Definition: null,
+                            PathHint: rebuild.PathHint,
+                            Force: rebuild.Force
+                        ),
+                        principal: rebuild.Actor,
+                        expectedContentHash: rebuildContentPin(rebuild)
+                    );
+
+                    break;
+                case WorldReplayEntry.ScreenOp screenOp:
+                    // Synchronous, like Command/Grant/Revoke above — never buffered — mirroring the live apply
+                    // exactly. expectedContentHash is null for every kind but a recorded Insert or a
+                    // machine-booting Select (Select shares Insert's own CAS pin); WorldMachineHost.TryBootMachine
+                    // refuses BY NAME, before booting anything, when a fresh re-read of the content path disagrees
+                    // with it (including an engine-resolution failure, since content is signed before engine
+                    // resolution and is never left unpinned on that path) — the negative control an edited/moved
+                    // ROM exercises.
+                    server.ApplyScreenOp(
+                        op: screenOp.Value,
+                        principal: screenOp.Actor,
+                        expectedContentHash: screenOp.ContentHash
+                    );
+
+                    break;
+                case WorldReplayEntry.Mutation mutation:
+                    // Buffered to the tick boundary through the ordinary door, drained by THIS tick's
+                    // server.Step call below (DrainPendingOps) — a live mutation never applies synchronously
+                    // either, so the whole apply pipeline (including addon preparation) re-executes at the same
+                    // point it did live. The completion queues this mutation's REPLAYED outcome; the recorded
+                    // one is queued alongside it and both are compared right after server.Step below.
+                    server.EnqueueMutation(
+                        mutation: mutation.Value,
+                        outcomeObserved: applied => replayedMutationOutcomes.Enqueue(item: applied)
+                    );
+                    expectedMutationOutcomes.Add(item: mutation.Outcome);
+
+                    break;
+                case WorldReplayEntry.Undo undo:
+                    server.EnqueueUndo(
+                        count: undo.Count,
+                        principal: undo.Actor
+                    );
+
+                    break;
+                case WorldReplayEntry.Composition composition:
+                    server.ApplyComposition(
+                        composition: composition.Value,
+                        principal: composition.Actor
+                    );
+
+                    break;
+                case WorldReplayEntry.Query query:
+                    // Re-executed so any read-back state the composition touches is reproduced at the same
+                    // position it was live; the answer itself is discarded, since the tape's verdict is the pose
+                    // trace and a query moves no simulation state.
+                    _ = server.Answer(query: query.Value);
+
+                    break;
+                case WorldReplayEntry.LinkDelivery linkDelivery:
+                    // The same entry point the live poll calls, at the same pre-step position, so this tick's
+                    // Collect sees the identical pending-refresh set. This shadow world holds no adjacency
+                    // source, so the live poll contributes nothing here and cannot double-count.
+                    server.Events.ObserveLinkDelivery(adjacencyName: linkDelivery.Adjacency);
+
+                    break;
+                case WorldReplayEntry.RateLever:
+                    // Deliberately a no-op: a paused span recorded zero ticks live, so re-driving exactly
+                    // Ticks.Count steps already reproduces the identical stepping cadence with no lever to apply.
+                    break;
+                case WorldReplayEntry.Transfer transferEvent:
+                    // Acts on the departure half only: this shadow world is the boot instance alone, with no
+                    // destination instance to move a body into, so an arrival is structurally unreachable. A
+                    // departed body must stop contributing to HashState here exactly as it did live. A slot
+                    // already inactive is a no-op by TryDetachSeatForTransfer's own contract, never a throw.
+                    foreach (var departedSlot in transferEvent.DepartedBootSlots) {
+                        _ = population.TryDetachSeatForTransfer(
+                            profile: out _,
+                            slot: departedSlot
+                        );
+                    }
+
+                    break;
+                default:
+                    // A new entry kind that reaches here unhandled would be silently DROPPED from the re-drive,
+                    // which is a determinism hole wearing a robustness costume.
+                    throw new WorldReplayCodecException(message: $"no .puckreplay re-drive for authority entry kind '{entry.GetType().Name}'.");
+            }
+        }
+
+        foreach (var intent in input.Intents) {
+            var submission = intent;
+
+            server.EnqueueIntent(submission: in submission);
+        }
+    }
+    /// <summary>Re-joins this recording's seats into <paramref name="server"/> and re-seats each profiled one on a
+    /// detached handle carrying its pinned locomotion rates — the recorded values, never the live catalog's current
+    /// ones, which are only read for the drift report. Shared by the offline <see cref="Drive"/> and the live drive's
+    /// boot image.</summary>
+    /// <param name="server">A server at its boot image, with no seat joined yet.</param>
+    /// <param name="population">That server's population.</param>
+    /// <param name="definition">The embedded definition, for the pinned handle's player defaults.</param>
+    /// <param name="profiles">The live catalog the drift report reads.</param>
+    internal void SeatRecordedSeats(WorldServer server, WorldPopulation population, WorldDefinition definition, WorldOwnedWorlds profiles) {
+        foreach (var seat in Seats) {
+            // Seat(slot) directly: there is no PlayerRoster (and so no claim) behind this join to ask PrincipalOf of.
+            _ = server.ApplySession(request: new SessionRequest.Join(
+                Principal: WorldPrincipal.Seat(slot: seat.Slot),
+                Slot: seat.Slot,
+                IdentityName: seat.Profile?.Name,
+                WireProtocolKey: WorldProtocol.WireProtocolKey
+            ));
+
+            if (seat.Profile is not { } pin) {
+                continue;
+            }
+
+            ReportProfileDrift(
+                pin: pin,
+                profiles: profiles
+            );
+            population.SetSeatProfile(
+                slot: seat.Slot,
+                profile: WorldIdentity.Pinned(
+                    name: pin.Name,
+                    moveSpeed: pin.MoveSpeed,
+                    turnSpeed: pin.TurnSpeed,
+                    defaults: definition.PlayerDefaults
+                )
+            );
+        }
+    }
+    /// <summary>Compares one tick's recorded mutation outcomes against what the apply pipeline actually produced,
+    /// right after the step that drained them — the mutation-outcome pin. Any disagreement, in either direction or in
+    /// count, refuses by name (<see cref="ReplayRefusal.MutationOutcomeMismatch"/>); <paramref name="replayed"/> is
+    /// drained by the comparison.</summary>
+    /// <param name="tick">The recorded tick index, for the refusal text.</param>
+    /// <param name="expected">The recorded outcomes, in entry order.</param>
+    /// <param name="replayed">The outcomes the drained step produced, in the same order.</param>
+    /// <exception cref="InvalidDataException">The two disagree.</exception>
+    internal static void VerifyRecordedMutationOutcomes(int tick, List<bool> expected, Queue<bool> replayed) {
+        for (var index = 0; (index < expected.Count); index++) {
+            if (!replayed.TryDequeue(result: out var replayedOutcome)) {
+                throw ReplayRefusal.MutationOutcomeMismatch.Raise(message: $"tick {tick}: {expected.Count} mutation(s) were recorded this tick, but the replay produced only {index} outcome(s) — the mutation stream itself diverged, not merely a later tick's pose.");
+            }
+
+            var recordedOutcome = expected[index];
+
+            if (replayedOutcome != recordedOutcome) {
+                throw ReplayRefusal.MutationOutcomeMismatch.Raise(message: $"tick {tick}: mutation #{index} was {(recordedOutcome
+                    ? "ACCEPTED"
+                    : "REFUSED")} live but is {(replayedOutcome
+                    ? "ACCEPTED"
+                    : "REFUSED")} on replay — once acceptance can depend on module bytes on disk, this disagreement is a real determinism finding, never an ordinary later-tick pose drift.");
+            }
+        }
+
+        if (replayed.Count > 0) {
+            throw ReplayRefusal.MutationOutcomeMismatch.Raise(message: $"tick {tick}: the replay produced {replayed.Count} more mutation outcome(s) than were recorded — the mutation stream itself diverged, not merely a later tick's pose.");
+        }
     }
     /// <summary>Returns the deterministic per-tick state hash: every active body's fixed-point pose — position and the full 6DOF
     /// attitude — folded in index order, so two runs with identical input produce identical traces regardless of
@@ -1666,6 +1747,26 @@ public sealed class WorldReplaySnapshot {
             }
 
             var simulationRate = reader.ReadUInt32();
+            WorldReplayForkProvenance? forkedFrom = null;
+
+            if (reader.ReadBoolean()) {
+                var parentName = reader.ReadString();
+                var forkTick = reader.ReadInt32();
+
+                if (string.IsNullOrWhiteSpace(value: parentName)) {
+                    throw new InvalidDataException(message: "Corrupt .puckreplay recording: the fork provenance names an empty parent tape.");
+                }
+
+                if (forkTick < 0) {
+                    throw new InvalidDataException(message: $"Corrupt .puckreplay recording: the fork provenance tick {forkTick} is negative.");
+                }
+
+                forkedFrom = new WorldReplayForkProvenance(
+                    ParentName: parentName,
+                    Tick: forkTick
+                );
+            }
+
             var hashCount = ReadCount(
                 minimumBytesEach: 8,
                 reader: reader,
@@ -1799,8 +1900,15 @@ public sealed class WorldReplaySnapshot {
                 throw new InvalidDataException(message: $"Corrupt .puckreplay recording: {recordedHashes.Length} recorded hashes for {ticks.Count} ticks.");
             }
 
+            // A child carries its copied prefix in its own Ticks, so a provenance claiming more copied ticks than the
+            // tape holds is doctored or truncated after the header.
+            if (forkedFrom is { } provenance && (provenance.Tick > ticks.Count)) {
+                throw new InvalidDataException(message: $"Corrupt .puckreplay recording: the fork provenance claims {provenance.Tick} tick(s) copied from '{provenance.ParentName}', but the tape carries only {ticks.Count}.");
+            }
+
             return new WorldReplaySnapshot {
                 DefinitionJson = definitionJson,
+                ForkedFrom = forkedFrom,
                 MountedAddons = mountedAddons,
                 RecordedHashes = recordedHashes,
                 Seats = seats,
@@ -1874,6 +1982,23 @@ public sealed class WorldReplaySnapshot {
         // Right after the shape header, before anything else: the rate is simulation INPUT the same way the
         // definition and seats are, and Drive needs it before it can honestly derive a step size.
         writer.Write(value: recording.SimulationRate);
+        // (bool present, string parent, int32 tick) — the fork provenance slot, right behind the rate it shares a
+        // header with; absent for a tape recorded from boot.
+        writer.Write(value: recording.ForkedFrom.HasValue);
+
+        if (recording.ForkedFrom is { } forkedFrom) {
+            if (
+                string.IsNullOrWhiteSpace(value: forkedFrom.ParentName) ||
+                (forkedFrom.Tick < 0) ||
+                (forkedFrom.Tick > recording.Ticks.Count)
+            ) {
+                throw new WorldReplayCodecException(message: $"a .puckreplay recording's fork provenance is inconsistent (parent '{forkedFrom.ParentName}', {forkedFrom.Tick} copied tick(s) of {recording.Ticks.Count}) — a host bug, not tape data.");
+            }
+
+            writer.Write(value: forkedFrom.ParentName);
+            writer.Write(value: forkedFrom.Tick);
+        }
+
         writer.Write(value: recording.RecordedHashes.Length);
 
         foreach (var hash in recording.RecordedHashes) {

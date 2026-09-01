@@ -835,6 +835,8 @@ internal static partial class LawRegistry {
         .. MeetCases(),
         .. NttCases(),
         .. FftCases(),
+        .. WhtCases(),
+        .. DctCases(),
         .. DynamicsCases(),
         .. CurvatureSplineCases(),
     ];

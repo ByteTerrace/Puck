@@ -33,10 +33,8 @@ Primary code:
 The engine declares no rig of its own: `views` is REQUIRED exactly when the
 census implies a body (`population.capacity > 0`), the same derived refusal
 `kits` carries, and a seatless document may author none. The standard chase
-framing below is AUTHORED, in `src/Puck.World/Assets/worlds/standard.world.json`
-— a world inherits it by naming that document as its `basis` (`null.world.json`
-does, authoring only its own `layouts` and other prototype-specific sections), or
-states its own:
+framing below is AUTHORED — the bare `puck.world.json` states its own, and the
+frozen diorama inherits one from `puck.basis.frozen.json`:
 
 ```json
 "views": {
@@ -215,6 +213,17 @@ active, so pointer consumption and cursor visibility cannot disagree. This is
 the presentation projection only: the same relative motion, wheel, and button
 events independently enter `Puck.Commands` through `InputSources.Mouse` while
 absolute cursor position remains observer-only.
+
+A held `player.orbit`/`player.steer` therefore turns the camera from the
+pointer store, never from a routed `mouse.motion` command — no shipped page
+binds `mouse.motion` outside the radial. The scripted twin honours that split:
+`player.signal mouse.motion <dx> <dy>` (pixels, unclamped), `mouse.wheel`, and
+`mouse.button<n> press|release` synthesize the raw `WindowInputEvent` and hand
+it to the window-input observers before the router, exactly as the window pump
+does, so a piped drag orbits and steers like a physical one; every other source
+enters the router alone. `world.view.camera` echoes `orbit=`/`steer=` for the
+two holds. A synthesized pointer never reports an absolute position, so
+`world.view.pointer` keeps answering `reason=no-position` under a scripted drag.
 
 Free Cam is a POSSESSION, not a second camera integrator. A `seatModes` state
 whose `target` is `"camera"` makes the seat possess its own authored

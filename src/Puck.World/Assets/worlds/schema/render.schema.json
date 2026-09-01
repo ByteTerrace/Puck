@@ -303,6 +303,14 @@
       ],
       "additionalProperties": false,
       "default": null
+    },
+    "farDistance": {
+      "description": "The far distance in world units: the depth at which every camera march ends \u2014 the far plane the renderer\u0027s fine march exits at, the reach of the beam\u0027s cone proofs, and the depth the fog and depth ramps are measured against. Geometry beyond it is never marched, so an infinite plane ends on a visible horizon curve at this depth unless the sky fog has absorbed it (render.sky.fogDensity). Optional; absent resolves to the engine\u0027s pinned 40 \u2014 exactly the value every world marched to before this field existed. Must lie within [MinFarDistance, MaxFarDistance]. Re-read on every definition revision (a world.row.set render lands on the next frame); world.budget echoes it with its derived costs.",
+      "type": [
+        "number",
+        "null"
+      ],
+      "default": null
     }
   },
   "additionalProperties": false,

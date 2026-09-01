@@ -1,0 +1,191 @@
+[
+  {
+    "Id": "dct.constant-and-impulse-exact",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedCosineTransform", "Name": "Forward" },
+      { "Type": "Puck.Maths.FixedCosineTransform", "Name": "Inverse" },
+      { "Type": "Puck.Maths.FixedCosineTransformPlan", "Name": "Create" },
+      { "Type": "Puck.Maths.FixedCosineTransformPlan", "Name": "Length" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "a constant input's spectrum is EXACTLY length*value at bin zero and EXACTLY zero at every other bin, and Inverse restores the constant EXACTLY at every sample, at lengths 1 through 256. Exact rather than bounded because the constant's Fourier route touches only twiddles at which the one-rounding multiply rounds nothing (the fft.impulse-dc-nyquist-exact argument), the post-twiddle at bin zero is exactly one, every other post-twiddle multiplies an exact zero, and the inverse's per-stage halving of length*value is an exact shift.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedExactKernel",
+        "Subject": "an impulse at sample zero, transformed at lengths 1 through 256",
+        "Against": "the cosine table FixedQ4816.Cos(FromDouble(-pi*k/(2N))) evaluated in the claim body, bin for bin — EXACT equality: the impulse's Fourier spectrum is exactly one at every bin, so each output bin is exactly the real part of the plan's own post-twiddle, which is that cosine",
+        "Shared": "FixedQ4816.SinCos, the IDENTICAL member, reached through FixedComplex.FromAngle on the plan side and FixedQ4816.Cos in the claim; a wiring statement about which twiddle lands at which bin, not an accuracy statement about the kernel",
+        "Citation": "scalar.* pins FixedQ4816.SinCos's own accuracy; what this leg adds is the post-twiddle indexing — a twiddle table built at the Fourier angle 2*pi*k/N instead of the quarter-turn pi*k/(2N), or indexed by the wrong bin, reddens this case while leaving scalar.* green.",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "a wrong FixedCosineTransformPlan.Length getter breaks this case rather than passing it silently: Forward and Inverse check both spans against the plan's Length before running, so a Length that answered anything but the length the plan was built for throws on every call this case makes.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "dct.round-trip-bound",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedCosineTransform", "Name": "Forward" },
+      { "Type": "Puck.Maths.FixedCosineTransform", "Name": "Inverse" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Inverse(Forward(x)) recovers x within 64 raw Q16 ULPs, at lengths 1 through 256, over Pcg32XshRr-seeded operands in raw [-2^20, 2^20] (about \u002B/-16.0). The bound is MEASURED: a calibration run at this exact envelope, seed source and length set observed a worst case of 42 ULPs at length 256; 64 is that measurement with margin, not a value chosen to make the case pass.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: the bound is stated AT this amplitude. Round-trip error scales with operand magnitude — the post-twiddle and every butterfly twiddle carry their own ~0.5 ULP quantization error through the signal — so a caller working at a larger amplitude should expect proportionally larger absolute error, not this same ceiling.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "dct.round-trip-bound-deep",
+    "Tier": "Deep",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "MIRROR of dct.round-trip-bound at strictly stronger operands — lengths 512 through 4096 rather than 1 through 256, with a wider measured bound (96 ULPs; the calibration run's worst case at this length range was 58 ULPs at length 4096) because more butterfly stages accumulate more per-stage rounding.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "dct.linearity-bound",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedCosineTransform", "Name": "Forward" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Forward(a) + Forward(b) agrees with Forward(a + b) within 24 raw Q16 ULPs, at lengths 1 through 256, over the same seeded envelope as dct.round-trip-bound. MEASURED: the calibration run's worst case at this length range was 8 ULPs at length 256; 24 is that measurement with margin. The three runs round independently, so the two sides need not agree bit-for-bit even though the ideal transform is exactly linear.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "dct.linearity-bound-deep",
+    "Tier": "Deep",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "MIRROR of dct.linearity-bound at strictly stronger operands — lengths 512 through 4096 — with a wider measured bound (96 ULPs; the calibration run's worst case at this length range was 66 ULPs at length 4096).",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "dct.parseval-bound",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedCosineTransform", "Name": "Forward" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "length * sum(x[n]^2) agrees with X[0]^2 + 2 * sum over k >= 1 of X[k]^2 — Parseval's identity for the unscaled DCT-II, whose basis has squared norm N at bin zero and N/2 elsewhere — within 4*10^11 raw Q32 units, at lengths 1 through 256 over the seeded envelope. Both sides are computed EXACTLY in BigInteger from the integer raw components, so the bound is on the fixed-point transform's own rounding and nothing else. MEASURED: the calibration run's worst case at this length range was about 1.5*10^11 at length 256.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "dct.parseval-bound-deep",
+    "Tier": "Deep",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "MIRROR of dct.parseval-bound at strictly stronger operands — lengths 512 through 4096 — with a wider measured bound (6*10^13 raw Q32 units; the calibration run's worst case at this length range was about 1.8*10^13 at length 4096).",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "dct.forward-vs-direct-sum",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedCosineTransform", "Name": "Forward" }
+    ],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "FusedSubstrate",
+        "Subject": "FixedCosineTransform.Forward's Fourier route — the even/odd fold, one FixedFourierTransform of the same length, one post-twiddle per bin — at lengths 1 through 32",
+        "Against": "a direct O(N^2) DCT-II sum built in this claim body from the SAME FixedQ4816.SinCos kernel the plan's twiddles use, but with no fold, no Fourier network and no post-twiddle: bin k accumulates x[n] * Cos(pi*(2n+1)*k/(2N)) over all n through the one-rounding FixedQ4816 multiply and exact addition. Agreement within 128 raw Q16 ULPs — MEASURED: a calibration run at this envelope observed a worst case of 54 ULPs at length 32; the direct sum rounds once per term (up to N per bin) against the route's one per stage plus one post-twiddle, so exact equality is not expected",
+        "Shared": "FixedQ4816.SinCos, the IDENTICAL member (through FixedComplex.FromAngle on the plan side and FixedQ4816.Cos in the claim), and FixedQ4816.RoundProductSum beneath both FixedComplex.operator* and FixedQ4816.operator* — the fused rounding kernel, identical, not a sibling copy",
+        "Citation": "scalar.* pins FixedQ4816.SinCos and the scalar multiply; complex.* pins FixedComplex.operator*; fft.* pins the Fourier network this route rides on. What this leg adds is the DCT-specific wiring — the even-ascending/odd-descending fold, the quarter-turn post-twiddle angle and its real-part projection — which none of those families touch: a fold that interleaved instead of reversing the odd half, a post-twiddle at the wrong angle, or an imaginary-part projection reddens this case while leaving scalar.*, complex.* and fft.* green.",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "dct.length-refusals",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedCosineTransformPlan", "Name": "Create" },
+      { "Type": "Puck.Maths.FixedCosineTransform", "Name": "Forward" },
+      { "Type": "Puck.Maths.FixedCosineTransform", "Name": "Inverse" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "every documented refusal, asserted by exception TYPE and by the parameter name it reports: FixedCosineTransformPlan.Create at zero, a negative length and a non-power-of-two length (12); Forward and Inverse given a values span or a scratch span whose length does not equal the plan's, each naming its own parameter.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

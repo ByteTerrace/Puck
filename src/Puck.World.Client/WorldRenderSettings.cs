@@ -70,8 +70,8 @@ public sealed class WorldRenderSettings {
     /// more simulated stand-ins; exact and fast are explicit visual/performance A/B overrides.</summary>
     public AmbientOcclusionMode AmbientOcclusionQuality { get => m_ambientOcclusionQuality; set { m_ambientOcclusionQuality = value; m_revision++; } }
     /// <summary>Whether the per-tile far-field bound is active (default <see langword="true"/>). Set
-    /// <see langword="false"/> (via <c>world.far-field bound off</c>) to march far-field sky rays to
-    /// MaxDistance exactly — a pure performance isolator (output-identical when on), so it is session state, never
+    /// <see langword="false"/> (via <c>world.far-field bound off</c>) to march far-field sky rays to the far
+    /// distance (<c>render.farDistance</c>) exactly — a pure performance isolator (output-identical when on), so it is session state, never
     /// durable config. Rides the per-frame <see cref="Puck.SdfVm.SdfFrame.DisableFarBound"/> lane
     /// <c>WorldFramePresenter</c> inverts each frame, so no rebuild.</summary>
     public bool FarBound { get => m_farBound; set { m_farBound = value; m_revision++; } }

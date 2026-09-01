@@ -352,8 +352,9 @@ internal static class Fixtures {
         Authority: null
     );
 
-    /// <summary>The standard authoring policy row (the values <c>standard.world.json</c> authors), for fixtures
-    /// that exercise editor/placement behavior — the engine no longer carries one.</summary>
+    /// <summary>A representative declared authoring policy row, for fixtures that exercise editor/placement
+    /// behavior — the engine carries none, and a world of only static placement rows authors none either (its
+    /// rows ride the derived policy; see <see cref="WorldPlacementPolicyDefaults.DeriveFrom"/>).</summary>
     public static WorldPlacementPolicyDefaults StandardAuthoring { get; } = new(
         AuthoringHeadroomPlacements: 8,
         AuthoringHeadroomScreens: 4,

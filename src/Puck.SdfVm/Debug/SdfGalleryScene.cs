@@ -73,7 +73,7 @@ public sealed class SdfGalleryScene {
             Title: "The ground-plane horizon notch",
             Target: new Vector3(x: 0f, y: -1.0f, z: -6f), Yaw: 0.0f, Pitch: 0.08f, Distance: 4.0f,
             Plaque: [
-                "The far ground silhouette against the sky steps in EXACT one-tile (16 px) increments near MaxDistance",
+                "The far ground silhouette against the sky steps in EXACT one-tile (16 px) increments near the far distance",
                 "instead of a smooth perspective curve. Per-tile marchStart / beam-cull GRANULARITY leaking into the",
                 "grazing horizon. MaxSteps exhaustion and occluder framing do not cause this artifact. Drive with a low",
                 "sdf.cam pitch to inspect the beam-cull boundary.",

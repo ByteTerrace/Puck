@@ -28,7 +28,7 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 6
 
 `--exit-after-seconds 0` (or omitting the flag) runs until the window closes.
 Boot prints one line naming the world-definition file it loaded (an explicit
-`--world <path>` or the shipped `Assets/worlds/nexus.world.json`), one naming
+`--world <path>` or the shipped `Assets/worlds/puck.world.json`), one naming
 the recording document, and one capability-disclosure line per mounted addon. The full CLI
 flag surface (backend, size, world, recording, user id, present mode, listen,
 connect, federation key) is declared in `Program.cs`; the graphics API is the boot-time
@@ -621,9 +621,10 @@ compositor calls `TryAcquire` each produced frame to bind the element's
 overlay slot. Two elements naming an identical (source, seat) pair share one
 key, one feed, and one slot — keying on the pair, not the source alone, is
 what keeps two seats' otherwise-identical bare camera panels (both authoring
-no `seat`) from collapsing onto the same feed. `standard.world.json`'s
-`hud.panels` ships one such panel — a mirrored, rounded picture-in-picture of
-the color camera — inherited by every world naming it as `basis`.
+no `seat`) from collapsing onto the same feed. `puck.basis.frozen.json`'s
+`hud.panels` ships one such panel (`portrait`) — a mirrored, rounded
+picture-in-picture of the color camera — inherited by the frozen world naming
+it as its `basis`.
 
 ## Native capture
 
@@ -820,10 +821,16 @@ facades over continuous values. Do not assume a lower render scale is
 monotonic for a large instance field — read both `world.gpu` and `world.fps`
 at the intended population and view layout. `world.budget` is the DERIVED cost
 sheet, not a lever: the live render program's packed words/instances against
-their frozen envelopes, the Lipschitz step scale and march multiplier, the
-field lattice program's node/cadence counts and exact full-cell/body-slot pass
-costs, and the state row count —
+their frozen envelopes, the Lipschitz step scale and march multiplier, the far
+distance with its reach multiplier, horizon-ray step tax, and far-plane fog
+remnant, the field lattice program's node/cadence counts and exact
+full-cell/body-slot pass costs, and the state row count —
 how an authored choice's price becomes legible instead of a silent frame tax.
+
+`render.farDistance` is the depth every camera march ends at (default 40 when
+unauthored; 1..8192), re-read on every definition revision like the lighting
+below — geometry beyond it is never marched, so an infinite ground plane shows
+a horizon curve there unless `render.sky.fogDensity` absorbs it first.
 
 Two document sections author the scene's lighting instead of a verb, re-read
 on every definition revision (a live edit lands on the next frame):

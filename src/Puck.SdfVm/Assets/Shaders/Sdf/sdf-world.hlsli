@@ -17,11 +17,21 @@ struct ViewportData {
     // x = the RENDER-SCALE numerator q (1..255; 255 = native): the view renders at worldRenderDims(rectDims, q) and
     // Stage 2 upsamples back into the full region (bilinear; q == 255 takes the exact-copy path). yz = the off-axis
     // (asymmetric) frustum's tangent-space center offset (SdfAsymmetricFrustum) — (0,0) for an ordinary symmetric
-    // camera, consumed by cameraRayDirection below. w spare.
+    // camera, consumed by cameraRayDirection below. w = the frame's FAR DISTANCE (SdfFrame.FarDistance, read through
+    // worldFarDistance below).
     // KEEP IN SYNC with SdfWorldEngine.PackViewports (the 96-byte row) and BuildCompositePush's scaleQPacked.
     float4 renderScale;
 };
 [[vk::binding(2, 0)]] StructuredBuffer<ViewportData> viewports : register(t1);
+
+// The frame's FAR DISTANCE — the depth at which every camera march ends: the fine march's far exit (renderView), the
+// beam's cone proofs (entry, the gap search, the F1 far bound) and the "nothing proven" sentinel every tile plane
+// carries, and the depth/overshoot debug ramps. It is WORLD DATA (render.farDistance → SdfFrame.FarDistance, packed
+// per view row by SdfWorldEngine.PackViewports — the one buffer every kernel that marches already binds), never a
+// shader constant: the host refuses a non-finite or non-positive value before packing, so no kernel guards it.
+float worldFarDistance(ViewportData view) {
+    return view.renderScale.w;
+}
 
 // The per-view REDUCED render extent, derived from the view's OUTPUT extent and the quantized scale numerator q by
 // INTEGER arithmetic — max(1, (outDim * q + 127) / 255) — so Stage 1 (render), the beam/instance-cull tile coverage,
@@ -67,8 +77,8 @@ uint worldInstanceMaskBase(uint tileIndex) {
 // march-start lower bound (the classic beam output; sdf-cull-args + the compositor read ONLY this plane, so their
 // worldTileIndex stride is unchanged). Planes 1/2 = the proven-empty gap [firstExit, secondEntry] a tile's cone
 // cleared between two occupied bands: sdf-beam writes them, sdf-world-views teleports across them. Plane 3 = the F1
-// FAR BOUND: the depth beyond which the tile's cone provably cannot produce ANY footprint-accepted hit through
-// MaxDistance (sdf-beam writes it, sdf-world-views exits the fine march at traveled >= farBound). Each plane is one
+// FAR BOUND: the depth beyond which the tile's cone provably cannot produce ANY footprint-accepted hit through the far
+// distance (sdf-beam writes it, sdf-world-views exits the fine march at traveled >= farBound). Each plane is one
 // entry per (viewport, tile) THIS frame — the same span worldTileIndex covers — so plane k of tile T sits at
 // (k * stride + tileIndex). KEEP IN SYNC with SdfWorldEngine.TilePlaneCount.
 static const uint WorldTilePlaneCount = 4u;
@@ -211,7 +221,7 @@ static const uint SdfBenchParams = 37u;
 // SdfWorldEngine.PackScreenLights + SdfFrame's EnableShadowProxy/UseCameraTileShadowMask/UseFastSoftShadowMarch fields.
 static const uint SdfShadowProxyParams = 38u;
 // The F1 FAR-FIELD lever row: x = disable the beam-published per-tile far bound (1 = the A/B
-// "off" side — the fine march ignores plane 3 and runs to MaxDistance exactly as pre-F1; 0 = the DEFAULT shipped
+// "off" side — the fine march ignores plane 3 and runs to the far distance exactly as pre-F1; 0 = the DEFAULT shipped
 // behavior with the far bound ACTIVE, so an unset frame uploads 0 and the feature is ON); y = disable the F2 shadow
 // light-side exit (RESERVED for F2, not yet consumed); zw reserved. A SEPARATE row from SdfShadowProxyParams (whose
 // lanes carry the shadow proxy). KEEP IN SYNC with SdfWorldEngine.PackScreenLights + SdfFrame's DisableFarBound field.
@@ -550,8 +560,10 @@ float worldSkyCloudSpinAngle() { return 0.0; }
 float worldSkyCloudCurl() { return 0.0; }
 #endif
 
+// The primary march's step budget. KEEP IN SYNC with SdfWorldEngine.PrimaryMarchSteps (the world.budget cost sheet
+// quotes it against the authored far distance). There is deliberately NO far-distance constant beside it any more:
+// the far plane is world data (render.farDistance), read per view through worldFarDistance.
 static const int MaxSteps = 128;
-static const float MaxDistance = 40.0;
 static const float SurfaceEpsilon = 0.001;
 static const float SphereTraceOmega = 1.2; // Keinert over-relaxation factor (1 = plain sphere tracing; [1, 2))
 static const int ConeMarchSteps = 56;
@@ -572,10 +584,10 @@ static const float TileGapMinStep = 0.15;
 static const int TileGapStallLimit = 3;
 // F1 FAR BOUND: after the gap search resolves, a bounded TAIL phase cone-marches from the
 // resolved t to prove the far bound — the depth past which the tile's cone cannot produce any footprint-accepted hit
-// through MaxDistance. TileFarSteps caps that extra beam cost (the tail is a latency-rich single-thread march, per the
-// beam kernel's design). Sixteen steps is enough to walk a live tile's near band + one gap + a second band into a
-// clear-to-far span; if the span is not proven within the budget the tile publishes farBound = MaxDistance (no early
-// exit — a total function).
+// through the far distance. TileFarSteps caps that extra beam cost (the tail is a latency-rich single-thread march,
+// per the beam kernel's design). Sixteen steps is enough to walk a live tile's near band + one gap + a second band
+// into a clear-to-far span; if the span is not proven within the budget the tile publishes farBound = the far distance
+// (no early exit — a total function).
 static const int TileFarSteps = 10;
 // Bán & Valasek 2023 auto-relaxed sphere tracing (EG short paper). The fine march tracks the field's along-ray slope
 // with an EMA `m` and over-relaxes adaptively — `omega = max(1, 2/(1 - m))`, so a planar (m -> 1) approach takes a big
@@ -1076,13 +1088,14 @@ TileCone buildTileCone(ViewportData view, float2 localUvMin, float2 localUvMax) 
 
 // The four-bound teleport's per-tile output (Larsson "The Gunk"). `entry` is the classic conservative-cone marchStart
 // (the earliest t at which any ray in the tile could hit — a march-start lower bound shared by every pixel in the tile,
-// or TileEmpty when the cone clears the field out to MaxDistance), so plane 0 — and therefore the cull-args bbox, the
-// compositor's empty-tile test, and the footprint-adaptive termination the ground-notch rides — is the exact classic
-// beam output. `firstExit`/`secondEntry` bound ONE proven-empty gap the cone cleared between two occupied bands; when
-// no gap is proven, firstExit = MaxDistance so the consumer's teleport is a total no-op (a total function, per the
-// determinism pin). secondEntry >= firstExit always. `farBound` (F1, plane 3) is the depth past which the tile's cone
-// cannot produce ANY footprint-accepted hit through MaxDistance (proven against the FOOTPRINT-INFLATED threshold — see
-// coneMarchFarBound); MaxDistance when the tail phase proved no such bound (the consumer's far-exit is then a no-op).
+// or TileEmpty when the cone clears the field out to the far distance), so plane 0 — and therefore the cull-args bbox,
+// the compositor's empty-tile test, and the footprint-adaptive termination the ground-notch rides — is the exact
+// classic beam output. `firstExit`/`secondEntry` bound ONE proven-empty gap the cone cleared between two occupied
+// bands; when no gap is proven, firstExit = the far distance so the consumer's teleport is a total no-op (a total
+// function, per the determinism pin). secondEntry >= firstExit always. `farBound` (F1, plane 3) is the depth past
+// which the tile's cone cannot produce ANY footprint-accepted hit through the far distance (proven against the
+// FOOTPRINT-INFLATED threshold — see coneMarchFarBound); the far distance when the tail phase proved no such bound (the
+// consumer's far-exit is then a no-op). Every "nothing proven" sentinel is the view's worldFarDistance, never a constant.
 struct TileBounds {
     float entry;
     float firstExit;
@@ -1091,31 +1104,33 @@ struct TileBounds {
 };
 
 // F1 TAIL PHASE. Proves the FAR BOUND: the depth past which the tile's cone cannot produce any
-// hit the fine march would ACCEPT, all the way to MaxDistance. Marches forward from `startT` with a FOOTPRINT-INFLATED
+// hit the fine march would ACCEPT, all the way to the far distance. Marches forward from `startT` with a FOOTPRINT-INFLATED
 // clearance threshold — the load-bearing correctness fact. The fine march accepts a hit at fieldDistance <
 // max(SurfaceEpsilon, footprint*t) (sdf-world-views computes footprint = 2*right.w/rectDims.y; the beam computes the
 // identical value from regionSizePx), and footprint*t ~ 0.001*t exceeds ConeEpsilon past t~2 — so a bare ConeEpsilon
 // proof is ANTI-conservative and could bound above a real footprint hit. Inflating the cone's transverse radius by the
 // pixel footprint (spread = chord + footprint) and requiring clearance = min(map(center), sdfMapStepBound) -
 // spread*t > SurfaceEpsilon (stepping by clearance/(1 + spread), the 1-Lipschitz cone guarantee for the inflated cone)
-// guarantees that for every ray and every t' in [farBound, MaxDistance] the hit-accept fieldDistance <
+// guarantees that for every ray and every t' in [farBound, farDistance] the hit-accept fieldDistance <
 // max(SurfaceEpsilon, footprint*t') can NEVER fire — so the ray renders skyColor whether it exits at farBound or marches
 // on, i.e. the far exit is OUTPUT-IDENTICAL on the shipped shading path (only step counts and the termination debug view
-// change). FOLD-SAFE like the gap phases (the bounded clearance rides sdfMapStepBound). Total function: no proven clear-
-// to-far span within the budget => MaxDistance.
+// change). The same rule is what renderView's exhaustion arm accepts a closest-approach candidate against, so the proof
+// covers that arm too. FOLD-SAFE like the gap phases (the bounded clearance rides sdfMapStepBound). Total function: no
+// proven clear-to-far span within the budget => the far distance.
 float coneMarchFarBound(ViewportData view, TileCone cone, uint instanceMaskBase, float footprint, float startT) {
     float3 origin = view.position.xyz;
+    float farDistance = worldFarDistance(view);
     float spread = (cone.chord + footprint); // the cone half-spread inflated by the pixel footprint
     float t = startT;
-    float clearStart = MaxDistance; // start of the CURRENT footprint-clear span (MaxDistance = not in one)
+    float clearStart = farDistance; // start of the CURRENT footprint-clear span (farDistance = not in one)
     bool clear = false;
 
     [loop]
     for (int i = 0; (i < TileFarSteps); i++) {
-        if (t > MaxDistance) {
-            // Reached the far plane. If we are inside a footprint-clear span, it extends to MaxDistance => the far
-            // bound is that span's start; otherwise no bound was proven.
-            return (clear ? clearStart : MaxDistance);
+        if (t > farDistance) {
+            // Reached the far plane. If we are inside a footprint-clear span, it extends to the far distance => the
+            // far bound is that span's start; otherwise no bound was proven.
+            return (clear ? clearStart : farDistance);
         }
 
         float clearance = (min(mapDistanceMasked(origin + (cone.centerDirection * t), instanceMaskBase), sdfMapStepBound) - (spread * t));
@@ -1133,21 +1148,21 @@ float coneMarchFarBound(ViewportData view, TileCone cone, uint instanceMaskBase,
             // plane. Advance through the band (magnitude-stepped, floored); overshoot only shrinks/misses a far bound,
             // never invents one (the same one-sided safety the gap search's through-band phase relies on).
             clear = false;
-            clearStart = MaxDistance;
+            clearStart = farDistance;
             t += (max(-clearance, TileGapMinStep) / (1.0 + spread));
         }
     }
 
-    return MaxDistance; // budget exhausted without proving a clear-to-far span => no far bound
+    return farDistance; // budget exhausted without proving a clear-to-far span => no far bound
 }
 
 // Cone march that additionally records the first proven-empty gap past the entry band. The GAP is
 // conservative for the WHOLE tile cone: `firstExit` is a t at which the cone clearance is strictly positive (every
 // ray in the tile is clear there) and the search then steps by <= clearance/(1+chord) — the sphere-trace guarantee —
 // so it cannot skip the cone re-entering geometry; the first re-entry is `secondEntry`. Overstepping the interior of
-// the first band (the through-band phase) can only MISS a gap (reporting firstExit = MaxDistance), never invent one,
-// so a teleport is never unsafe. Reaching MaxDistance while clear yields secondEntry = MaxDistance (an empty tail —
-// the ray teleports to the far plane and ends), the one far-bound benefit taken here.
+// the first band (the through-band phase) can only MISS a gap (reporting firstExit = the far distance), never invent
+// one, so a teleport is never unsafe. Reaching the far distance while clear yields secondEntry = the far distance (an
+// empty tail — the ray teleports to the far plane and ends), the one far-bound benefit taken here.
 //
 // The march evaluates the TILE-MASKED field (mapMasked at `instanceMaskBase` — the mask the instance-cull pass wrote
 // for THIS tile, dispatched immediately before the beam): each sample walks only the instances overlapping the tile's
@@ -1162,17 +1177,18 @@ float coneMarchFarBound(ViewportData view, TileCone cone, uint instanceMaskBase,
 // world/instance merge). A consumer with no mask passes SDF_INSTANCE_MASK_ALL and gets the unmasked march verbatim.
 TileBounds coneMarchTileBounds(ViewportData view, TileCone cone, uint instanceMaskBase, float footprint) {
     float3 origin = view.position.xyz;
+    float farDistance = worldFarDistance(view);
 
     TileBounds b;
     b.entry = TileEmpty;
-    b.firstExit = MaxDistance;   // no proven gap => teleport disabled (total function)
-    b.secondEntry = MaxDistance;
-    b.farBound = MaxDistance;    // F1: no proven far bound yet => the consumer's far-exit is a no-op (total function)
+    b.firstExit = farDistance;   // no proven gap => teleport disabled (total function)
+    b.secondEntry = farDistance;
+    b.farBound = farDistance;    // F1: no proven far bound yet => the consumer's far-exit is a no-op (total function)
 
     // Phase 1 — ENTRY (the classic conservative cone/beam march). map() is a true distance field, so the cone of
     // half-spread `chord` clears ALL of its rays while map(center) - chord*t > 0, and a 1-Lipschitz-safe step is
     // clearance / (1 + chord). Returns the earliest t at which the cone could hit (the shared per-tile marchStart), or
-    // TileEmpty when the cone clears the field out to MaxDistance.
+    // TileEmpty when the cone clears the field out to the far distance.
     float t = ConeNear;
     bool foundEntry = false;
 
@@ -1193,7 +1209,7 @@ TileBounds coneMarchTileBounds(ViewportData view, TileCone cone, uint instanceMa
 
         t += (clearance / (1.0 + cone.chord));
 
-        if (t > MaxDistance) {
+        if (t > farDistance) {
             return b; // TileEmpty entry, no gap — cull-args drops the tile
         }
     }
@@ -1201,7 +1217,7 @@ TileBounds coneMarchTileBounds(ViewportData view, TileCone cone, uint instanceMa
     if (!foundEntry) {
         b.entry = t; // step budget exhausted at the entry band — matches coneMarchTile's fallthrough `return t`
         // F1 leak #2: a budget-exhausted grazing tile is marked LIVE (all its pixels fine-march from t). Prove the far
-        // bound from here so sky pixels that clear the near band exit early instead of running to MaxDistance.
+        // bound from here so sky pixels that clear the near band exit early instead of running to the far distance.
         b.farBound = coneMarchFarBound(view, cone, instanceMaskBase, footprint, t);
 
         return b;
@@ -1233,10 +1249,10 @@ TileBounds coneMarchTileBounds(ViewportData view, TileCone cone, uint instanceMa
                 stall = ((clearance <= previousClearance) ? (stall + 1) : 0);
 
                 if (stall >= TileGapStallLimit) {
-                    b.firstExit = MaxDistance;
-                    b.secondEntry = MaxDistance;
+                    b.firstExit = farDistance;
+                    b.secondEntry = farDistance;
                     // F1: a descending, gap-less tile (ground/wall). The tail proves the far bound if the cone ever
-                    // clears to the far plane past here (a ground tile never does => farBound stays MaxDistance).
+                    // clears to the far plane past here (a ground tile never does => farBound stays the far distance).
                     b.farBound = coneMarchFarBound(view, cone, instanceMaskBase, footprint, t);
 
                     return b;
@@ -1253,7 +1269,7 @@ TileBounds coneMarchTileBounds(ViewportData view, TileCone cone, uint instanceMa
             if (clearance <= ConeEpsilon) {
                 b.secondEntry = t;             // cone re-enters geometry — gap = [firstExit, secondEntry]
                 // F1 leak #4: past the ONE proven gap there was no far information. Prove the far bound from the second
-                // band so a ray that clears it exits early instead of marching the second band's sky to MaxDistance.
+                // band so a ray that clears it exits early instead of marching the second band's sky to the far distance.
                 b.farBound = coneMarchFarBound(view, cone, instanceMaskBase, footprint, t);
 
                 return b; // one gap is the 90% win (Larsson clamps to one re-entry)
@@ -1262,12 +1278,12 @@ TileBounds coneMarchTileBounds(ViewportData view, TileCone cone, uint instanceMa
             t += (clearance / (1.0 + cone.chord)); // stay conservative across the clear span
         }
 
-        if (t > MaxDistance) {
+        if (t > farDistance) {
             if (clear) {
-                b.secondEntry = MaxDistance;   // proven clear to the far plane — teleport ends the ray (the far bound)
+                b.secondEntry = farDistance;   // proven clear to the far plane — teleport ends the ray (the far bound)
             }
             else {
-                b.firstExit = MaxDistance;     // never cleanly exited the band — disable the teleport
+                b.firstExit = farDistance;     // never cleanly exited the band — disable the teleport
             }
 
             return b;
@@ -1276,8 +1292,8 @@ TileBounds coneMarchTileBounds(ViewportData view, TileCone cone, uint instanceMa
 
     // Budget exhausted without a clean second entry: we cannot prove the span past firstExit stays empty, so DISABLE
     // the teleport (stay conservative — never teleport past unproven space).
-    b.firstExit = MaxDistance;
-    b.secondEntry = MaxDistance;
+    b.firstExit = farDistance;
+    b.secondEntry = farDistance;
     // F1: the gap budget ran out mid-band; the tail phase gets its own budget to prove a far bound from here.
     b.farBound = coneMarchFarBound(view, cone, instanceMaskBase, footprint, t);
 
@@ -1427,7 +1443,7 @@ bool worldScreenLightsDisabled() {
 }
 // The F1 FAR-BOUND A/B lever. Rides SdfFarFieldParams.x: 0 (the DEFAULT, an unset frame) keeps
 // the beam-published far bound ACTIVE (the shipped behavior — the fine march exits at traveled >= farBound); 1 pushes
-// the far bound out of reach so the march runs to MaxDistance exactly as pre-F1 (the paired-run "off" side). Decoded
+// the far bound out of reach so the march runs to the far distance exactly as pre-F1 (the paired-run "off" side). Decoded
 // only under SDF_SCREEN_SOURCES (the world-views kernel is the sole SDF-hit shader). KEEP IN SYNC with
 // SdfFrame.DisableFarBound and SdfWorldEngine.PackScreenLights.
 bool worldFarBoundDisabled() {
@@ -2018,9 +2034,9 @@ float3 applyObjectGrid(float3 color, float3 surfacePoint, float3 rayDirection, f
 // step can jump PAST a surface before the sample reads a hit (the overshoot). Two full marches per pixel is the
 // documented debug cost — the overshoot case gates the primary march OFF, so a pixel runs this twice and the production
 // marcher zero times.
-float marchOvershootDepth(float3 rayOrigin, float3 rayDirection, float marchStart, float firstExit, float secondEntry, uint instanceMaskBase, float pixelFootprint, float stepMultiplier) {
+float marchOvershootDepth(float3 rayOrigin, float3 rayDirection, float marchStart, float firstExit, float secondEntry, float farDistance, uint instanceMaskBase, float pixelFootprint, float stepMultiplier) {
     if (marchStart < 0.0) {
-        return MaxDistance; // a beam-culled tile — nothing to march; both marches agree at the far plane
+        return farDistance; // a beam-culled tile — nothing to march; both marches agree at the far plane
     }
 
     float traveled = max(marchStart, 0.0);
@@ -2046,8 +2062,10 @@ float marchOvershootDepth(float3 rayOrigin, float3 rayDirection, float marchStar
             traveled = secondEntry;
         }
 
-        if (traveled > MaxDistance) {
-            traveled = MaxDistance;
+        // Plain omega = 1 steps are provably clear by the 1-Lipschitz bound, so crossing the far plane here IS a
+        // validated escape (unlike renderView's over-relaxed step, which must fall back to the plain step first).
+        if (traveled > farDistance) {
+            traveled = farDistance;
             break;
         }
     }
@@ -2060,12 +2078,22 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
     float3 rayDirection = cameraRayDirection(view, localUv);
     int viewMode = (int)round(view.forward.w);
     float time = view.position.w;
+    float farDistance = worldFarDistance(view);
 
     sdfEvalCount = 0.0; // fresh tally for this pixel — see debug.view.evals (case 10 below)
 
     float traveled = max(marchStart, 0.0);
     bool hitSurface = false;
     int material = 0;
+    // The running closest approach, in the units of the hit-accept rule: the smallest (fieldDistance - hitThreshold)
+    // any sample of this ray measured, and the depth it was measured at. Negative means that sample satisfied the one
+    // accept rule (fieldDistance < hitThreshold) — the rule the in-loop hit arm applies, the F1 far bound is proven
+    // against, and the exhaustion arm after the loop re-applies. A sample can satisfy it yet not be accepted in-loop
+    // only when the disjoint-sphere test flagged the step that reached it as an overshoot (the sample is skipped and
+    // the march retreats); if the budget ends before the retreat re-finds the surface, that sample is the hit.
+    // Seeded far positive = no candidate.
+    float candidateMargin = SDF_FAR_DISTANCE;
+    float candidateT = 0.0;
     // Material blend at smooth seams (sdf-vm.hlsli's sdfMaterialBlendWeight): captured from the ACCEPT-sample march call
     // alongside `material`, because the normal/AO/shadow map calls after the loop clobber the per-thread channel. Weight 0
     // (no smooth seam within a blend radius of the hit) => the shade below is the exact table lookup, unchanged.
@@ -2126,6 +2154,16 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
             float fieldDistance = hit.distance;
             float radius = min(fieldDistance, sdfMapStepBound);
             float hitThreshold = max(SurfaceEpsilon, (pixelFootprint * traveled));
+            // The closest-approach candidate (see its declaration): every evaluated sample competes, INCLUDING one an
+            // overshoot retreat is about to skip — that skipped sample is exactly the one the exhaustion arm exists
+            // for. Recorded at this sample's own depth, before any retreat moves `traveled`.
+            float margin = (fieldDistance - hitThreshold);
+
+            if (margin < candidateMargin) {
+                candidateMargin = margin;
+                candidateT = traveled;
+            }
+
             bool overshoot;
 
 #ifdef SDF_STRICT_MARCH
@@ -2175,6 +2213,9 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
                 break;
             }
 
+            // The depth this step leaves from (after any retreat above) — the plain-step fallback below re-steps from it.
+            float stepFrom = traveled;
+
 #ifdef SDF_STRICT_MARCH
             traveled += stepLength;
 #else
@@ -2193,10 +2234,26 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
             stepLength = advance;
             traveled += stepLength;
 #endif
+            // A far exit may only be taken on a VALIDATED step. An over-relaxed step (omega > 1: stepLength > radius)
+            // is not proven clear by the 1-Lipschitz bound — only the next sample's disjoint-sphere test can reject a
+            // step that tunneled past a surface, and the two exits below fire before that sample exists. So a relaxed
+            // step that would cross the far plane / far bound is retaken as the plain step (radius, omega = 1 — the
+            // proven-clear advance; the slope resets as after a retreat), and the ray exits only if the plain step
+            // crosses too. A ray whose relaxed step never crosses an exit is untouched, so silhouettes against a far
+            // background — where omega reaches 2 / (1 - SlopeCap) = 10 while the ray accelerates away from the near
+            // object — resolve the background instead of vaulting it into sky.
+            if (((traveled >= farBound) || (traveled > farDistance)) && (stepLength > radius)) {
+                stepLength = radius;
+                traveled = (stepFrom + radius);
+#ifndef SDF_STRICT_MARCH
+                slopeM = -1.0; // the next step is plain — the same reset an overshoot retreat takes
+#endif
+            }
+
             // Four-bound teleport (Larsson "The Gunk"): once the ray marches past the tile's first occupied band without
             // converging, it is inside the beam-proven-empty gap — jump straight to the second band's start. secondEntry
             // >= firstExit, so this fires at most once (past secondEntry it is a no-op); a tile with no proven gap packs
-            // firstExit = MaxDistance, making the branch dead. The teleport lands at secondEntry <= the ray's true
+            // firstExit = the far distance, making the branch dead. The teleport lands at secondEntry <= the ray's true
             // re-entry, so `traveled` — and the footprint threshold — is never inflated beyond a normal march (it cannot
             // worsen the ground-notch). Reset the relaxation state so a stale step/slope does not carry across the jump.
             if ((traveled >= firstExit) && (traveled < secondEntry)) {
@@ -2216,15 +2273,38 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
             // F1 FAR-FIELD EXIT: past the tile's beam-proven far bound no ray in the tile can produce a hit the fine
             // march would ACCEPT (coneMarchFarBound proved it against the footprint-inflated threshold), so the ray
             // renders skyColor whether it exits here or marches on — OUTPUT-IDENTICAL, only fewer steps. farBound =
-            // MaxDistance (no bound proven, or the A/B lever pushed it out of reach) makes this a no-op past the far
-            // plane the MaxDistance break already handles.
+            // the far distance (no bound proven, or the A/B lever pushed it out of reach) makes this a no-op past the
+            // far plane the far-distance break already handles. Both exits are reached only on a validated step (the
+            // plain-step fallback above) or a cone-proven teleport landing.
             if (traveled >= farBound) {
                 break;
             }
 
-            if (traveled > MaxDistance) {
+            if (traveled > farDistance) {
                 break;
             }
+        }
+
+        // THE EXHAUSTION ARM — the ONE accept rule, re-applied to the closest approach. A ray that ended its budget
+        // (the step cap, or a far exit) without the in-loop arm accepting a sample, but whose closest approach DID
+        // satisfy fieldDistance < max(SurfaceEpsilon, footprint * t) (candidateMargin < 0 — only an overshoot-skipped
+        // sample can be in that state, see the candidate's declaration), is a hit at that sample: re-evaluate the
+        // field there (one extra eval on this rare path, so the loop carries no per-sample material/blend capture) and
+        // shade with its material and normal exactly as the in-loop arm would have. A ray whose closest approach never
+        // satisfied the rule stays a miss — there is no second, looser threshold here. Adjacent pixels along an edge
+        // therefore resolve by the same rule whichever arm ends them.
+        if (!hitSurface && (candidateMargin < 0.0)) {
+            traveled = candidateT;
+
+            SdfHit candidate = mapMasked(rayOrigin + (rayDirection * traveled), instanceMaskBase);
+
+            sdfEvalCount += 1.0;
+            hitSurface = true;
+            material = candidate.material;
+            materialBlendWeight = sdfMaterialBlendWeight;
+            materialBlendOther = sdfMaterialBlendOther;
+            terminalRadius = candidate.distance;
+            terminalHitThreshold = max(SurfaceEpsilon, (pixelFootprint * traveled));
         }
     }
 
@@ -2463,7 +2543,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
 
     switch (viewMode) {
         case 1: { // depth
-            float depth = saturate(traveled / MaxDistance);
+            float depth = saturate(traveled / farDistance);
             viewColor = float3(depth, depth, depth);
             break;
         }
@@ -2486,8 +2566,11 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
         }
         case 6: { // termination cause — WHY the march loop exited, per pixel (reconstructed from post-loop state so
                   // the hot non-debug path's codegen is untouched: no per-step tracking, just a read of the exit facts).
-                  // green = epsilon-dominated hit, cyan = footprint-dominated hit, red = MaxSteps exhausted (the ground-
-                  // notch hypothesis), dark blue = escaped past MaxDistance (or a tile the beam culled empty).
+                  // green = epsilon-dominated hit, cyan = footprint-dominated hit (either arm — a closest-approach
+                  // candidate accepted at exhaustion classifies by the same dominance test, because it satisfied the
+                  // same rule), red = MaxSteps exhausted with no candidate inside the rule (the ground-notch
+                  // hypothesis), dark blue = escaped (a validated step past the far distance or the F1 far bound, or a
+                  // tile the beam culled empty). A break leaves marchStep below MaxSteps; only exhaustion reaches it.
                   //
                   // THE TERMINATION/SLICE SPLIT (deliberate, keep it): this view shows what the REAL pipeline does —
                   // tile cull included (a beam-culled tile reads as escaped/background here, because that is exactly
@@ -2501,7 +2584,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
                 bool epsilonDominated = (SurfaceEpsilon >= (pixelFootprint * traveled));
                 viewColor = (epsilonDominated ? float3(0.15, 0.90, 0.25) : float3(0.15, 0.80, 0.95));
             }
-            else if ((marchStart < 0.0) || (traveled > MaxDistance)) {
+            else if ((marchStart < 0.0) || (marchStep < MaxSteps)) {
                 viewColor = float3(0.02, 0.05, 0.28); // escaped to the sky (or a beam-culled empty tile) — background
             }
             else {
@@ -2608,11 +2691,11 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
                   // thin geometry the clamp holds. Where they agree the clamp was not load-bearing (green); where the
                   // unclamped march tunneled past a surface the terminals diverge (hot) — the liar's-spiral class made
                   // live. This is a DEBUG-ONLY two-marches-per-pixel cost; the primary march was gated OFF above for it.
-            float clampedDepth = marchOvershootDepth(rayOrigin, rayDirection, marchStart, firstExit, secondEntry, instanceMaskBase, pixelFootprint, 1.0);
-            float unclampedDepth = marchOvershootDepth(rayOrigin, rayDirection, marchStart, firstExit, secondEntry, instanceMaskBase, pixelFootprint, (1.0 / stepScale));
+            float clampedDepth = marchOvershootDepth(rayOrigin, rayDirection, marchStart, firstExit, secondEntry, farDistance, instanceMaskBase, pixelFootprint, 1.0);
+            float unclampedDepth = marchOvershootDepth(rayOrigin, rayDirection, marchStart, firstExit, secondEntry, farDistance, instanceMaskBase, pixelFootprint, (1.0 / stepScale));
             float disagreement = abs(clampedDepth - unclampedDepth);
             // Log-scaled against the march reach so a sub-unit tunnel still reads while a full escape saturates.
-            float hot = saturate(log2(1.0 + disagreement) / log2(1.0 + MaxDistance));
+            float hot = saturate(log2(1.0 + disagreement) / log2(1.0 + farDistance));
             // green (agree) -> yellow -> red (the unclamped march tunneled far).
             float3 warmBand = lerp(float3(0.10, 0.70, 0.22), float3(0.98, 0.85, 0.12), saturate(hot * 2.0));
             viewColor = lerp(warmBand, float3(0.96, 0.12, 0.05), saturate((hot - 0.5) * 2.0));

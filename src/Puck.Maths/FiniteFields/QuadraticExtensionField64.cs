@@ -130,8 +130,7 @@ public readonly record struct QuadraticExtensionField64 : IBatchInvertible<Quadr
     /// record's equality mean "the supplied reduced generator agrees": an unreduced argument is a caller mistake, and
     /// silently folding it would leave <c>Create(f, d)</c> and <c>Create(f, d + p)</c> two unequal descriptors of one
     /// extension. The bound is also what keeps the modulus itself out — <c>p</c> reduces to zero in the base field's
-    /// residue ring, where the character's exponentiation path reports it as a non-square, and the resulting quotient
-    /// <c>F_p[t]/(t^2)</c> has a nilpotent and is not a field.
+    /// residue ring, and the resulting quotient <c>F_p[t]/(t^2)</c> has a nilpotent and is not a field.
     /// </remarks>
     /// <exception cref="ArgumentException"><paramref name="baseField"/> is default-initialized and names no prime field, or <paramref name="nonSquare"/> is zero or a square in <paramref name="baseField"/>, in which case <c>t^2 - nonSquare</c> factors and the quotient is not a field.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="nonSquare"/> is at or above the base field's modulus, so it is not a reduced base-field element.</exception>
@@ -218,32 +217,40 @@ public readonly record struct QuadraticExtensionField64 : IBatchInvertible<Quadr
     public Element Multiply(Element left, Element right) {
         ThrowIfUninitialized();
 
+        // Karatsuba: the cross term (A + B)(A' + B') - AA' - BB' costs one base product instead of two, so the whole
+        // product is four base multiplies rather than five. Exact field arithmetic, so the regrouping changes no bit.
         var outer = BaseField.Multiply(
             left: left.A,
             right: right.A
         );
-        var inner = BaseField.Multiply(
-            left: BaseField.Multiply(
-                left: left.B,
-                right: right.B
-            ),
-            right: NonSquare
+        var squareTerm = BaseField.Multiply(
+            left: left.B,
+            right: right.B
         );
-        var cross = BaseField.Add(
-            left: BaseField.Multiply(
-                left: left.A,
-                right: right.B
+        var cross = BaseField.Subtract(
+            left: BaseField.Subtract(
+                left: BaseField.Multiply(
+                    left: BaseField.Add(
+                        left: left.A,
+                        right: left.B
+                    ),
+                    right: BaseField.Add(
+                        left: right.A,
+                        right: right.B
+                    )
+                ),
+                right: outer
             ),
-            right: BaseField.Multiply(
-                left: left.B,
-                right: right.A
-            )
+            right: squareTerm
         );
 
         return new Element(
             A: BaseField.Add(
                 left: outer,
-                right: inner
+                right: BaseField.Multiply(
+                    left: squareTerm,
+                    right: NonSquare
+                )
             ),
             B: cross
         );
@@ -285,33 +292,90 @@ public readonly record struct QuadraticExtensionField64 : IBatchInvertible<Quadr
     /// <param name="value">The element to raise.</param>
     /// <param name="exponent">The exponent; zero yields <see cref="One"/> for every <paramref name="value"/>.</param>
     /// <returns><paramref name="value"/> raised to <paramref name="exponent"/>.</returns>
-    /// <remarks>Square-and-multiply over the exponent's binary expansion, so the operation count depends on the exponent and the routine is not constant-time in it.</remarks>
+    /// <remarks>Square-and-multiply over the exponent's binary expansion, so the operation count depends on the
+    /// exponent and the routine is not constant-time in it. The whole ladder runs in the base field's Montgomery
+    /// representation — both coordinates and the non-square are encoded once and decoded once — so each base product
+    /// along the chain is one REDC rather than a hardware division.</remarks>
     /// <exception cref="InvalidOperationException">The extension is default-initialized and names no field.</exception>
     public Element Pow(Element value, ulong exponent) {
         ThrowIfUninitialized();
 
-        var power = value;
-        var result = One;
+        var ring = new ScaledResidueRing64(modulus: BaseField.Modulus);
+        var nonSquare = ring.Encode(value: NonSquare);
+        var powerA = ring.Encode(value: value.A);
+        var powerB = ring.Encode(value: value.B);
+        var resultA = ring.One;
+        var resultB = 0UL;
 
         while (0UL != exponent) {
             if (0UL != (exponent & 1UL)) {
-                result = Multiply(
-                    left: result,
-                    right: power
+                (resultA, resultB) = MultiplyEncoded(
+                    leftA: resultA,
+                    leftB: resultB,
+                    nonSquare: nonSquare,
+                    rightA: powerA,
+                    rightB: powerB,
+                    ring: ring
                 );
             }
 
             exponent >>>= 1;
 
             if (0UL != exponent) {
-                power = Multiply(
-                    left: power,
-                    right: power
+                (powerA, powerB) = MultiplyEncoded(
+                    leftA: powerA,
+                    leftB: powerB,
+                    nonSquare: nonSquare,
+                    rightA: powerA,
+                    rightB: powerB,
+                    ring: ring
                 );
             }
         }
 
-        return result;
+        return new Element(
+            A: ring.Decode(value: resultA),
+            B: ring.Decode(value: resultB)
+        );
+    }
+    // The Karatsuba product of Multiply, over Montgomery-form coordinates: the representation is linear, so Add and
+    // Subtract apply unchanged, and each REDC product of two encoded operands is again encoded.
+    private static (ulong A, ulong B) MultiplyEncoded(in ScaledResidueRing64 ring, ulong nonSquare, ulong leftA, ulong leftB, ulong rightA, ulong rightB) {
+        var outer = ring.Multiply(
+            left: leftA,
+            right: rightA
+        );
+        var squareTerm = ring.Multiply(
+            left: leftB,
+            right: rightB
+        );
+        var cross = ring.Subtract(
+            left: ring.Subtract(
+                left: ring.Multiply(
+                    left: ring.Add(
+                        left: leftA,
+                        right: leftB
+                    ),
+                    right: ring.Add(
+                        left: rightA,
+                        right: rightB
+                    )
+                ),
+                right: outer
+            ),
+            right: squareTerm
+        );
+
+        return (
+            A: ring.Add(
+                left: outer,
+                right: ring.Multiply(
+                    left: squareTerm,
+                    right: nonSquare
+                )
+            ),
+            B: cross
+        );
     }
     /// <summary>Selects the smallest quadratic non-square of a base field.</summary>
     /// <param name="baseField">The base field to search.</param>

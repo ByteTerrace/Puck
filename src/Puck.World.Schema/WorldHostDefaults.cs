@@ -37,7 +37,12 @@ public sealed record WorldStorageDefaults(string? Endpoint = null, string? UserI
     );
 }
 /// <summary>
-/// World-varying editor/authoring policy values, authored as data rather than compile-time constants. Two
+/// World-varying editor/authoring policy values, authored as data rather than compile-time constants. The whole
+/// section is optional: an unauthored <c>placements.policy</c> resolves through <see cref="DeriveFrom"/> — no live
+/// placement authoring, a scale envelope spanning exactly the placement rows' authored scales — so a world of only
+/// static placement rows authors no policy block at all, while a world wanting live authoring declares the block
+/// deliberately and whole (every member is required of an authored block; a partial one refuses at parse naming
+/// the missing member). Two
 /// consumption classes share this one row (whole-row mutable like every other section — never split into two
 /// sections for a consumption nuance that consumers already handle honestly):
 /// <list type="bullet">
@@ -83,10 +88,9 @@ public sealed record WorldPlacementPolicyDefaults(
     int PreviewDeadlineFrames,
     int DerivedFaceScreens
 ) {
-    /// <summary>Gets the inert absence — zero headroom, a zero-width scale envelope, no candidates.
-    /// The engine holds no authoring policy of its own: the standard policy is AUTHORED, in
-    /// <c>Assets/worlds/puck.basis.json</c>, and a world inherits it by naming that document as its basis; a
-    /// world reading this cannot author placements or edit.</summary>
+    /// <summary>Gets the inert base — zero headroom, a zero-width scale envelope, no candidates, no preview
+    /// deadline, no derived faces. What an unauthored policy resolves to when the world also authors no placement
+    /// rows (see <see cref="DeriveFrom"/>); a world reading this cannot author placements or edit.</summary>
     public static WorldPlacementPolicyDefaults Absent { get; } = new WorldPlacementPolicyDefaults(
         AuthoringHeadroomPlacements: 0,
         AuthoringHeadroomScreens: 0,
@@ -97,6 +101,44 @@ public sealed record WorldPlacementPolicyDefaults(
         MinPlacementScale: 0f,
         PreviewDeadlineFrames: 0
     );
+    /// <summary>Derives what an unauthored <c>placements.policy</c> means: no live placement authoring — zero
+    /// headroom (placements and screens), no derived faces, no candidate ring, no preview deadline — and a scale
+    /// envelope spanning exactly the placement rows' authored scales, so a static world validates exactly what it
+    /// authored (a row's scale is admitted because it is authored, never against a guessed envelope) and the
+    /// envelope's ceiling keeps <c>Client.WorldStampPool</c>'s probe bound radius covering the largest authored
+    /// row. A non-finite or non-positive scale contributes nothing (the validator refuses it by name before the
+    /// envelope is consulted); no contributing row resolves to <see cref="Absent"/>.</summary>
+    /// <param name="placements">The world's placement rows.</param>
+    public static WorldPlacementPolicyDefaults DeriveFrom(IReadOnlyList<WorldPlacement> placements) {
+        ArgumentNullException.ThrowIfNull(argument: placements);
+
+        var maxScale = 0f;
+        var minScale = float.PositiveInfinity;
+
+        for (var index = 0; (index < placements.Count); index++) {
+            var scale = placements[index].Scale;
+
+            if (!float.IsFinite(f: scale) || (scale <= 0f)) {
+                continue;
+            }
+
+            if (scale < minScale) {
+                minScale = scale;
+            }
+
+            if (scale > maxScale) {
+                maxScale = scale;
+            }
+        }
+
+        return ((maxScale > 0f)
+            ? (Absent with {
+                MaxPlacementScale = maxScale,
+                MinPlacementScale = minScale,
+            })
+            : Absent
+        );
+    }
 }
 /// <summary>Which graphics backend a world prefers. <see cref="Auto"/> — the default — picks the OS-appropriate backend,
 /// so a shared world document is portable across an OS boundary; an explicit preference the running OS cannot satisfy

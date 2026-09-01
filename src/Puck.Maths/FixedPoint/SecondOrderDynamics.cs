@@ -304,7 +304,7 @@ public readonly record struct SecondOrderDynamics {
                 var oneMinus = (FixedQ4816.One - decayTime);
 
                 valueOffset = (e * ((e0 * onePlus) + (v0 * t)));
-                velocity = (e * ((v0 * oneMinus) - (FixedQ4816.FromRawBits(value: StiffnessRaw >> 16) * e0 * t)));
+                velocity = (e * ((v0 * oneMinus) - (NarrowQ32(raw: StiffnessRaw) * e0 * t)));
                 break;
             }
             case SecondOrderDynamicsBranch.Underdamped: {
@@ -323,14 +323,33 @@ public readonly record struct SecondOrderDynamics {
                 }
 
                 var (sin, cos) = FixedQ4816.SinCos(angle: FixedQ4816.FromRawBits(value: angleRaw));
-                var ratio = FixedQ4816.FromRawBits(value: unchecked((long)ScaleQ32ToQ16(value: DampingOverOscillationRaw)));
+                var ratio = NarrowQ32(raw: DampingOverOscillationRaw);
+                // The two divisions by ω_d take the Q32 rate as their divisor directly — v0·sin/ω_d and k·e0·sin/ω_d each
+                // one rounding — instead of dividing by a Q16 narrowing of a rate that can sit within a few units of it.
+                var velocityTerm = FixedQ4816.FromRawBits(value: FusedArithmetic.DivideProductSum(
+                    denominator: ((UInt128)((ulong)OscillationRateRaw)),
+                    numerator: FusedArithmetic.Product(
+                        left: v0.Value,
+                        right: sin.Value
+                    )
+                ));
+                var stiffnessTerm = FixedQ4816.FromRawBits(value: FusedArithmetic.DivideProductSum(
+                    denominator: (((UInt128)((ulong)OscillationRateRaw)) << (2 * FixedQ4816.FractionBitCount)),
+                    numerator: ScaleSignedProduct(
+                        product: FusedArithmetic.Product(
+                            left: e0.Value,
+                            right: sin.Value
+                        ),
+                        scale: StiffnessRaw
+                    )
+                ));
 
-                valueOffset = (e * ((e0 * (cos + (ratio * sin))) + (v0 * (sin / OscillationRateRawAsQ16()))));
-                velocity = (e * ((v0 * (cos - (ratio * sin))) - ((FixedQ4816.FromRawBits(value: StiffnessRaw >> 16) * e0 * sin) / OscillationRateRawAsQ16())));
+                valueOffset = (e * ((e0 * (cos + (ratio * sin))) + velocityTerm));
+                velocity = (e * ((v0 * (cos - (ratio * sin))) - stiffnessTerm));
                 break;
             }
             default: { // Overdamped — settling tracks the SLOWER pole p1 = ζω−σ, never the bare ζω.
-                var sigma = OscillationRateRawAsQ16();
+                var sigma = NarrowQ32(raw: OscillationRateRaw);
 
                 if (!TryDecayFactor(decayNumeratorRaw: (DecayRateRaw - OscillationRateRaw), t: t, log2e: log2e, factor: out var lambda1, timeProduct: out _)) {
                     return new(Value: target, Velocity: FixedQ4816.Zero);
@@ -349,12 +368,26 @@ public readonly record struct SecondOrderDynamics {
                 // lambda1/lambda2 decay at the positive rates p1 = ζω−σ, p2 = ζω+σ (the poles are −p1, −p2); p1·p2 =
                 // ω² exactly, which is how the velocity term below reaches ω² without a separate stiffness read.
                 var lambda2 = FixedQ4816.Exp2(value: -(FixedQ4816.FromRawBits(value: p2TimeRaw) * log2e));
-                var p1 = (FixedQ4816.FromRawBits(value: DecayRateRaw >> 16) - sigma);
-                var p2 = (FixedQ4816.FromRawBits(value: DecayRateRaw >> 16) + sigma);
-                var twoSigma = (sigma + sigma);
+                // The poles are narrowed from their exact Q32 difference and sum, not as differences of two narrowings.
+                var p1 = NarrowQ32(raw: (DecayRateRaw - OscillationRateRaw));
+                var p2 = NarrowQ32(raw: (DecayRateRaw + OscillationRateRaw));
+                // The closing divisions by 2σ take the Q32 rate directly, each one rounding.
+                var twoSigmaQ32 = (((UInt128)((ulong)OscillationRateRaw)) << 1);
 
-                valueOffset = (((e0 * ((p2 * lambda1) - (p1 * lambda2))) + (v0 * (lambda1 - lambda2))) / twoSigma);
-                velocity = (((e0 * p1 * p2 * (lambda2 - lambda1)) + (v0 * ((p2 * lambda2) - (p1 * lambda1)))) / twoSigma);
+                valueOffset = FixedQ4816.FromRawBits(value: FusedArithmetic.DivideProductSum(
+                    denominator: twoSigmaQ32,
+                    numerator: FusedArithmetic.Product(
+                        left: ((e0 * ((p2 * lambda1) - (p1 * lambda2))) + (v0 * (lambda1 - lambda2))).Value,
+                        right: FixedQ4816.One.Value
+                    )
+                ));
+                velocity = FixedQ4816.FromRawBits(value: FusedArithmetic.DivideProductSum(
+                    denominator: twoSigmaQ32,
+                    numerator: FusedArithmetic.Product(
+                        left: ((e0 * p1 * p2 * (lambda2 - lambda1)) + (v0 * ((p2 * lambda2) - (p1 * lambda1)))).Value,
+                        right: FixedQ4816.One.Value
+                    )
+                ));
                 break;
             }
         }
@@ -413,11 +446,16 @@ public readonly record struct SecondOrderDynamics {
         return new(Value: current.Value, Velocity: (current.Velocity + FixedQ4816.FromRawBits(value: kickRaw)));
     }
 
-    private FixedQ4816 OscillationRateRawAsQ16() =>
-        FixedQ4816.FromRawBits(value: (OscillationRateRaw >> 16));
-
-    private static ulong ScaleQ32ToQ16(long value) =>
-        unchecked((ulong)(value >> 16));
+    // Q32 → Q16 to nearest, ties to even — the same narrowing SecondOrderState's accessors use, never a truncating
+    // shift, whose downward bias reaches a whole Q16 unit on a rate that then serves as a divisor.
+    private static FixedQ4816 NarrowQ32(long raw) =>
+        FixedQ4816.FromRawBits(value: FixedQ4816.RoundProduct(
+            fractionBitCount: FixedQ4816.FractionBitCount,
+            product: raw
+        ));
+    // Multiplies a sign-magnitude Q32 product by a non-negative Q32 raw, exactly, for a divisor lifted by the same width.
+    private static (bool Negative, UInt128 Magnitude) ScaleSignedProduct((bool Negative, UInt128 Magnitude) product, long scale) =>
+        (product.Negative, (product.Magnitude * ((UInt128)((ulong)scale))));
 
     private void ThrowIfUnbound() {
         if (Frequency.Value <= 0L) {

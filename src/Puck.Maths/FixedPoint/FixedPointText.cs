@@ -926,6 +926,10 @@ internal static class FixedPointText {
         NumberFormatInfo numberFormat,
         bool useCurrencySeparators
     ) {
+        // The invariant format is immutable and its tokens ('+', '-', '.', ',', '¤') carry no digit, prefix one
+        // another, or begin with parser white space, so none of the shapes below can arise from it.
+        if (ReferenceEquals(numberFormat, NumberFormatInfo.InvariantInfo)) { return false; }
+
         var signEnabled = (0 != (style & (NumberStyles.AllowLeadingSign | NumberStyles.AllowTrailingSign | NumberStyles.AllowExponent)));
 
         if (

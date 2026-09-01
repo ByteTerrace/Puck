@@ -141,6 +141,49 @@ public static class ShapeDomainOps {
             domain: ToDomainOps(domain: domain)
         );
     }
+    /// <summary>Returns a conservative bound on how far a shape's domain ops can carry its geometry from the
+    /// creation origin, in creation units — the term a render bound adds so a folded lattice is not culled down to
+    /// the un-folded shape's own sphere. Ops compose, so each op's displacement bound is summed: a symmetry plane
+    /// through the origin and a polar fold are origin-preserving isometries (0); an offset plane displaces by twice
+    /// its offset; a repeat/wallpaper lattice reaches its per-axis limit times its spacing (an unbounded limit
+    /// yields a bound far past any camera, disabling the cull rather than lying to it).</summary>
+    /// <param name="domain">The shape's domain ops, or null/empty for 0.</param>
+    /// <returns>The displacement bound, creation units.</returns>
+    public static float Reach(IReadOnlyList<ShapeDomainOp>? domain) {
+        if (domain is not { Count: > 0 } ops) {
+            return 0f;
+        }
+
+        // 2/√3: the axial-diagonal stretch of the hex lattice's cell centers relative to its pitch.
+        const float HexDiagonal = 1.1547005f;
+
+        var reach = 0f;
+
+        foreach (var op in ops) {
+            reach += op switch {
+                ShapeDomainOp.Symmetry symmetry => (2f * MathF.Abs(x: (symmetry.Offset ?? 0f))),
+                ShapeDomainOp.Repeat repeat => (repeat.Spacing.Value * (repeat.Limit?.Value ?? new Vector3(value: ShapeDomainOp.Repeat.UnboundedLimit))).Length(),
+                ShapeDomainOp.Polar => 0f,
+                ShapeDomainOp.Wallpaper wallpaper => WallpaperReach(wallpaper: wallpaper),
+                _ => 0f,
+            };
+        }
+
+        return reach;
+
+        static float WallpaperReach(ShapeDomainOp.Wallpaper wallpaper) {
+            var cell = wallpaper.Cell.Value;
+            var limit = (wallpaper.Limit?.Value ?? new Vector2(value: ShapeDomainOp.Wallpaper.UnboundedLimit));
+
+            return ((wallpaper.Group >= SdfWallpaperGroup.P3)
+                ? ((cell.X * (limit.X + limit.Y)) * HexDiagonal)
+                : new Vector2(
+                    x: (cell.X * limit.X),
+                    y: (cell.Y * limit.Y)
+                ).Length()
+            );
+        }
+    }
     /// <summary>Converts a shape's authored ops into the SDF VM vocabulary, resolving every absent optional to its
     /// documented default.</summary>
     /// <param name="domain">The shape's domain ops, or null/empty.</param>

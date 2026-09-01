@@ -123,14 +123,10 @@ public readonly record struct HexagonalCoordinate(int Q, int R)
             R: checked((int)(((long)left.R) * right))
         );
 
-    private static int LengthOf(long q, long r) {
-        var wideQ = ((Int128)q);
-        var wideR = ((Int128)r);
-
-        return checked((int)(
-            ((Int128.Abs(value: wideQ) + Int128.Abs(value: wideR)) + Int128.Abs(value: (wideQ - wideR))) / 2
-        ));
-    }
+    // q and r are differences of two ints, so each magnitude is at most 2^32 and the three-term sum at most 2^34 —
+    // far inside long; the int narrowing is the one place the contract can overflow.
+    private static int LengthOf(long q, long r) =>
+        checked((int)(((Math.Abs(value: q) + Math.Abs(value: r)) + Math.Abs(value: (q - r))) / 2L));
 
     /// <summary>Returns the unit step in one of the six directions.</summary>
     /// <param name="direction">The direction index; taken modulo <see cref="NeighborCount"/>, so any integer is valid.</param>

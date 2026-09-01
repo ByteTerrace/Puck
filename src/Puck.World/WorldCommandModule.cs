@@ -934,7 +934,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.budget",
-            description: "Prints the compose-time cost sheet (Immediate): the live render program's packed words and instances against their frozen envelopes, the program's Lipschitz step scale with its march multiplier (1.00 = unclamped), the lattice program's node/cadence counts plus exact full-cell and body-slot passes, gravity's static source count and last deterministic solve work, the derived static placement instance count (including any Noise/Scatter distribution's resolved copies) against its authored row count, the state row count, and the number of active bodies currently following a curves row (one CompiledCurvatureSpline.Evaluate per follower, per tick). Every number is DERIVED from what the document declares — the sheet is how an authored choice's price becomes legible instead of a silent frame tax.",
+            description: "Prints the compose-time cost sheet (Immediate): the live render program's packed words and instances against their frozen envelopes, the program's Lipschitz step scale with its march multiplier (1.00 = unclamped), the far distance (render.farDistance, or the engine's pinned 40 when unauthored) with its derived costs — the reach multiplier over that default, the horizon-ray step count per unit of camera height against the primary march's step budget, and the fog remnant at the far plane (how much of a surface's colour survives to the cutoff: near 1 shows a hard horizon, near 0 means the sky fog has absorbed it) — the lattice program's node/cadence counts plus exact full-cell and body-slot passes, gravity's static source count and last deterministic solve work, the derived static placement instance count (including any Noise/Scatter distribution's resolved copies) against its authored row count, the state row count, and the number of active bodies currently following a curves row (one CompiledCurvatureSpline.Evaluate per follower, per tick). Every number is DERIVED from what the document declares — the sheet is how an authored choice's price becomes legible instead of a silent frame tax.",
             handler: (_, args) => {
                 if (CommandResult.RequireNoArguments(args: args, verb: "world.budget") is { } refusal) {
                     return refusal;
@@ -943,6 +943,16 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 var render = ((renderProbe.Node is { } node)
                     ? $"program {node.LiveProgramWords}/{node.ProgramWordCapacity} word(s), {node.LiveProgramInstances} instance(s), stepScale {node.LiveProgramStepScale.ToString(format: "0.###", provider: System.Globalization.CultureInfo.InvariantCulture)}{((node.LiveProgramStepScale is > 0f and < 1f) ? $" (march ~{(1f / node.LiveProgramStepScale).ToString(format: "0.#", provider: System.Globalization.CultureInfo.InvariantCulture)}x baseline)" : string.Empty)}"
                     : "renderer not built yet"
+                );
+                // The far distance and its derived prices, off the LIVE definition (the value the next frame uploads):
+                // the reach over the pinned default, the horizon-ray step tax (a ray skimming open ground at height h
+                // advances about h per step, so far/h steps reach the far plane — quoted per unit of height against
+                // the primary march's budget), and the static fog remnant exp(-density * far) at the cutoff.
+                var farDistance = Puck.World.Client.WorldRenderFarDistance.Resolve(defaults: server.Definition.Render);
+                var fogDensity = (server.Definition.Render.Sky?.FogDensity ?? Puck.SdfVm.SdfFrame.DefaultSkyFogDensity);
+                var far = string.Create(
+                    provider: System.Globalization.CultureInfo.InvariantCulture,
+                    handler: $"far {farDistance:0.##} unit(s) (reach x{(farDistance / Puck.SdfVm.SdfFrame.DefaultFarDistance):0.##} the {Puck.SdfVm.SdfFrame.DefaultFarDistance:0}-unit default; horizon ray ~{farDistance:0} step(s) per unit of camera height of {Puck.SdfVm.SdfWorldEngine.PrimaryMarchSteps}; fog remnant at the far plane {MathF.Exp(x: (-fogDensity * farDistance)):0.###})"
                 );
                 var lattice = ((population.Fields is { } fields)
                     ? fields.DescribeCost(
@@ -964,7 +974,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 var placements = $"placements {placementInstances} static instance(s) ({server.Definition.Placements.Count} row(s))";
                 var curves = $"curves {population.CountCurveFollowers()} follower(s)";
 
-                return new CommandResult(Output: $"[world.budget: {render} | {lattice} | {gravity} | {placements} | state {rows} row(s) | {curves}]");
+                return new CommandResult(Output: $"[world.budget: {render} | {far} | {lattice} | {gravity} | {placements} | state {rows} row(s) | {curves}]");
             }
         );
         yield return CommandDefinition.WithWireArgs(

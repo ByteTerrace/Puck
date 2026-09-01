@@ -187,7 +187,7 @@ public sealed partial class PlayerRoster : IInputSlotResolver, ICommandPrincipal
     // The catalog snapshot, fetched once at construction (WorldQuery.ProfileCatalog) and rebuilt client-side via
     // WorldIdentity.FromProjection — the same rehydration a federation arrival already uses. A catalog identity
     // created after this snapshot (identity.create) is not visible to this roster until the next boot.
-    private readonly WorldIdentity[] m_catalog;
+    private WorldIdentity[] m_catalog;
     private readonly float m_noseFactor;
     private readonly float m_pickerNeutralBlend;
     private readonly Vector3 m_pickerNeutralColor;
@@ -261,7 +261,8 @@ public sealed partial class PlayerRoster : IInputSlotResolver, ICommandPrincipal
 
     // Fetches the whole owned-world identity catalog over the link (WorldQuery.ProfileCatalog) and rehydrates it as
     // WorldIdentity via WorldIdentity.FromProjection — the same rehydration a federation arrival already uses.
-    // Called once, at construction. Fires inline over loopback (see IServerLink.Query's own remarks).
+    // Called at construction and again on a FindProfile miss. Fires inline over loopback (see IServerLink.Query's
+    // own remarks).
     private WorldIdentity[] QueryCatalog() {
         IReadOnlyList<WorldIdentityProjection>? projections = null;
 
@@ -1468,9 +1469,14 @@ public sealed partial class PlayerRoster : IInputSlotResolver, ICommandPrincipal
 
         return (m_slotDrivenBody[slot] ?? NoBody);
     }
-    /// <summary>Finds a profile by name (case-insensitive), or <see langword="null"/>.</summary>
+    /// <summary>Finds a profile by name (case-insensitive), or <see langword="null"/>. A miss re-fetches the
+    /// catalog over the link once and retries, so an identity minted after construction (<c>identity.create</c>,
+    /// a storage sync) is assignable in the session that created it.</summary>
     /// <param name="name">The profile name to look up.</param>
     public WorldIdentity? FindProfile(string name) {
+        return (FindInCatalog(name: name) ?? RefreshAndFindProfile(name: name));
+    }
+    private WorldIdentity? FindInCatalog(string name) {
         foreach (var candidate in m_catalog) {
             if (string.Equals(
                 a: candidate.Name,
@@ -1482,6 +1488,20 @@ public sealed partial class PlayerRoster : IInputSlotResolver, ICommandPrincipal
         }
 
         return null;
+    }
+    // An empty re-fetch keeps the current catalog: the constructor's empty-catalog fallback identity stays the
+    // catalog until the server actually answers identities, and seated participants are unaffected either way
+    // (identity comparisons are Id-based, never ReferenceEquals — see SameProfile).
+    private WorldIdentity? RefreshAndFindProfile(string name) {
+        var refreshed = QueryCatalog();
+
+        if (refreshed.Length == 0) {
+            return null;
+        }
+
+        m_catalog = refreshed;
+
+        return FindInCatalog(name: name);
     }
     /// <summary>Whether the slot is under an exclusive <see cref="TryClaimSlot"/> hold. A claimed slot's own protocol
     /// (its claimant's explicit commands) is its only legitimate driver — the guard a pushed/context-routed roster
@@ -2185,7 +2205,7 @@ public sealed partial class PlayerRoster : IInputSlotResolver, ICommandPrincipal
 
         // A world declaring local seats but no playerDefaults.identities and no owned-world catalog on disk has
         // nothing to seat seat 0 with — the smallest honest fallback is one inert identity (the neutral color,
-        // the profileless fallback motion rates), never a spectator boot for a world that declared a seat.
+        // no claimed rates, so the kit's own rates drive), never a spectator boot for a world that declared a seat.
         if (
             (m_catalog.Length == 0) &&
             (definition.Population.LocalSeats > 0)
@@ -2196,8 +2216,8 @@ public sealed partial class PlayerRoster : IInputSlotResolver, ICommandPrincipal
                         Id: "seat1",
                         Name: "seat1",
                         ColorHex: definition.PlayerDefaults.NeutralColor,
-                        MoveSpeed: FixedQ4816.FromDouble(value: definition.Motion.MoveSpeed),
-                        TurnSpeed: FixedQ4816.FromDouble(value: definition.Motion.TurnSpeed)
+                        MoveSpeed: null,
+                        TurnSpeed: null
                     ),
                     defaults: m_playerDefaults
                 ),

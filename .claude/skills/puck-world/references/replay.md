@@ -2,11 +2,17 @@
 
 `replay.record` captures a running session's inputs and per-tick pose hashes;
 `replay.verify` re-drives them offline against a fresh boot-image world and
-reports MATCH or MISMATCH naming the first divergent tick. Files (all in
-`src/Puck.World.Server/`, namespace `Puck.World`): `WorldReplayTape.cs`,
-`WorldReplaySnapshot.cs`, `WorldReplayRefusal.cs`, `WorldReplayVerdict.cs`,
-`WorldReplayCodecException.cs`; verbs in
-`src/Puck.World/WorldReplayCommandModule.cs`.
+reports MATCH or MISMATCH naming the first divergent tick; `replay.drive`
+re-drives a tape into the LIVE session at the recorded rate, and
+`replay.fork` fast-forwards a tape into the live session and keeps recording
+from there into a standalone child. Files (all in
+`src/Puck.World.Server/`, namespace `Puck.World`): `WorldReplayTape.cs` +
+`WorldReplayTape.Drive.cs` (the live drive), `WorldReplaySnapshot.cs`,
+`WorldReplayRefusal.cs`, `WorldReplayVerdict.cs`,
+`WorldReplayCodecException.cs`, the read-back in `WorldReplayInspector.cs` +
+`WorldReplayEntryDescriber.cs`; verbs in
+`src/Puck.World/WorldReplayCommandModule.cs`,
+`WorldReplayCommandModule.Drive.cs`, and `WorldReplayCommandModule.Inspect.cs`.
 
 ## Contents
 
@@ -15,16 +21,19 @@ reports MATCH or MISMATCH naming the first divergent tick. Files (all in
 - The pose hash — what a MATCH proves
 - Lifecycle
 - Verify semantics
+- Inspect — reading a tape back
+- The live drive and forking
 - Rules for changes
 
 ## Format and re-key posture
 
 - Extension `.puckreplay`, stored under `<WorldStateRoot.Resolve()>/Replays`
   (so `--state-dir` isolates replays too).
-- `Magic = 0x504B_4146` ("PKAF") + `ShapeToken = 1` (pinned permanently).
-  The current key covers the addon-lifecycle fold: the retired
-  `AddonLifecycle` entry kind (5, never reused) and the `Mutation` entry's
-  added `Outcome` field.
+- `Magic = 0x504B_464B` ("PKFK") + `ShapeToken = 1` (pinned permanently).
+  The current key covers the fork-provenance header slot: `(bool present,
+  string parentName, int32 tick)` right behind `SimulationRate`, read back as
+  `WorldReplaySnapshot.ForkedFrom` (`WorldReplayForkProvenance`), refused by
+  name when it claims more copied ticks than the tape holds.
   A tape with any retired magic refuses by name (`ShapeMismatch`, no tolerant
   reader; re-record it). The full retirement
   chain (each value opaque, never a sequence) lives in the comment above
@@ -110,7 +119,8 @@ submission-time, because Reset's hash (the base's own canonical bytes) is
 only knowable once `ApplyRebuild` reads `m_base` — private server state that
 can move between submission and drain if another rebuild is queued ahead of
 it in the same tick.
-`Drive`'s re-run applies a recorded `Mutation`/`Rebuild` entry through
+`Drive`'s re-run (and the live drive's — both go through the one
+`WorldReplaySnapshot.ApplyRecordedTick`) applies a recorded `Mutation`/`Rebuild` entry through
 `server.EnqueueMutation`/`EnqueueRebuild` — the SAME buffered door
 (`DrainPendingOps`, before intents) a live submission uses — so replay
 RE-EXECUTES the mutation (including its own addon-prepare gate, see
@@ -239,27 +249,34 @@ independent fresh boots and diff the streams instead.
 
 ## Lifecycle
 
-`WorldReplayMode` has exactly two members: `Idle`, `Recording`. There is no
-`Replaying` state — verification runs offline and synchronously over an
-isolated shadow `WorldServer`, so live seat input is structurally excluded
-and no record-while-replaying refusal exists (or is needed).
+`WorldReplayMode` has three members: `Idle`, `Recording`, `Replaying`.
+Verification (`replay.verify`, `replay.stop`'s post-persist check) never
+enters `Replaying` — it runs offline and synchronously over an isolated
+shadow `WorldServer`. `Replaying` is the live drive only (`replay.drive`/
+`replay.fork`, below): the running server is reset to the tape's boot image
+and fed the recorded ticks, with local seat input masked at the loopback.
 
 - `replay.record <name>` — in addition to bad args/name/already-recording,
-  refuses after any addon has pumped, any screen machine has stepped, or any
-  authority-admitted screen operation has reached host dispatch. The last
-  gate includes host refusals because a failed `Select` can still move its
-  selector; authority denials return before dispatch and do not latch it.
-  Guest and machine accumulated state and pre-arm screen operations are not
-  in the record-start image. The grant/revoke leaf carries
-  `WorldGrant.VerbMask` on tape.
+  refuses while a drive is in progress (`replay.cancel` ends it; a fork is
+  the way to record from a drive), and after any addon has pumped, any
+  screen machine has stepped, or any authority-admitted screen operation has
+  reached host dispatch. The last gate includes host refusals because a
+  failed `Select` can still move its selector; authority denials return
+  before dispatch and do not latch it. Guest and machine accumulated state
+  and pre-arm screen operations are not in the record-start image. The
+  grant/revoke leaf carries `WorldGrant.VerbMask` on tape.
 - `replay.stop` — persists FIRST (the tape is evidence of the capture),
   detaches taps on every exit path, then re-drives once and echoes the
   verdict. A post-persist drive failure reports "the LIVE TREE moved past
-  this recording" with the tape still on disk.
-- `replay.cancel` — detaches and writes nothing.
+  this recording" with the tape still on disk. Refuses while replaying.
+- `replay.cancel` — while recording: detaches and writes nothing. While
+  replaying: ends the drive where it stands (the world stays at that tick,
+  seats return to live input, a pending fork is abandoned — nothing written).
 - `replay.verify <name>` — read, re-drive, verdict; `IsError` when not a
-  match. `replay.list`, `replay.status` complete the surface. All six verbs
-  are `Immediate` and unbindable.
+  match. `replay.list`, `replay.status` (idle / recording + ticks captured /
+  replaying + `tick <cursor> of <target>`, the first divergent tick, the fork
+  target), and `replay.inspect` (below) complete the surface. Every
+  `replay.*` verb is `Immediate` and unbindable.
 - `WorldReplayCodecException` is deliberately its own type (not derived from
   `InvalidOperationException`): a determinism hole in the HOST's codec, never
   raised by untrusted tape bytes, reported as a host bug by both `stop` and
@@ -311,6 +328,137 @@ recorded world authored), hash.
   **Any later tick means the start matched and the trajectory
   drifted — a genuine determinism defect.** `replay.stop` echoes exactly
   this reading.
+
+## Inspect — reading a tape back
+
+`replay.inspect <name> [<from>-<to>] [--all] [--poses]` (Immediate,
+unbindable; `WorldReplayInspector`) prints a saved tape to stdout, every line
+`[replay.inspect: …]`:
+
+- Header, one line per fact: path; the file's own shape magic/token (read
+  verbatim off the first 8 bytes — `Read` has already refused a mismatch);
+  rate, tick count, tail hash; `forked from '<parent>' at tick N` when the
+  snapshot carries `ForkedFrom`; one `seat slot=… profile='…' move=… turn=…`
+  per pinned seat (`kit` for a null rate, else decimal + raw lane); one
+  `addon '…' hash=… fuel=…/tick` per receipt (or `addons none`); the
+  resolved `range a-b of N | edges only|every tick | poses on|off`.
+- Per tick, default: a line only for ticks where any authority/server-event
+  entry landed or any intent channel differs from the entity's previous
+  submission (both lanes — the composed intent, and `HeldChannels` as
+  `held.<name>`). `tick T hash=0x… | <entries; …> | p1 forward=1 strafe=-0.5`
+  — seats are `p1..p4`, everything else `body:N`; only the CHANGED channels
+  print, with the new value. The edge baseline is walked from tick 0 even
+  when `<from>` clamps the printed range. `--all` prints every tick.
+- Entries print kind-first with the salient payload (`press p1 forward=1
+  hold=2s by console`, `grant drive body:0 -> seat2 by console`, `mutation
+  UpsertStateRow by console accepted`, `rebuild load '…' sha256-64/… by
+  console`, `screen.insert 0 '…' content=… by console`, `session join
+  slot=1 identity=amber by seat2`, `rate paused`, `transfer #… -> '…' …
+  departed=[0]`, `link '…' delivered`). A `body.press` is a COMMAND entry,
+  not an intent edge — the seat's own intent lane stays whatever the device
+  held, and the server-side auto-release is not a tape event at all.
+- `--poses`: re-drives through the untouched `WorldReplaySnapshot.Drive`,
+  observing the shadow population at the addon seam's third pump point
+  (`IWorldAddonHost.ResolveReads`, after the population advanced) through a
+  forwarding host around the ordinary factory's product; each printed line
+  gains ` | body:0 pos=(x, y, z) yaw=…° pitch=…° roll=…°` per active body,
+  and a pose that MOVED (the recorded hash differs from the previous
+  tick's; tick 0 always) counts as an edge, so a body advancing under a
+  held stick prints every tick and a body at rest prints none.
+  The observation point is proven every drive — `HashState` recomputed there
+  must equal `Drive`'s own trace tick for tick, else the verb refuses by
+  name as a host bug. The tick where the re-driven trace first diverges is
+  tagged `DIVERGED` on its line and named again in a closing `re-drive
+  MATCH|DIVERGED` line. The tape pins one hash per tick, never per-body
+  poses, so the diverging BODY cannot be named from the tape — the closing
+  line prints every re-driven body at that tick for comparison against the
+  live session's `body.where`.
+- Refusals by name, `IsError`: unknown tape (`no replay named`), invalid
+  name, `from` beyond the tape's tick count, an unrecognized argument, a
+  re-drive refusal (the same `ReplayRefusal` family verify raises), a codec
+  bug, the observer's own proof failing.
+
+## The live drive and forking
+
+`replay.drive <name> [to <tick>]` and `replay.fork <name> <tick> <new>`
+(`WorldReplayTape.Drive.cs`). `<tick>` counts recorded ticks: a drive `to 30`
+steps tape ticks `0..29`; a fork at 30 copies ticks `0..29` and records live
+from child tick 30. Omitted, a drive runs to the tape's end.
+
+- **Arming (`TryBeginDrive`, Immediate).** Read the tape, refuse by name on
+  `RateMismatch`/zero ticks/target out of range; refuse when the live joined
+  player set differs from the tape's seat set (a seat cannot be respawned
+  through the session door — `player.join`/`player.leave` to match first),
+  when the tape's world declares screens and a machine has stepped or a
+  screen op applied, when the tape pins addons and a guest has pumped (the
+  rebuild door reuses an unchanged row's guest with its state), or when an
+  engagement is in flight. Then the boot image is installed through the
+  server's own doors: a forced `world.load` of the embedded definition
+  (`EnqueueRebuild` + `DrainAdministrative`, synchronous — solids, machines
+  reconcile, addon plan, document grants, journal clear, base replace; the
+  `[world.definition: world.load applied …]` line is the evidence, and the
+  boot document's path is the path hint so relative machine content keeps
+  resolving), then the population image a fresh server of that definition
+  reaches once `SeatRecordedSeats` joins the recorded seats on their pinned
+  rates — captured off that shadow population and installed with
+  `WorldPopulation.Restore` (a rebuild alone keeps every live pose, and a
+  seat leave/rejoin resumes the parked body). The shadow's event feed is
+  restored too. `VerifyMountedAddons` then pins the live receipts. On
+  success `LoopbackTransport.InputMasked = true` and the mode is
+  `Replaying`. The tick coordinate is NOT rebased: the live clock keeps
+  counting, so `world.wait`, captures, and peers see monotonic ticks; a
+  tape's own numbering is relative anyway.
+- **Stepping (`WorldServerStepShell.Step`).** Right before `server.Step`,
+  `tape.InjectDriveTick()` feeds tape tick `cursor` through
+  `ApplyRecordedTick` — the identical apply the offline drive uses (authority
+  entries in order, then intents into the buffer). The one difference: the
+  live drive passes no rebuild CAS pin (a refusal thrown from inside the
+  live step would kill the host); `NarrateRebuildContentPin` re-reads a
+  Load/Reload path and narrates a disagreement on stderr instead, and the
+  hash comparison reports the consequence. After the step, `NoteTick` →
+  `NoteDriveTick` samples the live hash, compares it (and the tick's
+  mutation outcomes, `VerifyRecordedMutationOutcomes`, caught and narrated —
+  never thrown) against the recording, narrates ONLY the first divergence
+  (`[replay.drive: divergence at tick N of T — live 0x…, recorded 0x…; the
+  drive continues]`), advances the cursor, and ends the drive at the target.
+  A plain drive runs one recorded tick per live tick, so it renders and
+  every read-back answers mid-drive; a fork sets `FastForward` and the shell
+  loops `WantsFastForwardStep` up to `FastForwardBurst` (two seconds of the
+  tape's rate) recorded ticks per shell call, so sibling instances and
+  rendering lag but the boot shape's `Tick`/`ElapsedTicks` stay contiguous
+  (both shapes derive elapsed time from the ticks the shell actually
+  completed).
+- **Masking.** `LoopbackTransport.InputMasked` drops every `SubmitIntent`
+  and every `Command` payload before any tap or the server sees it — device
+  sticks and the `body.*` drive verbs alike; grants, sessions, mutations,
+  queries still cross (typing one mid-drive is the operator's own
+  divergence). The named echo is `PlayerCommandModule.ReplayDriveError`
+  (`[body.press: refused — replay drive of 't1' is in progress and local seat
+  input is masked until it ends (replay.cancel ends it now)]`, same shape on
+  body.fly/stop/pose/motion/control/engage/disengage/attach/detach/reel).
+  Camera and look never touch the tape, so they stay the viewer's.
+- **Ending (`EndDrive`).** Seats return to live input, one stderr line
+  reports `reached`/`cancelled at tick N of T` and the verdict, and the
+  world stays where the drive left it. A completed fork hands over to
+  `Recording` instead of `Idle`: `m_ticks` = the parent's tick groups
+  `0..tick-1` (the same objects, verbatim), `m_liveHashes` = the hashes the
+  LIVE session reached during the drive (equal to the parent's on a matching
+  drive; the honest live trace on a diverged one), boot image/seats/receipts/
+  rate copied from the parent, `ForkedFrom = (parent, tick)`, taps attached.
+  `replay.stop` persists it like any recording — the child is standalone
+  (verify/inspect/fork need no parent lookup).
+- **Verifying a change here.** Headless: `replay.record t1`, `body.press
+  forward 1 2 0`, `world.wait 90`, `replay.stop` (MATCH); `replay.drive t1`,
+  `world.wait 30`, `body.where 0` (partial −Z), `body.press forward 1 1 0`
+  (the named refusal on stderr), wait to the end, `body.where 0` equals the
+  recorded final pose and stderr carries `every driven tick matched`;
+  `replay.fork t1 30 t2`, `body.press strafe 1 1 0`, `world.wait 60`,
+  `replay.stop` (MATCH), `replay.verify t2` (MATCH), `replay.inspect t2`
+  (the `forked from` line). The in-process laws are
+  `tests/Puck.World.Tests/ReplayForkLawTests.cs` (header round-trip, doctored
+  provenance refused, prefix copied verbatim, the boot-image reset
+  reproducing the parent's hashes on the live server, the mask with its
+  unmasked control, cancel abandoning a fork).
 
 ## Rules for changes
 

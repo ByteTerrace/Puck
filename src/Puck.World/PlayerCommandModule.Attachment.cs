@@ -59,6 +59,10 @@ internal sealed partial class PlayerCommandModule {
             return CommandResult.Error(output: $"[{verb}: the world's attachment section declares no {laneName} channel]");
         }
 
+        if (ReplayDriveError(verb: verb) is { } driveError) {
+            return driveError;
+        }
+
         m_link.SubmitCommand(command: new WorldCommand.PressChannel(
             Principal: context.ActingPrincipal(),
             EntityIndex: index,
@@ -147,6 +151,10 @@ internal sealed partial class PlayerCommandModule {
             }
 
             holdSeconds = authoredHoldSeconds;
+        }
+
+        if (ReplayDriveError(verb: "body.reel") is { } driveError) {
+            return driveError;
         }
 
         m_link.SubmitCommand(command: new WorldCommand.PressChannel(

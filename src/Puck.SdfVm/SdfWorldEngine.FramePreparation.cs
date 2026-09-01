@@ -438,10 +438,12 @@ public sealed partial class SdfWorldEngine {
     // the sub-cell fraction.
     private const double CloudLatticePeriod = 4096d;
 
-    // Pack each frame's views (camera snapshot + region + render scale) into the 96-byte ViewportData rows the kernels
-    // read — member-for-member from SdfFrame, no camera math (the snapshot already holds the basis + tan(fov/2) +
-    // aspect). The render scale packs as its QUANTIZED numerator q (RenderScaleQ) so Stage 1, the tile passes, and
-    // Stage 2 all derive the identical integer render extent.
+    // Pack each frame's views (camera snapshot + region + render scale + the frame's far distance) into the 96-byte
+    // ViewportData rows the kernels read — member-for-member from SdfFrame, no camera math (the snapshot already holds
+    // the basis + tan(fov/2) + aspect). The render scale packs as its QUANTIZED numerator q (RenderScaleQ) so Stage 1,
+    // the tile passes, and Stage 2 all derive the identical integer render extent. The far distance rides the row's
+    // last lane because the viewport table is the one buffer every marching kernel (beam, views, instance cull, sky)
+    // already binds — no descriptor grows. KEEP IN SYNC with sdf-world.hlsli's ViewportData / worldFarDistance.
     private void PackViewports(SdfFrame frame, uint viewportCount) {
         var floats = MemoryMarshal.Cast<byte, float>(span: m_viewportScratch.AsSpan());
 
@@ -459,7 +461,7 @@ public sealed partial class SdfWorldEngine {
             floats[(b + 20)] = RenderScaleQ(
                 slot: index,
                 view: view
-            ); floats[(b + 21)] = view.AsymmetricFrustumOffset.X; floats[(b + 22)] = view.AsymmetricFrustumOffset.Y; floats[(b + 23)] = 0f; // renderScale q, off-axis offset xy, spare
+            ); floats[(b + 21)] = view.AsymmetricFrustumOffset.X; floats[(b + 22)] = view.AsymmetricFrustumOffset.Y; floats[(b + 23)] = frame.FarDistance; // renderScale q, off-axis offset xy, far distance
         }
     }
     // The shared per-frame front half of both submission paths: validate, (re)bind sources, pack + upload the
@@ -484,6 +486,16 @@ public sealed partial class SdfWorldEngine {
         if (frame.DynamicTransforms.Count < m_requiredDynamicTransformCapacity) {
             throw new ArgumentException(
                 message: $"The uploaded SDF program requires {m_requiredDynamicTransformCapacity} dynamic-transform slots; the frame supplies {frame.DynamicTransforms.Count}.",
+                paramName: nameof(frame)
+            );
+        }
+
+        // The far distance is read by every marching kernel as the depth each march ends at; a non-finite or
+        // non-positive value would make every cone proof and far exit meaningless, so it is refused here rather than
+        // guarded per kernel (the world validator refuses the authored value by name long before it reaches a frame).
+        if (!float.IsFinite(f: frame.FarDistance) || (frame.FarDistance <= 0f)) {
+            throw new ArgumentException(
+                message: $"The frame's far distance must be finite and positive; got {frame.FarDistance}.",
                 paramName: nameof(frame)
             );
         }

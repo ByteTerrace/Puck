@@ -118,8 +118,16 @@ internal static class FieldNoiseOracleClaims {
 
         return ArithmeticShiftRight(shift: FadeFractionBitCount, value: (t3 * inner));
     }
+    // The blend rounds its Q28 product to nearest on the magnitude (half away from zero), then re-signs -- the
+    // subject's RoundShift, transcribed in BigInteger.
     private static BigInteger Lerp(BigInteger a, BigInteger b, BigInteger fadeQ28) =>
-        (a + ArithmeticShiftRight(shift: FadeFractionBitCount, value: ((b - a) * fadeQ28)));
+        (a + RoundShift(shift: FadeFractionBitCount, value: ((b - a) * fadeQ28)));
+    private static BigInteger RoundShift(BigInteger value, int shift) {
+        var magnitude = BigInteger.Abs(value: value);
+        var rounded = ((magnitude + (BigInteger.One << (shift - 1))) >> shift);
+
+        return ((value.Sign < 0) ? -rounded : rounded);
+    }
     // Arithmetic (floor) right shift of a possibly-negative BigInteger by a non-negative amount, matching C#'s `>>`
     // on a signed integral type -- which floors toward negative infinity rather than truncating toward zero, the one
     // place BigInteger's own division semantics would silently disagree with the subject's native shifts.
@@ -162,6 +170,17 @@ internal static class FieldNoiseOracleClaims {
             if (subject != expected) {
                 return $"seed={seed} position=({x},{y},{z}): FieldNoise.Sample returned raw {subject}, the independent oracle computed {expected}";
             }
+
+            // The prepared-seed door: Prepare carries the seed it was built from, and every overload taking it
+            // answers exactly what the ulong twin answers.
+            var prepared = FieldNoise.Prepare(seed: seed);
+
+            if (prepared.Seed != seed) { return $"Prepare({seed}).Seed reads {prepared.Seed}"; }
+            if (FieldNoise.Sample(position: position, seed: prepared).Value != subject) { return $"seed={seed} position=({x},{y},{z}): the prepared-seed Sample diverges from the ulong overload"; }
+            if (FieldNoise.Sample(octaves: 3, position: position, seed: prepared) != FieldNoise.Sample(octaves: 3, position: position, seed: seed)) { return $"seed={seed} position=({x},{y},{z}): the prepared-seed three-octave Sample diverges from the ulong overload"; }
+            if (FieldNoise.Hash(seed: prepared, x: x, y: y, z: z) != FieldNoise.Hash(seed: seed, x: x, y: y, z: z)) { return $"seed={seed}: the prepared-seed Hash diverges from the ulong overload"; }
+            if (FieldNoise.SampleGradient(gradient: out var preparedGradient, position: position, seed: prepared) != FieldNoise.SampleGradient(gradient: out var gradient, position: position, seed: seed)) { return $"seed={seed} position=({x},{y},{z}): the prepared-seed SampleGradient diverges from the ulong overload"; }
+            if (preparedGradient != gradient) { return $"seed={seed} position=({x},{y},{z}): the prepared-seed gradient diverges from the ulong overload"; }
         }
 
         return null;

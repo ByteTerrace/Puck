@@ -129,9 +129,9 @@ public sealed class SdfBenchScene {
     // whose grid grows with N. FarCorners spreads N across eight widely separated local clusters (each sized like
     // a scaled-down Clustered cluster) — the CSR grid's opposite stress.
     internal const float DynamicMatrixClusterExtent = 2.2f;
-    // Kept well under half of sdf-world.hlsli's MaxDistance (60 world units) march budget: the bench camera frames a
-    // placement's WHOLE radius (ComputeDistance below), so a far corner's camera-to-surface reach is up to
-    // distance + radius — an 8-unit reach keeps that sum (~40 at the 16384 rung) comfortably inside 60 even for the
+    // Kept well under the default far distance (SdfFrame.DefaultFarDistance, 40 world units) the bench frames march
+    // to: the bench camera frames a placement's WHOLE radius (ComputeDistance below), so a far corner's camera-to-surface
+    // reach is up to distance + radius — an 8-unit reach keeps that sum (~40 at the 16384 rung) inside it even for the
     // farthest-placed corner cluster, so no instance silently drops out of the march (which would UNDER-measure cost).
     internal const float DynamicMatrixCornerReach = 8f;
     internal const float DynamicMatrixCornerSpacing = 0.55f;
@@ -149,8 +149,8 @@ public sealed class SdfBenchScene {
     // orbit reach.
     internal const float StormInstanceRadius = 0.28f;
 
-    // The render kernels march to MaxDistance = 60 world units (sdf-world.hlsli); keep the framed workload's far corner
-    // comfortably inside that so no instance escapes unrendered.
+    // The render kernels march to the frame's far distance (SdfFrame.FarDistance; the bench leaves the 40-unit default);
+    // keep the framed workload's far corner comfortably inside that so no instance escapes unrendered.
     private const float FieldOfViewRadians = (50f * (MathF.PI / 180f)); // matches ScreenLayoutDirector.FieldOfViewRadians
     private const float FrameMargin = 1.15f;                            // slack so the workload never touches the view edge
     private const float MinCameraDistance = 3.5f;
@@ -167,7 +167,7 @@ public sealed class SdfBenchScene {
     private const float StormGoldenAngle = 2.399963f; // π · (3 − √5) — the per-instance phase spread
     // The deterministic storm motion (all phases are pure functions of the instance index + the produced-frame counter;
     // no wall clock, no RNG). Amplitudes stay under half the InstanceSpacing so orbiting neighbours never overlap and
-    // every copy holds inside the camera's framing (and inside MaxDistance).
+    // every copy holds inside the camera's framing (and inside the far distance).
     private const float StormOrbitRadius = 0.32f;
     private const float StormOrbitSpeed = 0.11f; // radians of orbit per produced frame
     private const float StormSpinSpeed = 0.05f;  // radians of per-instance Y spin per produced frame

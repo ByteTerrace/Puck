@@ -678,9 +678,20 @@ resolves a basis chain — and resolves its own `references[]` through
 (`WorldStorageNamespace.Hosted`), the same resolver the owned-worlds catalog
 uses with its default namespace.
 
-## Deterministic replay (`WorldReplayTape.cs`, `WorldReplaySnapshot.cs`)
+## Deterministic replay (`WorldReplayTape.cs`, `WorldReplayTape.Drive.cs`, `WorldReplaySnapshot.cs`)
 
-`replay.record <name>` captures the running session's record-start definition,
+`replay.drive <name> [to <tick>]` re-drives a saved tape into the running
+session: a forced `world.load` of the embedded definition plus the boot
+population image (`WorldPopulation.Restore` from a shadow server the recorded
+seats joined) reset the live world, `WorldServerStepShell` feeds one recorded
+tick through `WorldReplaySnapshot.ApplyRecordedTick` ahead of each live step
+(the same apply the offline drive uses), `LoopbackTransport.InputMasked`
+drops local seat intents and commands for the drive's span, and the first
+live-vs-recorded hash divergence is narrated on stderr without stopping.
+`replay.fork <name> <tick> <new>` fast-forwards the same drive to `<tick>`
+(a burst of recorded ticks per shell call) and hands over to a recording
+whose leading tick groups are the parent's, with `ForkedFrom` in the header;
+the child is standalone. `replay.record <name>` captures the running session's record-start definition,
 active seats, mounted-guest receipts, and the per-tick server-input stream,
 while sampling the LIVE population's per-tick pose hash; `replay.stop`
 persists `<name>.puckreplay` and re-drives it once; `replay.verify <name>`
@@ -692,7 +703,13 @@ no verdict; a recorded mutation's accept/refuse outcome disagreeing with what
 the replay's own apply pipeline produces refuses loudly by name too
 (`MutationOutcomeMismatch` — see [addons.md](../../.claude/skills/puck-world/references/addons.md)'s prepare/commit
 transaction); a codec defect (`WorldReplayCodecException.cs`) reports as a
-host bug, never folded into either refusal. Presentation (screen pixels,
+host bug, never folded into either refusal. `replay.inspect <name>
+[<from>-<to>] [--all] [--poses]` (`WorldReplayInspector.cs`,
+`WorldReplayEntryDescriber.cs`) is the tape's read-back: the header facts,
+then one line per tick carrying the recorded hash beside what changed that
+tick (authority entries, intent channel edges); `--poses` re-drives through
+the same `Drive` and prints each active body's pose per line, naming the
+first divergent tick. Presentation (screen pixels,
 cameras, overlays, audio) is excluded by design: a match proves the
 authoritative pose trajectory, not the HUD. Known scope limit — the tape
 captures every one of the twelve envelope payload kinds except `Lever`

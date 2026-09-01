@@ -29,7 +29,6 @@ public sealed class WorldOwnedWorlds {
     private readonly List<WorldOwnedWorldDisposal> m_discarded = [];
     private readonly List<WorldIdentity> m_identities;
     private readonly List<WorldOwnedWorldRefusal> m_refused = [];
-    private readonly WorldMotionDefaults m_motion;
     private readonly WorldDefinition m_template;
 
     private WorldDocumentSubmissionReceipt? m_lastReceipt;
@@ -42,7 +41,6 @@ public sealed class WorldOwnedWorlds {
         ArgumentNullException.ThrowIfNull(argument: template);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: directory);
         m_template = IdentityBase(fallback: template);
-        m_motion = template.Motion;
         m_directory = directory;
         MachineId = machineId;
         Defaults = template.PlayerDefaults;
@@ -133,7 +131,6 @@ public sealed class WorldOwnedWorlds {
 
                 var identity = new WorldIdentity(
                     document: Seed(
-                        motion: m_motion,
                         seed: seed,
                         template: m_template
                     ),
@@ -590,9 +587,10 @@ public sealed class WorldOwnedWorlds {
         ));
         Console.Error.WriteLine(value: $"[identity] owned world refused: '{fileName}' {reason}");
     }
-    private static WorldDefinition Seed(WorldDefinition template, WorldMotionDefaults motion, WorldIdentitySeed seed) => template with {
+    // A fresh identity claims NO locomotion rates: the two rate slots are named but their rows are absent, so the
+    // kit's own authored rate drives the seat until identity.motion mints an override row deliberately.
+    private static WorldDefinition Seed(WorldDefinition template, WorldIdentitySeed seed) => template with {
         DocumentId = seed.Id,
-        MotionRaw = motion,
         Identity = new WorldIdentityDefinition(
         Id: seed.Id,
         Name: seed.Name,
@@ -601,13 +599,10 @@ public sealed class WorldOwnedWorlds {
         TurnSpeedState: TurnSpeedState
     ),
         StateRaw = ((template.StateRaw ?? new WorldStateSection()) with {
-            // The identity rows FOLD OVER the template's authored world rows rather than replacing the list — the
+            // The rate slots FOLD OVER the template's authored world rows rather than replacing the list — the
             // template's views/camera programs may reference its own state rows (e.g. a seatRig yaw reading a
             // state.<row>.<key> cell), and a seeded document that drops them refuses validation on its next load.
-            World = SeedWorldState(
-            templateRows: template.StateRaw?.World,
-            motion: motion
-        ),
+            World = SeedWorldState(templateRows: template.StateRaw?.World),
         }),
         BindingOverlaysRaw = [],
         // The template's own hud policy (enabled/cursor) survives; only its authored panels are stripped — an owned
@@ -618,10 +613,10 @@ public sealed class WorldOwnedWorlds {
         ),
         Adjacencies = null,
     };
-    // The seeded world-state rows: the template's authored rows with the two identity speed slots folded over any
-    // same-named rows.
-    private static IReadOnlyList<WorldStateRow> SeedWorldState(IReadOnlyList<WorldStateRow>? templateRows, WorldMotionDefaults motion) {
-        var rows = new List<WorldStateRow>(capacity: ((templateRows?.Count ?? 0) + 2));
+    // The seeded world-state rows: the template's authored rows MINUS any same-named rate rows, so a template can
+    // never smuggle a rate claim into a fresh identity.
+    private static IReadOnlyList<WorldStateRow> SeedWorldState(IReadOnlyList<WorldStateRow>? templateRows) {
+        var rows = new List<WorldStateRow>(capacity: (templateRows?.Count ?? 0));
 
         if (templateRows is not null) {
             foreach (var row in templateRows) {
@@ -630,23 +625,6 @@ public sealed class WorldOwnedWorlds {
                 }
             }
         }
-
-        rows.Add(item: new WorldStateRow(
-            Name: MoveSpeedState,
-            Kind: CellKind.Fixed,
-            Cells: [new WorldStateCell(
-                Key: WorldStateRow.SlotKey,
-                Value: Puck.Maths.FixedQ4816.FromDouble(value: motion.MoveSpeed).Value
-            )]
-        ));
-        rows.Add(item: new WorldStateRow(
-            Name: TurnSpeedState,
-            Kind: CellKind.Fixed,
-            Cells: [new WorldStateCell(
-                Key: WorldStateRow.SlotKey,
-                Value: Puck.Maths.FixedQ4816.FromDouble(value: motion.TurnSpeed).Value
-            )]
-        ));
 
         return rows;
     }
@@ -707,7 +685,6 @@ public sealed class WorldOwnedWorlds {
         var identity = new WorldIdentity(
             document: Seed(
                 template: m_template,
-                motion: m_motion,
                 seed: new WorldIdentitySeed(
                     Color: colorHex,
                     Id: name,

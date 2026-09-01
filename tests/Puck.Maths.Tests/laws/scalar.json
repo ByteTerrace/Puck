@@ -1322,7 +1322,7 @@
         "Kind": "Classical",
         "Flavor": "None",
         "Subject": "FixedQ4816.Sqrt \u2014 both lanes, the 64-bit hardware-seeded integer root below raw \u003C 2\u2074\u2078 and the double-seeded UInt128 estimate settled by exact comparison above it",
-        "Against": "Oracles.IntegerSquareRoot(raw \u003C\u003C 16) \u2014 the exact \u230A\u221A\u230B by a bit-length seed and Newton descent in BigInteger, settled by the exact predicate r\u00B2 \u2264 v \u003C (r\u002B1)\u00B2. BIT-EXACT on both sides: the documented contract is the exact floor, not a rounded approximation, so this is the one transcendental with no envelope at all. Puck.Maths\u0027 own BigIntegerFunctions.SquareRoot is deliberately NOT used",
+        "Against": "Oracles.IntegerSquareRoot(raw \u003C\u003C 16) \u2014 the exact \u230A\u221A\u230B by a bit-length seed and Newton descent in BigInteger, settled by the exact predicate r\u00B2 \u2264 v \u003C (r\u002B1)\u00B2, lifted to the nearest integer in the claim body by the tie-free remainder test (an integer radicand is nearer (r\u002B1)\u00B2 exactly when v \u2212 r\u00B2 \u003E r). BIT-EXACT on both sides: the documented contract is the correctly rounded root, not an approximation, so this is the one transcendental with no envelope at all. Puck.Maths\u0027 own BigIntegerFunctions.SquareRoot is deliberately NOT used",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -1330,7 +1330,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "the defining predicate holds directly on the returned raw: result\u00B2 \u2264 raw\u00B72\u00B9\u2076 \u003C (result \u002B 1)\u00B2, checked in BigInteger, which pins the answer without reference to how either side computed it",
+        "Subject": "the defining predicate holds directly on the returned raw: raw\u00B72\u00B9\u2076 \u2212 result\u00B2 lies in (\u2212result, result], the nearest-integer condition (result \u2212 \u00BD)\u00B2 \u2264 raw\u00B72\u00B9\u2076 \u003C (result \u002B \u00BD)\u00B2 written over integers, checked in BigInteger, which pins the answer without reference to how either side computed it",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -1348,7 +1348,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "the two lanes agree across their own seam: the raws 2\u2074\u2078 \u2212 1 and 2\u2074\u2078, which take different code paths, both satisfy the exact-floor predicate, so the double seed\u0027s only role is confirmed to be a seed",
+        "Subject": "the two lanes agree across their own seam: the raws 2\u2074\u2078 \u2212 1 and 2\u2074\u2078, which take different code paths, both satisfy the exact nearest-root predicate, so the double seed\u0027s only role is confirmed to be a seed",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -1491,7 +1491,7 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedQ4816.SinCos \u2014 turn-domain reduction by the single Q64 reciprocal constant round(2\u2076\u2074/2\u03C0), a half-turn fold, and seven- and eight-term odd/even Taylor polynomials at Q60, narrowed round-half-UP and clamped",
+        "Subject": "FixedQ4816.SinCos \u2014 turn-domain reduction by the single Q64 reciprocal constant round(2\u2076\u2074/2\u03C0) applied to the angle\u0027s magnitude and re-signed, a half-turn fold, and seven- and eight-term odd/even Taylor polynomials at Q60 on a radian magnitude, narrowed round-half-to-even on the magnitude and clamped",
         "Against": "Oracles.EncloseSinCos, which reduces IN RADIANS against a \u03C0 derived from Machin\u0027s formula by this module\u0027s own alternating arctangent series, at 384 working bits so a full-range angle\u0027s forty-five bits of cancellation are absorbed, then sums the alternating sine and cosine series with a factorial remainder bound. Neither the reduction domain, the constant, nor the polynomial is shared. The envelope is stated per regime: 0.75 raw ULP for |raw| \u2264 411775 (|\u03B8| \u2264 2\u03C0), 1.0 for |raw| \u003C 2\u2074\u2078, 2.5 over the full range. Those bands are not arbitrary \u2014 the reduction constant carries |C \u2212 2\u2076\u2074/2\u03C0| \u2264 \u00BD, which admits up to 2\u03C0\u00B7|raw|/2\u2076\u2075 \u2248 1.57 raw ULP of argument error at |raw| = 2\u2076\u00B3, on top of the kernel\u0027s own \u2264 0.5",
         "Shared": "",
         "Citation": "",
@@ -1537,6 +1537,15 @@
         "Kind": "Structural",
         "Flavor": "None",
         "Subject": "the origin is exact: SinCos(Zero) is (Zero, One) with no rounding anywhere",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the pair is exactly odd in the sine and even in the cosine: Sin(\u2212\u03B8) == \u2212Sin(\u03B8) and Cos(\u2212\u03B8) == Cos(\u03B8) bit for bit at every swept raw (MinValue excepted, having no negation) \u2014 the turn reduction, the radian product and the Q60\u2192Q16 narrowing each run on a magnitude and re-sign, so no floor or half-up step can break the symmetry; a rotation chain that composes an angle with its negation therefore closes exactly",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -1698,7 +1707,7 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedQ4816.Pow on the FRACTIONAL path \u2014 Exp2 of the Q16-rounded product y\u00B7Log2(x), which the operand fold reaches by forcing a non-zero exponent fraction",
+        "Subject": "FixedQ4816.Pow on the FRACTIONAL path \u2014 Exp2 fed the once-rounded Q32 product y\u00B7Log2(x), the logarithm carried at Q46 and the exponential given twenty-five residual bits, which the operand fold reaches by forcing a non-zero exponent fraction",
         "Against": "Oracles.EncloseExp2 applied to the interval product of the sampled exponent with Oracles.EncloseLog2\u0027s enclosure of log\u2082(x), widened by the DERIVED envelope: with L\u0302 the subject\u0027s logarithm (within 0.75 ULP by scalar.log2-vs-series) and e the Q16 rounding of y\u00B7L\u0302, the exponent error is \u03B5 \u2264 (3\u00B7|yRaw| \u002B 2\u00B9\u2077)/2\u00B3\u2074, so the result carries at most x^y\u00B7\u03B5 \u2014 using 2^\u03B5 \u2212 1 \u2264 \u03B5, valid because the operand fold keeps \u03B5 far below one \u2014 plus Exp2\u0027s own documented envelope. ENVELOPE: Subjects.FixedPowWithinEnvelope bounds the sampled exponent so that |y\u00B7log\u2082 x| stays under sixteen, which is the band where neither saturation gate fires; the gates themselves are pinned by scalar.pow-exact-lattice",
         "Shared": "",
         "Citation": "",

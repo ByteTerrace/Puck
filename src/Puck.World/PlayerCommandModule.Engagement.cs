@@ -34,6 +34,10 @@ internal sealed partial class PlayerCommandModule {
             targetPrincipal: targetPrincipal
         );
 
+        if (ReplayDriveError(verb: "body.disengage") is { } driveError) {
+            return driveError;
+        }
+
         m_link.SubmitCommand(command: new WorldCommand.DissolveControl(
             EntityIndex: index,
             Principal: actingPrincipal,
@@ -215,6 +219,10 @@ internal sealed partial class PlayerCommandModule {
         // Server.WorldEngagement.Engage. body:{index}'s device state (held keys/lanes) is dropped client-side in the
         // same breath as the submission.
         var targetPrincipal = TargetPrincipalFor(index: index);
+
+        if (ReplayDriveError(verb: "body.engage") is { } driveError) {
+            return driveError;
+        }
 
         m_link.SubmitCommand(command: new WorldCommand.ComposeControl(
             EntityIndex: index,

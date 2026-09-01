@@ -43,8 +43,8 @@
     "Members": [
       { "Type": "Puck.Maths.NumberTheoreticTransform", "Name": "Forward" },
       { "Type": "Puck.Maths.NumberTheoreticTransform", "Name": "Inverse" },
-      { "Type": "Puck.Maths.NttPlan", "Name": "Create" },
-      { "Type": "Puck.Maths.NttPlan", "Name": "Length" }
+      { "Type": "Puck.Maths.NumberTheoreticTransformPlan", "Name": "Create" },
+      { "Type": "Puck.Maths.NumberTheoreticTransformPlan", "Name": "Length" }
     ],
     "Legs": [
       {
@@ -59,7 +59,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "a wrong NttPlan.Length getter breaks this case rather than passing it silently: NumberTheoreticTransform.Forward and Inverse both check the operand span's length against the plan's Length before running, so a Length that answered anything other than the length the plan was built for throws on every call this case makes, which Laws.Claim reports as a failure.",
+        "Subject": "a wrong NumberTheoreticTransformPlan.Length getter breaks this case rather than passing it silently: NumberTheoreticTransform.Forward and Inverse both check the operand span's length against the plan's Length before running, so a Length that answered anything other than the length the plan was built for throws on every call this case makes, which Laws.Claim reports as a failure.",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -118,7 +118,7 @@
     "Id": "ntt.length-refusals",
     "Tier": "Default",
     "Members": [
-      { "Type": "Puck.Maths.NttPlan", "Name": "Create" },
+      { "Type": "Puck.Maths.NumberTheoreticTransformPlan", "Name": "Create" },
       { "Type": "Puck.Maths.NumberTheoreticTransform", "Name": "Forward" },
       { "Type": "Puck.Maths.NumberTheoreticTransform", "Name": "Inverse" },
       { "Type": "Puck.Maths.NumberTheoreticTransform", "Name": "Convolve" },
@@ -128,7 +128,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "every documented refusal, asserted by exception TYPE and by the parameter name it reports: NttPlan.Create at zero, a negative length and a non-power-of-two length (3 and 6) — the largest power of two an int can name is 2^30, far below MaximumLog2Length, so no int length is ever refused for exceeding the prime's own two-adicity ceiling; Forward and Inverse given a span whose length does not equal the plan's; Convolve given a right or destination span of the wrong length; PointwiseMultiply given spans of unequal lengths.",
+        "Subject": "every documented refusal, asserted by exception TYPE and by the parameter name it reports: NumberTheoreticTransformPlan.Create at zero, a negative length and a non-power-of-two length (3 and 6) — the largest power of two an int can name is 2^30, far below MaximumLog2Length, so no int length is ever refused for exceeding the prime's own two-adicity ceiling; Forward and Inverse given a span whose length does not equal the plan's; Convolve given a right or destination span of the wrong length; Convolve given a left span of the wrong length; PointwiseMultiply given a right span or a destination span whose length differs from left, each naming its own parameter.",
         "Against": "",
         "Shared": "",
         "Citation": "",

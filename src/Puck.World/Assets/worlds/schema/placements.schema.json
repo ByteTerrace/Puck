@@ -104,7 +104,7 @@
       "default": null
     },
     "policy": {
-      "description": "The live-placement policy \u2014 ABSENT resolves to Absent.",
+      "description": "The live-placement policy \u2014 ABSENT derives from Rows (DeriveFrom: no live authoring, the scale envelope the rows span).",
       "type": [
         "object",
         "null"

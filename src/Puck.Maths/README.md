@@ -118,7 +118,7 @@ graph TB
     AL(["🏗️ Algebra<br/>configurable number systems"])
     OR(["🔮 Oracle<br/>graphs · paths · patterns"])
     RE(["🔬 Research<br/>exploratory, never the hot path"])
-    TR(["🎛️ Transforms<br/>NTT · fixed-point FFT"])
+    TR(["🎛️ Transforms<br/>NTT · Walsh–Hadamard · fixed-point FFT and DCT"])
     Root --- FP
     Root --- SA
     Root --- FF
@@ -138,7 +138,7 @@ graph TB
 | [`Geometry/`](Geometry/README.md) | Hex grids, the locality-preserving Hilbert curve, layered index spaces, and exact integer geometry. | A grid, a space-filling order, or a layered index. |
 | [`Oracle/`](Oracle/README.md) | One configurable product operation evaluated with different rules for combining values, then used to build graphs, geometric algebras, planar tangles, divisor arithmetic, and pattern languages. | Reachability, shortest paths, pattern matching, holes in a structure, or group words. |
 | [`Research/`](Research/README.md) | Exploratory exact tools: continued-fraction and radical tails, positional and Ostrowski automatic sequences, Sturmian and quasicrystal words, Fibonacci and metallic-mean arithmetic, odd-cyclic incidence, and real-quadratic orders. Partly in `namespace Puck.Maths.Research`; that folder README says which types. | Research questions and compiled random-access integer patterns, never the simulation hot path. |
-| [`Transforms/`](Transforms/README.md) | The exact number-theoretic transform over `PrimeField64`, and the fixed-point FFT over `FixedComplex` — forward/inverse radix-2, cached twiddle plans, exact cyclic convolution. | A frequency-domain transform, or an exact convolution. |
+| [`Transforms/`](Transforms/README.md) | The exact number-theoretic transform over `PrimeField64` and the exact Walsh–Hadamard transform over any binary integer; the fixed-point FFT over `FixedComplex` and the fixed-point DCT over `FixedQ4816` — one plan-then-in-place shape, cached twiddle plans, cyclic convolution on both spectral transforms. | A frequency-domain or sequency-domain transform, or a cyclic convolution. |
 
 The [root-level type map](#root-level-types) below introduces the types that do
 not belong to one of those folders: integer routines, exact discrete rates,

@@ -4,8 +4,8 @@
     "Tier": "Default",
     "Members": [
       { "Type": "Puck.Maths.FixedFourierTransform", "Name": "Forward" },
-      { "Type": "Puck.Maths.FixedFourierPlan", "Name": "Create" },
-      { "Type": "Puck.Maths.FixedFourierPlan", "Name": "Length" }
+      { "Type": "Puck.Maths.FixedFourierTransformPlan", "Name": "Create" },
+      { "Type": "Puck.Maths.FixedFourierTransformPlan", "Name": "Length" }
     ],
     "Legs": [
       {
@@ -200,17 +200,80 @@
     "Id": "fft.length-refusals",
     "Tier": "Default",
     "Members": [
-      { "Type": "Puck.Maths.FixedFourierPlan", "Name": "Create" },
+      { "Type": "Puck.Maths.FixedFourierTransformPlan", "Name": "Create" },
       { "Type": "Puck.Maths.FixedFourierTransform", "Name": "Forward" },
       { "Type": "Puck.Maths.FixedFourierTransform", "Name": "Inverse" },
       { "Type": "Puck.Maths.FixedFourierTransform", "Name": "ForwardReal" },
-      { "Type": "Puck.Maths.FixedFourierTransform", "Name": "InverseReal" }
+      { "Type": "Puck.Maths.FixedFourierTransform", "Name": "InverseReal" },
+      { "Type": "Puck.Maths.FixedFourierTransform", "Name": "Convolve" },
+      { "Type": "Puck.Maths.FixedFourierTransform", "Name": "PointwiseMultiply" }
     ],
     "Legs": [
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "every documented refusal, asserted by exception TYPE and by the parameter name it reports: FixedFourierPlan.Create at zero, a negative length and a non-power-of-two length (5); Forward and Inverse given a span whose length does not equal the plan's; ForwardReal given a real or destination span of the wrong length; InverseReal given a spectrum or destination span of the wrong length.",
+        "Subject": "every documented refusal, asserted by exception TYPE and by the parameter name it reports: FixedFourierTransformPlan.Create at zero, a negative length and a non-power-of-two length (5); Forward and Inverse given a span whose length does not equal the plan's; ForwardReal given a real or destination span of the wrong length; InverseReal given a spectrum or destination span of the wrong length; Convolve given a left, right or destination span whose length does not equal the plan's; PointwiseMultiply given a right span or a destination span whose length differs from left, each naming its own parameter.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "fft.convolution-vs-oracle-bound",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedFourierTransform", "Name": "Convolve" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedFourierTransform.Convolve at lengths 1 through 256 over Pcg32XshRr-seeded complex operands in raw [-2^16, 2^16] (about +/-1.0) per component",
+        "Against": "Oracles.CyclicConvolutionComplexRaw \u2014 the O(N^2) definition-form sum destination[k] = sum over i of left[i] * right[(k - i) mod N], formed EXACTLY in BigInteger over the raw Q16 components at Q32 and rounded ONCE per component back to Q16 through the module\u0027s own RoundDyadic. The subject runs forward-forward-pointwise-inverse; the oracle never forwards, never inverts and never multiplies pointwise \u2014 the two share the convolution theorem and nothing else. Agreement within 64 raw Q16 ULPs per component \u2014 MEASURED: a calibration run at this envelope observed a worst case of 36 ULPs at length 256; 64 is that measurement with margin.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: the bound is stated AT this amplitude and length range. The convolution's output grows as N times the product of the operands' amplitudes, and every twiddle's quantization error rides through three transforms and a pointwise product, so a caller at a wider envelope should expect proportionally larger absolute error. Unlike ntt.convolution-vs-oracle, agreement is a bound rather than exact equality: the fixed-point route rounds where the field route does not.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "fft.convolution-vs-oracle-bound-deep",
+    "Tier": "Deep",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "MIRROR of fft.convolution-vs-oracle-bound at strictly stronger operands — lengths 512 through 4096 — with a wider measured bound (384 ULPs; the calibration run's worst case at this length range was 255 ULPs at length 4096), because three deeper transforms accumulate more per-stage rounding into an output that has itself grown with N",
+        "Against": "the same Oracles.CyclicConvolutionComplexRaw definition-form sum, at O(N^2) BigInteger cost up to N = 4096",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "fft.pointwise-multiply-is-elementwise-product",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedFourierTransform", "Name": "PointwiseMultiply" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "PointwiseMultiply(left, right) is EXACTLY bit-identical to left[i] * right[i] through FixedComplex.operator* at every lane, at lengths 1 through 256, and stays so when the destination aliases left. A wiring statement about the lane loop rather than an accuracy statement about the product (complex.* pins that kernel): a lane skipped, an index crossed between the operands, or an aliasing read-after-write reddens this case.",
         "Against": "",
         "Shared": "",
         "Citation": "",

@@ -92,18 +92,18 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     uint2 tileCoord = (pixel / WorldTileSize);
     uint tileIndex = worldTileIndex(id.z, tileCoord, params.tileGrid);
     float marchStart = tiles[worldTileMarchStartIndex(tileIndex)];
-    // The four-bound teleport's proven-empty gap for this tile (planes 1/2; sdf-beam wrote them). firstExit =
-    // MaxDistance when no gap was proven — the teleport in renderView is then a dead branch.
+    // The four-bound teleport's proven-empty gap for this tile (planes 1/2; sdf-beam wrote them). firstExit = the
+    // far distance when no gap was proven — the teleport in renderView is then a dead branch.
     float firstExit = tiles[worldTileFirstExitIndex(tileIndex)];
     float secondEntry = tiles[worldTileSecondEntryIndex(tileIndex)];
     // The F1 far bound (plane 3; sdf-beam wrote it): the depth past which this tile's cone cannot produce any hit the
     // fine march would ACCEPT (proven against the footprint-inflated threshold), so renderView exits the march there.
-    // MaxDistance = no bound proven (a dead far-exit past the far plane). The A/B lever pushes it out of reach so the
-    // "off" side marches exactly as pre-F1.
+    // The far distance (the view's authored far plane, worldFarDistance) = no bound proven (a dead far-exit past the
+    // far plane). The A/B lever pushes it out of reach so the "off" side marches exactly as pre-F1.
     float farBound = tiles[worldTileFarBoundIndex(tileIndex)];
 
     if (worldFarBoundDisabled()) {
-        farBound = (MaxDistance + 1.0);
+        farBound = (worldFarDistance(view) + 1.0);
     }
     // The tile's mask BASE (not the words themselves), using the same host-pushed width the beam prepass wrote with.
     uint instanceMaskBase = worldInstanceMaskBase(tileIndex);

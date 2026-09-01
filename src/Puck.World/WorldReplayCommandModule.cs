@@ -5,7 +5,10 @@ namespace Puck.World;
 
 /// <summary>
 /// The replay console surface — <c>replay.record</c> / <c>replay.stop</c> / <c>replay.cancel</c> / <c>replay.verify</c>
-/// / <c>replay.list</c> / <c>replay.status</c>, the true-deterministic-replay control plane over the pipe (the seed of a
+/// / <c>replay.list</c> / <c>replay.status</c> / <c>replay.inspect</c> (the tape's read-back, in
+/// <c>WorldReplayCommandModule.Inspect.cs</c>) / <c>replay.drive</c> and <c>replay.fork</c> (the two verbs that touch the
+/// live session — they reset it to a tape's boot image and feed the recorded ticks through its own doors, in
+/// <c>WorldReplayCommandModule.Drive.cs</c>), the true-deterministic-replay control plane over the pipe (the seed of a
 /// future <c>Puck.Replay</c>). It arms the <see cref="WorldReplayTape"/> that captures the running session's per-tick
 /// server-input stream and starting state: <c>replay.record</c> begins capture, <c>replay.stop</c> persists the
 /// self-contained <see cref="WorldReplaySnapshot"/> under the LIVE session's tail pose hash and re-drives it once to
@@ -15,7 +18,9 @@ namespace Puck.World;
 /// verification runs offline over an isolated shadow world, so it never re-injects into the live session and its verdict
 /// is readable the instant the verb returns. A SEPARATE module to keep each class under its analyzer ceilings.
 /// </summary>
-internal sealed class WorldReplayCommandModule(WorldReplayTape tape) : ICommandModule {
+internal sealed partial class WorldReplayCommandModule(WorldReplayTape tape, WorldReplayInspector inspector, WorldInstanceHost instances) : ICommandModule {
+    private readonly WorldReplayInspector m_inspector = inspector;
+    private readonly WorldInstanceHost m_instances = instances;
     private readonly WorldReplayTape m_tape = tape;
 
     private CommandResult Cancel(WireArgs args) {
@@ -23,13 +28,17 @@ internal sealed class WorldReplayCommandModule(WorldReplayTape tape) : ICommandM
             return refusal;
         }
 
-        if (m_tape.Mode != WorldReplayMode.Recording) {
-            return CommandResult.Error(output: "[replay.cancel: not recording]");
+        switch (m_tape.Mode) {
+            case WorldReplayMode.Recording: {
+                    var name = m_tape.CancelRecording();
+
+                    return new CommandResult(Output: $"[replay.cancel: dropped '{name}' — nothing written]");
+                }
+            case WorldReplayMode.Replaying:
+                return CancelDrive();
+            default:
+                return CommandResult.Error(output: "[replay.cancel: not recording or replaying]");
         }
-
-        var name = m_tape.CancelRecording();
-
-        return new CommandResult(Output: $"[replay.cancel: dropped '{name}' — nothing written]");
     }
     private static CommandResult ListReplays(WireArgs args) {
         if (CommandResult.RequireNoArguments(args: args, verb: "replay.list") is { } refusal) {
@@ -56,8 +65,12 @@ internal sealed class WorldReplayCommandModule(WorldReplayTape tape) : ICommandM
             return CommandResult.Error(output: "[replay.record: name must be non-empty, with no '.', '/', '\\', or other filename-invalid characters]");
         }
 
-        if (m_tape.Mode != WorldReplayMode.Idle) {
+        if (m_tape.Mode == WorldReplayMode.Recording) {
             return CommandResult.Error(output: $"[replay.record: busy — already recording '{m_tape.Name}'; replay.stop persists it or replay.cancel drops it first]");
+        }
+
+        if (m_tape.Mode == WorldReplayMode.Replaying) {
+            return CommandResult.Error(output: $"[replay.record: busy — a replay drive of '{m_tape.DriveProgress?.SourceName}' is in progress; replay.cancel ends it, or use replay.fork to record from a drive]");
         }
 
         if (!m_tape.TryBeginRecording(
@@ -74,6 +87,17 @@ internal sealed class WorldReplayCommandModule(WorldReplayTape tape) : ICommandM
             return refusal;
         }
 
+        if (m_tape.DriveProgress is { } drive) {
+            var divergence = ((drive.DivergedAt < 0)
+                ? "no divergence"
+                : $"diverged at tick {drive.DivergedAt}"
+            );
+
+            return new CommandResult(Output: $"[replay.status: replaying '{drive.SourceName}' | tick {drive.Cursor} of {drive.Target} (tape {drive.TapeTicks}) | {divergence}{((drive.ForkName is { } fork)
+                ? $" | fork -> '{fork}' (fast-forward)"
+                : "")}]");
+        }
+
         return new CommandResult(Output: ((m_tape.Mode == WorldReplayMode.Idle)
             ? "[replay.status: idle]"
             : $"[replay.status: recording '{m_tape.Name}' | {m_tape.TickCount} ticks captured]"));
@@ -81,6 +105,10 @@ internal sealed class WorldReplayCommandModule(WorldReplayTape tape) : ICommandM
     private CommandResult Stop(WireArgs args) {
         if (CommandResult.RequireNoArguments(args: args, verb: "replay.stop") is { } refusal) {
             return refusal;
+        }
+
+        if (m_tape.Mode == WorldReplayMode.Replaying) {
+            return CommandResult.Error(output: $"[replay.stop: not recording — a replay drive of '{m_tape.DriveProgress?.SourceName}' is in progress; replay.cancel ends it]");
         }
 
         if (m_tape.Mode != WorldReplayMode.Recording) {
@@ -169,14 +197,32 @@ internal sealed class WorldReplayCommandModule(WorldReplayTape tape) : ICommandM
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "replay.cancel",
-            description: "Aborts the active recording WITHOUT persisting it (Immediate): drops the captured stream and detaches the taps.",
+            description: "Aborts the active recording WITHOUT persisting it (Immediate): drops the captured stream and detaches the taps. During a replay drive, ends the drive where it stands instead: the world stays at that tick, local seats return to live input, and a pending fork is abandoned.",
             handler: (_, args) => Cancel(args: args)
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "replay.drive",
+            description: "Drives a saved recording INTO THE LIVE SESSION (Immediate to arm; the drive itself runs one recorded tick per live tick, at the world's own rate, so it renders on screen and every read-back verb answers mid-drive): replay.drive <name> [to <tick>] resets the running world to the tape's boot image through the ordinary world.load door (its embedded definition, document grants, the record-start seats on their pinned profile rates) and feeds each recorded tick's authority entries and intents through the server's own doors. Local seat input — device sticks and every body.* drive verb — is masked for the drive's whole span (the recorded intents are the only intents); camera and look stay live. Each tick's live pose hash is compared against the recording and the first divergence is narrated on stderr by tick without stopping the drive. At the end (or the <tick>) the world stays where the drive left it and the seats are live again; nothing is recorded. Refuses while recording or already driving, when the live player set differs from the tape's seats, or when a booted screen machine or pumped addon guest holds state the rebuild door cannot reset.",
+            handler: (_, args) => Drive(args: args)
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "replay.fork",
+            description: "Forks a saved recording at a tick into a new live recording (Immediate to arm): replay.fork <name> <tick> <new> drives '<name>' to its first <tick> recorded ticks as fast as the host loop allows (rendering may lag), then hands the seats back to live input and keeps RECORDING into '<new>' — the parent's boot image, ticks 0..<tick>-1 copied verbatim, then the live ticks that follow, with forkedFrom(<name>, <tick>) in the child's header. The child is standalone: replay.verify/inspect/fork all work on it with no parent lookup; replay.stop persists it like any recording. Same refusals as replay.drive, plus <new> must differ from <name>.",
+            handler: (_, args) => Fork(args: args)
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "replay.verify",
             description: "Replays a saved recording through a FRESH world and reports MATCH/MISMATCH (Immediate): replay.verify <name> rehydrates the boot-image starting state, re-drives the recorded stream offline, and compares the replayed tail hash against the recorded LIVE tail (a genuine live-vs-replay fidelity check).",
             handler: (_, args) => Verify(args: args)
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "replay.inspect",
+            description: "Reads a saved recording back (Immediate): replay.inspect <name> [<from>-<to>] [--all] [--poses] prints the tape's header (shape magic, recorded rate, tick count, the pinned seats with their profile rates, the mounted-addon receipts) and then one line per tick carrying the recorded pose hash beside what CHANGED that tick — every authority/server-event entry (command, grant, revoke, session, mutation, rebuild, screen op, …) named compactly, and every intent channel whose value moved from the entity's previous submission (p1 forward=1). Default prints only ticks carrying such an edge; --all prints every tick; <from>-<to> clamps the printed ticks (a from beyond the tape refuses by name). --poses re-drives the tape through the same offline shadow drive replay.verify uses and prints each active body's body.where-style pose beside every printed tick, plus the first tick where the re-driven hash diverges from the recorded one, if any.",
+            handler: (_, args) => Inspect(args: args)
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
@@ -187,7 +233,7 @@ internal sealed class WorldReplayCommandModule(WorldReplayTape tape) : ICommandM
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "replay.status",
-            description: "Reports the tape state (Immediate): idle or recording, the active name, and ticks captured so far.",
+            description: "Reports the tape state (Immediate): idle, recording (the active name and ticks captured so far), or replaying (the source tape, tick <cursor> of <target>, the first divergent tick if any, and the fork target when one is armed).",
             handler: (_, args) => Status(args: args)
         );
     }

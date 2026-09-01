@@ -1034,10 +1034,13 @@ internal static partial class Subjects {
         if (root.Value < 256L) { return $"the root of the positive raw {realRaw} is {root.Value}, below the 256 floor the lift relies on"; }
         if ((root * Raw(value: (OneRaw << 1))).Value != (2L * root.Value)) { return $"the doubling of the root {root.Value} is not exact"; }
 
+        // The lift divides by the root at Q32 — ⌊√(a·2⁴⁸)⌋, sixteen bits finer than the returned Q16 root — so the
+        // expectation is ONE rounding of b·2³²/(2·R₃₂), formed here from the independent integer root.
+        var wideRoot = Oracles.IntegerSquareRoot(value: (new BigInteger(value: realRaw) << (3 * FixedQ4816.FractionBitCount)));
         var expectedRootDual = Oracles.RoundDyadicRatio(
             numerator: new BigInteger(value: dualRaw),
-            denominator: (2L * ((BigInteger)root.Value)),
-            shift: FixedQ4816.FractionBitCount
+            denominator: (2 * wideRoot),
+            shift: (2 * FixedQ4816.FractionBitCount)
         );
 
         if (rooted.Dual.Value != expectedRootDual) { return $"the dual part of Sqrt({realRaw}, {dualRaw}) is {rooted.Dual.Value}, expected {expectedRootDual}"; }

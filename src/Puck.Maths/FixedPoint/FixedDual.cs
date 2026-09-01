@@ -133,11 +133,20 @@ public static class FixedDual {
             );
         }
 
-        var root = FixedQ4816.Sqrt(value: value.Real);
+        // The dual lane b/(2√a) divides by the root at Q32 — √(a·2⁴⁸), sixteen bits finer than the returned Q16 root —
+        // so the divisor's own quantization sits far below the lane's single rounding; dividing by the rounded Q16
+        // root would round twice and bias the derivative by the root's own error.
+        var wideRoot = ((((UInt128)((ulong)value.Real.Value)) << (3 * FixedQ4816.FractionBitCount))).SquareRoot();
 
         return new(
-            Real: root,
-            Dual: (value.Dual / (root * Two))
+            Real: FixedQ4816.Sqrt(value: value.Real),
+            Dual: FixedQ4816.FromRawBits(value: FusedArithmetic.DivideProductSum(
+                denominator: (((UInt128)wideRoot) << 1),
+                numerator: FusedArithmetic.Product(
+                    left: value.Dual.Value,
+                    right: FixedQ4816.One.Value
+                )
+            ))
         );
     }
     /// <summary>Creates the differentiation variable (unit dual part).</summary>

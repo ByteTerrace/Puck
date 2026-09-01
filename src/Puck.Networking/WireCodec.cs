@@ -238,6 +238,13 @@ public ref struct WireReader {
     /// <summary>Reads one fixed-point scalar.</summary>
     /// <returns>The value.</returns>
     public FixedQ4816 ReadFixed() => new(Value: ReadInt64());
+    /// <summary>Reads a nullable fixed-point scalar behind its presence bit.</summary>
+    /// <returns>The value, or <see langword="null"/>.</returns>
+    public FixedQ4816? ReadNullableFixed() =>
+        (ReadBoolean()
+            ? ReadFixed()
+            : null
+        );
     /// <summary>Reads one fixed-point quaternion.</summary>
     /// <returns>The value.</returns>
     public FixedQuaternion ReadFixedQuaternion() => new(
@@ -495,6 +502,15 @@ public sealed class WireWriter {
     /// <summary>Writes one fixed-point scalar.</summary>
     /// <param name="value">The value.</param>
     public void WriteFixed(FixedQ4816 value) => WriteInt64(value: value.Value);
+    /// <summary>Writes a nullable fixed-point scalar behind its presence bit.</summary>
+    /// <param name="value">The value.</param>
+    public void WriteNullableFixed(FixedQ4816? value) {
+        WriteBoolean(value: value.HasValue);
+
+        if (value is { } present) {
+            WriteFixed(value: present);
+        }
+    }
     /// <summary>Writes one fixed-point quaternion.</summary>
     /// <param name="value">The value.</param>
     public void WriteFixedQuaternion(FixedQuaternion value) {

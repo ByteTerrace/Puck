@@ -161,8 +161,9 @@ internal sealed class WorldSimulation(WorldServer server, WorldClient client, Wo
             // Frozen — not merely unchanged — while boot did not step: ElapsedTicks/Tick report the AUTHORITATIVE
             // simulation's own completed engine time, so a paused/stopped boot's read-back must show exactly the
             // value it held the instant it stopped, never the host's own master-timeline advance it declined to
-            // take. Written HERE, from bootContext's own values, never from the raw pump context.
-            ElapsedTicks = bootContext.ElapsedTicks;
+            // take. Derived from the ticks the shell actually completed (one, or a fast-forwarding replay drive's
+            // burst), never from the raw pump context.
+            ElapsedTicks += ((stepTick - Tick) * context.StepTicks);
             Tick = stepTick;
         } else {
             _ = m_server.DrainAdministrative();
