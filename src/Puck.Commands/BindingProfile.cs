@@ -1,4 +1,6 @@
+using System.Collections.Frozen;
 using System.Collections.Immutable;
+using Puck.Assets.Documents;
 
 namespace Puck.Commands;
 
@@ -35,7 +37,7 @@ public static class BindingProfile {
         separator: ',',
         values: (activator.Sequence ?? [])
     )}";
-    private static (IReadOnlyDictionary<string, IReadOnlyList<CommandBinding>> Table, List<CompiledBindingProfile.CompiledActivatorEntry> Activators) BuildTable(BindingPageDefinition page, Func<ChannelRef, string> channelCommandName, ref int nextActivatorIndex) {
+    private static (FrozenDictionary<string, IReadOnlyList<CommandBinding>> Table, List<CompiledBindingProfile.CompiledActivatorEntry> Activators) BuildTable(BindingPageDefinition page, Func<ChannelRef, string> channelCommandName, ref int nextActivatorIndex) {
         var entries = (page.Entries ?? []);
         // Group by source into the runtime source→commands table, carrying each entry's full CommandBinding
         // expressiveness (activation edge, constant value). An entry triggered by an ACTIVATOR instead of a plain
@@ -340,22 +342,30 @@ public static class BindingProfile {
             table[source] = list.ToImmutableArray();
         }
 
-        return (table, activators);
+        // Frozen, not Dictionary: this table is built once per compiled profile and then read once per raw input
+        // signal for the lifetime of that profile, which is exactly the shape FrozenDictionary optimizes for. The
+        // comparer stays OrdinalIgnoreCase — a source id's case is authored-document noise, never identity.
+        return (table.ToFrozenDictionary(comparer: StringComparer.OrdinalIgnoreCase), activators);
     }
     private static BindingPageView BuildView(
-        HashSet<int> chord,
         string group,
         IReadOnlyList<BindingChordCommandView> hints,
         IReadOnlyList<BindingModifierDefinition> modifiers,
         BindingPageDefinition page,
+        HashSet<int> required,
         Func<ChannelRef, string> channelCommandName
     ) {
         var buttons = new BindingPageButtonView[(page.Entries?.Count ?? 0)];
+        // Every source the page binds → the button that source triggers. Built here, once per compiled profile, so a
+        // presentation layer joining physical slots against a page (the binding bar's twelve sockets, one lookup per
+        // slot per plate per bank per seat per frame) never re-derives it by scanning Buttons. Keyed by each source
+        // the entry actually LISTS rather than by the entry's comma-joined trigger label, so a row reachable from a
+        // gamepad button AND a keyboard key is found under both — a scan over the label found it under neither.
+        var buttonsBySource = new Dictionary<string, BindingPageButtonView>(comparer: StringComparer.OrdinalIgnoreCase);
 
         for (var entryIndex = 0; (entryIndex < buttons.Length); entryIndex++) {
             var entry = page.Entries![entryIndex];
-
-            buttons[entryIndex] = new BindingPageButtonView(
+            var button = new BindingPageButtonView(
                 Command: ((entry.Channel is { } channel)
                 ? channelCommandName(arg: channel)
                 : entry.Command!),
@@ -372,6 +382,18 @@ public static class BindingProfile {
                 ? sources.ToImmutableArray()
                 : [])
             );
+
+            buttons[entryIndex] = button;
+
+            // First entry wins, matching the profile order a consumer would have read by scanning Buttons.
+            foreach (var source in (entry.Sources ?? [])) {
+                if (!string.IsNullOrEmpty(value: source)) {
+                    _ = buttonsBySource.TryAdd(
+                        key: source,
+                        value: button
+                    );
+                }
+            }
         }
 
         var modifierViews = new BindingModifierView[modifiers.Count];
@@ -383,13 +405,14 @@ public static class BindingProfile {
                 Icon: modifier.Icon,
                 Id: modifier.Id,
                 Label: modifier.Label,
-                Required: chord.Contains(item: modifierIndex),
+                Required: required.Contains(item: modifierIndex),
                 Sources: modifier.Sources
             );
         }
 
         return new BindingPageView(
             Buttons: buttons.ToImmutableArray(),
+            ButtonsBySource: buttonsBySource.ToFrozenDictionary(comparer: StringComparer.OrdinalIgnoreCase),
             CommandChords: hints.ToImmutableArray(),
             Group: group,
             Icon: page.Icon,
@@ -585,6 +608,26 @@ public static class BindingProfile {
         }
     }
 
+    // A DocumentIdentifier-typed field can reach a document gate in two shapes that are not an identifier at all:
+    // JSON null (the converter is never asked, so the property arrives null) and an unresolved "state.<row>"
+    // reference no containing document has bound yet. Reading either through the implicit string conversion throws a
+    // NullReferenceException or an InvalidOperationException — past Compile's every caller, all of which catch
+    // ArgumentException only, and past BindingVocabularyCheck's promise to answer malformed documents with refusal
+    // lines rather than exceptions. Both read identifiers through here and refuse the row by name instead. The catch
+    // is the honest shape: DocumentIdentifier publishes no "is resolved" predicate, and a resolved reference keeps
+    // its Reference, so the two cannot be told apart from outside. It never runs on a well-formed document.
+    internal static string? ResolveIdentifier(DocumentIdentifier? identifier) {
+        if (identifier is null) {
+            return null;
+        }
+
+        try {
+            return identifier.Value;
+        } catch (InvalidOperationException) {
+            return null;
+        }
+    }
+
     /// <summary>The synthesized command name a channel destination named <paramref name="channel"/> compiles down to.</summary>
     public static string ChannelCommandName(ChannelRef channel) => channel switch {
         ChannelRef.Name name => $"{ChannelCommandPrefix}name.{name.Value}",
@@ -614,7 +657,12 @@ public static class BindingProfile {
             );
         }
 
-        var modifierIndexById = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
+        // Both member lookups are OrdinalIgnoreCase, and they must agree: a member that differs from a declared
+        // modifier's id only by case has to RESOLVE to that modifier. Under an Ordinal id lookup it missed, missed
+        // the source lookup too (the modifier's sources are its own, not its id), and was minted as an implicit
+        // single-source modifier over a control name that does not exist — a permanently dead row, authored in good
+        // faith and silently accepted.
+        var modifierIndexById = new Dictionary<string, int>(comparer: StringComparer.OrdinalIgnoreCase);
         var modifierIndexBySource = new Dictionary<string, int>(comparer: StringComparer.OrdinalIgnoreCase);
         // Declared modifiers first, then one implicit modifier per raw source a row names (appended in first-use
         // order), so every member resolves to a modifier index.
@@ -632,7 +680,7 @@ public static class BindingProfile {
 
             if (string.IsNullOrEmpty(value: modifier.Id)) {
                 throw new ArgumentException(
-                    message: "A modifier id must be non-empty.",
+                    message: $"Modifier {modifierIndex} must carry a non-empty id.",
                     paramName: nameof(document)
                 );
             }
@@ -660,7 +708,7 @@ public static class BindingProfile {
                 value: modifierIndex
             )) {
                 throw new ArgumentException(
-                    message: $"Duplicate modifier id \"{modifier.Id}\".",
+                    message: $"Modifier {modifierIndex} re-declares id \"{modifier.Id}\" (ids are compared case-insensitively).",
                     paramName: nameof(document)
                 );
             }
@@ -727,20 +775,20 @@ public static class BindingProfile {
                 paramName: nameof(document)
             ));
 
-            if (string.IsNullOrEmpty(value: row.Group)) {
+            if (ResolveIdentifier(identifier: row.Group) is not { Length: > 0 } rowGroup) {
                 throw new ArgumentException(
-                    message: $"Chord row {rowIndex} must name a group.",
+                    message: $"Chord row {rowIndex} must name a group (a resolved, non-empty identifier).",
                     paramName: nameof(document)
                 );
             }
 
             if (!groupIndexByName.TryGetValue(
-                key: row.Group,
+                key: rowGroup,
                 value: out var groupIndex
             )) {
                 groupIndex = groupNames.Count;
-                groupIndexByName[row.Group] = groupIndex;
-                groupNames.Add(item: row.Group);
+                groupIndexByName[rowGroup] = groupIndex;
+                groupNames.Add(item: rowGroup);
                 restingByGroup.Add(item: -1);
             }
 
@@ -749,7 +797,7 @@ public static class BindingProfile {
             var rowMembers = new HashSet<int>();
             var held = ResolveMembers(
                 document: document,
-                group: row.Group,
+                group: rowGroup,
                 members: (row.Held ?? []),
                 modifierIndexById: modifierIndexById,
                 modifierIndexBySource: modifierIndexBySource,
@@ -759,7 +807,7 @@ public static class BindingProfile {
             );
             var chord = ResolveMembers(
                 document: document,
-                group: row.Group,
+                group: rowGroup,
                 members: (row.Chord ?? []),
                 modifierIndexById: modifierIndexById,
                 modifierIndexBySource: modifierIndexBySource,
@@ -789,7 +837,7 @@ public static class BindingProfile {
 
             if (!seenChordKeys.Add(item: identity)) {
                 throw new ArgumentException(
-                    message: $"Group \"{row.Group}\" declares two meanings for held [{string.Join(
+                    message: $"Group \"{rowGroup}\" declares two meanings for held [{string.Join(
                         separator: ", ",
                         values: (row.Held ?? [])
                     )}] chord [{string.Join(
@@ -806,7 +854,7 @@ public static class BindingProfile {
             )) {
                 if (!(chordOnly && priorChordOnly)) {
                     throw new ArgumentException(
-                        message: $"Group \"{row.Group}\" declares two rows over the members [{string.Join(
+                        message: $"Group \"{rowGroup}\" declares two rows over the members [{string.Join(
                             separator: ", ",
                             values: row.Members
                         )}] and at least one is not chord-only — an unordered set and any other row over the same members would answer the same press.",
@@ -819,7 +867,7 @@ public static class BindingProfile {
 
             if ((row.Page is null) == (row.Command is null)) {
                 throw new ArgumentException(
-                    message: $"Chord row {rowIndex} (group \"{row.Group}\") must carry exactly one meaning — a page or a command.",
+                    message: $"Chord row {rowIndex} (group \"{rowGroup}\") must carry exactly one meaning — a page or a command.",
                     paramName: nameof(document)
                 );
             }
@@ -827,7 +875,7 @@ public static class BindingProfile {
             if (row.Page is { } page) {
                 if (string.IsNullOrEmpty(value: page.Id)) {
                     throw new ArgumentException(
-                        message: "A page id must be non-empty.",
+                        message: $"Chord row {rowIndex} (group \"{rowGroup}\") carries a page with an empty id.",
                         paramName: nameof(document)
                     );
                 }
@@ -837,7 +885,7 @@ public static class BindingProfile {
                     value: (GroupIndex: groupIndex, RowIndex: rowIndex)
                 )) {
                     throw new ArgumentException(
-                        message: $"Duplicate page id \"{page.Id}\".",
+                        message: $"Chord row {rowIndex} (group \"{rowGroup}\") re-declares page id \"{page.Id}\".",
                         paramName: nameof(document)
                     );
                 }
@@ -853,14 +901,14 @@ public static class BindingProfile {
 
                 if (!Enum.IsDefined(value: chordCommand.Mode)) {
                     throw new ArgumentException(
-                        message: $"Chord row {rowIndex} (group \"{row.Group}\") carries an invalid mode.",
+                        message: $"Chord row {rowIndex} (group \"{rowGroup}\") carries an invalid mode.",
                         paramName: nameof(document)
                     );
                 }
 
                 if ((chordCommand.Command is null) == (chordCommand.Channel is null)) {
                     throw new ArgumentException(
-                        message: $"Chord row {rowIndex} (group \"{row.Group}\") must carry exactly one destination — a command or a channel.",
+                        message: $"Chord row {rowIndex} (group \"{rowGroup}\") must carry exactly one destination — a command or a channel.",
                         paramName: nameof(document)
                     );
                 }
@@ -870,14 +918,14 @@ public static class BindingProfile {
                     (chordCommand.Channel is not null)
                 ) {
                     throw new ArgumentException(
-                        message: $"Chord row {rowIndex} (group \"{row.Group}\") carries text on a channel destination — text is only meaningful on a command press.",
+                        message: $"Chord row {rowIndex} (group \"{rowGroup}\") carries text on a channel destination — text is only meaningful on a command press.",
                         paramName: nameof(document)
                     );
                 }
 
                 ValidateTextPayload(
                     text: chordCommand.Text,
-                    path: $"Chord row {rowIndex} (group \"{row.Group}\")",
+                    path: $"Chord row {rowIndex} (group \"{rowGroup}\")",
                     paramName: nameof(document)
                 );
 
@@ -886,14 +934,14 @@ public static class BindingProfile {
                     (chordCommand.Channel is null)
                 ) {
                     throw new ArgumentException(
-                        message: $"Chord row {rowIndex} (group \"{row.Group}\") sets mode Toggle on a command destination — toggle is only meaningful on a channel destination.",
+                        message: $"Chord row {rowIndex} (group \"{rowGroup}\") sets mode Toggle on a command destination — toggle is only meaningful on a channel destination.",
                         paramName: nameof(document)
                     );
                 }
 
                 ValidateValue(
                     value: chordCommand.Value,
-                    path: $"Chord row {rowIndex} (group \"{row.Group}\")",
+                    path: $"Chord row {rowIndex} (group \"{rowGroup}\")",
                     isChannel: (chordCommand.Channel is not null),
                     paramName: nameof(document)
                 );
@@ -901,19 +949,19 @@ public static class BindingProfile {
                 if (chordCommand.Channel is { } channel) {
                     ValidateChannelRef(
                         channel: channel,
-                        path: $"Chord row {rowIndex} (group \"{row.Group}\")",
+                        path: $"Chord row {rowIndex} (group \"{rowGroup}\")",
                         paramName: nameof(document)
                     );
 
                     ValidateChannelScale(
                         channel: channel,
-                        path: $"Chord row {rowIndex} (group \"{row.Group}\")",
+                        path: $"Chord row {rowIndex} (group \"{rowGroup}\")",
                         paramName: nameof(document),
                         scale: chordCommand.Scale
                     );
                 } else if (string.IsNullOrEmpty(value: chordCommand.Command)) {
                     throw new ArgumentException(
-                        message: $"Chord row {rowIndex} (group \"{row.Group}\") must name the command or channel it fires.",
+                        message: $"Chord row {rowIndex} (group \"{rowGroup}\") must name the command or channel it fires.",
                         paramName: nameof(document)
                     );
                 }
@@ -924,7 +972,7 @@ public static class BindingProfile {
                     (held.Length == 0)
                 ) {
                     throw new ArgumentException(
-                        message: $"Group \"{row.Group}\" binds a command to the empty chord — the resting row must be a page.",
+                        message: $"Group \"{rowGroup}\" binds a command to the empty chord — the resting row must be a page.",
                         paramName: nameof(document)
                     );
                 }
@@ -944,65 +992,82 @@ public static class BindingProfile {
         // Resolve opt-in page inheritance after every page id and owning group is known. Cycles, missing pages,
         // and cross-group inheritance are refused before any runtime table is built.
         var effectivePages = new BindingPageDefinition?[documentRows.Count];
-        var pageResolution = new byte[documentRows.Count];
+        // Marked while a row sits on the chain currently being walked; a chain that re-enters a marked row is a cycle.
+        // A finished row needs no mark of its own — its effective page IS the record that it is done.
+        var pageInProgress = new bool[documentRows.Count];
 
-        BindingPageDefinition ResolvePage(int rowIndex) {
-            if (effectivePages[rowIndex] is { } resolved) {
-                return resolved;
-            }
+        // Walked as an explicit chain rather than by recursion: an inheritance depth is bounded only by the number of
+        // authored pages, so a generated document a few thousand pages deep would have overflowed the stack — an
+        // uncatchable process kill — before the cycle refusal below ever got to speak. The descent collects the chain
+        // to the first page that inherits nothing (or is already resolved); the ascent applies the overlays outward.
+        var chain = new List<int>();
 
-            if (pageResolution[rowIndex] == 1) {
-                throw new ArgumentException(
-                    message: $"Page inheritance contains a cycle at page \"{documentRows[rowIndex].Page!.Id}\".",
-                    paramName: nameof(document)
-                );
-            }
+        void ResolvePage(int startRowIndex) {
+            chain.Clear();
 
-            pageResolution[rowIndex] = 1;
+            var rowIndex = startRowIndex;
 
-            var page = documentRows[rowIndex].Page!;
-
-            if (page.Inherits is not { Length: > 0 } inheritedId) {
-                if (page.Inherits is not null) {
+            while (effectivePages[rowIndex] is null) {
+                if (pageInProgress[rowIndex]) {
                     throw new ArgumentException(
-                        message: $"Page \"{page.Id}\" carries an empty inherited page id.",
+                        message: $"Page inheritance contains a cycle at page \"{documentRows[rowIndex].Page!.Id}\".",
                         paramName: nameof(document)
                     );
                 }
 
-                effectivePages[rowIndex] = page;
-                pageResolution[rowIndex] = 2;
+                pageInProgress[rowIndex] = true;
+                chain.Add(item: rowIndex);
 
-                return page;
+                var page = documentRows[rowIndex].Page!;
+
+                if (page.Inherits is not { Length: > 0 } inheritedId) {
+                    if (page.Inherits is not null) {
+                        throw new ArgumentException(
+                            message: $"Page \"{page.Id}\" carries an empty inherited page id.",
+                            paramName: nameof(document)
+                        );
+                    }
+
+                    effectivePages[rowIndex] = page;
+
+                    break;
+                }
+
+                if (
+                    !pageRowsById.TryGetValue(
+                    key: inheritedId,
+                    value: out var inheritedRow
+                ) ||
+                    (inheritedRow.GroupIndex != rowGroups[rowIndex])
+                ) {
+                    throw new ArgumentException(
+                        message: $"Page \"{page.Id}\" inherits invalid page \"{inheritedId}\"; inherited pages must exist in the same group.",
+                        paramName: nameof(document)
+                    );
+                }
+
+                rowIndex = inheritedRow.RowIndex;
             }
 
-            if (
-                !pageRowsById.TryGetValue(
-                key: inheritedId,
-                value: out var inheritedRow
-            ) ||
-                (inheritedRow.GroupIndex != rowGroups[rowIndex])
-            ) {
-                throw new ArgumentException(
-                    message: $"Page \"{page.Id}\" inherits invalid page \"{inheritedId}\"; inherited pages must exist in the same group.",
-                    paramName: nameof(document)
+            for (var chainIndex = (chain.Count - 1); (chainIndex >= 0); chainIndex--) {
+                var chainRowIndex = chain[chainIndex];
+
+                if (effectivePages[chainRowIndex] is not null) {
+                    continue;
+                }
+
+                var page = documentRows[chainRowIndex].Page!;
+
+                effectivePages[chainRowIndex] = OverlayInheritedPage(
+                    inherited: effectivePages[pageRowsById[page.Inherits!].RowIndex]!,
+                    page: page
                 );
             }
-
-            var effective = OverlayInheritedPage(
-                inherited: ResolvePage(rowIndex: inheritedRow.RowIndex),
-                page: page
-            );
-
-            effectivePages[rowIndex] = effective;
-            pageResolution[rowIndex] = 2;
-
-            return effective;
         }
 
         for (var rowIndex = 0; (rowIndex < documentRows.Count); rowIndex++) {
             if (documentRows[rowIndex].Page is not null) {
-                _ = ResolvePage(rowIndex: rowIndex);
+                ResolvePage(startRowIndex: rowIndex);
             }
         }
 
@@ -1032,9 +1097,9 @@ public static class BindingProfile {
                 );
             }
 
-            if (string.IsNullOrEmpty(value: context.Group)) {
+            if (ResolveIdentifier(identifier: context.Group) is not { Length: > 0 } contextGroup) {
                 throw new ArgumentException(
-                    message: $"Contexts row {contextIndex} (family \"{context.Family}\", state \"{context.State}\") must name a group.",
+                    message: $"Contexts row {contextIndex} (family \"{context.Family}\", state \"{context.State}\") must name a group (a resolved, non-empty identifier).",
                     paramName: nameof(document)
                 );
             }
@@ -1046,9 +1111,9 @@ public static class BindingProfile {
                 );
             }
 
-            if (!groupIndexByName.ContainsKey(key: context.Group)) {
+            if (!groupIndexByName.ContainsKey(key: contextGroup)) {
                 throw new ArgumentException(
-                    message: $"Contexts row {contextIndex} (family \"{context.Family}\", state \"{context.State}\") names group \"{context.Group}\", which no chord row declares.",
+                    message: $"Contexts row {contextIndex} (family \"{context.Family}\", state \"{context.State}\") names group \"{contextGroup}\", which no chord row declares.",
                     paramName: nameof(document)
                 );
             }
@@ -1061,33 +1126,32 @@ public static class BindingProfile {
         var wheelViewByRow = new Dictionary<int, BindingWheelView>();
         var wheelIds = new HashSet<string>(comparer: StringComparer.Ordinal);
 
-        foreach (var wheel in wheels) {
-            if (wheel is null) {
-                throw new ArgumentException(
-                    message: "A wheels row is null.",
-                    paramName: nameof(document)
-                );
-            }
+        for (var wheelIndex = 0; (wheelIndex < wheels.Count); wheelIndex++) {
+            var wheel = (wheels[wheelIndex]
+                ?? throw new ArgumentException(
+                message: $"Wheels row {wheelIndex} is null.",
+                paramName: nameof(document)
+            ));
 
             if (
                 string.IsNullOrEmpty(value: wheel.Id) ||
                 !wheelIds.Add(item: wheel.Id)
             ) {
                 throw new ArgumentException(
-                    message: $"Wheel id \"{wheel.Id}\" must be non-empty and profile-unique.",
+                    message: $"Wheels row {wheelIndex} id \"{wheel.Id}\" must be non-empty and profile-unique.",
                     paramName: nameof(document)
                 );
             }
 
             if (
-                string.IsNullOrEmpty(value: wheel.Group) ||
+                (ResolveIdentifier(identifier: wheel.Group) is not { Length: > 0 } wheelGroup) ||
                 !groupIndexByName.TryGetValue(
-                key: wheel.Group,
+                key: wheelGroup,
                 value: out var wheelGroupIndex
             )
             ) {
                 throw new ArgumentException(
-                    message: $"Wheel \"{wheel.Id}\" names group \"{wheel.Group}\", which no chord row declares.",
+                    message: $"Wheel \"{wheel.Id}\" must name a group (a resolved, non-empty identifier) that a chord row declares.",
                     paramName: nameof(document)
                 );
             }
@@ -1118,14 +1182,14 @@ public static class BindingProfile {
                     (holdRow.GroupIndex != wheelGroupIndex)
                 ) {
                     throw new ArgumentException(
-                        message: $"Wheel \"{wheel.Id}\" holds on invalid or repeated page \"{holdPage}\"; every hold page must be a distinct chord-row page of group \"{wheel.Group}\".",
+                        message: $"Wheel \"{wheel.Id}\" holds on invalid or repeated page \"{holdPage}\"; every hold page must be a distinct chord-row page of group \"{wheelGroup}\".",
                         paramName: nameof(document)
                     );
                 }
 
                 if (wheelViewByRow.ContainsKey(key: holdRow.RowIndex)) {
                     throw new ArgumentException(
-                        message: $"Hold page \"{holdPage}\" presents more than one wheel.",
+                        message: $"Wheel \"{wheel.Id}\" hold page {holdIndex} (\"{holdPage}\") already presents another wheel.",
                         paramName: nameof(document)
                     );
                 }
@@ -1328,7 +1392,7 @@ public static class BindingProfile {
                     value: (GroupIndex: wheelGroupIndex, RowIndex: -1)
                 )) {
                     throw new ArgumentException(
-                        message: $"Duplicate page id \"{ring.Id}\".",
+                        message: $"Wheel \"{wheel.Id}\" ring {ringIndex} re-declares page id \"{ring.Id}\".",
                         paramName: nameof(document)
                     );
                 }
@@ -1340,7 +1404,7 @@ public static class BindingProfile {
                     (sectorCount > BindingWheelDefinition.MaxSectorsPerRing)
                 ) {
                     throw new ArgumentException(
-                        message: $"Wheel ring \"{ring.Id}\" (group \"{wheel.Group}\") declares {sectorCount} sectors; a ring presents {BindingWheelDefinition.MinSectorsPerRing}..{BindingWheelDefinition.MaxSectorsPerRing}.",
+                        message: $"Wheel ring \"{ring.Id}\" (group \"{wheelGroup}\") declares {sectorCount} sectors; a ring presents {BindingWheelDefinition.MinSectorsPerRing}..{BindingWheelDefinition.MaxSectorsPerRing}.",
                         paramName: nameof(document)
                     );
                 }
@@ -1351,10 +1415,10 @@ public static class BindingProfile {
                 for (var sectorIndex = 0; (sectorIndex < sectorCount); sectorIndex++) {
                     var sector = (ring.Entries![sectorIndex]
                         ?? throw new ArgumentException(
-                        message: $"Wheel ring \"{ring.Id}\" (group \"{wheel.Group}\") sector {sectorIndex} is null.",
+                        message: $"Wheel ring \"{ring.Id}\" (group \"{wheelGroup}\") sector {sectorIndex} is null.",
                         paramName: nameof(document)
                     ));
-                    var sectorPath = $"Wheel ring \"{ring.Id}\" (group \"{wheel.Group}\") sector {sectorIndex}";
+                    var sectorPath = $"Wheel ring \"{ring.Id}\" (group \"{wheelGroup}\") sector {sectorIndex}";
 
                     if (
                         (sector.Id is { } sectorId) &&
@@ -1450,7 +1514,7 @@ public static class BindingProfile {
 
             var view = new BindingWheelView(
                 Id: wheel.Id,
-                Group: wheel.Group,
+                Group: wheelGroup,
                 LabelRow: wheel.LabelRow,
                 IconRow: wheel.IconRow,
                 HoldPageIds: holdPages.ToImmutableArray(),
@@ -1528,11 +1592,14 @@ public static class BindingProfile {
                     ? activators.ToImmutableArray()
                     : null),
                     View: BuildView(
-                        chord: [.. chord],
                         group: groupNames[groupIndex],
                         hints: hintsByGroup[groupIndex],
                         modifiers: modifiers,
                         page: page,
+                        // Held AND chord: both lists are members the player must be holding for this page to be the
+                        // selected one, so both belong in the "required" set the bar renders chips from. Passing the
+                        // chord alone left a page selected by an unordered hold rendering no held-modifier chip at all.
+                        required: [.. rowHelds[rowIndex], .. chord],
                         channelCommandName: channelCommandName
                     )
                 );
@@ -1555,7 +1622,13 @@ public static class BindingProfile {
                     Held: rowHelds[rowIndex],
                     Command: new CompiledBindingProfile.CompiledCommandEdge(
                         Command: effectiveCommand,
-                        DispatchRelease: (command.HoldRelease || (isChannel && (command.Mode == BindingEntryMode.Toggle))),
+                        // The same rule the activator path states above, for the same reason: a CHANNEL destination
+                        // must dispatch its release whatever HoldRelease says, because only the channel verb's handler
+                        // frees the channel and CommandRegistry.ApplySnapshot drops any edge whose Dispatch is false.
+                        // A Hold-mode channel row left at the default holdRelease:false emitted its break edge with
+                        // Dispatch:false and latched the channel on forever. A command destination keeps HoldRelease's
+                        // own default (momentary; nothing to free).
+                        DispatchRelease: (command.HoldRelease || isChannel),
                         PressValue: pressValue,
                         ReleaseValue: CommandValue.Inactive(kind: pressValue.Kind),
                         Reassertable: (isChannel && (command.Mode == BindingEntryMode.Hold)),
