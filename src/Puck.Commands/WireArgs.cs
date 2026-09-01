@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+
 namespace Puck.Commands;
 
 /// <summary>
@@ -90,6 +92,9 @@ public readonly ref struct WireArgs {
     /// the token-array form always did.</summary>
     /// <param name="start">The zero-based trailing-token index to join from.</param>
     /// <returns>The joined text, or <see cref="string.Empty"/> when no token sits at or after <paramref name="start"/>.</returns>
+    /// <remarks>The scratch buffer is a bounded <see langword="stackalloc"/> that is written before it is read, so
+    /// <see cref="SkipLocalsInitAttribute"/> drops the zero-fill the JIT would otherwise emit for it.</remarks>
+    [SkipLocalsInit]
     public string Tail(int start) {
         var count = Count;
 
@@ -104,9 +109,10 @@ public readonly ref struct WireArgs {
         }
 
         // One allocation: the result. The scratch buffer is the stack below the common-tail size (a path, a name, a
-        // short inline-JSON row), a heap array only for a genuinely long tail.
+        // short inline-JSON row), a heap array only for a genuinely long tail. It is sized to the tail rather than to
+        // the cap so a short tail does not reserve the whole scratch.
         var destination = ((length <= MaxStackTail)
-            ? stackalloc char[MaxStackTail]
+            ? stackalloc char[length]
             : new char[length]
         );
         var offset = 0;
@@ -126,21 +132,40 @@ public readonly ref struct WireArgs {
         return new string(value: destination[..length]);
     }
     /// <summary>Parses the token at <paramref name="index"/> as a finite invariant-culture <see cref="float"/> straight
-    /// from its span, through <see cref="CommandArgs.TryParseFloat(ReadOnlySpan{char}, out float)"/>.</summary>
+    /// from its span, through <see cref="CommandArgs.TryParseFloat(ReadOnlySpan{char}, out float)"/>. An out-of-range
+    /// index is <see langword="false"/> — a missing argument and an unparsable one are the same answer to the caller,
+    /// exactly as they are for <see cref="Is"/>.</summary>
     /// <param name="index">The zero-based trailing-token index.</param>
     /// <param name="value">The parsed value, or <c>0</c> on failure.</param>
-    /// <returns>Whether the token parsed.</returns>
-    public bool TryFloat(int index, out float value) => CommandArgs.TryParseFloat(
-        text: this[index],
-        value: out value
-    );
+    /// <returns>Whether the token exists and parsed.</returns>
+    public bool TryFloat(int index, out float value) {
+        if (((uint)index) >= ((uint)Count)) {
+            value = 0f;
+
+            return false;
+        }
+
+        return CommandArgs.TryParseFloat(
+            text: this[index],
+            value: out value
+        );
+    }
     /// <summary>Parses the token at <paramref name="index"/> as an invariant-culture <see cref="int"/> straight from its
-    /// span, through <see cref="CommandArgs.TryParseInt(ReadOnlySpan{char}, out int)"/>.</summary>
+    /// span, through <see cref="CommandArgs.TryParseInt(ReadOnlySpan{char}, out int)"/>. An out-of-range index is
+    /// <see langword="false"/>, matching <see cref="Is"/> and <see cref="TryFloat"/>.</summary>
     /// <param name="index">The zero-based trailing-token index.</param>
     /// <param name="value">The parsed value, or <c>0</c> on failure.</param>
-    /// <returns>Whether the token parsed.</returns>
-    public bool TryInt(int index, out int value) => CommandArgs.TryParseInt(
-        text: this[index],
-        value: out value
-    );
+    /// <returns>Whether the token exists and parsed.</returns>
+    public bool TryInt(int index, out int value) {
+        if (((uint)index) >= ((uint)Count)) {
+            value = 0;
+
+            return false;
+        }
+
+        return CommandArgs.TryParseInt(
+            text: this[index],
+            value: out value
+        );
+    }
 }

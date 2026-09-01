@@ -57,14 +57,19 @@ public static class CommandArgs {
     /// <param name="args">The full argument array.</param>
     /// <param name="count">How many consecutive floats to parse.</param>
     /// <param name="start">The starting index into <paramref name="args"/>.</param>
-    /// <param name="values">The parsed values (length <paramref name="count"/>), zeroed on failure.</param>
+    /// <param name="values">The parsed values (length <paramref name="count"/>), zeroed from the first token that
+    /// failed to parse; an EMPTY array when <paramref name="args"/> is too short to hold the range at all.</param>
     /// <returns>Whether every token in the range parsed.</returns>
     public static bool TryParseFloats(string[] args, int count, int start, out float[] values) {
-        values = new float[count];
-
+        // Count first, allocate second: the common failure is a verb called with too few arguments, and that answer
+        // costs nothing to give.
         if (args.Length < (start + count)) {
+            values = [];
+
             return false;
         }
+
+        values = new float[count];
 
         for (var index = 0; (index < count); index++) {
             if (!TryParseFloat(
