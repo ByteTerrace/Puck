@@ -1,11 +1,13 @@
 name: Pack
 
 # Builds the blessed NuGet packages (ByteTerrace.Puck.Abstractions, .Maths,
-# .Commands, .Attestation, .Hosting, .Physics) and uploads them as a build
-# artifact. The package
-# version is whatever build/Packaging.targets declares — the single source of
-# truth. Runs on every change for validation, and is called by publish.yml so
-# the exact bytes that were validated are the bytes that get pushed.
+# .Assets, .Commands, .Attestation, .Hosting, .Physics) and uploads them as a
+# build artifact. Every package a blessed package depends on must itself be in
+# the loop: .Commands and .Hosting declare a dependency on .Assets, so a loop
+# without .Assets ships packages nobody can restore. The package version is
+# whatever build/Packaging.targets declares — the single source of truth. Runs
+# on every change for validation, and is called by publish.yml so the exact
+# bytes that were validated are the bytes that get pushed.
 
 on:
   push:
@@ -33,7 +35,7 @@ jobs:
 
       - name: Pack blessed projects
         run: |
-          for project in src/Puck.Abstractions src/Puck.Maths src/Puck.Commands src/Puck.Attestation src/Puck.Hosting src/Puck.Physics; do
+          for project in src/Puck.Abstractions src/Puck.Maths src/Puck.Assets src/Puck.Commands src/Puck.Attestation src/Puck.Hosting src/Puck.Physics; do
             dotnet pack "$project" --configuration Release --output artifacts/packages
           done
           ls -l artifacts/packages
