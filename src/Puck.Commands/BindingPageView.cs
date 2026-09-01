@@ -1,3 +1,5 @@
+using System.Collections.Frozen;
+
 namespace Puck.Commands;
 
 /// <summary>
@@ -11,7 +13,14 @@ namespace Puck.Commands;
 /// <param name="Label">The page's display label, if any; opaque to the engine.</param>
 /// <param name="Icon">The page's display icon id, if any; opaque to the engine.</param>
 /// <param name="Buttons">The page's bindings, in profile order.</param>
-/// <param name="Modifiers">Every modifier the profile declares, flagged with whether this page's chord requires it.</param>
+/// <param name="ButtonsBySource">Each source id the page binds mapped to the <paramref name="Buttons"/> entry that
+/// source triggers (<c>OrdinalIgnoreCase</c>; first entry in profile order wins a source two entries both name).
+/// This is the lookup a presentation layer joining physical controls against the page should read — a bar with
+/// twelve sockets asks once per socket per frame, and scanning <paramref name="Buttons"/> instead both cost a
+/// linear pass and MISSED every multi-source entry, whose <see cref="BindingPageButtonView.Source"/> is the row's
+/// comma-joined trigger label rather than any one source id. Entries triggered by an activator name no source and
+/// so appear only in <paramref name="Buttons"/>.</param>
+/// <param name="Modifiers">Every modifier the profile declares, flagged with whether this page's row requires it.</param>
 /// <param name="CommandChords">The command-meaning chord rows of this page's group, in profile order — the hints a
 /// binding bar renders so a player can discover a chord-fired act (a group that binds one; a group whose chords are
 /// all pages carries none).</param>
@@ -21,11 +30,13 @@ public sealed record BindingPageView(
     string? Label,
     string? Icon,
     IReadOnlyList<BindingPageButtonView> Buttons,
+    FrozenDictionary<string, BindingPageButtonView> ButtonsBySource,
     IReadOnlyList<BindingModifierView> Modifiers,
     IReadOnlyList<BindingChordCommandView> CommandChords
 );
 /// <summary>One bound source as the UI presents it.</summary>
-/// <param name="Source">The row's trigger label — its source ids comma-joined, or an activator label.</param>
+/// <param name="Source">The row's trigger LABEL — its source ids comma-joined, or an activator label. A display
+/// string, not a key: match a physical control through <see cref="BindingPageView.ButtonsBySource"/> instead.</param>
 /// <param name="Command">The name of the command the source activates on this page.</param>
 /// <param name="Label">The binding's display label, if any; opaque to the engine.</param>
 /// <param name="Icon">The binding's display icon id, if any; opaque to the engine.</param>
@@ -40,7 +51,9 @@ public sealed record BindingPageButtonView(
 /// <param name="Sources">The provider-neutral input source ids that drive the modifier.</param>
 /// <param name="Label">The modifier's display label, if any; opaque to the engine.</param>
 /// <param name="Icon">The modifier's display icon id, if any; opaque to the engine.</param>
-/// <param name="Required">Whether the page's chord requires this modifier to be held.</param>
+/// <param name="Required">Whether the page's own row requires this modifier to be held — either as an unordered
+/// <c>held</c> member or as a member of its ordered <c>chord</c>. Both lists must be down for the page to be the
+/// selected one, so both mark their modifiers required.</param>
 public sealed record BindingModifierView(
     string Id,
     IReadOnlyList<string> Sources,

@@ -28,20 +28,6 @@ public static class BindingBarSeatComposer {
         InputSources.Gamepad.RightStickPress,
     ];
 
-    private static BindingPageButtonView? FindButton(BindingPageView view, string source) {
-        foreach (var button in view.Buttons) {
-            if (string.Equals(
-                a: button.Source,
-                b: source,
-                comparisonType: StringComparison.OrdinalIgnoreCase
-            )) {
-                return button;
-            }
-        }
-
-        return null;
-    }
-
     /// <summary>Composes the bar's modifier pips from a page view (the active page's chord IS the held modifier
     /// sequence, so <see cref="BindingModifierView.Required"/> doubles as "held right now").</summary>
     /// <param name="view">The seat's active page view.</param>
@@ -84,13 +70,15 @@ public static class BindingBarSeatComposer {
             );
         }
 
+        // One hashed probe per socket into the page's precomputed source→button lookup. This runs per slot, per
+        // plate, per bank, per seat, every frame; scanning the ordered Buttons list instead cost a linear pass AND
+        // compared against each row's comma-joined trigger LABEL, so a row bound to a gamepad button and a keyboard
+        // key at once never matched either one and rendered as an empty socket.
         for (var index = 0; (index < destination.Length); index++) {
-            var button = FindButton(
-                view: view,
-                source: SlotSources[index]
-            );
-
-            if (button is null) {
+            if (!view.ButtonsBySource.TryGetValue(
+                key: SlotSources[index],
+                value: out var button
+            )) {
                 destination[index] = new OverlayBindingSlot(
                     Alpha: (0.35f * barAlpha),
                     Bound: false,

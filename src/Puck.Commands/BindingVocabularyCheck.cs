@@ -17,10 +17,14 @@ namespace Puck.Commands;
 /// <see cref="CommandBindability.Bindable"/> (an authority verb reached from a page would be an escalation the grant
 /// table never sees, because the page — not the principal — chose the destination); and the value kind the binding
 /// dispatches — its constant <c>Value</c> when it carries one, else the physical source's declared kind when the
-/// caller can resolve it — must equal the command's declared <see cref="CommandMetadata.ValueKind"/>. A source the
-/// caller's catalog cannot resolve (its lookup answering <see langword="null"/>) skips the kind half only: existence
-/// and eligibility are always checked. Empty sources/commands are skipped entirely — they are the structural gate's
-/// findings, not this one's.</para></remarks>
+/// caller can resolve it — must equal the command's declared <see cref="CommandMetadata.ValueKind"/>. Empty
+/// sources/commands are skipped entirely — they are the structural gate's findings, not this one's.</para>
+/// <para>The physical half is symmetrical with it: a source a caller's catalog cannot resolve is refused by name,
+/// whether it appears as a page entry's <c>sources</c>, an activator step, or a chord row's <c>held</c>/<c>chord</c>
+/// member that names no declared modifier. All three compile to a control that will never signal, so all three are
+/// permanently dead rows — the exact class of typo this gate exists to turn loud. An axis-COMPONENT source resolves
+/// its BASE control instead, and a control marked unaddressable is refused for that reason alone (one refusal per
+/// source, never both). Callers that pass no <c>sourceKind</c> keep every other check.</para></remarks>
 public static class BindingVocabularyCheck {
     private static void CheckChannel(
         ChannelRef channel,
@@ -77,8 +81,9 @@ public static class BindingVocabularyCheck {
     /// pre-container boot parse); the channel and kind halves still run, so a caller that cannot check commands never
     /// has to abandon the checks it can make.</param>
     /// <param name="sourceKind">Resolves a physical source id to its declared value kind, or <see langword="null"/>
-    /// when the source is unknown to the caller's catalog (the kind check is then skipped for that entry); pass
-    /// <see langword="null"/> to skip source-kind resolution entirely.</param>
+    /// when the source is unknown to the caller's catalog — which is itself a refusal ("names unknown control"), so
+    /// this lookup doubles as the physical vocabulary's existence check. Pass <see langword="null"/> to skip source
+    /// resolution entirely (a caller with no control catalog).</param>
     /// <param name="errors">The list refusal lines are appended to.</param>
     /// <param name="channel">Resolves a declared channel name (a second, world-owned vocabulary a binding destination
     /// may name instead of a command — see <see cref="BindingPageEntryDefinition.Channel"/>), or <see langword="null"/>
@@ -105,9 +110,12 @@ public static class BindingVocabularyCheck {
         ArgumentNullException.ThrowIfNull(argument: document);
         ArgumentNullException.ThrowIfNull(argument: errors);
 
+        // OrdinalIgnoreCase, matching how BindingProfile.Compile resolves a row member against a declared modifier
+        // id: a member differing only by case IS that modifier there, so refusing it here as an unknown control
+        // would contradict the structural gate.
         var declaredModifierIds = new HashSet<string>(
             collection: (document.Modifiers ?? []).Select(selector: static modifier => modifier.Id),
-            comparer: StringComparer.Ordinal
+            comparer: StringComparer.OrdinalIgnoreCase
         );
 
         foreach (var row in (document.Chords ?? [])) {
@@ -165,30 +173,43 @@ public static class BindingVocabularyCheck {
                     var label = entry.TriggerLabel;
 
                     foreach (var rawSource in (entry.Sources ?? [])) {
+                        // One refusal per source: an unaddressable control is already refused, and the catalog
+                        // answers null for its kind by construction, so falling through would double-report it.
                         if (!(sourceAddressable?.Invoke(arg: rawSource) ?? true)) {
                             errors.Add(item: $"page \"{page.Id}\" binds unaddressable control \"{rawSource}\"");
+
+                            continue;
                         }
+
+                        if (
+                            (sourceKind is null) ||
+                            !BindingSourceComponent.TrySplit(
+                            baseSource: out var baseSource,
+                            component: out var component,
+                            source: rawSource
+                        )
+                        ) {
+                            continue;
+                        }
+
+                        var baseKind = sourceKind(arg: baseSource);
 
                         // An axis-COMPONENT source's vocabulary half: the BASE control (with the .x/.y suffix
                         // parsed off — BindingProfile.Compile already refused a malformed suffix structurally) must
                         // name a real, two-dimensional control. An unresolvable base is "unknown control name"; a
                         // resolvable but non-Axis2D base is a distinct "malformed axis component" finding.
-                        if (
-                            (sourceKind is not null) &&
-                            BindingSourceComponent.TrySplit(
-                            baseSource: out var baseSource,
-                            component: out var component,
-                            source: rawSource
-                        ) &&
-                            (component is not null)
-                        ) {
-                            var baseKind = sourceKind(arg: baseSource);
-
+                        if (component is not null) {
                             if (baseKind is null) {
                                 errors.Add(item: $"page \"{page.Id}\" binds {rawSource} to an axis component, but \"{baseSource}\" names unknown control");
                             } else if (baseKind != CommandValueKind.Axis2D) {
                                 errors.Add(item: $"page \"{page.Id}\" binds {rawSource} to an axis component, but \"{baseSource}\" is not a two-dimensional axis control");
                             }
+                        } else if (baseKind is null) {
+                            // A plain source the catalog cannot resolve is a typo, and the structural gate has no
+                            // physical vocabulary to catch it with: the row compiles, tables a control that will
+                            // never signal, and is silently dead forever. Refused by name, exactly as an activator
+                            // step naming an unknown control already is.
+                            errors.Add(item: $"page \"{page.Id}\" binds unknown control \"{rawSource}\"");
                         }
                     }
 
@@ -249,16 +270,29 @@ public static class BindingVocabularyCheck {
                 }
             }
 
+            var rowLabel = $"row [{string.Join(
+                separator: '+',
+                values: row.Members
+            )}] (group \"{BindingProfile.ResolveIdentifier(identifier: row.Group)}\")";
+
             foreach (var member in row.Members) {
                 if (
-                    !string.IsNullOrEmpty(value: member) &&
-                    !declaredModifierIds.Contains(item: member) &&
-                    !(sourceAddressable?.Invoke(arg: member) ?? true)
+                    string.IsNullOrEmpty(value: member) ||
+                    declaredModifierIds.Contains(item: member)
                 ) {
-                    errors.Add(item: $"row [{string.Join(
-                        separator: '+',
-                        values: row.Members
-                    )}] (group \"{row.Group}\") names \"{member}\", which is neither a declared modifier nor an addressable control");
+                    continue;
+                }
+
+                // A member that names no declared modifier is compiled into an IMPLICIT modifier over a source of
+                // that name. If no such control exists the row can never be held, so the whole row — page or command
+                // — is dead. Same refusal, same reason, as an unresolvable page source.
+                if (!(sourceAddressable?.Invoke(arg: member) ?? true)) {
+                    errors.Add(item: $"{rowLabel} names \"{member}\", which is neither a declared modifier nor an addressable control");
+                } else if (
+                    (sourceKind is not null) &&
+                    (sourceKind(arg: member) is null)
+                ) {
+                    errors.Add(item: $"{rowLabel} names \"{member}\", which is neither a declared modifier nor a known control");
                 }
             }
 
@@ -269,10 +303,7 @@ public static class BindingVocabularyCheck {
                         channelBinary: channelBinary,
                         channelExists: channel,
                         errors: errors,
-                        prefix: $"row [{string.Join(
-                            separator: '+',
-                            values: row.Members
-                        )}] (group \"{row.Group}\") folds into channel",
+                        prefix: $"{rowLabel} folds into channel",
                         scale: chordCommand.Scale
                     );
 
@@ -286,10 +317,6 @@ public static class BindingVocabularyCheck {
                     continue;
                 }
 
-                var chordLabel = $"row [{string.Join(
-                    separator: '+',
-                    values: row.Members
-                )}] (group \"{row.Group}\")";
                 // A command-meaning chord (a channel one continues above) dispatches the same press value
                 // BindingProfile.Compile builds; validate the kind it will actually send.
                 var pressed = CompiledBindingProfile.PressValue(
@@ -302,9 +329,9 @@ public static class BindingVocabularyCheck {
                     commandName: chordCommand.Command,
                     dispatched: pressed,
                     errors: errors,
-                    unknownError: $"{chordLabel} fires \"{chordCommand.Command}\", which names no registered command",
-                    unbindableError: $"{chordLabel} fires \"{chordCommand.Command}\", which is not bindable",
-                    mismatchError: (actual, declared) => $"{chordLabel} sends {Word(kind: actual)} to \"{chordCommand.Command}\", which takes {Word(kind: declared)}"
+                    unknownError: $"{rowLabel} fires \"{chordCommand.Command}\", which names no registered command",
+                    unbindableError: $"{rowLabel} fires \"{chordCommand.Command}\", which is not bindable",
+                    mismatchError: (actual, declared) => $"{rowLabel} sends {Word(kind: actual)} to \"{chordCommand.Command}\", which takes {Word(kind: declared)}"
                 );
             }
         }

@@ -57,8 +57,11 @@ public sealed record BindingChordDefinition(
 /// <see cref="BindingPageEntryDefinition.Scale"/>.</param>
 /// <param name="HoldRelease">Whether the command dispatches on both edges — the press when the chord completes and
 /// the release when any member releases (the handler reads the phase to hold-or-free, the page-entry HoldRelease
-/// convention). The default dispatches the press edge only; the release still clears the carried held state. A
-/// Toggle channel instead dispatches its release when the next completion flips it off, regardless of this flag.</param>
+/// convention). The default dispatches the press edge only; the release still clears the carried held state.
+/// Meaningful for a <paramref name="Command"/> destination only: a <paramref name="Channel"/> destination always
+/// dispatches its release regardless of this flag, because only the channel verb's handler frees the channel — a
+/// withheld release would latch it on forever (a Hold channel on the member release, a Toggle channel on the next
+/// completion that flips it off).</param>
 /// <param name="Label">An optional display label for the UI layer; opaque to the engine.</param>
 /// <param name="Icon">An optional display icon id for the UI layer; opaque to the engine.</param>
 /// <param name="Value">A constant press value replacing the default active digital, or <see langword="null"/>.</param>
