@@ -1,10 +1,14 @@
 namespace Puck.Commands;
 
 /// <summary>One locked-in capture of a binding session: a command and the source that confirmed onto it.</summary>
-/// <param name="Command">The command that was bound.</param>
+/// <param name="Command">The command that was bound — the channel's engine-internal command name when
+/// <paramref name="Channel"/> is set, which is the identity <see cref="BindingSessionResult.Apply"/> matches an
+/// existing entry by.</param>
 /// <param name="Source">The provider-neutral input source id the player confirmed.</param>
 /// <param name="MatchedSuggestion"><see langword="true"/> when the player confirmed the suggested default; <see langword="false"/> when they deviated to their own choice.</param>
 /// <param name="ActivateOn">The phase the resulting binding fires on (carried from the step).</param>
+/// <param name="Channel">The channel destination this capture binds (carried from the step), or
+/// <see langword="null"/> for a plain command.</param>
 /// <param name="Label">The step's display label; opaque to the engine.</param>
 /// <param name="Icon">The step's display icon id; opaque to the engine.</param>
 public sealed record BindingSessionCapture(
@@ -12,6 +16,7 @@ public sealed record BindingSessionCapture(
     string Source,
     bool MatchedSuggestion,
     CommandPhase? ActivateOn = null,
+    ChannelRef? Channel = null,
     string? Label = null,
     string? Icon = null
 );
@@ -102,12 +107,18 @@ public sealed record BindingSessionResult(
                 }
             }
 
-            // A capture whose command had no entry binds a brand-new action onto the page.
+            // A capture whose command had no entry binds a brand-new action onto the page. A CHANNEL capture is
+            // appended as a channel entry: its Command is the engine's internal channel command name, which is an
+            // identity for matching and not a verb any registry declares, so writing it out as a plain command
+            // would author a row that binds to nothing.
             foreach (var capture in Captures) {
                 if (!appliedCommands.Contains(item: capture.Command)) {
                     entries.Add(item: new BindingPageEntryDefinition(
                         ActivateOn: capture.ActivateOn,
-                        Command: capture.Command,
+                        Channel: capture.Channel,
+                        Command: ((capture.Channel is null)
+                        ? capture.Command
+                        : null),
                         Icon: capture.Icon,
                         Label: capture.Label,
                         Sources: [capture.Source]

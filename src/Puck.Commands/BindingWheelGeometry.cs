@@ -1,5 +1,7 @@
 using System.Numerics;
 
+using Puck.Maths;
+
 namespace Puck.Commands;
 
 /// <summary>The result of resolving one spatial or axis vector against a radial.</summary>
@@ -29,27 +31,68 @@ public readonly record struct BindingWheelSelection(int Sector, BindingWheelSele
         _ => "invalid",
     };
 }
-/// <summary>Pure radial geometry shared by pointer presentation today and future spatial inputs such as touch.</summary>
+/// <summary>Pure radial geometry and selection policy shared by pointer presentation today and future spatial
+/// inputs such as touch.</summary>
+/// <remarks>
+/// The sector a gesture picks is dispatched into the seat's deterministic command lane, so the CHOICE has to be
+/// reproducible even though the vector reaching it is presentation float. Every step here is therefore either an
+/// exactly-rounded IEEE operation (add, subtract, multiply, divide, remainder, comparison, truncation — all
+/// bit-identical on every machine .NET runs on) or <see cref="FixedQ4816.Atan2"/>, whose pure-integer
+/// implementation is documented bit-identical across machines. No <c>MathF</c>/<c>Math</c> transcendental is
+/// reachable from a selection: a libm <c>atan2</c> is free to differ in its last place between runtimes, and one
+/// differing ULP at a sector boundary is a different command.
+/// </remarks>
 public static class BindingWheelGeometry {
+    // The angle decision, made reproducible. The vector is first scaled by a POWER OF TWO so its larger component
+    // lands in [1, 2): that is exact in binary floating point (it only shifts exponents), so it moves no angle,
+    // while giving the Q48.16 conversion below its full 16 fractional bits to work with no matter whether the
+    // caller passed a normalized stick deflection or a pointer displacement in pixels.
     private static BindingWheelSelection SelectAngle(Vector2 vector, int sectorCount, BindingWheelStyleDefinition style) {
-        var clockwiseAngle = MathF.Atan2(
-            x: -vector.Y,
-            y: vector.X
+        var magnitude = MathF.Max(
+            x: MathF.Abs(x: vector.X),
+            y: MathF.Abs(x: vector.Y)
         );
 
-        if (clockwiseAngle < 0f) {
-            clockwiseAngle += MathF.Tau;
+        // A zero or non-finite vector names no direction. SelectAxis and SelectSpatial already refuse the first via
+        // their dead zones, but SelectDirection is entered on a ring decision alone and every one of the three is
+        // public, so the refusal lives here — the one place all of them pass through.
+        if (
+            !float.IsFinite(f: magnitude) ||
+            (magnitude == 0f)
+        ) {
+            return new BindingWheelSelection(
+                Outcome: BindingWheelSelectionOutcome.DeadZone,
+                Sector: -1
+            );
         }
 
-        var rotation = (style.RotationDegrees * (MathF.PI / 180f));
+        var exponent = -MathF.ILogB(x: magnitude);
+        // Screen space is +Y down and sector zero sits at twelve o'clock, so the clockwise angle from that mark is
+        // atan2(x, -y).
+        var clockwiseAngle = ((double)FixedQ4816.Atan2(
+            x: FixedQ4816.FromDouble(value: -MathF.ScaleB(
+                n: exponent,
+                x: vector.Y
+            )),
+            y: FixedQ4816.FromDouble(value: MathF.ScaleB(
+                n: exponent,
+                x: vector.X
+            ))
+        ));
+
+        if (clockwiseAngle < 0d) {
+            clockwiseAngle += Math.Tau;
+        }
+
+        var rotation = (style.RotationDegrees * (Math.Tau / 360d));
         var relative = (style.Clockwise
             ? (clockwiseAngle - rotation)
             : (rotation - clockwiseAngle)
         );
 
-        relative = (((relative % MathF.Tau) + MathF.Tau) % MathF.Tau);
-        var span = (MathF.Tau / sectorCount);
-        var sector = (((int)((relative + (span * 0.5f)) / span)) % sectorCount);
+        relative = (((relative % Math.Tau) + Math.Tau) % Math.Tau);
+        var span = (Math.Tau / sectorCount);
+        var sector = (((int)((relative + (span * 0.5d)) / span)) % sectorCount);
 
         return new BindingWheelSelection(
             Outcome: BindingWheelSelectionOutcome.Sector,
@@ -162,7 +205,10 @@ public static class BindingWheelGeometry {
             )
         );
     }
-    /// <summary>Resolves only the angular component after another policy has accepted the vector and chosen a ring.</summary>
+    /// <summary>Resolves only the angular component after another policy has accepted the vector and chosen a ring.
+    /// A zero or non-finite vector names no direction and resolves to
+    /// <see cref="BindingWheelSelectionOutcome.DeadZone"/> — it is NOT sector zero, which is what an unguarded
+    /// <c>atan2(0, 0)</c> would silently report.</summary>
     public static BindingWheelSelection SelectDirection(Vector2 vector, int sectorCount, BindingWheelStyleDefinition style) {
         ArgumentNullException.ThrowIfNull(argument: style);
 
@@ -217,6 +263,31 @@ public static class BindingWheelGeometry {
             sectorCount: sectorCount,
             style: style,
             vector: vector
+        );
+    }
+    /// <summary>Converts an authored
+    /// <see cref="BindingWheelStyleDefinition.SelectionGraceSeconds"/> window into whole engine ticks — the unit a
+    /// presenter must count the window in, so the sector that survives a dead-centre reading (and therefore the
+    /// command a commit dispatches) is decided against the engine's one monotonic tick base rather than a private
+    /// wall clock the host cannot substitute.</summary>
+    /// <param name="seconds">The authored window; zero, negative, and non-finite all disable it.</param>
+    /// <param name="ticksPerSecond">The engine's tick rate.</param>
+    /// <returns>The window's whole tick count, truncated toward zero; <c>0</c> when the window is disabled.</returns>
+    public static ulong SelectionGraceTicks(float seconds, ulong ticksPerSecond) {
+        if (
+            !float.IsFinite(f: seconds) ||
+            (seconds <= 0f)
+        ) {
+            return 0UL;
+        }
+
+        var ticks = (((double)seconds) * ticksPerSecond);
+
+        // An absurd authored window is clamped rather than wrapped: an unchecked conversion of an out-of-range
+        // double to ulong is undefined, and "never expires" is the honest reading of a window that long.
+        return ((ticks >= 18_446_744_073_709_551_615d)
+            ? ulong.MaxValue
+            : ((ulong)ticks)
         );
     }
 }
