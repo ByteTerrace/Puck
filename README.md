@@ -105,7 +105,8 @@ rules and generates the layering block from each project's own declaration.
 
 | Family | Projects | What they are |
 |---|---|---|
-| The world | `Puck.World.Schema` · `Puck.World.Protocol` · `Puck.World.Server` · `Puck.World.Addons` · `Puck.World` | what a world *is* (document model, validator, composition), what it *says* (wire and tape vocabulary), what it *does* (the authoritative fold), the guest runtime it hosts, and the composition root that runs the game |
+| The world | `Puck.World.Schema` · `Puck.World.Protocol` · `Puck.World.Server` · `Puck.World.Addons` · `Puck.World` | what a world *is* (document model, validator, composition), what it *says* (wire and tape vocabulary), what it *does* (the authoritative fold), its guest runtime, and the composition root that runs the game |
+| Optional AI extensions | `Puck.World.AgentBridge` · `Puck.World.AgentHarness` | an opt-in autonomous-participant bridge and Microsoft Agent Framework adapter; the base world executable and runtime never reference them |
 | Documents and authoring | `Puck.World.Forge` | the authoring document families a world embeds (creations, audio, synth patches) and the ROM forge behind the emulator cartridges |
 | Numerics and physics | `Puck.Maths` · `Puck.Physics` | deterministic fixed-point arithmetic, exact fields, reproducible randomness; gravity, contact, and rigid-body kernels on it |
 | Rendering | `Puck.SdfVm` · `Puck.Shaders` · `Puck.Vulkan(.Presentation)` · `Puck.DirectX(.Presentation)` · `Puck.Overlays` · `Puck.Text` | the SDF virtual machine and world renderer, shader loading, the two backends and their presentation wrappers, overlays, and the MSDF/OpenType text pipeline |

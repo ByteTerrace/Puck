@@ -50,6 +50,9 @@
         block from these rows and each project's own declaration.
     -->
     <ItemGroup>
+        <!-- Optional integrations sit above application roots: they may consume Puck's public seams, but no shipped
+             base composition root or lower layer may acquire them. Tests remain terminal and may exercise them. -->
+        <PuckArchitectureLayer Include="Optional extensions" Rank="-1" />
         <PuckArchitectureLayer Include="Composition roots" Rank="0" />
         <PuckArchitectureLayer Include="Validation" Rank="1" />
         <PuckArchitectureLayer Include="Engine services" Rank="2" />
@@ -185,6 +188,11 @@
              (the frame/wire grammar its codecs frame payloads through). Same absence this profile enforces: no
              Backends row, no Presentation row, no Puck.Overlays, no Puck.Input, no Puck.World.Server. -->
         <PuckArchitectureProfile Include="Puck.World.Protocol" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Commands;Puck.Hosting;Puck.Maths;Puck.Networking;Puck.Physics;Puck.SignedDistance;Puck.Text;Puck.World.Authoring;Puck.World.Schema" />
+        <!-- Optional autonomous-participant projects consume only the public command/protocol/schema closure. Their
+             top-row classification prevents the base Puck.World composition root from referencing them; these exact
+             profiles prevent the reverse shortcut through Puck.World, Server, Client, Console, or Addons. -->
+        <PuckArchitectureProfile Include="Puck.World.AgentBridge" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Commands;Puck.Hosting;Puck.Maths;Puck.Networking;Puck.Physics;Puck.SignedDistance;Puck.Text;Puck.World.Authoring;Puck.World.Protocol;Puck.World.Schema" />
+        <PuckArchitectureProfile Include="Puck.World.AgentHarness" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Commands;Puck.Hosting;Puck.Maths;Puck.Networking;Puck.Physics;Puck.SignedDistance;Puck.Text;Puck.World.AgentBridge;Puck.World.Authoring;Puck.World.Protocol;Puck.World.Schema" />
         <!-- The headless P1 split's server row (docs/project-map.md's Puck.World.Server row) — everything
              Puck.World.Protocol's profile carries (Server references both Schema and Protocol), plus Puck.Storage
              (the owned-world cloud sync substrate WorldOwnedWorldSync reads through). Puck.Attestation also arrives

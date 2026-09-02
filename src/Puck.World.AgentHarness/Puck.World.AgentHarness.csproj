@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <!-- Agent Framework uses reflection-driven function schemas and is not an AOT boundary. -->
+        <IsAotCompatible>false</IsAotCompatible>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Optional extensions</PuckLayer>
+    </PropertyGroup>
+    <ItemGroup>
+        <!-- Pinned deliberately: Harness is a fast-moving integration surface and must not drift under Puck. -->
+        <PackageReference Include="Microsoft.Agents.AI.Harness" Version="[1.20.0]" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Puck.World.AgentBridge\Puck.World.AgentBridge.csproj" />
+    </ItemGroup>
+</Project>

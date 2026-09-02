@@ -37,7 +37,7 @@ console is only a MIRROR of that pipe — nothing that draws (including a HUD
 away. Verify game behavior by RUNNING the game, never by a build gate
 (`CLAUDE.md` rule 3).
 
-## The eight projects
+## The world project family
 
 | Project | Owns | Key types |
 |---|---|---|
@@ -50,8 +50,18 @@ away. Verify game behavior by RUNNING the game, never by a build gate
 | `src/Puck.World.Client` | The presentation-facing client seam, physically split out of `Puck.World` | `PlayerRoster`/`WorldClient`/`SeatController`, the camera-program translation (`WorldCameraRigCompiler`, over the document-blind IR in `Puck.SdfVm.Views`), `WorldFramePresenter` (the composed-frame producer)/`WorldSceneEmitter`/`WorldViewComposer`, `WorldSessionSceneEmitter`/`WorldAdjacencySceneEmitter`/`WorldSdfDocumentEmitter`, the stamp/animation pool (`WorldStampPool`/`WorldPlacementStamper`/`WorldScreenStamper`), the SDF document intake (`Sdf/SdfDocumentDecoder`/`SdfDocumentModel`/`SdfRefusal`), `IWorldAudioFrameFeed`/`IWorldAudioCueSink` (the narrow seams the frame/scene producers hold the root's `WorldAudioDirector` through, the `IWorldAudioLever` pattern), and the binding-authoring layer (`WorldSeatBindings`/`WorldAffordances`/`CommandVocabulary`). References `Puck.World.Protocol` and `Puck.Audio`, never `Puck.World.Server`. |
 | `src/Puck.World` | The sole composition root | `Program.cs`, `WorldClientSeats` (implements the Server seam `IWorldEmbodiedSeats`), `WorldAudioDirector` (stays here — imports `Puck.World.Audio` types directly; implements Client's `IWorldAudioFrameFeed`/`IWorldAudioCueSink`/`IWorldAudioLever` for the frame/scene producers and the session-lever sink), presentation and the screen-output binder, `Audio/` (document intake, tune hosting, the render device — the mixer core and voice synth live in `src/Puck.Audio`), the command modules that stayed here (`WorldCommandArguments`, the free-text-tail reconstruction shared with `Puck.World.Console`, lives in `Puck.World.Server` since both need it), and the shipped world/scenario documents under `Assets/` |
 
-`src/Puck.Audio` is an eighth, sibling engine-services project (not one of
-the seven above): the deterministic fixed-point mixer/voice-synth core
+The agent projects are an optional extension family, not members of the base world dependency closure:
+
+| Project | Owns | Key types |
+|---|---|---|
+| `src/Puck.World.AgentBridge` | The provider-neutral autonomous-participant extension | `WorldAgentBridge`, `WorldAgentMailbox`, `IWorldAgentDispatcher`, `WorldAgentObservation`, `WorldAgentAffordances`, `WorldAgentActionReceipt`; explicit opt-in composition through `AddPuckWorldAgentBridge`, bounded worker-to-pump dispatch through `ISnapshotInputCapture`, explicit-principal reads through `IPrincipalServerLink`, typed body actions, no model or Harness dependency |
+| `src/Puck.World.AgentHarness` | The optional Microsoft Agent Framework adapter | `WorldAgentHarness`, `WorldAgentHarnessOptions`; constrained `puck_*` tools over the bridge, Harness approvals on mutations, caller-supplied skills and `IChatClient`, no provider credentials or lifecycle policy |
+
+`Puck.World`, its core tests, Schema, Protocol, Server, Client, Console, and Addons must not reference either agent
+project. An agent-capable composition root opts into them from above; agent lifecycle commands and an MCP adapter,
+if built, also live in that extension layer.
+
+`src/Puck.Audio` is a sibling engine-services project: the deterministic fixed-point mixer/voice-synth core
 (`Puck.Audio.Mixing` — `AudioMixer`/`VoiceSynth`/
 `AudioSnapshot`/`MachineAudioRate`) plus sim-state music
 (`Puck.Audio.Simulation` — `MusicClock`/`MusicDirector`/`RhythmJudge`/
@@ -78,7 +88,9 @@ grammar). `Puck.World.Server`
 adds `Puck.World.Schema`, `Puck.World.Protocol`, `Puck.Physics`, `Puck.Storage`,
 `Puck.Hosting` — and knows nothing about rendering or input; `Puck.World.Addons` carries
 `Puck.Scripting` (the addon guest ABI) and its own `AddonSimulationPump` now, referencing
-`Puck.World.Server` rather than the reverse. Physics owns generic contact geometry; Server owns
+`Puck.World.Server` rather than the reverse. The optional `Puck.World.AgentBridge` adds Commands, Protocol, and Schema
+while remaining independent of model runtimes; `Puck.World.AgentHarness` adds the bridge and Microsoft Agent
+Framework packages. No base world project references either extension. Physics owns generic contact geometry; Server owns
 pair selection, authority, walkability/grounding, obstruction reporting, and body-state writes. The two seams
 that legitimately cross: `BindingVocabularyHook` (a `[ModuleInitializer]`
 injection so Schema validators reach the input vocabulary; the sibling
@@ -260,7 +272,7 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
 A minimal smoke session:
 
 ```
-printf 'world.status\nplayer.where 1\nworld.grants console\n' |
+printf 'world.status\nbody.where 0\nworld.grants console\n' |
   dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 6 --state-dir "$TMP/puck-state"
 ```
 
