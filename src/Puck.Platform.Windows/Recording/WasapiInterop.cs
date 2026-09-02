@@ -60,7 +60,6 @@ internal static class Wasapi {
     public static extern nint CreateEventW(nint lpEventAttributes, [MarshalAs(UnmanagedType.Bool)] bool bManualReset, [MarshalAs(UnmanagedType.Bool)] bool bInitialState, [MarshalAs(UnmanagedType.LPWStr)] string? lpName);
     [DllImport("Kernel32.dll", SetLastError = true)]
     public static extern uint WaitForSingleObject(nint hHandle, uint dwMilliseconds);
-
     /// <summary>Creates the device enumerator, resolves the endpoint (by id when one is given, otherwise the default
     /// for the data flow), and activates its <see cref="IAudioClient"/>. The enumerator and device are released before
     /// returning; the caller owns the client.</summary>

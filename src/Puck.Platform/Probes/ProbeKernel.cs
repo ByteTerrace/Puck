@@ -39,7 +39,6 @@ public abstract record ProbeKernelInput {
     /// <summary>An optional socket left unbound — one register, always a null SRV.</summary>
     public sealed record Unbound() : ProbeKernelInput;
 }
-
 /// <summary>The declared socket ceiling for one kernel request (<c>puck.probe.v1</c>: 1..8 sockets) and the derived
 /// t-register ceiling once a <see cref="ProbeKernelInput.StrobePair"/> socket's two registers are counted.</summary>
 public static class ProbeKernelInputLimits {
@@ -48,7 +47,6 @@ public static class ProbeKernelInputLimits {
     /// <summary>The maximum number of flattened t registers (every socket a <see cref="ProbeKernelInput.StrobePair"/>).</summary>
     public const int MaxRegisters = (MaxInputs * 2);
 }
-
 /// <summary>A kernel's texture output: a consumer-provisioned shared ring the kernel writes one slot of per cycle
 /// and publishes through <paramref name="Slots"/>, exactly as a camera stream publishes its frames.</summary>
 /// <param name="Width">The ring's width in pixels.</param>
@@ -57,7 +55,6 @@ public static class ProbeKernelInputLimits {
 /// <param name="SharedTargetHandles">The ring's shared textures (opaque NT handles on Windows), two or more.</param>
 /// <param name="Slots">The publication the consumer acquires completed slots from; configured for the ring's size.</param>
 public readonly record struct ProbeKernelOutput(int Width, int Height, SurfaceFormat TargetFormat, IReadOnlyList<nint> SharedTargetHandles, LatestSlotPublication Slots);
-
 /// <summary>One kernel-class probe's request: what to compile, the packed constant-buffer bytes bound from the
 /// kind's config, its declared sockets, which camera sensor's frame triggers a cycle, and its optional texture
 /// output. The kernel runs on the camera graph's own device and worker thread.</summary>
@@ -83,7 +80,6 @@ public readonly record struct ProbeKernelRequest(
     CameraSensor Trigger,
     ProbeKernelOutput? Output = null
 );
-
 /// <summary>A camera graph that hosts kernel-class probes on its own device and worker: a kernel is attached once,
 /// runs after each trigger frame's conversion with that frame and the other declared inputs bound, and publishes
 /// readings (and its output slot) before the worker moves on.</summary>

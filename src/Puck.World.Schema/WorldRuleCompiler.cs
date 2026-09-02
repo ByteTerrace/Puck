@@ -15,11 +15,11 @@ public static class WorldRuleCompiler {
     private static CompiledWorldEffect[] CompileEffects(IReadOnlyList<ActionEffect>? effects, string ruleName, WorldDefinition definition, string subject) {
         if (effects is not { Count: > 0 }) {
             throw new WorldRuleException(
-                refusal: WorldRuleRefusal.EffectKindInadmissible,
-                ruleName: ruleName,
                 detail: $"{((subject == "rule")
                     ? "a"
                     : "an")} {subject} must carry a non-empty effect list",
+                refusal: WorldRuleRefusal.EffectKindInadmissible,
+                ruleName: ruleName,
                 subject: subject
             );
         }
@@ -394,7 +394,7 @@ public static class WorldRuleCompiler {
     private static CompiledBodyRef ResolveBodyRefToken(string[] tokens, int start, string ruleName, WorldDefinition definition, string channel) {
         var kind = tokens[start];
 
-        if (BindingOfBodyToken(token: kind) is var bound && (bound != RuleBinding.None)) {
+        if ((BindingOfBodyToken(token: kind) is var bound) && (bound != RuleBinding.None)) {
             RequireBindingInScope(
                 binding: bound,
                 ruleName: ruleName,
@@ -403,7 +403,7 @@ public static class WorldRuleCompiler {
             );
 
             return new CompiledBodyRef(
-                Index: (int)bound,
+                Index: ((int)bound),
                 Kind: CompiledBodyRefKind.Binding,
                 Row: null
             );
@@ -652,6 +652,7 @@ public static class WorldRuleCompiler {
             Describe: $"generate {generate.Row}"
         );
     }
+
     // The (row, key) PAIR rule: a null key means the row's slot cell, and WorldStateRow.IsKeyed — never "declares a
     // capacity", and never !IsSlot — is the discriminator (a capacity-free row carrying several author-keyed cells
     // has no slot either, while a row with NO cells is legitimately slot-addressable: the first write mints its slot
@@ -687,20 +688,22 @@ public static class WorldRuleCompiler {
 
         return RuleBinding.None;
     }
+
     // The body-reference grammar as a refusal spells it; the bound tokens come from the same table the parser reads.
     private static readonly string s_bodyRefVocabulary =
-        "a 'body:<n>', 'argmax:<row>'/'argmin:<row>', 'cell:<row>:<key>', or a bound " +
+        (("a 'body:<n>', 'argmax:<row>'/'argmin:<row>', 'cell:<row>:<key>', or a bound " +
         string.Join(
             separator: '/',
             values: WorldRuleFacts.Bindings.Select(selector: static entry => $"'{WorldRuleFacts.BodyTokenOf(keyToken: entry.KeyToken)}'")
-        ) +
-        " reference";
+        )) +
+        " reference");
     private static readonly string s_bindingScopes = string.Join(
         separator: ", ",
         values: WorldRuleFacts.Bindings.Select(selector: static (entry, index) => $"'{entry.KeyToken}' {((index == 0)
             ? "binds inside "
             : "inside ")}{entry.Scope}")
     );
+
     private static void RequireBindingInScope(RuleBinding binding, string spelled, string ruleName, string where) {
         if (Array.IndexOf(
             array: (s_bindingScope ?? []),
@@ -775,7 +778,7 @@ public static class WorldRuleCompiler {
         );
     }
     private static bool TryResolveDynamicKey(string? key, string ruleName, WorldDefinition definition, string verb, string keyFieldLabel, out CompiledCellRef cell) {
-        if (BindingOfKeyToken(key: key) is var bound && (bound != RuleBinding.None)) {
+        if ((BindingOfKeyToken(key: key) is var bound) && (bound != RuleBinding.None)) {
             RequireBindingInScope(
                 binding: bound,
                 ruleName: ruleName,
@@ -1189,9 +1192,9 @@ public static class WorldRuleCompiler {
                 ? WorldRuleFacts.DistancePrefix.Length
                 : WorldRuleFacts.LineOfSightPrefix.Length)..];
             var tokens = suffix.Split(separator: ':');
-            var widthA = BodyRefTokenWidth(tokens: tokens, start: 0);
+            var widthA = BodyRefTokenWidth(start: 0, tokens: tokens);
 
-            if (tokens.Length != (widthA + BodyRefTokenWidth(tokens: tokens, start: widthA))) {
+            if (tokens.Length != (widthA + BodyRefTokenWidth(start: widthA, tokens: tokens))) {
                 throw new WorldRuleException(
                     refusal: WorldRuleRefusal.SpatialChannelMalformed,
                     ruleName: ruleName,
@@ -1487,12 +1490,12 @@ public static class WorldRuleCompiler {
         }
 
         if (TryResolveDynamicKey(
+            cell: out var dynamicKey,
             definition: definition,
             key: key,
-            ruleName: ruleName,
-            verb: verb,
             keyFieldLabel: keyFieldLabel,
-            cell: out var dynamicKey
+            ruleName: ruleName,
+            verb: verb
         )) {
             if (!row.IsKeyed) {
                 throw new WorldRuleException(
@@ -1770,12 +1773,12 @@ public static class WorldRuleCompiler {
         string resolvedKey;
 
         if (TryResolveDynamicKey(
+            cell: out var dynamicDestination,
             definition: definition,
             key: key,
-            ruleName: ruleName,
-            verb: verb,
             keyFieldLabel: "key",
-            cell: out var dynamicDestination
+            ruleName: ruleName,
+            verb: verb
         )) {
             if (!row.IsKeyed) {
                 throw new WorldRuleException(
@@ -1925,14 +1928,14 @@ public static class WorldRuleCompiler {
         }
 
         var source = ResolveOperand(
+            allowText: isTextRow,
             definition: definition,
             fieldLabel: "fromState",
             key: fromKey,
             keyFieldLabel: "fromKey",
             name: fromState!,
             ruleName: ruleName,
-            verb: verb,
-            allowText: isTextRow
+            verb: verb
         );
 
         if (source.ValueKind != row.Kind) {

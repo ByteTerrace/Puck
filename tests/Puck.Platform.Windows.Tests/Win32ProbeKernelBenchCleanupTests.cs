@@ -18,19 +18,19 @@ public sealed class Win32ProbeKernelBenchCleanupTests {
             throwOnError: true
         )!;
         var cleanup = bench.GetMethod(
-            name: "ReleaseRingResources",
-            bindingAttr: BindingFlags.NonPublic | BindingFlags.Static,
             binder: null,
-            types: [typeof(nint[]?[]), typeof(nint[]?[]), typeof(Action<nint>)],
-            modifiers: null
+            bindingAttr: BindingFlags.NonPublic | BindingFlags.Static,
+            modifiers: null,
+            name: "ReleaseRingResources",
+            types: [typeof(nint[]?[]), typeof(nint[]?[]), typeof(Action<nint>)]
         )!;
 
         _ = cleanup.Invoke(
             obj: null,
-            parameters: [textures, views, (Action<nint>)(resource => released.Add(item: resource))]
+            parameters: [textures, views, ((Action<nint>)(resource => released.Add(item: resource)))]
         );
 
-        Assert.Equal(expected: [21, 22, 11, 12, 13], actual: released);
+        Assert.Equal(actual: released, expected: [21, 22, 11, 12, 13]);
     }
     // A ring whose second shared handle is invalid drives the real OpenSharedResource1/CreateShaderResourceView path
     // (Win32ProbeKernelBench.Attachment.OpenRingResources, reached only through Win32D3D11 interop, so this exercises
@@ -78,12 +78,12 @@ public sealed class Win32ProbeKernelBenchCleanupTests {
         var ring = new ProbeReadingRing();
         var assembly = typeof(Win32RawInput).Assembly;
         var attachmentType = assembly.GetType(name: "Puck.Platform.Windows.Win32ProbeKernelBench+Attachment", throwOnError: true)!;
-        var attachmentConstructor = attachmentType.GetConstructors(bindingAttr: (BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)).Single();
+        var attachmentConstructor = attachmentType.GetConstructors(bindingAttr: BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance).Single();
         var attachment = attachmentConstructor.Invoke(parameters: [request, ring]);
         var deviceType = assembly.GetType(name: "Puck.Platform.Windows.Win32D3D11VideoDevice", throwOnError: true)!;
         var device = deviceType.GetConstructor(types: [typeof(long)])!.Invoke(parameters: [bench.AdapterLuid]);
-        var openSharedTexture = deviceType.GetMethod(name: "OpenSharedTexture", bindingAttr: BindingFlags.Public | BindingFlags.Instance)!;
-        var releaseTexture = deviceType.GetMethod(name: "ReleaseTexture", bindingAttr: BindingFlags.Public | BindingFlags.Static)!;
+        var openSharedTexture = deviceType.GetMethod(bindingAttr: BindingFlags.Public | BindingFlags.Instance, name: "OpenSharedTexture")!;
+        var releaseTexture = deviceType.GetMethod(bindingAttr: BindingFlags.Public | BindingFlags.Static, name: "ReleaseTexture")!;
 
         try {
             var probeFirst = ((nint)openSharedTexture.Invoke(obj: device, parameters: [target.SharedHandle])!);
@@ -91,25 +91,25 @@ public sealed class Win32ProbeKernelBenchCleanupTests {
 
             _ = releaseTexture.Invoke(obj: null, parameters: [probeFirst]);
             _ = releaseTexture.Invoke(obj: null, parameters: [probeSecond]);
-            Assert.NotEqual(expected: probeFirst, actual: probeSecond);
+            Assert.NotEqual(actual: probeSecond, expected: probeFirst);
 
-            var openRingResources = attachmentType.GetMethod(name: "OpenRingResources", bindingAttr: BindingFlags.Public | BindingFlags.Instance)!;
+            var openRingResources = attachmentType.GetMethod(bindingAttr: BindingFlags.Public | BindingFlags.Instance, name: "OpenRingResources")!;
             var thrown = Assert.Throws<TargetInvocationException>(testCode: () => openRingResources.Invoke(obj: attachment, parameters: [device]));
 
             Assert.IsType<InvalidOperationException>(@object: thrown.InnerException);
             Assert.Contains(expectedSubstring: "slot 1", actualString: thrown.InnerException!.Message);
 
-            var ringResourcesOpenedProperty = attachmentType.GetProperty(name: "RingResourcesOpened", bindingAttr: BindingFlags.Public | BindingFlags.Instance)!;
+            var ringResourcesOpenedProperty = attachmentType.GetProperty(bindingAttr: BindingFlags.Public | BindingFlags.Instance, name: "RingResourcesOpened")!;
 
             Assert.False(condition: ((bool)ringResourcesOpenedProperty.GetValue(obj: attachment)!));
 
-            var ringTexturesMethod = attachmentType.GetMethod(name: "RingTextures", bindingAttr: BindingFlags.Public | BindingFlags.Instance)!;
-            var ringViewsMethod = attachmentType.GetMethod(name: "RingViews", bindingAttr: BindingFlags.Public | BindingFlags.Instance)!;
+            var ringTexturesMethod = attachmentType.GetMethod(bindingAttr: BindingFlags.Public | BindingFlags.Instance, name: "RingTextures")!;
+            var ringViewsMethod = attachmentType.GetMethod(bindingAttr: BindingFlags.Public | BindingFlags.Instance, name: "RingViews")!;
             var slot0Textures = ((nint[])ringTexturesMethod.Invoke(obj: attachment, parameters: [0])!);
             var slot0Views = ((nint[])ringViewsMethod.Invoke(obj: attachment, parameters: [0])!);
 
-            Assert.All(collection: slot0Textures, action: texture => Assert.Equal(expected: 0, actual: texture));
-            Assert.All(collection: slot0Views, action: view => Assert.Equal(expected: 0, actual: view));
+            Assert.All(collection: slot0Textures, action: texture => Assert.Equal(actual: texture, expected: 0));
+            Assert.All(collection: slot0Views, action: view => Assert.Equal(actual: view, expected: 0));
         } finally {
             ((IDisposable)device).Dispose();
         }

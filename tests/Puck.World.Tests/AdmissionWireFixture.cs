@@ -15,11 +15,9 @@ namespace Puck.World.Tests;
 /// <summary>One generated P-256 test identity: the signing key, the key-hash domain it authorizes under, the
 /// subject it claims, and the SPKI an admission entry publishes.</summary>
 internal readonly record struct TestIdentity(ECDsa Key, string Domain, string Subject, byte[] Spki);
-
 /// <summary>A peer that completed the real wire door: the still-open socket plus the body index and generation
 /// <see cref="WorldAdmissionDoor"/> admitted it onto.</summary>
 internal readonly record struct AdmittedPeer(TcpClient Client, int PeerIndex, int Generation);
-
 /// <summary>
 /// The raw-TCP admission harness every wire-door suite drives: generate an identity, author the one-peer admission
 /// document, pump the host's tick-thread queue, complete the Hello/challenge/HelloIdentity/HelloAccepted exchange
@@ -99,7 +97,7 @@ internal static class AdmissionWireFixture {
                 ?? throw new InvalidOperationException(message: "connection closed before the Hello challenge arrived"));
 
             if (challengeFrame.Kind != WorldTcpWireFormat.DownstreamKind.HelloChallenge) {
-                throw new InvalidOperationException(message: $"expected HelloChallenge, got {challengeFrame.Kind}: {WorldTcpWireFormat.DecodeText(body: challengeFrame.Body)}");
+                throw new InvalidOperationException(message: $"expected HelloChallenge, got {challengeFrame.Kind}: {WorldTcpWireFormat.DecodeText(body: challengeFrame.Body.Span)}");
             }
 
             var challenge = challengeFrame.Body;
@@ -110,12 +108,12 @@ internal static class AdmissionWireFixture {
                 ?? throw new InvalidOperationException(message: "connection closed before the admission verdict arrived"));
 
             if (acceptedFrame.Kind != WorldTcpWireFormat.DownstreamKind.HelloAccepted) {
-                throw new InvalidOperationException(message: $"admission refused: {WorldTcpWireFormat.DecodeText(body: acceptedFrame.Body)}");
+                throw new InvalidOperationException(message: $"admission refused: {WorldTcpWireFormat.DecodeText(body: acceptedFrame.Body.Span)}");
             }
 
-            var body = acceptedFrame.Body;
+            var body = acceptedFrame.Body.Span;
             var peerIndex = BinaryPrimitives.ReadInt32LittleEndian(source: body);
-            var generation = BinaryPrimitives.ReadInt32LittleEndian(source: body.AsSpan(start: sizeof(int)));
+            var generation = BinaryPrimitives.ReadInt32LittleEndian(source: body[sizeof(int)..]);
             var admitted = client;
 
             client = null!;
@@ -125,7 +123,7 @@ internal static class AdmissionWireFixture {
             client?.Dispose();
         }
     }
-    public static Task WriteIdentityResponseAsync(NetworkStream stream, TestIdentity identity, byte[] challenge, CancellationToken ct) {
+    public static Task WriteIdentityResponseAsync(NetworkStream stream, TestIdentity identity, ReadOnlyMemory<byte> challenge, CancellationToken ct) {
         var codec = new CborAttestationCodec();
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var claim = AttestationSigner.SignClaim(
@@ -157,7 +155,7 @@ internal static class AdmissionWireFixture {
 
         Assert.Equal(actual: reply.Kind, expected: WorldTcpWireFormat.DownstreamKind.Query);
         Assert.True(
-            condition: WorldTcpWireFormat.TryReadResult(kind: reply.Kind, body: reply.Body, result: out var result, reason: out var reason),
+            condition: WorldTcpWireFormat.TryReadResult(kind: reply.Kind, body: reply.Body.Span, result: out var result, reason: out var reason),
             userMessage: $"the query reply failed to decode: {reason}"
         );
 

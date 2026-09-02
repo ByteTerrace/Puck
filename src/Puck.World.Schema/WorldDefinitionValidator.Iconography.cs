@@ -89,9 +89,9 @@ public static partial class WorldDefinitionValidator {
             );
 
             ValidateIconRow(
-                row: row,
+                errors: errors,
                 path: path,
-                errors: errors
+                row: row
             );
         }
 

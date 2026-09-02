@@ -21,9 +21,9 @@ public sealed class ShaderProgramLawTests {
     public void DirectionalGradientFixture_InterpolatesTheThreeStopsByElevation() {
         var program = DirectionalGradientProgram();
         var parameters = new Vector4[] {
-            new(x: 1f, y: 0f, z: 0f, w: 0f),
-            new(x: 0f, y: 1f, z: 0f, w: 0f),
-            new(x: 0f, y: 0f, z: 1f, w: 0f),
+            new(w: 0f, x: 1f, y: 0f, z: 0f),
+            new(w: 0f, x: 0f, y: 1f, z: 0f),
+            new(w: 0f, x: 0f, y: 0f, z: 1f),
         };
 
         Assert.Equal(actual: Evaluate(elevation: 1f, parameters: parameters, program: program), expected: parameters[2]);
@@ -36,9 +36,9 @@ public sealed class ShaderProgramLawTests {
         var program = ShaderExpressionCompiler.Compile(root: ShaderMath.Unit(value: ShaderMath.Hash3(value: ShaderExpression.Input(input: ShaderInput.Coordinate))));
         var coordinate = new Vector4(
             w: 0f,
-            x: BitConverter.UInt32BitsToSingle(7u),
-            y: BitConverter.UInt32BitsToSingle(9u),
-            z: BitConverter.UInt32BitsToSingle(1337u)
+            x: BitConverter.UInt32BitsToSingle(value: 7u),
+            y: BitConverter.UInt32BitsToSingle(value: 9u),
+            z: BitConverter.UInt32BitsToSingle(value: 1337u)
         );
         var context = new ShaderContext(Coordinate: coordinate);
 
@@ -52,7 +52,7 @@ public sealed class ShaderProgramLawTests {
         var program = ShaderExpressionCompiler.Compile(root: ShaderMath.Fbm2(octaves: 4, position: ShaderExpression.Input(input: ShaderInput.Coordinate)));
 
         for (var step = 0; (step < 512); step++) {
-            var context = new ShaderContext(Coordinate: new Vector4(x: (step * 0.37f), y: (step * -0.11f), z: 0f, w: 0f));
+            var context = new ShaderContext(Coordinate: new Vector4(w: 0f, x: (step * 0.37f), y: (step * -0.11f), z: 0f));
             var value = ShaderInterpreter.Evaluate(context: in context, parameters: [], program: program).X;
 
             Assert.InRange(actual: value, high: 1f, low: 0f);
@@ -65,11 +65,11 @@ public sealed class ShaderProgramLawTests {
             whenFalse: ShaderExpression.Constant(value: -1f),
             whenTrue: ShaderExpression.Constant(value: 1f)
         ));
-        var context = new ShaderContext(Coordinate: new Vector4(x: 1f, y: 0f, z: 1f, w: 0f));
+        var context = new ShaderContext(Coordinate: new Vector4(w: 0f, x: 1f, y: 0f, z: 1f));
 
         Assert.Equal(
             actual: ShaderInterpreter.Evaluate(context: in context, parameters: [], program: program),
-            expected: new Vector4(x: 1f, y: -1f, z: 1f, w: -1f)
+            expected: new Vector4(w: -1f, x: 1f, y: -1f, z: 1f)
         );
     }
     [Fact]
@@ -138,8 +138,9 @@ public sealed class ShaderProgramLawTests {
 
         Assert.Contains(actualString: exception.Message, comparisonType: StringComparison.Ordinal, expectedSubstring: "stack depth");
     }
+
     private static Vector4 Evaluate(ShaderProgram program, float elevation, Vector4[] parameters) {
-        var context = new ShaderContext(Coordinate: new Vector4(x: 0f, y: elevation, z: 0f, w: 0f));
+        var context = new ShaderContext(Coordinate: new Vector4(w: 0f, x: 0f, y: elevation, z: 0f));
 
         return ShaderInterpreter.Evaluate(context: in context, parameters: parameters, program: program);
     }

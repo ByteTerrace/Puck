@@ -73,7 +73,15 @@ public enum WorldTransferStep : byte {
 }
 /// <summary>One federation response, or the named reason there is none. The lane never faults a caller's task: a
 /// dead peer is a refusal with a name, so a simulation-thread caller always receives an answer it can act on.</summary>
-public readonly record struct WorldFederationAnswer(WorldFederationResponse Kind, byte[] Body, WireFailure Failure) {
+/// <param name="Kind">The response kind. <see cref="WorldFederationResponse.Refusal"/> when <see cref="Ok"/> is
+/// <see langword="false"/>.</param>
+/// <param name="Body">The response body — a slice over the frame's own buffer, allocated per frame and never reused,
+/// so it is safe to keep. Empty when <see cref="Ok"/> is <see langword="false"/>.</param>
+/// <param name="Failure">The named transport refusal when nothing decoded; a lane answer of
+/// <see cref="WireRefusal.RequestTimedOut"/> or an in-doubt <see cref="WireRefusal.ConnectionClosed"/> is a named
+/// answer about ONE request (it may or may not have been applied), never evidence that the peer is down.</param>
+public readonly record struct WorldFederationAnswer(WorldFederationResponse Kind, ReadOnlyMemory<byte> Body, WireFailure Failure) {
+    /// <summary>Gets a value indicating whether the peer answered at all (no transport refusal).</summary>
     public bool Ok => !Failure.IsRefusal;
 
     /// <summary>Narrates this answer as a refusal sentence.</summary>
@@ -81,13 +89,17 @@ public readonly record struct WorldFederationAnswer(WorldFederationResponse Kind
         (Failure.IsRefusal
             ? Failure.ToString()
             : ((Kind == WorldFederationResponse.Refusal)
-                ? Encoding.UTF8.GetString(bytes: Body)
+                ? Encoding.UTF8.GetString(bytes: Body.Span)
                 : $"unexpected federation response {Kind}"
         ));
+    /// <summary>Creates a refused answer.</summary>
+    /// <param name="refusal">The refusal name.</param>
+    /// <param name="detail">The refusal narration.</param>
+    /// <returns>The refused answer.</returns>
     public static WorldFederationAnswer Refused(WireRefusal refusal, string detail) =>
         new(
             Kind: WorldFederationResponse.Refusal,
-            Body: [],
+            Body: ReadOnlyMemory<byte>.Empty,
             Failure: new WireFailure(
                 Detail: detail,
                 Refusal: refusal
@@ -105,14 +117,26 @@ public readonly record struct WorldFederationAnswer(WorldFederationResponse Kind
 /// state across ticks the adjacency scan is concurrently re-deriving, so no path here returns one.</para>
 /// </remarks>
 public sealed class WorldRemoteAuthority : IDisposable {
-    /// <summary>The ceiling on how long a routed submission or route lookup waits for its answer. This bounds
-    /// transport lifecycle, never simulation state.</summary>
+    /// <summary>The detail every federation request answers with when this run holds no signing identity.</summary>
+    private const string UnconfiguredDetail = "this run holds no federation signing identity";
+
+    /// <summary>The ceiling on how long a caller waits for its answer, queue time included — the outer of the two
+    /// clocks. The lane's own <see cref="LaneRequestTimeout"/> bounds one attempt on the socket; this bounds how long
+    /// the caller's task waits behind whatever else is queued on the same ordered lane, so it is deliberately longer
+    /// than one attempt. A caller that runs out of it answers <see cref="WireRefusal.LaneUnavailable"/> and the
+    /// request stays queued for the lane to finish. This bounds transport lifecycle, never simulation state.</summary>
     private static readonly TimeSpan RoutedRequestDeadline = TimeSpan.FromSeconds(value: 10);
     /// <summary>How long a lane waits before retrying a connect that failed, before it calls the peer down.</summary>
     private static readonly TimeSpan ConnectRetryDelay = TimeSpan.FromMilliseconds(value: 50);
     /// <summary>How long a lane that failed to reach its peer answers immediately with
     /// <see cref="WireRefusal.LaneUnavailable"/> before trying to connect again.</summary>
     private static readonly TimeSpan LaneBackoff = TimeSpan.FromSeconds(value: 1);
+    /// <summary>The lane's per-attempt deadline — the inner of the two clocks. One attempt is connect, hello, and
+    /// authenticate (when the lane has no connection) plus the request write and the response read; a peer that goes
+    /// silent inside it is answered <see cref="WireRefusal.RequestTimedOut"/> once the request was written (no re-send,
+    /// no backoff) or counted as a connect failure before it. Shorter than <see cref="RoutedRequestDeadline"/> so a
+    /// caller's wait can cover its own attempt plus one queued ahead of it.</summary>
+    private static readonly TimeSpan LaneRequestTimeout = TimeSpan.FromSeconds(value: 5);
     // Written from the simulation thread as reservations commit and read from socket workers resolving a forwarded
     // submission, so the table itself must be concurrent even though every write comes from the commit path.
     private readonly ConcurrentDictionary<int, WorldRemoteRouteCredential> m_credentials = new();
@@ -134,11 +158,18 @@ public sealed class WorldRemoteAuthority : IDisposable {
     private readonly WorldRemoteAuthority? m_submissionAuthority;
     private readonly WorldRemoteRouteCredential? m_submissionCredential;
 
+    // Set once, by the first proof m_security refuses to give: an authenticator configured to verify but not to
+    // prove reports IsConfigured for the host's sake, so the client side learns it cannot sign from the exchange
+    // itself. Final for the run, exactly as an unconfigured authenticator is.
+    private int m_cannotProve;
     private WorldDefinition m_definition;
-    private IPEndPoint m_endpoint;
     private long m_lastObservedTickBits;
     private WorldAuthorityRouteDescription? m_observedRoute;
+    // The endpoint and its description travel as one reference so a republish swaps both atomically: every reader
+    // (a lane dial, an observer connect, an Endpoint narration) sees one generation's pair, never a mix.
+    private PublishedRoute m_route;
     private int m_routeRevision;
+    private int m_unconfiguredNoted;
 
     public WorldRemoteAuthority(string endpoint, WorldDefinition placeholder, IAuthenticator security, string observerAuthority, WorldRemoteAuthority? submissionAuthority = null, WorldRemoteRouteCredential? submissionCredential = null, WorldAuthorityRouteDescription? initialRoute = null, Action<WorldAuthorityRouteDescription>? routeChanged = null, CancellationToken applicationStopping = default) {
         if (!IPEndPoint.TryParse(
@@ -148,7 +179,7 @@ public sealed class WorldRemoteAuthority : IDisposable {
             throw new FormatException(message: $"host.authority '{endpoint}' is not a parseable IP endpoint");
         }
 
-        m_endpoint = parsed;
+        m_route = new PublishedRoute(endpoint: parsed);
         m_definition = placeholder;
         m_security = (security ?? throw new ArgumentNullException(paramName: nameof(security)));
         m_observerAuthority = observerAuthority;
@@ -167,7 +198,7 @@ public sealed class WorldRemoteAuthority : IDisposable {
             )) {
                 throw new FormatException(message: $"route endpoint '{route.Endpoint}' is not a parseable IP endpoint");
             }
-            m_endpoint = initialEndpoint;
+            m_route = new PublishedRoute(endpoint: initialEndpoint);
             m_definition = route.Definition;
             m_authority = route.Entity.Authority;
             m_lastObservedTickBits = unchecked((long)route.Tick);
@@ -193,16 +224,41 @@ public sealed class WorldRemoteAuthority : IDisposable {
         }
     }
     public WorldDefinition Definition => Volatile.Read(location: ref m_definition);
-    public string Endpoint => Volatile.Read(location: ref m_endpoint).ToString();
+    /// <summary>Gets the current route's endpoint as text — the description cached beside the endpoint when the
+    /// route was published, so reading it costs no formatting and always names the same generation the lanes dial.</summary>
+    public string Endpoint => Volatile.Read(location: ref m_route).Description;
     public IServerLink Link => m_link;
     public ulong NextInputTick => (unchecked((ulong)Interlocked.Read(location: ref m_lastObservedTickBits)) + 1UL);
 
+    /// <summary>Issues one routed request on the source namespace's lane and waits, bounded, for its answer.</summary>
+    /// <remarks>This wait, and its twin in the transfer-step resolver, is reached from the tick thread: the transfer
+    /// steps from <c>WorldInstanceHost.DrainPendingTransfers</c> (the host's per-tick fixed point) and the forwarded
+    /// submissions and route lookups from the server's own drain, plus the routed observer's <see cref="IServerLink"/>
+    /// (<see cref="WorldFederatedServerLink"/>), which the console and client drive on the thread that pumps the tick.
+    /// A bounded synchronous wait is acceptable there because the contract demands an ANSWER inside the tick — a
+    /// caller told "not yet" would hold state across ticks the adjacency scan is concurrently re-deriving and mint a
+    /// second crossing for the same seat — and the wait is bounded twice over: the lane's own
+    /// <see cref="LaneRequestTimeout"/> per attempt, then <see cref="RoutedRequestDeadline"/> here. A lane already
+    /// known unreachable, or a run holding no signing identity, answers without waiting at all, so the stall is
+    /// confined to the one tick that carries a request to a peer that stops answering mid-exchange — the cost the
+    /// authored unavailable policy exists to absorb.</remarks>
+    /// <param name="sourceAuthority">The authenticated source namespace whose lane carries the request.</param>
+    /// <param name="kind">The request kind.</param>
+    /// <param name="body">The encoded request leaf.</param>
+    /// <returns>The peer's answer, or a named refusal when the lane could not deliver one in time.</returns>
     public WorldFederationAnswer AwaitAnswer(string sourceAuthority, WorldFederationRequest kind, byte[] body) {
         if (m_submissionAuthority is { } upstream) {
             return upstream.AwaitAnswer(
                 body: body,
                 kind: kind,
                 sourceAuthority: sourceAuthority
+            );
+        }
+
+        if (LacksSigningIdentity()) {
+            return WorldFederationAnswer.Refused(
+                detail: UnconfiguredDetail,
+                refusal: WireRefusal.LaneUnavailable
             );
         }
 
@@ -281,7 +337,7 @@ public sealed class WorldRemoteAuthority : IDisposable {
         if (
             (answer.Kind != WorldFederationResponse.Route) ||
             !WorldFederationCodec.TryDecodeRoute(
-            body: answer.Body,
+            body: answer.Body.Span,
             route: out route,
             failure: out _
         )
@@ -445,16 +501,10 @@ public sealed class WorldRemoteAuthority : IDisposable {
             }
         }
     }
-    // Reads m_endpoint exactly once, so the endpoint a lane dials and the description it records for that same
-    // connect always name the same route republish generation.
-    private LaneRoute CurrentRoute() {
-        var endpoint = Volatile.Read(location: ref m_endpoint);
-
-        return new LaneRoute(
-            Endpoint: endpoint,
-            Description: endpoint.ToString()
-        );
-    }
+    // Reads m_route exactly once, so the endpoint a lane dials and the description it records for that same connect
+    // always name the same route republish generation; the description was formatted when the route was published,
+    // never per attempt.
+    private LaneRoute CurrentRoute() => Volatile.Read(location: ref m_route).Lane;
     private static string DescribeHandshake(WireFrameRead read, string stage) =>
         (read.Ok
             ? new WorldFederationAnswer(
@@ -462,7 +512,7 @@ public sealed class WorldRemoteAuthority : IDisposable {
                 Body: read.Body,
                 Failure: default
             ).Describe()
-            : $"{WireRefusal.HandshakeRefused}: federation {stage} — {read.Failure}"
+            : $"federation {stage} — {read.Failure}"
         );
     private static async Task<WorldFederationAnswer> EnqueueAnswerAsync(PersistentRequestLane<WorldFederationRequest, WorldFederationResponse> lane, WorldFederationRequest kind, byte[] body) {
         var response = await lane.Enqueue(
@@ -470,10 +520,18 @@ public sealed class WorldRemoteAuthority : IDisposable {
             kind: kind
         ).ConfigureAwait(continueOnCapturedContext: false);
 
-        return new WorldFederationAnswer(
-            Kind: response.Kind,
-            Body: response.Body,
-            Failure: response.Failure
+        // A refused LaneResponse carries a default Kind (no WorldFederationResponse member); the answer's own contract
+        // is that Kind is Refusal on every failure path, so the refusal is re-minted here rather than copied.
+        return (response.Ok
+            ? new WorldFederationAnswer(
+                Kind: response.Kind,
+                Body: response.Body,
+                Failure: response.Failure
+            )
+            : WorldFederationAnswer.Refused(
+                detail: response.Failure.Detail,
+                refusal: response.Failure.Refusal
+            )
         );
     }
     private void ForgetTransferSteps(string sourceAuthority, ulong transferId) {
@@ -496,6 +554,29 @@ public sealed class WorldRemoteAuthority : IDisposable {
             pump.InvalidateAcknowledgement(mobility: credential.Mobility);
         }
     }
+    // The gate before every socket: a run started without a federation signing identity can never authenticate a
+    // lane, so its requests are refused here — one stderr line per authority, then silently — rather than paid for
+    // with a connect, a Hello, and a proof that throws. m_security is readonly and its configuration is fixed for
+    // the run, so a true answer is final. IsConfigured alone is not the whole gate: an authenticator configured to
+    // verify but not to prove passes it, and only the first proof it refuses (recorded in m_cannotProve by
+    // AuthenticateAsync) reveals that — from then on this gate closes for it exactly as for an unconfigured one.
+    private bool LacksSigningIdentity() {
+        if (
+            m_security.IsConfigured &&
+            (Volatile.Read(location: ref m_cannotProve) == 0)
+        ) {
+            return false;
+        }
+
+        if (Interlocked.Exchange(
+            location1: ref m_unconfiguredNoted,
+            value: 1
+        ) == 0) {
+            Console.Error.WriteLine(value: $"[world.authority unavailable: federation to '{Endpoint}' is refused ({UnconfiguredDetail})]");
+        }
+
+        return true;
+    }
     private PersistentRequestLane<WorldFederationRequest, WorldFederationResponse> LaneFor(string sourceAuthority, WorldFederationRequest kind) =>
         m_requestLanes.GetOrAdd(
             key: (sourceAuthority, LaneOf(kind: kind)),
@@ -504,6 +585,7 @@ public sealed class WorldRemoteAuthority : IDisposable {
                 lifetime: m_lifetime.Token,
                 onUnavailable: exception => Console.Error.WriteLine(value: $"[world.authority unavailable: federation lane to '{Endpoint}' is reconnecting ({exception.GetType().Name}: {exception.Message.ReplaceLineEndings(replacementText: " ")})]"),
                 protocol: new WorldFederationLaneProtocol(owner: this),
+                requestTimeout: LaneRequestTimeout,
                 route: CurrentRoute,
                 sourceAuthority: key.SourceAuthority,
                 unavailableBackoff: LaneBackoff
@@ -518,7 +600,7 @@ public sealed class WorldRemoteAuthority : IDisposable {
         using var client = new TcpClient();
 
         client.NoDelay = true;
-        var observedEndpoint = Volatile.Read(location: ref m_endpoint);
+        var observedEndpoint = Volatile.Read(location: ref m_route).Endpoint;
         var observedRouteRevision = Volatile.Read(location: ref m_routeRevision);
 
         await client.ConnectAsync(
@@ -527,8 +609,9 @@ public sealed class WorldRemoteAuthority : IDisposable {
         ).ConfigureAwait(continueOnCapturedContext: false);
         using var stream = client.GetStream();
 
-        await WorldFederationCodec.WriteHelloAsync(
+        await HandshakeWireFormat.WriteHelloAsync(
             ct: ct,
+            key: WorldFederationCodec.WireKey,
             stream: stream
         ).ConfigureAwait(continueOnCapturedContext: false);
         await AuthenticateAsync(
@@ -556,7 +639,7 @@ public sealed class WorldRemoteAuthority : IDisposable {
                 case WorldFederationResponse.Definition: {
                         if (
                             !WorldFederationCodec.TryDecodeDocument(
-                            body: frame.Body,
+                            body: frame.Body.Span,
                             definition: out var definition,
                             tier: out var definitionTier,
                             failure: out var definitionFailure
@@ -582,7 +665,7 @@ public sealed class WorldRemoteAuthority : IDisposable {
                     }
                 case WorldFederationResponse.Snapshot: {
                         if (!WorldFederationCodec.TryDecodeSnapshot(
-                            body: frame.Body,
+                            body: frame.Body.Span,
                             snapshot: out var snapshot,
                             failure: out var snapshotFailure
                         )) {
@@ -624,6 +707,14 @@ public sealed class WorldRemoteAuthority : IDisposable {
     // disconnected and the authored unavailable policy remains the crossing-side safety net.
     private async Task ObserveUntilCancelledAsync(IClientSink sink, CancellationToken ct) {
         while (!ct.IsCancellationRequested) {
+            // The same gate every lane applies: an observer session authenticates too, and a run holding no signing
+            // identity would otherwise reconnect and be refused four times a second for the rest of the run. Tested
+            // per session, not once, because an authenticator that verifies but cannot prove is only discovered by
+            // the first session's own proof.
+            if (LacksSigningIdentity()) {
+                return;
+            }
+
             try {
                 if (await ObserveSessionAsync(
                     ct: ct,
@@ -655,6 +746,10 @@ public sealed class WorldRemoteAuthority : IDisposable {
                 sourceAuthority: sourceAuthority
             );
 
+            return;
+        }
+
+        if (LacksSigningIdentity()) {
             return;
         }
 
@@ -702,8 +797,8 @@ public sealed class WorldRemoteAuthority : IDisposable {
         }
 
         Volatile.Write(
-            location: ref m_endpoint,
-            value: routedEndpoint
+            location: ref m_route,
+            value: new PublishedRoute(endpoint: routedEndpoint)
         );
         m_observedRoute = route;
         InvalidateAcknowledgement(credential: in credential);
@@ -747,28 +842,22 @@ public sealed class WorldRemoteAuthority : IDisposable {
         }
         return false;
     }
-    private static bool TryReadCompletion(byte[] body, out WorldSubmissionResult? result, out string reason) {
+    // A Completion body is one whole downstream frame, decoded in place over the answer's own buffer.
+    private static bool TryReadCompletion(ReadOnlyMemory<byte> body, out WorldSubmissionResult? result, out string reason) {
         result = null;
 
-        using var input = new MemoryStream(
-            body,
-            writable: false
-        );
-        var completion = WorldTcpWireFormat.TryReadDownstreamAsync(
-            ct: default,
-            stream: input
-        ).GetAwaiter().GetResult();
-
-        if (completion is null) {
+        if (!WorldTcpWireFormat.TryDecodeDownstream(
+            body: out var completionBody,
+            frame: body,
+            kind: out var completionKind
+        )) {
             reason = "forwarded authority returned an empty completion";
             return false;
         }
 
-        var frame = completion.Value;
-
         return WorldTcpWireFormat.TryReadResult(
-            body: frame.Body,
-            kind: frame.Kind,
+            body: completionBody.Span,
+            kind: completionKind,
             reason: out reason,
             result: out result
         );
@@ -784,6 +873,15 @@ public sealed class WorldRemoteAuthority : IDisposable {
                 sourceAuthority: sourceAuthority,
                 transferId: transferId
             );
+        }
+
+        if (LacksSigningIdentity()) {
+            answer = WorldFederationAnswer.Refused(
+                detail: UnconfiguredDetail,
+                refusal: WireRefusal.LaneUnavailable
+            );
+
+            return true;
         }
 
         var lane = LaneFor(
@@ -884,8 +982,17 @@ public sealed class WorldRemoteAuthority : IDisposable {
     /// namespace alongside the proof — see <see cref="IAuthenticator"/>'s own remarks.</summary>
     /// <param name="stream">The connection stream.</param>
     /// <param name="ct">Cancellation.</param>
-    /// <exception cref="IOException">The peer's challenge or verdict frame is malformed or refused.</exception>
+    /// <exception cref="IOException">The peer's challenge or verdict frame is malformed or refused, or this run holds
+    /// no federation signing identity — every lane, observer, and intent pump gates that case before it opens a
+    /// socket, so this is belt and braces for a caller that reaches the exchange some other way. The one case the
+    /// gate cannot see up front is an authenticator configured to verify but not to prove: its first refused proof
+    /// is thrown as this same exception and recorded, so every later gate closes on it without another
+    /// socket.</exception>
     public async Task AuthenticateAsync(Stream stream, CancellationToken ct) {
+        if (LacksSigningIdentity()) {
+            throw new IOException(message: $"federation authentication — {UnconfiguredDetail}");
+        }
+
         var challenge = await WorldFederationCodec.ReadResponseAsync(
             ct: ct,
             stream: stream
@@ -902,7 +1009,22 @@ public sealed class WorldRemoteAuthority : IDisposable {
             ));
         }
 
-        var proof = m_security.Prove(challenge: challenge.Body);
+        byte[] proof;
+
+        try {
+            proof = m_security.Prove(challenge: challenge.Body.Span);
+        } catch (InvalidOperationException) {
+            // The authenticator holds nothing to sign with (WorldAttestedAuthenticator built with trust entries and
+            // no oracle). That is as final as an unconfigured run, so it is recorded for LacksSigningIdentity and
+            // thrown in the wire vocabulary: the lane takes its ordinary two-strike path to LaneUnavailable and
+            // backoff, and no later lane, observer, or intent stream pays a connect, a Hello, and a challenge for it.
+            Volatile.Write(
+                location: ref m_cannotProve,
+                value: 1
+            );
+
+            throw new IOException(message: $"federation authentication — {UnconfiguredDetail}");
+        }
 
         await WorldFederationCodec.WriteRequestAsync(
             stream: stream,
@@ -951,7 +1073,7 @@ public sealed class WorldRemoteAuthority : IDisposable {
         if (
             (answer.Kind != WorldFederationResponse.Commit) ||
             !WorldFederationCodec.TryDecodeCommitReply(
-            body: answer.Body,
+            body: answer.Body.Span,
             accepted: out accepted,
             reason: out reason,
             failure: out _
@@ -993,7 +1115,7 @@ public sealed class WorldRemoteAuthority : IDisposable {
 
         if (
             !WorldFederationCodec.TryDecodeReservationReply(
-            body: answer.Body,
+            body: answer.Body.Span,
             reply: out var decoded,
             failure: out var failure
         ) ||
@@ -1033,17 +1155,28 @@ public sealed class WorldRemoteAuthority : IDisposable {
         if (
             (answer.Kind != WorldFederationResponse.Status) ||
             (answer.Body.Length != 1) ||
-            !Enum.IsDefined(value: ((WorldTransferStatus)answer.Body[0]))
+            !Enum.IsDefined(value: ((WorldTransferStatus)answer.Body.Span[0]))
         ) {
             return false;
         }
 
-        status = ((WorldTransferStatus)answer.Body[0]);
+        status = ((WorldTransferStatus)answer.Body.Span[0]);
 
         return true;
     }
 
     private readonly record struct TransferStepKey(string SourceAuthority, ulong TransferId, WorldFederationRequest Kind);
+    // One route republish generation: the endpoint to dial and its description, formatted once here so no attempt,
+    // narration, or comparison formats it again, and held as one reference so a swap is atomic.
+    private sealed class PublishedRoute(IPEndPoint endpoint) {
+        public string Description { get; } = endpoint.ToString();
+        public IPEndPoint Endpoint { get; } = endpoint;
+
+        public LaneRoute Lane => new(
+            Description: Description,
+            Endpoint: Endpoint
+        );
+    }
     // One authenticated, persistent control lane per source namespace. SubmitIntent only updates this pump's
     // bounded latest-value table and returns to the local simulation immediately; the background lane pays connect
     // and authentication once, then preserves request/ack ordering without making rendering or the boot clock wait
@@ -1098,6 +1231,14 @@ public sealed class WorldRemoteAuthority : IDisposable {
         }
         private async Task RunAsync(CancellationToken ct) {
             while (!ct.IsCancellationRequested) {
+                // The same gate every lane applies: a run holding no signing identity can never open this stream, so
+                // the worker ends here instead of reconnecting ten times a second for the rest of the run. Tested per
+                // connection, not once, because an authenticator that verifies but cannot prove is only discovered
+                // by the first connection's own proof.
+                if (m_owner.LacksSigningIdentity()) {
+                    return;
+                }
+
                 string? attemptedEndpoint = null;
                 var established = false;
 
@@ -1161,15 +1302,21 @@ public sealed class WorldRemoteAuthority : IDisposable {
             using var client = new TcpClient();
 
             client.NoDelay = true;
+            // One route snapshot: the endpoint dialed and the description every later comparison names are the
+            // same generation, and the comparisons below are against the owner's cached description, never a
+            // fresh formatting.
+            var route = m_owner.CurrentRoute();
+
             await client.ConnectAsync(
                 cancellationToken: ct,
-                remoteEP: m_owner.m_endpoint
+                remoteEP: route.Endpoint
             ).ConfigureAwait(continueOnCapturedContext: false);
-            var connectedEndpoint = m_owner.Endpoint;
+            var connectedEndpoint = route.Description;
             using var stream = client.GetStream();
 
-            await WorldFederationCodec.WriteHelloAsync(
+            await HandshakeWireFormat.WriteHelloAsync(
                 ct: ct,
+                key: WorldFederationCodec.WireKey,
                 stream: stream
             ).ConfigureAwait(continueOnCapturedContext: false);
             await m_owner.AuthenticateAsync(

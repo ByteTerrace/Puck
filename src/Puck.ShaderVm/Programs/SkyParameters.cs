@@ -55,6 +55,7 @@ public static class SkyParameters {
         rows[CloudShape] = new Vector4(x: settings.CloudSoftness, y: MathF.Max(x: settings.CloudScale, y: 1e-3f), z: settings.CloudSpin, w: settings.CloudCurl);
         rows[CloudWind] = new Vector4(x: settings.CloudDrift.X, y: settings.CloudDrift.Y, z: settings.CloudShear.X, w: settings.CloudShear.Y);
     }
+
     // The disc reads half brightness at its authored edge: pow(cos(discRadians), k) = 0.5.
     private static float SunDiscExponent(float discRadians) {
         var cosRadius = Math.Cos(d: discRadians);

@@ -184,8 +184,8 @@ public static partial class WorldDefinitionValidator {
 
         if (host.BackendRow is { } backendRow) {
             if (WorldDefinitionRows.FindStateRow(
-                rows: stateRows,
-                name: backendRow
+                name: backendRow,
+                rows: stateRows
             ) is not { } tokenRow) {
                 errors.Add(item: $"host.backendRow names state row '{backendRow}', which the document does not declare.");
             } else if (
@@ -814,8 +814,8 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"fields.lattice.layers must be in 1..{WorldFieldCapacity.MaxLayers} (was {lattice.Layers}).");
         }
 
-        if (((long)lattice.Width * lattice.Depth * lattice.Layers) > WorldFieldCapacity.MaxCells) {
-            errors.Add(item: $"fields.lattice declares {((long)lattice.Width * lattice.Depth * lattice.Layers)} cells, exceeding the {WorldFieldCapacity.MaxCells}-cell ceiling.");
+        if (((((long)lattice.Width) * lattice.Depth) * lattice.Layers) > WorldFieldCapacity.MaxCells) {
+            errors.Add(item: $"fields.lattice declares {((((long)lattice.Width) * lattice.Depth) * lattice.Layers)} cells, exceeding the {WorldFieldCapacity.MaxCells}-cell ceiling.");
         }
 
         if (lattice.StepEveryTicks < 1) {
@@ -895,8 +895,8 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{path}.color must be #RRGGBB on a field carrying a heightScale.");
                 }
 
-                var maximumRaise = (((double)row.Max * row.HeightScale) * lattice.Layers);
-                var minimumRaise = (((double)row.Min * row.HeightScale) * lattice.Layers);
+                var maximumRaise = ((((double)row.Max) * row.HeightScale) * lattice.Layers);
+                var minimumRaise = ((((double)row.Min) * row.HeightScale) * lattice.Layers);
 
                 if (maximumRaise > (WorldFieldCapacity.MaxSurfaceCells * ((double)lattice.CellSize))) {
                     errors.Add(item: $"{path} can raise {maximumRaise} units of surface across {lattice.Layers} layers, above the {(WorldFieldCapacity.MaxSurfaceCells * lattice.CellSize)}-unit ceiling ({WorldFieldCapacity.MaxSurfaceCells} cells of cellSize).");
@@ -917,7 +917,7 @@ public static partial class WorldDefinitionValidator {
             hasHeightField &&
             ((lattice.Width > WorldFieldCapacity.MaxSurfaceCells) || (lattice.Depth > WorldFieldCapacity.MaxSurfaceCells))
         ) {
-            errors.Add(item: $"fields.lattice width/depth must be at most {WorldFieldCapacity.MaxSurfaceCells} when a field carries heightScale; one {WorldFieldCapacity.MaxSurfaceCells + 2}-voxel render brick must cover the lattice plus its border (was {lattice.Width}x{lattice.Depth}).");
+            errors.Add(item: $"fields.lattice width/depth must be at most {WorldFieldCapacity.MaxSurfaceCells} when a field carries heightScale; one {(WorldFieldCapacity.MaxSurfaceCells + 2)}-voxel render brick must cover the lattice plus its border (was {lattice.Width}x{lattice.Depth}).");
         }
 
         var reactions = (fields.Reactions ?? []);

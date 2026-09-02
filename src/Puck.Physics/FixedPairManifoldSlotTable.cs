@@ -50,6 +50,7 @@ public struct FixedPairManifoldSlot : IManifoldSlot<FixedTwoBodyContact> {
     readonly int IManifoldSlotState.FeatureId => FeatureId;
     readonly FixedVector3 IManifoldSlotState.Normal => Normal;
     readonly bool IManifoldSlotState.IsIdle => (Disposition == FixedPairManifoldSlotDisposition.Idle);
+
     void IManifoldSlotState.MarkIdle() {
         Disposition = FixedPairManifoldSlotDisposition.Idle;
     }

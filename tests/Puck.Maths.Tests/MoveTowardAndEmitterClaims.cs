@@ -33,7 +33,6 @@ internal static class MoveTowardAndEmitterClaims {
     /// <returns>The vector.</returns>
     private static FixedVector3 Vector(long x, long y, long z) =>
         new(X: FixedQ4816.FromInteger(value: x), Y: FixedQ4816.FromInteger(value: y), Z: FixedQ4816.FromInteger(value: z));
-
     /// <summary>Builds a vector from three raw components, bypassing <see cref="FixedQ4816.FromInteger"/>'s own
     /// scale — the carrier-extreme endpoints below are raws, not integers <see cref="FixedQ4816.FromInteger"/> could
     /// represent without itself overflowing.</summary>
@@ -160,6 +159,7 @@ internal static class MoveTowardAndEmitterClaims {
 
         return null;
     }
+
     /// <summary>The scalar segments the scalar move sweep runs between.</summary>
     private static readonly (long Current, long Target)[] ScalarSegments = [
         (0, 10), (0, -10), (-5, 5), (100, -100), (2, 3), (-2, -3), (7, 7),
@@ -223,7 +223,7 @@ internal static class MoveTowardAndEmitterClaims {
                 var remaining = FixedQ4816.Abs(value: (target - moved));
 
                 if ((remaining + step) != separation) {
-                    return $"a step of {step} from {current} toward {target} left {remaining} to go; remaining+step is {remaining + step} rather than the separation {separation}";
+                    return $"a step of {step} from {current} toward {target} left {remaining} to go; remaining+step is {(remaining + step)} rather than the separation {separation}";
                 }
 
                 if (target != current) {
@@ -253,12 +253,13 @@ internal static class MoveTowardAndEmitterClaims {
 
             foreach (var maxDeltaRaw in CarrierExtremeSteps) {
                 var maxDelta = FixedQ4816.FromRawBits(value: maxDeltaRaw);
+
                 var (landing, signX, signY, signZ) = Oracles.MoveTowardVerdict(
                     currentX: currentRaw.X, currentY: currentRaw.Y, currentZ: currentRaw.Z,
-                    targetX: targetRaw.X, targetY: targetRaw.Y, targetZ: targetRaw.Z,
-                    maxDeltaRaw: maxDeltaRaw
+                    maxDeltaRaw: maxDeltaRaw, targetX: targetRaw.X, targetY: targetRaw.Y,
+                    targetZ: targetRaw.Z
                 );
-                var actual = FixedVector3.MoveToward(current: current, target: target, maxDelta: maxDelta);
+                var actual = FixedVector3.MoveToward(current: current, maxDelta: maxDelta, target: target);
 
                 if (landing) {
                     if (actual != target) {
@@ -295,6 +296,7 @@ internal static class MoveTowardAndEmitterClaims {
 
         return null;
     }
+
     /// <summary>Whether a moved axis is consistent with the independent oracle's exact displacement sign: either the
     /// axis did not move at all (legitimate when the fixed-point direction rounds a tiny per-axis share to zero), or
     /// it moved in exactly the sign the oracle reports.</summary>
@@ -309,6 +311,7 @@ internal static class MoveTowardAndEmitterClaims {
 
         return ((0 == actualSign) || (actualSign == expectedSign));
     }
+
     /// <summary>Proves <see cref="FixedQ4816.MoveToward"/> does not teleport across the carrier at the opposing raw
     /// extremes — the exact scalar counterpart of <see cref="MoveTowardCarrierExtremesSurface"/>: every result matches
     /// an independent <c>BigInteger</c> displacement oracle EXACTLY, to the raw.</summary>
@@ -320,8 +323,8 @@ internal static class MoveTowardAndEmitterClaims {
 
             foreach (var maxDeltaRaw in CarrierExtremeSteps) {
                 var maxDelta = FixedQ4816.FromRawBits(value: maxDeltaRaw);
-                var expectedRaw = Oracles.MoveTowardRaw(currentRaw: currentRaw, targetRaw: targetRaw, maxDeltaRaw: maxDeltaRaw);
-                var actual = FixedQ4816.MoveToward(current: current, target: target, maxDelta: maxDelta);
+                var expectedRaw = Oracles.MoveTowardRaw(currentRaw: currentRaw, maxDeltaRaw: maxDeltaRaw, targetRaw: targetRaw);
+                var actual = FixedQ4816.MoveToward(current: current, maxDelta: maxDelta, target: target);
 
                 if (actual.Value != expectedRaw) {
                     return $"MoveToward({current}, {target}, maxDelta raw {maxDeltaRaw}) returned raw {actual.Value}, expected {expectedRaw} from the independent BigInteger displacement oracle";

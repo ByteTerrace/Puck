@@ -57,7 +57,7 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
 
         foreach (var point in (authored.Points ?? [])) {
             var derivedMass = ((compiledIndex < compiled.Attractors.Length)
-                ? DescribeFixed(compiled.Attractors[compiledIndex].Mass)
+                ? DescribeFixed(value: compiled.Attractors[compiledIndex].Mass)
                 : "uncompiled"
             );
 

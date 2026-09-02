@@ -36,26 +36,26 @@ public sealed class CounterpartAttestationLawTests {
         var west = Quilt(name: "west", counterpart: "east", document: "east.world.json", center: new Vector3(x: 10f, y: 0f, z: 0f), yaw: 90f, admission: [trust]);
         var east = Quilt(name: "east", counterpart: "west", document: "west.world.json", center: new Vector3(x: -10f, y: 0f, z: 0f), yaw: -90f, admission: [trust]);
 
-        Assert.True(WorldCounterpartAttestation.TryCompose(definition: east, document: "east.world.json", attestation: out var attested, reason: out var composeReason), composeReason);
+        Assert.True(condition: WorldCounterpartAttestation.TryCompose(attestation: out var attested, definition: east, document: "east.world.json", reason: out var composeReason), userMessage: composeReason);
 
         var codec = new CborAttestationCodec();
 
-        Assert.True(condition: TryVerifySigned(codec: codec, key: key, domain: domain, subject: "counterpart", entries: [trust], attestation: attested!, verified: out var verified, reason: out var verifyReason), userMessage: verifyReason);
-        Assert.True(WorldDefinitionValidator.TryValidate(definition: west, reason: out var accepted, neighbours: new StubResolver(attestation: verified!)), accepted);
+        Assert.True(condition: TryVerifySigned(attestation: attested!, codec: codec, domain: domain, entries: [trust], key: key, reason: out var verifyReason, subject: "counterpart", verified: out var verified), userMessage: verifyReason);
+        Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: west, reason: out var accepted, neighbours: new StubResolver(attestation: verified!)), userMessage: accepted);
 
         // A counterpart that widens its half of the seam after signing does not match what this side authored.
         var tampered = (verified! with {
             Edges = [(verified.Edges[0] with { Boundary = (verified.Edges[0].Boundary with { Width = 9f }) })],
         });
 
-        Assert.False(WorldDefinitionValidator.TryValidate(definition: west, reason: out var refused, neighbours: new StubResolver(attestation: tampered)));
-        Assert.Contains(expectedSubstring: "but neighbour 'east.world.json'/'east' is", actualString: refused, comparisonType: StringComparison.Ordinal);
+        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: west, reason: out var refused, neighbours: new StubResolver(attestation: tampered)));
+        Assert.Contains(actualString: refused, comparisonType: StringComparison.Ordinal, expectedSubstring: "but neighbour 'east.world.json'/'east' is");
 
         // A counterpart that stops pointing back refuses by its own name, not by the extent one.
         var nonReciprocal = (verified with { Edges = [(verified.Edges[0] with { Counterpart = "elsewhere" })] });
 
-        Assert.False(WorldDefinitionValidator.TryValidate(definition: west, reason: out var broken, neighbours: new StubResolver(attestation: nonReciprocal)));
-        Assert.Contains(expectedSubstring: "is not reciprocal", actualString: broken, comparisonType: StringComparison.Ordinal);
+        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: west, reason: out var broken, neighbours: new StubResolver(attestation: nonReciprocal)));
+        Assert.Contains(actualString: broken, comparisonType: StringComparison.Ordinal, expectedSubstring: "is not reciprocal");
     }
     [Fact]
     public void AnUnsignedOrForeignClaim_NeverBecomesAnAttestation() {
@@ -72,18 +72,18 @@ public sealed class CounterpartAttestationLawTests {
             Grants: []);
         var east = Quilt(name: "east", counterpart: "west", document: "west.world.json", center: new Vector3(x: -10f, y: 0f, z: 0f), yaw: -90f, admission: [trust]);
 
-        Assert.True(WorldCounterpartAttestation.TryCompose(definition: east, document: "east.world.json", attestation: out var attested, reason: out _));
+        Assert.True(condition: WorldCounterpartAttestation.TryCompose(attestation: out var attested, definition: east, document: "east.world.json", reason: out _));
 
         var codec = new CborAttestationCodec();
 
-        Assert.False(condition: TryVerifySigned(codec: codec, key: stranger, domain: domain, subject: "counterpart", entries: [trust], attestation: attested!, verified: out _, reason: out var strangerReason));
+        Assert.False(condition: TryVerifySigned(attestation: attested!, codec: codec, domain: domain, entries: [trust], key: stranger, reason: out var strangerReason, subject: "counterpart", verified: out _));
         Assert.NotEmpty(collection: strangerReason);
 
         // The control: the trusted key over the same payload does verify, so the refusal is about the signer.
-        Assert.True(condition: TryVerifySigned(codec: codec, key: trusted, domain: domain, subject: "counterpart", entries: [trust], attestation: attested!, verified: out _, reason: out var trustedReason), userMessage: trustedReason);
+        Assert.True(condition: TryVerifySigned(attestation: attested!, codec: codec, domain: domain, entries: [trust], key: trusted, reason: out var trustedReason, subject: "counterpart", verified: out _), userMessage: trustedReason);
 
         // A world with no key-bearing admission row believes no border claim at all.
-        Assert.False(condition: TryVerifySigned(codec: codec, key: trusted, domain: domain, subject: "counterpart", entries: [], attestation: attested!, verified: out _, reason: out var noTrust));
+        Assert.False(condition: TryVerifySigned(attestation: attested!, codec: codec, domain: domain, entries: [], key: trusted, reason: out var noTrust, subject: "counterpart", verified: out _));
         Assert.Contains(actualString: noTrust, comparisonType: StringComparison.Ordinal, expectedSubstring: "no key-bearing admission entries");
     }
     // H2: the attestation's own signed payload is what a peer without the document reads its geometry back from —
@@ -92,25 +92,25 @@ public sealed class CounterpartAttestationLawTests {
     public void AttestedEdgeBoundaryRoundTripsToTheSameCompiledFrame() {
         var definition = Fixtures.BuildDocument() with {
             References = [
-                new WorldReference(WorldSafeName.Parse("east-ref"), "east.world.json"),
-                new WorldReference(WorldSafeName.Parse("north-ref"), "north.world.json"),
+                new WorldReference(WorldSafeName.Parse(candidate: "east-ref"), "east.world.json"),
+                new WorldReference(WorldSafeName.Parse(candidate: "north-ref"), "north.world.json"),
             ],
             Destinations = [
-                new WorldDestination(WorldSafeName.Parse("east"), "east-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
-                new WorldDestination(WorldSafeName.Parse("north"), "north-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
+                new WorldDestination(WorldSafeName.Parse(candidate: "east"), "east-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
+                new WorldDestination(WorldSafeName.Parse(candidate: "north"), "north-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
             ],
             Adjacencies = [
-                new WorldAdjacency(WorldSafeName.Parse("east-edge"), "east", "west-edge", new WorldAdjacencyBoundary(Center: new Vector3(x: 10f, y: 0f, z: 0f), OutwardYawDegrees: 90f, OutwardPitchDegrees: 0f, Width: 8f, Height: 6f)),
-                new WorldAdjacency(WorldSafeName.Parse("north-edge"), "north", "south-edge", new WorldAdjacencyBoundary(Center: new Vector3(x: 0f, y: 0f, z: 10f), OutwardYawDegrees: 0f, OutwardPitchDegrees: 30f, Width: 6f, Height: 6f)),
+                new WorldAdjacency(WorldSafeName.Parse(candidate: "east-edge"), "east", "west-edge", new WorldAdjacencyBoundary(Center: new Vector3(x: 10f, y: 0f, z: 0f), OutwardYawDegrees: 90f, OutwardPitchDegrees: 0f, Width: 8f, Height: 6f)),
+                new WorldAdjacency(WorldSafeName.Parse(candidate: "north-edge"), "north", "south-edge", new WorldAdjacencyBoundary(Center: new Vector3(x: 0f, y: 0f, z: 10f), OutwardYawDegrees: 0f, OutwardPitchDegrees: 30f, Width: 6f, Height: 6f)),
             ],
         };
 
-        Assert.True(WorldCounterpartAttestation.TryCompose(definition: definition, document: "self.world.json", attestation: out var attestation, reason: out var composeReason), composeReason);
+        Assert.True(condition: WorldCounterpartAttestation.TryCompose(attestation: out var attestation, definition: definition, document: "self.world.json", reason: out var composeReason), userMessage: composeReason);
 
         var payload = WorldCounterpartAttestationProtocol.Payload(attestation: attestation!);
         var roundTripped = JsonSerializer.Deserialize(utf8Json: payload, jsonTypeInfo: WorldJsonContext.Default.WorldCounterpartAttestation);
 
-        Assert.NotNull(roundTripped);
+        Assert.NotNull(@object: roundTripped);
         Assert.Equal(attestation!.Document, roundTripped!.Document);
         Assert.Equal(attestation.Edges.Count, roundTripped.Edges.Count);
 
@@ -134,7 +134,7 @@ public sealed class CounterpartAttestationLawTests {
             world: worldName
         );
 
-        Assert.True(WorldCounterpartAttestation.TryCompose(attestation: out var attestation, definition: corner, document: $"owner/{owner:D}/{worldName}", reason: out var composeReason), composeReason);
+        Assert.True(condition: WorldCounterpartAttestation.TryCompose(attestation: out var attestation, definition: corner, document: $"owner/{owner:D}/{worldName}", reason: out var composeReason), userMessage: composeReason);
 
         var wrapper = oracle.SignCounterpartClaim(
             attestation: attestation!,
@@ -159,7 +159,7 @@ public sealed class CounterpartAttestationLawTests {
             ["right.world.json"] = right,
         }), apiResolver)!;
 
-        Assert.True(WorldDefinitionValidator.TryValidate(definition: source, neighbours: resolver, reason: out var accepted), accepted);
+        Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: source, neighbours: resolver, reason: out var accepted), userMessage: accepted);
         Assert.Contains(expected: $"owner/{owner:D}/{worldName}", collection: handler.RequestedPaths);
     }
     // The subject binding is load-bearing, not decorative: a claim genuinely vouched-for by the SAME trusted root,
@@ -176,7 +176,7 @@ public sealed class CounterpartAttestationLawTests {
             world: worldName
         );
 
-        Assert.True(WorldCounterpartAttestation.TryCompose(attestation: out var attestation, definition: corner, document: $"owner/{owner:D}/{worldName}", reason: out var composeReason), composeReason);
+        Assert.True(condition: WorldCounterpartAttestation.TryCompose(attestation: out var attestation, definition: corner, document: $"owner/{owner:D}/{worldName}", reason: out var composeReason), userMessage: composeReason);
 
         // The stranger's own claim verifies cleanly against the same root — it's a different onboarded user, not a
         // forger — but its subject is not the oid this key is being resolved under.
@@ -218,7 +218,7 @@ public sealed class CounterpartAttestationLawTests {
             world: worldName
         );
 
-        Assert.True(WorldCounterpartAttestation.TryCompose(attestation: out var attestation, definition: corner, document: $"owner/{owner:D}/{worldName}", reason: out var composeReason), composeReason);
+        Assert.True(condition: WorldCounterpartAttestation.TryCompose(attestation: out var attestation, definition: corner, document: $"owner/{owner:D}/{worldName}", reason: out var composeReason), userMessage: composeReason);
 
         var wrapper = untrustedOracle.SignCounterpartClaim(
             attestation: attestation!,
@@ -250,60 +250,60 @@ public sealed class CounterpartAttestationLawTests {
         var cornerReference = new WorldReference(Name: WorldSafeName.Parse(candidate: "corner-ref"), Owner: owner, World: WorldSafeName.Parse(candidate: world));
         var source = Fixtures.BuildDocument() with {
             References = [
-                new WorldReference(WorldSafeName.Parse("left-ref"), "left.world.json"),
-                new WorldReference(WorldSafeName.Parse("right-ref"), "right.world.json"),
+                new WorldReference(WorldSafeName.Parse(candidate: "left-ref"), "left.world.json"),
+                new WorldReference(WorldSafeName.Parse(candidate: "right-ref"), "right.world.json"),
                 cornerReference,
             ],
             Destinations = [
-                new WorldDestination(WorldSafeName.Parse("left"), "left-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
-                new WorldDestination(WorldSafeName.Parse("right"), "right-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
-                new WorldDestination(WorldSafeName.Parse("corner"), "corner-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
+                new WorldDestination(WorldSafeName.Parse(candidate: "left"), "left-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
+                new WorldDestination(WorldSafeName.Parse(candidate: "right"), "right-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
+                new WorldDestination(WorldSafeName.Parse(candidate: "corner"), "corner-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
             ],
             Adjacencies = [
-                new WorldAdjacency(WorldSafeName.Parse("left-edge"), "left", "source-edge", boundary(90f)),
-                new WorldAdjacency(WorldSafeName.Parse("right-edge"), "right", "source-edge", boundary(0f)),
+                new WorldAdjacency(WorldSafeName.Parse(candidate: "left-edge"), "left", "source-edge", boundary(90f)),
+                new WorldAdjacency(WorldSafeName.Parse(candidate: "right-edge"), "right", "source-edge", boundary(0f)),
             ],
         };
         var left = Fixtures.BuildDocument() with {
             References = [
-                new WorldReference(WorldSafeName.Parse("source-ref"), "source.world.json"),
+                new WorldReference(WorldSafeName.Parse(candidate: "source-ref"), "source.world.json"),
                 cornerReference,
             ],
             Destinations = [
-                new WorldDestination(WorldSafeName.Parse("source"), "source-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
-                new WorldDestination(WorldSafeName.Parse("corner"), "corner-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
+                new WorldDestination(WorldSafeName.Parse(candidate: "source"), "source-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
+                new WorldDestination(WorldSafeName.Parse(candidate: "corner"), "corner-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
             ],
             Adjacencies = [
-                new WorldAdjacency(WorldSafeName.Parse("source-edge"), "source", "left-edge", boundary(-90f)),
-                new WorldAdjacency(WorldSafeName.Parse("corner-edge"), "corner", "left-edge", boundary(0f)),
+                new WorldAdjacency(WorldSafeName.Parse(candidate: "source-edge"), "source", "left-edge", boundary(-90f)),
+                new WorldAdjacency(WorldSafeName.Parse(candidate: "corner-edge"), "corner", "left-edge", boundary(0f)),
             ],
         };
         var right = Fixtures.BuildDocument() with {
             References = [
-                new WorldReference(WorldSafeName.Parse("source-ref"), "source.world.json"),
+                new WorldReference(WorldSafeName.Parse(candidate: "source-ref"), "source.world.json"),
                 cornerReference,
             ],
             Destinations = [
-                new WorldDestination(WorldSafeName.Parse("source"), "source-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
-                new WorldDestination(WorldSafeName.Parse("corner"), "corner-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
+                new WorldDestination(WorldSafeName.Parse(candidate: "source"), "source-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
+                new WorldDestination(WorldSafeName.Parse(candidate: "corner"), "corner-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
             ],
             Adjacencies = [
-                new WorldAdjacency(WorldSafeName.Parse("source-edge"), "source", "right-edge", boundary(180f)),
-                new WorldAdjacency(WorldSafeName.Parse("corner-edge"), "corner", "right-edge", boundary(90f)),
+                new WorldAdjacency(WorldSafeName.Parse(candidate: "source-edge"), "source", "right-edge", boundary(180f)),
+                new WorldAdjacency(WorldSafeName.Parse(candidate: "corner-edge"), "corner", "right-edge", boundary(90f)),
             ],
         };
         var corner = Fixtures.BuildDocument() with {
             References = [
-                new WorldReference(WorldSafeName.Parse("left-ref"), "left.world.json"),
-                new WorldReference(WorldSafeName.Parse("right-ref"), "right.world.json"),
+                new WorldReference(WorldSafeName.Parse(candidate: "left-ref"), "left.world.json"),
+                new WorldReference(WorldSafeName.Parse(candidate: "right-ref"), "right.world.json"),
             ],
             Destinations = [
-                new WorldDestination(WorldSafeName.Parse("left"), "left-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
-                new WorldDestination(WorldSafeName.Parse("right"), "right-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
+                new WorldDestination(WorldSafeName.Parse(candidate: "left"), "left-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
+                new WorldDestination(WorldSafeName.Parse(candidate: "right"), "right-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
             ],
             Adjacencies = [
-                new WorldAdjacency(WorldSafeName.Parse("left-edge"), "left", "corner-edge", boundary(180f)),
-                new WorldAdjacency(WorldSafeName.Parse("right-edge"), "right", "corner-edge", boundary(-90f)),
+                new WorldAdjacency(WorldSafeName.Parse(candidate: "left-edge"), "left", "corner-edge", boundary(180f)),
+                new WorldAdjacency(WorldSafeName.Parse(candidate: "right-edge"), "right", "corner-edge", boundary(-90f)),
             ],
         };
 
@@ -495,7 +495,7 @@ public sealed class CounterpartAttestationLawTests {
                 Name: WorldSafeName.Parse(candidate: name),
                 Destination: "neighbour",
                 Counterpart: counterpart,
-                Boundary: new WorldAdjacencyBoundary(Center: center, OutwardYawDegrees: yaw, OutwardPitchDegrees: 0f, Width: 8f, Height: 6f))],
+                Boundary: new WorldAdjacencyBoundary(Center: center, Height: 6f, OutwardPitchDegrees: 0f, OutwardYawDegrees: yaw, Width: 8f))],
         });
     }
 

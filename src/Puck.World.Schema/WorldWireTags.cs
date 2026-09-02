@@ -47,7 +47,6 @@ public static class WorldWireTags {
     /// wire value (2) — distinct from an undeclared byte for callers that report the two differently.</summary>
     /// <param name="wire">The wire byte.</param>
     public static bool IsRetiredCapabilityWire(byte wire) => (wire == 2);
-
     /// <summary>Maps a <see cref="PrincipalKind"/> to its pinned wire byte. <see cref="PrincipalKind.Document"/> and
     /// <see cref="PrincipalKind.World"/> have no live wire value — a document principal never acts, and the world's
     /// own program is stamped structurally, never carried on a submission — so both fail here.</summary>
@@ -78,7 +77,6 @@ public static class WorldWireTags {
             default: value = default; return false;
         }
     }
-
     /// <summary>Maps a <see cref="GrantSubjectKind"/> to its pinned wire byte. Wire value 8 is retired (the removed
     /// <c>Table</c> subject) and is never reassigned.</summary>
     /// <param name="value">The subject kind.</param>
@@ -126,7 +124,6 @@ public static class WorldWireTags {
     /// wire value (8) — distinct from an undeclared byte for callers that report the two differently.</summary>
     /// <param name="wire">The wire byte.</param>
     public static bool IsRetiredGrantSubjectWire(byte wire) => (wire == 8);
-
     /// <summary>Maps a <see cref="WorldSection"/> to its wire byte — its own declaration ordinal, validated rather
     /// than assumed, so a future retirement in this enum has exactly one place to gain a gap. No member is retired
     /// today.</summary>

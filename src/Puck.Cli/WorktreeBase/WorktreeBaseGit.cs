@@ -6,7 +6,7 @@ namespace Puck.Cli.WorktreeBase;
 internal static class WorktreeBaseGit {
     public static WorktreeBaseGitResult Run(string path, params string[] arguments) {
         try {
-            var result = CliProcess.RunCapturedRaw(fileName: "git", arguments: ["-C", path, .. arguments]);
+            var result = CliProcess.RunCapturedRaw(arguments: ["-C", path, .. arguments], fileName: "git");
 
             return new WorktreeBaseGitResult(ExitCode: result.ExitCode, Stderr: result.Stderr.Trim(), Stdout: result.Stdout.Trim());
         } catch (Exception exception) when ((exception is InvalidOperationException or System.ComponentModel.Win32Exception)) {

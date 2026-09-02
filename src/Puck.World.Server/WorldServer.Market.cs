@@ -400,7 +400,8 @@ public sealed partial class WorldServer {
             ? listing.CurrentBid
             : 0L
         );
-        _ = settlement.TryBalance(cell: buyerCell, balance: out var buyerBalance);
+
+        _ = settlement.TryBalance(balance: out var buyerBalance, cell: buyerCell);
         var effectiveCost = (buyoutPrice - refundToSelf);
 
         if (buyerBalance < effectiveCost) {
@@ -433,6 +434,7 @@ public sealed partial class WorldServer {
             amount: buyoutPrice,
             feeBasisPoints: market.FeeBasisPoints
         );
+
         _ = settlement.Credit(
             cell: MarketCell(row: listing.CurrencyRow, key: sellerKey),
             amount: (buyoutPrice - fee)
@@ -699,7 +701,7 @@ public sealed partial class WorldServer {
         var settlement = new WorldEconomicSettlement(source: current, tick: tick);
         var sellerCell = MarketCell(row: mutation.ItemRow, key: sellerKey);
 
-        _ = settlement.TryBalance(cell: sellerCell, balance: out var sellerBalance);
+        _ = settlement.TryBalance(balance: out var sellerBalance, cell: sellerCell);
 
         if (sellerBalance < mutation.Quantity) {
             reason = $"seller holds {sellerBalance} of '{mutation.ItemRow}', short of the {mutation.Quantity} listed";
@@ -841,7 +843,7 @@ public sealed partial class WorldServer {
         var settlement = new WorldEconomicSettlement(source: current, tick: tick);
         var bidderCell = MarketCell(row: listing.CurrencyRow, key: bidderKey);
 
-        _ = settlement.TryBalance(cell: bidderCell, balance: out var bidderBalance);
+        _ = settlement.TryBalance(balance: out var bidderBalance, cell: bidderCell);
 
         if (bidderBalance < netCharge) {
             reason = (isSelfRaise
@@ -1018,6 +1020,7 @@ public sealed partial class WorldServer {
                 amount: listing.CurrentBid,
                 feeBasisPoints: market.FeeBasisPoints
             );
+
             _ = settlement.Release(
                 row: listing.CurrencyRow,
                 amount: listing.CurrentBid

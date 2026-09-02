@@ -1283,7 +1283,6 @@ internal static partial class Subjects {
 
         return null;
     }
-
     /// <summary>Pcg3dLatticeNoise.Pcg3d against a wide-integer reference over edge and drawn operands, ValueNoise01's
     /// [0, 1] bound, and ValueNoise01's exact collapse onto the public Pcg3d corner at whole-cell boundaries.</summary>
     public static string? Pcg3dLatticeNoiseReferenceAndCorners() {
@@ -1339,11 +1338,11 @@ internal static partial class Subjects {
         // reaches the identical way.
         for (var nx = 0; (nx <= 5); ++nx) {
             for (var nz = 0; (nz <= 5); ++nz) {
-                foreach (var noiseCells in (ReadOnlySpan<int>)[1, 7, 16]) {
+                foreach (var noiseCells in ((ReadOnlySpan<int>)[1, 7, 16])) {
                     var seed = generator.NextUInt32();
                     var corner = FixedQ4816.FromRawBits(value: ((long)(Pcg3dLatticeNoise.Pcg3d(
-                        x: (uint)nx,
-                        y: (uint)nz,
+                        x: ((uint)nx),
+                        y: ((uint)nz),
                         z: seed
                     ).X >> 16)));
                     var sample = Pcg3dLatticeNoise.ValueNoise01(
@@ -1360,6 +1359,7 @@ internal static partial class Subjects {
 
         return null;
     }
+
     // Pcg3d against Oracles.Pcg3dReference — the identical Jarzynski & Olano mix, formed independently in
     // BigInteger with the carrier reduction taken explicitly, where the subject relies on unchecked uint wrap.
     private static string? Pcg3dAgreesWithReference(uint x, uint y, uint z) {

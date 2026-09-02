@@ -39,11 +39,11 @@ public sealed class LinkLivenessLawTests {
 
             drops += fired;
             // Strictly before the threshold nothing may fire; on the threshold tick exactly one edge; after it, none.
-            Assert.Equal(expected: ((tick == grace) ? 1 : 0), actual: fired);
+            Assert.Equal(actual: fired, expected: ((tick == grace) ? 1 : 0));
             Assert.Equal(expected: ((long)tick), actual: fixture.Server.Events.LinkStalenessTicks(adjacencyName: LinkRow));
         }
 
-        Assert.Equal(expected: 1, actual: drops);
+        Assert.Equal(actual: drops, expected: 1);
     }
     [Fact]
     public void AnUnauthoredGraceSensesNothingAndReadsZeroForever() {
@@ -152,7 +152,7 @@ public sealed class LinkLivenessLawTests {
         }
 
         Assert.NotEmpty(collection: recorded);
-        Assert.Equal(expected: recorded, actual: replayed);
+        Assert.Equal(actual: replayed, expected: recorded);
     }
     [Fact]
     public void TheLinkDeliveryLeafSurvivesTheOnDiskTapeRoundTrip() {
@@ -191,7 +191,7 @@ public sealed class LinkLivenessLawTests {
             .Select(selector: static entry => entry.GetType().Name)
             .ToHashSet(comparer: StringComparer.Ordinal);
 
-        Assert.Contains(expected: "LinkDelivery", collection: kinds);
+        Assert.Contains(collection: kinds, expected: "LinkDelivery");
     }
     [Fact]
     public void EverySubmittedMutationTapesWithTheEnvelopesOwnActor() {
@@ -202,8 +202,8 @@ public sealed class LinkLivenessLawTests {
         fixture.Server.MutationTap = (_, actor) => observed.Add(item: actor);
 
         var peer = WorldPrincipal.Peer(
-            index: 4,
-            generation: 1
+            generation: 1,
+            index: 4
         );
 
         // A submission that never touches the loopback — the shape a forwarded traveller's write and an admitted
@@ -220,7 +220,7 @@ public sealed class LinkLivenessLawTests {
             ))
         ));
 
-        Assert.Equal(expected: [peer], actual: observed);
+        Assert.Equal(actual: observed, expected: [peer]);
 
         // The control: the two internal producers reach EnqueueMutation directly and must NOT tape — they re-derive
         // during a drive, so taping them would apply each twice.
@@ -229,9 +229,8 @@ public sealed class LinkLivenessLawTests {
             Row: new WorldStateRow(Name: WorldCellName.Parse(candidate: "internal-probe"), Kind: CellKind.Int)
         ));
 
-        Assert.Equal(expected: [peer], actual: observed);
+        Assert.Equal(actual: observed, expected: [peer]);
     }
-
     [Fact]
     public void LinkEdgesGateOnTheAdjacencyRowsOwnSubject() {
         var definition = SeamDocument(graceSeconds: 0.05f);
@@ -303,10 +302,10 @@ public sealed class LinkLivenessLawTests {
                     subject: subject
                 ).IsAllowed &&
                     fixture.Server.Grants.TryGetEventBudget(
+                    budget: out _,
                     capability: WorldCapability.Observe,
                     principal: addon,
-                    subject: subject,
-                    budget: out _
+                    subject: subject
                 ));
             });
 

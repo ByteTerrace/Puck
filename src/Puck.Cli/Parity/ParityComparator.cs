@@ -5,7 +5,6 @@ namespace Puck.Cli.Parity;
 /// <summary>One capture's named checks. A gate failure is the whole list — state and pixel never run once the
 /// content gate refuses a capture, because there is nothing trustworthy left to measure.</summary>
 internal sealed record ParityCaptureVerdict(string Name, bool Passed, string Detail);
-
 /// <summary>One capture's full comparison outcome: every verdict computed for it, and — only when at least one
 /// verdict failed — the decoded frames and delta heatmap evidence writing needs.</summary>
 internal sealed record ParityCaptureOutcome(
@@ -18,7 +17,6 @@ internal sealed record ParityCaptureOutcome(
 ) {
     public bool Failed => Verdicts.Any(predicate: static verdict => !verdict.Passed);
 }
-
 /// <summary>
 /// The two-verdict comparator core: per capture, a content gate that must hold before any pixel work runs, then
 /// an exact stateHash check and a per-tile pixel check — computed and reported independently of each other once
@@ -44,7 +42,7 @@ internal static class ParityComparator {
         }
 
         foreach (var key in orderedKeys) {
-            if (!contract.TryResolveStation(station: key.Station, resolved: out var stationContract)) {
+            if (!contract.TryResolveStation(resolved: out var stationContract, station: key.Station)) {
                 error = $"contract names no entry for station '{key.Station}' and declares no 'default' fallback.";
 
                 return false;
@@ -63,12 +61,12 @@ internal static class ParityComparator {
         if ((leftCapture is null) || (rightCapture is null)) {
             var missingSide = ((leftCapture is null) ? "left" : "right");
 
-            return GateFailure(station: station, tick: tick, reason: $"missing-frame: capture is absent from the {missingSide} manifest");
+            return GateFailure(reason: $"missing-frame: capture is absent from the {missingSide} manifest", station: station, tick: tick);
         }
         if (leftCapture.CameraInside || rightCapture.CameraInside) {
             var side = ((leftCapture.CameraInside && rightCapture.CameraInside) ? "both" : (leftCapture.CameraInside ? "left" : "right"));
 
-            return GateFailure(station: station, tick: tick, reason: $"cameraInside: refused on {side}");
+            return GateFailure(reason: $"cameraInside: refused on {side}", station: station, tick: tick);
         }
 
         var leftFramePath = Path.Combine(path1: leftDir, path2: leftCapture.Frame!);
@@ -77,15 +75,15 @@ internal static class ParityComparator {
         if (!File.Exists(path: leftFramePath) || !File.Exists(path: rightFramePath)) {
             var missingSide = (!File.Exists(path: leftFramePath) ? "left" : "right");
 
-            return GateFailure(station: station, tick: tick, reason: $"missing-frame: {missingSide} frame file is not on disk");
+            return GateFailure(reason: $"missing-frame: {missingSide} frame file is not on disk", station: station, tick: tick);
         }
 
         foreach (var (material, floor) in stationContract.CensusFloor) {
-            var leftCount = leftCapture.Census!.GetValueOrDefault(key: material, defaultValue: 0);
-            var rightCount = rightCapture.Census!.GetValueOrDefault(key: material, defaultValue: 0);
+            var leftCount = leftCapture.Census!.GetValueOrDefault(defaultValue: 0, key: material);
+            var rightCount = rightCapture.Census!.GetValueOrDefault(defaultValue: 0, key: material);
 
             if ((leftCount < floor) || (rightCount < floor)) {
-                return GateFailure(station: station, tick: tick, reason: $"census-below-floor: material '{material}' floor {floor}, left {leftCount}, right {rightCount}");
+                return GateFailure(reason: $"census-below-floor: material '{material}' floor {floor}, left {leftCount}, right {rightCount}", station: station, tick: tick);
             }
         }
 
@@ -99,7 +97,7 @@ internal static class ParityComparator {
         }
 
         var verdicts = new List<ParityCaptureVerdict> {
-            new(Name: "GATE-OK", Passed: true, Detail: "content gate held"),
+            new(Detail: "content gate held", Name: "GATE-OK", Passed: true),
         };
 
         var stateMatches = string.Equals(a: leftCapture.StateHash, b: rightCapture.StateHash, comparisonType: StringComparison.Ordinal);
@@ -111,7 +109,7 @@ internal static class ParityComparator {
         if ((leftImage.Width != rightImage.Width) || (leftImage.Height != rightImage.Height)) {
             verdicts.Add(item: new ParityCaptureVerdict(Name: "PIXEL-FAILED", Passed: false, Detail: $"extent disagreement {leftImage.Width}x{leftImage.Height} vulkan-side vs {rightImage.Width}x{rightImage.Height} directx-side"));
 
-            return new ParityCaptureOutcome(Station: station, Tick: tick, Verdicts: verdicts, LeftFrame: leftImage, RightFrame: rightImage, HeatmapRgba: null);
+            return new ParityCaptureOutcome(HeatmapRgba: null, LeftFrame: leftImage, RightFrame: rightImage, Station: station, Tick: tick, Verdicts: verdicts);
         }
 
         var tileComparison = ParityTileComparer.Compare(left: leftImage, right: rightImage, tileMaxDeltaThreshold: stationContract.TileMaxDelta, tileMeanDeltaThreshold: stationContract.TileMeanDelta, tileSize: tileSize);
@@ -125,8 +123,8 @@ internal static class ParityComparator {
         // matching pixels is itself worth showing (an all-black heatmap proves the pixels, at least, agreed).
         var heatmap = ParityTileComparer.BuildHeatmap(left: leftImage, right: rightImage);
 
-        return new ParityCaptureOutcome(Station: station, Tick: tick, Verdicts: verdicts, LeftFrame: leftImage, RightFrame: rightImage, HeatmapRgba: heatmap);
+        return new ParityCaptureOutcome(HeatmapRgba: heatmap, LeftFrame: leftImage, RightFrame: rightImage, Station: station, Tick: tick, Verdicts: verdicts);
     }
     private static ParityCaptureOutcome GateFailure(string station, ulong tick, string reason) =>
-        new(Station: station, Tick: tick, Verdicts: [new ParityCaptureVerdict(Name: "GATE-FAILED", Passed: false, Detail: reason)], LeftFrame: null, RightFrame: null, HeatmapRgba: null);
+        new(Station: station, Tick: tick, Verdicts: [new ParityCaptureVerdict(Detail: reason, Name: "GATE-FAILED", Passed: false)], LeftFrame: null, RightFrame: null, HeatmapRgba: null);
 }

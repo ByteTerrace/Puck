@@ -305,7 +305,7 @@ public readonly record struct FixedWorldKit(
             );
 
             planarDynamics = new FixedMotionDynamics(Planar: compiled.Compile(
-                stepTicks: (FixedTickConversion.TicksPerSecond / (ulong)simulationRateHz),
+                stepTicks: (FixedTickConversion.TicksPerSecond / ((ulong)simulationRateHz)),
                 ticksPerSecond: FixedTickConversion.TicksPerSecond
             ));
         }

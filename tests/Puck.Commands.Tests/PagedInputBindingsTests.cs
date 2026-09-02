@@ -672,6 +672,7 @@ public sealed class PagedInputBindingsTests {
             }
         }
     }
+
     [Fact]
     public void HeldCommandAuthoredAsAPressRowAndAReleaseRowDispatchesItsRelease() {
         var profile = BindingProfile.Compile(
@@ -694,12 +695,14 @@ public sealed class PagedInputBindingsTests {
 
         router.Capture(signal: InputSignal.Press(source: "mouse.button1"));
         var pressed = Assert.Single(collection: router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue).Lanes).Entries;
-        Assert.Contains(collection: pressed, filter: e => e.Dispatch && (e.Phase == CommandPhase.Started));
+
+        Assert.Contains(collection: pressed, filter: e => (e.Dispatch && (e.Phase == CommandPhase.Started)));
 
         router.Capture(signal: InputSignal.Release(source: "mouse.button1"));
         var lanes = router.SnapshotForTick(tick: 2UL, windowEndTick: ulong.MaxValue).Lanes;
+
         Assert.NotEmpty(collection: lanes);
-        Assert.Contains(collection: lanes[0].Entries, filter: e => e.Dispatch && (e.Phase == CommandPhase.Completed));
+        Assert.Contains(collection: lanes[0].Entries, filter: e => (e.Dispatch && (e.Phase == CommandPhase.Completed)));
     }
     [Fact]
     public void MultiSourceRowPressesAndReleasesFromEitherControlIndependently() {
@@ -711,21 +714,25 @@ public sealed class PagedInputBindingsTests {
 
         router.Capture(signal: InputSignal.Press(source: "gamepad.buttonSouth"));
         var padPress = Assert.Single(collection: router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue).Lanes).Entries;
-        Assert.Contains(collection: padPress, filter: e => e.Dispatch && (e.Phase == CommandPhase.Started));
+
+        Assert.Contains(collection: padPress, filter: e => (e.Dispatch && (e.Phase == CommandPhase.Started)));
 
         router.Capture(signal: InputSignal.Release(source: "gamepad.buttonSouth"));
         var padRelease = router.SnapshotForTick(tick: 2UL, windowEndTick: ulong.MaxValue).Lanes;
+
         Assert.NotEmpty(collection: padRelease);
-        Assert.Contains(collection: padRelease[0].Entries, filter: e => e.Dispatch && (e.Phase == CommandPhase.Completed));
+        Assert.Contains(collection: padRelease[0].Entries, filter: e => (e.Dispatch && (e.Phase == CommandPhase.Completed)));
 
         // The keyboard source presses and releases on its own, unaffected by the gamepad source's earlier cycle.
         router.Capture(signal: InputSignal.Press(source: "keyboard.space"));
         var keyPress = Assert.Single(collection: router.SnapshotForTick(tick: 3UL, windowEndTick: ulong.MaxValue).Lanes).Entries;
-        Assert.Contains(collection: keyPress, filter: e => e.Dispatch && (e.Phase == CommandPhase.Started));
+
+        Assert.Contains(collection: keyPress, filter: e => (e.Dispatch && (e.Phase == CommandPhase.Started)));
 
         router.Capture(signal: InputSignal.Release(source: "keyboard.space"));
         var keyRelease = router.SnapshotForTick(tick: 4UL, windowEndTick: ulong.MaxValue).Lanes;
+
         Assert.NotEmpty(collection: keyRelease);
-        Assert.Contains(collection: keyRelease[0].Entries, filter: e => e.Dispatch && (e.Phase == CommandPhase.Completed));
+        Assert.Contains(collection: keyRelease[0].Entries, filter: e => (e.Dispatch && (e.Phase == CommandPhase.Completed)));
     }
 }

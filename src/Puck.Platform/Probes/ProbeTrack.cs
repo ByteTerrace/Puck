@@ -101,7 +101,7 @@ public sealed class ProbeTrackPlayer {
                 throw new InvalidDataException(message: $"probe track sample {index} has t {sample.T}; every t must be finite and non-negative.");
             }
 
-            var ticks = ((long)Math.Round(sample.T * Stopwatch.Frequency));
+            var ticks = ((long)Math.Round(a: (sample.T * Stopwatch.Frequency)));
 
             if (ticks <= previousTicks) {
                 throw new InvalidDataException(message: $"probe track sample {index} has t {sample.T}, which does not ascend from the previous sample's.");
@@ -111,7 +111,7 @@ public sealed class ProbeTrackPlayer {
             previousTicks = ticks;
         }
 
-        var periodTicks = Math.Max(val1: 1L, val2: (long)Math.Round(Stopwatch.Frequency / document.RateHz));
+        var periodTicks = Math.Max(val1: 1L, val2: ((long)Math.Round(a: (Stopwatch.Frequency / document.RateHz))));
 
         m_channelCount = document.Channels;
         m_loopTicks = (previousTicks + periodTicks);
@@ -141,7 +141,7 @@ public sealed class ProbeTrackPlayer {
 
         var index = m_cursor;
 
-        while (((index + 1) < m_sampleTicks.Length) && (m_sampleTicks[index + 1] <= offsetTicks)) {
+        while (((index + 1) < m_sampleTicks.Length) && (m_sampleTicks[(index + 1)] <= offsetTicks)) {
             index++;
         }
 
@@ -152,7 +152,7 @@ public sealed class ProbeTrackPlayer {
         m_cursor = index;
 
         var sample = m_samples[index];
-        var captureTimestamp = (m_originTimestamp + (loop * m_loopTicks) + m_sampleTicks[index]);
+        var captureTimestamp = ((m_originTimestamp + (loop * m_loopTicks)) + m_sampleTicks[index]);
         var channels = default(ProbeChannelValues);
 
         for (var channel = 0; (channel < m_channelCount); channel++) {

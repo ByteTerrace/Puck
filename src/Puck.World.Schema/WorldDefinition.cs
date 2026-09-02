@@ -352,6 +352,7 @@ public sealed record WorldDefinition(
 
         return groups;
     }
+
     /// <summary>Gets the render-lever boot defaults and quality-preset table — ABSENT resolves to
     /// <see cref="WorldRenderDefaults.Absent"/> (inert levers, no presets); the standard posture is authored in
     /// <c>standard.world.json</c>.</summary>
@@ -451,7 +452,6 @@ public sealed record WorldDefinition(
             return cache.Fields;
         }
     }
-
     private WorldStateCatalog GetStateCatalog() {
         var cache = GetCompilationCache(state: StateRaw);
 
@@ -466,7 +466,6 @@ public sealed record WorldDefinition(
             return cache.StateCatalog;
         }
     }
-
     private WorldFieldProgram? GetFieldProgram() {
         var cache = GetCompilationCache(state: StateRaw);
 
@@ -498,7 +497,6 @@ public sealed record WorldDefinition(
             return cache.FieldProgram;
         }
     }
-
     private void PreserveCompatibleCompilation(WorldDefinition target) {
         if (!TryGetCompilationCache(state: StateRaw, cache: out var sourceCache)) {
             return;
@@ -512,9 +510,9 @@ public sealed record WorldDefinition(
                     var candidate = WorldFieldsSection.Compile(state: target.StateRaw);
 
                     targetCache.Fields = (
-                        (sourceCache.Fields is not null) &&
+                        ((sourceCache.Fields is not null) &&
                         (candidate is not null) &&
-                        sourceCache.Fields.HasSameCompilation(other: candidate)
+                        sourceCache.Fields.HasSameCompilation(other: candidate))
                             ? sourceCache.Fields
                             : candidate
                     );
@@ -541,11 +539,11 @@ public sealed record WorldDefinition(
                     targetCache.FieldsCompiled = true;
                     targetCache.StateCatalog = catalog;
                     targetCache.FieldProgram = (
-                        (sourceCache.FieldProgram is not null) &&
+                        ((sourceCache.FieldProgram is not null) &&
                         (sourceCache.FieldProgramFields is not null) &&
                         (fields is not null) &&
                         ReferenceEquals(objA: sourceCache.FieldProgram.StateCatalog, objB: catalog) &&
-                        sourceCache.FieldProgramFields.HasSameProgram(other: fields)
+                        sourceCache.FieldProgramFields.HasSameProgram(other: fields))
                             ? sourceCache.FieldProgram
                             : ((fields is null)
                                 ? null
@@ -557,13 +555,11 @@ public sealed record WorldDefinition(
             }
         }
     }
-
     private static RuntimeCompilationCache GetCompilationCache(WorldStateSection? state) => (
         (state is null)
             ? s_absentStateCompilation
             : s_runtimeCompilationCaches.GetOrCreateValue(key: state)
     );
-
     private static bool TryGetCompilationCache(WorldStateSection? state, out RuntimeCompilationCache cache) {
         if (state is null) {
             cache = s_absentStateCompilation;

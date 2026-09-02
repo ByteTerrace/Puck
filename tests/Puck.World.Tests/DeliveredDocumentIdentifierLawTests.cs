@@ -23,17 +23,17 @@ public sealed class DeliveredDocumentIdentifierLawTests {
     private static WorldDefinition Delivered(WorldDefinition live, WorldDisclosureTier tier) {
         Assert.True(condition: WorldFederationCodec.TryDecodeDocument(
             body: WorldFederationCodec.EncodeDocument(
-                definition: live,
-                tier: tier,
                 authority: "127.0.0.1:5000",
-                revision: 3
+                definition: live,
+                revision: 3,
+                tier: tier
             ),
             definition: out var delivered,
             tier: out var decodedTier,
             failure: out var failure
         ), $"{tier} delivery refused: {failure.Detail}");
-        Assert.Equal(expected: tier, actual: decodedTier);
-        Assert.NotNull(delivered);
+        Assert.Equal(actual: decodedTier, expected: tier);
+        Assert.NotNull(@object: delivered);
 
         return delivered!;
     }
@@ -107,7 +107,7 @@ public sealed class DeliveredDocumentIdentifierLawTests {
             revision: 3
         );
 
-        Assert.NotNull(projection);
+        Assert.NotNull(@object: projection);
 
         var json = Encoding.UTF8.GetString(bytes: WorldProjection.Serialize(projection: projection!));
 

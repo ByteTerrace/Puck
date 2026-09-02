@@ -98,6 +98,7 @@ internal sealed class Win32PixelStream(CameraSensor sensor, int width, int heigh
     private byte[] m_pullBuffer = [];
 
     public LatestFrameBuffer Frames { get; } = new();
+
     public long FrameVersion => Frames.Version;
     public int Height => height;
     public long LastFrameTimestamp => Frames.LastTimestamp;
@@ -133,7 +134,9 @@ internal sealed class Win32SharedStream(CameraSensor sensor, int width, int heig
     public int LatestSlot => Slots.LatestSlot;
     public CameraCaptureFormat NativeFormat => nativeFormat;
     public CameraSensor Sensor => sensor;
+
     public LatestSlotPublication Slots { get; } = new();
+
     public SurfaceFormat TargetFormat => targetFormat;
     public Task<nint[]> Targets => m_targets.Task;
     public int Width => width;

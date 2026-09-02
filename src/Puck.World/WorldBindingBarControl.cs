@@ -47,6 +47,7 @@ internal sealed class WorldBindingBarControl {
     // swap or a layout-cell flip) — the one derivation a status call may hand out without allocating.
     private readonly WorldBindingBarLayout?[] m_compiledSource = new WorldBindingBarLayout?[PlayerRoster.MaxSlots];
     private readonly CompiledBindingBarLayout[] m_compiled = new CompiledBindingBarLayout[PlayerRoster.MaxSlots];
+
     private readonly WorldSeatBindings m_bindings;
     private readonly WorldClient m_client;
     private readonly WorldOverlayFacts m_facts;
@@ -115,7 +116,7 @@ internal sealed class WorldBindingBarControl {
 
         var preferences = m_bindings.ProfileBindings(slot: slot)?.BindingBar;
         // Which layout is live is a state cell's answer, read now: the bar's shape is data the player can flip.
-        var layout = authoring.LayoutNamed(name: ((authoring.LayoutCell is { } layoutCell) && BindableState.TryParseBinding(
+        var layout = authoring.LayoutNamed(name: (((authoring.LayoutCell is { } layoutCell) && BindableState.TryParseBinding(
             key: out var layoutKey,
             row: out var layoutRow,
             value: layoutCell
@@ -127,7 +128,7 @@ internal sealed class WorldBindingBarControl {
             rowName: layoutRow,
             text: out var layoutName,
             tick: m_client.Tick
-        )
+        ))
             ? layoutName
             : null));
         var stacked = !((authoring.ModelCell is { } modelCell) && BindableState.TryParseBinding(
@@ -183,6 +184,7 @@ internal sealed class WorldBindingBarControl {
             )
         );
     }
+
     private CompiledBindingBarLayout CompiledFor(int slot, WorldBindingBarLayout layout) {
         if (!ReferenceEquals(objA: m_compiledSource[slot], objB: layout)) {
             m_compiled[slot] = layout.Compile();

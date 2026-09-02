@@ -316,7 +316,7 @@ public static class WorldPlacementStamp {
 
         static long WithMirror(long copies, CreationStampPlane? mirror, long ceiling) => ((mirror is null)
             ? copies
-            : CreationStampLattice.MultiplySaturated(left: copies, right: 2L, ceiling: ceiling)
+            : CreationStampLattice.MultiplySaturated(ceiling: ceiling, left: copies, right: 2L)
         );
     }
 }

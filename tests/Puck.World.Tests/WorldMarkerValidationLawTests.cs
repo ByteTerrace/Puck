@@ -37,7 +37,6 @@ public sealed class WorldMarkerValidationLawTests {
 
         Assert.True(condition: admitted, userMessage: reason);
     }
-
     [Fact]
     public void UnresolvedIconRefusesByName() {
         var definition = Fixtures.BuildDocument() with {
@@ -49,7 +48,6 @@ public sealed class WorldMarkerValidationLawTests {
         Assert.False(condition: admitted);
         Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "markers[0].icon 'marker.missing' names no row in icons.icons");
     }
-
     [Fact]
     public void UnrecognizedRingFieldRefusesByName() {
         var definition = Fixtures.BuildDocument() with {
@@ -61,14 +59,13 @@ public sealed class WorldMarkerValidationLawTests {
         Assert.False(condition: admitted);
         Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "markers[0].ring.field 'size' names no recognized field");
     }
-
     [Fact]
     public void RingOnPointSourceRefusesByName() {
         var definition = Fixtures.BuildDocument() with {
             IconsRaw = OneIcon(name: "marker.dot"),
             MarkersRaw = [
                 ValidSpeakerRow() with {
-                    Source = new WorldMarkerSource.Point(Position: new Puck.Assets.Documents.DocumentVector3(0f, 0f, 0f)),
+                    Source = new WorldMarkerSource.Point(Position: new Puck.Assets.Documents.DocumentVector3(x: 0f, y: 0f, z: 0f)),
                 },
             ],
         };
@@ -77,7 +74,6 @@ public sealed class WorldMarkerValidationLawTests {
         Assert.False(condition: admitted);
         Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "markers[0].ring.field 'radius' names a speakers-only field");
     }
-
     [Fact]
     public void RingPolicyWithoutStyleRingRefusesByName() {
         var definition = Fixtures.BuildDocument() with {
@@ -89,7 +85,6 @@ public sealed class WorldMarkerValidationLawTests {
         Assert.False(condition: admitted);
         Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "a ring policy without a style.ringColor/ringAlpha pair");
     }
-
     [Fact]
     public void StyleRingWithoutRingPolicyRefusesByName() {
         var definition = Fixtures.BuildDocument() with {
@@ -101,7 +96,6 @@ public sealed class WorldMarkerValidationLawTests {
         Assert.False(condition: admitted);
         Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "a style.ringColor/ringAlpha without a ring policy");
     }
-
     [Fact]
     public void DuplicateIdRefusesByName() {
         var definition = Fixtures.BuildDocument() with {
@@ -113,7 +107,6 @@ public sealed class WorldMarkerValidationLawTests {
         Assert.False(condition: admitted);
         Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "markers[1].id 'dup' is duplicated");
     }
-
     [Fact]
     public void AbsentMarkersSectionResolvesToNoRows() {
         var definition = Fixtures.BuildDocument();

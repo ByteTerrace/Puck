@@ -934,21 +934,21 @@ public static class CreationCanonicalizer {
             ));
         }
 
-        if (noise.Octaves is { } octaves && ((octaves < 1) || (octaves > SdfProgramBuilder.MaxNoiseOctaves))) {
+        if ((noise.Octaves is { } octaves) && ((octaves < 1) || (octaves > SdfProgramBuilder.MaxNoiseOctaves))) {
             errors.Add(item: new(
                 Message: $"octaves must be in 1..{SdfProgramBuilder.MaxNoiseOctaves}; got {octaves}.",
                 Path: "noise.octaves"
             ));
         }
 
-        if (noise.Gain is { } gain && (!float.IsFinite(f: gain) || (gain < CreationNoiseDocument.MinGain) || (gain > CreationNoiseDocument.MaxGain))) {
+        if ((noise.Gain is { } gain) && (!float.IsFinite(f: gain) || (gain < CreationNoiseDocument.MinGain) || (gain > CreationNoiseDocument.MaxGain))) {
             errors.Add(item: new(
                 Message: $"gain must be finite in [{CreationNoiseDocument.MinGain}, {CreationNoiseDocument.MaxGain}]; got {gain}.",
                 Path: "noise.gain"
             ));
         }
 
-        if (noise.Lacunarity is { } lacunarity && (!float.IsFinite(f: lacunarity) || (lacunarity < CreationNoiseDocument.MinLacunarity) || (lacunarity > CreationNoiseDocument.MaxLacunarity))) {
+        if ((noise.Lacunarity is { } lacunarity) && (!float.IsFinite(f: lacunarity) || (lacunarity < CreationNoiseDocument.MinLacunarity) || (lacunarity > CreationNoiseDocument.MaxLacunarity))) {
             errors.Add(item: new(
                 Message: $"lacunarity must be finite in [{CreationNoiseDocument.MinLacunarity}, {CreationNoiseDocument.MaxLacunarity}]; got {lacunarity}.",
                 Path: "noise.lacunarity"

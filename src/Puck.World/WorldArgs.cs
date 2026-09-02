@@ -65,6 +65,7 @@ internal static class WorldArgs {
             (value <= max)
         );
     }
+
     /// <summary>The reserved trailing-token prefix every instance-addressed verb shares (case-insensitive match).</summary>
     public const string InstanceTokenPrefix = "instance:";
 
@@ -126,10 +127,10 @@ internal static class WorldArgs {
     /// <returns>Whether the token resolved to a running instance.</returns>
     public static bool TryResolveInstance(ReadOnlySpan<char> token, string verb, WorldInstanceHost instances, out WorldInstance? instance, out CommandResult? error) {
         if (!TryParseInstanceName(
-            token: token,
-            verb: verb,
+            error: out error,
             name: out var name,
-            error: out error
+            token: token,
+            verb: verb
         )) {
             instance = null;
 

@@ -88,6 +88,7 @@ public sealed class AbsentDerivationLawTests {
         Assert.Equal(expected: SeatActivationPolicy.Eager, actual: Assert.Single(collection: definition.Population.SeatActivation));
         Assert.Equal(expected: WorldSpawnPointDefaults.ImplicitOriginId, actual: Assert.Single(collection: definition.Population.SeatSpawns));
     }
+
     // A nonzero-capacity document must carry a kit (see Kits_Empty_RequiredOnlyWhenPopulationImpliesABody), the
     // movement channels its motion program claims roles from (see Channels_Absent_ResolvesToNone), and a seat rig
     // (see Views_Absent_RequiredOnlyWhenPopulationImpliesABody) — none of which the engine supplies. The derivation
@@ -105,6 +106,14 @@ public sealed class AbsentDerivationLawTests {
     private const string MinimalDynamicsSection = """
         "dynamics": [ { "name": "chase", "f": 0.9549, "zeta": 1, "r": 1 } ]
         """;
+    private const string MinimalKitSection = """
+        "bodyMotionPrograms": [
+          { "name": "p", "version": "puck.body-motion.v1", "kind": "Motion", "operations": ["ResolveYawAttitudeAndPlanarFrame", "ComputePlanarTargetVelocity", "ShapePlanarVelocity", "SnapYawToPlanarIntent", "ApplyVerticalGravity", "IntegratePlanarAndVerticalVelocity", "CommitPose"] }
+        ],
+        "kits": { "rows": [
+          { "name": "k", "bodyMotionProgram": "p", "motion": { "$type": "grounded", "moveSpeed": 4, "turnSpeed": 2.5, "riseGravity": 28, "fallGravity": 46, "maxFallSpeed": 40, "response": [], "sprintMultiplier": 1 } }
+        ] }
+        """;
     private const string MinimalViewsSection = """
         "views": {
           "layouts": [],
@@ -120,14 +129,6 @@ public sealed class AbsentDerivationLawTests {
             ]
           }
         }
-        """;
-    private const string MinimalKitSection = """
-        "bodyMotionPrograms": [
-          { "name": "p", "version": "puck.body-motion.v1", "kind": "Motion", "operations": ["ResolveYawAttitudeAndPlanarFrame", "ComputePlanarTargetVelocity", "ShapePlanarVelocity", "SnapYawToPlanarIntent", "ApplyVerticalGravity", "IntegratePlanarAndVerticalVelocity", "CommitPose"] }
-        ],
-        "kits": { "rows": [
-          { "name": "k", "bodyMotionProgram": "p", "motion": { "$type": "grounded", "moveSpeed": 4, "turnSpeed": 2.5, "riseGravity": 28, "fallGravity": 46, "maxFallSpeed": 40, "response": [], "sprintMultiplier": 1 } }
-        ] }
         """;
 
     [Fact]
@@ -273,14 +274,14 @@ public sealed class AbsentDerivationLawTests {
         var document = new CreationDocument(
             Schema: CreationDocument.CurrentSchema,
             Name: "quat-round-trip",
-            Palette: [new PaletteEntryDocument(Color: "#CCCCCC", Emissive: 0, Specular: 0, Shininess: 0)],
+            Palette: [new PaletteEntryDocument(Color: "#CCCCCC", Emissive: 0, Shininess: 0, Specular: 0)],
             Shapes: [
                 new ShapeDocument(
                     Id: 0,
                     Name: "leaning",
                     Type: SdfSolidPrimitive.Box,
                     Position: new(x: 0, y: 1, z: 0),
-                    Rotation: new(x: 0.34202015f, y: 0, z: 0, w: 0.9396926f),
+                    Rotation: new(w: 0.9396926f, x: 0.34202015f, y: 0, z: 0),
                     Scale: new(x: 1, y: 1, z: 1),
                     Material: 0,
                     Blend: null,

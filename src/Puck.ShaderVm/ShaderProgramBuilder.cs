@@ -52,7 +52,7 @@ public sealed class ShaderProgramBuilder {
     /// <returns>This builder.</returns>
     public ShaderProgramBuilder Swizzle(int x, int y, int z, int w) => Append(
         op: ShaderOp.Swizzle,
-        operand: ShaderIsa.PackSwizzle(x: x, y: y, z: z, w: w)
+        operand: ShaderIsa.PackSwizzle(w: w, x: x, y: y, z: z)
     );
     /// <summary>Interns and loads one four-lane program constant.</summary>
     /// <param name="value">The constant value.</param>
@@ -104,6 +104,6 @@ public sealed class ShaderProgramBuilder {
             _ = Append(op: ShaderOp.Halt);
         }
 
-        return new ShaderProgram(instructions: m_instructions, constants: m_constants);
+        return new ShaderProgram(constants: m_constants, instructions: m_instructions);
     }
 }

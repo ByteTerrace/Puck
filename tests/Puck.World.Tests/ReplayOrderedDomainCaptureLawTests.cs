@@ -71,9 +71,9 @@ public sealed class ReplayOrderedDomainCaptureLawTests {
             .Select(selector: static entry => entry.GetType().Name)
             .ToHashSet(comparer: StringComparer.Ordinal);
 
-        Assert.Contains(expected: "Mutation", collection: kinds);
-        Assert.Contains(expected: "Undo", collection: kinds);
-        Assert.Contains(expected: "Composition", collection: kinds);
-        Assert.Contains(expected: "Query", collection: kinds);
+        Assert.Contains(collection: kinds, expected: "Mutation");
+        Assert.Contains(collection: kinds, expected: "Undo");
+        Assert.Contains(collection: kinds, expected: "Composition");
+        Assert.Contains(collection: kinds, expected: "Query");
     }
 }

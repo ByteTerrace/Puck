@@ -175,7 +175,7 @@ public sealed class CommandRegistryTests {
         registry.ApplySnapshot(snapshot: in snapshot);
 
         Assert.Equal(expected: CommandPrincipal.Seat(slot: 0), actual: seenPrincipal);
-        Assert.Equal(expected: "bound   first; second && privileged | fourth  ", actual: seenLine);
+        Assert.Equal(actual: seenLine, expected: "bound   first; second && privileged | fourth  ");
         Assert.False(condition: secondCommandInvoked);
     }
     [Fact]

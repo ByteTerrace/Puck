@@ -14,7 +14,6 @@ public sealed class ModifierReservationDerivationLawTests {
     [Fact]
     public void OverlayCapacityCarriesTheSchemaModifierCeiling() =>
         Assert.Equal(expected: WorldBindingBarCapacity.MaxModifiers, actual: WorldOverlayCapacity.FromSchema().BindingBarMaxModifiers);
-
     /// <summary>The binding-bar element reservation moves with the ceiling: raising the modifier count by one grows
     /// the reservation by exactly one element per seat — proving the reservation derives from the threaded constant
     /// rather than a fixed writer-side cap.</summary>

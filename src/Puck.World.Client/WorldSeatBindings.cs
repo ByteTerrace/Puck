@@ -298,6 +298,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
             }
         }
     }
+
     /// <summary>Resets every AUTHORED mode family the seat's routed document declares to its default state and
     /// re-derives the seat's active group, so a slot rejoined by a different occupant never inherits the departed
     /// one's published mode (and the group that mode selected). The seat-departure fact
@@ -369,13 +370,14 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     /// document, which happens before any seat can act).</summary>
     /// <param name="slot">The 0-based seat slot.</param>
     /// <param name="family">The family name.</param>
-    public string? ModeState(int slot, string family) => ((((uint)slot) < SeatCount) && m_contextStates[slot].TryGetValue(
+    public string? ModeState(int slot, string family) => (((((uint)slot) < SeatCount) && m_contextStates[slot].TryGetValue(
         key: family,
         value: out var state
-    )
+    ))
         ? state
         : null
     );
+
     // Publishes only the state-backed families the seat's composed document actually references. Called on a state
     // revision, route/entity change, or binding recompose — never on an unchanged tick.
     private void PublishStateContexts(int slot, ulong tick) {
@@ -501,8 +503,8 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         WorldAffordances.Validate(
             channels: channels,
             document: document,
-            seatModes: seatModes,
-            errors: errors
+            errors: errors,
+            seatModes: seatModes
         );
 
         if (errors.Count == 0) {

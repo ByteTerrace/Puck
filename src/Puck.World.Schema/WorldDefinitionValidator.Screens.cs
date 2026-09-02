@@ -688,6 +688,7 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path}.kit '{kit}' names no kit carrying a pad map.");
         }
     }
+
     // The one frame-source gate, shared by a screen row/magazine entry's own Camera/View/Probe/Capture arms
     // (ValidateScreenSource) and a probe socket (WorldDefinitionValidator.Probes.cs' ValidateProbeStream): a
     // camera's sensor is defined (and, when authored, its profile/vendor controls/seat, the last within
@@ -711,9 +712,9 @@ public static partial class WorldDefinitionValidator {
             case WorldScreenSource.Camera camera:
                 if (camera.Profile is { } cameraProfile) {
                     ValidateProfile(
-                        profile: cameraProfile,
+                        errors: errors,
                         path: $"{path}.camera",
-                        errors: errors
+                        profile: cameraProfile
                     );
                 }
 
@@ -784,6 +785,7 @@ public static partial class WorldDefinitionValidator {
                 break;
         }
     }
+
     // The one screen-source gate, shared by a declared source and every magazine entry — a pure extraction that closes a
     // real duplication risk (a magazine entry could otherwise name an undeclared camera). Returns whether the source is a
     // live CONSOLE (the caller counts these against the one-live ceiling).

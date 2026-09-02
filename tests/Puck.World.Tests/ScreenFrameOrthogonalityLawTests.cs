@@ -55,7 +55,6 @@ public sealed class ScreenFrameOrthogonalityLawTests {
             false,
         ];
     }
-
     [MemberData(nameof(FrameCases))]
     [Theory]
     public void ASkewedScreenFrameRefusesByName(Vector3 right, Vector3 up, bool valid) {
@@ -81,7 +80,6 @@ public sealed class ScreenFrameOrthogonalityLawTests {
             );
         }
     }
-
     /// <summary>The orthogonality rule must not swallow the degeneracy rule it follows: a parallel pair is still
     /// refused as linearly dependent, naming the property a reader can act on.</summary>
     [Fact]

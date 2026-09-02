@@ -23,7 +23,7 @@ internal sealed partial class WorldProbes {
             Deadband: FixedQ4816.FromDouble(value: axis.Deadband),
             Hysteresis: FixedQ4816.FromDouble(value: axis.Hysteresis),
             Maximum: FixedQ4816.FromDouble(value: spec.Max),
-            MaxAgeTicks: (long)(axis.MaxAgeSeconds * Stopwatch.Frequency),
+            MaxAgeTicks: ((long)(axis.MaxAgeSeconds * Stopwatch.Frequency)),
             Minimum: FixedQ4816.FromDouble(value: spec.Min),
             Neutral: FixedQ4816.FromDouble(value: spec.Neutral),
             QuantizeBits: axis.QuantizeBits,
@@ -90,7 +90,7 @@ internal sealed partial class WorldProbes {
                     Phase: (sample.Expired ? CommandPhase.Completed : CommandPhase.Active),
                     Slot: axis.Slot,
                     Source: axis.Source,
-                    Value: CommandValue.Axis(value: (float)(double)sample.Value)
+                    Value: CommandValue.Axis(value: ((float)((double)sample.Value)))
                 ));
                 axis.Held = !sample.Expired;
                 axis.Suppressed = false;

@@ -200,7 +200,7 @@ internal static partial class CanaryCommand {
     // budget refusal it is. The total below is therefore the exact sum of what every selected leg may spend, so a
     // leg is refused only when an earlier one overran its own declared ceiling.
     private static TimeSpan LegBudget(IReadOnlyList<CanaryManifest> manifests) =>
-        TimeSpan.FromSeconds(value: manifests.Sum(selector: static manifest => (BootsPerLeg(shape: manifest.BootShape) * 2 * manifest.TimeoutSeconds)));
+        TimeSpan.FromSeconds(value: manifests.Sum(selector: static manifest => ((BootsPerLeg(shape: manifest.BootShape) * 2) * manifest.TimeoutSeconds)));
     // A stub-shaped leg observes two successive launches against one declared timeout each; every other shape is one.
     private static int BootsPerLeg(CanaryBootShape shape) => ((shape == CanaryBootShape.Stub) ? 2 : 1);
     private static CanaryLegRun RunEitherLeg(string artifact, CanaryBudget budget, CanaryLeg leg, CanaryManifest manifest) =>

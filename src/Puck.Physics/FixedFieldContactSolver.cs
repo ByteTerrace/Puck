@@ -294,9 +294,9 @@ public sealed class FixedFieldContactSolver(
         }
 
         ApplyPush(
+            groundNormal: ref groundNormal,
             grounded: ref grounded,
             lastNormal: ref lastNormal,
-            groundNormal: ref groundNormal,
             normal: normal,
             penetration: (minimum - distance),
             position: ref position,
@@ -560,9 +560,9 @@ public sealed class FixedFieldContactSolver(
         }
 
         ApplyPush(
+            groundNormal: ref groundNormal,
             grounded: ref grounded,
             lastNormal: ref lastNormal,
-            groundNormal: ref groundNormal,
             normal: normal,
             penetration: (minimum - distance),
             position: ref position,
@@ -645,9 +645,9 @@ public sealed class FixedFieldContactSolver(
         }
 
         ApplyPush(
+            groundNormal: ref groundNormal,
             grounded: ref grounded,
             lastNormal: ref lastNormal,
-            groundNormal: ref groundNormal,
             normal: normal,
             penetration: (minimum - distance),
             position: ref position,

@@ -94,8 +94,8 @@ public sealed partial class WorldPopulation {
             if (!WorldSolidField.TryBuild(
                 built: out derivedSolids,
                 definition: definition,
-                reason: out var reason,
-                lattice: m_fields
+                lattice: m_fields,
+                reason: out var reason
             )) {
                 throw new InvalidOperationException(message: $"the target/contact field could not compile the world's solids at boot: {reason}");
             }
@@ -167,7 +167,6 @@ public sealed partial class WorldPopulation {
             reason: out reason
         );
     }
-
     /// <summary>Installs the candidate's compatible field companion/program pair, preserving live cell state.</summary>
     /// <param name="definition">The candidate definition.</param>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is null.</exception>
@@ -197,6 +196,7 @@ public sealed partial class WorldPopulation {
             );
         }
     }
+
     private static FixedSpawnPoint[] CompileSeatSpawns(IReadOnlyList<WorldSpawnPoint> spawnPoints, IReadOnlyList<string> seatSpawns) {
         var compiled = new FixedSpawnPoint[seatSpawns.Count];
 

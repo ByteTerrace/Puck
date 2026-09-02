@@ -8,10 +8,9 @@ namespace Puck.World.Tests;
 /// <c>ValidateFrameSource</c> gate, the kind/source pairing, and the radius/opacity ranges — plus its serialization
 /// round trip through <see cref="WorldJsonContext"/>.</summary>
 public sealed class HudFrameElementValidationLawTests {
-    private static readonly WorldHudRect UnitRect = new(X: 0f, Y: 0f, Width: 1f, Height: 1f);
+    private static readonly WorldHudRect UnitRect = new(Height: 1f, Width: 1f, X: 0f, Y: 0f);
 
     private static WorldFrameSource CameraSource() => new WorldScreenSource.Camera(Sensor: WorldCameraSensor.Color);
-
     private static WorldHudElement FrameElement(WorldFrameSource? source, float radius = 0f, float opacity = 1f, string id = "cam") => new(
         Id: id,
         Kind: WorldHudElementKind.Frame,
@@ -22,7 +21,6 @@ public sealed class HudFrameElementValidationLawTests {
         Radius: radius,
         Opacity: opacity
     );
-
     private static WorldDefinition WithPanelElement(WorldHudElement element) => Fixtures.BuildDocument() with {
         HudRaw = new WorldHudSection(
             Defaults: new WorldHudDefaults(Enabled: true),
@@ -37,7 +35,6 @@ public sealed class HudFrameElementValidationLawTests {
             ]
         ),
     };
-
     private static WorldDefinition WithFrameSources(IReadOnlyList<WorldFrameSource> sources) => Fixtures.BuildDocument() with {
         HudRaw = new WorldHudSection(
             Defaults: new WorldHudDefaults(Enabled: true),
@@ -47,7 +44,7 @@ public sealed class HudFrameElementValidationLawTests {
                     Rect: UnitRect,
                     Layer: WorldHudLayer.Over,
                     Style: WorldHudPanelStyle.Chip,
-                    Elements: sources.Select((source, index) => FrameElement(source: source, id: $"feed-{index}")).ToArray()
+                    Elements: sources.Select(selector: (source, index) => FrameElement(source: source, id: $"feed-{index}")).ToArray()
                 ),
             ]
         ),
@@ -68,17 +65,17 @@ public sealed class HudFrameElementValidationLawTests {
     }
     [Fact]
     public void ANinthDistinctFrameSourceRefusesWhileEightPass() {
-        static WorldFrameSource[] Sources(int count) => Enumerable.Range(start: 0, count: count)
-            .Select(selector: index => (WorldFrameSource)new WorldScreenSource.Capture(
+        static WorldFrameSource[] Sources(int count) => Enumerable.Range(count: count, start: 0)
+            .Select(selector: index => ((WorldFrameSource)new WorldScreenSource.Capture(
                 WindowTitle: $"capture-{index}",
                 Profile: WorldFeedProfile.Default
-            ))
+            )))
             .ToArray();
 
         Laws.RefusalWithControl(
             lawId: "hud.frame-source-capacity",
             deniedOutcome: () => WorldDefinitionValidator.TryValidateLocally(
-                definition: WithFrameSources(sources: Sources(count: WorldHudCapacity.MaxFrameSources + 1)),
+                definition: WithFrameSources(sources: Sources(count: (WorldHudCapacity.MaxFrameSources + 1))),
                 reason: out _
             ),
             controlOutcome: () => WorldDefinitionValidator.TryValidateLocally(
@@ -87,10 +84,10 @@ public sealed class HudFrameElementValidationLawTests {
             ));
 
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
-            definition: WithFrameSources(sources: Sources(count: WorldHudCapacity.MaxFrameSources + 1)),
+            definition: WithFrameSources(sources: Sources(count: (WorldHudCapacity.MaxFrameSources + 1))),
             reason: out var reason
         ));
-        Assert.Contains(expectedSubstring: "hud.TooManyFrameSources", actualString: reason, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "hud.TooManyFrameSources");
     }
     [Fact]
     public void RepeatedFrameSourcesShareTheAuthoringCapacity() {
@@ -99,8 +96,8 @@ public sealed class HudFrameElementValidationLawTests {
             Profile: WorldFeedProfile.Default
         );
         var repeated = Enumerable.Repeat<WorldFrameSource>(
-            element: shared,
-            count: WorldHudCapacity.MaxElementsPerPanel
+            count: WorldHudCapacity.MaxElementsPerPanel,
+            element: shared
         ).ToArray();
 
         Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(
@@ -122,8 +119,8 @@ public sealed class HudFrameElementValidationLawTests {
             jsonTypeInfo: WorldJsonContext.Default.WorldFrameSource,
             value: source
         );
-        var repeated = Enumerable.Range(start: 0, count: WorldHudCapacity.MaxElementsPerPanel)
-            .Select(_ => JsonSerializer.Deserialize(
+        var repeated = Enumerable.Range(count: WorldHudCapacity.MaxElementsPerPanel, start: 0)
+            .Select(selector: _ => JsonSerializer.Deserialize(
                 jsonTypeInfo: WorldJsonContext.Default.WorldFrameSource,
                 utf8Json: bytes
             )!)
@@ -242,7 +239,7 @@ public sealed class HudFrameElementValidationLawTests {
         Assert.Equal(expected: 12f, actual: roundTripped.Radius);
         Assert.Equal(expected: 0.75f, actual: roundTripped.Opacity);
 
-        var camera = Assert.IsType<WorldScreenSource.Camera>(roundTripped.Source);
+        var camera = Assert.IsType<WorldScreenSource.Camera>(@object: roundTripped.Source);
 
         Assert.Equal(expected: WorldCameraSensor.Color, actual: camera.Sensor);
     }

@@ -112,7 +112,7 @@ public sealed class PlacementResponseValidationLawTests {
         Scale: 1f,
         Respond: [
             new WorldPlacementResponse(
-                When: new WorldFieldCondition(Field: FieldName, Comparison: WorldFieldComparison.GreaterOrEqual, Value: 0.5f),
+                When: new WorldFieldCondition(Comparison: WorldFieldComparison.GreaterOrEqual, Field: FieldName, Value: 0.5f),
                 PrototypeId: TargetCreation
             ),
         ]
@@ -136,7 +136,7 @@ public sealed class PlacementResponseValidationLawTests {
         AssertRefusedNaming(
             definition: With(placement: (WellFormed() with {
                 Respond = [new WorldPlacementResponse(
-                    When: new WorldFieldCondition(Field: "no-such-field", Comparison: WorldFieldComparison.GreaterOrEqual, Value: 0.5f),
+                    When: new WorldFieldCondition(Comparison: WorldFieldComparison.GreaterOrEqual, Field: "no-such-field", Value: 0.5f),
                     PrototypeId: TargetCreation
                 )],
             })),
@@ -151,7 +151,7 @@ public sealed class PlacementResponseValidationLawTests {
         AssertRefusedNaming(
             definition: With(placement: (WellFormed() with {
                 Respond = [new WorldPlacementResponse(
-                    When: new WorldFieldCondition(Field: FieldName, Comparison: ((WorldFieldComparison)byte.MaxValue), Value: 0.5f),
+                    When: new WorldFieldCondition(Comparison: ((WorldFieldComparison)byte.MaxValue), Field: FieldName, Value: 0.5f),
                     PrototypeId: TargetCreation
                 )],
             })),
@@ -166,7 +166,7 @@ public sealed class PlacementResponseValidationLawTests {
         var document = Fixtures.BuildDocument();
         var animated = (document with {
             StateRaw = FieldsSection(),
-            CreationsRaw = [Creation(id: BaseCreation), Creation(id: TargetCreation, animated: true)],
+            CreationsRaw = [Creation(id: BaseCreation), Creation(animated: true, id: TargetCreation)],
             PlacementRowsRaw = [WellFormed()],
         });
 

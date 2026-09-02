@@ -45,6 +45,7 @@ public sealed class SdfIsaDensity {
         );
         Assert.True(condition: (program.Instructions.Count > 0));
     }
+
     // ResetPoint, the transform, the ordered domain ops, the local pose, then the primitive.
     private static void EmitShape(SdfProgramBuilder builder, AuthoredShape shape, int slot) {
         var chain = builder.ResetPoint();
@@ -104,12 +105,12 @@ public sealed class SdfIsaDensity {
         Ground(cell: 2f, cuts: true, material: NullWorldScene.BlueDeep, wallpaper: true);
         Ground(cell: 1f, cuts: false, material: NullWorldScene.Stone, wallpaper: false);
 
-        foreach (var (type, position, scale, material, smooth) in ((SdfSolidPrimitive, Vector3, Vector3, int, float)[])[
+        foreach (var (type, position, scale, material, smooth) in (((SdfSolidPrimitive, Vector3, Vector3, int, float)[])[
             (SdfSolidPrimitive.Cylinder, new Vector3(x: 6f, y: 0.3f, z: 6f), new Vector3(x: 0.8f, y: 0.3f, z: 0.8f), NullWorldScene.PillarTrim, 0f),
             (SdfSolidPrimitive.Cylinder, new Vector3(x: 6f, y: 3.3f, z: 6f), new Vector3(x: 0.45f, y: 2.9f, z: 0.45f), NullWorldScene.PillarStone, 0.25f),
             (SdfSolidPrimitive.Cylinder, new Vector3(x: 6f, y: 6.35f, z: 6f), new Vector3(x: 0.8f, y: 0.3f, z: 0.8f), NullWorldScene.PillarTrim, 0.25f),
             (SdfSolidPrimitive.Sphere, new Vector3(x: 6f, y: 7f, z: 6f), new Vector3(value: 0.45f), NullWorldScene.PillarLamp, 0.1f),
-        ]) {
+        ])) {
             shapes.Add(item: new AuthoredShape(
                 Blend: SdfBlendOp.Union,
                 Domain: [mirrorX, mirrorZ],
@@ -169,5 +170,6 @@ public sealed class SdfIsaDensity {
 
         return shapes;
     }
+
     private sealed record AuthoredShape(SdfSolidPrimitive Type, Vector3 Position, Vector3 Scale, int Material, float Smooth, SdfBlendOp Blend, IReadOnlyList<ShapeDomainOp> Domain);
 }

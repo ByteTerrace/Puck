@@ -18,7 +18,7 @@ public sealed class ObserverDisclosureLawTests {
     public void UnauthoredWorld_IsDiscloseAll() {
         var population = Fixtures.BuildDocument().Population;
 
-        Assert.Null(population.Disclosure);
+        Assert.Null(@object: population.Disclosure);
         Assert.Equal(expected: WorldObserverDisclosureMode.All, actual: population.ObserverDisclosure.Mode);
         Assert.True(condition: new WorldSinkDisclosure(Policy: population.ObserverDisclosure, ObserverBodyIndex: -1).IsFull);
     }
@@ -59,8 +59,8 @@ public sealed class ObserverDisclosureLawTests {
         var embodied = new RecordingSink();
         var policy = new WorldObserverDisclosure(Mode: WorldObserverDisclosureMode.SelfOnly);
 
-        using var unembodiedLease = hub.Subscribe(sink: unembodied, disclosure: new WorldSinkDisclosure(Policy: policy, ObserverBodyIndex: -1));
-        using var embodiedLease = hub.Subscribe(sink: embodied, disclosure: new WorldSinkDisclosure(Policy: policy, ObserverBodyIndex: 1));
+        using var unembodiedLease = hub.Subscribe(sink: unembodied, disclosure: new WorldSinkDisclosure(ObserverBodyIndex: -1, Policy: policy));
+        using var embodiedLease = hub.Subscribe(sink: embodied, disclosure: new WorldSinkDisclosure(ObserverBodyIndex: 1, Policy: policy));
 
         var snapshot = new WorldSnapshot(
             Tick: 1UL,
@@ -78,20 +78,20 @@ public sealed class ObserverDisclosureLawTests {
     public void ValidatorRefusesAMisauthoredPolicyByName() {
         var document = Fixtures.BuildDocument();
 
-        Assert.False(WorldDefinitionValidator.TryValidateLocally(
+        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
             definition: (document with { PopulationRaw = (document.Population with { Disclosure = new WorldObserverDisclosure(Mode: WorldObserverDisclosureMode.Radius) }) }),
             reason: out var missingRadius));
-        Assert.Contains(expectedSubstring: "bodies.disclosure.radius is required", actualString: missingRadius, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(actualString: missingRadius, comparisonType: StringComparison.Ordinal, expectedSubstring: "bodies.disclosure.radius is required");
 
-        Assert.False(WorldDefinitionValidator.TryValidateLocally(
+        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
             definition: (document with { PopulationRaw = (document.Population with { Disclosure = new WorldObserverDisclosure(Mode: WorldObserverDisclosureMode.All, Radius: 4f) }) }),
             reason: out var strayRadius));
-        Assert.Contains(expectedSubstring: "bodies.disclosure.radius must be absent", actualString: strayRadius, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(actualString: strayRadius, comparisonType: StringComparison.Ordinal, expectedSubstring: "bodies.disclosure.radius must be absent");
 
         // The control: a well-formed policy validates, so the refusals above are about the shape, not the member.
-        Assert.True(WorldDefinitionValidator.TryValidateLocally(
+        Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(
             definition: (document with { PopulationRaw = (document.Population with { Disclosure = new WorldObserverDisclosure(Mode: WorldObserverDisclosureMode.Radius, Radius: 12f) }) }),
-            reason: out var wellFormed), wellFormed);
+            reason: out var wellFormed), userMessage: wellFormed);
     }
 
     private static EntitySnapshot Entity(int index, float x) =>

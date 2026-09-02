@@ -45,13 +45,13 @@ public sealed class WorldSiloDefinitionLawTests : IDisposable {
             Worlds: [
                 new WorldSiloWorldRow(
                     Owner: Guid.NewGuid(),
-                    World: WorldSafeName.TryParse(candidate: "quilt-nw", name: out var nw, reason: out _) ? nw : default,
+                    World: (WorldSafeName.TryParse(candidate: "quilt-nw", name: out var nw, reason: out _) ? nw : default),
                     Federation: new WorldSiloFederation(KeyFile: WriteKey(name: "nw.key")),
                     Pinned: true
                 ),
                 new WorldSiloWorldRow(
                     Owner: Guid.NewGuid(),
-                    World: WorldSafeName.TryParse(candidate: "quilt-ne", name: out var ne, reason: out _) ? ne : default,
+                    World: (WorldSafeName.TryParse(candidate: "quilt-ne", name: out var ne, reason: out _) ? ne : default),
                     Federation: new WorldSiloFederation(KeyFile: WriteKey(name: "ne.key")),
                     Pinned: false
                 ),
@@ -92,7 +92,7 @@ public sealed class WorldSiloDefinitionLawTests : IDisposable {
         };
 
         Assert.False(condition: WorldSiloDefinitionValidator.TryValidate(definition: duplicated, reason: out var reason));
-        Assert.Contains(expectedSubstring: "declared more than once", actualString: reason);
+        Assert.Contains(actualString: reason, expectedSubstring: "declared more than once");
     }
     [Fact]
     public void SharedKeyFile_Refuses() {
@@ -102,17 +102,17 @@ public sealed class WorldSiloDefinitionLawTests : IDisposable {
         };
 
         Assert.False(condition: WorldSiloDefinitionValidator.TryValidate(definition: shared, reason: out var reason));
-        Assert.Contains(expectedSubstring: "share the key file", actualString: reason);
+        Assert.Contains(actualString: reason, expectedSubstring: "share the key file");
     }
     [Fact]
     public void MissingKeyFile_Refuses() {
         var valid = MakeValid();
         var missing = valid with {
-            Worlds = [valid.Worlds[0] with { Federation = new WorldSiloFederation(KeyFile: Path.Combine(m_directory, "does-not-exist.key")) }],
+            Worlds = [valid.Worlds[0] with { Federation = new WorldSiloFederation(KeyFile: Path.Combine(path1: m_directory, path2: "does-not-exist.key")) }],
         };
 
         Assert.False(condition: WorldSiloDefinitionValidator.TryValidate(definition: missing, reason: out var reason));
-        Assert.Contains(expectedSubstring: "does not exist", actualString: reason);
+        Assert.Contains(actualString: reason, expectedSubstring: "does not exist");
     }
     [Fact]
     public void MalformedKeyFile_Refuses() {
@@ -126,7 +126,7 @@ public sealed class WorldSiloDefinitionLawTests : IDisposable {
         };
 
         Assert.False(condition: WorldSiloDefinitionValidator.TryValidate(definition: malformed, reason: out var reason));
-        Assert.Contains(expectedSubstring: "PKCS#8", actualString: reason);
+        Assert.Contains(actualString: reason, expectedSubstring: "PKCS#8");
     }
     [Fact]
     public void PinnedCountExceedsBudget_Refuses() {
@@ -137,27 +137,27 @@ public sealed class WorldSiloDefinitionLawTests : IDisposable {
         };
 
         Assert.False(condition: WorldSiloDefinitionValidator.TryValidate(definition: overPinned, reason: out var reason));
-        Assert.Contains(expectedSubstring: "exceed the declared doors.budget", actualString: reason);
+        Assert.Contains(actualString: reason, expectedSubstring: "exceed the declared doors.budget");
     }
     [Fact]
     public void WrongSchemaTag_Refuses() {
         var wrong = MakeValid() with { Schema = "puck.world.def.v1" };
 
         Assert.False(condition: WorldSiloDefinitionValidator.TryValidate(definition: wrong, reason: out var reason));
-        Assert.Contains(expectedSubstring: "schema", actualString: reason);
+        Assert.Contains(actualString: reason, expectedSubstring: "schema");
     }
     [Fact]
     public void StoreKindDirectoryWithAccountUrl_Refuses() {
-        var mismatched = MakeValid() with { Store = new WorldSiloStore(Kind: WorldSiloStoreKind.Directory, DirectoryPath: m_directory, AccountUrl: "https://example.blob.core.windows.net") };
+        var mismatched = MakeValid() with { Store = new WorldSiloStore(AccountUrl: "https://example.blob.core.windows.net", DirectoryPath: m_directory, Kind: WorldSiloStoreKind.Directory) };
 
         Assert.False(condition: WorldSiloDefinitionValidator.TryValidate(definition: mismatched, reason: out var reason));
-        Assert.Contains(expectedSubstring: "store.accountUrl is set", actualString: reason);
+        Assert.Contains(actualString: reason, expectedSubstring: "store.accountUrl is set");
     }
     [Fact]
     public void ClusteringKindTableWithNoTableName_Refuses() {
         var mismatched = MakeValid() with { Clustering = new WorldSiloClustering(Kind: WorldSiloClusteringKind.Table) };
 
         Assert.False(condition: WorldSiloDefinitionValidator.TryValidate(definition: mismatched, reason: out var reason));
-        Assert.Contains(expectedSubstring: "clustering.tableName is missing", actualString: reason);
+        Assert.Contains(actualString: reason, expectedSubstring: "clustering.tableName is missing");
     }
 }

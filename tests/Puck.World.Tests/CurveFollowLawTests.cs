@@ -15,8 +15,8 @@ namespace Puck.World.Tests;
 /// (and switching back), that restart survives a checkpoint capture/restore under the same producer, and the
 /// World-frame steering tracks a genuinely curved, closed path with the orbit scalar's effect observable.</summary>
 public sealed class CurveFollowLawTests {
-    private const string FollowProgramName = "follow";
     private const string CurveRowName = "path";
+    private const string FollowProgramName = "follow";
     private const string LoopCurveRowName = "loop";
     private const string LoopFollowProgramName = "followLoop";
     private const float LoopRadius = 5f;
@@ -40,6 +40,7 @@ public sealed class CurveFollowLawTests {
         ],
         Closed: false
     );
+
     // A closed, genuinely curved path — three knots evenly spaced around a radius-5 circle: curvature exactly
     // 1/radius and a tangent perpendicular to the radius are exact by this construction (the same one
     // Puck.SdfVm.Tests.SdfCurvePathTests' ClosedCurve uses), so unlike StraightPath this exercises real curvature
@@ -53,7 +54,7 @@ public sealed class CurveFollowLawTests {
         var angle = (index * turn);
 
         return new WorldCurveKnot(
-            Position: new DocumentVector3(x: (-LoopRadius + (LoopRadius * MathF.Cos(angle))), y: 0f, z: (LoopRadius * MathF.Sin(angle))),
+            Position: new DocumentVector3(x: (-LoopRadius + (LoopRadius * MathF.Cos(x: angle))), y: 0f, z: (LoopRadius * MathF.Sin(x: angle))),
             TangentYaw: WrapToPi(angle: (angle + (MathF.PI / 2f))),
             Curvature: (1f / LoopRadius)
         );
@@ -66,11 +67,13 @@ public sealed class CurveFollowLawTests {
 
         return wrapped;
     }
+
     private static WorldCurveRow LoopPath => new(
         Name: LoopCurveRowName,
         Knots: [LoopKnot(index: 0), LoopKnot(index: 1), LoopKnot(index: 2)],
         Closed: true
     );
+
     private static BodyProgramParameters FollowerProducerParameters(float orbit) => new(
         Scalars: new Dictionary<string, float> {
             ["standoffRadius"] = 0.1f,
@@ -102,7 +105,7 @@ public sealed class CurveFollowLawTests {
         return (document with {
             BodyMotionProgramsRaw = [.. document.BodyMotionPrograms, followProgram],
             KitRowsRaw = [kit with {
-                ProducersRaw = new Dictionary<string, BodyProgramParameters>(kit.Producers) {
+                ProducersRaw = new Dictionary<string, BodyProgramParameters>(collection: kit.Producers) {
                     [programName] = FollowerProducerParameters(orbit: orbit),
                 },
             }],
@@ -131,7 +134,7 @@ public sealed class CurveFollowLawTests {
     private static float PlanarDistance(FixedVector3 from, FixedVector3 to) {
         var delta = (to - from);
 
-        return MathF.Sqrt(x: ((float)(double)((delta.X * delta.X) + (delta.Z * delta.Z))));
+        return MathF.Sqrt(x: ((float)((double)((delta.X * delta.X) + (delta.Z * delta.Z)))));
     }
 
     [Fact]
@@ -163,7 +166,6 @@ public sealed class CurveFollowLawTests {
 
         Assert.True(condition: (controlDistance < 1e-4f), userMessage: $"the control (no producer selected) must not move; moved {controlDistance:0.######} units");
     }
-
     [Fact]
     public void CountCurveFollowers_ReportsTheSelectedBody_ButNotTheNoProducerControl() {
         using var followFixture = Fixtures.FreshServer(definition: WithFollower(rate: 2f));
@@ -180,20 +182,18 @@ public sealed class CurveFollowLawTests {
 
         Assert.Equal(expected: 0, actual: controlFixture.Server.Population.CountCurveFollowers());
     }
-
     [Fact]
     public void CurveFollowProducer_ProducesIdenticalHashTraces_WhileDivergingFromANoProducerControl() {
         var document = WithFollower(rate: 2f);
         var first = Fixtures.DriveHashTrace(document: document, ticks: 240, join: JoinFollower);
         var second = Fixtures.DriveHashTrace(document: document, ticks: 240, join: JoinFollower);
 
-        Assert.Equal(expected: first, actual: second);
+        Assert.Equal(actual: second, expected: first);
 
         var control = Fixtures.DriveHashTrace(document: document, ticks: 240, join: JoinBody);
 
-        Assert.NotEqual(expected: first, actual: control);
+        Assert.NotEqual(actual: control, expected: first);
     }
-
     [Fact]
     public void CurveFollowProducer_ReplayRecordingReDrivesToAnIdenticalMatch() {
         Fixtures.SkipIfReplayDirectoryUnwritable();
@@ -215,8 +215,8 @@ public sealed class CurveFollowLawTests {
 
         var result = tape.StopRecording();
 
-        Assert.Null(result.VerifyFault);
-        Assert.NotNull(result.Verdict);
+        Assert.Null(@object: result.VerifyFault);
+        Assert.NotNull(value: result.Verdict);
     }
 
     // The straight, zero-curvature StraightPath collapses arc length to world X exactly (see StraightPath's own
@@ -227,7 +227,6 @@ public sealed class CurveFollowLawTests {
         Y: FixedQ4816.Zero,
         Z: FixedQ4816.Zero
     );
-
     // Derived, not measured, from the pursuit's own bang-bang rule: engaged (distance > standoffRadius) the
     // pursuer closes at its full MoveSpeed while the target recedes at up to its own rate, so the gap can only
     // shrink once MoveSpeed exceeds rate; disengaged (distance <= standoffRadius) the pursuer holds and only the
@@ -255,16 +254,16 @@ public sealed class CurveFollowLawTests {
             fixture.Step();
         }
 
-        var windowStartX = (float)(double)body.FixedPosition.X;
+        var windowStartX = ((float)((double)body.FixedPosition.X));
         var maxTrackingError = 0f;
 
         for (var tick = 0; (tick < windowTicks); tick++) {
             fixture.Step();
 
-            var elapsedSeconds = ((warmupTicks + tick + 1) / SimulationRateHz);
+            var elapsedSeconds = (((warmupTicks + tick) + 1) / SimulationRateHz);
             var error = PlanarDistance(from: ExpectedCurvePoint(
-                rate: rate,
-                elapsedSeconds: elapsedSeconds
+                elapsedSeconds: elapsedSeconds,
+                rate: rate
             ), to: body.FixedPosition);
 
             maxTrackingError = Math.Max(val1: maxTrackingError, val2: error);
@@ -272,12 +271,11 @@ public sealed class CurveFollowLawTests {
 
         Assert.True(condition: (maxTrackingError <= trackingTolerance), userMessage: $"the follower drifted {maxTrackingError:0.###} units from the travelling curve point (tolerance {trackingTolerance}) — a body that never steers at the target (only marches at a fixed world axis) drifts unboundedly instead");
 
-        var windowEndX = (float)(double)body.FixedPosition.X;
+        var windowEndX = ((float)((double)body.FixedPosition.X));
         var observedRate = ((windowEndX - windowStartX) / (windowTicks / SimulationRateHz));
 
         Assert.True(condition: (MathF.Abs(x: (observedRate - rate)) <= (rate * 0.02f)), userMessage: $"the follower's steady-state arc progress rate was {observedRate:0.######} u/s against an authored rate of {rate} u/s (2% tolerance) — a body driving in a fixed world direction never converges to the curve's own rate at all");
     }
-
     [Fact]
     public void CurveFollowProducer_TracksAGenuinelyCurvedClosedPathOnTrackAndAtTheAuthoredRate() {
         const float rate = 2f;
@@ -301,7 +299,7 @@ public sealed class CurveFollowLawTests {
         for (var tick = 0; (tick < windowTicks); tick++) {
             fixture.Step();
 
-            var elapsedSeconds = ((warmupTicks + tick + 1) / SimulationRateHz);
+            var elapsedSeconds = (((warmupTicks + tick) + 1) / SimulationRateHz);
             var expected = compiled.Evaluate(arcLength: FixedQ4816.FromDouble(value: (rate * elapsedSeconds))).Position;
             var error = PlanarDistance(from: expected, to: body.FixedPosition);
 
@@ -336,7 +334,7 @@ public sealed class CurveFollowLawTests {
         for (var tick = 0; (tick < windowTicks); tick++) {
             fixture.Step();
 
-            var elapsedSeconds = ((warmupTicks + tick + 1) / SimulationRateHz);
+            var elapsedSeconds = (((warmupTicks + tick) + 1) / SimulationRateHz);
             var target = compiled.Evaluate(arcLength: FixedQ4816.FromDouble(value: (rate * elapsedSeconds))).Position;
 
             sum += PlanarDistance(from: target, to: body.FixedPosition);
@@ -349,12 +347,12 @@ public sealed class CurveFollowLawTests {
     public void CurveFollowProducer_OrbitScalarMeasurablyWidensTrackingDistance() {
         const float rate = 2f;
         const float orbit = 1f; // the scalar's own authored ceiling (RequireUnitInterval) — the largest, most
-                                 // detectable bias this fixture can author.
+                                // detectable bias this fixture can author.
         const int warmupTicks = 240;
         const int windowTicks = 1200;
 
-        var zeroOrbitDistance = MeanTrackingDistance(document: WithLoopFollower(rate: rate, orbit: 0f), rate: rate, warmupTicks: warmupTicks, windowTicks: windowTicks);
-        var withOrbitDistance = MeanTrackingDistance(document: WithLoopFollower(rate: rate, orbit: orbit), rate: rate, warmupTicks: warmupTicks, windowTicks: windowTicks);
+        var zeroOrbitDistance = MeanTrackingDistance(document: WithLoopFollower(orbit: 0f, rate: rate), rate: rate, warmupTicks: warmupTicks, windowTicks: windowTicks);
+        var withOrbitDistance = MeanTrackingDistance(document: WithLoopFollower(orbit: orbit, rate: rate), rate: rate, warmupTicks: warmupTicks, windowTicks: windowTicks);
 
         // The standoff-gated approach term (bounded at MoveSpeed) dominates orbit's own bounded-at-1 tangential
         // bias whenever it is engaged, so orbit only measurably widens the tracked distance once the pursuer is
@@ -410,7 +408,7 @@ public sealed class CurveFollowLawTests {
         document = (document with {
             BodyMotionProgramsRaw = [.. document.BodyMotionPrograms, followStraight, followLoop],
             KitRowsRaw = [kit with {
-                ProducersRaw = new Dictionary<string, BodyProgramParameters>(kit.Producers) {
+                ProducersRaw = new Dictionary<string, BodyProgramParameters>(collection: kit.Producers) {
                     [FollowProgramName] = FollowerProducerParameters(orbit: 0f),
                     [LoopFollowProgramName] = FollowerProducerParameters(orbit: 0f),
                 },
@@ -424,14 +422,14 @@ public sealed class CurveFollowLawTests {
             fixture.Step();
         }
 
-        var arcOnPathBeforeSwitch = CurrentCurveArcRaw(fixture: fixture, bodyIndex: 0);
+        var arcOnPathBeforeSwitch = CurrentCurveArcRaw(bodyIndex: 0, fixture: fixture);
 
         Assert.True(condition: (arcOnPathBeforeSwitch > 0L), userMessage: "the follower must have travelled before switching, or this law proves nothing");
 
         body.SetIntentSource(source: IntentSource.Producer(name: LoopFollowProgramName));
         fixture.Step(); // the transition tick: resets the shared accumulator to zero, then advances by one step.
 
-        var arcOnLoopFirstTick = CurrentCurveArcRaw(fixture: fixture, bodyIndex: 0);
+        var arcOnLoopFirstTick = CurrentCurveArcRaw(bodyIndex: 0, fixture: fixture);
 
         Assert.True(condition: (arcOnLoopFirstTick < (arcOnPathBeforeSwitch / 4)), userMessage: $"selecting a different producer must restart its curve accumulator near zero rather than resume the prior producer's travelled arc; before switching {arcOnPathBeforeSwitch}, one tick after switching {arcOnLoopFirstTick}");
 
@@ -442,11 +440,10 @@ public sealed class CurveFollowLawTests {
         body.SetIntentSource(source: IntentSource.Producer(name: FollowProgramName));
         fixture.Step(); // switching back is itself a transition — the prior "path" travel is never re-matched.
 
-        var arcOnPathAfterSwitchBack = CurrentCurveArcRaw(fixture: fixture, bodyIndex: 0);
+        var arcOnPathAfterSwitchBack = CurrentCurveArcRaw(bodyIndex: 0, fixture: fixture);
 
         Assert.True(condition: (arcOnPathAfterSwitchBack < (arcOnPathBeforeSwitch / 4)), userMessage: $"switching back to the original producer must restart its arc at zero rather than resume where it was left off; before the first switch away {arcOnPathBeforeSwitch}, after switching back {arcOnPathAfterSwitchBack}");
     }
-
     [Fact]
     public void CurveFollowProducer_ArcAccumulatorSurvivesCheckpointRestoreUnderTheSameProducer() {
         using var fixture = Fixtures.FreshServer(definition: WithFollower(rate: 2f));
@@ -467,7 +464,7 @@ public sealed class CurveFollowLawTests {
 
         fixture.Step();
 
-        var arcRawAfterRestoreAndOneTick = CurrentCurveArcRaw(fixture: fixture, bodyIndex: 0);
+        var arcRawAfterRestoreAndOneTick = CurrentCurveArcRaw(bodyIndex: 0, fixture: fixture);
 
         // Restoring under the SAME producer must resume the travelled arc — never re-latch as a fresh selection and
         // restart it at zero, which is exactly the hazard BodyProducerState.ActiveProducerName's own remarks name:

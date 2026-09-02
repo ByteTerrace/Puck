@@ -298,7 +298,7 @@ public sealed class FixedSurfaceQueryTests {
 
                 Assert.True(condition: found);
                 MeasurementAssert.Near(
-                    actual: (double)candidate.Normal.Length,
+                    actual: ((double)candidate.Normal.Length),
                     expected: 1d,
                     subject: $"{collider.Kind} normal length for probe {probe}",
                     tolerance: 0.001d
@@ -352,8 +352,8 @@ public sealed class FixedSurfaceQueryTests {
             candidate: out var candidate
         ));
         Assert.Equal(
-            expected: default,
-            actual: candidate
+            actual: candidate,
+            expected: default
         );
     }
     [Fact]
@@ -410,6 +410,7 @@ public sealed class FixedSurfaceQueryTests {
             }
             for (var i = (permutation.Length - 1); (i > 0); i--) {
                 var swapWith = random.Next(maxValue: (i + 1));
+
                 (permutation[i], permutation[swapWith]) = (permutation[swapWith], permutation[i]);
             }
 

@@ -12,8 +12,8 @@ namespace Puck.World.Tests;
 /// both validate. Each arm is a denial paired with a control differing in exactly one authored field.
 /// </summary>
 public sealed class PlacementSamplingValidationLawTests {
-    private const string PrototypeId = "marker";
     private const string PlacementId = "field";
+    private const string PrototypeId = "marker";
 
     private static void AssertValidates(WorldDefinition definition) {
         Assert.True(
@@ -86,8 +86,8 @@ public sealed class PlacementSamplingValidationLawTests {
             ],
         });
     }
-    private static WorldDistributionRegion.Noise WellFormedNoise() => new(CellSize: 1f, Width: 16, Depth: 16, Frequency: 4, Threshold: 0.4f, Octaves: 3, Seed: 7u);
-    private static WorldDistributionRegion.Scatter WellFormedScatter() => new(CellSize: 1f, Width: 10, Depth: 10, Spacing: 3, Radius: 1, Seed: 3u);
+    private static WorldDistributionRegion.Noise WellFormedNoise() => new(CellSize: 1f, Depth: 16, Frequency: 4, Octaves: 3, Seed: 7u, Threshold: 0.4f, Width: 16);
+    private static WorldDistributionRegion.Scatter WellFormedScatter() => new(CellSize: 1f, Depth: 10, Radius: 1, Seed: 3u, Spacing: 3, Width: 10);
 
     [Fact]
     public void ANoiseThresholdMustLieInZeroOneHalfOpen() {

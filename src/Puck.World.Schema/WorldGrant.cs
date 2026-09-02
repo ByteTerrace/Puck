@@ -671,7 +671,7 @@ public readonly record struct GrantVerdict(GrantRule Rule, WorldPrincipal? Reser
     public string DescribeRefusal(WorldPrincipal actor, string verb, string subject, string? dropped = null) {
         var sentence = $"{actor.Describe()} cannot {verb} {subject} ({DescribeDenial()})";
 
-        return (dropped is null
+        return ((dropped is null)
             ? sentence
             : $"{sentence} — {dropped}"
         );

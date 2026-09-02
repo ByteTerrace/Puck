@@ -21,6 +21,7 @@ internal sealed partial class WorldProbes {
         ["whiteBalance"] = CameraControl.WhiteBalance,
         ["zoom"] = CameraControl.Zoom,
     };
+
     // Only every 4th host frame's controls are actually written (device writes are slow) — a fixed frame-key
     // divisor, not a document field: it paces HOW OFTEN the surface is touched, never what value it settles on.
     private const ulong ControlWriteFrameDivisor = 4UL;
@@ -46,7 +47,7 @@ internal sealed partial class WorldProbes {
         return new ControlBindingTemplate {
             Channel = channel,
             ControlEnum = controlEnum,
-            MaxAgeTicks = (long)(control.MaxAgeSeconds * Stopwatch.Frequency),
+            MaxAgeTicks = ((long)(control.MaxAgeSeconds * Stopwatch.Frequency)),
             Row = control,
         };
     }
@@ -93,13 +94,13 @@ internal sealed partial class WorldProbes {
 
                 var spec = instance.RowInfo.Manifest.Channels[control.Channel];
                 var normalized = NormalizeChannel(
-                    raw: (double)reading[control.Channel],
+                    raw: ((double)reading[control.Channel]),
                     min: spec.Min,
                     max: spec.Max,
                     neutral: spec.Neutral
                 );
                 var unitInterval = ((normalized + 1.0) / 2.0);
-                var value = (int)Math.Round(control.Row.Minimum + (unitInterval * (control.Row.Maximum - control.Row.Minimum)));
+                var value = ((int)Math.Round(a: (control.Row.Minimum + (unitInterval * (control.Row.Maximum - control.Row.Minimum)))));
 
                 if (control.HasWritten && ReferenceEquals(objA: control.Surface, objB: surface) && (value == control.LastValue)) {
                     continue;

@@ -8,11 +8,10 @@ public readonly record struct ShaderInstruction(ShaderOp Op, uint Operand = 0u) 
     public const uint MaxOperand = 0x00FF_FFFFu;
 
     /// <summary>Gets a value indicating whether the operation reads its operand at all.</summary>
-    public static bool TakesOperand(ShaderOp op) => op is
+    public static bool TakesOperand(ShaderOp op) => (op is
         ShaderOp.LoadInput or ShaderOp.LoadParameter or ShaderOp.LoadConstant or ShaderOp.LoadLocal or
         ShaderOp.StoreLocal or ShaderOp.Swizzle or ShaderOp.Pick or ShaderOp.Jump or ShaderOp.JumpIfZero or
-        ShaderOp.Fbm2;
-
+        ShaderOp.Fbm2);
     /// <summary>Packs the operation into one word: opcode in bits 0–7 and operand in bits 8–31.</summary>
     /// <returns>The packed instruction word.</returns>
     public uint Pack() {
@@ -22,7 +21,7 @@ public readonly record struct ShaderInstruction(ShaderOp Op, uint Operand = 0u) 
         }
         ValidateOperand(op: Op, operand: Operand, paramName: nameof(Operand));
 
-        return (((uint)Op) | (Operand << 8));
+        return ((uint)Op) | (Operand << 8);
     }
     /// <summary>Decodes and validates one packed instruction word.</summary>
     /// <param name="word">The packed word.</param>
@@ -37,6 +36,7 @@ public readonly record struct ShaderInstruction(ShaderOp Op, uint Operand = 0u) 
 
         return new ShaderInstruction(Op: op, Operand: operand);
     }
+
     private static void ValidateOperand(ShaderOp op, uint operand, string paramName) {
         if (!TakesOperand(op: op)) {
             if (operand != 0u) {

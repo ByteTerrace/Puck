@@ -157,6 +157,7 @@ public sealed class OverlayChannelLeases {
     // character clamp.
     private const int ToastLabelChars = ToastWriter.LabelChars;
     private const int ToastTextWords = (ToastLabelChars + (ToastWriter.MaxMessageChars * ToastWriter.MaxMessageLines));
+
     // Wheel, per PRESENTED seat (open or lingering through its outcome fade) — the hub disc, every ring's sector
     // pieces each with its icon chip OR text fallback (two elements per sector at most), and the hub's two text
     // lines (hovered/outcome sector, active ring), all inside the seat's one clip scope. No panel. The ring/sector
@@ -194,28 +195,28 @@ public sealed class OverlayChannelLeases {
         // UInt128 covers the largest possible product here (three non-negative Int32 counts times a small writer
         // cost), so even an adversarial capacity is refused by its exact total instead of wrapping negative and
         // slipping through construction.
-        var seats = ((UInt128)(uint)capacity.Seats);
-        var hudWorldElements = (((UInt128)(uint)capacity.HudPanels) * (uint)capacity.HudElementsPerPanel);
-        var hudSeatElements = ((seats * (uint)capacity.HudSeatPanelsPerSeat) * (uint)capacity.HudElementsPerSeatPanel);
-        var hudPanels = (((UInt128)(uint)capacity.HudPanels) + ((UInt128)(uint)capacity.HudSeatPanelsPerSeat * seats));
-        var bindingBarFixedElementsPerSeat = (((UInt128)1 + (uint)capacity.BindingBarMaxModifiers) + BindingBarWriter.MaxHintLines);
-        var bindingBarElementsPerSeat = (bindingBarFixedElementsPerSeat + ((UInt128)(uint)capacity.BindingBarMaxBanks * (uint)capacity.BindingBarMaxSlotsPerBank));
+        var seats = ((UInt128)((uint)capacity.Seats));
+        var hudWorldElements = (((UInt128)((uint)capacity.HudPanels)) * ((uint)capacity.HudElementsPerPanel));
+        var hudSeatElements = ((seats * ((uint)capacity.HudSeatPanelsPerSeat)) * ((uint)capacity.HudElementsPerSeatPanel));
+        var hudPanels = (((UInt128)((uint)capacity.HudPanels)) + (((UInt128)((uint)capacity.HudSeatPanelsPerSeat)) * seats));
+        var bindingBarFixedElementsPerSeat = ((((UInt128)1) + ((uint)capacity.BindingBarMaxModifiers)) + BindingBarWriter.MaxHintLines);
+        var bindingBarElementsPerSeat = (bindingBarFixedElementsPerSeat + (((UInt128)((uint)capacity.BindingBarMaxBanks)) * ((uint)capacity.BindingBarMaxSlotsPerBank)));
         // Markers, per seat — each admitted chip writes its presence ring and its icon chip, all inside the seat's
         // one clip scope. No text, no panel. Schema-derived (OverlayCapacity.MarkerMaxChipsPerSeat), never a
         // writer-baked constant.
-        var markerElementsPerSeat = ((UInt128)(uint)capacity.MarkerMaxChipsPerSeat * 2);
-        var wheelSectorsPerSeat = ((UInt128)(uint)capacity.WheelMaxRings * (uint)capacity.WheelMaxSectorsPerRing);
+        var markerElementsPerSeat = (((UInt128)((uint)capacity.MarkerMaxChipsPerSeat)) * 2);
+        var wheelSectorsPerSeat = (((UInt128)((uint)capacity.WheelMaxRings)) * ((uint)capacity.WheelMaxSectorsPerRing));
         var wheelElementsPerSeat = ((1 + (wheelSectorsPerSeat * 2)) + 2);
         var wheelTextWordsPerSeat = (((wheelSectorsPerSeat + 1) * WheelWriter.MaxSectorLabelChars) + WheelWriter.MaxRingLabelChars);
 
         Capacity = capacity;
         (UInt128 Clips, UInt128 Elements, UInt128 Panels, UInt128 TextWords)[] wideReservations = [
             (0, ConsoleElements, 1, ConsoleTextWords),
-            (seats, (bindingBarElementsPerSeat * seats), 0, ((UInt128)BindingBarTextWordsPerSeat * seats)),
+            (seats, (bindingBarElementsPerSeat * seats), 0, (((UInt128)BindingBarTextWordsPerSeat) * seats)),
             (seats, (markerElementsPerSeat * seats), 0, 0),
             (0, ToastElements, 1, ToastTextWords),
             (hudPanels, ((hudWorldElements + hudSeatElements) * HudElementCost), hudPanels, ((hudWorldElements + hudSeatElements) * HudTextWordCost)),
-            (seats, ((UInt128)CursorElementsPerSeat * seats), 0, ((UInt128)CursorTextWordsPerSeat * seats)),
+            (seats, (((UInt128)CursorElementsPerSeat) * seats), 0, (((UInt128)CursorTextWordsPerSeat) * seats)),
             (seats, (wheelElementsPerSeat * seats), 0, (wheelTextWordsPerSeat * seats)),
         ];
 
@@ -279,7 +280,7 @@ public sealed class OverlayChannelLeases {
         }
     }
     private static void RequireWithinBackstop(string resource, UInt128 total, int backstop, string backstopName) {
-        if (total > ((UInt128)(uint)backstop)) {
+        if (total > ((UInt128)((uint)backstop))) {
             throw new ArgumentOutOfRangeException(
                 actualValue: total,
                 message: $"The overlay lease table over-subscribes its {resource}: the channels reserve {total} together, but OverlayFrameBuilder.{backstopName} addresses only {backstop}. Lower the host's OverlayCapacity or a writer's declared cap; a backstop grows only with the GPU region it sizes.",

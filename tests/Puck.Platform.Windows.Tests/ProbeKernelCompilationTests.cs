@@ -6,11 +6,11 @@ using Xunit;
 namespace Puck.Platform.Windows.Tests;
 
 public sealed class ProbeKernelCompilationTests {
-    [Theory]
     [InlineData("ir-blob")]
     [InlineData("faerie")]
     [InlineData("ir-marker")]
     [SupportedOSPlatform("windows10.0.10240")]
+    [Theory]
     public void Shipped_kernel_compiles_both_entry_points(string name) {
         var source = File.ReadAllText(path: KernelPath(name: name));
 
@@ -33,7 +33,7 @@ public sealed class ProbeKernelCompilationTests {
     }
 
     private static string KernelPath(string name, [CallerFilePath] string callerFilePath = "") {
-        var repositoryRoot = Path.GetFullPath(path: Path.Combine(Path.GetDirectoryName(path: callerFilePath)!, "..", ".."));
+        var repositoryRoot = Path.GetFullPath(path: Path.Combine(path1: Path.GetDirectoryName(path: callerFilePath)!, path2: "..", path3: ".."));
 
         return Path.Combine(repositoryRoot, "src", "Puck.Shaders", "Assets", "Probes", $"{name}.hlsl");
     }

@@ -85,10 +85,10 @@ public readonly record struct FixedSoftConstraint(
         }
 
         var (omegaNumerator, omegaDenominator) = FixedQ4816.AngularFrequency(frequencyHz: clamped);
-        var omega = new Rational(Numerator: omegaNumerator, Denominator: omegaDenominator);
+        var omega = new Rational(Denominator: omegaDenominator, Numerator: omegaNumerator);
 
         // hω, the ONE place the substep width enters. h = 1 / (rateHz · substepCount) exactly.
-        var hOmega = new Rational(Numerator: omegaNumerator, Denominator: (omegaDenominator * substepRate));
+        var hOmega = new Rational(Denominator: (omegaDenominator * substepRate), Numerator: omegaNumerator);
         var twoZeta = new Rational(Numerator: (2 * ((BigInteger)dampingRatio.Value)), Denominator: (BigInteger.One << FixedQ4816.FractionBitCount));
 
         // a₁ = 2ζ + hω; a₂ = hω·a₁; a₃ = 1/(1 + a₂).

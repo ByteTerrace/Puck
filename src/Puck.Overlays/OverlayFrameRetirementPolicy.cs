@@ -11,7 +11,6 @@ public enum OverlayFrameExit {
     /// <summary>The device was lost.</summary>
     DeviceLost,
 }
-
 /// <summary>Which <see cref="OverlayFrameSlots"/> retirement one <see cref="OverlayFrameExit"/> takes — pulled out
 /// of <see cref="UnifiedOverlayNode"/> so its exit points read one shared table instead of each repeating the
 /// decision.</summary>

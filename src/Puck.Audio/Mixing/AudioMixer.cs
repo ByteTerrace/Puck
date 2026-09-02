@@ -53,6 +53,7 @@ public sealed class AudioMixer {
     private struct Q32GainRamp {
         private long m_currentLeft;
         private long m_currentRight;
+
         private readonly long m_stepLeft;
         private readonly long m_stepRight;
 

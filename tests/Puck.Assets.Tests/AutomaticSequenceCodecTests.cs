@@ -27,8 +27,8 @@ public sealed class AutomaticSequenceCodecTests {
         var reencoded = AutomaticIntegerSequenceCodec.Encode(sequence: decoded);
 
         Assert.Equal(
-            expected: encoded,
-            actual: reencoded
+            actual: reencoded,
+            expected: encoded
         );
         Assert.Equal(
             expected: ContentAddressedStore.ComputeHash(content: encoded),
@@ -46,7 +46,6 @@ public sealed class AutomaticSequenceCodecTests {
             );
         }
     }
-
     [Fact]
     public void QuadraticOstrowskiSequenceRoundTrips() {
         var numeration = IntegerNumerationSystem.QuadraticOstrowski(basis: QuadraticSurd.Create(
@@ -68,22 +67,21 @@ public sealed class AutomaticSequenceCodecTests {
             content: AutomaticIntegerSequenceCodec.Encode(sequence: original)
         );
 
-        foreach (var index in new BigInteger[] { 0, 1, 2, 3, 55, 65_535, BigInteger.Pow(value: 10, exponent: 80) }) {
+        foreach (var index in new BigInteger[] { 0, 1, 2, 3, 55, 65_535, BigInteger.Pow(exponent: 80, value: 10) }) {
             Assert.Equal(
                 expected: original.ValueAt(index: index),
                 actual: decoded.ValueAt(index: index)
             );
         }
     }
-
     [Fact]
     public void DecoderRejectsTrailingBytesAndCeilingBreaches() {
         var encoded = AutomaticIntegerSequenceCodec.Encode(sequence: BinaryParitySequence());
-        var withTrailingByte = new byte[encoded.Length + 1];
+        var withTrailingByte = new byte[(encoded.Length + 1)];
 
         encoded.CopyTo(array: withTrailingByte, index: 0);
-        Assert.Throws<InvalidDataException>(() => AutomaticIntegerSequenceCodec.Decode(content: withTrailingByte));
-        Assert.Throws<InvalidDataException>(() => AutomaticIntegerSequenceCodec.Decode(
+        Assert.Throws<InvalidDataException>(testCode: () => AutomaticIntegerSequenceCodec.Decode(content: withTrailingByte));
+        Assert.Throws<InvalidDataException>(testCode: () => AutomaticIntegerSequenceCodec.Decode(
             content: encoded,
             limits: new AutomaticSequenceDecodeLimits(maximumArtifactBytes: (encoded.Length - 1))
         ));

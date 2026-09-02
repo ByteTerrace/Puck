@@ -82,7 +82,6 @@ internal sealed partial class WorldScreenBinder {
 
         return (Ok: true, Message: $"screen {index} showing probe '{id}'");
     }
-
     /// <summary>Reads a named camera's offscreen view as a kernel input ring, registering the view for export on first
     /// request; the ring arrives at a later publish. Export needs the Direct3D 12 host: the offscreen engine's
     /// exportable image is opened by the probe kernel bench's Direct3D 11 <c>OpenSharedResource1</c>, and a Vulkan
@@ -192,13 +191,13 @@ internal sealed partial class WorldScreenBinder {
             }
         }
     }
+
     private bool HasViewExportReferences(string cameraName) => m_viewExportReferences.ContainsKey(key: cameraName);
     private void RetireViewExportForRecreation(string cameraName) {
         if (m_viewExports.Remove(key: cameraName, value: out var feed)) {
             feed.Detach();
         }
     }
-
     // Registers (idempotent) the camera's offscreen view for export — the same persistent SdfCameraView a jumbotron
     // screen would use (RegisterCameraView), so a camera already filmed by a screen gains export with no second
     // render pass. An export-only camera (no screen names it) still renders every ViewStack refresh: Register's
@@ -241,7 +240,6 @@ internal sealed partial class WorldScreenBinder {
 
         return feed;
     }
-
     private ProbeFeed GetOrAddProbeFeed(string id) {
         if (!m_probeFeeds.TryGetValue(key: id, value: out var feed)) {
             feed = new ProbeFeed(id: id);
@@ -345,7 +343,9 @@ internal sealed partial class WorldScreenBinder {
 
             return targets.Handle(slot: output.Slots.LatestSlot);
         }
+
         public Vector3 Light => Vector3.Zero;
+
         public void Release() {
             var targets = Targets;
 
@@ -369,6 +369,7 @@ internal sealed partial class WorldScreenBinder {
         public ViewExportRing Slots { get; } = new();
         public ProbeKernelInput.Ring? Input { get; set; }
         public object? InputGeneration { get; set; }
+
         private object? PendingGeneration { get; set; }
 
         public void Detach() {
@@ -376,6 +377,7 @@ internal sealed partial class WorldScreenBinder {
             View.TryBeginExportWrite = null;
             View.EndExportWrite = null;
         }
+
         private void EndWrite(bool completed) {
             if (completed) {
                 // Publish the generation identity before the ring's volatile ready state. A failed first submission
@@ -420,14 +422,13 @@ internal sealed partial class WorldScreenBinder {
                 if ((state > 1) || (state < 0)) {
                     return false;
                 }
-                if (Interlocked.CompareExchange(location1: ref m_state, value: -2, comparand: state) == state) {
+                if (Interlocked.CompareExchange(comparand: state, location1: ref m_state, value: -2) == state) {
                     m_hadCompletedBeforeWrite = (state == 1);
 
                     return true;
                 }
             }
         }
-
         public bool TryAcquireLatest(out int slot) {
             while (true) {
                 var state = Volatile.Read(location: ref m_state);
@@ -437,7 +438,7 @@ internal sealed partial class WorldScreenBinder {
 
                     return false;
                 }
-                if (Interlocked.CompareExchange(location1: ref m_state, value: (state + 1), comparand: state) == state) {
+                if (Interlocked.CompareExchange(comparand: state, location1: ref m_state, value: (state + 1)) == state) {
                     slot = 0;
 
                     return true;
@@ -455,7 +456,7 @@ internal sealed partial class WorldScreenBinder {
                 if (state <= 1) {
                     return;
                 }
-                if (Interlocked.CompareExchange(location1: ref m_state, value: (state - 1), comparand: state) == state) {
+                if (Interlocked.CompareExchange(comparand: state, location1: ref m_state, value: (state - 1)) == state) {
                     return;
                 }
             }
@@ -469,7 +470,7 @@ internal sealed partial class WorldScreenBinder {
                 if (state == -1) {
                     return;
                 }
-                if ((state is 0 or 1) && (Interlocked.CompareExchange(location1: ref m_state, value: -1, comparand: state) == state)) {
+                if ((state is 0 or 1) && (Interlocked.CompareExchange(comparand: state, location1: ref m_state, value: -1) == state)) {
                     return;
                 }
 

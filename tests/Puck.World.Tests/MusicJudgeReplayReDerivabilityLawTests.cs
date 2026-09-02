@@ -128,11 +128,11 @@ public sealed class MusicJudgeReplayReDerivabilityLawTests {
                     Id: "calm",
                     Transitions: null,
                     Layers: [
-                        new MusicLayerDocument(TuneId: "ambient-tune", GainThousandths: null, When: null),
-                        new MusicLayerDocument(TuneId: "arrival-tune", GainThousandths: null, When: WorldAudioCue.SeatJoin),
+                        new MusicLayerDocument(GainThousandths: null, TuneId: "ambient-tune", When: null),
+                        new MusicLayerDocument(GainThousandths: null, TuneId: "arrival-tune", When: WorldAudioCue.SeatJoin),
                     ],
                     Embellishments: [
-                        new MusicEmbellishmentDocument(PatchId: "stinger", When: WorldAudioCue.SeatJoin, GainThousandths: null),
+                        new MusicEmbellishmentDocument(GainThousandths: null, PatchId: "stinger", When: WorldAudioCue.SeatJoin),
                     ]
                 ),
             ]
@@ -141,8 +141,8 @@ public sealed class MusicJudgeReplayReDerivabilityLawTests {
 
         File.WriteAllBytes(path: musicPath, bytes: music.Bytes);
 
-        var ambientTune = AudioCanonicalizer.Canonicalize(document: new AudioDocument(Schema: AudioDocument.CurrentSchema, Name: "ambient", Tempo: null, Patterns: null, Order: null, Effects: null));
-        var arrivalTune = AudioCanonicalizer.Canonicalize(document: new AudioDocument(Schema: AudioDocument.CurrentSchema, Name: "arrival", Tempo: null, Patterns: null, Order: null, Effects: null));
+        var ambientTune = AudioCanonicalizer.Canonicalize(document: new AudioDocument(Effects: null, Name: "ambient", Order: null, Patterns: null, Schema: AudioDocument.CurrentSchema, Tempo: null));
+        var arrivalTune = AudioCanonicalizer.Canonicalize(document: new AudioDocument(Effects: null, Name: "arrival", Order: null, Patterns: null, Schema: AudioDocument.CurrentSchema, Tempo: null));
         var stingerPatch = SynthPatchCanonicalizer.Canonicalize(document: new SynthPatchDocument(Schema: SynthPatchDocument.CurrentSchema, Name: "stinger", Oscillator: null, DutyThousandths: null, Polynomial: null, AttackFrames: null, DecayFrames: null, SustainThousandths: null, ReleaseFrames: null, PitchMillihertz: 440_000));
 
         var ambientTunePath = Path.Combine(path1: assetDirectory, path2: "ambient-tune.puck.audio.v1.json");

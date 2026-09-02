@@ -29,7 +29,7 @@ public sealed class NullWorldComparison {
 
         foreach (var point in points) {
             var expected = NullWorldReference.Sample(point: point);
-            var context = new ShaderContext(Coordinate: new Vector4(x: point.X, y: point.Y, z: point.Z, w: 0f));
+            var context = new ShaderContext(Coordinate: new Vector4(w: 0f, x: point.X, y: point.Y, z: point.Z));
             var actual = ShaderInterpreter.Evaluate(context: in context, parameters: [], program: program);
             var delta = Math.Abs(value: (((double)actual.X) - expected.Distance));
 
@@ -50,7 +50,7 @@ public sealed class NullWorldComparison {
         }
 
         var interpreted = Nanoseconds(evaluate: point => {
-            var context = new ShaderContext(Coordinate: new Vector4(x: point.X, y: point.Y, z: point.Z, w: 0f));
+            var context = new ShaderContext(Coordinate: new Vector4(w: 0f, x: point.X, y: point.Y, z: point.Z));
 
             return ShaderInterpreter.Evaluate(context: in context, parameters: [], program: program).X;
         }, points: points);
@@ -82,6 +82,7 @@ public sealed class NullWorldComparison {
         Assert.Equal(actual: materialMismatches, expected: 0);
         Assert.True(condition: (worstDistance < 1e-4), userMessage: $"worst distance delta {worstDistance:E3} at ({worstAt.X}, {worstAt.Y}, {worstAt.Z})");
     }
+
     // A deterministic spread over the whole authored volume, up past the highest planetoid, so every creation and
     // every domain fold is exercised.
     private static Vector3[] Points() {

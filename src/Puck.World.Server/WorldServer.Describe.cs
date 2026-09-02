@@ -307,7 +307,7 @@ public sealed partial class WorldServer {
             var held = latch.Held(name: rule.Name);
             var scope = ((rule.Interaction is { } interaction)
                 ? $" {interaction.CoOccurrence.ToString().ToLowerInvariant()} {interaction.Left} x {interaction.Right}{((interaction.CoOccurrence == WorldInteractionCoOccurrence.Distance)
-                    ? $" <= {(double)interaction.Range}"
+                    ? $" <= {((double)interaction.Range)}"
                     : string.Empty)}"
                 : ((rule.ForEach is { } forEach)
                     ? $" forEach {forEach}"

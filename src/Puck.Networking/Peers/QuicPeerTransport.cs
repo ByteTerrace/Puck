@@ -11,8 +11,10 @@ namespace Puck.Networking.Peers;
 /// certificate on both sides, so <see cref="IPeerConnection.RemoteTransportKey"/> is the public key of the
 /// certificate the remote side proved possession of. Certificate validation accepts any certificate the remote
 /// side can prove; binding that certificate's key to a peer identity is the peer handshake's job, so a certificate
-/// is a channel credential here, never a trust decision. Datagrams are absent: this runtime's QUIC surface exposes
-/// no RFC 9221 datagram API, so <see cref="IPeerConnection.MaxDatagramBytes"/> is 0 on every connection.</summary>
+/// is a channel credential here, never a trust decision. Each connection admits exactly one inbound bidirectional
+/// stream — the control stream is the only one a peer ever accepts, so a remote side cannot open further streams
+/// whose receive windows nobody drains. Datagrams are absent: this runtime's QUIC surface exposes no RFC 9221
+/// datagram API, so <see cref="IPeerConnection.MaxDatagramBytes"/> is 0 on every connection.</summary>
 [SupportedOSPlatform("windows")]
 [SupportedOSPlatform("linux")]
 [SupportedOSPlatform("macos")]
@@ -26,7 +28,9 @@ public sealed class QuicPeerTransport : IPeerTransport {
 
     private static readonly TimeSpan KeepAliveInterval = TimeSpan.FromSeconds(value: 10);
 
-    private const int MaxInboundStreams = 16;
+    // Only the control stream is ever accepted (Peer.AcceptOneAsync accepts one stream and nothing reads a second),
+    // so admitting more would only let a remote side fill inbound receive windows nobody drains.
+    private const int MaxInboundStreams = 1;
 
     private readonly X509Certificate2 m_certificate;
 
@@ -52,10 +56,16 @@ public sealed class QuicPeerTransport : IPeerTransport {
     );
 
     private static bool AcceptAnyPresentedCertificate(object sender, X509Certificate? certificate, X509Chain? chain, SslPolicyErrors errors) => (certificate is not null);
-    private static ReadOnlyMemory<byte> TransportKeyOf(QuicConnection connection) => (connection.RemoteCertificate switch {
-        X509Certificate2 certificate => certificate.PublicKey.ExportSubjectPublicKeyInfo(),
-        _ => ReadOnlyMemory<byte>.Empty,
-    });
+    private static ReadOnlyMemory<byte> TransportKeyOf(QuicConnection connection) {
+        // Reading RemoteCertificate transfers ownership of the certificate object to the caller, so it is disposed
+        // here once its SPKI has been exported rather than left for finalization.
+        using var certificate = connection.RemoteCertificate;
+
+        return (certificate switch {
+            X509Certificate2 presented => presented.PublicKey.ExportSubjectPublicKeyInfo(),
+            _ => ReadOnlyMemory<byte>.Empty,
+        });
+    }
 
     /// <inheritdoc/>
     public async ValueTask<IPeerConnection> DialAsync(EndPoint endpoint, CancellationToken ct = default) {
@@ -78,7 +88,13 @@ public sealed class QuicPeerTransport : IPeerTransport {
             }
         ).ConfigureAwait(continueOnCapturedContext: false);
 
-        return new Connection(connection: connection);
+        try {
+            return new Connection(connection: connection);
+        } catch (Exception) {
+            await connection.DisposeAsync().ConfigureAwait(continueOnCapturedContext: false);
+
+            throw;
+        }
     }
     /// <inheritdoc/>
     public async ValueTask<IPeerListener> ListenAsync(IPEndPoint endpoint, CancellationToken ct = default) {
@@ -95,6 +111,9 @@ public sealed class QuicPeerTransport : IPeerTransport {
                     MaxInboundBidirectionalStreams = MaxInboundStreams,
                     ServerAuthenticationOptions = new SslServerAuthenticationOptions {
                         ApplicationProtocols = [ApplicationProtocol],
+                        // Load-bearing for "a certificate on both sides": without it the validation callback is never
+                        // invoked for a dialer, the accepted connection's RemoteCertificate stays null, and every
+                        // dialer would arrive with an empty transport key.
                         ClientCertificateRequired = true,
                         RemoteCertificateValidationCallback = AcceptAnyPresentedCertificate,
                         ServerCertificate = m_certificate,
@@ -127,12 +146,18 @@ public sealed class QuicPeerTransport : IPeerTransport {
                 try {
                     var connection = await m_listener.AcceptConnectionAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false);
 
-                    return new Connection(connection: connection);
+                    try {
+                        return new Connection(connection: connection);
+                    } catch (Exception) {
+                        // The accepted connection's certificate could not be read or its key exported; that connection is
+                        // dropped and the listener stays open for the next.
+                        await connection.DisposeAsync().ConfigureAwait(continueOnCapturedContext: false);
+                    }
                 } catch (QuicException exception) when (((exception.QuicError != QuicError.OperationAborted) && !ct.IsCancellationRequested)) {
                     // One remote side failed the transport handshake; the listener stays open for the next.
                 } catch (AuthenticationException) when (!ct.IsCancellationRequested) {
                     // Same: the remote side's certificate did not satisfy the TLS handshake.
-                } catch (Exception exception) when ((exception is QuicException or ObjectDisposedException or OperationCanceledException)) {
+                } catch (Exception exception) when ((exception is QuicException or AuthenticationException or ObjectDisposedException or OperationCanceledException)) {
                     return null;
                 }
             }

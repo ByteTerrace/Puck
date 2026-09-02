@@ -53,7 +53,7 @@ public static class WorldTcpWireFormat {
     }
 
     private static byte[] EncodeText(string text) => Encoding.UTF8.GetBytes(s: (text ?? string.Empty));
-    private static Task WriteDownstreamAsync(Stream stream, DownstreamKind kind, byte[] body, CancellationToken ct) => WireFrame.WriteAsync(
+    private static Task WriteDownstreamAsync(Stream stream, DownstreamKind kind, ReadOnlyMemory<byte> body, CancellationToken ct) => WireFrame.WriteAsync(
         body: body,
         ct: ct,
         kind: ((byte)kind),
@@ -66,28 +66,59 @@ public static class WorldTcpWireFormat {
     /// <param name="body">The whole downstream body.</param>
     /// <returns>The decoded string.</returns>
     public static string DecodeText(ReadOnlySpan<byte> body) => Encoding.UTF8.GetString(bytes: body);
+    /// <summary>Decodes one whole downstream frame already in memory — <c>[u32 length][u8 kind][body]</c>, exactly
+    /// the bytes <see cref="WriteResultAsync"/> and its siblings write — into its kind and body. The one parse both
+    /// <see cref="TryReadDownstreamAsync"/> (over a socket) and the federation Completion lane (which embeds a whole
+    /// downstream frame as a response body) share, so the grammar has one home.</summary>
+    /// <param name="frame">The whole frame, prefix included.</param>
+    /// <param name="kind">The decoded kind on success.</param>
+    /// <param name="body">The body, sliced over <paramref name="frame"/> without copying, on success.</param>
+    /// <returns><see langword="false"/> when the frame is shorter than its prefix plus kind byte, longer than
+    /// <see cref="MaxDownstreamFrameBytes"/>, declares a length other than the bytes that follow the prefix, or names
+    /// an undeclared kind.</returns>
+    public static bool TryDecodeDownstream(ReadOnlyMemory<byte> frame, out DownstreamKind kind, out ReadOnlyMemory<byte> body) {
+        kind = default;
+        body = ReadOnlyMemory<byte>.Empty;
+
+        if (
+            (frame.Length <= sizeof(uint)) ||
+            (frame.Length > MaxDownstreamFrameBytes) ||
+            (System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(source: frame.Span) != ((uint)(frame.Length - sizeof(uint))))
+        ) {
+            return false;
+        }
+
+        var declared = ((DownstreamKind)frame.Span[sizeof(uint)]);
+
+        if (!Enum.IsDefined(value: declared)) {
+            return false;
+        }
+
+        kind = declared;
+        body = frame[(sizeof(uint) + sizeof(byte))..];
+
+        return true;
+    }
     /// <summary>Reads one downstream frame — the client's one reader for both the Hello verdict and every completion.</summary>
     /// <param name="stream">The connection stream.</param>
     /// <param name="ct">Cancellation.</param>
-    /// <returns>The decoded kind and its raw body, or <see langword="null"/> on disconnect.</returns>
-    public static async Task<(DownstreamKind Kind, byte[] Body)?> TryReadDownstreamAsync(Stream stream, CancellationToken ct) {
+    /// <returns>The decoded kind and its raw body — a slice over the frame's own buffer, allocated per frame and never
+    /// reused, so it is safe to keep — or <see langword="null"/> on disconnect or a frame that does not decode.</returns>
+    public static async Task<(DownstreamKind Kind, ReadOnlyMemory<byte> Body)?> TryReadDownstreamAsync(Stream stream, CancellationToken ct) {
         var whole = await HandshakeWireFormat.TryReadLengthPrefixedFrameAsync(
             ct: ct,
             maxTotalBytes: MaxDownstreamFrameBytes,
             stream: stream
         ).ConfigureAwait(continueOnCapturedContext: false);
 
-        if ((whole is not { Length: > sizeof(uint) } bytes)) {
-            return null;
-        }
-
-        var kind = ((DownstreamKind)bytes[sizeof(uint)]);
-
-        if (!Enum.IsDefined(value: kind)) {
-            return null;
-        }
-
-        return (kind, bytes[(sizeof(uint) + sizeof(byte))..]);
+        return (((whole is not null) && TryDecodeDownstream(
+            body: out var body,
+            frame: whole,
+            kind: out var kind
+        ))
+            ? (kind, body)
+            : null
+        );
     }
     /// <summary>Writes a downstream Hello-accepted verdict.</summary>
     public static Task WriteHelloAcceptedAsync(Stream stream, int peerIndex, int generation, int connectionId, CancellationToken ct) {
@@ -98,7 +129,7 @@ public static class WorldTcpWireFormat {
         writer.WriteInt32(value: connectionId);
 
         return WriteDownstreamAsync(
-            body: writer.ToArray(),
+            body: writer.WrittenMemory,
             ct: ct,
             kind: DownstreamKind.HelloAccepted,
             stream: stream
@@ -141,7 +172,7 @@ public static class WorldTcpWireFormat {
         switch (result) {
             case WorldSubmissionResult.Ack:
                 return WriteDownstreamAsync(
-                    body: [],
+                    body: ReadOnlyMemory<byte>.Empty,
                     ct: ct,
                     kind: DownstreamKind.Ack,
                     stream: stream
@@ -156,7 +187,7 @@ public static class WorldTcpWireFormat {
                     writer.WriteString(value: session.Reply.Reason);
 
                     return WriteDownstreamAsync(
-                        body: writer.ToArray(),
+                        body: writer.WrittenMemory,
                         ct: ct,
                         kind: DownstreamKind.Session,
                         stream: stream
@@ -170,7 +201,7 @@ public static class WorldTcpWireFormat {
                     writer.WriteString(value: query.Answer.Text);
 
                     return WriteDownstreamAsync(
-                        body: writer.ToArray(),
+                        body: writer.WrittenMemory,
                         ct: ct,
                         kind: DownstreamKind.Query,
                         stream: stream
@@ -219,8 +250,8 @@ public static class WorldTcpWireFormat {
                     result = new WorldSubmissionResult.Session(Reply: new SessionReply(
                         Accepted: accepted,
                         AssignedIndex: assignedIndex,
-                        RosterEcho: string.Empty,
-                        Reason: sessionReason
+                        Reason: sessionReason,
+                        RosterEcho: string.Empty
                     ));
                     reason = string.Empty;
 

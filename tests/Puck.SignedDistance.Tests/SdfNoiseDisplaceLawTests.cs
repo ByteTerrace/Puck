@@ -86,7 +86,6 @@ public sealed class SdfNoiseDisplaceLawTests {
         );
         Assert.True(condition: (program.StepScale < 1.0f));
     }
-
     [Fact]
     public void AZeroAmplitudeIsAnExactIdentityOnTheStepScale() {
         var program = BuildNoiseSphere(
@@ -102,7 +101,6 @@ public sealed class SdfNoiseDisplaceLawTests {
             expected: 1.0f
         );
     }
-
     [Fact]
     public void ANoiseFreeProgramKeepsTheExactUnitStepScale() {
         var builder = new SdfProgramBuilder();
@@ -120,10 +118,9 @@ public sealed class SdfNoiseDisplaceLawTests {
             expected: 1.0f
         );
     }
-
-    [Theory]
     [InlineData(0)]
-    [InlineData(SdfProgramBuilder.MaxNoiseOctaves + 1)]
+    [InlineData((SdfProgramBuilder.MaxNoiseOctaves + 1))]
+    [Theory]
     public void AnOctaveCountOutsideTheCapRefusesByName(int octaves) {
         var builder = new SdfProgramBuilder();
         var exception = Assert.Throws<ArgumentException>(testCode: () => builder.NoiseDisplace(
@@ -137,7 +134,6 @@ public sealed class SdfNoiseDisplaceLawTests {
             expected: "octaves"
         );
     }
-
     [Fact]
     public void ANonFiniteFrequencyRefusesByName() {
         var builder = new SdfProgramBuilder();
@@ -151,7 +147,6 @@ public sealed class SdfNoiseDisplaceLawTests {
             expected: "frequency"
         );
     }
-
     [Fact]
     public void ANonPositiveGainRefusesByName() {
         var builder = new SdfProgramBuilder();
@@ -166,7 +161,6 @@ public sealed class SdfNoiseDisplaceLawTests {
             expected: "gain"
         );
     }
-
     [Fact]
     public void AParkedInstanceCarryingTheFieldOpRefuses() {
         var builder = new SdfProgramBuilder();
@@ -195,7 +189,6 @@ public sealed class SdfNoiseDisplaceLawTests {
             expectedSubstring: "NoiseDisplace"
         );
     }
-
     [Fact]
     public void AnUncontainableCellJitterPrototypeRefusesAtBuild() {
         // jitter/2 (1.2) + capsule reach (~2.05 from the fold frame) > min(spacing)/2 (1.75 for spacing 3.5): packing
@@ -220,7 +213,6 @@ public sealed class SdfNoiseDisplaceLawTests {
             expectedSubstring: "cannot be contained"
         );
     }
-
     [Fact]
     public void AContainableCellJitterPrototypeBuildsWithABoundedStepClamp() {
         var builder = new SdfProgramBuilder();
@@ -240,7 +232,6 @@ public sealed class SdfNoiseDisplaceLawTests {
         Assert.True(condition: (program.StepScale > 0.01f));
         Assert.True(condition: (program.StepScale <= 1.0f));
     }
-
     [Fact]
     public void TheWarpFreeEvaluatorRefusesTheOpByName() {
         var program = BuildNoiseSphere(

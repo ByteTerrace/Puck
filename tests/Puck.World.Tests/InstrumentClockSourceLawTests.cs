@@ -19,8 +19,8 @@ namespace Puck.World.Tests;
 /// </summary>
 public sealed class InstrumentClockSourceLawTests {
     private const int InstrumentScreenIndex = 1;
-    private const int WorldTicksPerBeat = 50400;
     private const int StepBudgetAfterJoin = 10;
+    private const int WorldTicksPerBeat = 50400;
 
     [Fact]
     public void EngagingTheInstrumentCommitsTheTransition_UnengagedControlLeavesItArmed() {
@@ -97,14 +97,14 @@ public sealed class InstrumentClockSourceLawTests {
             Segments: [
                 new MusicSegmentDocument(
                     Id: "idle",
-                    Transitions: [new MusicTransitionDocument(To: "driven", When: WorldAudioCue.SeatJoin, At: MusicTransitionBoundary.BeatEnd)]
+                    Transitions: [new MusicTransitionDocument(At: MusicTransitionBoundary.BeatEnd, To: "driven", When: WorldAudioCue.SeatJoin)]
                 ),
                 new MusicSegmentDocument(Id: "driven", Transitions: null),
             ]
         ));
         // The instrument's own authored tempo — AudioDocument's minimum (1 frame/row @ 60 fps), the fastest an
         // instrument can author: 840 engine ticks/beat, far inside this law's step budget.
-        var instrument = AudioCanonicalizer.Canonicalize(document: new AudioDocument(Schema: AudioDocument.CurrentSchema, Name: "fast-instrument", Tempo: 1, Patterns: null, Order: null, Effects: null));
+        var instrument = AudioCanonicalizer.Canonicalize(document: new AudioDocument(Effects: null, Name: "fast-instrument", Order: null, Patterns: null, Schema: AudioDocument.CurrentSchema, Tempo: 1));
 
         var musicPath = Path.Combine(path1: assetDirectory, path2: "instrument-clock-law.puck.music.v1.json");
         var instrumentPath = Path.Combine(path1: assetDirectory, path2: "fast-instrument.puck.audio.v1.json");

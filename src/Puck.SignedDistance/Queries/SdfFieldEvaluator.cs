@@ -120,12 +120,12 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     private static FixedQ4816 ConservativeStepScale(float value) {
         const double RawOne = (1L << FixedQ4816.FractionBitCount);
 
-        var raw = ((long)Math.Floor(((double)value) * RawOne));
+        var raw = ((long)Math.Floor(d: (((double)value) * RawOne)));
 
         return FixedQ4816.FromRawBits(value: Math.Clamp(
-            value: raw,
+            max: ((long)RawOne),
             min: 0L,
-            max: ((long)RawOne)
+            value: raw
         ));
     }
 
@@ -538,13 +538,13 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
             // iteration accepts on the negative field inside. Geometry thinner than one tick is under the format.
             // Radius casts are bit-identical: for radius >= one tick, max(floor(f*s), tick) - radius <= 0 exactly when
             // floor(f*s) - radius <= 0, so a sweep still stops before advancing into the contact envelope.
-            var safeAdvance = FixedQ4816.Max(
+            var safeAdvance = (FixedQ4816.Max(
                 x: ScaleDistanceDown(
                     distance: fieldDistance,
                     scale: m_stepScale
                 ),
                 y: FixedQ4816.Epsilon
-            ) - radius;
+            ) - radius);
 
             if (safeAdvance <= FixedQ4816.Zero) {
                 return Exhaust(
@@ -1416,7 +1416,6 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
         Hit = 1,
         Exhausted = 2,
     }
-
     // The compiled, fixed-point form of one SdfInstruction: every Data0/Data1 float lane converted to FixedQ4816
     // ONCE at construction (see Compile). Field names mirror the shader's data0.x/y/z/w and data1.x/y/z/w swizzles
     // directly so a shape/op body reads as a transcription of its mapCore counterpart, not a re-derivation.

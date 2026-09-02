@@ -51,9 +51,9 @@ public sealed class ProjectionDisclosureLawTests {
                 Custom: new Dictionary<string, JsonElement> { ["secret"] = JsonDocument.Parse(json: "true").RootElement.Clone() }
             ),
         });
-        var projection = WorldProjection.Compose(definition: definition, tier: WorldDisclosureTier.Presentation, authority: "boot", revision: 7);
+        var projection = WorldProjection.Compose(authority: "boot", definition: definition, revision: 7, tier: WorldDisclosureTier.Presentation);
 
-        Assert.NotNull(projection);
+        Assert.NotNull(@object: projection);
 
         var json = Encoding.UTF8.GetString(bytes: WorldProjection.Serialize(projection: projection!));
         var found = new List<string>();
@@ -81,28 +81,28 @@ public sealed class ProjectionDisclosureLawTests {
         var definition = (Fixtures.BuildDocument() with {
             Metadata = new WorldMetadataSection(Title: "Play", Description: "The overworld hub.", Authors: [new WorldMetadataAuthor(Name: "Jane")], Tags: ["overworld"]),
         });
-        var projection = WorldProjection.Compose(definition: definition, tier: WorldDisclosureTier.Presentation, authority: "127.0.0.1:5000", revision: 3);
+        var projection = WorldProjection.Compose(authority: "127.0.0.1:5000", definition: definition, revision: 3, tier: WorldDisclosureTier.Presentation);
 
-        Assert.NotNull(projection);
-        Assert.True(WorldProjection.TryDeserialize(utf8Json: WorldProjection.Serialize(projection: projection!), projection: out var decoded, reason: out var reason), reason);
-        Assert.NotNull(decoded);
+        Assert.NotNull(@object: projection);
+        Assert.True(condition: WorldProjection.TryDeserialize(utf8Json: WorldProjection.Serialize(projection: projection!), projection: out var decoded, reason: out var reason), userMessage: reason);
+        Assert.NotNull(@object: decoded);
         Assert.Equal(expected: WorldDisclosureTier.Presentation, actual: decoded!.Provenance.Tier);
         Assert.Equal(expected: "127.0.0.1:5000", actual: decoded.Provenance.Authority);
         Assert.Equal(expected: 3, actual: decoded.Provenance.Revision);
 
-        Assert.True(WorldProjection.TryToDefinition(projection: decoded, definition: out var hydrated, reason: out var hydrationReason), hydrationReason);
-        Assert.NotNull(hydrated);
+        Assert.True(condition: WorldProjection.TryToDefinition(definition: out var hydrated, projection: decoded, reason: out var hydrationReason), userMessage: hydrationReason);
+        Assert.NotNull(@object: hydrated);
         Assert.Equal(expected: definition.Kits.Count, actual: hydrated!.Kits.Count);
         Assert.Equal(expected: definition.Kits[0].Name, actual: hydrated.Kits[0].Name);
         Assert.Equal(expected: definition.DefaultSeatKit, actual: hydrated.DefaultSeatKit);
         Assert.Equal(expected: definition.Placements.Count, actual: hydrated.Placements.Count);
         Assert.Equal(expected: definition.SimulationRateHz, actual: hydrated.SimulationRateHz);
         // The redacted sections hydrate neutral, never as a guess at what the composing authority authored.
-        Assert.Empty(hydrated.Grants);
-        Assert.Empty(hydrated.State);
-        Assert.Empty(hydrated.Kits[0].Actions);
-        Assert.Empty(hydrated.BodyMotionPrograms);
-        Assert.Null(hydrated.Admission);
+        Assert.Empty(collection: hydrated.Grants);
+        Assert.Empty(collection: hydrated.State);
+        Assert.Empty(collection: hydrated.Kits[0].Actions);
+        Assert.Empty(collection: hydrated.BodyMotionPrograms);
+        Assert.Null(@object: hydrated.Admission);
         // Metadata's disclosed half survives the round trip; its withheld half hydrates neutral, not as a guess.
         Assert.Equal(expected: "Play", actual: hydrated.Metadata!.Title);
         Assert.Equal(expected: "The overworld hub.", actual: hydrated.Metadata.Description);
@@ -114,8 +114,8 @@ public sealed class ProjectionDisclosureLawTests {
     public void ReplicaTier_SendsTheDefinitionVerbatim() {
         var definition = Fixtures.BuildDocument();
 
-        Assert.Null(WorldProjection.Compose(definition: definition, tier: WorldDisclosureTier.Replica, authority: "boot", revision: 1));
-        Assert.Null(WorldProjection.Compose(definition: definition, tier: WorldDisclosureTier.Frames, authority: "boot", revision: 1));
+        Assert.Null(@object: WorldProjection.Compose(authority: "boot", definition: definition, revision: 1, tier: WorldDisclosureTier.Replica));
+        Assert.Null(@object: WorldProjection.Compose(authority: "boot", definition: definition, revision: 1, tier: WorldDisclosureTier.Frames));
 
         var first = WorldDefinitionSerialization.Serialize(definition: definition);
         var reloaded = WorldDefinitionSerialization.Deserialize(utf8Json: first);
@@ -126,15 +126,15 @@ public sealed class ProjectionDisclosureLawTests {
     public void UnauthoredAdmissionEntry_ResolvesToPresentation() {
         var entry = Fixtures.AnyAuthorityArrivals();
 
-        Assert.Null(entry.Disclosure);
+        Assert.Null(value: entry.Disclosure);
         Assert.Equal(expected: WorldDisclosureTier.Presentation, actual: entry.Tier);
         Assert.Equal(expected: WorldDisclosureTier.Replica, actual: (entry with { Disclosure = WorldDisclosureTier.Replica }).Tier);
 
-        Assert.Null(WorldAdmissionDoor.TryAdmitArrival(entries: [entry], sourceAuthority: "127.0.0.1:9", verdict: out var verdict));
-        Assert.NotNull(verdict);
+        Assert.Null(value: WorldAdmissionDoor.TryAdmitArrival(entries: [entry], sourceAuthority: "127.0.0.1:9", verdict: out var verdict));
+        Assert.NotNull(@object: verdict);
         Assert.Equal(expected: WorldDisclosureTier.Presentation, actual: verdict!.Tier);
 
-        Assert.Null(WorldAdmissionDoor.TryAdmitArrival(entries: [entry with { Disclosure = WorldDisclosureTier.Replica }], sourceAuthority: "127.0.0.1:9", verdict: out var replica));
+        Assert.Null(value: WorldAdmissionDoor.TryAdmitArrival(entries: [entry with { Disclosure = WorldDisclosureTier.Replica }], sourceAuthority: "127.0.0.1:9", verdict: out var replica));
         Assert.Equal(expected: WorldDisclosureTier.Replica, actual: replica!.Tier);
     }
     [Fact]
@@ -142,18 +142,18 @@ public sealed class ProjectionDisclosureLawTests {
         var projection = WorldProjection.Compose(definition: Fixtures.BuildDocument(), tier: WorldDisclosureTier.Presentation, authority: "boot", revision: 1)!;
         var json = Encoding.UTF8.GetString(bytes: WorldProjection.Serialize(projection: projection));
 
-        Assert.False(WorldProjection.TryDeserialize(utf8Json: Encoding.UTF8.GetBytes(s: json.Replace(comparisonType: StringComparison.Ordinal, newValue: "\"$schema\"", oldValue: "\"schema\"")), projection: out _, reason: out var schemaReason));
-        Assert.Contains(expectedSubstring: "puck.world.projection.v1", actualString: schemaReason, comparisonType: StringComparison.Ordinal);
+        Assert.False(condition: WorldProjection.TryDeserialize(utf8Json: Encoding.UTF8.GetBytes(s: json.Replace(comparisonType: StringComparison.Ordinal, newValue: "\"$schema\"", oldValue: "\"schema\"")), projection: out _, reason: out var schemaReason));
+        Assert.Contains(actualString: schemaReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "puck.world.projection.v1");
 
         var withUnknown = json.Insert(startIndex: (json.IndexOf(comparisonType: StringComparison.Ordinal, value: '{') + 1), value: "\"rules\": [],");
 
-        Assert.False(WorldProjection.TryDeserialize(utf8Json: Encoding.UTF8.GetBytes(s: withUnknown), projection: out _, reason: out var unknownReason));
-        Assert.Contains(expectedSubstring: "rules", actualString: unknownReason, comparisonType: StringComparison.Ordinal);
+        Assert.False(condition: WorldProjection.TryDeserialize(utf8Json: Encoding.UTF8.GetBytes(s: withUnknown), projection: out _, reason: out var unknownReason));
+        Assert.Contains(actualString: unknownReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "rules");
 
         var withReserved = json.Insert(startIndex: (json.IndexOf(comparisonType: StringComparison.Ordinal, value: '{') + 1), value: "\"_note\": \"kept\",");
 
-        Assert.True(WorldProjection.TryDeserialize(utf8Json: Encoding.UTF8.GetBytes(s: withReserved), projection: out var reserved, reason: out var reservedReason), reservedReason);
-        Assert.NotNull(reserved!.Extensions);
+        Assert.True(condition: WorldProjection.TryDeserialize(utf8Json: Encoding.UTF8.GetBytes(s: withReserved), projection: out var reserved, reason: out var reservedReason), userMessage: reservedReason);
+        Assert.NotNull(@object: reserved!.Extensions);
     }
 
     private static void CollectMemberNames(JsonElement element, List<string> names) {

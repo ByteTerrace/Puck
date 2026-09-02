@@ -1075,11 +1075,11 @@ public sealed class InputRouter : IDisposable {
     // layering. Anything else (a probe source, an authored/injected source) classifies as Gamepad, the roster's own
     // defensive floor for a device it cannot otherwise place.
     private static InputDeviceKind ClassifyDeviceKind(string source) {
-        if (source.StartsWith(value: "keyboard.", comparisonType: StringComparison.Ordinal)) {
+        if (source.StartsWith(comparisonType: StringComparison.Ordinal, value: "keyboard.")) {
             return InputDeviceKind.Keyboard;
         }
 
-        if (source.StartsWith(value: "mouse.", comparisonType: StringComparison.Ordinal)) {
+        if (source.StartsWith(comparisonType: StringComparison.Ordinal, value: "mouse.")) {
             return InputDeviceKind.Mouse;
         }
 
@@ -2305,9 +2305,11 @@ public sealed class InputRouter : IDisposable {
         device: device,
         preservePressedControls: true
     );
+
     /// <summary>The analog magnitude below which a sample is a device at rest, not a hand on it — stick centring
     /// slop and gyro noise sit well under this; the lightest deliberate deflection sits well over it.</summary>
     public const float ActivityRestBand = 0.15f;
+
     // A bound row's authored text payload rides the PRESS as a submitted line — "<command> <text>", dispatched by
     // the registry exactly as a typed line under the pressing seat's principal — so a wire-args verb is bindable
     // with authored arguments. A release, or a row with no payload, carries no line.
@@ -2332,6 +2334,7 @@ public sealed class InputRouter : IDisposable {
             _ => false,
         });
     }
+
     /// <summary>Gets the simulation tick at which a seat most recently produced a physical press/release or a live
     /// digital/analog sample outside the rest band. Authored-lane and posture samples do not count.</summary>
     /// <param name="slot">The logical player slot.</param>

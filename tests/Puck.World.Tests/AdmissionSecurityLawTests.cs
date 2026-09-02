@@ -214,7 +214,7 @@ public sealed class AdmissionSecurityLawTests {
 
         using (var malformedClient = new TcpClient()) {
             var reply = await SendRawIdentityFrameAsync(body: malformedBody, client: malformedClient, ct: testCt, host: host);
-            var text = WorldTcpWireFormat.DecodeText(body: reply.Body);
+            var text = WorldTcpWireFormat.DecodeText(body: reply.Body.Span);
 
             Assert.Equal(actual: reply.Kind, expected: WorldTcpWireFormat.DownstreamKind.HelloRefused);
             Assert.Contains(actualString: text, comparisonType: StringComparison.Ordinal, expectedSubstring: "identity-refused: ");
@@ -252,7 +252,7 @@ public sealed class AdmissionSecurityLawTests {
 
         using var client = new TcpClient();
         var reply = await SendRawIdentityFrameAsync(body: body, client: client, ct: testCt, host: host);
-        var text = WorldTcpWireFormat.DecodeText(body: reply.Body);
+        var text = WorldTcpWireFormat.DecodeText(body: reply.Body.Span);
 
         Assert.Equal(actual: reply.Kind, expected: WorldTcpWireFormat.DownstreamKind.HelloRefused);
         Assert.Contains(actualString: text, comparisonType: StringComparison.Ordinal, expectedSubstring: "identity-refused: the frame carries trailing bytes after the claim attestation");
@@ -273,7 +273,7 @@ public sealed class AdmissionSecurityLawTests {
 
         using var client = new TcpClient();
         var reply = await SendTruncatedIdentityFrameAsync(actualBodyBytes: 4, client: client, ct: testCt, declaredBodyLength: 10, host: host);
-        var text = WorldTcpWireFormat.DecodeText(body: reply.Body);
+        var text = WorldTcpWireFormat.DecodeText(body: reply.Body.Span);
 
         Assert.Equal(actual: reply.Kind, expected: WorldTcpWireFormat.DownstreamKind.HelloRefused);
         Assert.Contains(actualString: text, comparisonType: StringComparison.Ordinal, expectedSubstring: "identity-refused: the connection closed before the declared frame's body completed");
@@ -484,7 +484,7 @@ public sealed class AdmissionSecurityLawTests {
     /// <paramref name="body"/> as a raw length-prefixed HelloIdentity frame (bypassing
     /// <see cref="HandshakeWireFormat.WriteHelloIdentityAsync"/>'s own grammar so a deliberately malformed shape can
     /// be sent) and returns the door's downstream reply.</summary>
-    private static async Task<(WorldTcpWireFormat.DownstreamKind Kind, byte[] Body)> SendRawIdentityFrameAsync(WorldTcpHost host, TcpClient client, byte[] body, CancellationToken ct) {
+    private static async Task<(WorldTcpWireFormat.DownstreamKind Kind, ReadOnlyMemory<byte> Body)> SendRawIdentityFrameAsync(WorldTcpHost host, TcpClient client, byte[] body, CancellationToken ct) {
         var stream = await ConnectPastChallengeAsync(client: client, ct: ct, host: host);
         var frame = new byte[checked((sizeof(uint) + body.Length))];
 
@@ -503,7 +503,7 @@ public sealed class AdmissionSecurityLawTests {
     /// prefix declaring <paramref name="declaredBodyLength"/> bytes, writes only
     /// <paramref name="actualBodyBytes"/> of that body, and half-closes the send side — a peer that commits to a
     /// frame and then abandons it. Returns the door's downstream reply.</summary>
-    private static async Task<(WorldTcpWireFormat.DownstreamKind Kind, byte[] Body)> SendTruncatedIdentityFrameAsync(WorldTcpHost host, TcpClient client, int declaredBodyLength, int actualBodyBytes, CancellationToken ct) {
+    private static async Task<(WorldTcpWireFormat.DownstreamKind Kind, ReadOnlyMemory<byte> Body)> SendTruncatedIdentityFrameAsync(WorldTcpHost host, TcpClient client, int declaredBodyLength, int actualBodyBytes, CancellationToken ct) {
         var stream = await ConnectPastChallengeAsync(client: client, ct: ct, host: host);
         var prefix = new byte[sizeof(uint)];
 

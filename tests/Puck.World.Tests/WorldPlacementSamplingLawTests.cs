@@ -25,7 +25,7 @@ public sealed class WorldPlacementSamplingLawTests {
 
     [Fact]
     public void ANoiseDistributionIsBitIdenticalAcrossResolvesAndMovesWithTheWorldSeed() {
-        var placement = Placement(region: new WorldDistributionRegion.Noise(CellSize: 1f, Width: 16, Depth: 16, Frequency: 4, Threshold: 0.4f, Octaves: 3, Seed: 7u));
+        var placement = Placement(region: new WorldDistributionRegion.Noise(CellSize: 1f, Depth: 16, Frequency: 4, Octaves: 3, Seed: 7u, Threshold: 0.4f, Width: 16));
 
         var a = WorldPlacementStamp.SampledFixedOffsetsFor(placement: placement, worldSeed: 5UL)!;
         var b = WorldPlacementStamp.SampledFixedOffsetsFor(placement: placement, worldSeed: 5UL)!;
@@ -50,12 +50,11 @@ public sealed class WorldPlacementSamplingLawTests {
             expected: a.Count
         );
     }
-
     [Fact]
     public void AScatterDistributionEmitsExactlyOneInstancePerBlockAndMovesWithTheWorldSeed() {
         // Radius 1 against spacing 5 leaves a 3-cell jitter inset per axis (spacing - 2*radius), wide enough that a
         // rerolled seed is expected to move at least one point; spacing 3 (inset 1) would be degenerate.
-        var placement = Placement(region: new WorldDistributionRegion.Scatter(CellSize: 1f, Width: 10, Depth: 10, Spacing: 5, Radius: 1, Seed: 3u));
+        var placement = Placement(region: new WorldDistributionRegion.Scatter(CellSize: 1f, Depth: 10, Radius: 1, Seed: 3u, Spacing: 5, Width: 10));
 
         var a = WorldPlacementStamp.SampledFixedOffsetsFor(placement: placement, worldSeed: 1UL)!;
         var b = WorldPlacementStamp.SampledFixedOffsetsFor(placement: placement, worldSeed: 1UL)!;
@@ -92,14 +91,12 @@ public sealed class WorldPlacementSamplingLawTests {
 
         Assert.True(condition: moved);
     }
-
     [Fact]
     public void ALatticeDistributionResolvesNoSampledOffsets() {
         var placement = Placement(region: new WorldDistributionRegion.Lattice(StepA: new DocumentVector3(x: 1f, y: 0f, z: 0f), CountA: 3, StepB: new DocumentVector3(x: 0f, y: 0f, z: 1f), CountB: 2));
 
         Assert.Null(@object: WorldPlacementStamp.SampledFixedOffsetsFor(placement: placement, worldSeed: 1UL));
     }
-
     [Fact]
     public void TheScatterCeilingIsExactAndTheNoiseCeilingIsWorstCase() {
         var scatter = Placement(region: new WorldDistributionRegion.Scatter(CellSize: 1f, Width: 10, Depth: 10, Spacing: 3, Radius: 1));

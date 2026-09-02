@@ -72,6 +72,7 @@ internal struct FixedManifoldSlot : IManifoldSlot<FixedContactCandidate> {
     readonly int IManifoldSlotState.FeatureId => FeatureId;
     readonly FixedVector3 IManifoldSlotState.Normal => Normal;
     readonly bool IManifoldSlotState.IsIdle => (Disposition == FixedManifoldSlotDisposition.Idle);
+
     void IManifoldSlotState.MarkIdle() {
         Disposition = FixedManifoldSlotDisposition.Idle;
     }

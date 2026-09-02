@@ -17,22 +17,22 @@ public sealed class MarketCheckpointRecoveryLawTests {
         var bidder = WorldPrincipal.Seat(slot: 1);
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.CreateMarketListing(
-            Principal: seller,
-            Seller: seller,
-            ItemRow: MarketFixtures.AppleRow,
-            Quantity: 3,
-            CurrencyRow: MarketFixtures.GoldRow,
-            Format: WorldMarketFormat.English,
-            StartPrice: 10,
             BuyoutPrice: null,
-            DurationSeconds: MarketFixtures.MinDurationSeconds
+            CurrencyRow: MarketFixtures.GoldRow,
+            DurationSeconds: MarketFixtures.MinDurationSeconds,
+            Format: WorldMarketFormat.English,
+            ItemRow: MarketFixtures.AppleRow,
+            Principal: seller,
+            Quantity: 3,
+            Seller: seller,
+            StartPrice: 10
         ));
         fixture.Step();
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.PlaceMarketBid(
-            Principal: bidder,
+            Amount: 30,
             Bidder: bidder,
             ListingId: 1,
-            Amount: 30
+            Principal: bidder
         ));
         fixture.Step();
 
@@ -55,6 +55,7 @@ public sealed class MarketCheckpointRecoveryLawTests {
         var stateDirectory = Directory.CreateTempSubdirectory(prefix: "puck-market-checkpoint-").FullName;
         var profiles = new WorldOwnedWorlds(template: definition, directory: stateDirectory, machineId: Guid.NewGuid());
         using var machines = new WorldMachineHost(screens: definition.Screens, engines: []);
+
         var (restored, _) = WorldServer.FromCheckpoint(
             checkpoint: decoded,
             instanceIdentity: "market-checkpoint",

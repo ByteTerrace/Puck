@@ -64,7 +64,7 @@ public struct Fnv1aHash {
         var hash = Create();
 
         foreach (var character in values) {
-            hash.Add(value: (uint)character);
+            hash.Add(value: ((uint)character));
         }
 
         return hash.Value;

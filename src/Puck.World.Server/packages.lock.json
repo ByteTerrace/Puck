@@ -257,6 +257,13 @@
       "ByteTerrace.Puck.Maths": {
         "type": "Project"
       },
+      "ByteTerrace.Puck.Networking": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Attestation": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
+        }
+      },
       "ByteTerrace.Puck.Physics": {
         "type": "Project",
         "dependencies": {
@@ -283,13 +290,6 @@
         "type": "Project",
         "dependencies": {
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
-        }
-      },
-      "puck.networking": {
-        "type": "Project",
-        "dependencies": {
-          "ByteTerrace.Puck.Attestation": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
         }
       },
@@ -325,7 +325,7 @@
           "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
-          "Puck.Networking": "[1.0.0, )",
+          "ByteTerrace.Puck.Networking": "[0.1.0-alpha, )",
           "Puck.World.Schema": "[1.0.0, )"
         }
       },

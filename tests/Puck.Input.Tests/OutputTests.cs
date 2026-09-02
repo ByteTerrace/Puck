@@ -73,9 +73,9 @@ public sealed class OutputTests {
         Assert.True(condition: connection.Output.Rumble(effect: in stop));
         Assert.True(condition: connection.TryTakeRumble(rumble: out var stopped));
 
-        Assert.Equal(expected: 0f, actual: stopped.LowFrequency);
-        Assert.Equal(expected: 0f, actual: stopped.HighFrequency);
-        Assert.Equal(expected: 0f, actual: stopped.LeftTrigger);
-        Assert.Equal(expected: 0f, actual: stopped.RightTrigger);
+        Assert.Equal(actual: stopped.LowFrequency, expected: 0f);
+        Assert.Equal(actual: stopped.HighFrequency, expected: 0f);
+        Assert.Equal(actual: stopped.LeftTrigger, expected: 0f);
+        Assert.Equal(actual: stopped.RightTrigger, expected: 0f);
     }
 }

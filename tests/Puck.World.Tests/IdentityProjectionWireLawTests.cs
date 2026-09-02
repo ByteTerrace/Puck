@@ -23,7 +23,7 @@ public sealed class IdentityProjectionWireLawTests {
     public void ReservationWire_CarriesAppearanceAndRates_NeverTheOwnedDocument() {
         var defaults = Fixtures.BuildDocument().PlayerDefaults;
         var owned = OwnedIdentityDocument();
-        var identity = new WorldIdentity(document: owned, defaults: defaults);
+        var identity = new WorldIdentity(defaults: defaults, document: owned);
         var request = new WorldTransferReservationRequest(
             TransferId: 5UL,
             SourceAuthority: "machine-a/boot",
@@ -42,34 +42,34 @@ public sealed class IdentityProjectionWireLawTests {
                     Source: default,
                     BodyColor: new Vector3(x: 0.1f, y: 0.2f, z: 0.3f),
                     CatalogRig: 3,
-                    Mobility: new WorldMobilityIdentity(Incarnation: new WorldEntityAddress(Authority: "machine-a/boot", Index: 0, Generation: 1), Epoch: 0UL)),
+                    Mobility: new WorldMobilityIdentity(Incarnation: new WorldEntityAddress(Authority: "machine-a/boot", Generation: 1, Index: 0), Epoch: 0UL)),
             ]);
 
         var encoded = WorldFederationCodec.EncodeReservation(request: request);
         var frame = Encoding.UTF8.GetString(bytes: encoded);
 
-        Assert.DoesNotContain(expectedSubstring: PrivateChatPeer, actualString: frame, comparisonType: StringComparison.Ordinal);
-        Assert.DoesNotContain(expectedSubstring: PrivateStateRow, actualString: frame, comparisonType: StringComparison.Ordinal);
-        Assert.DoesNotContain(expectedSubstring: "puck.world.def.v1", actualString: frame, comparisonType: StringComparison.Ordinal);
+        Assert.DoesNotContain(actualString: frame, comparisonType: StringComparison.Ordinal, expectedSubstring: PrivateChatPeer);
+        Assert.DoesNotContain(actualString: frame, comparisonType: StringComparison.Ordinal, expectedSubstring: PrivateStateRow);
+        Assert.DoesNotContain(actualString: frame, comparisonType: StringComparison.Ordinal, expectedSubstring: "puck.world.def.v1");
         // The control: what the destination legitimately needs did cross.
-        Assert.Contains(expectedSubstring: "traveller-one", actualString: frame, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(actualString: frame, comparisonType: StringComparison.Ordinal, expectedSubstring: "traveller-one");
 
-        Assert.True(WorldFederationCodec.TryDecodeReservation(body: encoded, defaults: defaults, request: out var decoded, failure: out var failure), failure.ToString());
-        Assert.NotNull(decoded);
+        Assert.True(condition: WorldFederationCodec.TryDecodeReservation(body: encoded, defaults: defaults, failure: out var failure, request: out var decoded), userMessage: failure.ToString());
+        Assert.NotNull(@object: decoded);
 
         var arrived = decoded!.Members[0].Identity;
 
-        Assert.NotNull(arrived);
+        Assert.NotNull(@object: arrived);
         Assert.Equal(expected: identity.Id, actual: arrived!.Id);
         Assert.Equal(expected: identity.Name, actual: arrived.Name);
         Assert.Equal(expected: identity.ColorHex, actual: arrived.ColorHex);
         Assert.Equal(expected: identity.FixedMoveSpeed, actual: arrived.FixedMoveSpeed);
         Assert.Equal(expected: identity.FixedTurnSpeed, actual: arrived.FixedTurnSpeed);
         // Nothing the destination can read its way back into: no document, so no grants, no state, no bindings.
-        Assert.Null(arrived.Document);
-        Assert.Null(arrived.Bindings);
-        Assert.Null(arrived.Hud);
-        Assert.False(arrived.TryReadState(name: PrivateStateRow, row: out _));
+        Assert.Null(@object: arrived.Document);
+        Assert.Null(@object: arrived.Bindings);
+        Assert.Null(@object: arrived.Hud);
+        Assert.False(condition: arrived.TryReadState(name: PrivateStateRow, row: out _));
     }
 
     private static WorldDefinition OwnedIdentityDocument() {

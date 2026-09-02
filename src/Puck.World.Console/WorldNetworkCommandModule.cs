@@ -125,9 +125,9 @@ public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority, 
                 endpoint: out endpoint,
                 laneAvailable: out laneAvailable
             ) || instances.TryDescribeRemoteAuthority(
-                name: authority,
                 endpoint: out endpoint,
-                laneAvailable: out laneAvailable
+                laneAvailable: out laneAvailable,
+                name: authority
             )));
             var lane = (dialled
                 ? (laneAvailable

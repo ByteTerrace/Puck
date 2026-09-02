@@ -547,8 +547,8 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
 
         var (ok, message) = m_binder.TryCamera(
             index: index,
-            sensor: sensor,
-            seat: seat
+            seat: seat,
+            sensor: sensor
         );
 
         return (ok

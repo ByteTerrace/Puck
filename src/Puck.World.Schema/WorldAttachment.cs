@@ -68,7 +68,6 @@ public sealed record WorldAttachmentSection(
         ReleaseMomentumScale: 1f
     );
 }
-
 /// <summary>The one-time fixed-point compilation of <see cref="WorldAttachmentSection"/> — every world-unit and
 /// degree field quantized to <see cref="FixedQ4816"/>, and every declared channel name resolved to the ordinal
 /// <see cref="Puck.Physics.Motion.BodyMotionOp"/>-free WorldBody attachment code reads directly (the same

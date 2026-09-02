@@ -26,6 +26,7 @@ internal static class FixedVectorMath {
         var numerator = (((UInt128)magnitude) << (FixedQ4816.FractionBitCount * 2));
         var quotient = (numerator / squaredSum);
         var remainder = (numerator - (quotient * squaredSum));
+
         quotient = FixedPointRounding.RoundToNearestTiesToEven(
             distanceToNext: (squaredSum - remainder),
             distanceToTruncated: remainder,
@@ -185,8 +186,8 @@ internal static class FixedVectorMath {
 
         return (
             Separation: (targetIsGreater
-                ? unchecked((ulong)targetRaw - (ulong)currentRaw)
-                : unchecked((ulong)currentRaw - (ulong)targetRaw)),
+                ? unchecked((((ulong)targetRaw) - ((ulong)currentRaw)))
+                : unchecked((((ulong)currentRaw) - ((ulong)targetRaw)))),
             TargetIsGreater: targetIsGreater
         );
     }
@@ -474,6 +475,7 @@ internal static class FixedVectorMath {
         var numerator = (((UInt128)RawMagnitude(value: value)) << FixedQ4816.FractionBitCount);
         var quotient = (numerator / rawMagnitude);
         var remainder = ((ulong)(numerator - (quotient * rawMagnitude)));
+
         quotient = FixedPointRounding.RoundToNearestTiesToEven(
             distanceToNext: ((UInt128)(rawMagnitude - remainder)),
             distanceToTruncated: ((UInt128)remainder),

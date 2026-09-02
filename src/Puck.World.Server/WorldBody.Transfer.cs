@@ -748,7 +748,6 @@ public sealed partial class WorldBody {
         bool VerticalFollowerSeeded,
         AttachmentResidue Attachment
     );
-
     /// <summary>The checkpoint-only attachment state that remains meaningful only inside the same authoritative
     /// world's coordinate frame. It is intentionally not part of <see cref="TransferState"/>: a cross-world transfer
     /// cannot carry a grip point or tether anchor whose geometry belongs to the source authority.</summary>
@@ -886,7 +885,7 @@ public sealed partial class WorldBody {
             ticksPerSecond: EngineTicksPerSecond
         );
         m_climbGrantedByOverride = attachment.ClimbGrantedByOverride;
-        m_tether = (attachment.Tether is { } tether
+        m_tether = ((attachment.Tether is { } tether)
             ? FixedTetherConstraint.FromState(state: tether)
             : null
         );

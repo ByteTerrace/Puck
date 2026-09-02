@@ -138,11 +138,11 @@ public static class WorldQueryDriftInstrument {
         var terrain = new List<WorldQueryTerrainInput>(capacity: cellCount);
 
         for (var row = 0; (row < height); row++) {
-            var cellCenterZRaw = ((long)(((Int128)originZRaw) + (((Int128)row) * cellSizeRaw) + halfCellRaw));
+            var cellCenterZRaw = ((long)((((Int128)originZRaw) + (((Int128)row) * cellSizeRaw)) + halfCellRaw));
             var cellCenterZ = ((float)((double)FixedQ4816.FromRawBits(value: cellCenterZRaw)));
 
             for (var column = 0; (column < width); column++) {
-                var cellCenterXRaw = ((long)(((Int128)originXRaw) + (((Int128)column) * cellSizeRaw) + halfCellRaw));
+                var cellCenterXRaw = ((long)((((Int128)originXRaw) + (((Int128)column) * cellSizeRaw)) + halfCellRaw));
                 var probeOrigin = FixedPosition.FromLocal(local: new FixedVector3(
                     X: FixedQ4816.FromRawBits(value: cellCenterXRaw),
                     Y: FixedQ4816.Zero,
@@ -184,6 +184,7 @@ public static class WorldQueryDriftInstrument {
             terrain: terrain
         );
     }
+
     // Each cell is authored to the baker as a float point inside it, so the float grid has to resolve one cell from
     // the next: once a coordinate's ULP reaches the cell size, that point rounds onto or across its own cell boundary
     // and the bake marks a neighbour or nothing at all. Refused rather than answered with an artifact that silently
@@ -205,6 +206,7 @@ public static class WorldQueryDriftInstrument {
             );
         }
     }
+
     /// <summary>Runs the drift comparison over <paramref name="points"/>: excludes anything inside
     /// <paramref name="epsilonShell"/> of the evaluator's own zero set, then compares the sign each remaining point
     /// resolves to against <paramref name="gpuInsideOrNear"/> (when supplied) and the ground-height agreement

@@ -150,7 +150,7 @@ public sealed class WorldQueryArtifact {
             );
         }
 
-        var paddingBits = (cellCount & 63);
+        var paddingBits = cellCount & 63;
 
         // The bits above the last cell in the final word address no cell. Left unconstrained they remain observable
         // through Blocked and HasBlocked, so an artifact could report blocker content outside its own grid.

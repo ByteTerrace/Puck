@@ -7,7 +7,6 @@ namespace Puck.Maths.Tests;
 internal static partial class Subjects {
     private static FixedQ4816 CurvatureSplineD(double value) =>
         FixedQ4816.FromDouble(value: value);
-
     private static CurvatureSplineKnot CurvatureSplineKnotAt(double x, double z, double elevation, double tangentYaw, double curvature) => new(
         Curvature: CurvatureSplineD(value: curvature),
         Elevation: CurvatureSplineD(value: elevation),
@@ -34,10 +33,10 @@ internal static partial class Subjects {
     // completion), a symmetric quarter turn, the constructed multi-root configuration (§ deterministic-multi-root-pick
     // shares this same geometry), and a gentle asymmetric S.
     private static readonly (string Label, CurvatureSplineKnot Start, CurvatureSplineKnot End)[] EndpointCurvatureCases = [
-        ("straight", CurvatureSplineKnotAt(0, 0, 0, 0, 0), CurvatureSplineKnotAt(4, 0, 0, 0, 0)),
-        ("quarter-turn", CurvatureSplineKnotAt(0, 0, 0, 0, 0.5), CurvatureSplineKnotAt(2, 2, 0, Math.PI / 2, 0.5)),
-        ("multi-root", CurvatureSplineKnotAt(0, 0, 0, -1.4, 1.0), CurvatureSplineKnotAt(4, 0, 0, 0.4, 0.25)),
-        ("gentle-s", CurvatureSplineKnotAt(0, 0, 0, 0.2, 0.4), CurvatureSplineKnotAt(5, 1, 0, 0.1, -0.15)),
+        ("straight", CurvatureSplineKnotAt(curvature: 0, elevation: 0, tangentYaw: 0, x: 0, z: 0), CurvatureSplineKnotAt(curvature: 0, elevation: 0, tangentYaw: 0, x: 4, z: 0)),
+        ("quarter-turn", CurvatureSplineKnotAt(curvature: 0.5, elevation: 0, tangentYaw: 0, x: 0, z: 0), CurvatureSplineKnotAt(curvature: 0.5, elevation: 0, tangentYaw: (Math.PI / 2), x: 2, z: 2)),
+        ("multi-root", CurvatureSplineKnotAt(curvature: 1.0, elevation: 0, tangentYaw: -1.4, x: 0, z: 0), CurvatureSplineKnotAt(curvature: 0.25, elevation: 0, tangentYaw: 0.4, x: 4, z: 0)),
+        ("gentle-s", CurvatureSplineKnotAt(curvature: 0.4, elevation: 0, tangentYaw: 0.2, x: 0, z: 0), CurvatureSplineKnotAt(curvature: -0.15, elevation: 0, tangentYaw: 0.1, x: 5, z: 1)),
     ];
 
     /// <summary>Every compiled endpoint curvature agrees with its authored knot, checked against BOTH an
@@ -48,7 +47,7 @@ internal static partial class Subjects {
         const double envelope = 1e-4; // measured max observed error ~6e-6 across the battery below; frozen with margin.
 
         foreach (var (label, start, end) in EndpointCurvatureCases) {
-            var compiled = CurvatureSpline.Compile(knots: [start, end], closed: false);
+            var compiled = CurvatureSpline.Compile(closed: false, knots: [start, end]);
             var segment = compiled.GetSegment(index: 0);
             var authoredK0 = (((double)start.Curvature.Value) / 65536.0);
             var authoredK1 = (((double)end.Curvature.Value) / 65536.0);
@@ -74,18 +73,17 @@ internal static partial class Subjects {
 
         return null;
     }
-
     /// <summary>At every interior joint of a multi-knot curve, the curvature one Q32 raw before the joint station
     /// (the left segment's own evaluation, essentially at its t=1) and exactly at the joint station (the right
     /// segment's own evaluation at its t=0) agree after Q16 rounding — both read through the subject's own public
     /// <see cref="CompiledCurvatureSpline.EvaluateRaw"/>, at the true Q32 station scale, never re-derived.</summary>
     public static string? CurvatureSplineG2Joint() {
         CurvatureSplineKnot[] knots = [
-            CurvatureSplineKnotAt(0, 0, 0, 0, 0.3),
-            CurvatureSplineKnotAt(3, 1, 1, 0.4, -0.2),
-            CurvatureSplineKnotAt(6, 0, 2, -0.3, 0.1),
+            CurvatureSplineKnotAt(curvature: 0.3, elevation: 0, tangentYaw: 0, x: 0, z: 0),
+            CurvatureSplineKnotAt(curvature: -0.2, elevation: 1, tangentYaw: 0.4, x: 3, z: 1),
+            CurvatureSplineKnotAt(curvature: 0.1, elevation: 2, tangentYaw: -0.3, x: 6, z: 0),
         ];
-        var compiled = CurvatureSpline.Compile(knots: knots, closed: false);
+        var compiled = CurvatureSpline.Compile(closed: false, knots: knots);
 
         for (var joint = 1; (joint < compiled.SegmentCount); ++joint) {
             var stationRaw = compiled.GetSegment(index: joint).StationRaw;
@@ -100,7 +98,6 @@ internal static partial class Subjects {
 
         return null;
     }
-
     /// <summary>Every compiled segment's arc table is strictly increasing (exact, on raws), knot stations are
     /// strictly increasing with the last agreeing with <see cref="CompiledCurvatureSpline.TotalLength"/>, and the
     /// compiled total length agrees with an independent double chord-subdivision flattening oracle within a
@@ -108,11 +105,11 @@ internal static partial class Subjects {
     public static string? CurvatureSplineArcLengthTable() {
         const double relativeTolerance = 1e-6; // measured relative error ~1.8e-10 on the battery below.
         CurvatureSplineKnot[] openKnots = [
-            CurvatureSplineKnotAt(0, 0, 0, 0.2, 0.4),
-            CurvatureSplineKnotAt(5, 1, 0, 0.1, -0.15),
-            CurvatureSplineKnotAt(9, -1, 0, -0.5, 0.2),
+            CurvatureSplineKnotAt(curvature: 0.4, elevation: 0, tangentYaw: 0.2, x: 0, z: 0),
+            CurvatureSplineKnotAt(curvature: -0.15, elevation: 0, tangentYaw: 0.1, x: 5, z: 1),
+            CurvatureSplineKnotAt(curvature: 0.2, elevation: 0, tangentYaw: -0.5, x: 9, z: -1),
         ];
-        var compiled = CurvatureSpline.Compile(knots: openKnots, closed: false);
+        var compiled = CurvatureSpline.Compile(closed: false, knots: openKnots);
         var runningStation = 0L;
 
         for (var segmentIndex = 0; (segmentIndex < compiled.SegmentCount); ++segmentIndex) {
@@ -139,7 +136,7 @@ internal static partial class Subjects {
                 return $"segment {segmentIndex}: chord-subdivision oracle length {oracleLength} vs compiled {compiledLength} (relative error {relativeError})";
             }
 
-            runningStation = unchecked(runningStation + segment.LengthRaw);
+            runningStation = unchecked((runningStation + segment.LengthRaw));
         }
 
         for (var knotIndex = 1; (knotIndex <= compiled.SegmentCount); ++knotIndex) {
@@ -153,26 +150,25 @@ internal static partial class Subjects {
 
         return null;
     }
-
     /// <summary><see cref="CompiledCurvatureSpline.Evaluate"/> is total over its whole arc-length domain — never
     /// throws, every component finite — at both the arc-length extremes and well past them in either direction, for
     /// both an open and a closed curve, and agrees closely across a one-Q32-raw step at every interior knot station.</summary>
     public static string? CurvatureSplineEvaluateContinuityAndTotality() {
         CurvatureSplineKnot[] openKnots = [
-            CurvatureSplineKnotAt(0, 0, 0, 0, 0.3),
-            CurvatureSplineKnotAt(3, 1, 1, 0.4, -0.2),
-            CurvatureSplineKnotAt(6, 0, 2, -0.3, 0.1),
+            CurvatureSplineKnotAt(curvature: 0.3, elevation: 0, tangentYaw: 0, x: 0, z: 0),
+            CurvatureSplineKnotAt(curvature: -0.2, elevation: 1, tangentYaw: 0.4, x: 3, z: 1),
+            CurvatureSplineKnotAt(curvature: 0.1, elevation: 2, tangentYaw: -0.3, x: 6, z: 0),
         ];
         CurvatureSplineKnot[] closedKnots = [
-            CurvatureSplineKnotAt(0, 0, 0, 0, 0.4),
-            CurvatureSplineKnotAt(3, 3, 0, Math.PI / 2, 0.4),
-            CurvatureSplineKnotAt(0, 6, 0, Math.PI, 0.4),
-            CurvatureSplineKnotAt(-3, 3, 0, -Math.PI / 2, 0.4),
+            CurvatureSplineKnotAt(curvature: 0.4, elevation: 0, tangentYaw: 0, x: 0, z: 0),
+            CurvatureSplineKnotAt(curvature: 0.4, elevation: 0, tangentYaw: (Math.PI / 2), x: 3, z: 3),
+            CurvatureSplineKnotAt(curvature: 0.4, elevation: 0, tangentYaw: Math.PI, x: 0, z: 6),
+            CurvatureSplineKnotAt(curvature: 0.4, elevation: 0, tangentYaw: (-Math.PI / 2), x: -3, z: 3),
         ];
 
         foreach (var (label, compiled) in new[] {
-            ("open", CurvatureSpline.Compile(knots: openKnots, closed: false)),
-            ("closed", CurvatureSpline.Compile(knots: closedKnots, closed: true)),
+            ("open", CurvatureSpline.Compile(closed: false, knots: openKnots)),
+            ("closed", CurvatureSpline.Compile(closed: true, knots: closedKnots)),
         }) {
             if (compiled.Closed != (label == "closed")) {
                 return $"{label} curve: Closed reported {compiled.Closed}.";
@@ -203,8 +199,8 @@ internal static partial class Subjects {
                 var before = compiled.EvaluateRaw(arcRaw: (stationRaw - 1L));
                 var at = compiled.EvaluateRaw(arcRaw: stationRaw);
                 var positionDiff = (
-                    Math.Abs(value: (before.Position.X.Value - at.Position.X.Value)) +
-                    Math.Abs(value: (before.Position.Y.Value - at.Position.Y.Value)) +
+                    (Math.Abs(value: (before.Position.X.Value - at.Position.X.Value)) +
+                    Math.Abs(value: (before.Position.Y.Value - at.Position.Y.Value))) +
                     Math.Abs(value: (before.Position.Z.Value - at.Position.Z.Value))
                 );
 
@@ -216,20 +212,19 @@ internal static partial class Subjects {
 
         return null;
     }
-
     /// <summary>Compiling the identical authored knots three times from scratch produces bit-identical compiled
     /// output — every control point, derivative point, tangent length, station and arc-table entry — proving the
     /// deterministic branch pick is a pure function of the authored knots (no iteration-order or ambient-state
     /// dependence).</summary>
     public static string? CurvatureSplineDeterministicRecompile() {
         CurvatureSplineKnot[] knots = [
-            CurvatureSplineKnotAt(0, 0, 0, -1.4, 1.0),
-            CurvatureSplineKnotAt(4, 0, 0, 0.4, 0.25),
+            CurvatureSplineKnotAt(curvature: 1.0, elevation: 0, tangentYaw: -1.4, x: 0, z: 0),
+            CurvatureSplineKnotAt(curvature: 0.25, elevation: 0, tangentYaw: 0.4, x: 4, z: 0),
         ];
 
-        var first = CurvatureSpline.Compile(knots: knots, closed: false);
-        var second = CurvatureSpline.Compile(knots: knots, closed: false);
-        var third = CurvatureSpline.Compile(knots: knots, closed: false);
+        var first = CurvatureSpline.Compile(closed: false, knots: knots);
+        var second = CurvatureSpline.Compile(closed: false, knots: knots);
+        var third = CurvatureSpline.Compile(closed: false, knots: knots);
 
         for (var i = 0; (i < first.SegmentCount); ++i) {
             var a = first.GetSegment(index: i);
@@ -268,25 +263,25 @@ internal static partial class Subjects {
     /// <see cref="double"/> root finder) at least two admissible roots: the subject picks the one minimizing
     /// <c>l0² + l1²</c>, not merely the first the isolation order happens to visit.</summary>
     public static string? CurvatureSplineDeterministicMultiRootPick() {
-        var start = CurvatureSplineKnotAt(0, 0, 0, -1.4, 1.0);
-        var end = CurvatureSplineKnotAt(4, 0, 0, 0.4, 0.25);
-        var chordX = ((double)(end.X.Value - start.X.Value) / 65536.0);
-        var chordZ = ((double)(end.Z.Value - start.Z.Value) / 65536.0);
-        var t0X = Math.Cos(-1.4); var t0Z = Math.Sin(-1.4);
-        var t1X = Math.Cos(0.4); var t1Z = Math.Sin(0.4);
+        var start = CurvatureSplineKnotAt(curvature: 1.0, elevation: 0, tangentYaw: -1.4, x: 0, z: 0);
+        var end = CurvatureSplineKnotAt(curvature: 0.25, elevation: 0, tangentYaw: 0.4, x: 4, z: 0);
+        var chordX = (((double)(end.X.Value - start.X.Value)) / 65536.0);
+        var chordZ = (((double)(end.Z.Value - start.Z.Value)) / 65536.0);
+        var t0X = Math.Cos(d: -1.4); var t0Z = Math.Sin(a: -1.4);
+        var t1X = Math.Cos(d: 0.4); var t1Z = Math.Sin(a: 0.4);
         var s0 = ((t0X * chordZ) - (t0Z * chordX));
         var s1 = ((t1X * chordZ) - (t1Z * chordX));
         var w = ((t0X * t1Z) - (t0Z * t1X));
         var chordLength = Math.Sqrt(d: ((chordX * chordX) + (chordZ * chordZ)));
 
-        var admissible = Oracles.CurvatureSplineAdmissibleTangentLengths(s0: s0, s1: s1, w: w, kappa0: 1.0, kappa1: 0.25, chordLength: chordLength);
+        var admissible = Oracles.CurvatureSplineAdmissibleTangentLengths(chordLength: chordLength, kappa0: 1.0, kappa1: 0.25, s0: s0, s1: s1, w: w);
 
         if (admissible.Count < 2) {
             return $"the constructed configuration's own certification found only {admissible.Count} admissible root(s); it no longer exercises multiple roots.";
         }
 
         var bestByOracle = admissible.MinBy(keySelector: pair => ((pair.L0 * pair.L0) + (pair.L1 * pair.L1)));
-        var compiled = CurvatureSpline.Compile(knots: [start, end], closed: false);
+        var compiled = CurvatureSpline.Compile(closed: false, knots: [start, end]);
         var segment = compiled.GetSegment(index: 0);
         var subjectL0 = (segment.Tangent0LengthRaw / 4294967296.0);
         var subjectL1 = (segment.Tangent1LengthRaw / 4294967296.0);
@@ -297,13 +292,12 @@ internal static partial class Subjects {
 
         return null;
     }
-
     /// <summary>Every named refusal in <see cref="CurvatureSplineRefusal"/> is reachable, and reached by name — a
     /// wrong-reason refusal fails the case.</summary>
     public static string? CurvatureSplineRefusalLadder() {
         string? Expect(CurvatureSplineKnot[] knots, bool closed, CurvatureSplineRefusal expected, string label) {
             try {
-                _ = CurvatureSpline.Compile(knots: knots, closed: closed);
+                _ = CurvatureSpline.Compile(closed: closed, knots: knots);
             } catch (CurvatureSplineException exception) {
                 if (exception.Refusal != expected) {
                     return $"{label}: expected {expected} but got {exception.Refusal} ({exception.Message})";
@@ -328,31 +322,30 @@ internal static partial class Subjects {
         // the derived §1.6 bounds make the Q32 carrier's own overflow unreachable through legal authored knots,
         // which is the intended safety margin, not a gap in this ladder.
         var detail =
-            Expect(knots: [CurvatureSplineKnotAt(0, 0, 0, 0, 0)], closed: false, expected: CurvatureSplineRefusal.TooFewKnots, label: "open, one knot")
-            ?? Expect(knots: [CurvatureSplineKnotAt(0, 0, 0, 0, 0), CurvatureSplineKnotAt(4, 0, 0, 0, 0)], closed: true, expected: CurvatureSplineRefusal.TooFewKnots, label: "closed, two knots")
-            ?? Expect(knots: [CurvatureSplineKnotAt(0, 0, 0, 0, 0), CurvatureSplineKnotAt(0, 0, 0, 0, 0)], closed: false, expected: CurvatureSplineRefusal.ZeroLengthChord, label: "coincident knots")
-            ?? Expect(knots: [CurvatureSplineKnotAt(0, 0, 0, 0, 8), CurvatureSplineKnotAt((1.0 / 16.0), 0, 0, 0, 8)], closed: false, expected: CurvatureSplineRefusal.TangentCurvatureInconsistent, label: "parallel tangents along the chord, w = 0 and s0 = 0")
-            ?? Expect(knots: [CurvatureSplineKnotAt(0, 0, 0, 0, 0.2), CurvatureSplineKnotAt(4, 0, 0, Math.PI, 0.2)], closed: false, expected: CurvatureSplineRefusal.CurvatureUnreachable, label: "near-opposite tangents, general branch admits no admissible root")
-            ?? Expect(knots: [CurvatureSplineKnotAt(0, 0, 0, 0, 0), CurvatureSplineKnotAt(2_000_000, 0, 0, 0, 0)], closed: false, expected: CurvatureSplineRefusal.KnotOutOfRange, label: "coordinate past MaxCoordinate")
-            ?? Expect(knots: [CurvatureSplineKnotAt(0, 0, 0, -2.7407, 1.1065), CurvatureSplineKnotAt(1.0357, 0, 0, -1.1520, -4.9124)], closed: false, expected: CurvatureSplineRefusal.InteriorCusp, label: "admissible tangent lengths whose speed dips below the floor mid-segment");
+            (Expect(knots: [CurvatureSplineKnotAt(curvature: 0, elevation: 0, tangentYaw: 0, x: 0, z: 0)], closed: false, expected: CurvatureSplineRefusal.TooFewKnots, label: "open, one knot")
+            ?? (Expect(knots: [CurvatureSplineKnotAt(curvature: 0, elevation: 0, tangentYaw: 0, x: 0, z: 0), CurvatureSplineKnotAt(curvature: 0, elevation: 0, tangentYaw: 0, x: 4, z: 0)], closed: true, expected: CurvatureSplineRefusal.TooFewKnots, label: "closed, two knots")
+            ?? (Expect(knots: [CurvatureSplineKnotAt(curvature: 0, elevation: 0, tangentYaw: 0, x: 0, z: 0), CurvatureSplineKnotAt(curvature: 0, elevation: 0, tangentYaw: 0, x: 0, z: 0)], closed: false, expected: CurvatureSplineRefusal.ZeroLengthChord, label: "coincident knots")
+            ?? (Expect(knots: [CurvatureSplineKnotAt(curvature: 8, elevation: 0, tangentYaw: 0, x: 0, z: 0), CurvatureSplineKnotAt(curvature: 8, elevation: 0, tangentYaw: 0, x: (1.0 / 16.0), z: 0)], closed: false, expected: CurvatureSplineRefusal.TangentCurvatureInconsistent, label: "parallel tangents along the chord, w = 0 and s0 = 0")
+            ?? (Expect(knots: [CurvatureSplineKnotAt(curvature: 0.2, elevation: 0, tangentYaw: 0, x: 0, z: 0), CurvatureSplineKnotAt(curvature: 0.2, elevation: 0, tangentYaw: Math.PI, x: 4, z: 0)], closed: false, expected: CurvatureSplineRefusal.CurvatureUnreachable, label: "near-opposite tangents, general branch admits no admissible root")
+            ?? (Expect(knots: [CurvatureSplineKnotAt(curvature: 0, elevation: 0, tangentYaw: 0, x: 0, z: 0), CurvatureSplineKnotAt(curvature: 0, elevation: 0, tangentYaw: 0, x: 2_000_000, z: 0)], closed: false, expected: CurvatureSplineRefusal.KnotOutOfRange, label: "coordinate past MaxCoordinate")
+            ?? Expect(knots: [CurvatureSplineKnotAt(curvature: 1.1065, elevation: 0, tangentYaw: -2.7407, x: 0, z: 0), CurvatureSplineKnotAt(curvature: -4.9124, elevation: 0, tangentYaw: -1.1520, x: 1.0357, z: 0)], closed: false, expected: CurvatureSplineRefusal.InteriorCusp, label: "admissible tangent lengths whose speed dips below the floor mid-segment")))))));
 
         return detail;
     }
-
     /// <summary>Knots placed at exactly <see cref="CurvatureSpline.MaxCoordinate"/> with admissible geometry compile,
     /// and <see cref="CompiledCurvatureSpline.Evaluate"/> stays finite across the whole arc; one raw past the cap
     /// refuses <see cref="CurvatureSplineRefusal.KnotOutOfRange"/>.</summary>
     public static string? CurvatureSplineCarrierExtremes() {
-        var max = ((double)CurvatureSpline.MaxCoordinate.Value / 65536.0);
+        var max = (((double)CurvatureSpline.MaxCoordinate.Value) / 65536.0);
         CurvatureSplineKnot[] knots = [
-            CurvatureSplineKnotAt(-max, 0, 0, 0, 0),
-            CurvatureSplineKnotAt(max, 0, 0, 0, 0),
+            CurvatureSplineKnotAt(curvature: 0, elevation: 0, tangentYaw: 0, x: -max, z: 0),
+            CurvatureSplineKnotAt(curvature: 0, elevation: 0, tangentYaw: 0, x: max, z: 0),
         ];
 
         CompiledCurvatureSpline compiled;
 
         try {
-            compiled = CurvatureSpline.Compile(knots: knots, closed: false);
+            compiled = CurvatureSpline.Compile(closed: false, knots: knots);
         } catch (Exception exception) {
             return $"knots at ±MaxCoordinate with straight, zero-curvature geometry did not compile: {exception.GetType().Name}: {exception.Message}";
         }
@@ -366,7 +359,7 @@ internal static partial class Subjects {
             }
         }
 
-        var overCap = CurvatureSplineKnotAt((max + 1), 0, 0, 0, 0);
+        var overCap = CurvatureSplineKnotAt(curvature: 0, elevation: 0, tangentYaw: 0, x: (max + 1), z: 0);
 
         try {
             _ = CurvatureSpline.Compile(knots: [knots[0], overCap], closed: false);
@@ -385,14 +378,13 @@ internal static partial class Subjects {
             (left.Tangent.X.Value == right.Tangent.X.Value) && (left.Tangent.Z.Value == right.Tangent.Z.Value) &&
             (left.Grade.Value == right.Grade.Value) && (left.Curvature.Value == right.Curvature.Value)
         );
-
     // Narrows a Q32 raw to Q16 through the SAME shared exact rounding kernel CompiledCurvatureSpline itself narrows
     // through (FixedPointRounding.TryRoundRational, ties to even) — legitimate here because the claim under test is
     // about which SEGMENT/T region a raw station resolves into (the wrap/clamp seam), not the rounding kernel itself,
     // which curvature-spline.endpoint-curvature-oracle and curvature-spline.arc-length-table already pin
     // independently.
     private static long CurvatureSplineNarrowQ32ToQ16(long raw32) {
-        _ = FixedPointRounding.TryRoundRational(numerator: raw32, denominator: (1L << 16), fractionBitCount: 0, result: out var narrowed);
+        _ = FixedPointRounding.TryRoundRational(denominator: (1L << 16), fractionBitCount: 0, numerator: raw32, result: out var narrowed);
 
         return narrowed;
     }
@@ -404,22 +396,22 @@ internal static partial class Subjects {
     /// reproduce raw <c>TotalLengthRaw</c> itself).</summary>
     public static string? CurvatureSplineEvaluateRawStationBoundaries() {
         CurvatureSplineKnot[] openKnots = [
-            CurvatureSplineKnotAt(0, 0, 0, 0.2, 0.4),
-            CurvatureSplineKnotAt(5, 1, 0, 0.1, -0.15),
-            CurvatureSplineKnotAt(9, -1, 0, -0.5, 0.2),
+            CurvatureSplineKnotAt(curvature: 0.4, elevation: 0, tangentYaw: 0.2, x: 0, z: 0),
+            CurvatureSplineKnotAt(curvature: -0.15, elevation: 0, tangentYaw: 0.1, x: 5, z: 1),
+            CurvatureSplineKnotAt(curvature: 0.2, elevation: 0, tangentYaw: -0.5, x: 9, z: -1),
         ];
         CurvatureSplineKnot[] closedKnots = [
-            CurvatureSplineKnotAt(0, 0, 0, 0, 0.4),
-            CurvatureSplineKnotAt(3, 3, 0, Math.PI / 2, 0.4),
-            CurvatureSplineKnotAt(0, 6, 0, Math.PI, 0.4),
-            CurvatureSplineKnotAt(-3, 3, 0, -Math.PI / 2, 0.4),
+            CurvatureSplineKnotAt(curvature: 0.4, elevation: 0, tangentYaw: 0, x: 0, z: 0),
+            CurvatureSplineKnotAt(curvature: 0.4, elevation: 0, tangentYaw: (Math.PI / 2), x: 3, z: 3),
+            CurvatureSplineKnotAt(curvature: 0.4, elevation: 0, tangentYaw: Math.PI, x: 0, z: 6),
+            CurvatureSplineKnotAt(curvature: 0.4, elevation: 0, tangentYaw: (-Math.PI / 2), x: -3, z: 3),
         ];
 
         foreach (var (label, knots, closed) in new (string, CurvatureSplineKnot[], bool)[] {
             ("open", openKnots, false),
             ("closed", closedKnots, true),
         }) {
-            var compiled = CurvatureSpline.Compile(knots: knots, closed: closed);
+            var compiled = CurvatureSpline.Compile(closed: closed, knots: knots);
             var totalRaw = compiled.TotalLengthRaw;
 
             if ((totalRaw & 0xFFFFL) == 0L) {
@@ -494,7 +486,6 @@ internal static partial class Subjects {
 
         return null;
     }
-
     /// <summary>Position vs. requested station, on a well-conditioned small curve AND an adversarial large-scale one
     /// (four knots on a circle at 0.9·<see cref="CurvatureSpline.MaxCoordinate"/>'s own radius, so both the compiled
     /// coordinates and the arc table's Simpson/inverse-lookup arithmetic run near the extreme end of the authoring
@@ -505,25 +496,25 @@ internal static partial class Subjects {
     public static string? CurvatureSplineArcStationOracle() {
         const double relativeTolerance = 1e-4; // margin over the chord walk's own discretization at 100000 steps.
         CurvatureSplineKnot[] smallKnots = [
-            CurvatureSplineKnotAt(0, 0, 0, 0.2, 0.4),
-            CurvatureSplineKnotAt(5, 1, 0, 0.1, -0.15),
-            CurvatureSplineKnotAt(9, -1, 0, -0.5, 0.2),
+            CurvatureSplineKnotAt(curvature: 0.4, elevation: 0, tangentYaw: 0.2, x: 0, z: 0),
+            CurvatureSplineKnotAt(curvature: -0.15, elevation: 0, tangentYaw: 0.1, x: 5, z: 1),
+            CurvatureSplineKnotAt(curvature: 0.2, elevation: 0, tangentYaw: -0.5, x: 9, z: -1),
         ];
-        var maxCoordinate = ((double)CurvatureSpline.MaxCoordinate.Value / 65536.0);
+        var maxCoordinate = (((double)CurvatureSpline.MaxCoordinate.Value) / 65536.0);
         var bigRadius = (maxCoordinate * 0.9);
         const double bigTurn = (Math.PI / 6.0);
         CurvatureSplineKnot[] largeScaleKnots = [
-            CurvatureSplineCircleKnotAt(radius: bigRadius, elevation: 0, knotIndex: 0, turnRadians: bigTurn, signedCurvature: (1.0 / bigRadius)),
-            CurvatureSplineCircleKnotAt(radius: bigRadius, elevation: 0, knotIndex: 1, turnRadians: bigTurn, signedCurvature: (1.0 / bigRadius)),
-            CurvatureSplineCircleKnotAt(radius: bigRadius, elevation: 0, knotIndex: 2, turnRadians: bigTurn, signedCurvature: (1.0 / bigRadius)),
-            CurvatureSplineCircleKnotAt(radius: bigRadius, elevation: 0, knotIndex: 3, turnRadians: bigTurn, signedCurvature: (1.0 / bigRadius)),
+            CurvatureSplineCircleKnotAt(elevation: 0, knotIndex: 0, radius: bigRadius, signedCurvature: (1.0 / bigRadius), turnRadians: bigTurn),
+            CurvatureSplineCircleKnotAt(elevation: 0, knotIndex: 1, radius: bigRadius, signedCurvature: (1.0 / bigRadius), turnRadians: bigTurn),
+            CurvatureSplineCircleKnotAt(elevation: 0, knotIndex: 2, radius: bigRadius, signedCurvature: (1.0 / bigRadius), turnRadians: bigTurn),
+            CurvatureSplineCircleKnotAt(elevation: 0, knotIndex: 3, radius: bigRadius, signedCurvature: (1.0 / bigRadius), turnRadians: bigTurn),
         ];
 
         foreach (var (label, knots) in new (string, CurvatureSplineKnot[])[] {
             ("small, well-conditioned", smallKnots),
             ("large-scale, conditioned", largeScaleKnots),
         }) {
-            var compiled = CurvatureSpline.Compile(knots: knots, closed: false);
+            var compiled = CurvatureSpline.Compile(closed: false, knots: knots);
 
             foreach (var fraction in new[] { 0.0, 0.125, 0.25, 0.5, 0.75, 0.875, 1.0 }) {
                 var stationRaw = ((long)(compiled.TotalLengthRaw * fraction));
@@ -538,7 +529,8 @@ internal static partial class Subjects {
 
                 var segment = compiled.GetSegment(index: segmentIndex);
                 var withinSegment = ((stationRaw - segment.StationRaw) / 4294967296.0);
-                var (oracleX, oracleZ) = Oracles.CurvatureSplinePositionAtStation(segment: segment, targetArcLength: withinSegment, subdivisions: 100000);
+
+                var (oracleX, oracleZ) = Oracles.CurvatureSplinePositionAtStation(segment: segment, subdivisions: 100000, targetArcLength: withinSegment);
                 var scale = Math.Max(val1: 1.0, val2: Math.Max(val1: Math.Abs(value: subjectX), val2: Math.Abs(value: subjectZ)));
                 var error = (Math.Sqrt(d: (((subjectX - oracleX) * (subjectX - oracleX)) + ((subjectZ - oracleZ) * (subjectZ - oracleZ)))) / scale);
 
@@ -550,7 +542,6 @@ internal static partial class Subjects {
 
         return null;
     }
-
     /// <summary>Declaration-first coverage for every degenerate branch of the tangent-length system's branch table
     /// (<see cref="CurvatureSplineExactMath"/>'s own remarks): <c>w≠0</c> with both curvatures zero, <c>w≠0</c> with
     /// exactly one curvature zero on either side, and <c>w=0</c>'s zero-curvature-with-nonzero-s refusal on either
@@ -562,7 +553,7 @@ internal static partial class Subjects {
         const double envelope = 1e-3;
 
         string? ExpectAdmit(string label, CurvatureSplineKnot start, CurvatureSplineKnot end, double expectedL0, double expectedL1) {
-            var compiled = CurvatureSpline.Compile(knots: [start, end], closed: false);
+            var compiled = CurvatureSpline.Compile(closed: false, knots: [start, end]);
             var segment = compiled.GetSegment(index: 0);
             var l0 = (segment.Tangent0LengthRaw / 4294967296.0);
             var l1 = (segment.Tangent1LengthRaw / 4294967296.0);
@@ -573,7 +564,7 @@ internal static partial class Subjects {
         }
         string? ExpectRefuse(string label, CurvatureSplineKnot start, CurvatureSplineKnot end, CurvatureSplineRefusal expected) {
             try {
-                _ = CurvatureSpline.Compile(knots: [start, end], closed: false);
+                _ = CurvatureSpline.Compile(closed: false, knots: [start, end]);
             } catch (CurvatureSplineException exception) {
                 return ((exception.Refusal == expected) ? null : $"{label}: expected {expected} but got {exception.Refusal} ({exception.Message})");
             }
@@ -588,20 +579,20 @@ internal static partial class Subjects {
         // s1 = s0 = 3 rather than the opposite-signed pair an antiparallel construction would give.
         var detail =
             // w != 0, both curvatures zero: l0 = -s1/w = 3, l1 = s0/w = 4.
-            ExpectAdmit(label: "w!=0, both kappa=0", start: CurvatureSplineKnotAt(0, 0, 0, 0, 0), end: CurvatureSplineKnotAt(3, 4, 0, Math.PI / 2, 0), expectedL0: 3.0, expectedL1: 4.0)
+            (ExpectAdmit(label: "w!=0, both kappa=0", start: CurvatureSplineKnotAt(curvature: 0, elevation: 0, tangentYaw: 0, x: 0, z: 0), end: CurvatureSplineKnotAt(curvature: 0, elevation: 0, tangentYaw: (Math.PI / 2), x: 3, z: 4), expectedL0: 3.0, expectedL1: 4.0)
             // w != 0, only kappa0 = 0: eq0 fixes l1 = s0/w = 4, eq1 fixes l0 = (-s1 - 1.5*kappa1*l1^2)/w = 0.6.
-            ?? ExpectAdmit(label: "w!=0, only kappa0=0", start: CurvatureSplineKnotAt(0, 0, 0, 0, 0), end: CurvatureSplineKnotAt(3, 4, 0, Math.PI / 2, 0.1), expectedL0: 0.6, expectedL1: 4.0)
+            ?? (ExpectAdmit(label: "w!=0, only kappa0=0", start: CurvatureSplineKnotAt(curvature: 0, elevation: 0, tangentYaw: 0, x: 0, z: 0), end: CurvatureSplineKnotAt(curvature: 0.1, elevation: 0, tangentYaw: (Math.PI / 2), x: 3, z: 4), expectedL0: 0.6, expectedL1: 4.0)
             // w != 0, only kappa1 = 0: eq1 fixes l0 = -s1/w = 3, eq0 fixes l1 = (s0 - 1.5*kappa0*l0^2)/w = 1.3.
-            ?? ExpectAdmit(label: "w!=0, only kappa1=0", start: CurvatureSplineKnotAt(0, 0, 0, 0, 0.2), end: CurvatureSplineKnotAt(3, 4, 0, Math.PI / 2, 0), expectedL0: 3.0, expectedL1: 1.3)
+            ?? (ExpectAdmit(label: "w!=0, only kappa1=0", start: CurvatureSplineKnotAt(curvature: 0.2, elevation: 0, tangentYaw: 0, x: 0, z: 0), end: CurvatureSplineKnotAt(curvature: 0, elevation: 0, tangentYaw: (Math.PI / 2), x: 3, z: 4), expectedL0: 3.0, expectedL1: 1.3)
             // w = 0, both kappa != 0, correct-sign admit: tangent0 = sqrt((2/3)*(s0/kappa0)) = sqrt(10), tangent1 =
             // sqrt(-(2/3)*(s1/kappa1)) = sqrt(40/3) (T1 = T0, s1 = s0 = 3).
-            ?? ExpectAdmit(label: "w=0, both kappa!=0 admit", start: CurvatureSplineKnotAt(0, 0, 0, 0, 0.2), end: CurvatureSplineKnotAt(4, 3, 0, 0, -0.15), expectedL0: Math.Sqrt(d: 10.0), expectedL1: Math.Sqrt(d: (40.0 / 3.0)))
+            ?? (ExpectAdmit(label: "w=0, both kappa!=0 admit", start: CurvatureSplineKnotAt(curvature: 0.2, elevation: 0, tangentYaw: 0, x: 0, z: 0), end: CurvatureSplineKnotAt(curvature: -0.15, elevation: 0, tangentYaw: 0, x: 4, z: 3), expectedL0: Math.Sqrt(d: 10.0), expectedL1: Math.Sqrt(d: (40.0 / 3.0)))
             // w = 0, kappa0 = 0 with s0 != 0 (T1 = T0, s0 = 3): no tangent along T0 reaches zero curvature off the
             // chord direction — refuses before kappa1 (irrelevant here) is even read.
-            ?? ExpectRefuse(label: "w=0, kappa0=0, s0!=0", start: CurvatureSplineKnotAt(0, 0, 0, 0, 0), end: CurvatureSplineKnotAt(4, 3, 0, 0, 0), expected: CurvatureSplineRefusal.TangentCurvatureInconsistent)
+            ?? (ExpectRefuse(label: "w=0, kappa0=0, s0!=0", start: CurvatureSplineKnotAt(curvature: 0, elevation: 0, tangentYaw: 0, x: 0, z: 0), end: CurvatureSplineKnotAt(curvature: 0, elevation: 0, tangentYaw: 0, x: 4, z: 3), expected: CurvatureSplineRefusal.TangentCurvatureInconsistent)
             // w = 0, kappa1 = 0 with s1 != 0 (T1 = T0, s1 = 3), reached only after kappa0 = 0.2's own admit succeeds
             // (s0*kappa0 = 0.6 > 0) — exercises the SECOND half of the w = 0 branch, not merely the first.
-            ?? ExpectRefuse(label: "w=0, kappa1=0, s1!=0", start: CurvatureSplineKnotAt(0, 0, 0, 0, 0.2), end: CurvatureSplineKnotAt(4, 3, 0, 0, 0), expected: CurvatureSplineRefusal.TangentCurvatureInconsistent);
+            ?? ExpectRefuse(label: "w=0, kappa1=0, s1!=0", start: CurvatureSplineKnotAt(curvature: 0.2, elevation: 0, tangentYaw: 0, x: 0, z: 0), end: CurvatureSplineKnotAt(curvature: 0, elevation: 0, tangentYaw: 0, x: 4, z: 3), expected: CurvatureSplineRefusal.TangentCurvatureInconsistent))))));
 
         return detail;
     }

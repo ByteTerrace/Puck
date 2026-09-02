@@ -36,6 +36,7 @@ public sealed partial class WorldServer {
             : $"[world.responses: {string.Join(separator: "; ", values: lines)}]"
         );
     }
+
     // Runs immediately after StepFields (WorldServer.Step.cs), so a response condition reads THIS tick's own lattice
     // writes rather than a tick-stale value — a burning tree's stump swap fires the same tick the char field crosses
     // its threshold.

@@ -183,7 +183,7 @@ public sealed class FederationTransferLawTests {
             await attacker.ConnectAsync(address: endpoint.Address, port: endpoint.Port, cancellationToken: timeout.Token);
             var stream = attacker.GetStream();
 
-            await WorldFederationCodec.WriteHelloAsync(stream: stream, ct: timeout.Token);
+            await HandshakeWireFormat.WriteHelloAsync(ct: timeout.Token, key: WorldFederationCodec.WireKey, stream: stream);
             var challenge = await RequireFrameAsync(stream: stream, ct: timeout.Token);
 
             Assert.Equal(expected: ((byte)WorldFederationResponse.Challenge), actual: challenge.Kind);
@@ -192,16 +192,16 @@ public sealed class FederationTransferLawTests {
             var refusal = await RequireFrameAsync(stream: stream, ct: timeout.Token);
 
             Assert.Equal(expected: ((byte)WorldFederationResponse.Refusal), actual: refusal.Kind);
-            Assert.StartsWith(expectedStartString: nameof(WorldFederationRefusal.AuthenticationFailed), actualString: Encoding.UTF8.GetString(bytes: refusal.Body), comparisonType: StringComparison.Ordinal);
+            Assert.StartsWith(expectedStartString: nameof(WorldFederationRefusal.AuthenticationFailed), actualString: Encoding.UTF8.GetString(bytes: refusal.Body.Span), comparisonType: StringComparison.Ordinal);
         }
 
         using (var authenticated = new TcpClient()) {
             await authenticated.ConnectAsync(address: endpoint.Address, port: endpoint.Port, cancellationToken: timeout.Token);
             var stream = authenticated.GetStream();
 
-            await WorldFederationCodec.WriteHelloAsync(stream: stream, ct: timeout.Token);
+            await HandshakeWireFormat.WriteHelloAsync(ct: timeout.Token, key: WorldFederationCodec.WireKey, stream: stream);
             var challenge = await RequireFrameAsync(stream: stream, ct: timeout.Token);
-            var proof = security.Prove(challenge: challenge.Body);
+            var proof = security.Prove(challenge: challenge.Body.Span);
 
             await WorldFederationCodec.WriteRequestAsync(stream: stream, kind: WorldFederationRequest.Authenticate, body: WorldFederationCodec.EncodeAuthentication(proof: proof), ct: timeout.Token);
             var accepted = await RequireFrameAsync(stream: stream, ct: timeout.Token);
@@ -213,13 +213,13 @@ public sealed class FederationTransferLawTests {
             var status = await RequireFrameAsync(stream: stream, ct: timeout.Token);
 
             Assert.Equal(expected: ((byte)WorldFederationResponse.Status), actual: status.Kind);
-            Assert.Equal(expected: ((byte)WorldTransferStatus.Missing), actual: Assert.Single(collection: status.Body));
+            Assert.Equal(expected: ((byte)WorldTransferStatus.Missing), actual: Assert.Single(collection: status.Body.ToArray()));
 
             await WorldFederationCodec.WriteRequestAsync(stream: stream, kind: WorldFederationRequest.Status, body: WorldFederationCodec.EncodeTransferKey(sourceAuthority: "machine-b/boot", transferId: 17), ct: timeout.Token);
             var refusal = await RequireFrameAsync(stream: stream, ct: timeout.Token);
 
             Assert.Equal(expected: ((byte)WorldFederationResponse.Refusal), actual: refusal.Kind);
-            Assert.StartsWith(expectedStartString: nameof(WorldFederationRefusal.SourceAuthorityMismatch), actualString: Encoding.UTF8.GetString(bytes: refusal.Body), comparisonType: StringComparison.Ordinal);
+            Assert.StartsWith(expectedStartString: nameof(WorldFederationRefusal.SourceAuthorityMismatch), actualString: Encoding.UTF8.GetString(bytes: refusal.Body.Span), comparisonType: StringComparison.Ordinal);
         }
 
         Assert.Contains(collection: host.FederationRefusals, filter: row => ((row.Refusal == WorldFederationRefusal.AuthenticationFailed) && (row.Count == 1)));
@@ -248,10 +248,10 @@ public sealed class FederationTransferLawTests {
         await client.ConnectAsync(address: endpoint.Address, port: endpoint.Port, cancellationToken: timeout.Token);
         var stream = client.GetStream();
 
-        await WorldFederationCodec.WriteHelloAsync(stream: stream, ct: timeout.Token);
+        await HandshakeWireFormat.WriteHelloAsync(ct: timeout.Token, key: WorldFederationCodec.WireKey, stream: stream);
         var challenge = await RequireFrameAsync(stream: stream, ct: timeout.Token);
         // Y signs the proof — never X's own key — so the connection can only ever be recorded as "authority-y".
-        var proof = oracleY.Sign(challenge: challenge.Body, cancellationToken: CancellationToken.None);
+        var proof = oracleY.Sign(challenge: challenge.Body.Span, cancellationToken: CancellationToken.None);
 
         await WorldFederationCodec.WriteRequestAsync(stream: stream, kind: WorldFederationRequest.Authenticate, body: WorldFederationCodec.EncodeAuthentication(proof: proof), ct: timeout.Token);
         Assert.Equal(expected: ((byte)WorldFederationResponse.Ack), actual: (await RequireFrameAsync(stream: stream, ct: timeout.Token)).Kind);
@@ -261,7 +261,7 @@ public sealed class FederationTransferLawTests {
         var refusedAsX = await RequireFrameAsync(stream: stream, ct: timeout.Token);
 
         Assert.Equal(expected: ((byte)WorldFederationResponse.Refusal), actual: refusedAsX.Kind);
-        Assert.StartsWith(expectedStartString: nameof(WorldFederationRefusal.SourceAuthorityMismatch), actualString: Encoding.UTF8.GetString(bytes: refusedAsX.Body), comparisonType: StringComparison.Ordinal);
+        Assert.StartsWith(expectedStartString: nameof(WorldFederationRefusal.SourceAuthorityMismatch), actualString: Encoding.UTF8.GetString(bytes: refusedAsX.Body.Span), comparisonType: StringComparison.Ordinal);
 
         // The control: a status frame naming Y's own verified identity is admitted.
         await WorldFederationCodec.WriteRequestAsync(stream: stream, kind: WorldFederationRequest.Status, body: WorldFederationCodec.EncodeTransferKey(sourceAuthority: "authority-y", transferId: 1), ct: timeout.Token);
@@ -289,10 +289,10 @@ public sealed class FederationTransferLawTests {
             await first.ConnectAsync(address: endpoint.Address, port: endpoint.Port, cancellationToken: timeout.Token);
             var stream = first.GetStream();
 
-            await WorldFederationCodec.WriteHelloAsync(stream: stream, ct: timeout.Token);
+            await HandshakeWireFormat.WriteHelloAsync(ct: timeout.Token, key: WorldFederationCodec.WireKey, stream: stream);
             var challenge = await RequireFrameAsync(stream: stream, ct: timeout.Token);
 
-            capturedProof = security.Prove(challenge: challenge.Body);
+            capturedProof = security.Prove(challenge: challenge.Body.Span);
             await WorldFederationCodec.WriteRequestAsync(stream: stream, kind: WorldFederationRequest.Authenticate, body: WorldFederationCodec.EncodeAuthentication(proof: capturedProof), ct: timeout.Token);
             Assert.Equal(expected: ((byte)WorldFederationResponse.Ack), actual: (await RequireFrameAsync(stream: stream, ct: timeout.Token)).Kind);
         }
@@ -301,14 +301,14 @@ public sealed class FederationTransferLawTests {
             await replay.ConnectAsync(address: endpoint.Address, port: endpoint.Port, cancellationToken: timeout.Token);
             var stream = replay.GetStream();
 
-            await WorldFederationCodec.WriteHelloAsync(stream: stream, ct: timeout.Token);
+            await HandshakeWireFormat.WriteHelloAsync(ct: timeout.Token, key: WorldFederationCodec.WireKey, stream: stream);
             var challenge = await RequireFrameAsync(stream: stream, ct: timeout.Token);
 
             await WorldFederationCodec.WriteRequestAsync(stream: stream, kind: WorldFederationRequest.Authenticate, body: WorldFederationCodec.EncodeAuthentication(proof: capturedProof), ct: timeout.Token);
             var refusal = await RequireFrameAsync(stream: stream, ct: timeout.Token);
 
             Assert.Equal(expected: ((byte)WorldFederationResponse.Refusal), actual: refusal.Kind);
-            Assert.StartsWith(expectedStartString: nameof(WorldFederationRefusal.AuthenticationFailed), actualString: Encoding.UTF8.GetString(bytes: refusal.Body), comparisonType: StringComparison.Ordinal);
+            Assert.StartsWith(expectedStartString: nameof(WorldFederationRefusal.AuthenticationFailed), actualString: Encoding.UTF8.GetString(bytes: refusal.Body.Span), comparisonType: StringComparison.Ordinal);
         }
     }
     /// <summary>The federation door carries no authenticator-scheme width of its own — <see cref="WorldTcpHost"/>
@@ -330,19 +330,55 @@ public sealed class FederationTransferLawTests {
         await client.ConnectAsync(address: endpoint.Address, port: endpoint.Port, cancellationToken: timeout.Token);
         var stream = client.GetStream();
 
-        await WorldFederationCodec.WriteHelloAsync(stream: stream, ct: timeout.Token);
+        await HandshakeWireFormat.WriteHelloAsync(ct: timeout.Token, key: WorldFederationCodec.WireKey, stream: stream);
         var challenge = await RequireFrameAsync(stream: stream, ct: timeout.Token);
 
         Assert.Equal(expected: ((byte)WorldFederationResponse.Challenge), actual: challenge.Kind);
         Assert.Equal(expected: OddWidthAuthenticator.ChallengeWidth, actual: challenge.Body.Length);
 
-        var proof = security.Prove(challenge: challenge.Body);
+        var proof = security.Prove(challenge: challenge.Body.Span);
 
         Assert.NotEqual(expected: 32, actual: proof.Length);
         await WorldFederationCodec.WriteRequestAsync(stream: stream, kind: WorldFederationRequest.Authenticate, body: WorldFederationCodec.EncodeAuthentication(proof: proof), ct: timeout.Token);
         var accepted = await RequireFrameAsync(stream: stream, ct: timeout.Token);
 
         Assert.Equal(expected: ((byte)WorldFederationResponse.Ack), actual: accepted.Kind);
+    }
+    /// <summary>The client-side signing gate closes on an authenticator that verifies but cannot prove, not only on
+    /// an unconfigured one: a <see cref="WorldAttestedAuthenticator"/> built with trust entries and no oracle passes
+    /// <see cref="IAuthenticator.IsConfigured"/>, so a <see cref="WorldRemoteAuthority"/> holding it learns from the
+    /// first proof it refuses and answers every later request without a socket, naming the missing identity. Every
+    /// refused answer — the first, which came back through the lane, included — carries
+    /// <see cref="WorldFederationResponse.Refusal"/> as its kind. Falsifiers: gating on <c>IsConfigured</c> alone
+    /// turns the second answer's detail into the lane's own "is reconnecting" narration; copying a refused lane
+    /// response's default kind into the answer turns the first answer's kind red.</summary>
+    [Fact]
+    public void RemoteAuthority_ClosesTheSigningGateOnAnAuthenticatorThatVerifiesButCannotProve() {
+        using var fixture = Fixtures.FreshServer();
+        using var oracle = LocalOracle(subject: "machine-a/boot");
+        var hostSecurity = new WorldAttestedAuthenticator(trustEntries: () => [TrustEntryFor(oracle: oracle)], oracle: oracle);
+        using var host = new WorldTcpHost(server: fixture.Server, authenticator: hostSecurity);
+
+        host.Start(listen: "127.0.0.1:0");
+        var verifyOnly = new WorldAttestedAuthenticator(trustEntries: () => [TrustEntryFor(oracle: oracle)]);
+
+        Assert.True(condition: verifyOnly.IsConfigured);
+
+        using var remote = new WorldRemoteAuthority(endpoint: host.ListenEndpoint!, placeholder: fixture.Server.Definition, security: verifyOnly, observerAuthority: "machine-b/boot");
+        var body = WorldFederationCodec.EncodeTransferKey(sourceAuthority: "machine-b/boot", transferId: 17);
+        var first = remote.AwaitAnswer(body: body, kind: WorldFederationRequest.Status, sourceAuthority: "machine-b/boot");
+
+        Assert.False(condition: first.Ok);
+        Assert.Equal(expected: WorldFederationResponse.Refusal, actual: first.Kind);
+        Assert.Equal(expected: WireRefusal.LaneUnavailable, actual: first.Failure.Refusal);
+        Assert.Contains(expectedSubstring: "this run holds no federation signing identity", actualString: first.Failure.Detail, comparisonType: StringComparison.Ordinal);
+
+        var second = remote.AwaitAnswer(body: body, kind: WorldFederationRequest.Status, sourceAuthority: "machine-b/boot");
+
+        Assert.False(condition: second.Ok);
+        Assert.Equal(expected: WorldFederationResponse.Refusal, actual: second.Kind);
+        Assert.Equal(expected: WireRefusal.LaneUnavailable, actual: second.Failure.Refusal);
+        Assert.Equal(expected: "this run holds no federation signing identity", actual: second.Failure.Detail);
     }
     [InlineData(true)]
     [InlineData(false)]
@@ -372,9 +408,9 @@ public sealed class FederationTransferLawTests {
         await client.ConnectAsync(address: endpoint.Address, port: endpoint.Port, cancellationToken: timeout.Token);
         var stream = client.GetStream();
 
-        await WorldFederationCodec.WriteHelloAsync(stream: stream, ct: timeout.Token);
+        await HandshakeWireFormat.WriteHelloAsync(ct: timeout.Token, key: WorldFederationCodec.WireKey, stream: stream);
         var challenge = await RequireFrameAsync(stream: stream, ct: timeout.Token);
-        var proof = security.Prove(challenge: challenge.Body);
+        var proof = security.Prove(challenge: challenge.Body.Span);
 
         await WorldFederationCodec.WriteRequestAsync(stream: stream, kind: WorldFederationRequest.Authenticate, body: WorldFederationCodec.EncodeAuthentication(proof: proof), ct: timeout.Token);
         Assert.Equal(expected: ((byte)WorldFederationResponse.Ack), actual: (await RequireFrameAsync(stream: stream, ct: timeout.Token)).Kind);
@@ -396,7 +432,7 @@ public sealed class FederationTransferLawTests {
         var expectedRefusal = (rebindAuthority ? WorldFederationRefusal.SourceAuthorityMismatch : WorldFederationRefusal.CredentialUnknown);
 
         Assert.Equal(expected: ((byte)WorldFederationResponse.Refusal), actual: refusal.Kind);
-        Assert.StartsWith(expectedStartString: expectedRefusal.ToString(), actualString: Encoding.UTF8.GetString(bytes: refusal.Body), comparisonType: StringComparison.Ordinal);
+        Assert.StartsWith(expectedStartString: expectedRefusal.ToString(), actualString: Encoding.UTF8.GetString(bytes: refusal.Body.Span), comparisonType: StringComparison.Ordinal);
     }
     [Fact]
     public void CommitStatus_SurvivesALostAcknowledgement_AndOnlyExactCommitReplays() {

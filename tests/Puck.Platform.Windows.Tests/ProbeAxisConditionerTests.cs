@@ -37,20 +37,19 @@ public sealed class ProbeAxisConditionerTests {
     [Fact]
     public void Step_rejects_a_channel_ordinal_outside_the_measurement() {
         var conditioner = new ProbeAxisConditioner(policy: SymmetricPolicy);
-        var reading = MakeMeasurement(value: 0.0, captureTimestamp: 0L);
+        var reading = MakeMeasurement(captureTimestamp: 0L, value: 0.0);
 
-        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => conditioner.Step(reading: reading, channel: -1, nowTimestamp: 0L));
-        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => conditioner.Step(reading: reading, channel: 1, nowTimestamp: 0L));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => conditioner.Step(channel: -1, nowTimestamp: 0L, reading: reading));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => conditioner.Step(channel: 1, nowTimestamp: 0L, reading: reading));
     }
-
-    [Theory]
     [InlineData(0.05)]
     [InlineData(-0.05)]
     [InlineData(0.10)]
     [InlineData(-0.10)]
+    [Theory]
     public void A_value_at_or_inside_the_deadband_yields_neutral(double raw) {
         var conditioner = new ProbeAxisConditioner(policy: SymmetricPolicy);
-        var sample = conditioner.Step(reading: MakeMeasurement(value: raw, captureTimestamp: 0L), channel: 0, nowTimestamp: 0L);
+        var sample = conditioner.Step(reading: MakeMeasurement(captureTimestamp: 0L, value: raw), channel: 0, nowTimestamp: 0L);
 
         Assert.Equal(actual: sample.Value, expected: FixedQ4816.Zero);
         Assert.False(condition: sample.Expired);
@@ -64,21 +63,21 @@ public sealed class ProbeAxisConditionerTests {
 
         // Exactly at the threshold (0.10) does not exceed it, so the gate stays inactive.
         Assert.Equal(
-            actual: positiveAtBoundary.Step(reading: MakeMeasurement(value: 0.10, captureTimestamp: 0L), channel: 0, nowTimestamp: 0L).Value,
+            actual: positiveAtBoundary.Step(reading: MakeMeasurement(captureTimestamp: 0L, value: 0.10), channel: 0, nowTimestamp: 0L).Value,
             expected: FixedQ4816.Zero
         );
         Assert.Equal(
-            actual: negativeAtBoundary.Step(reading: MakeMeasurement(value: -0.10, captureTimestamp: 0L), channel: 0, nowTimestamp: 0L).Value,
+            actual: negativeAtBoundary.Step(reading: MakeMeasurement(captureTimestamp: 0L, value: -0.10), channel: 0, nowTimestamp: 0L).Value,
             expected: FixedQ4816.Zero
         );
         // Past it, the gate activates and the value passes through.
         Assert.NotEqual(
             expected: FixedQ4816.Zero,
-            actual: positiveBeyond.Step(reading: MakeMeasurement(value: 0.11, captureTimestamp: 0L), channel: 0, nowTimestamp: 0L).Value
+            actual: positiveBeyond.Step(reading: MakeMeasurement(captureTimestamp: 0L, value: 0.11), channel: 0, nowTimestamp: 0L).Value
         );
         Assert.NotEqual(
             expected: FixedQ4816.Zero,
-            actual: negativeBeyond.Step(reading: MakeMeasurement(value: -0.11, captureTimestamp: 0L), channel: 0, nowTimestamp: 0L).Value
+            actual: negativeBeyond.Step(reading: MakeMeasurement(captureTimestamp: 0L, value: -0.11), channel: 0, nowTimestamp: 0L).Value
         );
     }
     [Fact]
@@ -88,16 +87,16 @@ public sealed class ProbeAxisConditionerTests {
         // Activate the deadband gate first.
         Assert.NotEqual(
             expected: FixedQ4816.Zero,
-            actual: conditioner.Step(reading: MakeMeasurement(value: 0.20, captureTimestamp: 0L), channel: 0, nowTimestamp: 0L).Value
+            actual: conditioner.Step(reading: MakeMeasurement(captureTimestamp: 0L, value: 0.20), channel: 0, nowTimestamp: 0L).Value
         );
         // With hysteresis zero, re-entry uses the same boundary: exactly at the deadband still counts as active
         // (the exit test is a strict "<", not "<="), so the gate only releases once the magnitude drops below it.
         Assert.NotEqual(
             expected: FixedQ4816.Zero,
-            actual: conditioner.Step(reading: MakeMeasurement(value: 0.10, captureTimestamp: 0L), channel: 0, nowTimestamp: 0L).Value
+            actual: conditioner.Step(reading: MakeMeasurement(captureTimestamp: 0L, value: 0.10), channel: 0, nowTimestamp: 0L).Value
         );
         Assert.Equal(
-            actual: conditioner.Step(reading: MakeMeasurement(value: 0.05, captureTimestamp: 0L), channel: 0, nowTimestamp: 0L).Value,
+            actual: conditioner.Step(reading: MakeMeasurement(captureTimestamp: 0L, value: 0.05), channel: 0, nowTimestamp: 0L).Value,
             expected: FixedQ4816.Zero
         );
     }
@@ -108,31 +107,30 @@ public sealed class ProbeAxisConditionerTests {
 
         // Enter threshold is deadband + hysteresis = 0.15: 0.12 alone must not activate.
         Assert.Equal(
-            actual: conditioner.Step(reading: MakeMeasurement(value: 0.12, captureTimestamp: 0L), channel: 0, nowTimestamp: 0L).Value,
+            actual: conditioner.Step(reading: MakeMeasurement(captureTimestamp: 0L, value: 0.12), channel: 0, nowTimestamp: 0L).Value,
             expected: FixedQ4816.Zero
         );
         Assert.NotEqual(
             expected: FixedQ4816.Zero,
-            actual: conditioner.Step(reading: MakeMeasurement(value: 0.16, captureTimestamp: 0L), channel: 0, nowTimestamp: 0L).Value
+            actual: conditioner.Step(reading: MakeMeasurement(captureTimestamp: 0L, value: 0.16), channel: 0, nowTimestamp: 0L).Value
         );
         // Exit threshold is deadband - hysteresis = 0.05: 0.07 alone must not release an already-active gate.
         Assert.NotEqual(
             expected: FixedQ4816.Zero,
-            actual: conditioner.Step(reading: MakeMeasurement(value: 0.07, captureTimestamp: 0L), channel: 0, nowTimestamp: 0L).Value
+            actual: conditioner.Step(reading: MakeMeasurement(captureTimestamp: 0L, value: 0.07), channel: 0, nowTimestamp: 0L).Value
         );
         Assert.Equal(
-            actual: conditioner.Step(reading: MakeMeasurement(value: 0.03, captureTimestamp: 0L), channel: 0, nowTimestamp: 0L).Value,
+            actual: conditioner.Step(reading: MakeMeasurement(captureTimestamp: 0L, value: 0.03), channel: 0, nowTimestamp: 0L).Value,
             expected: FixedQ4816.Zero
         );
     }
-
     [Fact]
     public void Zero_smoothing_tracks_the_gated_value_with_no_lag() {
         var policy = (SymmetricPolicy with { Deadband = FixedQ4816.Zero, Smoothing = FixedQ4816.Zero });
         var conditioner = new ProbeAxisConditioner(policy: policy);
 
-        var first = conditioner.Step(reading: MakeMeasurement(value: 0.20, captureTimestamp: 0L), channel: 0, nowTimestamp: 0L);
-        var second = conditioner.Step(reading: MakeMeasurement(value: 0.60, captureTimestamp: 0L), channel: 0, nowTimestamp: 0L);
+        var first = conditioner.Step(reading: MakeMeasurement(captureTimestamp: 0L, value: 0.20), channel: 0, nowTimestamp: 0L);
+        var second = conditioner.Step(reading: MakeMeasurement(captureTimestamp: 0L, value: 0.60), channel: 0, nowTimestamp: 0L);
 
         Assert.Equal(actual: first.Value, expected: Quantize(raw: 0.20, bits: policy.QuantizeBits));
         // Zero smoothing is the identity: the second step lands exactly on the new input, not partway from the first.
@@ -143,21 +141,20 @@ public sealed class ProbeAxisConditionerTests {
         var policy = (SymmetricPolicy with { Deadband = FixedQ4816.Zero, Smoothing = FixedQ4816.FromDouble(value: 0.5) });
         var conditioner = new ProbeAxisConditioner(policy: policy);
 
-        _ = conditioner.Step(reading: MakeMeasurement(value: 0.20, captureTimestamp: 0L), channel: 0, nowTimestamp: 0L);
-        var second = conditioner.Step(reading: MakeMeasurement(value: 0.60, captureTimestamp: 0L), channel: 0, nowTimestamp: 0L);
+        _ = conditioner.Step(reading: MakeMeasurement(captureTimestamp: 0L, value: 0.20), channel: 0, nowTimestamp: 0L);
+        var second = conditioner.Step(reading: MakeMeasurement(captureTimestamp: 0L, value: 0.60), channel: 0, nowTimestamp: 0L);
 
         Assert.True(condition: (second.Value > Quantize(raw: 0.20, bits: policy.QuantizeBits)));
         Assert.True(condition: (second.Value < Quantize(raw: 0.60, bits: policy.QuantizeBits)));
     }
-
     [Fact]
     public void Quantization_is_symmetric_about_the_neutral() {
         var policy = (SymmetricPolicy with { Deadband = FixedQ4816.Zero, Smoothing = FixedQ4816.Zero, QuantizeBits = 4 });
         var positive = new ProbeAxisConditioner(policy: policy);
         var negative = new ProbeAxisConditioner(policy: policy);
 
-        var positiveValue = positive.Step(reading: MakeMeasurement(value: 0.37, captureTimestamp: 0L), channel: 0, nowTimestamp: 0L).Value;
-        var negativeValue = negative.Step(reading: MakeMeasurement(value: -0.37, captureTimestamp: 0L), channel: 0, nowTimestamp: 0L).Value;
+        var positiveValue = positive.Step(reading: MakeMeasurement(captureTimestamp: 0L, value: 0.37), channel: 0, nowTimestamp: 0L).Value;
+        var negativeValue = negative.Step(reading: MakeMeasurement(captureTimestamp: 0L, value: -0.37), channel: 0, nowTimestamp: 0L).Value;
 
         Assert.Equal(actual: negativeValue, expected: -positiveValue);
     }
@@ -167,14 +164,13 @@ public sealed class ProbeAxisConditionerTests {
         var first = new ProbeAxisConditioner(policy: policy);
         var second = new ProbeAxisConditioner(policy: policy);
 
-        var quantized = first.Step(reading: MakeMeasurement(value: 0.37, captureTimestamp: 0L), channel: 0, nowTimestamp: 0L).Value;
+        var quantized = first.Step(reading: MakeMeasurement(captureTimestamp: 0L, value: 0.37), channel: 0, nowTimestamp: 0L).Value;
         // Feed the already-quantized output straight back in as the next raw channel value (the symmetric policy's
         // span is exactly [-1, 1], so normalization is the identity on a value already in range).
-        var requantized = second.Step(reading: MakeMeasurement(value: (double)quantized, captureTimestamp: 0L), channel: 0, nowTimestamp: 0L).Value;
+        var requantized = second.Step(reading: MakeMeasurement(captureTimestamp: 0L, value: ((double)quantized)), channel: 0, nowTimestamp: 0L).Value;
 
         Assert.Equal(actual: requantized, expected: quantized);
     }
-
     [Fact]
     public void One_bit_quantization_exposes_exactly_negative_one_zero_and_one() {
         var policy = (SymmetricPolicy with { Deadband = FixedQ4816.Zero, Smoothing = FixedQ4816.Zero, QuantizeBits = 1 });
@@ -183,14 +179,14 @@ public sealed class ProbeAxisConditionerTests {
         for (var raw = -1.0; (raw <= 1.0); raw += 0.05) {
             var conditioner = new ProbeAxisConditioner(policy: policy);
 
-            _ = observed.Add(item: conditioner.Step(reading: MakeMeasurement(value: raw, captureTimestamp: 0L), channel: 0, nowTimestamp: 0L).Value);
+            _ = observed.Add(item: conditioner.Step(reading: MakeMeasurement(captureTimestamp: 0L, value: raw), channel: 0, nowTimestamp: 0L).Value);
         }
 
         Assert.Equal(expected: [FixedQ4816.NegativeOne, FixedQ4816.Zero, FixedQ4816.One], actual: observed.OrderBy(keySelector: static value => value).ToArray());
     }
-    [Theory]
     [InlineData(2)]
     [InlineData(4)]
+    [Theory]
     public void Quantization_exposes_two_to_the_bits_plus_one_values_with_exact_endpoints(int bits) {
         var policy = (SymmetricPolicy with { Deadband = FixedQ4816.Zero, Smoothing = FixedQ4816.Zero, QuantizeBits = bits });
         var observed = new HashSet<FixedQ4816>();
@@ -201,7 +197,7 @@ public sealed class ProbeAxisConditionerTests {
             var raw = (-1.0 + ((2.0 * index) / (steps * 8)));
             var conditioner = new ProbeAxisConditioner(policy: policy);
 
-            _ = observed.Add(item: conditioner.Step(reading: MakeMeasurement(value: raw, captureTimestamp: 0L), channel: 0, nowTimestamp: 0L).Value);
+            _ = observed.Add(item: conditioner.Step(reading: MakeMeasurement(captureTimestamp: 0L, value: raw), channel: 0, nowTimestamp: 0L).Value);
         }
 
         Assert.Equal(expected: (steps + 1), actual: observed.Count);
@@ -209,17 +205,16 @@ public sealed class ProbeAxisConditionerTests {
         Assert.Contains(expected: FixedQ4816.Zero, collection: observed);
         Assert.Contains(expected: FixedQ4816.One, collection: observed);
     }
-
     [Fact]
     public void A_stale_measurement_expires_to_neutral_exactly_once_then_stops_changing() {
         var conditioner = new ProbeAxisConditioner(policy: SymmetricPolicy);
-        var live = MakeMeasurement(value: 0.50, captureTimestamp: 0L);
-        var fresh = conditioner.Step(reading: live, channel: 0, nowTimestamp: 0L);
+        var live = MakeMeasurement(captureTimestamp: 0L, value: 0.50);
+        var fresh = conditioner.Step(channel: 0, nowTimestamp: 0L, reading: live);
 
         Assert.False(condition: fresh.Expired);
         Assert.True(condition: fresh.Changed);
 
-        var stale = MakeMeasurement(value: 0.50, captureTimestamp: 0L);
+        var stale = MakeMeasurement(captureTimestamp: 0L, value: 0.50);
         var firstExpiry = conditioner.Step(reading: stale, channel: 0, nowTimestamp: (SymmetricPolicy.MaxAgeTicks + 1L));
 
         Assert.True(condition: firstExpiry.Expired);
@@ -241,7 +236,7 @@ public sealed class ProbeAxisConditionerTests {
     [Fact]
     public void The_first_ever_step_can_already_be_stale_and_still_reports_a_single_edge() {
         var conditioner = new ProbeAxisConditioner(policy: SymmetricPolicy);
-        var stale = MakeMeasurement(value: 0.50, captureTimestamp: 0L);
+        var stale = MakeMeasurement(captureTimestamp: 0L, value: 0.50);
 
         var first = conditioner.Step(reading: stale, channel: 0, nowTimestamp: (SymmetricPolicy.MaxAgeTicks + 1L));
 
@@ -258,7 +253,7 @@ public sealed class ProbeAxisConditionerTests {
         var quantumRaw = (1L << (17 - bits));
         var rawUnits = FixedQ4816.FromDouble(value: raw).Value;
         var half = (quantumRaw / 2);
-        var offset = (rawUnits >= 0L) ? half : -half;
+        var offset = ((rawUnits >= 0L) ? half : -half);
         var quantized = (((rawUnits + offset) / quantumRaw) * quantumRaw);
 
         return FixedQ4816.FromRawBits(value: quantized);

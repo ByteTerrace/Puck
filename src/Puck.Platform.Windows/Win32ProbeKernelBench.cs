@@ -57,7 +57,7 @@ internal sealed unsafe class Win32ProbeKernelBench {
         var views = stackalloc nint[ProbeKernelInputLimits.MaxRegisters];
         var ringSlots = stackalloc int[ProbeKernelInputLimits.MaxInputs];
 
-        for (var index = m_attached.Count - 1; (index >= 0); index--) {
+        for (var index = (m_attached.Count - 1); (index >= 0); index--) {
             var attachment = m_attached[index];
 
             if (attachment.Detached) {
@@ -102,56 +102,56 @@ internal sealed unsafe class Win32ProbeKernelBench {
                 for (var input = 0; (input < inputs.Count); input++) {
                     switch (inputs[input]) {
                         case ProbeKernelInput.Sensor sensorInput: {
-                            var view = resolver.Resolve(sensor: sensorInput.Kind, previous: false);
+                                var view = resolver.Resolve(sensor: sensorInput.Kind, previous: false);
 
-                            views[cursor] = view;
-                            cursor += 1;
+                                views[cursor] = view;
+                                cursor += 1;
 
-                            if (view != 0) {
-                                boundMask |= (1u << input);
-                            } else {
-                                ready = false;
+                                if (view != 0) {
+                                    boundMask |= (1u << input);
+                                } else {
+                                    ready = false;
+                                }
+
+                                break;
                             }
-
-                            break;
-                        }
                         case ProbeKernelInput.StrobePair strobeInput: {
-                            var lit = resolver.Resolve(sensor: strobeInput.Kind, previous: false);
-                            var unlit = resolver.Resolve(sensor: strobeInput.Kind, previous: true);
+                                var lit = resolver.Resolve(sensor: strobeInput.Kind, previous: false);
+                                var unlit = resolver.Resolve(sensor: strobeInput.Kind, previous: true);
 
-                            views[cursor] = lit;
-                            views[cursor + 1] = unlit;
-                            cursor += 2;
+                                views[cursor] = lit;
+                                views[(cursor + 1)] = unlit;
+                                cursor += 2;
 
-                            if ((lit != 0) && (unlit != 0)) {
-                                boundMask |= (1u << input);
-                            } else {
-                                ready = false;
+                                if ((lit != 0) && (unlit != 0)) {
+                                    boundMask |= (1u << input);
+                                } else {
+                                    ready = false;
+                                }
+
+                                break;
                             }
-
-                            break;
-                        }
                         case ProbeKernelInput.Ring ringInput: {
-                            var ringViews = attachment.RingViews(index: input);
+                                var ringViews = attachment.RingViews(index: input);
 
-                            if ((ringViews is not null) && ringInput.Slots.TryAcquireLatest(out var slot)) {
-                                ringSlots[input] = slot;
-                                views[cursor] = ringViews[slot];
-                                boundMask |= (1u << input);
-                            } else {
-                                views[cursor] = 0;
+                                if ((ringViews is not null) && ringInput.Slots.TryAcquireLatest(slot: out var slot)) {
+                                    ringSlots[input] = slot;
+                                    views[cursor] = ringViews[slot];
+                                    boundMask |= (1u << input);
+                                } else {
+                                    views[cursor] = 0;
+                                }
+
+                                cursor += 1;
+
+                                break;
                             }
-
-                            cursor += 1;
-
-                            break;
-                        }
                         case ProbeKernelInput.Unbound: {
-                            views[cursor] = 0;
-                            cursor += 1;
+                                views[cursor] = 0;
+                                cursor += 1;
 
-                            break;
-                        }
+                                break;
+                            }
                     }
                 }
 
@@ -178,7 +178,7 @@ internal sealed unsafe class Win32ProbeKernelBench {
                     device.Enter();
 
                     try {
-                        _ = attachment.Kernel.TryRun(views: new ReadOnlySpan<nint>(views, cursor), boundMask: boundMask, captureTimestamp: captureTimestamp);
+                        _ = attachment.Kernel.TryRun(views: new ReadOnlySpan<nint>(length: cursor, pointer: views), boundMask: boundMask, captureTimestamp: captureTimestamp);
                     } finally {
                         device.Leave();
                     }
@@ -196,17 +196,19 @@ internal sealed unsafe class Win32ProbeKernelBench {
             }
         }
     }
+
     // The fault a probe reports: the message plus the first frame inside this assembly, so a refused native call names
     // the kernel step it came from rather than only the HRESULT text.
     private static string DescribeFault(Exception exception) {
         foreach (var frame in new System.Diagnostics.StackTrace(e: exception).GetFrames()) {
-            if ((frame.GetMethod() is { DeclaringType: { } type } method) && (type.Assembly == typeof(Win32ProbeKernelBench).Assembly) && (type.Namespace?.StartsWith(value: "Windows.Win32", comparisonType: StringComparison.Ordinal) != true)) {
+            if ((frame.GetMethod() is { DeclaringType: { } type } method) && (type.Assembly == typeof(Win32ProbeKernelBench).Assembly) && (type.Namespace?.StartsWith(comparisonType: StringComparison.Ordinal, value: "Windows.Win32") != true)) {
                 return $"{exception.Message} ({type.Name}.{method.Name})";
             }
         }
 
         return exception.Message;
     }
+
     /// <summary>Ends every attachment and releases its kernel; called on the worker as the graph closes.</summary>
     public void Close() {
         Volatile.Write(location: ref m_closed, value: true);
@@ -230,7 +232,6 @@ internal sealed unsafe class Win32ProbeKernelBench {
         textures: textures,
         views: views
     );
-
     // Release views first because each view retains its texture. Each released slot is zeroed in place so a caller
     // holding the same array (Attachment publishes textures/views before it knows whether the open will succeed) can
     // read the release back. The injected release action is the smallest pure seam that lets a law prove partially
@@ -269,20 +270,22 @@ internal sealed unsafe class Win32ProbeKernelBench {
         private string? m_fault;
         private byte[]? m_pendingConstants;
         private bool m_ringResourcesOpened;
+
         private nint[]?[] m_ringTextures = [];
         private nint[]?[] m_ringViews = [];
 
         public readonly ProbeKernelRequest Request = request;
         public readonly ProbeReadingRing Ring = ring;
+
         public Win32D3D11ProbeKernel? Kernel;
 
-        public bool Detached => m_detached;
-        public bool Ended => m_ended;
-        public bool RingResourcesOpened => m_ringResourcesOpened;
         public long Cycles => (Kernel?.Cycles ?? 0L);
+        public bool Detached => m_detached;
         public long Drops => (Kernel?.Drops ?? 0L);
+        public bool Ended => m_ended;
         public string? Fault => Volatile.Read(location: ref m_fault);
         public bool IsEnded => m_ended;
+        public bool RingResourcesOpened => m_ringResourcesOpened;
 
         public void ApplyPendingConstants() {
             if ((Interlocked.Exchange(location1: ref m_pendingConstants, value: null) is { } pending) && (Kernel is { } kernel)) {
@@ -343,7 +346,7 @@ internal sealed unsafe class Win32ProbeKernelBench {
                         ID3D11ShaderResourceView* view = null;
 
                         try {
-                            device.Device->CreateShaderResourceView(pResource: ((ID3D11Resource*)texture), pDesc: null, ppSRView: &view);
+                            device.Device->CreateShaderResourceView(pDesc: null, pResource: ((ID3D11Resource*)texture), ppSRView: &view);
                         } catch (Exception exception) {
                             throw new InvalidOperationException(message: $"viewing ring socket {index} slot {slot} ({description.Format}, bind {description.BindFlags}, misc {description.MiscFlags}) failed: {exception.Message}", innerException: exception);
                         } finally {
@@ -376,7 +379,7 @@ internal sealed unsafe class Win32ProbeKernelBench {
         }
         public void Dispose() => m_detached = true;
         public void End(string fault) {
-            _ = Interlocked.CompareExchange(location1: ref m_fault, value: fault, comparand: null);
+            _ = Interlocked.CompareExchange(comparand: null, location1: ref m_fault, value: fault);
             m_ended = true;
         }
         public void SetConstants(ReadOnlyMemory<byte> constants) {

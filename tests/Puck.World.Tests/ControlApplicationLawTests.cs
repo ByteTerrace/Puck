@@ -23,9 +23,9 @@ public sealed class ControlApplicationLawTests {
         var principal = WorldPrincipal.Seat(slot: slot);
 
         _ = fixture.Server.ApplySession(request: new SessionRequest.Join(
+            IdentityName: null,
             Principal: principal,
             Slot: slot,
-            IdentityName: null,
             WireProtocolKey: WorldProtocol.WireProtocolKey
         ));
 

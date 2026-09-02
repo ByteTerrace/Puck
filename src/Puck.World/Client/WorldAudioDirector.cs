@@ -77,6 +77,7 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
     /// always inside the full-presence band, an approximation of "no envelope" rather than an authorable value
     /// (every genre wants layered music equally global).</summary>
     public const long MusicLayerBedRadius = 1_000_000L;
+
     /// <summary>The <c>speaker:</c>/<c>placement:</c> derived-plan key prefixes' sibling for a music-layer bed —
     /// the tune id follows.</summary>
     private const string MusicLayerKeyPrefix = "musicLayer:";
@@ -99,10 +100,10 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
     // once set, the lever owns "now" for the rest of the session and world.save folds it back into the document.
     private float? m_sessionMasterVolume;
     private int m_slabIndex;
+
     // The world.instrument-clock session lever's echo, by 0-based local seat — presentation only (see
     // IWorldInstrumentClockLever's own remarks); the simulation-side clock fold never reads this.
     private readonly HashSet<int> m_instrumentClockSeats = new();
-
     private readonly PublishBuffer<AudioSnapshot> m_buffer = new();
     private readonly List<EmitterPlan> m_plan = new();
     // The stable-id registry: emitter key → (id, identity signature). Survives reconciles so property edits keep
@@ -112,10 +113,12 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
     // The pending voice-babble syllable schedule, aged by AdvanceBabbleSchedule — one entry per syllable still
     // waiting to fire.
     private readonly List<ScheduledBabbleTrigger> m_scheduledBabble = new();
+
     // The cumulative babble-syllable fire count this session — the voice.state echo's one monotone fact (never
     // reset), so a caller can prove multiple distinct syllables fired without racing the live transient pool's own
     // expiry.
     private ulong m_babbleFiredTotal;
+
     // The mixer-facing patch registration set (world patch rows by id + inline creation-sound patches by emitter
     // key) — applied on attach and on every reconcile while attached.
     private readonly List<(string Id, VoicePatch Patch)> m_patchSet = new();
@@ -321,8 +324,8 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
         WorldAnchor.Seat or WorldAnchor.RecentSpeaker when (SeatRelativeBody(anchor: anchor) is { } seatBody) => ((WorldSeatAnchors.PartOf(anchor: anchor) is { } seatPart)
         ? EmitterAnchor.EntityPart(
             index: seatBody,
-            partId: seatPart,
-            offset: offset
+            offset: offset,
+            partId: seatPart
         )
         : EmitterAnchor.EntityRoot(
             index: seatBody,
@@ -792,10 +795,10 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
         });
         m_lastCueByToken[key: WorldAudioCue.VoiceBabble] = patchId;
         SubmitTrigger(
-            patchId: patchId,
-            seed: seed,
+            emitterId: id,
             gainQ16: 65536,
-            emitterId: id
+            patchId: patchId,
+            seed: seed
         );
         m_babbleFiredTotal++;
     }
@@ -1959,7 +1962,7 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
 
             // Masked to Pcg32XshRr.MaxStream: VoiceBabbler feeds this straight through as the jitter stream id,
             // which refuses past 2^63-1 — a raw 64-bit hash can set that top bit.
-            var identitySeed = (Fnv1aHash.Compute(values: identityId) & Pcg32XshRr.MaxStream);
+            var identitySeed = Fnv1aHash.Compute(values: identityId) & Pcg32XshRr.MaxStream;
             var ticks = new ulong[syllableCount];
 
             VoiceBabbler.ComputeTriggerTicks(

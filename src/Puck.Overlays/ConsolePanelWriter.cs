@@ -227,6 +227,7 @@ public sealed class ConsolePanelWriter {
             y: promptY
         );
     }
+
     // The rows a line of the given length occupies at the column count; an empty line still takes one.
     private static int SegmentCount(int length, int cols) =>
         Math.Max(

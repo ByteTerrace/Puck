@@ -8,6 +8,7 @@ internal static class CanaryManifestLoader {
     private const int MaximumFederatedLegTimeoutSeconds = 240;
     private const int MaximumLegTimeoutSeconds = 60;
     private const string UnknownMemberDetail = "strict manifests refuse fields the runner does not read.";
+
     private static readonly Func<string, Exception> Refusal = static message => new CanaryManifestRefusal(message: message);
 
     public static bool TryLoadAll(string repositoryRoot, out IReadOnlyList<CanaryManifest> manifests, out string error) {
@@ -79,7 +80,7 @@ internal static class CanaryManifestLoader {
         error = string.Empty;
 
         try {
-            using var document = CliStrictJson.ParseStrict(path: manifestPath, maxDepth: 32, duplicateDetail: "the reviewer and runtime must see one value.", refusal: Refusal);
+            using var document = CliStrictJson.ParseStrict(duplicateDetail: "the reviewer and runtime must see one value.", maxDepth: 32, path: manifestPath, refusal: Refusal);
             var root = CliStrictJson.RequireObject(element: document.RootElement, context: "manifest root", refusal: Refusal);
 
             CliStrictJson.RequireOnlyMembers(
@@ -619,21 +620,21 @@ internal static class CanaryManifestLoader {
                 right = ReadOperand(element: CliStrictJson.ReadRequiredObject(context: context, element: element, member: "right", refusal: Refusal), context: $"{context} right");
                 break;
             case CanaryRelationOperator.BetweenInclusive:
-                minimum = CliStrictJson.ReadRequiredFiniteNumber(context: context, element: element, member: "minimum", descriptor: "finite in-range number", refusal: Refusal);
-                maximum = CliStrictJson.ReadRequiredFiniteNumber(context: context, element: element, member: "maximum", descriptor: "finite in-range number", refusal: Refusal);
+                minimum = CliStrictJson.ReadRequiredFiniteNumber(context: context, descriptor: "finite in-range number", element: element, member: "minimum", refusal: Refusal);
+                maximum = CliStrictJson.ReadRequiredFiniteNumber(context: context, descriptor: "finite in-range number", element: element, member: "maximum", refusal: Refusal);
                 if (minimum > maximum) {
                     throw new CanaryManifestRefusal(message: $"{context} minimum is greater than maximum.");
                 }
                 break;
             case CanaryRelationOperator.AtLeast:
-                minimum = CliStrictJson.ReadRequiredFiniteNumber(context: context, element: element, member: "minimum", descriptor: "finite in-range number", refusal: Refusal);
+                minimum = CliStrictJson.ReadRequiredFiniteNumber(context: context, descriptor: "finite in-range number", element: element, member: "minimum", refusal: Refusal);
                 break;
             case CanaryRelationOperator.AtMost:
-                maximum = CliStrictJson.ReadRequiredFiniteNumber(context: context, element: element, member: "maximum", descriptor: "finite in-range number", refusal: Refusal);
+                maximum = CliStrictJson.ReadRequiredFiniteNumber(context: context, descriptor: "finite in-range number", element: element, member: "maximum", refusal: Refusal);
                 break;
             case CanaryRelationOperator.MinimumMargin:
                 right = ReadOperand(element: CliStrictJson.ReadRequiredObject(context: context, element: element, member: "right", refusal: Refusal), context: $"{context} right");
-                margin = CliStrictJson.ReadRequiredFiniteNumber(context: context, element: element, member: "margin", descriptor: "finite in-range number", refusal: Refusal);
+                margin = CliStrictJson.ReadRequiredFiniteNumber(context: context, descriptor: "finite in-range number", element: element, member: "margin", refusal: Refusal);
                 if (margin < 0) {
                     throw new CanaryManifestRefusal(message: $"{context} margin must be zero or greater.");
                 }

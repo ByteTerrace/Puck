@@ -33,18 +33,17 @@ public sealed class BindingRadialTests {
 
         foreach (var count in new[] { 3, 4, 6, 7, }) {
             // Offset 0: the first entry straddles north on either side.
-            Assert.Equal(expected: 0, actual: BindingWheelGeometry.SelectAxis(vector: justEast, sectorCount: count, style: centered).Sector);
-            Assert.Equal(expected: 0, actual: BindingWheelGeometry.SelectAxis(vector: justWest, sectorCount: count, style: centered).Sector);
+            Assert.Equal(expected: 0, actual: BindingWheelGeometry.SelectAxis(sectorCount: count, style: centered, vector: justEast).Sector);
+            Assert.Equal(expected: 0, actual: BindingWheelGeometry.SelectAxis(sectorCount: count, style: centered, vector: justWest).Sector);
             // Offset 0.5: north is the seam — east of it the first entry, west of it the last — whatever the count.
-            Assert.Equal(expected: 0, actual: BindingWheelGeometry.SelectAxis(vector: justEast, sectorCount: count, style: seam).Sector);
-            Assert.Equal(expected: (count - 1), actual: BindingWheelGeometry.SelectAxis(vector: justWest, sectorCount: count, style: seam).Sector);
+            Assert.Equal(expected: 0, actual: BindingWheelGeometry.SelectAxis(sectorCount: count, style: seam, vector: justEast).Sector);
+            Assert.Equal(expected: (count - 1), actual: BindingWheelGeometry.SelectAxis(sectorCount: count, style: seam, vector: justWest).Sector);
         }
 
         // Sectors advance clockwise: due east on a four-wheel is entry 1 either way.
         Assert.Equal(expected: 1, actual: BindingWheelGeometry.SelectAxis(vector: new Vector2(x: 1f, y: 0f), sectorCount: 4, style: centered).Sector);
         Assert.Equal(expected: 1, actual: BindingWheelGeometry.SelectAxis(vector: new Vector2(x: 1f, y: 0f), sectorCount: 4, style: seam).Sector);
     }
-
     [Fact]
     public void AWholeSectorOfOffsetIsRefusedAsAReorder() {
         var profile = Profile();
@@ -57,7 +56,6 @@ public sealed class BindingRadialTests {
         Assert.Contains(expectedSubstring: "sectorOffset", actualString: refusal.Message);
         Assert.Contains(expectedSubstring: "reorder", actualString: refusal.Message);
     }
-
     [Fact]
     public void AngleUsesInputNeutralWhileHitTargetUsesTheDisplayedHub() {
         var openingInput = new Vector2(x: 700f, y: 500f);
@@ -76,11 +74,11 @@ public sealed class BindingRadialTests {
     public void ExcursionPolicyRoundTripsAsAuthoredData() {
         var json = JsonSerializer.Serialize(value: ExcursionProfile(), jsonTypeInfo: WorldJsonContext.Default.BindingProfileDocument);
 
-        Assert.Contains(expectedSubstring: "\"ringSelection\": \"Excursion\"", actualString: json);
-        Assert.Contains(expectedSubstring: "\"deadZone\": 0.15", actualString: json);
-        Assert.Contains(expectedSubstring: "\"thresholds\": [", actualString: json);
-        Assert.Contains(expectedSubstring: "\"spatialTravelFraction\": 0.2", actualString: json);
-        Assert.Contains(expectedSubstring: "\"hysteresis\": 0.02", actualString: json);
+        Assert.Contains(actualString: json, expectedSubstring: "\"ringSelection\": \"Excursion\"");
+        Assert.Contains(actualString: json, expectedSubstring: "\"deadZone\": 0.15");
+        Assert.Contains(actualString: json, expectedSubstring: "\"thresholds\": [");
+        Assert.Contains(actualString: json, expectedSubstring: "\"spatialTravelFraction\": 0.2");
+        Assert.Contains(actualString: json, expectedSubstring: "\"hysteresis\": 0.02");
 
         var roundTripped = JsonSerializer.Deserialize(json: json, jsonTypeInfo: WorldJsonContext.Default.BindingProfileDocument);
         var style = roundTripped!.Wheels![0].Style!;
@@ -135,7 +133,7 @@ public sealed class BindingRadialTests {
             unit: 100f
         );
 
-        Assert.Equal(expected: 2, actual: ring);
+        Assert.Equal(actual: ring, expected: 2);
         Assert.Equal(expected: new Vector2(x: 30f, y: 0f), actual: targetingVector);
         Assert.Equal(expected: BindingWheelSelectionOutcome.Sector, actual: selection.Outcome);
     }
@@ -220,8 +218,8 @@ public sealed class BindingRadialTests {
     public void SelectionAndPlacementPoliciesRoundTripAsAuthoredTokens() {
         var json = JsonSerializer.Serialize(value: Profile(), jsonTypeInfo: WorldJsonContext.Default.BindingProfileDocument);
 
-        Assert.Contains(expectedSubstring: "\"pointerSelection\": \"HitTarget\"", actualString: json);
-        Assert.Contains(expectedSubstring: "\"placement\": \"ViewportCenter\"", actualString: json);
+        Assert.Contains(actualString: json, expectedSubstring: "\"pointerSelection\": \"HitTarget\"");
+        Assert.Contains(actualString: json, expectedSubstring: "\"placement\": \"ViewportCenter\"");
 
         var roundTripped = JsonSerializer.Deserialize(json: json, jsonTypeInfo: WorldJsonContext.Default.BindingProfileDocument);
 
@@ -307,14 +305,14 @@ public sealed class BindingRadialTests {
         ));
         Assert.True(condition: gesture.TrySelect(
             axis: intended,
-            sequence: 2L,
             deadZoneSquared: 0.01f,
+            sequence: 2L,
             switchThresholdSquared: 0.16f
         ));
         Assert.False(condition: gesture.TrySelect(
             axis: rebound,
-            sequence: 3L,
             deadZoneSquared: 0.01f,
+            sequence: 3L,
             switchThresholdSquared: 0.16f
         ));
         Assert.Equal(expected: intended, actual: gesture.Axis);
@@ -328,8 +326,8 @@ public sealed class BindingRadialTests {
         ));
         Assert.False(condition: gesture.TrySelect(
             axis: rebound,
-            sequence: 5L,
             deadZoneSquared: 0.01f,
+            sequence: 5L,
             switchThresholdSquared: 0.16f
         ));
         Assert.Equal(expected: intended, actual: gesture.Axis);
@@ -338,8 +336,8 @@ public sealed class BindingRadialTests {
 
         Assert.True(condition: gesture.TrySelect(
             axis: repeated,
-            sequence: 6L,
             deadZoneSquared: 0.01f,
+            sequence: 6L,
             switchThresholdSquared: 0.16f
         ));
         Assert.Equal(expected: repeated, actual: gesture.Axis);
@@ -354,8 +352,8 @@ public sealed class BindingRadialTests {
         ));
         Assert.False(condition: gesture.TrySelect(
             axis: rebound,
-            sequence: 8L,
             deadZoneSquared: 0.01f,
+            sequence: 8L,
             switchThresholdSquared: 0.16f
         ));
         Assert.Equal(expected: repeated, actual: gesture.Axis);
@@ -373,20 +371,20 @@ public sealed class BindingRadialTests {
 
         Assert.True(condition: gesture.TrySelect(
             axis: first,
-            sequence: 1L,
             deadZoneSquared: 0.01f,
+            sequence: 1L,
             switchThresholdSquared: 0.16f
         ));
         Assert.True(condition: gesture.TrySelect(
             axis: rotated,
-            sequence: 2L,
             deadZoneSquared: 0.01f,
+            sequence: 2L,
             switchThresholdSquared: 0.16f
         ));
         Assert.True(condition: gesture.TrySelect(
             axis: rotatedAgain,
-            sequence: 3L,
             deadZoneSquared: 0.01f,
+            sequence: 3L,
             switchThresholdSquared: 0.16f
         ));
 
@@ -432,17 +430,17 @@ public sealed class BindingRadialTests {
     public void UnregisteredSectorDispatchRemainsADistinctCommitOutcome() {
         var bindings = new PagedInputBindings(profile: BindingProfile.Compile(document: Profile()));
         var registry = new CommandRegistry(modules: []);
-        var router = new InputRouter(registry: registry, bindings: bindings, principalResolver: new FixedPrincipalResolver(CommandPrincipal.Console));
+        var router = new InputRouter(registry: registry, bindings: bindings, principalResolver: new FixedPrincipalResolver(principal: CommandPrincipal.Console));
 
         _ = bindings.Resolve(slot: 2, signal: InputSignal.Press(source: "keyboard.tab"));
         var activation = bindings.WheelFor(slot: 2)!.Rings[0].Sectors[0].Activation;
         var outcome = BindingWheelCommitResult.Dispatch(
-            router: router,
-            slot: 2,
             activation: activation,
             label: "Missing",
             ring: 0,
-            sector: 0
+            router: router,
+            sector: 0,
+            slot: 2
         );
 
         Assert.Equal(expected: BindingWheelCommitStatus.Unregistered, actual: outcome.Status);
@@ -457,7 +455,7 @@ public sealed class BindingRadialTests {
         _ = bindings.Resolve(slot: 2, signal: InputSignal.Press(source: "keyboard.tab"));
         var primary = bindings.WheelFor(slot: 2);
 
-        Assert.NotNull(primary);
+        Assert.NotNull(@object: primary);
         Assert.Equal(expected: "primary", actual: primary.Id);
         Assert.Equal(expected: BindingWheelSpatialSelectionMode.HitTarget, actual: primary.Style.PointerSelection);
         Assert.Equal(expected: BindingWheelPlacement.ViewportCenter, actual: primary.Style.Placement);
@@ -473,7 +471,7 @@ public sealed class BindingRadialTests {
 
         _ = bindings.Resolve(slot: 2, signal: InputSignal.Release(source: "gamepad.leftTrigger"));
 
-        Assert.Null(bindings.WheelFor(slot: 2));
+        Assert.Null(@object: bindings.WheelFor(slot: 2));
 
         _ = bindings.Resolve(slot: 2, signal: InputSignal.Press(source: "gamepad.rightTrigger"));
 
@@ -483,17 +481,17 @@ public sealed class BindingRadialTests {
     public void ACompiledSectorReturnsThroughTheSeatsPrincipalDoor() {
         var bindings = new PagedInputBindings(profile: BindingProfile.Compile(document: Profile()));
         var registry = new CommandRegistry(modules: [new TestModule()]);
-        var expectedPrincipal = CommandPrincipal.Peer(index: 17, generation: 4);
-        var router = new InputRouter(registry: registry, bindings: bindings, principalResolver: new FixedPrincipalResolver(expectedPrincipal));
+        var expectedPrincipal = CommandPrincipal.Peer(generation: 4, index: 17);
+        var router = new InputRouter(registry: registry, bindings: bindings, principalResolver: new FixedPrincipalResolver(principal: expectedPrincipal));
 
         _ = bindings.Resolve(slot: 2, signal: InputSignal.Press(source: "keyboard.tab"));
         var activation = bindings.WheelFor(slot: 2)!.Rings[0].Sectors[0].Activation;
 
-        Assert.True(router.Activate(slot: 2, activation: activation));
+        Assert.True(condition: router.Activate(activation: activation, slot: 2));
 
         var snapshot = router.SnapshotForTick(tick: 7UL, windowEndTick: ulong.MaxValue);
 
-        Assert.True(snapshot.TryGetLane(slot: 2, lane: out var lane));
+        Assert.True(condition: snapshot.TryGetLane(lane: out var lane, slot: 2));
         var entry = Assert.Single(collection: lane.Entries);
 
         Assert.Equal(expected: expectedPrincipal, actual: entry.Principal);
@@ -508,7 +506,7 @@ public sealed class BindingRadialTests {
             Version: BindingProfileDocument.CurrentVersion,
             Modifiers: [],
             Chords: [Page(group: "play", chord: ["tab", "lt"], id: "third-page")],
-            Wheels: [Wheel(id: "third", holdPages: ["third-page"], ringId: "third-ring")]
+            Wheels: [Wheel(holdPages: ["third-page"], id: "third", ringId: "third-ring")]
         );
 
         var composed = WorldBindingComposer.Compose(baseDocument, overlay);
@@ -536,8 +534,8 @@ public sealed class BindingRadialTests {
             Page(group: "play", chord: ["rt"], id: "rt-page"),
         ],
         Wheels: [
-            Wheel(id: "primary", holdPages: ["tab-page", "lt-page"], ringId: "primary-ring"),
-            Wheel(id: "secondary", holdPages: ["rt-page"], ringId: "secondary-ring"),
+            Wheel(holdPages: ["tab-page", "lt-page"], id: "primary", ringId: "primary-ring"),
+            Wheel(holdPages: ["rt-page"], id: "secondary", ringId: "secondary-ring"),
         ]
     );
     private static BindingProfileDocument ExcursionProfile() {
@@ -560,9 +558,9 @@ public sealed class BindingRadialTests {
                         RingSelection: BindingWheelRingSelectionMode.Excursion,
                         Excursion: new BindingWheelExcursionDefinition(
                             DeadZone: 0.15f,
-                            Thresholds: [0.35f, 0.70f],
+                            Hysteresis: 0.02f,
                             SpatialTravelFraction: 0.20f,
-                            Hysteresis: 0.02f
+                            Thresholds: [0.35f, 0.70f]
                         )
                     )
                 ),

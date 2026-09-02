@@ -13,7 +13,6 @@ public static class WorldSessionLevers {
     /// <summary>The <see cref="WorldSessionLever.A"/> value <see cref="BindingBar"/> carries to clear a seat's
     /// override and return it to authored behavior; a non-negative value forces the bar off (0) or on (1).</summary>
     public const double BindingBarAuto = -1.0;
-
     /// <summary>The ambient-occlusion toggle (<c>world.ao</c>), folding into <c>render</c>.</summary>
     public const string AmbientOcclusion = "ao";
     /// <summary>The ambient-occlusion quality tier ordinal (<c>world.ao-quality</c>).</summary>

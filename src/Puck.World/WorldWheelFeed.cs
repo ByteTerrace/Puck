@@ -61,6 +61,7 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
     // FeedTick can run BEFORE the dispatch's tick applies — a decision dropped at first close-observation would
     // silently cancel every commit landing on such a frame. Counted in observed frames, never wall time.
     private const int CommitGraceFrames = 2;
+
     /// <summary>The label-row cell the hub reads while nothing is hovered — what releasing now does. The ONE reserved
     /// key in a wheel's label row; every other key is a sector id.</summary>
     public const string HubLabelKey = "cancel";
@@ -111,16 +112,20 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
         public BindingWheelGestureState Gesture { get; } = new();
         public OverlayWheelRing[] RingCache = [];
         public string CommitLabel = string.Empty;
+
         // The outcome flash: the seat as last drawn while open, re-emitted after the wheel closes with the local
         // dispatch outcome's glow. Dispatched means handed to the input router; a later simulation/server refusal is
         // deliberately not overclaimed here.
         public OverlayWheelSeat LastSeat;
         public bool LastSeatKnown;
         public OverlayWheelOutcome FlashOutcome;
+
         public int FlashSector = -1;
+
         public long FlashSince;
         public float FlashSeconds;
         public float FlashEase;
+
         public string CommitReason = "closed";
     }
 
@@ -225,8 +230,8 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
     // only what it does and which sector it is.
     private string? SectorCell(int slot, string? rowReference, BindingWheelSectorView sector) {
         m_bindings.GetRoutedState(
-            slot: slot,
             definition: out var definition,
+            slot: slot,
             tick: out var tick
         );
 
@@ -248,8 +253,8 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
     }
     private string? HubLabel(int slot, BindingWheelView wheel) {
         m_bindings.GetRoutedState(
-            slot: slot,
             definition: out var definition,
+            slot: slot,
             tick: out var tick
         );
 
@@ -286,8 +291,8 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
     }
     private OverlayWheelSeat BuildSeat(int slot, SeatState state, BindingWheelView wheel, in WorldSeatView viewport, int hoverSector, float unit) {
         m_bindings.GetRoutedState(
-            slot: slot,
             definition: out var definition,
+            slot: slot,
             tick: out _
         );
 
@@ -672,6 +677,7 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
             );
         }
     }
+
     // Starts the after-close fade; Tick re-emits the last drawn seat with the verdict glow, fading, until it elapses.
     private static void Flash(SeatState state, OverlayWheelOutcome outcome, int sector) {
         state.FlashOutcome = outcome;
@@ -681,6 +687,7 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
             : 0L
         );
     }
+
     /// <summary>Accepts an authored Axis2D selection binding for a seat. The open wheel's compiled dead zone admits
     /// a deliberate neutral selection. The retained peak is scoped to one excursion, so repeated flicks remain
     /// responsive while the authored switch threshold prevents an opposite return-spring rebound from beginning
@@ -751,7 +758,7 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
                     state.LastSeatKnown &&
                     viewport.Present
                 ) {
-                    var elapsed = (float)System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: state.FlashSince).TotalSeconds;
+                    var elapsed = ((float)System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: state.FlashSince).TotalSeconds);
                     var t = ((state.FlashSeconds > 0f)
                         ? (elapsed / state.FlashSeconds)
                         : 1f

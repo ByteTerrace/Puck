@@ -71,9 +71,9 @@ public sealed class ProbeKindManifestTests {
 
         // Two floats occupy eight bytes; the block pads to the 16-byte granule a D3D11 constant buffer requires.
         Assert.Equal(expected: ProbeKindManifest.ConstantsBlockAlignment, actual: block.Length);
-        Assert.Equal(expected: 0.75f, actual: BitConverter.ToSingle(value: block, startIndex: 0));
-        Assert.Equal(expected: 0.1f, actual: BitConverter.ToSingle(value: block, startIndex: 4));
-        Assert.All(collection: block[8..], action: static padding => Assert.Equal(expected: (byte)0, actual: padding));
+        Assert.Equal(expected: 0.75f, actual: BitConverter.ToSingle(startIndex: 0, value: block));
+        Assert.Equal(expected: 0.1f, actual: BitConverter.ToSingle(startIndex: 4, value: block));
+        Assert.All(collection: block[8..], action: static padding => Assert.Equal(actual: padding, expected: ((byte)0)));
     }
     [Fact]
     public void Wrong_schema_tag_refuses() {

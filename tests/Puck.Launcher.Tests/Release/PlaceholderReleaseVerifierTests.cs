@@ -10,7 +10,6 @@ public sealed class PlaceholderReleaseVerifierTests : IDisposable {
     private readonly TempStagingRoot m_root = new();
 
     public void Dispose() => m_root.Dispose();
-
     [Fact]
     public void ReleaseTrustAnchor_Placeholder_IsRecognizedByDomainAlone() {
         Assert.True(condition: ReleaseTrustAnchor.Placeholder.IsPlaceholder);

@@ -47,13 +47,13 @@ public sealed class WorldAuthorityCheckpointHostRoundtripLawTests {
 
         return (checkpoint with {
             Grants = (grants with {
-                Budgets = [.. grants.Budgets.OrderBy(keySelector: static row => KeyOf(row.Principal, row.Capability, row.Subject), comparer: StringComparer.Ordinal)],
-                EventBudgets = [.. grants.EventBudgets.OrderBy(keySelector: static row => KeyOf(row.Principal, row.Capability, row.Subject), comparer: StringComparer.Ordinal)],
-                HoldCeilings = [.. grants.HoldCeilings.OrderBy(keySelector: static row => KeyOf(row.Principal, row.Capability, row.Subject), comparer: StringComparer.Ordinal)],
-                ChannelReach = [.. grants.ChannelReach.OrderBy(keySelector: static row => KeyOf(row.Principal, row.Capability, row.Subject), comparer: StringComparer.Ordinal)],
-                KindMasks = [.. grants.KindMasks.OrderBy(keySelector: static row => KeyOf(row.Principal, row.Capability, row.Subject), comparer: StringComparer.Ordinal)],
-                WriteMasks = [.. grants.WriteMasks.OrderBy(keySelector: static row => KeyOf(row.Principal, row.Capability, row.Subject), comparer: StringComparer.Ordinal)],
-                Exclusive = [.. grants.Exclusive.OrderBy(keySelector: static row => KeyOf(row.Holder, row.Capability, row.Subject), comparer: StringComparer.Ordinal)],
+                Budgets = [.. grants.Budgets.OrderBy(keySelector: static row => KeyOf(capability: row.Capability, principal: row.Principal, subject: row.Subject), comparer: StringComparer.Ordinal)],
+                EventBudgets = [.. grants.EventBudgets.OrderBy(keySelector: static row => KeyOf(capability: row.Capability, principal: row.Principal, subject: row.Subject), comparer: StringComparer.Ordinal)],
+                HoldCeilings = [.. grants.HoldCeilings.OrderBy(keySelector: static row => KeyOf(capability: row.Capability, principal: row.Principal, subject: row.Subject), comparer: StringComparer.Ordinal)],
+                ChannelReach = [.. grants.ChannelReach.OrderBy(keySelector: static row => KeyOf(capability: row.Capability, principal: row.Principal, subject: row.Subject), comparer: StringComparer.Ordinal)],
+                KindMasks = [.. grants.KindMasks.OrderBy(keySelector: static row => KeyOf(capability: row.Capability, principal: row.Principal, subject: row.Subject), comparer: StringComparer.Ordinal)],
+                WriteMasks = [.. grants.WriteMasks.OrderBy(keySelector: static row => KeyOf(capability: row.Capability, principal: row.Principal, subject: row.Subject), comparer: StringComparer.Ordinal)],
+                Exclusive = [.. grants.Exclusive.OrderBy(keySelector: static row => KeyOf(capability: row.Capability, principal: row.Holder, subject: row.Subject), comparer: StringComparer.Ordinal)],
             }),
         });
     }

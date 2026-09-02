@@ -35,7 +35,6 @@ public sealed class InputSourceVocabularyLawTests {
     [Theory]
     public void CatalogAcceptsOnlyDeclaredSourceIds(string candidate, bool known) =>
         Assert.Equal(expected: known, actual: InputSourceVocabulary.IsKnownSourceId(sourceId: candidate));
-
     public static IEnumerable<object[]> FamilyCases() {
         yield return ["XboxOne", true];
         yield return ["SwitchPro", true];
@@ -50,7 +49,6 @@ public sealed class InputSourceVocabularyLawTests {
     [Theory]
     public void FamilyCatalogAcceptsOnlyExactDeclaredNames(string candidate, bool known) =>
         Assert.Equal(expected: known, actual: GamepadFamilyCatalog.IsKnownName(name: candidate));
-
     /// <summary>Every button flag reaches the vocabulary as a declared source id — the property the bar's slot set,
     /// the capture path, and the badge table all rest on: a flag with no id could be pressed and never bound, badged,
     /// or shown.</summary>
@@ -63,7 +61,6 @@ public sealed class InputSourceVocabularyLawTests {
             Assert.Equal(expected: source, actual: GamepadButtonCatalog.SourceOf(button: flag));
         }
     }
-
     /// <summary>The door-level consequence for a bar slot: the device-enum spelling the document used to carry now
     /// refuses by name, while the source id passes.</summary>
     [Fact]
@@ -76,7 +73,6 @@ public sealed class InputSourceVocabularyLawTests {
         Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "is not a declared input source id");
         Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: admitted, neighbours: null, reason: out var controlReason), userMessage: controlReason);
     }
-
     /// <summary>The door-level consequence for a badge row, and the fallthrough: the badge table is keyed by source
     /// id alone, so a control no gamepad flag names — a mouse button — badges by authoring its row, while a numeric
     /// spelling refuses.</summary>

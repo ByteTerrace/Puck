@@ -130,7 +130,6 @@ public sealed class BakedWorldQueryTests {
         Assert.False(condition: absent.HasHeightfield);
         Assert.True(condition: present.HasHeightfield);
     }
-
     [Fact]
     public void AnAllZeroBlockedBitmapDoesNotAdvertiseABlockedLayer() {
         var absent = new WorldQueryArtifact(
@@ -155,7 +154,6 @@ public sealed class BakedWorldQueryTests {
         Assert.False(condition: absent.HasBlocked);
         Assert.True(condition: present.HasBlocked);
     }
-
     [Fact]
     public void AnEmptyBakeAdvertisesNeitherLayer() {
         var empty = WorldQueryBaker.Bake(
@@ -191,7 +189,6 @@ public sealed class BakedWorldQueryTests {
         Assert.True(condition: authored.HasBlocked);
         Assert.True(condition: authored.HasHeightfield);
     }
-
     [Fact]
     public void BakeCoversPartialCellsAtMaximumEdges() {
         var artifact = WorldQueryBaker.Bake(
@@ -212,7 +209,6 @@ public sealed class BakedWorldQueryTests {
             actual: artifact.Height
         );
     }
-
     [Fact]
     public void BakeRefusesAGridSpanningMoreCellsThanACellIndexAddresses() {
         Assert.Throws<ArgumentException>(
@@ -249,7 +245,6 @@ public sealed class BakedWorldQueryTests {
             ).Width
         );
     }
-
     [Fact]
     public void BakeRefusesItsAllocationBudgetBeforeAllocatingLayers() {
         Assert.Throws<ArgumentException>(
@@ -301,7 +296,6 @@ public sealed class BakedWorldQueryTests {
             ).CellCount
         );
     }
-
     [Fact]
     public void BakeRefusesAGridBoundTheCoordinateCarrierCanOnlySaturate() {
         Assert.Throws<ArgumentException>(
@@ -338,7 +332,6 @@ public sealed class BakedWorldQueryTests {
             ).Width
         );
     }
-
     [Fact]
     public void BakeRefusesATerrainHeightThatQuantizesToTheNoGroundSentinel() {
         Assert.Throws<ArgumentException>(testCode: () => WorldQueryBaker.Bake(
@@ -381,7 +374,6 @@ public sealed class BakedWorldQueryTests {
             actual: heightRaw
         );
     }
-
     [Fact]
     public void BakeRefusesAnInvertedGridBound() {
         Assert.Throws<ArgumentException>(
@@ -407,7 +399,6 @@ public sealed class BakedWorldQueryTests {
             ).Width
         );
     }
-
     [Fact]
     public void BakeRefusesAnInvertedRectangle() {
         Assert.Throws<ArgumentException>(testCode: () => WorldQueryBaker.Bake(
@@ -437,11 +428,10 @@ public sealed class BakedWorldQueryTests {
             terrain: []
         ).HasBlocked);
     }
-
-    [Theory]
     [InlineData(float.NaN)]
     [InlineData(float.PositiveInfinity)]
     [InlineData(float.NegativeInfinity)]
+    [Theory]
     public void BakeRefusesANonFiniteTerrainHeight(float topY) {
         Assert.Throws<ArgumentException>(testCode: () => WorldQueryBaker.Bake(
             blockers: [],
@@ -472,7 +462,6 @@ public sealed class BakedWorldQueryTests {
             ),]
         ).HasHeightfield);
     }
-
     [Fact]
     public void BakeRefusesANonFiniteGridBound() {
         Assert.Throws<ArgumentException>(
@@ -498,7 +487,6 @@ public sealed class BakedWorldQueryTests {
             ).Width
         );
     }
-
     [Fact]
     public void CastsAgainstTheSameArtifactAreBitIdentical() {
         var artifact = Artifact(
@@ -547,7 +535,6 @@ public sealed class BakedWorldQueryTests {
             );
         }
     }
-
     [Fact]
     public void LineOfSightBlocksADegenerateSegmentInsideABlockedCell() {
         var query = BlockedColumnQuery();
@@ -573,7 +560,6 @@ public sealed class BakedWorldQueryTests {
             )
         ));
     }
-
     [Fact]
     public void LineOfSightBlocksASegmentShorterThanOneCell() {
         var query = BlockedColumnQuery();
@@ -599,7 +585,6 @@ public sealed class BakedWorldQueryTests {
             )
         ));
     }
-
     [Fact]
     public void LineOfSightBlocksWhenOnlyItsEndpointLandsInABlocker() {
         var query = BlockedColumnQuery();
@@ -625,7 +610,6 @@ public sealed class BakedWorldQueryTests {
             )
         ));
     }
-
     [Fact]
     public void LineOfSightUsesTheHeightfieldWhenTheBlockedLayerIsAbsent() {
         var artifact = WorldQueryBaker.Bake(
@@ -671,7 +655,6 @@ public sealed class BakedWorldQueryTests {
             )
         ));
     }
-
     [Fact]
     public void LineOfSightReadsBothEndpointsInWorldSpace() {
         var query = new BakedWorldQuery(artifact: GroundPlane(topY: 0f));
@@ -706,7 +689,6 @@ public sealed class BakedWorldQueryTests {
             )
         ));
     }
-
     [Fact]
     public void OverlapClampsTheDiscToTheArtifactRatherThanBailingOnAnOutsideCenter() {
         var query = Query(
@@ -730,7 +712,6 @@ public sealed class BakedWorldQueryTests {
             radius: Fixed(value: 0.5)
         ));
     }
-
     [Fact]
     public void OverlapTreatsABlockedCellAsAreaRatherThanAsItsCenterPoint() {
         var query = TwoCellQuery();
@@ -745,7 +726,6 @@ public sealed class BakedWorldQueryTests {
 
         Assert.True(condition: overlaps);
     }
-
     [Fact]
     public void OverlapConsultsTheHeightfieldNotOnlyTheBlockedLayer() {
         var query = new BakedWorldQuery(artifact: GroundPlane(topY: 0f));
@@ -776,7 +756,6 @@ public sealed class BakedWorldQueryTests {
             radius: Fixed(value: 0.1)
         ));
     }
-
     [Fact]
     public void OverlapIsNeverLooserThanTheSweepThatSharesItsRadius() {
         var artifact = WorldQueryBaker.Bake(
@@ -842,7 +821,6 @@ public sealed class BakedWorldQueryTests {
             low: 1
         );
     }
-
     [Fact]
     public void OverlapMeasuresTheCornerExactlyWhereTheSweepDilatesIt() {
         var query = Query(
@@ -879,7 +857,6 @@ public sealed class BakedWorldQueryTests {
             radius: Fixed(value: 0.15)
         ));
     }
-
     [Fact]
     public void OverlapRefusesARadiusPastTheCellCeiling() {
         var query = new BakedWorldQuery(artifact: GroundPlane(topY: 0f));
@@ -908,7 +885,6 @@ public sealed class BakedWorldQueryTests {
             radius: ceiling
         ));
     }
-
     [Fact]
     public void QueriesAnswerAgainstAnArtifactCarryingNeitherLayer() {
         var query = new BakedWorldQuery(artifact: new WorldQueryArtifact(
@@ -954,7 +930,6 @@ public sealed class BakedWorldQueryTests {
             )
         ));
     }
-
     [Fact]
     public void QueriesReadWorldSpaceNotTheCellLocalOffset() {
         var ground = new BakedWorldQuery(artifact: GroundPlane(topY: 0f));
@@ -1030,7 +1005,6 @@ public sealed class BakedWorldQueryTests {
             radius: FixedQ4816.Zero
         ));
     }
-
     [Fact]
     public void QueriesRefuseAPositionTheWorldCarrierCannotHold() {
         var query = new BakedWorldQuery(artifact: GroundPlane(topY: 0f));
@@ -1084,7 +1058,6 @@ public sealed class BakedWorldQueryTests {
             radius: FixedQ4816.Zero
         ));
     }
-
     [Fact]
     public void RaycastCrossesEveryCellTheSegmentTouchesNotOnlyItsSamples() {
         var query = Query(
@@ -1129,7 +1102,6 @@ public sealed class BakedWorldQueryTests {
             )
         ));
     }
-
     [Fact]
     public void RaycastDoesNotReportACellBeyondMaximumDistance() {
         var query = TwoCellQuery();
@@ -1150,7 +1122,6 @@ public sealed class BakedWorldQueryTests {
 
         Assert.False(condition: hit);
     }
-
     [Fact]
     public void RaycastStillReportsAHitExactlyAtMaximumDistance() {
         var query = TwoCellQuery();
@@ -1175,7 +1146,6 @@ public sealed class BakedWorldQueryTests {
             actual: hit.Distance
         );
     }
-
     [Fact]
     public void SphereCastGroundsAtTheSphereSurfaceNotAtItsCenter() {
         var query = new BakedWorldQuery(artifact: GroundPlane(topY: 0f));
@@ -1219,7 +1189,6 @@ public sealed class BakedWorldQueryTests {
             actual: ray.Distance
         );
     }
-
     [Fact]
     public void SphereCastRefusesARadiusPastTheCellCeiling() {
         var query = new BakedWorldQuery(artifact: GroundPlane(topY: 0f));
@@ -1255,7 +1224,6 @@ public sealed class BakedWorldQueryTests {
             radius: query.MaxRadius
         ));
     }
-
     [Fact]
     public void SphereCastRefusesGroundContactBeyondMaximumDistance() {
         var query = new BakedWorldQuery(artifact: GroundPlane(topY: 0f));
@@ -1285,7 +1253,6 @@ public sealed class BakedWorldQueryTests {
             radius: Fixed(value: 0.5)
         ));
     }
-
     [Fact]
     public void SphereCastReportsContactWhenTheSweepStartsAlreadyOverlapping() {
         var query = Query(
@@ -1329,7 +1296,6 @@ public sealed class BakedWorldQueryTests {
             radius: Fixed(value: 0.5)
         ));
     }
-
     [Fact]
     public void SphereCastReportsTheSweptSpheresFirstContactNotItsMarchingCenter() {
         var query = BlockedColumnQuery();
@@ -1375,7 +1341,6 @@ public sealed class BakedWorldQueryTests {
             radius: Fixed(value: 0.25)
         ));
     }
-
     [Fact]
     public void TheBlockedWordCountCoversTheWidestGridAndRefusesANegativeCount() {
         Assert.Equal(
@@ -1395,7 +1360,6 @@ public sealed class BakedWorldQueryTests {
             testCode: () => WorldQueryArtifact.BlockedWordCount(cellCount: -1)
         );
     }
-
     [Fact]
     public void TheConstructorRefusesABlockedLayerSettingAPaddingBit() {
         Assert.Throws<ArgumentException>(
@@ -1429,7 +1393,6 @@ public sealed class BakedWorldQueryTests {
             actual: padded.CellCount
         );
     }
-
     [Fact]
     public void TheConstructorRefusesABlockedLayerThatContradictsTheGrid() {
         Assert.Throws<ArgumentException>(
@@ -1457,7 +1420,6 @@ public sealed class BakedWorldQueryTests {
             ).Blocked.Length
         );
     }
-
     [Fact]
     public void TheConstructorRefusesAHeightLayerThatContradictsTheGrid() {
         Assert.Throws<ArgumentException>(
@@ -1485,7 +1447,6 @@ public sealed class BakedWorldQueryTests {
             ).HeightRaw.Length
         );
     }
-
     [Fact]
     public void TheConstructorRefusesANonPositiveCellSize() {
         Assert.Throws<ArgumentOutOfRangeException>(
@@ -1513,7 +1474,6 @@ public sealed class BakedWorldQueryTests {
             ).CellSizeRaw
         );
     }
-
     [Fact]
     public void TheConstructorRefusesAnAxisWhoseFarEdgeOverflowsTheCarrier() {
         Assert.Throws<ArgumentException>(
@@ -1542,7 +1502,6 @@ public sealed class BakedWorldQueryTests {
             ).CellSizeRaw
         );
     }
-
     [Fact]
     public void ExtremeButRepresentableArtifactsDoNotOverflowQueryArithmetic() {
         var widestCell = new BakedWorldQuery(artifact: new WorldQueryArtifact(
@@ -1569,7 +1528,7 @@ public sealed class BakedWorldQueryTests {
 
         const long largeCell = 4_000_000_000_000_000_000L;
         var compensatedOrigin = long.MinValue;
-        var lastCellCenter = ((long)(((Int128)compensatedOrigin) + (3 * ((Int128)largeCell)) + (largeCell / 2)));
+        var lastCellCenter = ((long)((((Int128)compensatedOrigin) + (3 * ((Int128)largeCell))) + (largeCell / 2)));
         var compensated = new BakedWorldQuery(artifact: new WorldQueryArtifact(
             blocked: [(1UL << 3),],
             cellSizeRaw: largeCell,

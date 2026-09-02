@@ -18,16 +18,15 @@ public sealed class BindingBarPreferencesValidationLawTests {
     [MemberData(nameof(ScaleCases))]
     [Theory]
     public void ProfileScaleRefusesOutOfRangeByName(float scale, bool valid) {
-        var definition = WithPreferences(new BindingBarPreferences(Scale: scale));
+        var definition = WithPreferences(preferences: new BindingBarPreferences(Scale: scale));
         var admitted = WorldDefinitionValidator.TryValidate(definition: definition, neighbours: null, reason: out var reason);
 
-        Assert.Equal(expected: valid, actual: admitted);
+        Assert.Equal(actual: admitted, expected: valid);
 
         if (!valid) {
             Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "bindingOverlays[0].document.bindingBar.scale");
         }
     }
-
     public static IEnumerable<object[]> ContrastBoostCases() {
         yield return [1f, true];
         yield return [2f, true];
@@ -39,16 +38,15 @@ public sealed class BindingBarPreferencesValidationLawTests {
     [MemberData(nameof(ContrastBoostCases))]
     [Theory]
     public void ProfileContrastBoostRefusesOutOfRangeByName(float contrastBoost, bool valid) {
-        var definition = WithPreferences(new BindingBarPreferences(ContrastBoost: contrastBoost));
+        var definition = WithPreferences(preferences: new BindingBarPreferences(ContrastBoost: contrastBoost));
         var admitted = WorldDefinitionValidator.TryValidate(definition: definition, neighbours: null, reason: out var reason);
 
-        Assert.Equal(expected: valid, actual: admitted);
+        Assert.Equal(actual: admitted, expected: valid);
 
         if (!valid) {
             Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "bindingOverlays[0].document.bindingBar.contrastBoost");
         }
     }
-
     public static IEnumerable<object[]> UiScaleCases() {
         yield return [0.5f, true];
         yield return [2f, true];
@@ -60,16 +58,15 @@ public sealed class BindingBarPreferencesValidationLawTests {
     [MemberData(nameof(UiScaleCases))]
     [Theory]
     public void ProfileUiScaleRefusesOutOfRangeByName(float uiScale, bool valid) {
-        var definition = WithPreferences(new BindingBarPreferences(UiScale: uiScale));
+        var definition = WithPreferences(preferences: new BindingBarPreferences(UiScale: uiScale));
         var admitted = WorldDefinitionValidator.TryValidate(definition: definition, neighbours: null, reason: out var reason);
 
-        Assert.Equal(expected: valid, actual: admitted);
+        Assert.Equal(actual: admitted, expected: valid);
 
         if (!valid) {
             Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "bindingOverlays[0].document.bindingBar.uiScale");
         }
     }
-
     [Fact]
     public void AbsentPreferencesPasses() =>
         Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: WithPreferences(preferences: null), neighbours: null, reason: out var reason), userMessage: reason);

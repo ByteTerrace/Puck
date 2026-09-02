@@ -45,6 +45,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
     /// <summary>Gets the mirror of the authority's field lattice, or <see langword="null"/> for a world without a
     /// <c>fields</c> section.</summary>
     public WorldClientFieldLattice? Fields => m_fields;
+
     private int m_definitionRevision;
     // The accepted-lever applier (see WorldSessionLeverSink). Optional so a client composed without the presentation
     // services — a headless or test host — simply drops accepted levers rather than failing to construct.

@@ -44,8 +44,8 @@ public sealed class WorldScreenResolutionJsonConverter : JsonConverter<WorldScre
             throw new JsonException(message: "a resolution must be a two-element [width, height] array.");
         }
 
-        var width = JsonComponentReader.ReadInt(reader: ref reader, notNumberMessage: "a resolution element must be an integer.");
-        var height = JsonComponentReader.ReadInt(reader: ref reader, notNumberMessage: "a resolution element must be an integer.");
+        var width = JsonComponentReader.ReadInt(notNumberMessage: "a resolution element must be an integer.", reader: ref reader);
+        var height = JsonComponentReader.ReadInt(notNumberMessage: "a resolution element must be an integer.", reader: ref reader);
 
         if (
             !reader.Read() ||

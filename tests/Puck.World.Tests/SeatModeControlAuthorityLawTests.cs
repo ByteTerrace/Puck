@@ -34,12 +34,12 @@ public sealed class SeatModeControlAuthorityLawTests {
 
         Laws.RefusalWithControl(
             lawId: "player.mode.acting-principal-drive-required",
-            deniedOutcome: () => IdledTargetBody(fixture: fixture, actor: actor),
+            deniedOutcome: () => IdledTargetBody(actor: actor, fixture: fixture),
             controlOutcome: () => {
                 // The one discriminating fact reversed: the actor now holds Drive over the target body only.
                 fixture.Server.Grant(grant: driveOverTarget, actor: WorldPrincipal.Console);
 
-                return IdledTargetBody(fixture: fixture, actor: actor);
+                return IdledTargetBody(actor: actor, fixture: fixture);
             });
     }
 

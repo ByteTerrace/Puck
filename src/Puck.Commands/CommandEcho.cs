@@ -18,6 +18,7 @@ namespace Puck.Commands;
 /// </summary>
 public sealed class CommandEcho {
     private readonly StringBuilder m_builder;
+
     private bool m_pendingSegment;
 
     private CommandEcho(string verb) {
@@ -35,6 +36,7 @@ public sealed class CommandEcho {
             m_pendingSegment = false;
         }
     }
+
     /// <summary>Marks a boundary between groups of fields — the <c>" | "</c> separator is written only if more
     /// content follows, so a boundary marked immediately before <see cref="Close"/> vanishes rather than trailing.</summary>
     /// <returns>The echo builder.</returns>

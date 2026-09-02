@@ -179,7 +179,6 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
             format: SurfaceFormat.R8G8B8A8Unorm
         );
     }
-
     /// <inheritdoc/>
     public void RequestCapture(string path) {
         m_pendingCapturePath = path;
@@ -217,7 +216,7 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
         if (!m_liveConfigBytes!.TryGetValue(key: field, value: out var bytes)) {
             bytes = new byte[ShaderValueTypes.ComponentBytes];
             m_liveConfigBytes[field] = bytes;
-            live[field] = new ShaderConfigValue(Type: ShaderValueType.Float, Bytes: bytes);
+            live[field] = new ShaderConfigValue(Bytes: bytes, Type: ShaderValueType.Float);
         }
 
         BinaryPrimitives.WriteSingleLittleEndian(destination: bytes, value: value);

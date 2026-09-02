@@ -64,15 +64,14 @@ public sealed class TetherConstraintLawTests {
         var second = RunTrajectory();
 
         Assert.Equal(
-            expected: first.Positions,
-            actual: second.Positions
+            actual: second.Positions,
+            expected: first.Positions
         );
         Assert.Equal(
-            expected: first.Velocities,
-            actual: second.Velocities
+            actual: second.Velocities,
+            expected: first.Velocities
         );
     }
-
     [Fact]
     public void Slack_SingleCallLeavesStateUntouched() {
         var anchor = FixedVector3.Zero;
@@ -101,15 +100,14 @@ public sealed class TetherConstraintLawTests {
 
         Assert.False(condition: result.Taut);
         Assert.Equal(
-            expected: expectedPosition,
-            actual: position
+            actual: position,
+            expected: expectedPosition
         );
         Assert.Equal(
-            expected: expectedVelocity,
-            actual: velocity
+            actual: velocity,
+            expected: expectedVelocity
         );
     }
-
     [Fact]
     public void Slack_TrajectoryIsBitIdenticalToTheUnconstrainedRun() {
         var anchor = FixedVector3.Zero;
@@ -158,15 +156,14 @@ public sealed class TetherConstraintLawTests {
         }
 
         Assert.Equal(
-            expected: withoutPosition,
-            actual: withPosition
+            actual: withPosition,
+            expected: withoutPosition
         );
         Assert.Equal(
-            expected: withoutVelocity,
-            actual: withVelocity
+            actual: withVelocity,
+            expected: withoutVelocity
         );
     }
-
     [Fact]
     public void Taut_NeverExceedsLengthOverALongSwing() {
         var anchor = FixedVector3.Zero;
@@ -216,7 +213,6 @@ public sealed class TetherConstraintLawTests {
             userMessage: $"max |body-anchor|^2 observed {maxObservedDistanceSquared} exceeds the allowed {maxAllowedDistanceSquared} (length {length})."
         );
     }
-
     [Fact]
     public void Taut_PreservesTheNonRadialVelocityComponentsExactly() {
         // Axis-aligned so the whole computation — sqrt of a perfect square, division of a value by itself — is
@@ -265,7 +261,6 @@ public sealed class TetherConstraintLawTests {
             actual: velocity
         );
     }
-
     [Fact]
     public void Taut_NeverRemovesInwardRadialVelocity() {
         // Position already sits beyond the cap (as if displaced there by something other than this constraint's
@@ -305,11 +300,10 @@ public sealed class TetherConstraintLawTests {
             actual: position
         );
         Assert.Equal(
-            expected: expectedVelocity,
-            actual: velocity
+            actual: velocity,
+            expected: expectedVelocity
         );
     }
-
     [Fact]
     public void Pendulum_TheConstraintNeverInjectsEnergyAtACorrection() {
         var anchor = FixedVector3.Zero;
@@ -365,7 +359,6 @@ public sealed class TetherConstraintLawTests {
             userMessage: $"max total energy {maxObservedEnergy} exceeds the initial {initialEnergy} by more than {tolerance} over the swing."
         );
     }
-
     [Fact]
     public void BodyAnchored_DragsTheTetheredBodyAndLeavesTheAnchorUntouched() {
         var length = FixedQ4816.FromInteger(value: 4L);
@@ -427,7 +420,6 @@ public sealed class TetherConstraintLawTests {
             userMessage: $"expected the tethered body to have been dragged past the origin; ended at {bodyPosition}."
         );
     }
-
     [Fact]
     public void Reel_InShortensDistanceMonotonicallyAndStopsAtTheFloor() {
         var anchor = FixedVector3.Zero;
@@ -483,11 +475,10 @@ public sealed class TetherConstraintLawTests {
             actual: tether.Length
         );
         Assert.Equal(
-            expected: (minLength * minLength),
-            actual: previousDistanceSquared
+            actual: previousDistanceSquared,
+            expected: (minLength * minLength)
         );
     }
-
     [Fact]
     public void Reel_OneCallOverManyTicksMatchesManyOneTickCalls() {
         var length = FixedQ4816.FromInteger(value: 20L);
@@ -520,7 +511,6 @@ public sealed class TetherConstraintLawTests {
             actual: incremental.Length
         );
     }
-
     [Fact]
     public void CaptureState_RestoresTheExactNextReelFraction() {
         var rate = FixedQ4816.FromDouble(value: 0.37d);
@@ -553,7 +543,6 @@ public sealed class TetherConstraintLawTests {
             Assert.Equal(expected: uninterrupted.CaptureState(), actual: restored.CaptureState());
         }
     }
-
     [Fact]
     public void ResolveAnchor_RotatesTheLocalOffsetByTheAnchorBodysOrientation() {
         var anchorPosition = new FixedVector3(
@@ -583,14 +572,14 @@ public sealed class TetherConstraintLawTests {
         var expected = (anchorPosition + quarterTurnAboutY.Rotate(vector: localOffset));
 
         Assert.Equal(
-            expected: expected,
-            actual: resolved
+            actual: resolved,
+            expected: expected
         );
         // The offset actually moved relative to a bare translation — proves the orientation was applied, not
         // silently ignored.
         Assert.NotEqual(
-            expected: (anchorPosition + localOffset),
-            actual: resolved
+            actual: resolved,
+            expected: (anchorPosition + localOffset)
         );
     }
 }

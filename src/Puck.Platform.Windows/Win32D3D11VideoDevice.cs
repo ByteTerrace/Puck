@@ -82,7 +82,6 @@ internal sealed unsafe class Win32D3D11VideoDevice : IDisposable, IProbeKernelDe
     /// Foundation's transforms share the device).</summary>
     public void Enter() => m_multithread->Enter();
     public void Leave() => m_multithread->Leave();
-
     /// <summary>Copies a decoded frame into a shared target and blocks (on the calling grabber thread) until the copy
     /// has completed on the GPU — so the target may be published for another device to sample.</summary>
     /// <param name="targetTexture">The shared target texture (an <c>ID3D11Texture2D*</c> from <see cref="OpenSharedTexture"/>).</param>
@@ -127,7 +126,7 @@ internal sealed unsafe class Win32D3D11VideoDevice : IDisposable, IProbeKernelDe
     public nint CreateShaderResourceView(nint texture) {
         ID3D11ShaderResourceView* view = null;
 
-        m_device->CreateShaderResourceView(pResource: ((ID3D11Resource*)texture), pDesc: null, ppSRView: &view);
+        m_device->CreateShaderResourceView(pDesc: null, pResource: ((ID3D11Resource*)texture), ppSRView: &view);
 
         return ((nint)view);
     }

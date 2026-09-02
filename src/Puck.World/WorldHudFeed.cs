@@ -36,7 +36,9 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
     private readonly WorldHudPanel?[] m_seatSources = new WorldHudPanel?[PlayerRoster.MaxSlots];
     private readonly PanelBuild?[] m_seatBuilds = new PanelBuild?[PlayerRoster.MaxSlots];
     private int m_seenRevision = -1;
+
     private WorldHudSection? m_seenHud;
+
     private PanelBuild[] m_worldPanels = [];
     private OverlayHudPanel[] m_visiblePanels = [];
     private WorldHudPanel[] m_worldSources = [];
@@ -418,6 +420,7 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
         public OverlayHudPanel Panel { get; set; } = panel;
         public int Slot { get; } = slot;
     }
+
     private float PresenceAnySeat(OverlayPredicate? predicate) {
         if (predicate is null) {
             return 1f;

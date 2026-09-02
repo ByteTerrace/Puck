@@ -14,6 +14,7 @@ namespace Puck.World;
 /// </summary>
 internal sealed class WorldOverlayFrameSources : IOverlayFrameSources {
     private readonly WorldScreenBinder m_binder;
+
     // The cached-structure key table, keyed by canonical wire form plus seat rather than the source record alone: a
     // Camera.Controls.Vendor list must compare structurally, and a bare Camera source with no
     // authored Seat (record-equal across every seat's identity panel) still needs a DISTINCT key per seat — the
@@ -21,13 +22,14 @@ internal sealed class WorldOverlayFrameSources : IOverlayFrameSources {
     private readonly Stack<int> m_freeKeys = new();
     private readonly Dictionary<(string Source, int Seat), int> m_keys = new();
     private readonly List<SourceEntry?> m_sources = [];
+
     private readonly OverlayFrameSourceGeneration m_generation;
 
     public WorldOverlayFrameSources(WorldScreenBinder binder) {
         m_binder = binder;
         m_generation = new OverlayFrameSourceGeneration(
-            retain: RetainKey,
-            release: ReleaseActiveKey
+            release: ReleaseActiveKey,
+            retain: RetainKey
         );
     }
 
@@ -85,14 +87,14 @@ internal sealed class WorldOverlayFrameSources : IOverlayFrameSources {
             return existing;
         }
 
-        var key = (m_freeKeys.TryPop(out var recycled) ? recycled : m_sources.Count);
+        var key = (m_freeKeys.TryPop(result: out var recycled) ? recycled : m_sources.Count);
         var sourceEntry = new SourceEntry(
             binder: m_binder,
             key: key,
             onIdle: TryRecycle,
+            seat: seat,
             source: source,
-            structuralSource: structuralSource,
-            seat: seat
+            structuralSource: structuralSource
         );
 
         if (key == m_sources.Count) {
@@ -164,7 +166,7 @@ internal sealed class WorldOverlayFrameSources : IOverlayFrameSources {
             string structuralSource,
             int seat
         ) {
-            Leases = new FrameLeaseRelay(binder: binder, key: key, onIdle: onIdle, source: source, seat: seat);
+            Leases = new FrameLeaseRelay(binder: binder, key: key, onIdle: onIdle, seat: seat, source: source);
             Seat = seat;
             Source = source;
             StructuralSource = structuralSource;
@@ -197,7 +199,7 @@ internal sealed class WorldOverlayFrameSources : IOverlayFrameSources {
                     continue;
                 }
 
-                m_binder.RetainFrameSource(source: m_source, seat: m_seat);
+                m_binder.RetainFrameSource(seat: m_seat, source: m_source);
                 m_slots[token] = new LeaseSlot(
                     Active: true,
                     Release: frame.Release,
@@ -215,7 +217,9 @@ internal sealed class WorldOverlayFrameSources : IOverlayFrameSources {
 
             throw new InvalidOperationException(message: "A HUD frame source has more than two overlay frames awaiting retirement.");
         }
-        public bool IsIdle => !m_slots[0].Active && !m_slots[1].Active;
+
+        public bool IsIdle => (!m_slots[0].Active && !m_slots[1].Active);
+
         private void Release(int token) {
             if ((token < 0) || (token >= m_slots.Length) || !m_slots[token].Active) {
                 return;
@@ -228,7 +232,7 @@ internal sealed class WorldOverlayFrameSources : IOverlayFrameSources {
             try {
                 slot.Release?.Invoke(obj: slot.ReleaseToken);
             } finally {
-                m_binder.ReleaseFrameSource(source: m_source, seat: m_seat);
+                m_binder.ReleaseFrameSource(seat: m_seat, source: m_source);
                 m_onIdle(m_key);
             }
         }

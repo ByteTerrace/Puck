@@ -3,14 +3,16 @@ using Puck.Maths;
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
-    private static readonly float CurveMaxCoordinate = ((float)(double)CurvatureSpline.MaxCoordinate);
-    private static readonly float CurveMaxCurvature = ((float)(double)CurvatureSpline.MaxCurvature);
+    private static readonly float CurveMaxCoordinate = ((float)((double)CurvatureSpline.MaxCoordinate));
+    private static readonly float CurveMaxCurvature = ((float)((double)CurvatureSpline.MaxCurvature));
+
     // A knot's tangentYaw must arrive already reduced to the canonical interval: FixedQ4816.FromDouble saturates
     // (rather than wraps) a finite value outside its representable range, so an authored angle outside this interval
     // would silently compile at a saturated direction unrelated to the authored periodic angle instead of refusing.
     // The slack over MathF.PI absorbs float round-trip of a double PI literal without admitting a genuinely
     // unreduced angle (e.g. one authored in turns or degrees by mistake).
     private const float TangentYawSlack = 1e-3f;
+
     private static readonly float CurveMaxTangentYaw = (MathF.PI + TangentYawSlack);
 
     private static HashSet<string> ValidateCurves(IReadOnlyList<WorldCurveRow> curves, List<string> errors) {

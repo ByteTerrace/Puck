@@ -8,7 +8,6 @@ internal sealed record ParityManifest(
     string World,
     IReadOnlyList<ParityManifestCapture> Captures
 );
-
 /// <summary>One scheduled capture entry. When <see cref="CameraInside"/> is <see langword="true"/> the capture
 /// was refused (<c>map(cameraPos) &lt;= 0</c>): <see cref="Frame"/> and <see cref="Census"/> are
 /// <see langword="null"/>, and only <see cref="StateHash"/> — the sim-state summary, independent of whether

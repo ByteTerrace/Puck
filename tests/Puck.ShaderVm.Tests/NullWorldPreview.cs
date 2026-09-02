@@ -13,9 +13,9 @@ public sealed class NullWorldPreview {
     private const int MaxSteps = 160;
     private const int Width = 960;
 
-    [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    [Theory]
     public void RendersTheDocument(bool overview) {
         var directory = Environment.GetEnvironmentVariable(variable: "PUCK_SKY_PREVIEW_DIR");
 
@@ -33,7 +33,7 @@ public sealed class NullWorldPreview {
         SkyParameters.Pack(rows: parameters, settings: in settings);
 
         var palette = NullWorldScene.Palette;
-        var pixels = new byte[Width * Height * 4];
+        var pixels = new byte[((Width * Height) * 4)];
         var sun = Vector3.Normalize(value: settings.SunDirection);
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var evaluations = 0L;
@@ -72,13 +72,13 @@ public sealed class NullWorldPreview {
             width: Width
         );
         File.WriteAllText(
-            contents: $"field: instructions={statistics.InstructionCount} constants={field.ConstantCount} stack={statistics.StackDepth} locals={statistics.LocalCount}\n"
-                + $"sky:   instructions={sky.InstructionCount}\n"
-                + $"trace: fieldEvaluations={evaluations} perPixel={(((double)evaluations) / (Width * Height)):F1} milliseconds={stopwatch.ElapsedMilliseconds}\n"
-                + $"cost:  fieldInstructionsPerPixel={((((double)evaluations) / (Width * Height)) * statistics.InstructionCount):F0}\n",
+            contents: ((((string)$"field: instructions={statistics.InstructionCount} constants={field.ConstantCount} stack={statistics.StackDepth} locals={statistics.LocalCount}\nsky:   instructions={sky.InstructionCount}\n")
+                + $"trace: fieldEvaluations={evaluations} perPixel={(((double)evaluations) / (Width * Height)):F1} milliseconds={stopwatch.ElapsedMilliseconds}\n")
+                + $"cost:  fieldInstructionsPerPixel={((((double)evaluations) / (Width * Height)) * statistics.InstructionCount):F0}\n"),
             path: Path.Combine(path1: directory!, path2: (overview ? "null-world-overview.txt" : "null-world.txt"))
         );
     }
+
     private static Vector3 Trace(ShaderProgram field, ShaderProgram sky, Vector3 direction, Vector3 origin, Vector3 sun, Vector4[] parameters, Vector3[] palette, ref long evaluations) {
         var travelled = 0f;
 
@@ -106,7 +106,7 @@ public sealed class NullWorldPreview {
     private static Vector4 Field(ShaderProgram field, Vector3 point, ref long evaluations) {
         evaluations++;
 
-        var context = new ShaderContext(Coordinate: new Vector4(x: point.X, y: point.Y, z: point.Z, w: 0f));
+        var context = new ShaderContext(Coordinate: new Vector4(w: 0f, x: point.X, y: point.Y, z: point.Z));
 
         return ShaderInterpreter.Evaluate(context: in context, parameters: [], program: field);
     }
@@ -123,7 +123,7 @@ public sealed class NullWorldPreview {
         );
     }
     private static Vector3 Sky(ShaderProgram sky, Vector3 direction, Vector4[] parameters) {
-        var context = new ShaderContext(Coordinate: new Vector4(x: direction.X, y: direction.Y, z: direction.Z, w: 0f));
+        var context = new ShaderContext(Coordinate: new Vector4(w: 0f, x: direction.X, y: direction.Y, z: direction.Z));
         var color = ShaderInterpreter.Evaluate(context: in context, parameters: parameters, program: sky);
 
         return new Vector3(x: color.X, y: color.Y, z: color.Z);
@@ -149,14 +149,14 @@ public sealed class NullWorldPreview {
         var up = Vector3.Cross(vector1: right, vector2: forward);
         var ndcX = ((((((float)x) + 0.5f) / ((float)Width)) * 2f) - 1f);
         var ndcY = (1f - ((((((float)y) + 0.5f) / ((float)Height))) * 2f));
-        var direction = Vector3.Normalize(value: (forward + (right * ((ndcX * aspect) * tangent)) + (up * (ndcY * tangent))));
+        var direction = Vector3.Normalize(value: ((forward + (right * ((ndcX * aspect) * tangent))) + (up * (ndcY * tangent))));
 
-        return new Vector4(x: direction.X, y: direction.Y, z: direction.Z, w: 0f);
+        return new Vector4(w: 0f, x: direction.X, y: direction.Y, z: direction.Z);
     }
     private static byte Encode(float value) => ((byte)Math.Clamp(
         max: 255,
         min: 0,
-        value: ((int)((MathF.Pow(x: Math.Clamp(value: value, max: 1f, min: 0f), y: (1f / 2.2f)) * 255f) + 0.5f))
+        value: ((int)((MathF.Pow(x: Math.Clamp(max: 1f, min: 0f, value: value), y: (1f / 2.2f)) * 255f) + 0.5f))
     ));
     private static Vector3 Trace(ShaderProgram field, ShaderProgram sky, Vector4 direction, Vector3 origin, Vector3 sun, Vector4[] parameters, Vector3[] palette, ref long evaluations) => Trace(
         direction: new Vector3(x: direction.X, y: direction.Y, z: direction.Z),

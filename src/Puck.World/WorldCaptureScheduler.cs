@@ -263,8 +263,8 @@ internal sealed class WorldCaptureScheduler {
         try {
             File.WriteAllText(
                 contents: JsonSerializer.Serialize(
-                    value: manifest,
-                    options: ManifestSerializerOptions
+                    options: ManifestSerializerOptions,
+                    value: manifest
                 ),
                 path: path
             );
@@ -285,8 +285,8 @@ internal sealed class WorldCaptureScheduler {
     private static (bool Inside, string? Narration) ProbeCameraInside(WorldDefinition definition, WorldServer server, ulong tick) {
         if (!TryResolveActiveCameraPosition(
             definition: definition,
-            reason: out var reason,
             position: out var position,
+            reason: out var reason,
             tick: tick
         )) {
             return (false, $"could not resolve the active camera position ({reason}) — inside-check unchecked.");
@@ -484,8 +484,8 @@ internal sealed class WorldCaptureScheduler {
         for (var pixel = 0; (pixel < pixelCount); pixel++) {
             var offset = (pixel * 4);
             var r = pixels[offset];
-            var g = pixels[offset + 1];
-            var b = pixels[offset + 2];
+            var g = pixels[(offset + 1)];
+            var b = pixels[(offset + 2)];
             var bestIndex = 0;
             var bestDistance = long.MaxValue;
 
@@ -493,7 +493,7 @@ internal sealed class WorldCaptureScheduler {
                 var dr = (r - swatchR[swatch]);
                 var dg = (g - swatchG[swatch]);
                 var db = (b - swatchB[swatch]);
-                var distance = ((((long)dr * dr) + ((long)dg * dg)) + ((long)db * db));
+                var distance = (((((long)dr) * dr) + (((long)dg) * dg)) + (((long)db) * db));
 
                 if (distance < bestDistance) {
                     bestDistance = distance;
@@ -513,6 +513,7 @@ internal sealed class WorldCaptureScheduler {
 
         return counts;
     }
+
     // Reuses WorldReplaySnapshot.HashState (the pose trajectory replay.verify pins) as the pose half, then chains
     // state.world's every declared row/cell in document order onto the SAME running fold — extending the summary
     // WorldReplayTape already trusts rather than inventing a second one. Body/identity state lanes are ephemeral
@@ -558,6 +559,7 @@ internal sealed class WorldCaptureScheduler {
 
         return hash.Value;
     }
+
     private static string ToHex(ulong hash) => hash.ToString(
         format: "x16",
         provider: CultureInfo.InvariantCulture

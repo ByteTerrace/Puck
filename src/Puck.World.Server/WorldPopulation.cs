@@ -61,6 +61,7 @@ public sealed partial class WorldPopulation {
     /// <param name="number">The 1-based display number.</param>
     /// <returns>The 0-based entity index.</returns>
     public static int EntityFromDisplay(int number) => (number - 1);
+
     /// <summary>Gets the currently configured adjacency resolver — see <see cref="ConfigureAdjacencies"/>, the
     /// one writer.</summary>
     public IWorldAdjacencySource? Adjacencies => m_adjacencies;
@@ -176,6 +177,7 @@ public sealed partial class WorldPopulation {
     private WorldSolidField? m_targetField;
     private WorldFieldLattice? m_fields;
     private bool m_fieldsCompiled;
+
     // The compiled climb/grapple policy every live body reads its attach/detach/reel channel ordinals and grip/rope
     // tuning from. Recompiled by CompileFixedTables beside every other sim-affecting table and handed to each live
     // body the same way the contact field/gravity are (see the SetAttachmentPolicy call sites).

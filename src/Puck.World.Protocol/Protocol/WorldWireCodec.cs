@@ -11,9 +11,12 @@ namespace Puck.World.Protocol;
 /// enum-to-byte tables these leaves cross on; this type pins the field order around them. Frozen: changing a layout
 /// here invalidates every saved tape, every checkpoint, and every in-flight envelope.</summary>
 /// <remarks>Each layout carries two overloads — one over <see cref="BinaryReader"/>/<see cref="BinaryWriter"/>,
-/// one over <see cref="WireReader"/>/<see cref="WireWriter"/> — because the framing around them differs while
-/// the bytes do not: <see cref="WireWriter.WriteFixed"/> emits the same raw <see cref="long"/> lane
-/// <see cref="BinaryWriter.Write(long)"/> does, and both string forms carry the same present flag. Decodes that can
+/// one over <see cref="WireReader"/>/<see cref="WireWriter"/> — because the framing around them differs. The fixed
+/// and long lanes are byte-identical across the pair: <see cref="WireWriter.WriteFixed"/> emits the same raw
+/// <see cref="long"/> lane <see cref="BinaryWriter.Write(long)"/> does. The two string forms are NOT: they share only
+/// the present flag, after which <see cref="BinaryWriter.Write(string)"/> emits a 7-bit-encoded length prefix while
+/// <see cref="WireWriter.WriteString"/> emits a u16 prefix, so a nullable string written by one overload is never read
+/// back by the other's reader. Decodes that can
 /// meet an undeclared byte are <c>Try</c>-shaped rather than throwing, and writers that can refuse write nothing
 /// before returning <see langword="false"/> — each codec raises its own refusal (a <c>WorldCodecRefusal</c> leaf
 /// failure on the wire, a tape exception on the tape, a <c>WireReader.Fail</c> narration on a wire frame) at the call

@@ -44,7 +44,7 @@ public sealed class AuthoredShapeAdmissionLawTests {
         Assert.NotEmpty(collection: violations);
         Assert.Contains(
             collection: violations,
-            filter: violation => violation.Message.Contains(value: needle, comparisonType: StringComparison.Ordinal)
+            filter: violation => violation.Message.Contains(comparisonType: StringComparison.Ordinal, value: needle)
         );
     }
     private static void AssertCanonicalizerAccepts(ShapeDocument shape) {

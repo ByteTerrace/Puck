@@ -50,7 +50,6 @@ public static class ShaderMath {
     /// <param name="value">The value.</param>
     /// <returns>The node.</returns>
     public static ShaderExpression IntegerBits(ShaderExpression value) => ShaderExpression.Unary(op: ShaderOp.IntegerBits, value: value);
-
     /// <summary>Takes the component-wise minimum.</summary>
     /// <param name="left">The first value.</param>
     /// <param name="right">The second value.</param>
@@ -86,7 +85,6 @@ public static class ShaderMath {
     /// <param name="right">The second value.</param>
     /// <returns>The node.</returns>
     public static ShaderExpression Dot3(ShaderExpression left, ShaderExpression right) => ShaderExpression.Binary(left: left, op: ShaderOp.Dot3, right: right);
-
     /// <summary>Linearly interpolates between two values.</summary>
     /// <param name="from">The value at zero.</param>
     /// <param name="to">The value at one.</param>
@@ -111,7 +109,6 @@ public static class ShaderMath {
     /// <param name="whenFalse">The value taken elsewhere.</param>
     /// <returns>The node.</returns>
     public static ShaderExpression Select(ShaderExpression condition, ShaderExpression whenTrue, ShaderExpression whenFalse) => ShaderExpression.Ternary(a: whenFalse, b: whenTrue, c: condition, op: ShaderOp.Select);
-
     /// <summary>Samples the lattice noise at a value's first two lanes.</summary>
     /// <param name="position">The value whose first two lanes locate the sample and whose fourth carries the seed bits.</param>
     /// <returns>The node.</returns>
@@ -139,6 +136,6 @@ public static class ShaderMath {
         x: 0f,
         y: 0f,
         z: 0f,
-        w: BitConverter.UInt32BitsToSingle(seed)
+        w: BitConverter.UInt32BitsToSingle(value: seed)
     ));
 }

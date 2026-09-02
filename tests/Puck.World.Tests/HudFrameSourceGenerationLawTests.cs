@@ -18,10 +18,9 @@ public sealed class HudFrameSourceGenerationLawTests {
         generation.BeginGeneration();
         generation.EndGeneration();
 
-        Assert.Equal(expected: ["retain:2", "release:2"], actual: events);
+        Assert.Equal(actual: events, expected: ["retain:2", "release:2"]);
         Assert.False(condition: generation.IsActive(key: 2));
     }
-
     [Fact]
     public void RepeatedElementsShareOneGenerationReference() {
         var events = new List<string>();
@@ -36,10 +35,9 @@ public sealed class HudFrameSourceGenerationLawTests {
         generation.MarkActive(key: 1);
         generation.EndGeneration();
 
-        Assert.Equal(expected: ["retain:0", "retain:1", "release:0"], actual: events);
+        Assert.Equal(actual: events, expected: ["retain:0", "retain:1", "release:0"]);
         Assert.True(condition: generation.IsActive(key: 1));
     }
-
     [Fact]
     public void ASourceReturningAfterRetirementIsRetainedAgain() {
         var events = new List<string>();
@@ -54,7 +52,7 @@ public sealed class HudFrameSourceGenerationLawTests {
         generation.MarkActive(key: 3);
         generation.EndGeneration();
 
-        Assert.Equal(expected: ["retain:3", "release:3", "retain:3"], actual: events);
+        Assert.Equal(actual: events, expected: ["retain:3", "release:3", "retain:3"]);
     }
 
     private static OverlayFrameSourceGeneration NewGeneration(List<string> events) => new(

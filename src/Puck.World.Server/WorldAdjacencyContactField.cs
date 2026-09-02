@@ -104,9 +104,9 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
     private ContactResolution ResolveCore(int entityIndex, in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) {
         var resolution = m_inner.ResolveSweep(
             orientation: in orientation,
-                    up: in up,
-            position: ref position,
+                    position: ref position,
             previousPosition: previousPosition,
+            up: in up,
             velocity: ref velocity,
             volumes: volumes
         );
@@ -341,16 +341,16 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
     }
     private readonly struct PointStageMap : IFrameStageMap {
         public static FixedVector3 Map(FixedVector3 value, in WorldFaceFrame source, in WorldFaceFrame destination) => WorldFrameIsometry.MapPoint(
+            destination: in destination,
             point: value,
-            source: in source,
-            destination: in destination
+            source: in source
         );
     }
     private readonly struct VectorStageMap : IFrameStageMap {
         public static FixedVector3 Map(FixedVector3 value, in WorldFaceFrame source, in WorldFaceFrame destination) => WorldFrameIsometry.MapVector(
-            value: value,
+            destination: in destination,
             source: in source,
-            destination: in destination
+            value: value
         );
     }
 }

@@ -14,7 +14,6 @@
         <ProjectReference Include="..\Puck.Commands\Puck.Commands.csproj" />
         <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
         <ProjectReference Include="..\Puck.Launcher\Puck.Launcher.csproj" />
-        <ProjectReference Include="..\Puck.Networking\Puck.Networking.csproj" />
         <ProjectReference Include="..\Puck.Storage\Puck.Storage.csproj" />
         <ProjectReference Include="..\Puck.World.Client\Puck.World.Client.csproj" />
         <ProjectReference Include="..\Puck.World.Console\Puck.World.Console.csproj" />

@@ -14,9 +14,9 @@ internal readonly record struct BodySensorTarget(int Index, FixedVector3 Positio
     // and ProduceAttendIntent read only Position/DistanceSquared, so a point steers identically. The index sentinel
     // keeps AcquiredTarget's body-index reads (>= 0 guarded) treating it as no acquired body.
     public static BodySensorTarget Point(FixedVector3 position, FixedQ4816 distanceSquared) => new(
+        DistanceSquared: distanceSquared,
         Index: WorldTargetDesignation.PointIndex,
-        Position: position,
-        DistanceSquared: distanceSquared
+        Position: position
     );
 }
 internal readonly record struct BodyProducerSensors(BodySensorTarget Candidate, BodySensorTarget CurrentTarget);

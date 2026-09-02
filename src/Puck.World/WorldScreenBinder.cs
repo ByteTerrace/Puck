@@ -107,6 +107,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     // tokens screen.camera/probe.status echo. A camera is an input device seated like a gamepad; this binder never
     // opens hardware by device identity, only by (seat, sensor).
     private readonly PlayerRoster m_roster;
+
     // Every physical camera device seen since boot, by its reconnect-stable InputDeviceId, plus a stable first-seen
     // order for DescribeCamera. A device vanishing (unplugged) drops out of both; a later reconnect (the SAME
     // content-addressed id) re-enumerates fresh.
@@ -124,6 +125,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     // ResolveSeatCameraControls) — resolved at boot and re-resolved by ReconcileScreens, so an UpsertScreen mutation
     // moves the seat's device live through the per-frame service path.
     private Dictionary<int, WorldCameraControls?> m_seatCameraControls = new();
+
     private long m_nextCameraDeviceScanTimestamp;
     // Narrates a scan failure once per failure episode (ServiceCameraDevices) rather than every ~2s retry; cleared
     // the moment a scan succeeds again.

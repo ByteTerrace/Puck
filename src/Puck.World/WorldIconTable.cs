@@ -111,7 +111,6 @@ public sealed class WorldIconTable {
             ? resolved
             : OverlayResolvedGlyph.None
         );
-
     /// <summary>Resolves a physical control's badge content for a connected controller family (the family override
     /// seam, checked before the row's default icon). The ONE badge door: a bar slot, a modifier indicator, and a
     /// chord hint all arrive here with the same input source id, and a control the badge table carries no row for

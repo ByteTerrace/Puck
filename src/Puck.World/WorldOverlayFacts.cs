@@ -88,6 +88,7 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
         bodyIndex: bodyIndex,
         tick: tick
     );
+
     // Distance between two subjects off the presentation poses; an unresolvable subject is infinitely far. An AnySeat
     // on either side quantifies over the joined seats (the nearest pair decides).
     private float Distance(int slot, OverlaySubject subject, OverlaySubject? of) {
@@ -307,6 +308,7 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
 
         return true;
     }
+
     /// <summary>Evaluates a predicate's PRESENCE for one seat: 1 while it fully holds, 0 when it does not, and the
     /// eased value in between while a <see cref="OverlayPredicate.Recently"/> fades — <c>all</c> takes the minimum,
     /// <c>any</c> the maximum, <c>not</c> the complement. <see cref="Evaluate"/> is this above zero.</summary>
@@ -332,35 +334,35 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
                     windowSeconds: recently.WindowSeconds
                 );
             case OverlayPredicate.All all: {
-                var presence = 1f;
+                    var presence = 1f;
 
-                foreach (var inner in (all.Predicates ?? [])) {
-                    presence = MathF.Min(
-                        x: presence,
-                        y: Presence(
-                            predicate: inner,
-                            slot: slot
-                        )
-                    );
+                    foreach (var inner in (all.Predicates ?? [])) {
+                        presence = MathF.Min(
+                            x: presence,
+                            y: Presence(
+                                predicate: inner,
+                                slot: slot
+                            )
+                        );
+                    }
+
+                    return presence;
                 }
-
-                return presence;
-            }
             case OverlayPredicate.Any any: {
-                var presence = 0f;
+                    var presence = 0f;
 
-                foreach (var inner in (any.Predicates ?? [])) {
-                    presence = MathF.Max(
-                        x: presence,
-                        y: Presence(
-                            predicate: inner,
-                            slot: slot
-                        )
-                    );
+                    foreach (var inner in (any.Predicates ?? [])) {
+                        presence = MathF.Max(
+                            x: presence,
+                            y: Presence(
+                                predicate: inner,
+                                slot: slot
+                            )
+                        );
+                    }
+
+                    return presence;
                 }
-
-                return presence;
-            }
             case OverlayPredicate.Not not:
                 return (1f - Presence(
                     predicate: not.Predicate,
@@ -391,6 +393,7 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
                 return 1f;
         }
     }
+
     // Samples a fact from its owner for one seat. SeatInput/PointerMotion are edge facts: they hold for the whole
     // evaluation tick on which their owner is first observed advanced (an overlay evaluates once per frame, several
     // sim ticks apart, so "arrived this tick" would miss most inputs, and every element evaluating in that frame must

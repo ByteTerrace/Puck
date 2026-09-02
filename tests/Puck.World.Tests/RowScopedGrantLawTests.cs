@@ -21,7 +21,7 @@ public sealed class RowScopedGrantLawTests {
     /// act.</summary>
     private const string SlotRow = "slot-nw";
 
-    private static readonly WorldPrincipal Partner = WorldPrincipal.Peer(index: 4, generation: 1);
+    private static readonly WorldPrincipal Partner = WorldPrincipal.Peer(generation: 1, index: 4);
 
     [Fact]
     public void RowScopedMutateAdmitsOnlyItsOwnRow_ForeignRowRefused_OwnRowAdmitted() {
@@ -38,7 +38,6 @@ public sealed class RowScopedGrantLawTests {
             deniedOutcome: () => UpsertAndObserveChange(fixture: fixture, row: HostRow),
             controlOutcome: () => UpsertAndObserveChange(fixture: fixture, row: SlotRow));
     }
-
     [Fact]
     public void SectionGrantStillAdmitsEveryRow_RowGrantAlone_ThenSectionGrant() {
         using var fixture = FreshSlottedServer();
@@ -72,7 +71,6 @@ public sealed class RowScopedGrantLawTests {
                 return UpsertAndObserveChange(fixture: fixture, row: HostRow);
             });
     }
-
     [Fact]
     public void RowScopedVerbMaskNarrowsTheRow_RemoveMasked_RemoveAdmitted() {
         using var fixture = FreshSlottedServer();
@@ -100,7 +98,6 @@ public sealed class RowScopedGrantLawTests {
                 return RemoveAndObserveChange(fixture: fixture, row: SlotRow);
             });
     }
-
     [Fact]
     public void UntrustedRowScopedGrantRequiresAVerbMask_MasklessRefused_MaskedHeld() {
         using var fixture = FreshSlottedServer();
@@ -110,7 +107,6 @@ public sealed class RowScopedGrantLawTests {
             deniedOutcome: () => GrantAndObserveHeld(fixture: fixture, kinds: null, subject: GrantSubject.Placement(id: SlotRow)),
             controlOutcome: () => GrantAndObserveHeld(fixture: fixture, kinds: WorldMutationKindCatalog.KindsOf(section: WorldSection.Placements), subject: GrantSubject.Placement(id: SlotRow)));
     }
-
     [Fact]
     public void RowScopedVerbMaskIsBoundedByItsOwnSection_ForeignKindRefused_OwnKindHeld() {
         using var fixture = FreshSlottedServer();
@@ -120,7 +116,6 @@ public sealed class RowScopedGrantLawTests {
             deniedOutcome: () => GrantAndObserveHeld(fixture: fixture, kinds: WorldMutationKindCatalog.KindsOf(section: WorldSection.Kits), subject: GrantSubject.Creation(id: HostRow)),
             controlOutcome: () => GrantAndObserveHeld(fixture: fixture, kinds: WorldMutationKindCatalog.KindsOf(section: WorldSection.Creations), subject: GrantSubject.Creation(id: HostRow)));
     }
-
     [Fact]
     public void AddonHoldsNoRowScopedRow_RowSubjectRefused_SectionSubjectHeld() {
         using var fixture = FreshSlottedServer();
@@ -136,7 +131,6 @@ public sealed class RowScopedGrantLawTests {
     /// <summary>A server over the collider-bearing fixture document — the only code-built document carrying a
     /// creation and a placement row, which is what <see cref="HostRow"/> names.</summary>
     private static WorldFixture FreshSlottedServer() => Fixtures.FreshServer(definition: Fixtures.BuildGradientUpDocument(gradientUp: false));
-
     private static void GrantSlot(WorldFixture fixture, string row, MutationKindMask kinds) {
         fixture.Server.Grant(
             actor: WorldPrincipal.Console,

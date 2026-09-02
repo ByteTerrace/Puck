@@ -7,9 +7,9 @@ namespace Puck.World.Tests;
 /// <summary>Authoring-time laws for the <c>probes</c> section: the kind vocabulary hook, probe/binding cross-
 /// references, source uniqueness, and the closed binding-row field ranges.</summary>
 public sealed class ProbesAuthoringValidationLawTests {
+    private const string ChannelName = "x";
     private const string ProbeId = "head";
     private const string ProbeKind = "ir-blob";
-    private const string ChannelName = "x";
 
     private static WorldFrameSource CameraSource(WorldCameraSensor sensor = WorldCameraSensor.Infrared) => new WorldScreenSource.Camera(
         Profile: WorldFeedProfile.Default,
@@ -24,7 +24,6 @@ public sealed class ProbesAuthoringValidationLawTests {
         RateHz: 30U,
         Track: track
     );
-
     private static WorldDefinition WithProbes(WorldProbe[] probes, WorldProbeBinding[] bindings, WorldRenderExtensionEntry[]? extensions = null) {
         var document = Fixtures.BuildDocument() with {
             ProbesRaw = ((probes.Length == 0)
@@ -107,7 +106,6 @@ public sealed class ProbesAuthoringValidationLawTests {
                 reason: out _
             ));
     }
-
     [Fact]
     public void BlankKindRefusesWhileANonBlankKindPasses() {
         Laws.RefusalWithControl(
@@ -252,7 +250,7 @@ public sealed class ProbesAuthoringValidationLawTests {
                 definition: WithProbes(
                 probes: [BuildProbe()],
                 bindings: [
-                    new WorldProbeBinding.Parameter(Channel: "luminance", Target: new WorldProbeParameterTarget.Extension(Id: "not-composed", Field: "intensity"), Range: new Vector2(x: 0f, y: 1f)),
+                    new WorldProbeBinding.Parameter(Channel: "luminance", Target: new WorldProbeParameterTarget.Extension(Field: "intensity", Id: "not-composed"), Range: new Vector2(x: 0f, y: 1f)),
                 ],
                 extensions: [extension]
             ),
@@ -262,7 +260,7 @@ public sealed class ProbesAuthoringValidationLawTests {
                 definition: WithProbes(
                 probes: [BuildProbe()],
                 bindings: [
-                    new WorldProbeBinding.Parameter(Channel: "luminance", Target: new WorldProbeParameterTarget.Extension(Id: "sdf-film-grain", Field: "intensity"), Range: new Vector2(x: 0f, y: 1f)),
+                    new WorldProbeBinding.Parameter(Channel: "luminance", Target: new WorldProbeParameterTarget.Extension(Field: "intensity", Id: "sdf-film-grain"), Range: new Vector2(x: 0f, y: 1f)),
                 ],
                 extensions: [extension]
             ),
@@ -277,7 +275,7 @@ public sealed class ProbesAuthoringValidationLawTests {
                 definition: WithProbes(
                 probes: [BuildProbe(), BuildProbe(id: "faerie")],
                 bindings: [
-                    new WorldProbeBinding.Parameter(Channel: ChannelName, Target: new WorldProbeParameterTarget.Probe(Id: "not-declared", Field: "anchorX"), Range: new Vector2(x: -1f, y: 1f)),
+                    new WorldProbeBinding.Parameter(Channel: ChannelName, Target: new WorldProbeParameterTarget.Probe(Field: "anchorX", Id: "not-declared"), Range: new Vector2(x: -1f, y: 1f)),
                 ]
             ),
                 reason: out _
@@ -286,7 +284,7 @@ public sealed class ProbesAuthoringValidationLawTests {
                 definition: WithProbes(
                 probes: [BuildProbe(), BuildProbe(id: "faerie")],
                 bindings: [
-                    new WorldProbeBinding.Parameter(Channel: ChannelName, Target: new WorldProbeParameterTarget.Probe(Id: "faerie", Field: "anchorX"), Range: new Vector2(x: -1f, y: 1f)),
+                    new WorldProbeBinding.Parameter(Channel: ChannelName, Target: new WorldProbeParameterTarget.Probe(Field: "anchorX", Id: "faerie"), Range: new Vector2(x: -1f, y: 1f)),
                 ]
             ),
                 reason: out _
@@ -300,7 +298,7 @@ public sealed class ProbesAuthoringValidationLawTests {
                 definition: WithProbes(
                 probes: [BuildProbe(), BuildProbe(id: "faerie")],
                 bindings: [
-                    new WorldProbeBinding.Parameter(Channel: ChannelName, Target: new WorldProbeParameterTarget.Probe(Id: ProbeId, Field: "threshold"), Range: new Vector2(x: 0f, y: 1f)),
+                    new WorldProbeBinding.Parameter(Channel: ChannelName, Target: new WorldProbeParameterTarget.Probe(Field: "threshold", Id: ProbeId), Range: new Vector2(x: 0f, y: 1f)),
                 ]
             ),
                 reason: out _
@@ -309,7 +307,7 @@ public sealed class ProbesAuthoringValidationLawTests {
                 definition: WithProbes(
                 probes: [BuildProbe(), BuildProbe(id: "faerie")],
                 bindings: [
-                    new WorldProbeBinding.Parameter(Channel: ChannelName, Target: new WorldProbeParameterTarget.Probe(Id: "faerie", Field: "threshold"), Range: new Vector2(x: 0f, y: 1f)),
+                    new WorldProbeBinding.Parameter(Channel: ChannelName, Target: new WorldProbeParameterTarget.Probe(Field: "threshold", Id: "faerie"), Range: new Vector2(x: 0f, y: 1f)),
                 ]
             ),
                 reason: out _

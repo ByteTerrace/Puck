@@ -56,6 +56,7 @@ public sealed partial class WorldAddonRuntime : IWorldAddonHost {
     // check compares a candidate's Channels against this by content, never by reference (a freshly deserialized
     // rebuild/undo candidate never shares object identity with what booted).
     private IReadOnlyList<WorldChannel> m_channelsSource;
+
     private readonly WorldServer m_server;
 
     private bool m_disposed;

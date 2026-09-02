@@ -220,6 +220,7 @@ public sealed class OverlayGlyphAtlasSet {
 
         return built;
     }
+
     // The appended codepoint list's key contribution — plain int32 little-endian, in caller order, so two callers
     // requesting the same repertoire in the same order (the ordinary case: one WorldIconTable per boot) hash equal.
     private static void HashExtraCodePoints(IReadOnlyList<int>? codePoints, Span<byte> destination) {

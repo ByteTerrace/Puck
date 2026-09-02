@@ -818,7 +818,7 @@ public static partial class WorldDefinitionValidator {
         if (
             (width >= 1) &&
             (depth >= 1) &&
-            (CreationStampSampling.NoiseInstanceCeiling(width: width, depth: depth) > SdfProgramBuilder.MaxInstances)
+            (CreationStampSampling.NoiseInstanceCeiling(depth: depth, width: width) > SdfProgramBuilder.MaxInstances)
         ) {
             errors.Add(item: $"{path} width x depth ({width}x{depth}) worst-case exceeds the {SdfProgramBuilder.MaxInstances}-instance engine ceiling.");
         }
@@ -866,9 +866,9 @@ public static partial class WorldDefinitionValidator {
 
             if (sun.Weight is { } weight) {
                 RequireNonNegative(
-                    value: weight,
+                    errors: errors,
                     name: $"{path}.sun.weight",
-                    errors: errors
+                    value: weight
                 );
             }
 
@@ -886,17 +886,17 @@ public static partial class WorldDefinitionValidator {
         if (lighting.Ambient is { } ambient) {
             if (ambient.Base is { } ambientBase) {
                 RequireNonNegative(
-                    value: ambientBase,
+                    errors: errors,
                     name: $"{path}.ambient.base",
-                    errors: errors
+                    value: ambientBase
                 );
             }
 
             if (ambient.Hemisphere is { } hemisphere) {
                 RequireFinite(
-                    value: hemisphere,
+                    errors: errors,
                     name: $"{path}.ambient.hemisphere",
-                    errors: errors
+                    value: hemisphere
                 );
             }
 
@@ -948,9 +948,9 @@ public static partial class WorldDefinitionValidator {
 
         if (sky.FogDensity is { } fogDensity) {
             RequireNonNegative(
-                value: fogDensity,
+                errors: errors,
                 name: $"{path}.fogDensity",
-                errors: errors
+                value: fogDensity
             );
         }
 
@@ -1046,17 +1046,17 @@ public static partial class WorldDefinitionValidator {
 
             if (clouds.Spin is { } spin) {
                 RequireFinite(
-                    value: spin,
+                    errors: errors,
                     name: $"{path}.clouds.spin",
-                    errors: errors
+                    value: spin
                 );
             }
 
             if (clouds.Curl is { } curl) {
                 RequireFinite(
-                    value: curl,
+                    errors: errors,
                     name: $"{path}.clouds.curl",
-                    errors: errors
+                    value: curl
                 );
             }
 
@@ -1232,9 +1232,9 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: "bodies.disclosure.radius is required for mode 'radius'.");
             } else {
                 RequirePositive(
-                    value: radius,
+                    errors: errors,
                     name: "bodies.disclosure.radius",
-                    errors: errors
+                    value: radius
                 );
             }
         } else if (row.Radius is not null) {

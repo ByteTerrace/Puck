@@ -50,7 +50,7 @@ public sealed class WorldFaceApertureTableLawTests {
             ),
                 expected: opens
             );
-            Assert.Equal(expected: opens, actual: (aperture is not null));
+            Assert.Equal(actual: (aperture is not null), expected: opens);
         }
 
         // A face naming no shape at all opens nothing — the same answer through the same door, not a second rule.

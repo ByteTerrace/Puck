@@ -1028,7 +1028,7 @@ public readonly partial record struct FixedQ4816(long Value)
 
         return ((separation <= ((ulong)maxDelta.Value))
             ? target
-            : new(Value: unchecked(current.Value + (targetIsGreater ? maxDelta.Value : -maxDelta.Value)))
+            : new(Value: unchecked((current.Value + (targetIsGreater ? maxDelta.Value : -maxDelta.Value))))
         );
     }
     /// <summary>Returns the exact angular frequency <c>ω = 2π·frequencyHz</c> as a rational pair, unscaled — no

@@ -45,6 +45,7 @@ public static class ShaderExpressionCompiler {
 
         return builder.Build();
     }
+
     private static void CountUses(ShaderExpression node, Dictionary<ShaderExpression, int> uses) {
         if (uses.TryGetValue(key: node, value: out var count)) {
             uses[node] = (count + 1);

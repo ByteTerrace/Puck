@@ -167,6 +167,7 @@ public static class WorldRuleFacts {
     /// on a <c>compareState</c> <c>key</c>/<c>comparandKey</c> and on a world-scope effect's <c>key</c>/<c>fromKey</c>;
     /// a body-reference token spells the same indirection as <c>cell:&lt;row&gt;:&lt;key&gt;</c>.</summary>
     public const string CellKeyPrefix = "$cell:";
+
     /// <summary>The binding vocabulary, one row per <see cref="RuleBinding"/> other than <see cref="RuleBinding.None"/>:
     /// the key token (<c>$each</c>, <c>$left</c>, <c>$right</c>), the body-reference token derived from it by
     /// <see cref="BodyTokenOf"/> (<c>each</c>, <c>left</c>, <c>right</c>), and the scope the binding is live in. Every
@@ -176,9 +177,11 @@ public static class WorldRuleFacts {
         (RuleBinding.Left, "$left", "an interaction"),
         (RuleBinding.Right, "$right", "a Distance interaction"),
     ];
+
     /// <summary>The body-reference spelling of a binding's key token — the token without its leading <c>$</c>.</summary>
     /// <param name="keyToken">A <see cref="Bindings"/> key token.</param>
     public static string BodyTokenOf(string keyToken) => keyToken[1..];
+
     /// <summary>The prefix; <c>$channel:&lt;seat&gt;:&lt;channelName&gt;</c> reads the 1-based local seat's current value of
     /// a declared <c>channels[]</c> row as its body integrates it that tick — the drained
     /// <see cref="Puck.Commands.CommandSnapshot"/> read folded with co-driving contributions and the admitted held

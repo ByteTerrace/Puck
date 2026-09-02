@@ -10,10 +10,10 @@ public sealed class SkyPreview {
     private const int Height = 512;
     private const int Width = 1024;
 
-    [Theory]
     [InlineData("sky-base")]
     [InlineData("sky-night")]
     [InlineData("sky-day")]
+    [Theory]
     public void RendersTheAuthoredSky(string name) {
         var directory = Environment.GetEnvironmentVariable(variable: "PUCK_SKY_PREVIEW_DIR");
 
@@ -25,7 +25,7 @@ public sealed class SkyPreview {
 
         SkyParameters.Pack(rows: parameters, settings: in settings);
 
-        var pixels = new byte[Width * Height * 4];
+        var pixels = new byte[((Width * Height) * 4)];
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         _ = Parallel.For(body: y => {
@@ -57,6 +57,7 @@ public sealed class SkyPreview {
             path: Path.Combine(path1: directory!, path2: (name + ".txt"))
         );
     }
+
     // The three keys null.world.json authors, with the wind integrated to a fixed offset so the frame is stable.
     private static SkyFrameSettings Settings(string name) {
         var wind = new SkyFrameSettings {
@@ -101,7 +102,7 @@ public sealed class SkyPreview {
     // Equirectangular: longitude across, latitude down, so one image carries the whole sphere.
     private static Vector4 RayDirection(int x, int y) {
         var latitude = ((MathF.PI * 0.5f) - ((((((float)y) + 0.5f) / ((float)Height))) * MathF.PI));
-        var longitude = (((((((float)x) + 0.5f) / ((float)Width))) * 2f) - 1f) * MathF.PI;
+        var longitude = ((((((((float)x) + 0.5f) / ((float)Width))) * 2f) - 1f) * MathF.PI);
         var radius = MathF.Cos(x: latitude);
 
         return new Vector4(
@@ -114,6 +115,6 @@ public sealed class SkyPreview {
     private static byte Encode(float value) => ((byte)Math.Clamp(
         max: 255,
         min: 0,
-        value: ((int)((MathF.Pow(x: Math.Clamp(value: value, max: 1f, min: 0f), y: (1f / 2.2f)) * 255f) + 0.5f))
+        value: ((int)((MathF.Pow(x: Math.Clamp(max: 1f, min: 0f, value: value), y: (1f / 2.2f)) * 255f) + 0.5f))
     ));
 }

@@ -29,12 +29,13 @@ public static class WorldFrameCodec {
         WorldSubmissionKind.Designation => (4 * 1024),
         _ => 0,
     };
+
     // WireRefusal (Puck.Networking, the transport-neutral frame/wire grammar) and WorldCodecRefusal (this leaf
     // vocabulary) are deliberately separate enums — this is the one seam a WireFailure crosses into a
     // WorldCodecFailure, so the map lives here rather than forcing the two vocabularies into one. Every name both
     // sides declare maps by identity; the tail arm covers the WireRefusal members FrameCodec.TrySplit's own frame-
     // length gate can reach today (FrameLengthInvalid) plus every member neither TrySplit nor this decode path can
-    // produce (CountOutOfRange, StringTooLong, ConnectionClosed, HandshakeRefused, LaneUnavailable, None) — a length
+    // produce (CountOutOfRange, StringTooLong, ConnectionClosed, LaneUnavailable, RequestTimedOut, None) — a length
     // problem is the correct default for an otherwise-unreachable wire refusal surfacing from a length-prefixed
     // grammar's own split step.
     private static WorldCodecRefusal ToCodecRefusal(WireRefusal refusal) => refusal switch {
@@ -46,6 +47,7 @@ public static class WorldFrameCodec {
         WireRefusal.EnumValueUnknown => WorldCodecRefusal.EnumValueUnknown,
         _ => WorldCodecRefusal.FrameLengthInvalid,
     };
+
     /// <summary>Decodes exactly one complete frame through the canonical leaf codec.</summary>
     /// <param name="frame">The complete frame bytes.</param>
     /// <param name="payload">The decoded payload on success.</param>

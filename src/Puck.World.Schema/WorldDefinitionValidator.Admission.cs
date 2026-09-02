@@ -563,11 +563,11 @@ public static partial class WorldDefinitionValidator {
                     var tagPath = $"{path}.tags[{tagIndex}]";
 
                     RequireUniqueName(
-                        value: tag,
-                        seen: seenTags,
-                        path: tagPath,
+                        errors: errors,
                         field: "",
-                        errors: errors
+                        path: tagPath,
+                        seen: seenTags,
+                        value: tag
                     );
                 }
             }

@@ -175,7 +175,6 @@ public sealed unsafe class DirectXGpuExportableStorageImage : IGpuExportableStor
     // Keep the three access shapes' initial-state policy at one allocation-independent door; the constructor uses
     // this result for the native resource state and the documentation above names the same split.
     private static bool UsesCommonInitialState(DirectXExportableImageAccess access) => (access != DirectXExportableImageAccess.ComputeWrite);
-
     private void WaitForGpu() {
         DirectXFence.SignalAndWait(
             deviceContext: m_deviceContext,

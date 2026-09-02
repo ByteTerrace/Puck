@@ -20,6 +20,7 @@ public static class NullWorldReference {
 
         return world;
     }
+
     private static (float Distance, int Material) GroundNorthEast(Vector3 point) {
         var key = WallpaperKey(cell: 1f, point: point);
 
@@ -74,12 +75,12 @@ public static class NullWorldReference {
     private static (float Distance, int Material) Planetoids(Vector3 point) {
         var world = Planetoid(point: point, position: new Vector3(x: 6f, y: 17f, z: 6f), scale: 1f);
 
-        foreach (var (position, scale) in ((Vector3, float)[])[
+        foreach (var (position, scale) in (((Vector3, float)[])[
             (new Vector3(x: -6f, y: 17f, z: 6f), 1f),
             (new Vector3(x: 6f, y: 17f, z: -6f), 1f),
             (new Vector3(x: -6f, y: 17f, z: -6f), 1f),
             (new Vector3(x: 0f, y: 24f, z: 0f), 1.8f),
-        ]) {
+        ])) {
             world = Union(candidate: Planetoid(point: point, position: position, scale: scale), current: world);
         }
 
@@ -89,7 +90,7 @@ public static class NullWorldReference {
         var local = ((point - position) / scale);
         var core = (Distance: (local.Length() - 1.5f), Material: NullWorldScene.PlanetoidCrust);
         var sectorAngle = ((2f * MathF.PI) / 6f);
-        var raised = (MathF.Atan2(y: local.Z, x: local.X) + (0.5f * sectorAngle));
+        var raised = (MathF.Atan2(x: local.X, y: local.Z) + (0.5f * sectorAngle));
         var angle = ((raised - (MathF.Floor(x: (raised / sectorAngle)) * sectorAngle)) - (0.5f * sectorAngle));
         var radius = MathF.Sqrt(x: ((local.X * local.X) + (local.Z * local.Z)));
         var folded = new Vector3(x: ((MathF.Cos(x: angle) * radius) - 1.32f), y: local.Y, z: (MathF.Sin(x: angle) * radius));

@@ -35,7 +35,6 @@ public enum CameraControl {
     /// <see langword="false"/> everywhere.</summary>
     FieldOfView,
 }
-
 /// <summary>Which sensor stream a session opens: the default color stream, or the infrared stream exposed by a
 /// Windows Hello capable device. Independent single-sensor opens can contend for one physical pipeline; callers that
 /// need both sensors use the capture service's coordinated dual open.</summary>
@@ -45,7 +44,6 @@ public enum CameraSensor {
     /// <summary>The infrared sensor camera.</summary>
     Infrared,
 }
-
 /// <summary>One control's device-reported envelope: the value range, its stepping, the driver default, and whether the
 /// device can run the control automatically.</summary>
 /// <param name="Minimum">The smallest accepted value.</param>
@@ -54,7 +52,6 @@ public enum CameraSensor {
 /// <param name="Default">The driver's default value.</param>
 /// <param name="SupportsAuto">Whether the device can drive this control automatically.</param>
 public readonly record struct CameraControlRange(int Minimum, int Maximum, int Step, int Default, bool SupportsAuto);
-
 /// <summary>The live control surface a camera session exposes over its open device, shared by both capture tiers (the
 /// controls live on the capture source, independent of how frames are read). Every member is best-effort and
 /// non-throwing: a control the device or platform does not implement reports <see langword="false"/>.</summary>

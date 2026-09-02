@@ -24,19 +24,21 @@ public sealed class BindingRowMemberLawTests {
             principalResolver: new Principal()
         );
     private static bool Fired(InputRouter router, ulong tick) =>
-        router.SnapshotForTick(tick: tick, windowEndTick: ulong.MaxValue).Lanes.Any(predicate: lane => lane.Entries.Any(predicate: e => e.Dispatch && (e.Phase == CommandPhase.Started)));
+        router.SnapshotForTick(tick: tick, windowEndTick: ulong.MaxValue).Lanes.Any(predicate: lane => lane.Entries.Any(predicate: e => (e.Dispatch && (e.Phase == CommandPhase.Started))));
 
     [Fact]
     public void HeldRowFiresInEitherPressOrder() {
         var profile = Compile(rows: [new BindingChordDefinition(Group: "g", Held: ["mouse.button1", "mouse.button2"], Command: new BindingCommandDefinition(Command: ActionCommand))]);
 
         var leftFirst = Router(profile: profile);
+
         leftFirst.Capture(signal: InputSignal.Press(source: "mouse.button1"));
         Assert.False(condition: Fired(router: leftFirst, tick: 1UL));
         leftFirst.Capture(signal: InputSignal.Press(source: "mouse.button2"));
         Assert.True(condition: Fired(router: leftFirst, tick: 2UL));
 
         var rightFirst = Router(profile: profile);
+
         rightFirst.Capture(signal: InputSignal.Press(source: "mouse.button2"));
         rightFirst.Capture(signal: InputSignal.Press(source: "mouse.button1"));
         Assert.True(condition: Fired(router: rightFirst, tick: 1UL));
@@ -46,11 +48,13 @@ public sealed class BindingRowMemberLawTests {
         var profile = Compile(rows: [new BindingChordDefinition(Group: "g", Chord: ["key.a", "key.b"], Command: new BindingCommandDefinition(Command: ActionCommand))]);
 
         var inOrder = Router(profile: profile);
+
         inOrder.Capture(signal: InputSignal.Press(source: "key.a"));
         inOrder.Capture(signal: InputSignal.Press(source: "key.b"));
         Assert.True(condition: Fired(router: inOrder, tick: 1UL));
 
         var reversed = Router(profile: profile);
+
         reversed.Capture(signal: InputSignal.Press(source: "key.b"));
         reversed.Capture(signal: InputSignal.Press(source: "key.a"));
         Assert.False(condition: Fired(router: reversed, tick: 1UL));
@@ -60,18 +64,21 @@ public sealed class BindingRowMemberLawTests {
         var profile = Compile(rows: [new BindingChordDefinition(Group: "g", Held: ["key.shift"], Chord: ["key.a", "key.b"], Command: new BindingCommandDefinition(Command: ActionCommand))]);
 
         var shiftBetween = Router(profile: profile);
+
         shiftBetween.Capture(signal: InputSignal.Press(source: "key.a"));
         shiftBetween.Capture(signal: InputSignal.Press(source: "key.shift"));
         shiftBetween.Capture(signal: InputSignal.Press(source: "key.b"));
         Assert.True(condition: Fired(router: shiftBetween, tick: 1UL));
 
         var wrongOrder = Router(profile: profile);
+
         wrongOrder.Capture(signal: InputSignal.Press(source: "key.shift"));
         wrongOrder.Capture(signal: InputSignal.Press(source: "key.b"));
         wrongOrder.Capture(signal: InputSignal.Press(source: "key.a"));
         Assert.False(condition: Fired(router: wrongOrder, tick: 1UL));
 
         var noShift = Router(profile: profile);
+
         noShift.Capture(signal: InputSignal.Press(source: "key.a"));
         noShift.Capture(signal: InputSignal.Press(source: "key.b"));
         Assert.False(condition: Fired(router: noShift, tick: 1UL));
@@ -97,6 +104,7 @@ public sealed class BindingRowMemberLawTests {
             new BindingChordDefinition(Group: "g", Held: ["key.a", "key.b"], Command: new BindingCommandDefinition(Command: ActionCommand)),
             new BindingChordDefinition(Group: "g", Chord: ["key.b", "key.a"], Command: new BindingCommandDefinition(Command: ActionCommand)),
         ]));
+
         Assert.Contains(expectedSubstring: "not chord-only", actualString: refused.Message);
 
         _ = Compile(rows: [
@@ -109,6 +117,7 @@ public sealed class BindingRowMemberLawTests {
         var refused = Assert.Throws<ArgumentException>(testCode: () => Compile(rows: [
             new BindingChordDefinition(Group: "g", Held: ["key.a"], Chord: ["key.a"], Command: new BindingCommandDefinition(Command: ActionCommand)),
         ]));
+
         Assert.Contains(expectedSubstring: "more than once", actualString: refused.Message);
     }
 

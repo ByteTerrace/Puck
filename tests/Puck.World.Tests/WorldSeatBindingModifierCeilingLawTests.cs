@@ -26,12 +26,11 @@ public sealed class WorldSeatBindingModifierCeilingLawTests {
             ),
         ],
     };
-
     // A rebind carrying `count` distinct modifiers (unique id AND unique source, so composition unions rather than
     // absorbs them). Unreferenced modifiers still count against the ceiling — the compiler seeds every declared one.
     private static BindingProfileDocument RebindWithModifiers(int count) => new(
         Version: BindingProfileDocument.CurrentVersion,
-        Modifiers: [.. Enumerable.Range(start: 0, count: count).Select(selector: static index => new BindingModifierDefinition(Id: $"mod{index}", Sources: [$"source.{index}"]))],
+        Modifiers: [.. Enumerable.Range(count: count, start: 0).Select(selector: static index => new BindingModifierDefinition(Id: $"mod{index}", Sources: [$"source.{index}"]))],
         Chords: []
     );
 

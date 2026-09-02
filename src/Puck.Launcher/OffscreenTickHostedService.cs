@@ -114,6 +114,7 @@ public sealed class OffscreenTickHostedService : BackgroundService {
             );
             var frequency = Stopwatch.Frequency;
             var maxFrameTicks = (EngineTicks.PerSecond / 4UL);
+
             static uint ResolveRatePerSecond(IFixedStepSimulation? simulation) {
                 var simRatePerSecond = (simulation?.RatePerSecond ?? LauncherHostLoop.DefaultUpdateRate);
 

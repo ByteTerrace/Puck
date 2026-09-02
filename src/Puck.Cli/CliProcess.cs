@@ -23,7 +23,6 @@ internal static class CliProcess {
     }
     public static CliProcessResult RunCaptured(string fileName, IReadOnlyList<string> arguments, string input, TimeSpan timeout) =>
         RunCapturedAsync(arguments: arguments, fileName: fileName, input: input, timeout: timeout).GetAwaiter().GetResult();
-
     /// <summary>Spawns <paramref name="fileName"/>, drains both streams to their end exactly as read (no line
     /// splitting or re-joining, so byte content — including line endings — passes through unchanged), waits for
     /// exit, and returns the raw text alongside the exit code. Unlike <see cref="RunCaptured"/> this leaves the
@@ -57,7 +56,6 @@ internal static class CliProcess {
 
         return new CliRawProcessResult(ExitCode: process.ExitCode, Stderr: stderr, Stdout: stdout);
     }
-
     /// <summary>Gets what remains of a suite-wide time budget after a running clock's elapsed time. The result is
     /// zero or negative once the budget is spent.</summary>
     /// <param name="clock">The running suite clock.</param>

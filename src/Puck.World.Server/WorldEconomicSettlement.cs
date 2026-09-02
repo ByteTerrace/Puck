@@ -4,21 +4,18 @@ namespace Puck.World.Server;
 /// <param name="Row">The state row carrying the asset.</param>
 /// <param name="Key">The holder key inside that row.</param>
 public readonly record struct WorldEconomicCell(WorldCellName Row, WorldCellName Key);
-
 /// <summary>One holder-cell movement in a balanced economic candidate receipt.</summary>
 /// <param name="Cell">The touched cell.</param>
 /// <param name="Before">Its live value at the settlement tick.</param>
 /// <param name="After">Its committed candidate value.</param>
 /// <param name="Delta">The signed change from <paramref name="Before"/> to <paramref name="After"/>.</param>
 public readonly record struct WorldEconomicCellDelta(WorldEconomicCell Cell, long Before, long After, Int128 Delta);
-
 /// <summary>One asset row's exact conservation proof in a balanced economic candidate receipt.</summary>
 /// <param name="Row">The conserved asset row.</param>
 /// <param name="CellDelta">The sum of holder-cell changes.</param>
 /// <param name="ReserveDelta">The signed movement into external reserves.</param>
 /// <param name="NetDelta">The exact sum of cell and reserve movement; zero for a committed receipt.</param>
 public readonly record struct WorldEconomicConservationDelta(WorldCellName Row, Int128 CellDelta, Int128 ReserveDelta, Int128 NetDelta);
-
 /// <summary>The immutable, bounded audit result emitted for a balanced candidate, before document validation and install.</summary>
 public sealed class WorldEconomicCandidateReceipt {
     private readonly System.Collections.ObjectModel.ReadOnlyCollection<WorldEconomicCellDelta> m_cells;
@@ -46,7 +43,6 @@ public sealed class WorldEconomicCandidateReceipt {
         }
     }
 }
-
 /// <summary>
 /// Builds one bounded debit/credit settlement over world-owned integer cells, proves conservation per asset row, and
 /// publishes a candidate document only when every precondition and arithmetic operation succeeds.
@@ -67,6 +63,7 @@ public sealed class WorldEconomicSettlement {
 
     private readonly List<CellChange> m_cells = [];
     private readonly List<RowChange> m_conservation = [];
+
     private readonly WorldDefinition m_source;
     private readonly ulong m_tick;
 
@@ -106,7 +103,6 @@ public sealed class WorldEconomicSettlement {
 
         return true;
     }
-
     /// <summary>Subtracts a non-negative amount from a holder cell when its staged balance can cover it.</summary>
     /// <param name="cell">The cell to debit.</param>
     /// <param name="amount">The amount to subtract.</param>
@@ -137,7 +133,6 @@ public sealed class WorldEconomicSettlement {
 
         return true;
     }
-
     /// <summary>Reads a cell's live value plus operations already staged in this settlement.</summary>
     /// <param name="cell">The cell to read.</param>
     /// <param name="balance">The staged balance on success.</param>
@@ -162,7 +157,6 @@ public sealed class WorldEconomicSettlement {
 
         return true;
     }
-
     /// <summary>Stages value entering an external reserve for an asset row.</summary>
     /// <param name="row">The asset row.</param>
     /// <param name="amount">The non-negative amount entering reserve.</param>
@@ -174,15 +168,14 @@ public sealed class WorldEconomicSettlement {
         if (amount == 0L) {
             return true;
         }
-        if (!TryEconomicRow(row: row, resolved: out _)) {
+        if (!TryEconomicRow(resolved: out _, row: row)) {
             return false;
         }
 
-        ChangeReserveConservation(row: row, delta: amount);
+        ChangeReserveConservation(delta: amount, row: row);
 
         return true;
     }
-
     /// <summary>Stages value leaving an external reserve for an asset row.</summary>
     /// <param name="row">The asset row.</param>
     /// <param name="amount">The non-negative amount leaving reserve.</param>
@@ -194,15 +187,14 @@ public sealed class WorldEconomicSettlement {
         if (amount == 0L) {
             return true;
         }
-        if (!TryEconomicRow(row: row, resolved: out _)) {
+        if (!TryEconomicRow(resolved: out _, row: row)) {
             return false;
         }
 
-        ChangeReserveConservation(row: row, delta: -((Int128)amount));
+        ChangeReserveConservation(delta: -((Int128)amount), row: row);
 
         return true;
     }
-
     /// <summary>Latches a caller-owned precondition; the first refusal wins and prevents candidate publication.</summary>
     /// <param name="condition">The condition that must hold.</param>
     /// <param name="reason">The refusal used when it does not.</param>
@@ -223,7 +215,6 @@ public sealed class WorldEconomicSettlement {
 
         return true;
     }
-
     /// <summary>Moves a non-negative amount between two holder cells in the same asset row.</summary>
     /// <param name="source">The cell to debit.</param>
     /// <param name="destination">The cell to credit.</param>
@@ -238,10 +229,9 @@ public sealed class WorldEconomicSettlement {
             return false;
         }
 
-        return (Debit(cell: source, amount: amount, insufficientReason: insufficientReason)
-            && Credit(cell: destination, amount: amount));
+        return (Debit(amount: amount, cell: source, insufficientReason: insufficientReason)
+            && Credit(amount: amount, cell: destination));
     }
-
     /// <summary>Publishes the settlement's cell writes and caller-owned metadata as one candidate document.</summary>
     /// <param name="complete">Adds the built-in's metadata (for example, a listing row) to the state candidate.</param>
     /// <param name="candidate">The completed candidate, or the untouched source on refusal.</param>
@@ -329,9 +319,8 @@ public sealed class WorldEconomicSettlement {
             }
         }
 
-        m_conservation.Add(item: new RowChange(row: row, cellDelta: delta, reserveDelta: 0));
+        m_conservation.Add(item: new RowChange(cellDelta: delta, reserveDelta: 0, row: row));
     }
-
     private void ChangeReserveConservation(WorldCellName row, Int128 delta) {
         foreach (var change in m_conservation) {
             if (change.Row == row) {
@@ -341,14 +330,12 @@ public sealed class WorldEconomicSettlement {
             }
         }
 
-        m_conservation.Add(item: new RowChange(row: row, cellDelta: 0, reserveDelta: delta));
+        m_conservation.Add(item: new RowChange(cellDelta: 0, reserveDelta: delta, row: row));
     }
-
     private bool TryAmount(long amount, string operation) => Require(
         condition: (amount >= 0L),
         reason: $"economic {operation} amount {amount} must be non-negative"
     );
-
     private bool TryCell(WorldEconomicCell cell, out CellChange change) {
         foreach (var found in m_cells) {
             if (found.Cell == cell) {
@@ -416,7 +403,6 @@ public sealed class WorldEconomicSettlement {
 
         return true;
     }
-
     private bool TryEconomicRow(WorldCellName row, out WorldStateRow resolved) {
         resolved = WorldDefinitionRows.FindStateRow(rows: m_source.State, name: row)!;
 
@@ -429,7 +415,6 @@ public sealed class WorldEconomicSettlement {
             reason: $"'{row}' is not a capacity-bounded int state row"
         );
     }
-
     private static IReadOnlyList<WorldStateRow> WriteCell(IReadOnlyList<WorldStateRow> rows, WorldEconomicCell cell, long value) {
         var row = WorldDefinitionRows.FindStateRow(rows: rows, name: cell.Row)!;
         var existing = WorldDefinitionRows.FindCell(cells: row.Cells, key: cell.Key);
@@ -452,7 +437,6 @@ public sealed class WorldEconomicSettlement {
             keyOf: static value => value.Name
         );
     }
-
     private static IReadOnlyList<T> ReplaceOrAppend<T, TKey>(IReadOnlyList<T> list, T item, Func<T, TKey> keyOf) where TKey : notnull {
         var key = keyOf(arg: item);
         var result = new T[(list.Count + 1)];
@@ -481,11 +465,12 @@ public sealed class WorldEconomicSettlement {
 
     private sealed class CellChange(WorldEconomicCell cell, bool existed, long initialValue) {
         public WorldEconomicCell Cell { get; } = cell;
+
         public Int128 Delta { get; set; }
+
         public bool Existed { get; } = existed;
         public long InitialValue { get; } = initialValue;
     }
-
     private sealed class RowChange(WorldCellName row, Int128 cellDelta, Int128 reserveDelta) {
         public Int128 CellDelta { get; set; } = cellDelta;
         public Int128 ReserveDelta { get; set; } = reserveDelta;

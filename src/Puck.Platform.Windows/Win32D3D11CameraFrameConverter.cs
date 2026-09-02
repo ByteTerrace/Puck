@@ -212,7 +212,7 @@ public sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable, IProbeK
 
                 // CsWin32's generated COM projection throws on a failed HRESULT. Keep the postcondition explicit too:
                 // a missing plane must refuse this converter so the graph reopens on the CPU tier.
-                device->CreateShaderResourceView(pResource: ((ID3D11Resource*)input), pDesc: &inputViewDescription, ppSRView: &inputView);
+                device->CreateShaderResourceView(pDesc: &inputViewDescription, pResource: ((ID3D11Resource*)input), ppSRView: &inputView);
                 if (inputView is null) {
                     throw new InvalidOperationException(message: $"D3D11 camera plane {index} view creation returned no view");
                 }
@@ -229,16 +229,16 @@ public sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable, IProbeK
                 SampleDesc = new DXGI_SAMPLE_DESC { Count = 1 },
                 Usage = D3D11_USAGE.D3D11_USAGE_DEFAULT,
                 // Readable by the kernels a probe attaches to the graph, which sample the converted frames in place.
-                BindFlags = (D3D11_BIND_FLAG.D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_FLAG.D3D11_BIND_SHADER_RESOURCE),
+                BindFlags = D3D11_BIND_FLAG.D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_FLAG.D3D11_BIND_SHADER_RESOURCE,
             };
 
             device->CreateTexture2D(pDesc: &outputDescription, pInitialData: null, ppTexture2D: &output);
-            device->CreateUnorderedAccessView(pResource: ((ID3D11Resource*)output), pDesc: null, ppUAView: &outputView);
-            device->CreateShaderResourceView(pResource: ((ID3D11Resource*)output), pDesc: null, ppSRView: &outputSrv);
+            device->CreateUnorderedAccessView(pDesc: null, pResource: ((ID3D11Resource*)output), ppUAView: &outputView);
+            device->CreateShaderResourceView(pDesc: null, pResource: ((ID3D11Resource*)output), ppSRView: &outputSrv);
             // The previous frame's conversion, kept for kernels that read a strobing stream's unlit half beside the lit one.
             device->CreateTexture2D(pDesc: &outputDescription, pInitialData: null, ppTexture2D: &previous);
-            device->CreateUnorderedAccessView(pResource: ((ID3D11Resource*)previous), pDesc: null, ppUAView: &previousView);
-            device->CreateShaderResourceView(pResource: ((ID3D11Resource*)previous), pDesc: null, ppSRView: &previousSrv);
+            device->CreateUnorderedAccessView(pDesc: null, pResource: ((ID3D11Resource*)previous), ppUAView: &previousView);
+            device->CreateShaderResourceView(pDesc: null, pResource: ((ID3D11Resource*)previous), ppSRView: &previousSrv);
             shader = CompileShader(device: device, source: shaderSource);
 
             var queryDescription = new D3D11_QUERY_DESC { Query = D3D11_QUERY.D3D11_QUERY_EVENT };
@@ -283,7 +283,7 @@ public sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable, IProbeK
     // A YUY2 view as R8G8B8A8 exposes each two-pixel macropixel as normalized Y0/U/Y1/V components at half width; an
     // NV12 texture answers an R8 view with its luma plane and an R8G8 view with its half-resolution chroma plane.
     private static (DXGI_FORMAT Surface, DXGI_FORMAT[] Views, string Shader) Kernel(string subtype, Win32CameraColorimetry colorimetry) => (subtype.ToUpperInvariant() switch {
-        "YUY2" => (DXGI_FORMAT.DXGI_FORMAT_YUY2, [DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM], ColorMath(colorimetry: colorimetry) + PackedColorKernel),
+        "YUY2" => (DXGI_FORMAT.DXGI_FORMAT_YUY2, [DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM], (ColorMath(colorimetry: colorimetry) + PackedColorKernel)),
         "NV12" => (DXGI_FORMAT.DXGI_FORMAT_NV12, [DXGI_FORMAT.DXGI_FORMAT_R8_UNORM, DXGI_FORMAT.DXGI_FORMAT_R8G8_UNORM], PlanarColorShader(colorimetry: colorimetry)),
         "L8" => (DXGI_FORMAT.DXGI_FORMAT_R8_UNORM, [DXGI_FORMAT.DXGI_FORMAT_R8_UNORM], InfraredShader),
         _ => throw new NotSupportedException(message: $"no GPU conversion kernel for the native camera subtype '{subtype}'"),
@@ -291,9 +291,11 @@ public sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable, IProbeK
 
     public bool IsStarted => (m_targets.Length != 0);
     public int TargetCount => m_targets.Length;
+
     ID3D11DeviceContext* IProbeKernelDevice.Context => m_context;
     ID3D11Device* IProbeKernelDevice.Device => m_device;
     ID3D11Device1* IProbeKernelDevice.Device1 => m_device1;
+
     /// <summary>Gets the shader-resource view over the most recent conversion.</summary>
     public nint OutputView => ((nint)m_outputSrv);
     /// <summary>Gets the shader-resource view over the conversion kept by <see cref="ConvertPrevious"/>.</summary>
@@ -302,7 +304,6 @@ public sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable, IProbeK
     /// <summary>Holds the device's critical section across a multi-call sequence on its immediate context.</summary>
     public void Enter() => m_multithread->Enter();
     public void Leave() => m_multithread->Leave();
-
     public void AttachTargets(IReadOnlyList<nint> sharedTargetHandles) {
         if (IsStarted) {
             throw new InvalidOperationException(message: "camera converter targets are already attached");
@@ -388,13 +389,13 @@ public sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable, IProbeK
         var viewCount = checked((uint)m_inputViews.Length);
         var targetView = target;
 
-        m_context->CSSetShader(pComputeShader: m_shader, NumClassInstances: 0, ppClassInstances: null);
+        m_context->CSSetShader(NumClassInstances: 0, pComputeShader: m_shader, ppClassInstances: null);
 
         fixed (ID3D11ShaderResourceView** inputViews = m_inputViews) {
-            m_context->CSSetShaderResources(StartSlot: 0, NumViews: viewCount, ppShaderResourceViews: inputViews);
+            m_context->CSSetShaderResources(NumViews: viewCount, StartSlot: 0, ppShaderResourceViews: inputViews);
         }
 
-        m_context->CSSetUnorderedAccessViews(StartSlot: 0, NumUAVs: 1, ppUnorderedAccessViews: &targetView, pUAVInitialCounts: null);
+        m_context->CSSetUnorderedAccessViews(NumUAVs: 1, StartSlot: 0, pUAVInitialCounts: null, ppUnorderedAccessViews: &targetView);
         m_context->Dispatch(
             ThreadGroupCountX: checked((uint)((m_width + 7) / 8)),
             ThreadGroupCountY: checked((uint)((m_height + 7) / 8)),
@@ -408,9 +409,9 @@ public sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable, IProbeK
             noInputs[index] = null;
         }
 
-        m_context->CSSetShaderResources(StartSlot: 0, NumViews: viewCount, ppShaderResourceViews: noInputs);
-        m_context->CSSetUnorderedAccessViews(StartSlot: 0, NumUAVs: 1, ppUnorderedAccessViews: &noTarget, pUAVInitialCounts: null);
-        m_context->CSSetShader(pComputeShader: null, NumClassInstances: 0, ppClassInstances: null);
+        m_context->CSSetShaderResources(NumViews: viewCount, StartSlot: 0, ppShaderResourceViews: noInputs);
+        m_context->CSSetUnorderedAccessViews(NumUAVs: 1, StartSlot: 0, pUAVInitialCounts: null, ppUnorderedAccessViews: &noTarget);
+        m_context->CSSetShader(NumClassInstances: 0, pComputeShader: null, ppClassInstances: null);
     }
 
     public void Dispose() {
@@ -481,7 +482,7 @@ public sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable, IProbeK
                         : Marshal.PtrToStringUTF8(((nint)errors->GetBufferPointer()), checked((int)errors->GetBufferSize()))
                     );
 
-                    throw new COMException(message: $"camera conversion shader compilation failed: {message}", errorCode: result.Value);
+                    throw new COMException(errorCode: result.Value, message: $"camera conversion shader compilation failed: {message}");
                 }
             }
 
@@ -497,6 +498,7 @@ public sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable, IProbeK
             Release(value: errors);
         }
     }
+
     /// <summary>Composes the conversion shader for a native subtype under a colorimetry.</summary>
     public static string Shader(string subtype, Win32CameraColorimetry colorimetry) => Kernel(colorimetry: colorimetry, subtype: subtype).Shader;
     /// <summary>Compiles the conversion shader for a native subtype under a colorimetry, throwing on a compiler refusal.</summary>
@@ -505,6 +507,7 @@ public sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable, IProbeK
 
         Release(value: code);
     }
+
     private static string ColorMath(Win32CameraColorimetry colorimetry) {
         var conversion = colorimetry.Resolve();
         var range = ((Win32YuvRange.Limited == conversion.Range) ? LimitedRangeMath : FullRangeMath);
@@ -517,7 +520,7 @@ public sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable, IProbeK
         var horizontalOffset = (conversion.ChromaHorizontallyCosited ? "0.0" : "0.5");
         var verticalOffset = (conversion.ChromaVerticallyCosited ? "0.0" : "0.5");
 
-        return (ColorMath(colorimetry: colorimetry) + $"static const float2 ChromaOffset = float2({horizontalOffset}, {verticalOffset});\n\n" + PlanarColorKernel);
+        return ((ColorMath(colorimetry: colorimetry) + $"static const float2 ChromaOffset = float2({horizontalOffset}, {verticalOffset});\n\n") + PlanarColorKernel);
     }
     private static ID3D10Multithread* ProtectMultithreaded(ID3D11Device* device) {
         var iid = ID3D10Multithread.IID_Guid;

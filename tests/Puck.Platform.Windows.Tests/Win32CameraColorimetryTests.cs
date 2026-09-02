@@ -15,19 +15,19 @@ public sealed class Win32CameraColorimetryTests {
     }
     [Fact]
     public void Explicit_metadata_selects_matrix_range_and_siting() {
-        var conversion = new Win32CameraColorimetry(Matrix: 2u, NominalRange: 1u, ChromaSiting: 0x6u).Resolve();
+        var conversion = new Win32CameraColorimetry(ChromaSiting: 0x6u, Matrix: 2u, NominalRange: 1u).Resolve();
 
         Assert.Equal(expected: Win32YuvMatrix.Bt601, actual: conversion.Matrix);
         Assert.Equal(expected: Win32YuvRange.Full, actual: conversion.Range);
         Assert.True(condition: conversion.ChromaHorizontallyCosited);
         Assert.True(condition: conversion.ChromaVerticallyCosited);
     }
-    [Theory]
     [InlineData(3u, 2u, 0u)]
     [InlineData(1u, 3u, 0u)]
     [InlineData(1u, 2u, 0x10u)]
+    [Theory]
     public void Unsupported_metadata_refuses_gpu_conversion(uint matrix, uint range, uint siting) {
-        var colorimetry = new Win32CameraColorimetry(Matrix: matrix, NominalRange: range, ChromaSiting: siting);
+        var colorimetry = new Win32CameraColorimetry(ChromaSiting: siting, Matrix: matrix, NominalRange: range);
 
         _ = Assert.Throws<NotSupportedException>(testCode: () => colorimetry.Resolve());
     }
@@ -35,24 +35,24 @@ public sealed class Win32CameraColorimetryTests {
     [SupportedOSPlatform("windows10.0.19041")]
     public void Shader_selection_honors_colorimetry_and_chroma_siting() {
         var shader = Win32D3D11CameraFrameConverter.Shader(
-            colorimetry: new Win32CameraColorimetry(Matrix: 2u, NominalRange: 1u, ChromaSiting: 0x6u),
+            colorimetry: new Win32CameraColorimetry(ChromaSiting: 0x6u, Matrix: 2u, NominalRange: 1u),
             subtype: "NV12"
         );
 
-        Assert.Contains(expectedSubstring: "1.402 * v", actualString: shader, comparisonType: StringComparison.Ordinal);
-        Assert.Contains(expectedSubstring: "float2(0.0, 0.0)", actualString: shader, comparisonType: StringComparison.Ordinal);
-        Assert.DoesNotContain(expectedSubstring: "1.5748 * v", actualString: shader, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(actualString: shader, comparisonType: StringComparison.Ordinal, expectedSubstring: "1.402 * v");
+        Assert.Contains(actualString: shader, comparisonType: StringComparison.Ordinal, expectedSubstring: "float2(0.0, 0.0)");
+        Assert.DoesNotContain(actualString: shader, comparisonType: StringComparison.Ordinal, expectedSubstring: "1.5748 * v");
     }
-    [Theory]
-    [SupportedOSPlatform("windows10.0.19041")]
     [InlineData("YUY2", 0u, 0u, 0u)]
     [InlineData("YUY2", 2u, 1u, 0u)]
     [InlineData("NV12", 0u, 0u, 0u)]
     [InlineData("NV12", 1u, 2u, 0x6u)]
     [InlineData("L8", 0u, 0u, 0u)]
+    [SupportedOSPlatform("windows10.0.19041")]
+    [Theory]
     public void Every_generated_kernel_compiles(string subtype, uint matrix, uint range, uint siting) {
         Win32D3D11CameraFrameConverter.ValidateShader(
-            colorimetry: new Win32CameraColorimetry(Matrix: matrix, NominalRange: range, ChromaSiting: siting),
+            colorimetry: new Win32CameraColorimetry(ChromaSiting: siting, Matrix: matrix, NominalRange: range),
             subtype: subtype
         );
     }

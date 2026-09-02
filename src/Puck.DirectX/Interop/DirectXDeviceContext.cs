@@ -263,7 +263,6 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
 
         DrainDebugMessages();
     }
-
     /// <summary>Surfaces any Direct3D 12 debug-layer messages accumulated since the last drain to the console, then
     /// clears them. A no-op when the debug layer / info queue is unavailable (the default; opt in with
     /// <c>PUCK_D3D12_DEBUG</c>). Also called at the end of <see cref="WaitIdle"/>; callers that no longer drain the
@@ -306,7 +305,6 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
 
         infoQueue->ClearStoredMessages();
     }
-
     /// <summary>Recreates the device, command queue, and idle fence IN PLACE after a device removal — preserving this
     /// instance's identity so the published <c>IGpuDeviceContext</c> capability (and every node that resolved it) stays
     /// valid; they rebuild their own device-derived resources. The old objects are released WITHOUT a GPU drain (the

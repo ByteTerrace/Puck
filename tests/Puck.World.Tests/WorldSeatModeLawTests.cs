@@ -15,10 +15,10 @@ namespace Puck.World.Tests;
 /// </summary>
 public sealed class WorldSeatModeLawTests {
     private const string FamilyName = "camera";
+    private const string FlyingGroup = "freeCam";
     private const string OffState = "seat";
     private const string OnState = "free";
     private const string RestingGroup = "resting";
-    private const string FlyingGroup = "freeCam";
 
     private static WorldSeatModeFamily Family(string defaultState = OffState) => new(
         Name: FamilyName,
@@ -54,7 +54,7 @@ public sealed class WorldSeatModeLawTests {
                         new BindingChordDefinition(Group: FlyingGroup, Page: new BindingPageDefinition(Id: "flying-base", Entries: [])),
                     ],
                     Contexts: [
-                        new BindingContextDefinition(Family: FamilyName, State: OnState, Group: FlyingGroup),
+                        new BindingContextDefinition(Family: FamilyName, Group: FlyingGroup, State: OnState),
                     ]
                 )
             ),
@@ -66,7 +66,7 @@ public sealed class WorldSeatModeLawTests {
         var bindings = new WorldSeatBindings(definition: DocumentWithFamily(family: Family()));
 
         for (var slot = 0; (slot < WorldSeatBindings.SeatCount); slot++) {
-            Assert.Equal(expected: OffState, actual: bindings.ModeState(slot: slot, family: FamilyName));
+            Assert.Equal(expected: OffState, actual: bindings.ModeState(family: FamilyName, slot: slot));
         }
     }
     [Fact]
@@ -75,14 +75,14 @@ public sealed class WorldSeatModeLawTests {
 
         Assert.Equal(expected: RestingGroup, actual: bindings.PageView(slot: 0).Group);
 
-        bindings.SetContextState(slot: 0, family: FamilyName, state: OnState);
+        bindings.SetContextState(family: FamilyName, slot: 0, state: OnState);
 
-        Assert.Equal(expected: OnState, actual: bindings.ModeState(slot: 0, family: FamilyName));
+        Assert.Equal(expected: OnState, actual: bindings.ModeState(family: FamilyName, slot: 0));
         Assert.Equal(expected: FlyingGroup, actual: bindings.PageView(slot: 0).Group);
 
-        bindings.SetContextState(slot: 0, family: FamilyName, state: OffState);
+        bindings.SetContextState(family: FamilyName, slot: 0, state: OffState);
 
-        Assert.Equal(expected: OffState, actual: bindings.ModeState(slot: 0, family: FamilyName));
+        Assert.Equal(expected: OffState, actual: bindings.ModeState(family: FamilyName, slot: 0));
         Assert.Equal(expected: RestingGroup, actual: bindings.PageView(slot: 0).Group);
     }
     // SetContextState's own gate admits any state text once the FAMILY is declared — validating a state token
@@ -93,19 +93,19 @@ public sealed class WorldSeatModeLawTests {
     public void SetContextState_TakesAnyStateTextForAKnownFamily_ValidationIsTheCallersJob() {
         var bindings = new WorldSeatBindings(definition: DocumentWithFamily(family: Family()));
 
-        bindings.SetContextState(slot: 0, family: FamilyName, state: "not-a-declared-state");
+        bindings.SetContextState(family: FamilyName, slot: 0, state: "not-a-declared-state");
 
-        Assert.Equal(expected: "not-a-declared-state", actual: bindings.ModeState(slot: 0, family: FamilyName));
+        Assert.Equal(expected: "not-a-declared-state", actual: bindings.ModeState(family: FamilyName, slot: 0));
 
         // Control: a state the family DOES declare takes effect identically.
-        bindings.SetContextState(slot: 0, family: FamilyName, state: OnState);
+        bindings.SetContextState(family: FamilyName, slot: 0, state: OnState);
 
-        Assert.Equal(expected: OnState, actual: bindings.ModeState(slot: 0, family: FamilyName));
+        Assert.Equal(expected: OnState, actual: bindings.ModeState(family: FamilyName, slot: 0));
     }
     [Fact]
     public void TryResolveMode_StatesList_IsWhatACallerValidatesATokenAgainst() {
         var bindings = new WorldSeatBindings(definition: DocumentWithFamily(family: Family()));
-        var family = bindings.TryResolveMode(slot: 0, family: FamilyName)!;
+        var family = bindings.TryResolveMode(family: FamilyName, slot: 0)!;
 
         Assert.DoesNotContain(collection: family.States, filter: state => (state.Name == "not-a-declared-state"));
         // Control: the declared states ARE present, by name.
@@ -116,28 +116,27 @@ public sealed class WorldSeatModeLawTests {
     public void SetContextState_UndeclaredFamily_IsIgnored() {
         var bindings = new WorldSeatBindings(definition: DocumentWithFamily(family: Family()));
 
-        bindings.SetContextState(slot: 0, family: "no-such-family", state: OnState);
+        bindings.SetContextState(family: "no-such-family", slot: 0, state: OnState);
 
-        Assert.Null(@object: bindings.ModeState(slot: 0, family: "no-such-family"));
-        Assert.Null(@object: bindings.TryResolveMode(slot: 0, family: "no-such-family"));
+        Assert.Null(@object: bindings.ModeState(family: "no-such-family", slot: 0));
+        Assert.Null(@object: bindings.TryResolveMode(family: "no-such-family", slot: 0));
 
         // Control: the declared family accepts the identical state value.
-        bindings.SetContextState(slot: 0, family: FamilyName, state: OnState);
+        bindings.SetContextState(family: FamilyName, slot: 0, state: OnState);
 
-        Assert.Equal(expected: OnState, actual: bindings.ModeState(slot: 0, family: FamilyName));
+        Assert.Equal(expected: OnState, actual: bindings.ModeState(family: FamilyName, slot: 0));
     }
     [Fact]
     public void TryResolveMode_ReturnsTheDeclaredFamilyAndStates() {
         var bindings = new WorldSeatBindings(definition: DocumentWithFamily(family: Family()));
 
-        var resolved = bindings.TryResolveMode(slot: 0, family: FamilyName);
+        var resolved = bindings.TryResolveMode(family: FamilyName, slot: 0);
 
         Assert.NotNull(@object: resolved);
         Assert.Equal(expected: 2, actual: resolved!.States.Count);
-        Assert.Contains(collection: resolved.States, filter: state => (state.Name == OffState) && (state.Target is null));
-        Assert.Contains(collection: resolved.States, filter: state => (state.Name == OnState) && (state.Target == "camera"));
+        Assert.Contains(collection: resolved.States, filter: state => ((state.Name == OffState) && (state.Target is null)));
+        Assert.Contains(collection: resolved.States, filter: state => ((state.Name == OnState) && (state.Target == "camera")));
     }
-
     // Validator laws: seatModes name/state rules, each a denied document beside a one-value-different control.
     [Fact]
     public void FamilyName_CollidingWithABuiltInFamily_RefusesByName() {

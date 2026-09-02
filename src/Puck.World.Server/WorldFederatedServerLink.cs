@@ -13,7 +13,7 @@ internal sealed class WorldFederatedServerLink(WorldRemoteAuthority authority) :
             Console.Error.WriteLine(value: $"[world.authority unavailable: body:{bodyIndex} input/submission held ({reason})]");
         }
     }
-    private (WorldTcpWireFormat.DownstreamKind Kind, byte[] Body)? Submit(int bodyIndex, WorldSubmissionPayload payload) {
+    private (WorldTcpWireFormat.DownstreamKind Kind, ReadOnlyMemory<byte> Body)? Submit(int bodyIndex, WorldSubmissionPayload payload) {
         if (!m_authority.TryCredential(
             bodyIndex: bodyIndex,
             mobility: out var mobility,
@@ -60,17 +60,17 @@ internal sealed class WorldFederatedServerLink(WorldRemoteAuthority authority) :
 
         _ = m_unavailableBodies.Remove(item: bodyIndex);
 
-        using var input = new MemoryStream(
-            response.Body,
-            writable: false
+        // A Completion body is one whole downstream frame, decoded in place over the response's own buffer.
+        return (WorldTcpWireFormat.TryDecodeDownstream(
+            body: out var completionBody,
+            frame: response.Body,
+            kind: out var completionKind
+        )
+            ? (completionKind, completionBody)
+            : null
         );
-
-        return WorldTcpWireFormat.TryReadDownstreamAsync(
-            ct: default,
-            stream: input
-        ).GetAwaiter().GetResult();
     }
-    private (WorldTcpWireFormat.DownstreamKind Kind, byte[] Body)? SubmitAny(WorldSubmissionPayload payload) => Submit(
+    private (WorldTcpWireFormat.DownstreamKind Kind, ReadOnlyMemory<byte> Body)? SubmitAny(WorldSubmissionPayload payload) => Submit(
         bodyIndex: -1,
         payload: payload
     );
@@ -101,7 +101,7 @@ internal sealed class WorldFederatedServerLink(WorldRemoteAuthority authority) :
             return;
         }
         if (!WorldTcpWireFormat.TryReadResult(
-            body: reply.Value.Body,
+            body: reply.Value.Body.Span,
             kind: reply.Value.Kind,
             reason: out var reason,
             result: out var result
@@ -113,10 +113,10 @@ internal sealed class WorldFederatedServerLink(WorldRemoteAuthority authority) :
             return;
         }
 
-        completion((result as WorldSubmissionResult.Query)?.Answer ?? new QueryAnswer(
+        completion(((result as WorldSubmissionResult.Query)?.Answer ?? new QueryAnswer(
             Refused: true,
             Text: $"remote authority returned unsupported completion {reply.Value.Kind} for a query"
-        ));
+        )));
     }
     // The one abstract member every fire-and-forget Submit* interface default forwards to. A forwarded submission
     // routes by BODY, never by principal (the credential IS the authority — see TryCredential); Command/Designation
@@ -163,33 +163,33 @@ internal sealed class WorldFederatedServerLink(WorldRemoteAuthority authority) :
 
         if (reply is null) {
             completion(new SessionReply(
-                false,
-                -1,
-                string.Empty,
-                "remote transfer credential is unavailable"
+                Accepted: false,
+                AssignedIndex: -1,
+                Reason: "remote transfer credential is unavailable",
+                RosterEcho: string.Empty
             ));
             return;
         }
         if (!WorldTcpWireFormat.TryReadResult(
-            body: reply.Value.Body,
+            body: reply.Value.Body.Span,
             kind: reply.Value.Kind,
             reason: out var reason,
             result: out var result
         )) {
             completion(new SessionReply(
-                false,
-                -1,
-                string.Empty,
-                reason
+                Accepted: false,
+                AssignedIndex: -1,
+                Reason: reason,
+                RosterEcho: string.Empty
             ));
             return;
         }
 
-        completion((result as WorldSubmissionResult.Session)?.Reply ?? new SessionReply(
+        completion(((result as WorldSubmissionResult.Session)?.Reply ?? new SessionReply(
             false,
             -1,
             string.Empty,
             $"remote authority returned unsupported completion {reply.Value.Kind} for a session request"
-        ));
+        )));
     }
 }

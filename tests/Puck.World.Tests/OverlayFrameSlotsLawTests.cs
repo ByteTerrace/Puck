@@ -12,10 +12,9 @@ namespace Puck.World.Tests;
 public sealed class OverlayFrameSlotsLawTests {
     [Fact]
     public void AuthoringFrameSourceCapacityMatchesTheRuntimeSlotTable() => Assert.Equal(
-        expected: WorldHudCapacity.MaxFrameSources,
-        actual: OverlayFrameSlots.SlotCount
+        actual: OverlayFrameSlots.SlotCount,
+        expected: WorldHudCapacity.MaxFrameSources
     );
-
     [Fact]
     public void PassThroughWaitsBeforeRetiringTheCurrentlyBoundLease() {
         var events = new List<string>();
@@ -26,10 +25,9 @@ public sealed class OverlayFrameSlotsLawTests {
 
         slots.RetireAllAfter(fence: fence);
 
-        Assert.Equal(expected: ["wait", "release:41"], actual: events);
+        Assert.Equal(actual: events, expected: ["wait", "release:41"]);
         Assert.Equal(expected: 0, actual: slots.BoundCount);
     }
-
     [Fact]
     public void NoContentAfterBeginFrameWaitsThenRetiresPendingAndNewLeases() {
         var events = new List<string>();
@@ -42,10 +40,9 @@ public sealed class OverlayFrameSlotsLawTests {
 
         slots.RetireAllAfter(fence: fence);
 
-        Assert.Equal(expected: ["wait", "release:11", "release:12"], actual: events);
+        Assert.Equal(actual: events, expected: ["wait", "release:11", "release:12"]);
         Assert.Equal(expected: 0, actual: slots.BoundCount);
     }
-
     [Fact]
     public void OverlayNodeEmptyInnerFrame_WaitsBeforeRetiringItsBoundLease() {
         var events = new List<string>();
@@ -60,10 +57,9 @@ public sealed class OverlayFrameSlotsLawTests {
         var result = node.ProduceFrame(context: default);
 
         Assert.True(condition: result.IsEmpty);
-        Assert.Equal(expected: ["wait", "release:31"], actual: events);
+        Assert.Equal(actual: events, expected: ["wait", "release:31"]);
         Assert.Equal(expected: 0, actual: FrameSlots(node: node).BoundCount);
     }
-
     [Fact]
     public void OverlayNodeNoContentAfterBeginFrame_WaitsBeforeRetiringItsPendingLease() {
         var events = new List<string>();
@@ -84,20 +80,18 @@ public sealed class OverlayFrameSlotsLawTests {
 
         var result = node.ProduceFrame(context: default);
 
-        Assert.Equal(expected: inner, actual: result);
-        Assert.Equal(expected: ["wait", "release:32"], actual: events);
+        Assert.Equal(actual: result, expected: inner);
+        Assert.Equal(actual: events, expected: ["wait", "release:32"]);
         Assert.Equal(expected: 0, actual: FrameSlots(node: node).BoundCount);
     }
-
-    [Theory]
     [InlineData(OverlayFrameExit.NoInnerFrame, false)]
     [InlineData(OverlayFrameExit.NoOverlayContent, false)]
     [InlineData(OverlayFrameExit.DeviceLost, true)]
+    [Theory]
     public void OnlyDeviceLossRetiresImmediately(OverlayFrameExit exit, bool expected) => Assert.Equal(
         expected: expected,
         actual: OverlayFrameRetirementPolicy.RetiresImmediately(exit: exit)
     );
-
     [Fact]
     public void OverlayNodeDeviceLoss_RetiresItsHeldLeaseWithoutWaitingOnTheFence() {
         var events = new List<string>();
@@ -111,10 +105,9 @@ public sealed class OverlayFrameSlotsLawTests {
 
         node.OnDeviceLost();
 
-        Assert.Equal(expected: ["release:51"], actual: events);
+        Assert.Equal(actual: events, expected: ["release:51"]);
         Assert.Equal(expected: 0, actual: FrameSlots(node: node).BoundCount);
     }
-
     [Fact]
     public void DeviceLossRetiresEveryHeldLeaseWithoutWaitingOnTheFence() {
         var events = new List<string>();
@@ -126,10 +119,9 @@ public sealed class OverlayFrameSlotsLawTests {
 
         slots.RetireAll();
 
-        Assert.Equal(expected: ["release:21", "release:22"], actual: events);
+        Assert.Equal(actual: events, expected: ["release:21", "release:22"]);
         Assert.Equal(expected: 0, actual: slots.BoundCount);
     }
-
     [Fact]
     public void ADistinctNinthSourceSetsTheCapacitySignalWithoutAcquiringIt() {
         var events = new List<string>();
@@ -152,25 +144,25 @@ public sealed class OverlayFrameSlotsLawTests {
 
     private static UnifiedOverlayNode BuildNode(List<string> events, IRenderNode inner) => new(
         capacity: new OverlayCapacity(
-            Seats: 0,
-            HudPanels: 0,
-            HudElementsPerPanel: 0,
-            HudSeatPanelsPerSeat: 0,
-            HudElementsPerSeatPanel: 0,
             BindingBarMaxBanks: 0,
-            BindingBarMaxSlotsPerBank: 0,
             BindingBarMaxModifiers: 0,
+            BindingBarMaxSlotsPerBank: 0,
+            HudElementsPerPanel: 0,
+            HudElementsPerSeatPanel: 0,
+            HudPanels: 0,
+            HudSeatPanelsPerSeat: 0,
             MarkerMaxChipsPerSeat: 0,
+            Seats: 0,
             WheelMaxRings: 0,
             WheelMaxSectorsPerRing: 0
         ),
         fragmentBytecode: ReadOnlyMemory<byte>.Empty,
         glyphs: CreateGlyphs(
-            atlasCellWidth: 1,
             atlasCellHeight: 1,
+            atlasCellWidth: 1,
             distanceRange: 1f,
-            packedSdf: [0u],
-            glyphCount: 1
+            glyphCount: 1,
+            packedSdf: [0u]
         ),
         height: 1,
         inner: inner,
@@ -198,29 +190,24 @@ public sealed class OverlayFrameSlotsLawTests {
         vertexBytecode: ReadOnlyMemory<byte>.Empty,
         width: 1
     );
-
     [UnsafeAccessor(UnsafeAccessorKind.Constructor)]
     private static extern OverlayGlyphSdfPack CreateGlyphs(int atlasCellWidth, int atlasCellHeight, float distanceRange, uint[] packedSdf, int glyphCount);
-
     [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "m_frameSlots")]
     private static extern ref OverlayFrameSlots FrameSlots(UnifiedOverlayNode node);
-
     [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "m_frameFence")]
     private static extern ref IGpuSubmissionFence? FrameFence(UnifiedOverlayNode node);
 
     private sealed class RecordingFence(List<string> events) : IGpuSubmissionFence {
         public void Dispose() { }
-
         public void Wait() => events.Add(item: "wait");
     }
-
     private sealed class RecordingFrameSources(List<string> events) : IOverlayFrameSources {
         public int AcquisitionCount { get; private set; }
 
         public bool TryAcquire(int key, out OverlayFrameLease lease) {
             AcquisitionCount++;
             lease = new OverlayFrameLease(
-                ImageViewHandle: key + 1,
+                ImageViewHandle: (key + 1),
                 Release: token => events.Add(item: $"release:{token}"),
                 ReleaseToken: key
             );
@@ -228,7 +215,6 @@ public sealed class OverlayFrameSlotsLawTests {
             return true;
         }
     }
-
     // Only ReleaseGpuResources' unconditional DeviceHandle read needs a real instance (the null-service fields
     // this suite's nodes carry are never exercised by an early-exit or device-loss path).
     private sealed class FixedDeviceContext : IGpuDeviceContext {
@@ -237,7 +223,6 @@ public sealed class OverlayFrameSlotsLawTests {
 
         public void WaitIdle() { }
     }
-
     private sealed class FixedRenderNode(Surface surface) : IRenderNode {
         public NodeDescriptor Descriptor { get; } = new(
             Name: "overlay-law-inner",
@@ -245,7 +230,6 @@ public sealed class OverlayFrameSlotsLawTests {
         );
 
         public void Dispose() { }
-
         public Surface ProduceFrame(in FrameContext context) => surface;
     }
 }

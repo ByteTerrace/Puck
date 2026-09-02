@@ -9,7 +9,6 @@ namespace Puck.Platform.Probes;
 /// <param name="Changed">Whether this result differs from the previous <see cref="ProbeAxisConditioner.Step"/>
 /// call's result — the caller's signal to capture it as a fresh input, never captured on an unchanged repeat.</param>
 public readonly record struct ProbeAxisSample(FixedQ4816 Value, FixedQ4816 Confidence, bool Expired, bool Changed);
-
 /// <summary>
 /// Compiles a <see cref="ProbeAxisPolicy"/> into a per-tick conditioning step from one <see cref="ProbeReading"/>
 /// channel to a <see cref="ProbeAxisSample"/> — the whole policy an axis binding row reduces to: map the channel's
@@ -27,7 +26,6 @@ public struct ProbeAxisConditioner {
     private bool m_active;
     private bool m_hasSmoothed;
     private FixedQ4816 m_smoothed;
-
     private bool m_hasEmitted;
     private bool m_lastExpired;
     private FixedQ4816 m_lastValue;
@@ -96,7 +94,7 @@ public struct ProbeAxisConditioner {
             var gated = (m_active ? normalized : FixedQ4816.Zero);
 
             m_smoothed = Smooth(gated: gated);
-            value = Quantize(value: m_smoothed, quantumRaw: m_quantumRaw);
+            value = Quantize(quantumRaw: m_quantumRaw, value: m_smoothed);
             confidence = reading.Confidence;
         }
 
@@ -112,7 +110,7 @@ public struct ProbeAxisConditioner {
         m_lastValue = value;
         m_lastConfidence = confidence;
 
-        return new ProbeAxisSample(Value: value, Confidence: confidence, Expired: expired, Changed: changed);
+        return new ProbeAxisSample(Changed: changed, Confidence: confidence, Expired: expired, Value: value);
     }
 
     /// <summary>Maps a raw channel value onto <c>[-1, 1]</c>: <paramref name="policy"/>'s neutral maps to zero, its
@@ -122,16 +120,16 @@ public struct ProbeAxisConditioner {
         if (raw >= policy.Neutral) {
             var span = (policy.Maximum - policy.Neutral);
 
-            return (span > FixedQ4816.Zero)
+            return ((span > FixedQ4816.Zero)
                 ? FixedQ4816.Clamp(value: ((raw - policy.Neutral) / span), minimum: FixedQ4816.Zero, maximum: FixedQ4816.One)
-                : FixedQ4816.Zero;
+                : FixedQ4816.Zero);
         }
 
         var lowerSpan = (policy.Neutral - policy.Minimum);
 
-        return (lowerSpan > FixedQ4816.Zero)
+        return ((lowerSpan > FixedQ4816.Zero)
             ? -FixedQ4816.Clamp(value: ((policy.Neutral - raw) / lowerSpan), minimum: FixedQ4816.Zero, maximum: FixedQ4816.One)
-            : FixedQ4816.Zero;
+            : FixedQ4816.Zero);
     }
     /// <summary>Updates the deadband's hysteresis state from a newly normalized value.</summary>
     private void Gate(FixedQ4816 normalized) {
@@ -161,7 +159,7 @@ public struct ProbeAxisConditioner {
     private static FixedQ4816 Quantize(FixedQ4816 value, long quantumRaw) {
         var raw = value.Value;
         var half = (quantumRaw / 2);
-        var offset = (raw >= 0L) ? half : -half;
+        var offset = ((raw >= 0L) ? half : -half);
         var quantized = (((raw + offset) / quantumRaw) * quantumRaw);
 
         quantized = Math.Clamp(value: quantized, min: FixedQ4816.NegativeOne.Value, max: FixedQ4816.One.Value);

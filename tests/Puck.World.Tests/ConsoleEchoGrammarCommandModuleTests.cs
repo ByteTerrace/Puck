@@ -42,9 +42,9 @@ public sealed class ConsoleEchoGrammarCommandModuleTests {
     [Fact]
     public void WorldUpdate_AuthoredSection_EchoesKeyValueFields() {
         var document = (Fixtures.BuildDocument() with {
-            Update = new WorldUpdateDefaults(Channel: "stable", CacheRoot: "cache", CheckIntervalSeconds: 3600, KeepVersions: 2),
+            Update = new WorldUpdateDefaults(CacheRoot: "cache", Channel: "stable", CheckIntervalSeconds: 3600, KeepVersions: 2),
         });
-        using var row = HostRow.Build(name: "boot", definition: document);
+        using var row = HostRow.Build(definition: document, name: "boot");
         var registry = new CommandRegistry(modules: [new WorldUpdateCommandModule(authority: new FakeConsoleAuthority(instance: row.Instance))]);
 
         var result = registry.Submit(line: "world.update");
@@ -67,7 +67,7 @@ public sealed class ConsoleEchoGrammarCommandModuleTests {
             Kinds: [
                 new WorldGroupKind(
                     Name: "party",
-                    Roles: [new WorldGroupRole(Name: "leader", Capabilities: [WorldCapability.Drive])],
+                    Roles: [new WorldGroupRole(Capabilities: [WorldCapability.Drive], Name: "leader")],
                     OwnershipPolicy: WorldGroupOwnershipPolicy.LeaderDecides,
                     Lifetime: WorldGroupLifetime.Ephemeral,
                     EvictionPolicy: WorldGroupEvictionPolicy.Remove,
@@ -79,7 +79,7 @@ public sealed class ConsoleEchoGrammarCommandModuleTests {
             ],
             Ownership: [
                 new WorldOwnership(
-                    Subject: new OwnershipSubject(Kind: OwnershipSubjectKind.Group, Id: "alpha"),
+                    Subject: new OwnershipSubject(Id: "alpha", Kind: OwnershipSubjectKind.Group),
                     Owner: new OwnershipOwner(Kind: OwnershipOwnerKind.Principal, Principal: WorldPrincipal.Seat(slot: 1))
                 ),
             ]

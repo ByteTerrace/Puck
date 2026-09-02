@@ -15,15 +15,14 @@ public sealed class RowScopedSubjectCodecLawTests {
     /// map rather than a cast.</summary>
     private const byte RetiredTableWireValue = 8;
 
-    [Theory]
     [InlineData("piece-nw")]
     [InlineData("slot-nw")]
+    [Theory]
     public void RowScopedSubjectsRoundTripWithTheirId(string id) {
         Assert.Equal(actual: RoundTrip(subject: GrantSubject.Creation(id: id)), expected: GrantSubject.Creation(id: id));
         Assert.Equal(actual: RoundTrip(subject: GrantSubject.Placement(id: id)), expected: GrantSubject.Placement(id: id));
         Assert.Equal(actual: RoundTrip(subject: GrantSubject.Adjacency(name: id)), expected: GrantSubject.Adjacency(name: id));
     }
-
     [Fact]
     public void RetiredSubjectWireValueRefuses_WhileItsSuccessorsDecode() {
         var placement = EncodeGrant(subject: GrantSubject.Placement(id: "slot-nw"));

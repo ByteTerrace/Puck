@@ -13,7 +13,6 @@ public static class PostStageFilters {
         b: tierFilter,
         comparisonType: StringComparison.OrdinalIgnoreCase
     ));
-
     /// <summary>Returns <see langword="true"/> when <paramref name="nameFilter"/> is absent, or is contained in
     /// <paramref name="stage"/>'s <see cref="IPostStage{TContext}.Name"/> case-insensitively.</summary>
     /// <param name="stage">The stage being considered.</param>

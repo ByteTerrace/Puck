@@ -4,7 +4,6 @@ namespace Puck.Maths.Tests;
 
 internal static partial class Oracles {
     private static readonly BigInteger TwoTo32 = (BigInteger.One << 32);
-
     // The two constants Pcg3dLatticeNoise.Pcg3d's LCG step multiplies and adds by.
     private static readonly BigInteger Pcg3dLcgMultiplier = 1664525;
     private static readonly BigInteger Pcg3dLcgIncrement = 1013904223;

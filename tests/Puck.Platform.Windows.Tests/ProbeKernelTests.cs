@@ -189,7 +189,7 @@ public sealed class ProbeKernelTests {
         Assert.InRange(actual: reading.OutputSlot, low: 0, high: (targets.Length - 1));
         Assert.Equal(expected: reading.OutputSlot, actual: slots.LatestSlot);
 
-        const double ExpectedCoverage = ((double)(SquareSize * SquareSize)) / (FrameWidth * FrameHeight);
+        const double ExpectedCoverage = (((double)(SquareSize * SquareSize)) / (FrameWidth * FrameHeight));
 
         Assert.InRange(actual: ((double)reading[0]), low: -1.0, high: 1.0);
         Assert.InRange(actual: ((double)reading[1]), low: -1.0, high: 1.0);
@@ -246,7 +246,7 @@ public sealed class ProbeKernelTests {
         Assert.Equal(expected: FaerieChannelCount, actual: reading.ChannelCount);
         Assert.InRange(actual: reading.OutputSlot, low: 0, high: (targets.Length - 1));
 
-        const double ExpectedCoverage = ((double)(SquareSize * SquareSize)) / (FrameWidth * FrameHeight);
+        const double ExpectedCoverage = (((double)(SquareSize * SquareSize)) / (FrameWidth * FrameHeight));
 
         Assert.InRange(actual: ((double)reading[0]), low: -1.0, high: 1.0);
         Assert.InRange(actual: ((double)reading[1]), low: -1.0, high: 1.0);
@@ -255,7 +255,7 @@ public sealed class ProbeKernelTests {
         // journey defaults to 0, so the light never enters the (unbound) painting.
         Assert.Equal(expected: 0.0, actual: ((double)reading[4]));
 
-        var expectedConfidence = Math.Min(1.0, (ExpectedCoverage / 0.02));
+        var expectedConfidence = Math.Min(val1: 1.0, val2: (ExpectedCoverage / 0.02));
 
         Assert.InRange(actual: ((double)reading.Confidence), low: (expectedConfidence - 0.01), high: (expectedConfidence + 0.01));
 
@@ -280,13 +280,13 @@ public sealed class ProbeKernelTests {
 
         Assert.True(condition: paintingRing.Slots.TryReserveWriteSlot(slot: out var paintingWriteSlot));
 
-        var greenPixels = new byte[FrameWidth * FrameHeight * 4];
+        var greenPixels = new byte[((FrameWidth * FrameHeight) * 4)];
 
         for (var index = 0; (index < greenPixels.Length); index += 4) {
             greenPixels[index] = 0;
-            greenPixels[index + 1] = 255;
-            greenPixels[index + 2] = 0;
-            greenPixels[index + 3] = 255;
+            greenPixels[(index + 1)] = 255;
+            greenPixels[(index + 2)] = 0;
+            greenPixels[(index + 3)] = 255;
         }
 
         bench.UploadPixels(target: paintingRing.Targets[paintingWriteSlot], pixels: greenPixels);
@@ -358,11 +358,11 @@ public sealed class ProbeKernelTests {
         // Inside the bright square (the subject occludes the painting): ordinary subject shading, not green.
         AssertNotGreenDominant(pixels: pixels, x: (SquareLeft + (SquareSize / 2)), y: (SquareTop + (SquareSize / 2)));
         // A wall pixel outside the quad: no painting, no subject — ambient dominates, so it reads roughly neutral.
-        AssertRoughlyNeutral(pixels: pixels, x: 8, y: (FrameHeight - 8), tolerance: 40);
+        AssertRoughlyNeutral(pixels: pixels, tolerance: 40, x: 8, y: (FrameHeight - 8));
     }
-    [Theory]
     [InlineData(1.0f, 1.0)]
     [InlineData(0.5f, 0.0)]
+    [Theory]
     public void Shipped_faerie_kernel_reports_portal_from_journey(float journey, double expectedPortal) {
         using var bench = KernelBench.TryCreate();
 
@@ -416,8 +416,8 @@ public sealed class ProbeKernelTests {
         const int RectangleWidth = 16;
         const int RectangleHeight = 16;
 
-        var lit = bench.CreateFrame(pixels: BuildRectangle(left: RectangleLeft, top: RectangleTop, width: RectangleWidth, height: RectangleHeight, inside: [255, 255, 255, 255], outside: [0, 0, 0, 255]));
-        var unlit = bench.CreateFrame(pixels: BuildRectangle(left: RectangleLeft, top: RectangleTop, width: RectangleWidth, height: RectangleHeight, inside: [0, 0, 0, 255], outside: [0, 0, 0, 255]));
+        var lit = bench.CreateFrame(pixels: BuildRectangle(height: RectangleHeight, inside: [255, 255, 255, 255], left: RectangleLeft, outside: [0, 0, 0, 255], top: RectangleTop, width: RectangleWidth));
+        var unlit = bench.CreateFrame(pixels: BuildRectangle(height: RectangleHeight, inside: [0, 0, 0, 255], left: RectangleLeft, outside: [0, 0, 0, 255], top: RectangleTop, width: RectangleWidth));
         var ring = new ProbeReadingRing();
         var request = new ProbeKernelRequest(
             KernelSource: File.ReadAllText(path: KernelPath(name: "ir-marker")),
@@ -439,9 +439,9 @@ public sealed class ProbeKernelTests {
         var centreV = ((RectangleTop + (RectangleHeight / 2.0)) / FrameHeight);
         var halfU = ((RectangleWidth / 2.0) / FrameWidth);
         var halfV = ((RectangleHeight / 2.0) / FrameHeight);
-        var expected = ExpectedMarkerCorners(centreU: centreU, centreV: centreV, majorAxisU: 1.0, majorAxisV: 0.0, halfMajor: halfU, halfMinor: halfV);
+        var expected = ExpectedMarkerCorners(centreU: centreU, centreV: centreV, halfMajor: halfU, halfMinor: halfV, majorAxisU: 1.0, majorAxisV: 0.0);
 
-        AssertMarkerCorners(reading: reading, expected: expected, tolerance: 0.06);
+        AssertMarkerCorners(expected: expected, reading: reading, tolerance: 0.06);
 
         Assert.InRange(actual: ((double)reading.Confidence), low: 0.99, high: 1.0);
     }
@@ -459,8 +459,8 @@ public sealed class ProbeKernelTests {
         const double HalfMinor = 0.1;
         var angle = (Math.PI / 6.0);
 
-        var lit = bench.CreateFrame(pixels: BuildRotatedRectangle(centreU: CentreU, centreV: CentreV, halfExtentMajor: HalfMajor, halfExtentMinor: HalfMinor, angleRadians: angle, inside: [255, 255, 255, 255], outside: [0, 0, 0, 255]));
-        var unlit = bench.CreateFrame(pixels: BuildRotatedRectangle(centreU: CentreU, centreV: CentreV, halfExtentMajor: HalfMajor, halfExtentMinor: HalfMinor, angleRadians: angle, inside: [0, 0, 0, 255], outside: [0, 0, 0, 255]));
+        var lit = bench.CreateFrame(pixels: BuildRotatedRectangle(angleRadians: angle, centreU: CentreU, centreV: CentreV, halfExtentMajor: HalfMajor, halfExtentMinor: HalfMinor, inside: [255, 255, 255, 255], outside: [0, 0, 0, 255]));
+        var unlit = bench.CreateFrame(pixels: BuildRotatedRectangle(angleRadians: angle, centreU: CentreU, centreV: CentreV, halfExtentMajor: HalfMajor, halfExtentMinor: HalfMinor, inside: [0, 0, 0, 255], outside: [0, 0, 0, 255]));
         var ring = new ProbeReadingRing();
         var request = new ProbeKernelRequest(
             KernelSource: File.ReadAllText(path: KernelPath(name: "ir-marker")),
@@ -481,11 +481,11 @@ public sealed class ProbeKernelTests {
         // The rectangle's own local axes are known by construction; feeding the major axis's uv-space direction
         // through the kernel's documented corner rule (non-negative u component) gives the expected corners
         // without assuming which physical corner ends up "top-left".
-        var majorAxisU = Math.Cos(angle);
-        var majorAxisV = Math.Sin(angle);
-        var expected = ExpectedMarkerCorners(centreU: CentreU, centreV: CentreV, majorAxisU: majorAxisU, majorAxisV: majorAxisV, halfMajor: HalfMajor, halfMinor: HalfMinor);
+        var majorAxisU = Math.Cos(d: angle);
+        var majorAxisV = Math.Sin(a: angle);
+        var expected = ExpectedMarkerCorners(centreU: CentreU, centreV: CentreV, halfMajor: HalfMajor, halfMinor: HalfMinor, majorAxisU: majorAxisU, majorAxisV: majorAxisV);
 
-        AssertMarkerCorners(reading: reading, expected: expected, tolerance: 0.08);
+        AssertMarkerCorners(expected: expected, reading: reading, tolerance: 0.08);
 
         Assert.InRange(actual: ((double)reading.Confidence), low: 0.99, high: 1.0);
     }
@@ -516,9 +516,9 @@ public sealed class ProbeKernelTests {
 
     private static void AssertBlobCentroid(in ProbeReading reading) {
         // Centroid of the square: u = (48 + 4) / 64, v = (8 + 4) / 64 → x = 2u - 1, y = 1 - 2v (y-up).
-        const double ExpectedX = (((SquareLeft + (SquareSize / 2.0)) / FrameWidth) * 2.0) - 1.0;
-        const double ExpectedY = 1.0 - (((SquareTop + (SquareSize / 2.0)) / FrameHeight) * 2.0);
-        const double ExpectedCoverage = ((double)(SquareSize * SquareSize)) / (FrameWidth * FrameHeight);
+        const double ExpectedX = ((((SquareLeft + (SquareSize / 2.0)) / FrameWidth) * 2.0) - 1.0);
+        const double ExpectedY = (1.0 - (((SquareTop + (SquareSize / 2.0)) / FrameHeight) * 2.0));
+        const double ExpectedCoverage = (((double)(SquareSize * SquareSize)) / (FrameWidth * FrameHeight));
 
         Assert.Equal(expected: 4, actual: reading.ChannelCount);
         Assert.InRange(actual: ((double)reading[0]), low: (ExpectedX - 0.01), high: (ExpectedX + 0.01));
@@ -528,7 +528,7 @@ public sealed class ProbeKernelTests {
         Assert.InRange(actual: ((double)reading.Confidence), low: 0.99, high: 1.0);
     }
     private static byte[] BuildSquare(byte[] inside, byte[] outside) {
-        var pixels = new byte[FrameWidth * FrameHeight * 4];
+        var pixels = new byte[((FrameWidth * FrameHeight) * 4)];
 
         for (var y = 0; (y < FrameHeight); y++) {
             for (var x = 0; (x < FrameWidth); x++) {
@@ -609,19 +609,19 @@ public sealed class ProbeKernelTests {
         return block;
     }
     private static string KernelPath(string name, [CallerFilePath] string callerFilePath = "") {
-        var repositoryRoot = Path.GetFullPath(path: Path.Combine(Path.GetDirectoryName(path: callerFilePath)!, "..", ".."));
+        var repositoryRoot = Path.GetFullPath(path: Path.Combine(path1: Path.GetDirectoryName(path: callerFilePath)!, path2: "..", path3: ".."));
 
         return Path.Combine(repositoryRoot, "src", "Puck.Shaders", "Assets", "Probes", $"{name}.hlsl");
     }
     private static int Luminance(byte[] pixels, int x, int y) {
         var offset = (((y * FrameWidth) + x) * 4);
 
-        return (pixels[offset] + pixels[offset + 1] + pixels[offset + 2]);
+        return ((pixels[offset] + pixels[(offset + 1)]) + pixels[(offset + 2)]);
     }
     private static (int R, int G, int B) Pixel(byte[] pixels, int x, int y) {
         var offset = (((y * FrameWidth) + x) * 4);
 
-        return (pixels[offset], pixels[offset + 1], pixels[offset + 2]);
+        return (pixels[offset], pixels[(offset + 1)], pixels[(offset + 2)]);
     }
     private static void AssertGreenDominant(byte[] pixels, int x, int y) {
         var (r, g, b) = Pixel(pixels: pixels, x: x, y: y);
@@ -642,7 +642,7 @@ public sealed class ProbeKernelTests {
         Assert.True(condition: ((max - min) <= tolerance), userMessage: $"expected roughly neutral at ({x},{y}): r={r} g={g} b={b}");
     }
     private static byte[] BuildRectangle(int left, int top, int width, int height, byte[] inside, byte[] outside) {
-        var pixels = new byte[FrameWidth * FrameHeight * 4];
+        var pixels = new byte[((FrameWidth * FrameHeight) * 4)];
 
         for (var y = 0; (y < FrameHeight); y++) {
             for (var x = 0; (x < FrameWidth); x++) {
@@ -659,9 +659,9 @@ public sealed class ProbeKernelTests {
     // centred at (centreU, centreV) and rotated angleRadians about that centre: a pixel is inside when its centre,
     // expressed in the rectangle's own axes (the inverse rotation), falls within the half extents on both axes.
     private static byte[] BuildRotatedRectangle(double centreU, double centreV, double halfExtentMajor, double halfExtentMinor, double angleRadians, byte[] inside, byte[] outside) {
-        var pixels = new byte[FrameWidth * FrameHeight * 4];
-        var cos = Math.Cos(angleRadians);
-        var sin = Math.Sin(angleRadians);
+        var pixels = new byte[((FrameWidth * FrameHeight) * 4)];
+        var cos = Math.Cos(d: angleRadians);
+        var sin = Math.Sin(a: angleRadians);
         var centreX = (centreU * FrameWidth);
         var centreY = (centreV * FrameHeight);
         var halfMajorPx = (halfExtentMajor * FrameWidth);
@@ -674,7 +674,7 @@ public sealed class ProbeKernelTests {
                 var localMajor = ((dx * cos) + (dy * sin));
                 var localMinor = ((-dx * sin) + (dy * cos));
                 var offset = (((y * FrameWidth) + x) * 4);
-                var source = (((Math.Abs(localMajor) <= halfMajorPx) && (Math.Abs(localMinor) <= halfMinorPx)) ? inside : outside);
+                var source = (((Math.Abs(value: localMajor) <= halfMajorPx) && (Math.Abs(value: localMinor) <= halfMinorPx)) ? inside : outside);
 
                 source.CopyTo(array: pixels, index: offset);
             }
@@ -686,7 +686,7 @@ public sealed class ProbeKernelTests {
     // ("points right"), axisMinor is its +90-degree rotation in uv space ("points down"), and the four corners are
     // centre +/- (major half-extent) +/- (minor half-extent), converted to frame coordinates.
     private static MarkerCorners ExpectedMarkerCorners(double centreU, double centreV, double majorAxisU, double majorAxisV, double halfMajor, double halfMinor) {
-        var length = Math.Sqrt((majorAxisU * majorAxisU) + (majorAxisV * majorAxisV));
+        var length = Math.Sqrt(d: ((majorAxisU * majorAxisU) + (majorAxisV * majorAxisV)));
         var axisMajorU = (majorAxisU / length);
         var axisMajorV = (majorAxisV / length);
 
@@ -701,12 +701,12 @@ public sealed class ProbeKernelTests {
         var axV = (axisMajorV * halfMajor);
         var ayU = (axisMinorU * halfMinor);
         var ayV = (axisMinorV * halfMinor);
-        var topLeft = ToFrameCoordinates(u: (centreU - axU - ayU), v: (centreV - axV - ayV));
-        var topRight = ToFrameCoordinates(u: (centreU + axU - ayU), v: (centreV + axV - ayV));
-        var bottomRight = ToFrameCoordinates(u: (centreU + axU + ayU), v: (centreV + axV + ayV));
-        var bottomLeft = ToFrameCoordinates(u: (centreU - axU + ayU), v: (centreV - axV + ayV));
+        var topLeft = ToFrameCoordinates(u: ((centreU - axU) - ayU), v: ((centreV - axV) - ayV));
+        var topRight = ToFrameCoordinates(u: ((centreU + axU) - ayU), v: ((centreV + axV) - ayV));
+        var bottomRight = ToFrameCoordinates(u: ((centreU + axU) + ayU), v: ((centreV + axV) + ayV));
+        var bottomLeft = ToFrameCoordinates(u: ((centreU - axU) + ayU), v: ((centreV - axV) + ayV));
 
-        return new MarkerCorners(TopLeft: topLeft, TopRight: topRight, BottomRight: bottomRight, BottomLeft: bottomLeft);
+        return new MarkerCorners(BottomLeft: bottomLeft, BottomRight: bottomRight, TopLeft: topLeft, TopRight: topRight);
     }
     private static (double X, double Y) ToFrameCoordinates(double u, double v) => (((u * 2.0) - 1.0), (1.0 - (v * 2.0)));
     private static void AssertMarkerCorners(in ProbeReading reading, MarkerCorners expected, double tolerance) {
@@ -721,8 +721,9 @@ public sealed class ProbeKernelTests {
         AssertClose(expected: expected.BottomLeft.Y, actual: ((double)reading[7]), tolerance: tolerance);
     }
     private static void AssertClose(double expected, double actual, double tolerance) {
-        Assert.InRange(actual: actual, low: (expected - tolerance), high: (expected + tolerance));
+        Assert.InRange(actual: actual, high: (expected + tolerance), low: (expected - tolerance));
     }
+
     // Frame-coordinate corners in image order (top-left, top-right, bottom-right, bottom-left) — mirrors the
     // channel layout ir-marker.hlsl writes.
     private readonly record struct MarkerCorners((double X, double Y) TopLeft, (double X, double Y) TopRight, (double X, double Y) BottomRight, (double X, double Y) BottomLeft);

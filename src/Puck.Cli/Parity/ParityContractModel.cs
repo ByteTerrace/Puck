@@ -21,7 +21,6 @@ internal sealed record ParityContract(
         return Stations.TryGetValue(key: FallbackStationName, value: out resolved!);
     }
 }
-
 /// <summary>One station's gate floors and per-tile pixel thresholds.</summary>
 /// <param name="CensusFloor">Minimum pixel count required, on both sides, for each named material index. A
 /// material absent from a side's census reads as zero.</param>

@@ -11,7 +11,7 @@ internal static class ClosedBitset {
     /// <summary>Determines whether <paramref name="ordinal"/>'s bit is set.</summary>
     public static bool Contains(ulong bits, int ordinal) => ((bits & (1UL << ordinal)) != 0UL);
     /// <summary>Returns <paramref name="bits"/> with <paramref name="ordinal"/>'s bit additionally set.</summary>
-    public static ulong With(ulong bits, int ordinal) => (bits | (1UL << ordinal));
+    public static ulong With(ulong bits, int ordinal) => bits | (1UL << ordinal);
 }
 /// <summary>The name-based describe/parse half of <see cref="ClosedBitset"/>, for a mask whose ordinals are a small
 /// closed <typeparamref name="TEnum"/> vocabulary rather than a bare channel/register index.</summary>

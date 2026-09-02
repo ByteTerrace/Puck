@@ -614,15 +614,14 @@ public sealed class OverlayFrameBuilder {
         m_scratch[(offset + 1)] = Pack(value: (y * m_inverseHeight));
         m_scratch[(offset + 2)] = Pack(value: (w * m_inverseWidth));
         m_scratch[(offset + 3)] = Pack(value: (h * m_inverseHeight));
-        m_scratch[(offset + 4)] = (4u
+        m_scratch[(offset + 4)] = 4u
             | (((uint)slot) << 4)
             | (mirror
             ? (1u << 12)
             : 0u
             )
             | (((uint)fit) << 13)
-            | (((uint)(slotB + 1)) << 16)
-        );
+            | (((uint)(slotB + 1)) << 16);
         m_scratch[(offset + 6)] = Pack(value: radius);
         m_scratch[(offset + 7)] = Pack(value: alpha);
 

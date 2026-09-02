@@ -12,18 +12,16 @@ public sealed class BindingIconReferentialIntegrityLawTests {
 
     [Fact]
     public void ModifierIconTypoRefusesWhileDeclaredIconPasses() =>
-        AssertDoorRefusesTypo(door: "modifier", document: ModifierDocument);
-
+        AssertDoorRefusesTypo(document: ModifierDocument, door: "modifier");
     [Fact]
     public void PageIconTypoRefusesWhileDeclaredIconPasses() =>
-        AssertDoorRefusesTypo(door: "page", document: PageDocument);
-
+        AssertDoorRefusesTypo(document: PageDocument, door: "page");
     [Fact]
     public void WheelPresentationRowsRefuseUnknownWrongKindAndMissingSectorIdentity() {
-        var unknown = WithBindingDocument(document: WheelPresentationDocument(labelRow: "state.noSuch", iconRow: null, sectorId: "jump"));
-        var numeric = WithBindingDocument(document: WheelPresentationDocument(labelRow: null, iconRow: "state.numericPresentation", sectorId: "jump"));
-        var missingId = WithBindingDocument(document: WheelPresentationDocument(labelRow: "state.presentation", iconRow: null, sectorId: null));
-        var admitted = WithBindingDocument(document: WheelPresentationDocument(labelRow: "state.presentation", iconRow: "state.presentation", sectorId: "jump"));
+        var unknown = WithBindingDocument(document: WheelPresentationDocument(iconRow: null, labelRow: "state.noSuch", sectorId: "jump"));
+        var numeric = WithBindingDocument(document: WheelPresentationDocument(iconRow: "state.numericPresentation", labelRow: null, sectorId: "jump"));
+        var missingId = WithBindingDocument(document: WheelPresentationDocument(iconRow: null, labelRow: "state.presentation", sectorId: null));
+        var admitted = WithBindingDocument(document: WheelPresentationDocument(iconRow: "state.presentation", labelRow: "state.presentation", sectorId: "jump"));
 
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: unknown, neighbours: null, reason: out var unknownReason));
         Assert.Contains(actualString: unknownReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "wheels row 0.labelRow 'state.noSuch' names no declared state row");
@@ -43,7 +41,6 @@ public sealed class BindingIconReferentialIntegrityLawTests {
         Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: $"icon '{TypoIcon}' names no row in icons.icons");
         Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: admitted, neighbours: null, reason: out var controlReason), userMessage: controlReason);
     }
-
     private static WorldDefinition WithBindingDocument(BindingProfileDocument document) => Fixtures.BuildDocument() with {
         StateRaw = new WorldStateSection(World: [
             new WorldStateRow(Name: WorldCellName.Parse(candidate: "presentation"), Kind: CellKind.Text, Capacity: 8, Cells: [new WorldStateCell(Key: WorldCellName.Parse(candidate: "jump"), Text: KnownIcon)]),
@@ -54,7 +51,6 @@ public sealed class BindingIconReferentialIntegrityLawTests {
         ),
         BindingOverlaysRaw = [new WorldBindingOverlay(Id: "icon-door-law", Document: document)],
     };
-
     private static BindingChordDefinition RestingPage(string? icon = null, IReadOnlyList<BindingPageEntryDefinition>? entries = null) => new(
         Group: "play",
         Page: new BindingPageDefinition(Id: "base", Entries: (entries ?? []), Icon: icon)

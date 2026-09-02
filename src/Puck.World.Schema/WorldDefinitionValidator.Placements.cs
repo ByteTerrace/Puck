@@ -922,12 +922,12 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{path}.motion.dynamics is empty — name a dynamics row or omit it.");
                 } else {
                     RequireDeclared(
-                        value: lookDynamics,
                         declaredSet: dynamicsNames,
-                        path: path,
+                        errors: errors,
                         field: "motion.dynamics",
+                        path: path,
                         rowNoun: "dynamics",
-                        errors: errors
+                        value: lookDynamics
                     );
                 }
             }
@@ -953,12 +953,12 @@ public static partial class WorldDefinitionValidator {
                     }
 
                     RequireDeclared(
-                        value: partRow,
                         declaredSet: dynamicsNames,
-                        path: $"{path}.motion.partDynamics['{partId}']",
+                        errors: errors,
                         field: "",
+                        path: $"{path}.motion.partDynamics['{partId}']",
                         rowNoun: "dynamics",
-                        errors: errors
+                        value: partRow
                     );
                 }
             }
@@ -1184,8 +1184,8 @@ public static partial class WorldDefinitionValidator {
                     // so the analytic ceiling does not describe what it costs.
                     if (!requiresField) {
                         var copies = WorldPlacementStamp.MaterializedCopyCeiling(
-                            placement: placement,
-                            ceiling: (WorldPlacementPolicy.MaxSolidPlacementColliders + 1L)
+                            ceiling: (WorldPlacementPolicy.MaxSolidPlacementColliders + 1L),
+                            placement: placement
                         );
                         var contribution = CreationStampLattice.MultiplySaturated(
                             ceiling: (WorldPlacementPolicy.MaxSolidPlacementColliders + 1L),
@@ -1249,8 +1249,8 @@ public static partial class WorldDefinitionValidator {
                     definition: definition,
                     errors: errors,
                     inhabit: inhabit,
-                    kitsByName: kitsByName,
                     kitNames: kitNames,
+                    kitsByName: kitsByName,
                     lookNames: lookNames,
                     path: $"{path}.inhabit",
                     placement: placement
@@ -1284,8 +1284,8 @@ public static partial class WorldDefinitionValidator {
                     : 1
                 );
                 var contribution = checked((WorldPlacementStamp.MaterializedCopyCeiling(
-                    placement: placement,
-                    ceiling: (SdfProgramBuilder.MaxInstances + 1L)
+                    ceiling: (SdfProgramBuilder.MaxInstances + 1L),
+                    placement: placement
                 ) * perCopyInstances));
                 var previousInstanceCount = staticPlacementInstanceCount;
 
@@ -1391,22 +1391,22 @@ public static partial class WorldDefinitionValidator {
             if (placement.Contribution is { } slotContribution) {
                 ValidateContribution(
                     contribution: slotContribution,
-                    prototypeIds: prototypeIds,
                     definition: definition,
                     errors: errors,
                     path: $"{path}.contribution",
-                    placement: placement
+                    placement: placement,
+                    prototypeIds: prototypeIds
                 );
             }
 
             // The RESPOND facet: an ordered, state-driven prototype swap (see WorldPlacementResponse).
             if (placement.Respond is not null) {
                 ValidatePlacementResponse(
-                    placement: placement,
                     definition: definition,
-                    prototypeIds: prototypeIds,
+                    errors: errors,
+                    placement: placement,
                     placementPath: path,
-                    errors: errors
+                    prototypeIds: prototypeIds
                 );
             }
         }

@@ -478,7 +478,7 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
         ((DirectXCommandBufferState)GCHandle.FromIntPtr(value: commandBufferHandle).Target!);
     private static D3D12_RESOURCE_STATES ToResourceState(GpuImageLayout layout) =>
         // General and Undefined both resolve to the compute read/write state (the kernel's working layout).
-        DirectXGpuFormats.TryToResourceState(layout: layout, resourceState: out var resourceState)
+        (DirectXGpuFormats.TryToResourceState(layout: layout, resourceState: out var resourceState)
             ? resourceState
-            : D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+            : D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 }

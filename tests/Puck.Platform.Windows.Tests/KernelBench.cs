@@ -38,7 +38,7 @@ internal sealed unsafe class KernelBench : IDisposable {
 
         var description = adapter->GetDesc1();
 
-        AdapterLuid = ((((long)description.AdapterLuid.HighPart) << 32) | description.AdapterLuid.LowPart);
+        AdapterLuid = (((long)description.AdapterLuid.HighPart) << 32) | description.AdapterLuid.LowPart;
     }
 
     // Packed the same way Win32D3D11.FindAdapterByLuid matches it: (HighPart << 32) | LowPart.
@@ -106,8 +106,8 @@ internal sealed unsafe class KernelBench : IDisposable {
 
             fixed (byte* pixelData = pixels) {
                 var initialData = new D3D11_SUBRESOURCE_DATA {
-                    pSysMem = pixelData,
                     SysMemPitch = (FrameWidth * 4),
+                    pSysMem = pixelData,
                 };
 
                 m_device->CreateTexture2D(pDesc: &description, pInitialData: &initialData, ppTexture2D: &texture);
@@ -149,8 +149,8 @@ internal sealed unsafe class KernelBench : IDisposable {
                 Format = DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM,
                 SampleDesc = new DXGI_SAMPLE_DESC { Count = 1 },
                 Usage = D3D11_USAGE.D3D11_USAGE_DEFAULT,
-                BindFlags = (D3D11_BIND_FLAG.D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_FLAG.D3D11_BIND_UNORDERED_ACCESS),
-                MiscFlags = (D3D11_RESOURCE_MISC_FLAG.D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_FLAG.D3D11_RESOURCE_MISC_SHARED_NTHANDLE),
+                BindFlags = D3D11_BIND_FLAG.D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_FLAG.D3D11_BIND_UNORDERED_ACCESS,
+                MiscFlags = D3D11_RESOURCE_MISC_FLAG.D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_FLAG.D3D11_RESOURCE_MISC_SHARED_NTHANDLE,
             };
 
             m_device->CreateTexture2D(pDesc: &description, pInitialData: null, ppTexture2D: &texture);
@@ -199,7 +199,7 @@ internal sealed unsafe class KernelBench : IDisposable {
 
         publication.Configure(targetCount: slots);
 
-        return new SharedRing(targets: targets, handles: handles, slots: publication);
+        return new SharedRing(handles: handles, slots: publication, targets: targets);
     }
     /// <summary>Writes CPU pixel data into an already-created target texture (Default usage accepts
     /// <c>UpdateSubresource</c> without a staging round trip).</summary>
@@ -255,10 +255,10 @@ internal sealed unsafe class KernelBench : IDisposable {
             m_context->Map(pResource: ((ID3D11Resource*)staging), Subresource: 0, MapType: D3D11_MAP.D3D11_MAP_READ, MapFlags: 0, pMappedResource: &mapped);
 
             try {
-                var pixels = new byte[FrameWidth * FrameHeight * 4];
+                var pixels = new byte[((FrameWidth * FrameHeight) * 4)];
 
                 for (var y = 0; (y < FrameHeight); y++) {
-                    new ReadOnlySpan<byte>(((byte*)mapped.pData) + (y * mapped.RowPitch), (FrameWidth * 4)).CopyTo(destination: pixels.AsSpan(start: (y * FrameWidth * 4)));
+                    new ReadOnlySpan<byte>((((byte*)mapped.pData) + (y * mapped.RowPitch)), (FrameWidth * 4)).CopyTo(destination: pixels.AsSpan(start: ((y * FrameWidth) * 4)));
                 }
 
                 return pixels;
@@ -329,18 +329,22 @@ internal sealed unsafe class KernelBench : IDisposable {
     }
     private static void ThrowIfFailed(HRESULT hr, string operation) {
         if (hr.Value < 0) {
-            throw new COMException(message: $"{operation} failed", errorCode: hr.Value);
+            throw new COMException(errorCode: hr.Value, message: $"{operation} failed");
         }
     }
 
     public sealed class Frame(ID3D11Texture2D* texture, ID3D11ShaderResourceView* view) {
         public ID3D11Texture2D* Texture { get; } = texture;
+
         public nint View => ((nint)ViewPointer);
+
         public ID3D11ShaderResourceView* ViewPointer { get; } = view;
     }
     public sealed class SharedTarget(ID3D11Texture2D* texture, SafeFileHandle handle) {
         public SafeFileHandle Handle { get; } = handle;
+
         public nint SharedHandle => Handle.DangerousGetHandle();
+
         public ID3D11Texture2D* Texture { get; } = texture;
     }
     /// <summary>A shared ring created by <see cref="CreateSharedRing"/>: the targets in slot order (for

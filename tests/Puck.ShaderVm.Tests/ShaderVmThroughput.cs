@@ -37,7 +37,7 @@ public sealed class ShaderVmThroughput {
         _ = report.AppendLine(value: "layers   instr  stack  locals   ns/sample   scratch B/lane");
         _ = report.AppendLine(value: "------ ------- ------ ------- ----------- ---------------");
 
-        foreach (var layers in (int[])[1, 2, 4, 8, 16, 32]) {
+        foreach (var layers in ((int[])[1, 2, 4, 8, 16, 32])) {
             var program = Layered(layers: layers);
             var statistics = ShaderProgramStatistics.Measure(program: program);
 
@@ -52,7 +52,7 @@ public sealed class ShaderVmThroughput {
         _ = report.AppendLine(value: "interpreter demand (what the GPU must provision per lane)");
         _ = report.AppendLine(value: "-------------------------------------------------------------");
 
-        foreach (var (label, program) in ((string, ShaderProgram)[])[("sky (full)", SkyProgram.Compile()), ("stars only", Synthetic(kind: "stars")), ("clouds only", Synthetic(kind: "clouds"))]) {
+        foreach (var (label, program) in (((string, ShaderProgram)[])[("sky (full)", SkyProgram.Compile()), ("stars only", Synthetic(kind: "stars")), ("clouds only", Synthetic(kind: "clouds"))])) {
             var statistics = ShaderProgramStatistics.Measure(program: program);
 
             _ = report.AppendLine(value: $"{label,-26} stack={statistics.StackDepth,3}  locals={statistics.LocalCount,3}  branches={statistics.Branches,3}  path={statistics.LongestPath,5}");
@@ -66,12 +66,12 @@ public sealed class ShaderVmThroughput {
 
         _ = report.AppendLine(value: $"{"Add (absolute)",-26} {(baseline / 64d),8:F2}");
 
-        foreach (var op in (ShaderOp[])[ShaderOp.Multiply, ShaderOp.Swizzle, ShaderOp.Dot3, ShaderOp.Lerp, ShaderOp.Select, ShaderOp.SquareRoot, ShaderOp.Sine, ShaderOp.Exponential, ShaderOp.Power, ShaderOp.Hash3, ShaderOp.ValueNoise2]) {
+        foreach (var op in ((ShaderOp[])[ShaderOp.Multiply, ShaderOp.Swizzle, ShaderOp.Dot3, ShaderOp.Lerp, ShaderOp.Select, ShaderOp.SquareRoot, ShaderOp.Sine, ShaderOp.Exponential, ShaderOp.Power, ShaderOp.Hash3, ShaderOp.ValueNoise2])) {
             var cost = ((Nanoseconds(program: Chain(count: 64, op: op)) - baseline) / 64d);
 
             _ = report.AppendLine(value: $"{op,-26} {cost,8:F2}");
         }
-        foreach (var octaves in (int[])[1, 2, 4, 8]) {
+        foreach (var octaves in ((int[])[1, 2, 4, 8])) {
             var cost = ((Nanoseconds(program: Chain(count: 64, octaves: octaves, op: ShaderOp.Fbm2)) - baseline) / 64d);
 
             _ = report.AppendLine(value: $"{$"Fbm2 x{octaves}",-26} {cost,8:F2}");
@@ -82,6 +82,7 @@ public sealed class ShaderVmThroughput {
             path: Path.Combine(path1: directory!, path2: "throughput.txt")
         );
     }
+
     private static void Measure(string label, ShaderProgram program, StringBuilder report) {
         var nanoseconds = Nanoseconds(program: program);
         var perInstruction = (nanoseconds / program.InstructionCount);
@@ -126,7 +127,7 @@ public sealed class ShaderVmThroughput {
     private static Vector4 Evaluate(ShaderProgram program, int index, Vector4[] parameters) {
         var angle = (index * 0.001f);
         var direction = Vector3.Normalize(value: new Vector3(x: MathF.Cos(x: angle), y: MathF.Sin(x: (angle * 0.37f)), z: MathF.Sin(x: angle)));
-        var context = new ShaderContext(Coordinate: new Vector4(x: direction.X, y: direction.Y, z: direction.Z, w: 0f));
+        var context = new ShaderContext(Coordinate: new Vector4(w: 0f, x: direction.X, y: direction.Y, z: direction.Z));
 
         return ShaderInterpreter.Evaluate(context: in context, parameters: parameters, program: program);
     }
@@ -134,7 +135,7 @@ public sealed class ShaderVmThroughput {
     // the same shape built from Add isolates the operation's own cost from the accumulation around it.
     private static ShaderProgram Chain(ShaderOp op, int count, int octaves = 4) {
         var input = (ShaderMath.Saturate(value: ShaderExpression.Input(input: ShaderInput.Coordinate)) + ShaderExpression.Constant(value: 0.5f));
-        var operand = ((op == ShaderOp.Fbm2) ? checked((uint)octaves) : ((op == ShaderOp.Swizzle) ? ShaderIsa.PackSwizzle(x: 1, y: 2, z: 3, w: 0) : 0u));
+        var operand = ((op == ShaderOp.Fbm2) ? checked((uint)octaves) : ((op == ShaderOp.Swizzle) ? ShaderIsa.PackSwizzle(w: 0, x: 1, y: 2, z: 3) : 0u));
         var total = ShaderExpression.Constant(value: 0f);
 
         for (var step = 0; (step < count); step++) {
@@ -161,7 +162,7 @@ public sealed class ShaderVmThroughput {
         var color = SkyProgram.Build();
 
         for (var layer = 0; (layer < layers); layer++) {
-            var point = ((direction.Swizzle(x: 0, y: 2, z: 0, w: 2) * (1f + layer)) + ShaderExpression.Constant(value: (layer * 7.3f)));
+            var point = ((direction.Swizzle(w: 2, x: 0, y: 2, z: 0) * (1f + layer)) + ShaderExpression.Constant(value: (layer * 7.3f)));
             var density = ShaderMath.Fbm2(octaves: 4, position: ShaderMath.Seeded(position: point, seed: (4242u + ((uint)layer))));
             var mask = ShaderMath.SmoothStep(edge0: 0.55f, edge1: 0.85f, value: density);
 
@@ -195,7 +196,7 @@ public sealed class ShaderVmThroughput {
     // The star and cloud halves alone, reached through the same public surface the full program is built from.
     private static ShaderExpression StarsOnly(ShaderExpression direction) {
         var stars = ShaderExpression.Parameter(index: SkyParameters.Stars);
-        var cell = ShaderMath.Floor(value: (direction.Swizzle(x: 0, y: 1, z: 0, w: 1) * stars.X));
+        var cell = ShaderMath.Floor(value: (direction.Swizzle(w: 1, x: 0, y: 1, z: 0) * stars.X));
         var hash = ShaderMath.Hash3(value: ShaderMath.Seeded(position: cell, seed: 1337u));
         var unit = ShaderMath.Unit(value: hash);
         var second = ShaderMath.Unit(value: ShaderMath.Hash3(value: hash));
@@ -210,7 +211,7 @@ public sealed class ShaderVmThroughput {
     }
     private static ShaderExpression CloudsOnly(ShaderExpression direction) {
         var shape = ShaderExpression.Parameter(index: SkyParameters.CloudShape);
-        var point = (direction.Swizzle(x: 0, y: 2, z: 0, w: 2) / shape.Y);
+        var point = (direction.Swizzle(w: 2, x: 0, y: 2, z: 0) / shape.Y);
         var warp = ShaderMath.Fbm2(octaves: 4, position: ShaderMath.Seeded(position: point, seed: 0x9E3779B9u));
         var density = ShaderMath.Fbm2(octaves: 4, position: ShaderMath.Seeded(position: (point + warp), seed: 4242u));
 

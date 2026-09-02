@@ -101,8 +101,8 @@ public sealed class WorldSolidField : IContactField {
     public ContactResolution Resolve(ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) =>
         m_solver.Resolve(
             orientation: in orientation,
-            up: in up,
             position: ref position,
+            up: in up,
             velocity: ref velocity,
             volumes: volumes
         );
@@ -111,9 +111,9 @@ public sealed class WorldSolidField : IContactField {
         in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) =>
         m_solver.ResolveSweep(
             orientation: in orientation,
-            up: in up,
             position: ref position,
             previousPosition: in previousPosition,
+            up: in up,
             velocity: ref velocity,
             volumes: volumes
         );

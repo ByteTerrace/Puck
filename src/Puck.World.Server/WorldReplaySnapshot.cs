@@ -394,11 +394,13 @@ public sealed class WorldReplaySnapshot {
         tryDecode: WorldSubmissionCodec.TryDecodeCommand,
         what: "command"
     );
+
     // The one shape every fixed leaf codec's TryDecodeX follows: a span of bytes decodes to a T or names a
     // WorldCodecFailure. `value is null` is reachable only for the reference-typed leaves (WorldCommand,
     // WorldComposition, WorldMutation, WorldQuery, SessionRequest) — a defensive check against a codec that reports
     // success with no value, always false for the struct-typed leaves (WorldDesignation, WorldGrant).
     private delegate bool TryDecodeLeaf<T>(ReadOnlySpan<byte> bytes, out T? value, out WorldCodecFailure failure);
+
     private static T ReadLeaf<T>(BinaryReader reader, string what, TryDecodeLeaf<T> tryDecode) {
         var bytes = ReadLeafBytes(
             reader: reader,
@@ -660,9 +662,9 @@ public sealed class WorldReplaySnapshot {
     }
     private static WorldPrincipal ReadPrincipal(BinaryReader reader) {
         if (!WorldWireCodec.TryReadPrincipal(
-            reader: reader,
+            kindWire: out var wire,
             principal: out var principal,
-            kindWire: out var wire
+            reader: reader
         )) {
             throw new InvalidDataException(message: $"unknown .puckreplay {nameof(PrincipalKind)} wire value {wire}.");
         }
@@ -889,9 +891,11 @@ public sealed class WorldReplaySnapshot {
         what: "command",
         writer: writer
     );
+
     // The write-side twin of ReadLeaf: every fixed leaf codec's TryEncodeX turns a T into bytes or names a
     // WorldCodecFailure.
     private delegate bool TryEncodeLeaf<T>(T value, out byte[] bytes, out WorldCodecFailure failure);
+
     private static void WriteLeaf<T>(BinaryWriter writer, T value, string what, TryEncodeLeaf<T> tryEncode) {
         if (!tryEncode(value, out var bytes, out var failure)) {
             throw new WorldReplayCodecException(message: $"the canonical {what} leaf refused while writing .puckreplay: {failure}");

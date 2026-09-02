@@ -14,7 +14,6 @@ public enum WorldStateOwnershipLane : byte {
     /// <summary>One durable identity owns the state.</summary>
     Identity,
 }
-
 /// <summary>Identifies the storage shape selected by a compiled state descriptor.</summary>
 public enum WorldStateStorageShape : byte {
     /// <summary>The state is addressed as one scalar slot.</summary>
@@ -26,21 +25,20 @@ public enum WorldStateStorageShape : byte {
     /// <summary>The state is addressed as one scalar per lattice cell.</summary>
     Lattice,
 }
-
 /// <summary>Identifies the deterministic value domain selected by a compiled state descriptor.</summary>
 public enum WorldStateValueKind : byte {
     /// <summary>A whole signed integer within <see cref="WorldStateCapacity.MinIntCellValue"/> through
     /// <see cref="WorldStateCapacity.MaxIntCellValue"/>, the range every engine read can lift to fixed point.</summary>
-    Int = (byte)CellKind.Int,
+    Int = ((byte)CellKind.Int),
 
     /// <summary>A Q48.16 fixed-point value carried as raw deterministic bits.</summary>
-    Fixed = (byte)CellKind.Fixed,
+    Fixed = ((byte)CellKind.Fixed),
 
     /// <summary>A boolean value.</summary>
-    Bool = (byte)CellKind.Bool,
+    Bool = ((byte)CellKind.Bool),
 
     /// <summary>A bounded text value.</summary>
-    Text = (byte)CellKind.Text,
+    Text = ((byte)CellKind.Text),
 
     /// <summary>A per-body Q48.16 action-state counter.</summary>
     Counter = 4,
@@ -48,7 +46,6 @@ public enum WorldStateValueKind : byte {
     /// <summary>A per-body action-state duration stored in engine ticks.</summary>
     Timer,
 }
-
 /// <summary>Identifies one descriptor in the <see cref="WorldStateCatalog"/> that minted it.</summary>
 /// <remarks>Handles are bound to one catalog instance. A processor resolves a name during compilation, retains the
 /// handle while that catalog is current, and uses the catalog indexer during execution instead of repeating a string
@@ -60,12 +57,11 @@ public readonly record struct WorldStateHandle {
 
     internal WorldStateHandle(int ordinal, object catalogIdentity) {
         m_catalogIdentity = catalogIdentity;
-        m_encodedOrdinal = checked(ordinal + 1);
+        m_encodedOrdinal = checked((ordinal + 1));
     }
 
     /// <summary>Gets whether this handle was minted by a state catalog.</summary>
     public bool IsValid => (m_encodedOrdinal > 0);
-
     /// <summary>Gets the descriptor's stable ordinal in its catalog, or <c>-1</c> for the default invalid handle.</summary>
     public int Ordinal => (m_encodedOrdinal - 1);
 
@@ -74,7 +70,6 @@ public readonly record struct WorldStateHandle {
         objB: catalogIdentity
     );
 }
-
 /// <summary>Describes one authored state declaration after its ownership, storage, and value domains are compiled.</summary>
 /// <param name="Handle">The catalog-instance-relative typed handle for this declaration.</param>
 /// <param name="Name">The authored stable name.</param>
@@ -90,7 +85,6 @@ public readonly record struct WorldStateDescriptor(
     WorldStateValueKind ValueKind,
     int LaneOrdinal
 );
-
 /// <summary>Compiles a <see cref="WorldStateSection"/> into immutable typed descriptors and catalog-instance-relative
 /// handles. Descriptor ordinals are assigned deterministically in world, body, then identity document order.</summary>
 /// <remarks>The authored section remains the serialization source. This catalog is a runtime compiler product and
@@ -110,7 +104,6 @@ public sealed class WorldStateCatalog {
 
     /// <summary>Gets the compiled descriptors in stable handle order.</summary>
     public IReadOnlyList<WorldStateDescriptor> Descriptors => m_readOnlyDescriptors;
-
     /// <summary>Gets the number of compiled state declarations.</summary>
     public int Count => m_descriptors.Length;
 
@@ -119,8 +112,8 @@ public sealed class WorldStateCatalog {
     /// <returns>The compiled descriptor.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="handle"/> is invalid or outside this catalog.</exception>
     public WorldStateDescriptor this[WorldStateHandle handle] => (TryGetDescriptor(
-        handle: handle,
-        descriptor: out var descriptor
+        descriptor: out var descriptor,
+        handle: handle
     )
         ? descriptor
         : throw new ArgumentOutOfRangeException(
@@ -151,7 +144,7 @@ public sealed class WorldStateCatalog {
                 catalogIdentity: identity
             );
 
-            if (!handlesByLane[(int)ownership].TryAdd(
+            if (!handlesByLane[((int)ownership)].TryAdd(
                 key: name,
                 value: handle
             )) {
@@ -160,11 +153,11 @@ public sealed class WorldStateCatalog {
 
             descriptors.Add(item: new WorldStateDescriptor(
                 Handle: handle,
+                LaneOrdinal: laneOrdinal,
                 Name: name,
                 Ownership: ownership,
                 Storage: storage,
-                ValueKind: valueKind,
-                LaneOrdinal: laneOrdinal
+                ValueKind: valueKind
             ));
         }
 
@@ -208,7 +201,6 @@ public sealed class WorldStateCatalog {
             handlesByLane: handlesByLane
         );
     }
-
     /// <summary>Resolves an authored name once into a typed handle.</summary>
     /// <param name="lane">The ownership lane to search.</param>
     /// <param name="name">The authored stable name.</param>
@@ -224,12 +216,11 @@ public sealed class WorldStateCatalog {
             return false;
         }
 
-        return m_handlesByLane[(int)lane].TryGetValue(
+        return m_handlesByLane[((int)lane)].TryGetValue(
             key: name,
             value: out handle
         );
     }
-
     /// <summary>Resolves a validated state name once into a typed handle.</summary>
     /// <param name="lane">The ownership lane to search.</param>
     /// <param name="name">The validated authored name.</param>
@@ -240,7 +231,6 @@ public sealed class WorldStateCatalog {
         name: name.Value,
         handle: out handle
     );
-
     /// <summary>Attempts to read a descriptor by its catalog-instance-relative handle.</summary>
     /// <param name="handle">The handle to inspect.</param>
     /// <param name="descriptor">The descriptor on success; otherwise the default descriptor.</param>
@@ -284,13 +274,12 @@ public sealed class WorldStateCatalog {
 
         return true;
     }
-
     /// <summary>Determines without allocation whether an authored section still carries this catalog's shape.</summary>
     internal bool MatchesShape(WorldStateSection? section) {
         var descriptorIndex = 0;
 
         bool Match(string name, WorldStateOwnershipLane ownership, WorldStateStorageShape storage, WorldStateValueKind valueKind, int laneOrdinal) {
-            if ((uint)descriptorIndex >= (uint)m_descriptors.Length) {
+            if (((uint)descriptorIndex) >= ((uint)m_descriptors.Length)) {
                 return false;
             }
 
@@ -369,7 +358,6 @@ public sealed class WorldStateCatalog {
             );
         }
     }
-
     private static WorldStateValueKind FromCellKind(CellKind kind) => kind switch {
         CellKind.Int => WorldStateValueKind.Int,
         CellKind.Fixed => WorldStateValueKind.Fixed,
@@ -377,7 +365,6 @@ public sealed class WorldStateCatalog {
         CellKind.Text => WorldStateValueKind.Text,
         _ => throw new InvalidOperationException(message: $"Unknown state cell kind '{kind}'."),
     };
-
     private static bool MatchesActionLane(IReadOnlyList<ActionStateSlot> declarations, WorldStateOwnershipLane ownership, IReadOnlyList<WorldStateDescriptor> descriptors, ref int descriptorIndex) {
         for (var index = 0; (index < declarations.Count); index++) {
             if (declarations[index] is not { } declaration) {
@@ -387,12 +374,12 @@ public sealed class WorldStateCatalog {
             var valueKind = declaration.Kind switch {
                 ActionStateKind.Counter => WorldStateValueKind.Counter,
                 ActionStateKind.Timer => WorldStateValueKind.Timer,
-                _ => (WorldStateValueKind?)null,
+                _ => ((WorldStateValueKind?)null),
             };
 
             if (
                 (valueKind is not { } kind) ||
-                ((uint)descriptorIndex >= (uint)descriptors.Count)
+                (((uint)descriptorIndex) >= ((uint)descriptors.Count))
             ) {
                 return false;
             }
@@ -412,14 +399,13 @@ public sealed class WorldStateCatalog {
 
         return true;
     }
-
     private static bool TryFromCellKind(CellKind kind, out WorldStateValueKind valueKind) {
         switch (kind) {
             case CellKind.Int:
             case CellKind.Fixed:
             case CellKind.Bool:
             case CellKind.Text:
-                valueKind = (WorldStateValueKind)kind;
+                valueKind = ((WorldStateValueKind)kind);
 
                 return true;
             default:

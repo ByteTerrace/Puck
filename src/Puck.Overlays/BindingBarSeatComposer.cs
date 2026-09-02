@@ -60,8 +60,8 @@ public static class BindingBarSeatComposer {
         ArgumentNullException.ThrowIfNull(argument: isCommandHeld);
 
         var binding = FindButton(
-            view: activeView,
-            source: source
+            source: source,
+            view: activeView
         );
 
         return ((binding is not null) && isCommandHeld(binding.Command));
@@ -152,8 +152,8 @@ public static class BindingBarSeatComposer {
                 text: text
             );
             var binding = FindButton(
-                view: view,
-                source: source
+                source: source,
+                view: view
             );
             // A momentary press lights only on the live bank (isPressed is null for a wing). A latched toggle is a
             // fact about the seat, not the live page: it lights on every bank that binds it, judged against this

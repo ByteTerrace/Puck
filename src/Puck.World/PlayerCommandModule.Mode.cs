@@ -121,6 +121,7 @@ internal sealed partial class PlayerCommandModule {
         }
 
         var state = args[1].ToString();
+
         var (slot, error) = SeatCommandArgs.ResolveSlot(
             args: in args,
             at: 2,

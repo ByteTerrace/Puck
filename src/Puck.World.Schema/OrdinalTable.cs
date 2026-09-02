@@ -19,7 +19,6 @@ public sealed class OrdinalTable {
         ordinalByName: new Dictionary<string, int>(comparer: StringComparer.Ordinal),
         names: []
     );
-
     /// <summary>Gets the declared row count.</summary>
     public int Count => m_names.Length;
 
@@ -46,11 +45,10 @@ public sealed class OrdinalTable {
         }
 
         return new OrdinalTable(
-            ordinalByName: ordinalByName,
-            names: table
+            names: table,
+            ordinalByName: ordinalByName
         );
     }
-
     /// <summary>Gets the declared name at <paramref name="ordinal"/>.</summary>
     public string Name(int ordinal) => m_names[ordinal];
     /// <summary>Resolves a declared name to its ordinal.</summary>

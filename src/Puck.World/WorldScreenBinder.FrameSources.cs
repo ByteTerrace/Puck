@@ -86,7 +86,7 @@ internal sealed partial class WorldScreenBinder {
         var key = (source, seat);
 
         if (m_frameSourceReferences.TryGetValue(key: key, value: out var references)) {
-            m_frameSourceReferences[key] = checked(references + 1);
+            m_frameSourceReferences[key] = checked((references + 1));
 
             return;
         }
@@ -99,7 +99,7 @@ internal sealed partial class WorldScreenBinder {
                 // open imperatively here.
                 break;
             default:
-                DeclareFrameSource(source: source, seat: seat);
+                DeclareFrameSource(seat: seat, source: source);
 
                 break;
         }
@@ -170,6 +170,7 @@ internal sealed partial class WorldScreenBinder {
                 break;
         }
     }
+
     // Parks a camera view no frame source retains: it keeps rendering only while a screen or export still films it.
     private void ParkCameraView(string name) {
         if ((m_viewStack is null) || !m_cameraViews.TryGetValue(key: name, value: out var registration)) {
@@ -188,7 +189,7 @@ internal sealed partial class WorldScreenBinder {
         RefreshRateHz: Math.Max(val1: left.RefreshRateHz, val2: right.RefreshRateHz)
     );
     private void RetainProbeCameraDemandCore(WorldScreenSource.Camera camera, int contextSeat) {
-        var key = (camera.Seat ?? contextSeat, camera.Sensor);
+        var key = ((camera.Seat ?? contextSeat), camera.Sensor);
         var requested = (camera.Profile ?? WorldFeedProfile.Default);
 
         if (!m_probeCameraDemand.TryGetValue(key: key, value: out var demands)) {
@@ -199,7 +200,7 @@ internal sealed partial class WorldScreenBinder {
         demands.Add(item: requested);
     }
     private void ReleaseProbeCameraDemandCore(WorldScreenSource.Camera camera, int contextSeat) {
-        var key = (camera.Seat ?? contextSeat, camera.Sensor);
+        var key = ((camera.Seat ?? contextSeat), camera.Sensor);
 
         if (!m_probeCameraDemand.TryGetValue(key: key, value: out var demands)) {
             return;
@@ -263,7 +264,7 @@ internal sealed partial class WorldScreenBinder {
         WorldScreenSource.Camera camera,
         int fallbackSeat
     ) {
-        var key = (camera.Seat ?? fallbackSeat, camera.Sensor);
+        var key = ((camera.Seat ?? fallbackSeat), camera.Sensor);
         var requested = (camera.Profile ?? WorldFeedProfile.Default);
 
         demands[key] = (demands.TryGetValue(key: key, value: out var existing)
@@ -289,13 +290,13 @@ internal sealed partial class WorldScreenBinder {
                 continue;
             }
 
-            var requested = (
+            var requested = ((
                 (slot.DeclaredSource is WorldScreenSource.Camera declared) &&
                 ((declared.Seat ?? seat) == seat) &&
                 (declared.Sensor == sensor)
             )
                 ? (declared.Profile ?? WorldFeedProfile.Default)
-                : WorldFeedProfile.Default;
+                : WorldFeedProfile.Default);
             var key = (seat, sensor);
 
             m_cameraDemand[key] = (m_cameraDemand.TryGetValue(key: key, value: out var existing)
@@ -315,7 +316,7 @@ internal sealed partial class WorldScreenBinder {
 
         foreach (var entry in m_frameSourceReferences.Keys) {
             if (entry.Source is WorldScreenSource.Camera camera) {
-                MergeCameraDemand(demands: m_cameraDemand, camera: camera, fallbackSeat: entry.Seat);
+                MergeCameraDemand(camera: camera, demands: m_cameraDemand, fallbackSeat: entry.Seat);
             }
         }
 
@@ -327,7 +328,7 @@ internal sealed partial class WorldScreenBinder {
     // every demand entry is then ensured against whichever device the roster resolves it to.
     private void ReconcileCameraFeedsToDemand() {
         foreach (var device in m_cameraDeviceOrder) {
-            var seat = (m_roster.DeviceSlot(device: device.DeviceId) is { } slot ? PlayerRoster.DisplayNumber(slot: slot) : 0);
+            var seat = ((m_roster.DeviceSlot(device: device.DeviceId) is { } slot) ? PlayerRoster.DisplayNumber(slot: slot) : 0);
             // A slot can carry more than one camera at once (TryGetSeatDevice's own most-recently-assigned
             // tie-break exists precisely because PlayerRoster allows this) — so mapping to a demanding seat is not
             // enough to keep a feed open. Only the seat's RESOLVED device (the one TryFulfillCameraDemand/
@@ -372,6 +373,7 @@ internal sealed partial class WorldScreenBinder {
             _ = TryFulfillCameraDemand(seat: seat, sensor: sensor);
         }
     }
+
     /// <summary>Acquires the current frame for a previously-declared <see cref="WorldFrameSource"/> — the render-thread,
     /// per-frame counterpart of <see cref="DeclareFrameSource"/>. Reads the same shared feed a screen slot naming the
     /// identical source would (a camera seat/sensor, a named view, a probe id, or a standalone capture), so a HUD
@@ -431,6 +433,7 @@ internal sealed partial class WorldScreenBinder {
 
         return false;
     }
+
     // Standalone captures ride the same per-frame pull cadence a slot-owned capture does, from Publish (below), and
     // the same device-lost/dispose sweeps every other feed this binder owns gets.
     private void PublishFrameCaptures(IGpuDeviceContext deviceContext, IGpuComputeServices gpu) {

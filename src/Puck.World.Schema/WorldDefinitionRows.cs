@@ -10,7 +10,7 @@ public static class WorldDefinitionRows {
     private static T? Find<T>(IReadOnlyList<T>? rows, string name, Func<T, string> selector) {
         foreach (var row in (rows ?? [])) {
             if (
-                ((object?)row is not null) &&
+                (((object?)row) is not null) &&
                 string.Equals(
                 a: selector(row),
                 b: name,

@@ -474,9 +474,9 @@ internal sealed partial class PlayerCommandModule {
             description: "The left stick's movement pair (Axis2D, +Y forward / +X strafe right), CAMERA-framed and facing the way it moves — the seat rotates it by the rendered camera yaw and writes its direction to the FaceX/FaceZ roles before it reaches the wire, whatever frame the world declared on its channel rows (channels[].frame). Routed to the owning device's player each frame. A typed player.move <x> <y> injects one exact tick through this same router for automation and accessibility surfaces.",
             valueKind: CommandValueKind.Axis2D,
             handler: (context, args) => MoveRouter(
-                context: context,
                 args: args,
                 behavior: SeatMoveBehavior.FaceTravel,
+                context: context,
                 verb: MoveCommand
             )
         );
@@ -486,9 +486,9 @@ internal sealed partial class PlayerCommandModule {
             description: "An action movement pair (Axis2D, +Y forward / +X strafe right) that preserves body heading and follows live camera yaw every tick, so lateral input is a true strafe and holding forward while looking turns the trajectory. Standard binds the left gamepad stick here; player.move remains available for latched movement-facing control.",
             valueKind: CommandValueKind.Axis2D,
             handler: (context, args) => MoveRouter(
-                context: context,
                 args: args,
                 behavior: SeatMoveBehavior.Strafe,
+                context: context,
                 verb: MoveStrafeCommand
             )
         );
@@ -498,9 +498,9 @@ internal sealed partial class PlayerCommandModule {
             description: "A free-orbit look channel (Axis2D, +X looks right / +Y looks up) — camera only, routed to the owning device's player each frame. A typed player.look <x> <y> injects one exact tick through this same router.",
             valueKind: CommandValueKind.Axis2D,
             handler: (context, args) => LookRouter(
-                context: context,
                 args: args,
                 behavior: SeatLookBehavior.Orbit,
+                context: context,
                 verb: LookCommand
             )
         );
@@ -510,9 +510,9 @@ internal sealed partial class PlayerCommandModule {
             description: "An action look channel (Axis2D, +X turns/looks right / +Y looks up): orbits the camera and, while deflected, writes its planar yaw into FaceX/FaceZ so horizontal look turns the upright body. Standard binds the right gamepad stick here; player.look remains available for authored free orbit.",
             valueKind: CommandValueKind.Axis2D,
             handler: (context, args) => LookRouter(
-                context: context,
                 args: args,
                 behavior: SeatLookBehavior.FaceBody,
+                context: context,
                 verb: LookSteerCommand
             )
         );

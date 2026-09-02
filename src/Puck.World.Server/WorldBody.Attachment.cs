@@ -19,7 +19,6 @@ public enum WorldBodyAttachmentMode : byte {
     /// <summary>Tethered to a grapple anchor: gravity on, the tether constraint clamps the swing.</summary>
     Grapple,
 }
-
 public sealed partial class WorldBody {
     // The body-owned action-state slot name a world may declare (state.body) to make this body's attachment mode
     // camera-select-readable (views.seatRig's select op keys off state.<row>) — see WriteAttachmentModeState. A
@@ -28,6 +27,7 @@ public sealed partial class WorldBody {
 
     private FixedWorldAttachment m_attachmentPolicy = FixedWorldAttachment.Absent;
     private WorldBodyAttachmentMode m_attachmentMode = WorldBodyAttachmentMode.None;
+
     private bool m_attachPreviousBit;
     private bool m_detachPreviousBit;
     // CLIMB-only state: the gripped surface point/normal at attach, and the tangent-plane basis derived from the
@@ -41,7 +41,9 @@ public sealed partial class WorldBody {
     // The last tick's tangent-plane world-space velocity — read back for body.attachment and carried into
     // m_planarVelocity/m_verticalVelocity on Detach (the release-momentum-scale field applies to this).
     private FixedVector3 m_climbVelocity;
+
     private FixedVector3RateAccumulator m_climbAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
+
     // Which policy layer granted CLIMB — true when the gripped collider carried a WorldPlacementGrip override,
     // false when the world's own DefaultGrip decided it. Meaningless outside Climb mode.
     private bool m_climbGrantedByOverride;
@@ -77,6 +79,7 @@ public sealed partial class WorldBody {
     internal void SetAttachmentPolicy(FixedWorldAttachment policy) {
         m_attachmentPolicy = policy;
     }
+
     // Reads the attach/detach channels DIRECTLY (never through the kit action table — see FixedWorldAttachment's own
     // remarks on why it carries its own thresholds), fires at most one transition per tick: a detach edge always
     // wins over an attach edge held the SAME tick, and a fresh attach only ever starts from None (a body already
@@ -289,7 +292,7 @@ public sealed partial class WorldBody {
 
         ApplyRawState(
             reason: "attachment.mode",
-            requested: FixedQ4816.FromInteger(value: (long)m_attachmentMode).Value,
+            requested: FixedQ4816.FromInteger(value: ((long)m_attachmentMode)).Value,
             slot: slot,
             writer: "attachment"
         );

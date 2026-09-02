@@ -40,7 +40,6 @@ public abstract record WorldGravityAreaBounds {
     /// <summary>A sphere centered on the riding placement.</summary>
     /// <param name="Radius">The positive placement-local radius, multiplied by the placement's scale.</param>
     public sealed record SphereBounds(float Radius) : WorldGravityAreaBounds;
-
     /// <summary>A yaw-oriented box centered on the riding placement.</summary>
     /// <param name="HalfExtents">The positive placement-local half extents, multiplied by the placement's scale.</param>
     public sealed record BoxBounds(DocumentVector3 HalfExtents) : WorldGravityAreaBounds;
@@ -56,7 +55,6 @@ public abstract record WorldGravityAreaAcceleration {
     /// <param name="Value">The acceleration vector in world units per second squared. Zero is admitted so
     /// <see cref="WorldGravityAreaMode.Replace"/> can author a zero-gravity pocket.</param>
     public sealed record Directional(DocumentVector3 Value) : WorldGravityAreaAcceleration;
-
     /// <summary>A constant-magnitude acceleration directed toward the placement origin.</summary>
     /// <param name="Magnitude">The positive acceleration magnitude in world units per second squared.</param>
     public sealed record Radial(float Magnitude) : WorldGravityAreaAcceleration;
@@ -129,13 +127,13 @@ public sealed record WorldGravity(
 ) {
     /// <summary>Gets the inert field — the exact solver, no sources, and constants that produce no acceleration.</summary>
     public static WorldGravity Default { get; } = new(
+        Areas: null,
         Attractors: [],
         GravitationalConstant: 0f,
+        Points: null,
         SofteningLength: 1f,
         Solver: WorldGravitySolver.Pairwise,
-        Uniform: null,
-        Points: null,
-        Areas: null
+        Uniform: null
     );
     /// <summary>Gets a value indicating whether the section declares an active global or bounded local field.</summary>
     public bool IsActive => (
@@ -438,6 +436,7 @@ public readonly record struct FixedWorldGravityArea(
         Y: FixedQ4816.One,
         Z: FixedQ4816.Zero
     );
+
     private static bool IsFixedRepresentable(float value) => (
         float.IsFinite(f: value) &&
         (((double)value) >= ((double)FixedQ4816.MinValue)) &&
@@ -471,7 +470,6 @@ public readonly record struct FixedWorldGravityArea(
             (local.Z >= -HalfExtents.Z) && (local.Z <= HalfExtents.Z)
         );
     }
-
     /// <summary>Evaluates the area's world-space acceleration at a point already known to match its bound.</summary>
     public FixedVector3 AccelerationAt(FixedVector3 point, FixedVector3 center, FixedQuaternion rotation) =>
         ((AccelerationKind == FixedWorldGravityAreaAccelerationKind.Directional)
@@ -503,48 +501,48 @@ public readonly record struct FixedWorldGravityArea(
 
             switch (area.Bounds) {
                 case WorldGravityAreaBounds.SphereBounds sphere: {
-                    if (!IsFixedRepresentable(value: sphere.Radius) || !(sphere.Radius > 0f)) {
-                        return false;
+                        if (!IsFixedRepresentable(value: sphere.Radius) || !(sphere.Radius > 0f)) {
+                            return false;
+                        }
+
+                        var radius = FixedQ4816.FromDouble(value: sphere.Radius);
+                        var scaledRadius = checked((radius * scale));
+
+                        if (scaledRadius <= FixedQ4816.Zero) {
+                            return false;
+                        }
+
+                        radiusSquared = checked((scaledRadius * scaledRadius));
+                        boundsKind = FixedWorldGravityAreaBoundsKind.Sphere;
+                        break;
                     }
-
-                    var radius = FixedQ4816.FromDouble(value: sphere.Radius);
-                    var scaledRadius = checked((radius * scale));
-
-                    if (scaledRadius <= FixedQ4816.Zero) {
-                        return false;
-                    }
-
-                    radiusSquared = checked((scaledRadius * scaledRadius));
-                    boundsKind = FixedWorldGravityAreaBoundsKind.Sphere;
-                    break;
-                }
                 case WorldGravityAreaBounds.BoxBounds box: {
-                    if (
-                        !IsFixedRepresentable(value: box.HalfExtents) ||
-                        !(box.HalfExtents.X > 0f) ||
-                        !(box.HalfExtents.Y > 0f) ||
-                        !(box.HalfExtents.Z > 0f)
-                    ) {
-                        return false;
-                    }
+                        if (
+                            !IsFixedRepresentable(value: box.HalfExtents) ||
+                            !(box.HalfExtents.X > 0f) ||
+                            !(box.HalfExtents.Y > 0f) ||
+                            !(box.HalfExtents.Z > 0f)
+                        ) {
+                            return false;
+                        }
 
-                    var local = FixedVector3.FromVector3(value: box.HalfExtents);
+                        var local = FixedVector3.FromVector3(value: box.HalfExtents);
 
-                    halfExtents = new FixedVector3(
-                        X: checked((local.X * scale)),
-                        Y: checked((local.Y * scale)),
-                        Z: checked((local.Z * scale))
-                    );
-                    if (
-                        (halfExtents.X <= FixedQ4816.Zero) ||
-                        (halfExtents.Y <= FixedQ4816.Zero) ||
-                        (halfExtents.Z <= FixedQ4816.Zero)
-                    ) {
-                        return false;
+                        halfExtents = new FixedVector3(
+                            X: checked((local.X * scale)),
+                            Y: checked((local.Y * scale)),
+                            Z: checked((local.Z * scale))
+                        );
+                        if (
+                            (halfExtents.X <= FixedQ4816.Zero) ||
+                            (halfExtents.Y <= FixedQ4816.Zero) ||
+                            (halfExtents.Z <= FixedQ4816.Zero)
+                        ) {
+                            return false;
+                        }
+                        boundsKind = FixedWorldGravityAreaBoundsKind.Box;
+                        break;
                     }
-                    boundsKind = FixedWorldGravityAreaBoundsKind.Box;
-                    break;
-                }
                 default:
                     return false;
             }
@@ -583,6 +581,7 @@ public readonly record struct FixedWorldGravityArea(
                 angle: yaw,
                 axis: s_up
             );
+
             _ = ((accelerationKind == FixedWorldGravityAreaAccelerationKind.Directional)
                 ? rotation.Rotate(vector: localAcceleration)
                 : FixedVector3.Zero

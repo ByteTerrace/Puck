@@ -48,7 +48,7 @@ public static class CameraFramePacking {
 
         for (var row = 0; (row < height); row++) {
             var sourceRow = ((sourceStride < 0) ? ((height - 1) - row) : row);
-            var sourcePixels = source.Slice(start: (sourceRow * absoluteStride), length: tightSourceRowBytes);
+            var sourcePixels = source.Slice(length: tightSourceRowBytes, start: (sourceRow * absoluteStride));
             var destinationOffset = ((row * width) * 4);
 
             for (var column = 0; (column < width); column++) {
@@ -84,8 +84,8 @@ public static class CameraFramePacking {
         for (var row = 0; (row < height); row++) {
             var sourceRow = ((sourceStride < 0) ? ((height - 1) - row) : row);
 
-            source.Slice(start: (sourceRow * absoluteStride), length: tightSourceRowBytes).CopyTo(
-                destination: destination.Slice(start: (row * tightSourceRowBytes), length: tightSourceRowBytes)
+            source.Slice(length: tightSourceRowBytes, start: (sourceRow * absoluteStride)).CopyTo(
+                destination: destination.Slice(length: tightSourceRowBytes, start: (row * tightSourceRowBytes))
             );
         }
 

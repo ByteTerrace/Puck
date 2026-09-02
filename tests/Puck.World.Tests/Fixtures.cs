@@ -351,7 +351,6 @@ internal static class Fixtures {
         Listen: null,
         Authority: null
     );
-
     /// <summary>The standard authoring policy row (the values <c>standard.world.json</c> authors), for fixtures
     /// that exercise editor/placement behavior — the engine no longer carries one.</summary>
     public static WorldPlacementPolicyDefaults StandardAuthoring { get; } = new(
@@ -368,13 +367,14 @@ internal static class Fixtures {
     /// <summary>The placed ball's actual surface radius, in world units — sized to "a few" per
     /// <see cref="GradientUpContactLawTests"/>'s brief, never a raw magic number at the call site.</summary>
     public const float BallSurfaceRadius = 3f;
+
     /// <summary>The document's declared <c>dynamics</c> rows, mirroring what
     /// <c>src/Puck.World/Assets/worlds/standard.world.json</c> authors — <c>chase</c> backs
     /// <see cref="StandardSeatRig"/>'s boom; <c>probe</c> is spare furniture a law can name without authoring its
     /// own row.</summary>
     public static WorldDynamicsRow[] StandardDynamics { get; } = [
-        new WorldDynamicsRow(Name: "chase", Frequency: 0.9549f, Damping: 1f, Response: 1f),
-        new WorldDynamicsRow(Name: "probe", Frequency: 2f, Damping: 1f, Response: 0f),
+        new WorldDynamicsRow(Damping: 1f, Frequency: 0.9549f, Name: "chase", Response: 1f),
+        new WorldDynamicsRow(Damping: 1f, Frequency: 2f, Name: "probe", Response: 0f),
     ];
     /// <summary>The standard chase framing, mirroring what <c>src/Puck.World/Assets/worlds/standard.world.json</c>
     /// authors. The engine holds no rig of its own, and a document whose census implies a body is refused for
@@ -645,7 +645,6 @@ internal static class Fixtures {
 
         return hashes;
     }
-
     /// <summary>Skips the calling law, by name, when <see cref="WorldReplayTape"/>'s REAL on-disk
     /// <c>Replays</c> directory (under <see cref="WorldStateRoot.Resolve"/> — this test project has no seam to
     /// redirect it, and <c>WorldStateRoot.Override</c> can only ever be applied ONCE per process, so no individual
@@ -696,7 +695,6 @@ internal static class Fixtures {
         bodyCount: 0,
         host: (host ?? new LambdaHost())
     );
-
     /// <summary>Compiles <paramref name="document"/> (plus any extra world <paramref name="state"/> rows) into a
     /// <see cref="WorldFieldLattice"/> the way a booted world would.</summary>
     public static WorldFieldLattice BuildLattice(
@@ -718,13 +716,11 @@ internal static class Fixtures {
             worldSeed: worldSeed
         );
     }
-
     /// <summary>The document spelling of a composite: state.lattices topology + one lattice-shaped row per
     /// composite row — what <c>with { Fields = ... }</c> said before the fold made Fields a compiled view of the
     /// state section.</summary>
     public static WorldDefinition WithLattice(WorldDefinition definition, WorldFieldsSection composite) =>
         (definition with { StateRaw = WorldFieldsSection.ToStateSection(composite: composite) });
-
     /// <summary>The swim-floatable medium row a swim-kit fixture splices into its <c>state.world</c>: a
     /// full-value lattice row over <paramref name="topology"/> whose <paramref name="heightScale"/> places the free
     /// surface at that Y — the level the retired global waterline section floated bodies against.</summary>

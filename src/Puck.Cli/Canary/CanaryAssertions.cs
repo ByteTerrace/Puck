@@ -96,7 +96,6 @@ internal static class CanaryAssertions {
             Passed: passed
         );
     }
-
     private static CanaryAssertionResult EvaluateFrameAgreement(CanaryFrameAgreementAssertion assertion, CanaryTranscript transcript) {
         var beforePath = Path.Combine(path1: transcript.RunDirectory, path2: assertion.Before);
         var afterPath = Path.Combine(path1: transcript.RunDirectory, path2: assertion.After);
@@ -168,10 +167,10 @@ internal static class CanaryAssertions {
     }
 
     private static CanaryAssertionResult EvaluateLine(CanaryLineAssertion assertion, CanaryTranscript transcript, string authorityEndpoint) {
-        var text = assertion.Text.Replace(oldValue: AuthorityToken, newValue: authorityEndpoint, comparisonType: StringComparison.Ordinal);
+        var text = assertion.Text.Replace(comparisonType: StringComparison.Ordinal, newValue: authorityEndpoint, oldValue: AuthorityToken);
         var matched = Lines(transcript: transcript, stream: assertion.Stream).Any(predicate: line => assertion.Match switch {
             CanaryLineMatch.Exact => string.Equals(a: line, b: text, comparisonType: StringComparison.Ordinal),
-            CanaryLineMatch.Contains => line.Contains(value: text, comparisonType: StringComparison.Ordinal),
+            CanaryLineMatch.Contains => line.Contains(comparisonType: StringComparison.Ordinal, value: text),
             _ => false,
         });
         var passed = (matched == assertion.Present);

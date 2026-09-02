@@ -95,7 +95,7 @@ public sealed partial class WorldServer {
             return;
         }
 
-        Console.Error.WriteLine(value: $"[world.contribution: retracted '{placement.Id}' — tenure=presence link={contribution.Link?.Value ?? "(none)"} contributor={contributor?.Describe() ?? "(none)"} creation '{retired}' released, slot shows '{contribution.SlotCreationId}']");
+        Console.Error.WriteLine(value: $"[world.contribution: retracted '{placement.Id}' — tenure=presence link={(contribution.Link?.Value ?? "(none)")} contributor={(contributor?.Describe() ?? "(none)")} creation '{retired}' released, slot shows '{contribution.SlotCreationId}']");
 
         if (
             string.Equals(
@@ -104,8 +104,8 @@ public sealed partial class WorldServer {
             comparisonType: StringComparison.Ordinal
         ) ||
             IsCreationReferenced(
-            prototypeId: retired,
-            definition: m_definition
+            definition: m_definition,
+            prototypeId: retired
         )
         ) {
             return;
@@ -281,6 +281,7 @@ public sealed partial class WorldServer {
             );
         }
     }
+
     /// <summary>Returns one authored <c>adjacencies</c> row's live liveness — the event feed's own staleness count
     /// and its own latched drop verdict (<see cref="WorldEventFeed.LinkDropped"/>), never a second spelling of the
     /// grace comparison that pass owns.</summary>

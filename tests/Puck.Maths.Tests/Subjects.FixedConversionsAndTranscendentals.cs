@@ -150,7 +150,7 @@ internal static partial class Subjects {
         foreach (var (value, fractionBitCount) in samples) {
             var (numerator, decimalExponent) = DecimalParts(value: value);
             var expected = FixedPointRounding.RoundRational(
-                denominator: BigInteger.Pow(value: 10, exponent: decimalExponent),
+                denominator: BigInteger.Pow(exponent: decimalExponent, value: 10),
                 fractionBitCount: fractionBitCount,
                 numerator: numerator
             );

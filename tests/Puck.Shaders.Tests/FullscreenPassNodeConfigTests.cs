@@ -30,11 +30,11 @@ public sealed class FullscreenPassNodeConfigTests {
         Assert.False(condition: node.TrySetConfig(field: "seed", value: 1f));
         Assert.Equal(expected: 0u, actual: node.Config["seed"].ComponentBits(index: 0));
     }
-    [Theory]
     [InlineData(-0.01f)]
     [InlineData(1.01f)]
     [InlineData(float.NaN)]
     [InlineData(float.PositiveInfinity)]
+    [Theory]
     public void TrySetConfig_refuses_a_value_the_field_schema_would_refuse_at_bind_time(float value) {
         using var node = CreateNode();
 

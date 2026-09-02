@@ -373,6 +373,7 @@ public sealed partial class WorldServer {
     // A '$cell:' key indirection: the cell's integer value spelled as a key; an absent cell reads 0 like any other.
     // The integer part of a Q48.16 value — the key or index a cell's value names.
     private static long IntegerOf(FixedQ4816 value) => (value.Value >> 16);
+
     // The bodies bound for the evaluation in progress — set by the rule/interaction evaluator before a gate or
     // effect is read, -1 when a binding is not in play.
     private int m_boundEach = -1;
@@ -448,12 +449,12 @@ public sealed partial class WorldServer {
     }
     private int ResolveBodyRef(CompiledBodyRef bodyRef, ulong tick) => (bodyRef.Kind switch {
         CompiledBodyRefKind.Literal => bodyRef.Index,
-        CompiledBodyRefKind.Binding => BoundBody(binding: (RuleBinding)bodyRef.Index),
-        CompiledBodyRefKind.Cell => ((IntegerOf(value: ReadStateCell(
+        CompiledBodyRefKind.Binding => BoundBody(binding: ((RuleBinding)bodyRef.Index)),
+        CompiledBodyRefKind.Cell => (((IntegerOf(value: ReadStateCell(
         row: bodyRef.Row!,
         key: bodyRef.Key!,
         tick: tick
-    )) is var cellIndex) && (cellIndex >= 0) && (cellIndex < m_population.Capacity)
+    )) is var cellIndex) && (cellIndex >= 0) && (cellIndex < m_population.Capacity))
         ? ((int)cellIndex)
         : -1),
         _ => ResolveArgBody(

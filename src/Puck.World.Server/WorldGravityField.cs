@@ -121,8 +121,8 @@ public sealed class WorldGravityField {
                 attach: attach,
                 population: population,
                 position: out var position,
-                yawRadians: out var yaw,
-                reason: out _
+                reason: out _,
+                yawRadians: out var yaw
             )) {
                 m_areaActive[index] = false;
 

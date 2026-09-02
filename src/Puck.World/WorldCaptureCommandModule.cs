@@ -29,6 +29,7 @@ internal sealed class WorldCaptureCommandModule(WorldServer server) : ICommandMo
             : Hash())
         );
     }
+
     private CommandResult Describe() {
         var captures = server.Definition.Captures;
 

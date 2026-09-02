@@ -57,7 +57,7 @@ internal static class CliStrictJson {
             throw refusal($"{context} {member} is required and must be an object.");
         }
 
-        return RequireObject(element: value, context: $"{context} {member}", refusal: refusal);
+        return RequireObject(context: $"{context} {member}", element: value, refusal: refusal);
     }
     public static int ReadRequiredInt32(JsonElement element, string member, string context, Func<string, Exception> refusal) {
         if (!element.TryGetProperty(propertyName: member, value: out var value) || (value.ValueKind != JsonValueKind.Number) || !value.TryGetInt32(value: out var result)) {
@@ -73,6 +73,7 @@ internal static class CliStrictJson {
 
         return result;
     }
+
     private static bool TryFindDuplicateMember(JsonElement element, string path, out string duplicate) {
         if (element.ValueKind == JsonValueKind.Object) {
             var names = new HashSet<string>(comparer: StringComparer.Ordinal);
@@ -91,7 +92,7 @@ internal static class CliStrictJson {
             var index = 0;
 
             foreach (var item in element.EnumerateArray()) {
-                if (TryFindDuplicateMember(element: item, path: $"{path}[{index}]", duplicate: out duplicate)) {
+                if (TryFindDuplicateMember(duplicate: out duplicate, element: item, path: $"{path}[{index}]")) {
                     return true;
                 }
 

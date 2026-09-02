@@ -134,7 +134,7 @@ public sealed partial class WorldBody {
         switch (motion) {
             case WorldMotionModel.Grounded grounded:
                 m_motionArm = CompiledMotionArm.Grounded;
-                m_tuning = WorldMotionTuningFactory.Compile(tuning: grounded, dynamics: planarDynamics);
+                m_tuning = WorldMotionTuningFactory.Compile(dynamics: planarDynamics, tuning: grounded);
                 m_vehicleTuning = default;
                 m_swimTuning = null;
                 break;
@@ -153,7 +153,7 @@ public sealed partial class WorldBody {
                 break;
             case WorldMotionModel.Swim swim:
                 m_motionArm = CompiledMotionArm.Swim;
-                m_tuning = WorldMotionTuningFactory.Compile(tuning: swim, dynamics: planarDynamics);
+                m_tuning = WorldMotionTuningFactory.Compile(dynamics: planarDynamics, tuning: swim);
                 m_vehicleTuning = default;
                 m_swimTuning = WorldMotionTuningFactory.CompileSwim(tuning: swim);
                 break;

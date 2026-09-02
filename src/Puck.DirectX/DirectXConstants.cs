@@ -45,7 +45,7 @@ public static unsafe class DirectXConstants {
     /// <param name="packedRowBytes">The tightly packed row size, in bytes.</param>
     /// <returns>The row pitch, rounded up to the copy alignment.</returns>
     public static uint AlignRowPitch(uint packedRowBytes) {
-        return (((packedRowBytes + TextureRowPitchAlignment) - 1) & ~(TextureRowPitchAlignment - 1));
+        return ((packedRowBytes + TextureRowPitchAlignment) - 1) & ~(TextureRowPitchAlignment - 1);
     }
     /// <summary>Gets a descriptor heap's CPU handle for its first descriptor, via the direct vtable-slot call the
     /// hidden-pointer x64 COM ABI requires (see <see cref="GetCpuDescriptorHandleSlot"/>).</summary>
