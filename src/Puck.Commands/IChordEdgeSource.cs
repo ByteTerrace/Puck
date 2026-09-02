@@ -47,7 +47,7 @@ public readonly record struct BindingChordEdge(
 );
 /// <summary>
 /// The seam a chord-aware <see cref="IInputBindings"/> hands its synthesized chord-command edges to the
-/// <see cref="InputRouter"/> through. After each <see cref="IInputBindings.Resolve(int, in InputSignal)"/> the
+/// <see cref="InputRouter"/> through. After each <see cref="IInputBindings.Resolve(int, in InputSignal, bool)"/> the
 /// router drains the slot's pending edges and folds them into the same tick's lane — so a chord-fired command is
 /// <see cref="CommandSnapshot"/>-visible, held-tracked, and replayed exactly like a source-bound one.
 /// </summary>

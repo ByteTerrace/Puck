@@ -643,8 +643,12 @@ public sealed class PagedInputBindingsTests {
             new BindingPageEntryDefinition(Sources: null, Command: ActionCommand),
         ]);
     }
-    private static void Resolve(PagedInputBindings bindings, InputSignal signal) {
-        _ = bindings.Resolve(signal: in signal, slot: 0);
+    private static void Resolve(PagedInputBindings bindings, InputSignal signal, bool pressesWithheld = false) {
+        _ = bindings.Resolve(
+            pressesWithheld: pressesWithheld,
+            signal: in signal,
+            slot: 0
+        );
     }
     private static InputRouter Router(PagedInputBindings bindings, params (string Name, CommandValueKind Kind)[] definitions) {
         return Router(bindings: bindings, registry: out _, definitions: definitions);
@@ -744,12 +748,14 @@ public sealed class PagedInputBindingsTests {
 
         Assert.Equal(
             actual: Assert.Single(collection: bindings.Resolve(
+                pressesWithheld: false,
                 signal: InputSignal.Press(source: "key.left"),
                 slot: 0
             )!).Command,
             expected: ActionCommand
         );
         Assert.Null(@object: bindings.Resolve(
+            pressesWithheld: false,
             signal: InputSignal.Press(source: "key.right"),
             slot: 0
         ));
@@ -758,6 +764,7 @@ public sealed class PagedInputBindingsTests {
         // this signal — but key.left is not a member of the row that fired, so the chord does not own the release.
         Assert.Equal(
             actual: Assert.Single(collection: bindings.Resolve(
+                pressesWithheld: false,
                 signal: InputSignal.Release(source: "key.left"),
                 slot: 0
             )!).Command,
@@ -766,6 +773,7 @@ public sealed class PagedInputBindingsTests {
         // The latch cleared with that release, so the next press resolves rather than being swallowed.
         Assert.Equal(
             actual: Assert.Single(collection: bindings.Resolve(
+                pressesWithheld: false,
                 signal: InputSignal.Press(source: "key.left"),
                 slot: 0
             )!).Command,
@@ -773,19 +781,57 @@ public sealed class PagedInputBindingsTests {
         );
     }
     [Fact]
+    public void AWithheldCompletionArmsNothingAndEmitsOnlyTheBreak() {
+        var bindings = new PagedInputBindings(profile: OverlappingChordProfile());
+
+        Resolve(bindings: bindings, signal: InputSignal.Press(source: "key.left"));
+        Resolve(bindings: bindings, signal: InputSignal.Press(source: "key.right"));
+        _ = bindings.DrainChordEdges(slot: 0);
+
+        // The router will discard every press this resolve produces, so the shorter row that key.left's release
+        // leaves exactly satisfied must be neither started nor ARMED — only the deeper row's break is owed.
+        Resolve(
+            bindings: bindings,
+            pressesWithheld: true,
+            signal: InputSignal.Release(source: "key.left")
+        );
+
+        var withheld = bindings.DrainChordEdges(slot: 0).ToArray();
+        var broke = Assert.Single(collection: withheld);
+
+        Assert.Equal(actual: broke.Command, expected: LongChordCommand);
+        Assert.Equal(actual: broke.Phase, expected: CommandPhase.Completed);
+
+        // An unarmed row owes nothing: releasing its remaining member emits no completion for a command that never
+        // started.
+        Resolve(bindings: bindings, signal: InputSignal.Release(source: "key.right"));
+        Assert.Empty(collection: bindings.DrainChordEdges(slot: 0).ToArray());
+
+        // And the row is not stuck: a later real press completes it exactly as it always did.
+        Resolve(bindings: bindings, signal: InputSignal.Press(source: "key.right"));
+
+        var pressed = Assert.Single(collection: bindings.DrainChordEdges(slot: 0).ToArray());
+
+        Assert.Equal(actual: pressed.Command, expected: ShortChordCommand);
+        Assert.Equal(actual: pressed.Phase, expected: CommandPhase.Started);
+    }
+    [Fact]
     public void AModifierReleaseThatSatisfiesAShorterRowStillFiresThatRowsPressEdge() {
         var bindings = new PagedInputBindings(profile: OverlappingChordProfile());
 
         _ = bindings.Resolve(
+            pressesWithheld: false,
             signal: InputSignal.Press(source: "key.left"),
             slot: 0
         );
         _ = bindings.Resolve(
+            pressesWithheld: false,
             signal: InputSignal.Press(source: "key.right"),
             slot: 0
         );
         _ = bindings.DrainChordEdges(slot: 0);
         _ = bindings.Resolve(
+            pressesWithheld: false,
             signal: InputSignal.Release(source: "key.left"),
             slot: 0
         );
@@ -822,16 +868,19 @@ public sealed class PagedInputBindingsTests {
         )));
 
         _ = bindings.Resolve(
+            pressesWithheld: false,
             signal: InputSignal.Press(source: "key.a"),
             slot: 0
         );
         // The chord row owns this press — and the half-finished tap must still see it as the wrong input it is.
         Assert.Null(@object: bindings.Resolve(
+            pressesWithheld: false,
             signal: InputSignal.Press(source: "key.x"),
             slot: 0
         ));
         _ = bindings.DrainChordEdges(slot: 0);
         _ = bindings.Resolve(
+            pressesWithheld: false,
             signal: InputSignal.Press(source: "key.b"),
             slot: 0
         );
@@ -843,10 +892,12 @@ public sealed class PagedInputBindingsTests {
         var bindings = new PagedInputBindings(profile: GroupProfile());
 
         _ = bindings.Resolve(
+            pressesWithheld: false,
             signal: InputSignal.Press(source: "key.left"),
             slot: 0
         );
         Assert.Null(@object: bindings.Resolve(
+            pressesWithheld: false,
             signal: InputSignal.Press(source: "key.right"),
             slot: 0
         ));
@@ -859,6 +910,7 @@ public sealed class PagedInputBindingsTests {
         // The latch is gone: the release answers from the page active NOW, not the one its press latched.
         Assert.Equal(
             actual: Assert.Single(collection: bindings.Resolve(
+                pressesWithheld: false,
                 signal: InputSignal.Release(source: "key.left"),
                 slot: 0
             )!).Command,
@@ -867,6 +919,7 @@ public sealed class PagedInputBindingsTests {
         // And the chord no longer owns key.right, so its reassertion resolves instead of being swallowed.
         Assert.Equal(
             actual: Assert.Single(collection: bindings.Resolve(
+                pressesWithheld: false,
                 signal: Reassert(source: "key.right"),
                 slot: 0
             )!).Command,
@@ -878,6 +931,7 @@ public sealed class PagedInputBindingsTests {
         var bindings = new PagedInputBindings(profile: GroupProfile());
 
         _ = bindings.Resolve(
+            pressesWithheld: false,
             signal: InputSignal.Press(source: "key.left"),
             slot: 0
         );
@@ -891,6 +945,7 @@ public sealed class PagedInputBindingsTests {
         // The latch survived: a held action stays itself across the flip.
         Assert.Equal(
             actual: Assert.Single(collection: bindings.Resolve(
+                pressesWithheld: false,
                 signal: InputSignal.Release(source: "key.left"),
                 slot: 0
             )!).Command,
@@ -899,6 +954,7 @@ public sealed class PagedInputBindingsTests {
         // A new press uses the new group's page.
         Assert.Equal(
             actual: Assert.Single(collection: bindings.Resolve(
+                pressesWithheld: false,
                 signal: InputSignal.Press(source: "key.right"),
                 slot: 0
             )!).Command,
@@ -910,10 +966,12 @@ public sealed class PagedInputBindingsTests {
         var bindings = new PagedInputBindings(profile: GroupProfile());
 
         _ = bindings.Resolve(
+            pressesWithheld: false,
             signal: InputSignal.Press(source: "key.left"),
             slot: 0
         );
         _ = bindings.Resolve(
+            pressesWithheld: false,
             signal: InputSignal.Press(source: "key.right"),
             slot: 0
         );
@@ -923,6 +981,7 @@ public sealed class PagedInputBindingsTests {
             slot: 0
         ));
         Assert.Null(@object: bindings.Resolve(
+            pressesWithheld: false,
             signal: InputSignal.Release(source: "key.right"),
             slot: 0
         ));
@@ -959,6 +1018,7 @@ public sealed class PagedInputBindingsTests {
         )));
 
         _ = bindings.Resolve(
+            pressesWithheld: false,
             signal: InputSignal.Press(source: "key.a"),
             slot: 0
         );
@@ -971,6 +1031,7 @@ public sealed class PagedInputBindingsTests {
             slot: 0
         ));
         _ = bindings.Resolve(
+            pressesWithheld: false,
             signal: InputSignal.Press(source: "key.b"),
             slot: 0
         );
@@ -1038,11 +1099,13 @@ public sealed class PagedInputBindingsTests {
                 // Reload drops every slot state, so each pass re-opens the window the render thread can store into.
                 bindings.Reload(profile: profile);
                 _ = bindings.Resolve(
+                    pressesWithheld: false,
                     signal: InputSignal.Press(source: "key.hold"),
                     slot: 0
                 );
 
                 var resolved = bindings.Resolve(
+                    pressesWithheld: false,
                     signal: InputSignal.Press(source: "key.action"),
                     slot: 0
                 );
@@ -1052,10 +1115,12 @@ public sealed class PagedInputBindingsTests {
                     expected: EditorCommand
                 );
                 _ = bindings.Resolve(
+                    pressesWithheld: false,
                     signal: InputSignal.Release(source: "key.action"),
                     slot: 0
                 );
                 _ = bindings.Resolve(
+                    pressesWithheld: false,
                     signal: InputSignal.Release(source: "key.hold"),
                     slot: 0
                 );

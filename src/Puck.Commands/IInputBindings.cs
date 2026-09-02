@@ -23,8 +23,16 @@ public interface IInputBindings {
     /// </summary>
     /// <param name="slot">The logical player slot.</param>
     /// <param name="signal">The captured signal being resolved.</param>
+    /// <param name="pressesWithheld">Whether the <see cref="InputRouter"/> will DISCARD every press this resolve
+    /// produces — the state a signal captured while its device's terminal focus is released arrives in (see
+    /// <see cref="InputRouter.CaptureFocusExempt(in InputSignal)"/>). Such a signal is forwarded only so the
+    /// resolver's own held state can be RELEASED: the page must still flip back and a broken row must still emit
+    /// its completion. A stateful resolver must therefore arm nothing and start nothing while this is
+    /// <see langword="true"/> — a row armed here would owe a completion for a command that never started, and
+    /// could not fire again until it delivered one.</param>
     /// <returns>The command bindings for <paramref name="slot"/> and the signal's source, or <see langword="null"/>.</returns>
-    IReadOnlyList<CommandBinding>? Resolve(int slot, in InputSignal signal) {
+    IReadOnlyList<CommandBinding>? Resolve(int slot, in InputSignal signal, bool pressesWithheld) {
+        // A stateless resolver is a pure table: it arms nothing, so it has nothing to withhold.
         return Resolve(
             slot: slot,
             source: signal.Source

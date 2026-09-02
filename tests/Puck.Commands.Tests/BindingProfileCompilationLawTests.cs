@@ -74,6 +74,7 @@ public sealed class BindingProfileCompilationLawTests {
         ]));
 
         _ = bindings.Resolve(
+            pressesWithheld: false,
             signal: InputSignal.Press(source: "key.a"),
             slot: 0
         );
@@ -85,6 +86,7 @@ public sealed class BindingProfileCompilationLawTests {
         Assert.True(condition: pressed[0].Dispatch);
 
         _ = bindings.Resolve(
+            pressesWithheld: false,
             signal: InputSignal.Release(source: "key.a"),
             slot: 0
         );
@@ -109,11 +111,13 @@ public sealed class BindingProfileCompilationLawTests {
         ]));
 
         _ = bindings.Resolve(
+            pressesWithheld: false,
             signal: InputSignal.Press(source: "key.a"),
             slot: 0
         );
         _ = bindings.DrainChordEdges(slot: 0);
         _ = bindings.Resolve(
+            pressesWithheld: false,
             signal: InputSignal.Release(source: "key.a"),
             slot: 0
         );
@@ -257,6 +261,7 @@ public sealed class BindingProfileCompilationLawTests {
         );
 
         _ = bindings.Resolve(
+            pressesWithheld: false,
             signal: InputSignal.Press(source: "key.shift"),
             slot: 0
         );
@@ -422,6 +427,7 @@ public sealed class BindingProfileCompilationLawTests {
         Assert.Equal(expected: "base", actual: bindings.ViewFor(slot: 0).PageId);
 
         _ = bindings.Resolve(
+            pressesWithheld: false,
             signal: InputSignal.Press(source: "key.shift"),
             slot: 0
         );

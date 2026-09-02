@@ -49,6 +49,30 @@ public sealed class InputRouterFocusExemptTests {
         Assert.Empty(collection: router.SnapshotForTick(tick: 3UL, windowEndTick: ulong.MaxValue).Lanes);
     }
     [Fact]
+    public void AFocusExemptReleaseLeavesTheShorterRowUnarmed() {
+        var bindings = ChordBindings();
+        var registry = new CommandRegistry(modules: [new ProbeModule()]);
+        var router = Router(
+            bindings: bindings,
+            registry: registry
+        );
+
+        router.Capture(signal: InputSignal.Press(source: "key.left"));
+        router.Capture(signal: InputSignal.Press(source: "key.right"));
+        _ = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+
+        // Releasing key.left under focus exemption leaves [right] exactly satisfied. The shorter row's press is
+        // withheld, so the row must not be ARMED either: an armed row owes a completion, and a completion for a
+        // command that never started is a release the handler never asked for.
+        router.CaptureFocusExempt(signal: InputSignal.Release(source: "key.left"));
+        _ = router.SnapshotForTick(tick: 2UL, windowEndTick: ulong.MaxValue);
+
+        // The console closes and the player lets go of key.right. Nothing is owed for the shorter row.
+        router.Capture(signal: InputSignal.Release(source: "key.right"));
+
+        Assert.Empty(collection: router.SnapshotForTick(tick: 3UL, windowEndTick: ulong.MaxValue).Lanes);
+    }
+    [Fact]
     public void AnIdleAnalogSampleUnderFocusExemptionNeverReachesTheResolver() {
         var bindings = new RecordingBindings();
         var router = Router(bindings: bindings);

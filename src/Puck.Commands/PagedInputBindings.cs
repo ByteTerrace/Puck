@@ -325,7 +325,13 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
     // source, so the release must go on to resolve the source's own authored binding instead of being swallowed as
     // "consumed by a chord". A row that DOES contain the signal's modifier can only complete while that modifier is
     // down, so membership implies the signal was a rising edge.
-    private static bool SyncChordState(SlotState state, bool isDigitalReassertion, int signalModifierIndex) {
+    //
+    // pressesWithheld (see IInputBindings.Resolve) splits the two halves: the BREAK edges of already-armed rows are
+    // what such a signal is forwarded to deliver, while a row the same signal completes is neither armed nor
+    // started. Arming one anyway would leave this resolver believing a row fired that the router discarded — the row
+    // could not fire again until a member released, and that release would emit a completion for a command with no
+    // matching start.
+    private static bool SyncChordState(SlotState state, bool isDigitalReassertion, bool pressesWithheld, int signalModifierIndex) {
         var fired = false;
         var held = state.Tracker.HeldOrder;
         var profile = state.Profile;
@@ -356,6 +362,12 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
                     )
                 );
             }
+        }
+
+        if (pressesWithheld) {
+            ResolveAndPublishPage(state: state);
+
+            return false;
         }
 
         foreach (var rowIndex in profile.CommandRowsOf(groupIndex: state.GroupIndex)) {
@@ -526,7 +538,7 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
         );
     }
     /// <inheritdoc/>
-    public IReadOnlyList<CommandBinding>? Resolve(int slot, in InputSignal signal) {
+    public IReadOnlyList<CommandBinding>? Resolve(int slot, in InputSignal signal, bool pressesWithheld) {
         var state = StateFor(slot: slot);
         var isDigitalReassertion = ((signal.Phase == CommandPhase.Active) && (signal.Value.Kind == CommandValueKind.Digital));
         var consumed = false;
@@ -534,6 +546,7 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
         if (state.Tracker.Apply(signal: signal)) {
             consumed = SyncChordState(
                 isDigitalReassertion: isDigitalReassertion,
+                pressesWithheld: pressesWithheld,
                 signalModifierIndex: (state.Profile.TryGetModifier(
                     source: signal.Source,
                     modifierIndex: out var modifierIndex
@@ -551,6 +564,12 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
         // early on a chord completion would let a chord press slip past a half-finished tap unnoticed.
         // Activators are gestures, not held-state destinations. Reassertions may rebuild modifier/page state but
         // never advance or complete a Held/Tapped sequence without a real physical edge.
+        //
+        // Not gated on pressesWithheld, and it needs no gate: a signal arrives in that state only because it is a
+        // RELEASE (the router forwards nothing else — see IInputBindings.Resolve), and a release can only CLOSE a
+        // Held gate (opening demands every member down) and cannot advance a Tapped sequence at all (taps are
+        // rising edges — see RowActivatorTracker.Apply). The only edge reachable here is the one a withheld
+        // signal is forwarded to deliver.
         if (!isDigitalReassertion) {
             ApplyRowActivators(
                 signal: in signal,

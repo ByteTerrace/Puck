@@ -383,11 +383,13 @@ public sealed class BindingVocabularyCheckTests {
 
         // The canonically-spelled control drives the mis-cased row.
         Assert.NotEmpty(collection: (bindings.Resolve(
+            pressesWithheld: false,
             signal: InputSignal.Press(source: "gamepad.buttonSouth"),
             slot: 0
         ) ?? []));
         // And the mis-cased modifier source latches the chord whose mis-cased member names it, flipping the page.
         _ = bindings.Resolve(
+            pressesWithheld: false,
             signal: InputSignal.Press(source: "gamepad.leftTrigger"),
             slot: 0
         );

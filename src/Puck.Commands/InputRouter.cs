@@ -527,6 +527,7 @@ public sealed partial class InputRouter : IDisposable {
         );
         var resolvedPageBindings = (forwardsToResolver
             ? m_bindings.Resolve(
+                pressesWithheld: focusExemptOnly,
                 signal: signal,
                 slot: slot
             )
@@ -549,10 +550,12 @@ public sealed partial class InputRouter : IDisposable {
             // phase and value (the physical signal's phase may be a mid-sweep Active) — see IChordEdgeSource.
             foreach (var edge in m_chordEdges.DrainChordEdges(slot: slot)) {
                 // Under focus exemption this drain exists to deliver what the RELEASE owes — the broken row's
-                // completion — never to press something new. A member release can leave a SHORTER row exactly
-                // satisfied (releasing left out of [left, right] completes [right]), and that row's press must
-                // neither dispatch nor latch a command that never declared CommandInputScope.FocusExempt: a latched
-                // press would re-assert for as long as the seat console stays open.
+                // completion — never to press something new. The resolver is told as much (pressesWithheld above)
+                // and arms nothing, which is what keeps its bookkeeping honest; this is the belt-and-braces half,
+                // covering an IInputBindings implementation that ignores the flag and hands a press over anyway. A
+                // press that reached the lane here would neither dispatch nor latch a command that never declared
+                // CommandInputScope.FocusExempt: a latched press would re-assert for as long as the seat console
+                // stays open.
                 if (
                     focusExemptOnly &&
                     (edge.Phase is not (CommandPhase.Completed or CommandPhase.Canceled)) &&
