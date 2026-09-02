@@ -114,7 +114,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     private readonly WorldSeatViewports m_viewports;
 
     private int m_builtDefinitionRevision;
-    private SdfFieldEvaluator? m_cameraClearanceField;
+
     // This produced frame's dressed SdfFrame, kept from Dress so the LATER RenderViews call can hand it to every
     // offscreen view as the base each derives its own submission from. Null before the first Dress.
     private SdfFrame? m_dressedFrame;
@@ -454,21 +454,25 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             slotBase: m_emitter.DynamicSlotCount
         );
     });
-    // Build the camera query from the same static scene layers the composed frame renders. The live program cannot
-    // be queried directly because its avatar catalog carries TransformDynamic instructions; reconstructing only the
-    // static placements/screens/adjacency geometry keeps the camera from treating the avatar it follows as an obstacle.
-    private void RebuildCameraClearanceField() {
-        m_cameraClearanceField = null;
+    // Build the presentation query field from the same static scene layers the composed frame renders, and park it on
+    // the client so the chase camera's clearance sweep and the stamp pool's limb probes share ONE evaluator. The live
+    // program cannot be queried directly because its avatar catalog carries TransformDynamic instructions;
+    // reconstructing only the static placements/screens/adjacency geometry also keeps a body from treating itself, or
+    // the avatar a camera follows, as an obstacle.
+    private void RebuildStaticField() {
+        m_client.PublishStaticField(field: null);
 
         try {
             var definition = m_client.Definition;
             var builder = new SdfProgramBuilder();
 
+            // Only what a body can touch: a solid placement. A presentation-only placement (the wallpaper-folded
+            // ground texture) has no fixed-point query twin and would refuse the whole field.
             WorldPlacementStamper.EmitStatic(
                 builder: builder,
                 definition: definition,
                 creations: definition.Creations,
-                placements: definition.Placements
+                placements: [.. definition.Placements.Where(predicate: static placement => (placement.Solid is not null))]
             );
 
             var facets = WorldPrototypeFacets.Derive(
@@ -484,7 +488,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             );
 
             m_adjacencies.EmitCurrent(builder: builder);
-            m_cameraClearanceField = new SdfFieldEvaluator(program: builder.Build(buildInstanceGrid: false));
+            m_client.PublishStaticField(field: new SdfFieldEvaluator(program: builder.Build(buildInstanceGrid: false)));
         } catch (ArgumentException) {
             // Render-only warp/texture operations have no fixed-point query twin. Those worlds retain the authored
             // eye; query-compatible worlds still receive the presentation-only clearance correction.
@@ -926,7 +930,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         )) {
             eye = WorldCameraClearance.Resolve(
                 desiredEye: eye,
-                field: m_cameraClearanceField,
+                field: m_client.StaticField,
                 target: target
             );
         }
@@ -1231,7 +1235,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         if (programChanged) {
             m_lastProgram = program;
             m_programRevision++;
-            RebuildCameraClearanceField();
+            RebuildStaticField();
         }
 
         // Emit one view per joined local seat (a 1..MaxSlots count up to the ViewportCapacity floor, so players can join

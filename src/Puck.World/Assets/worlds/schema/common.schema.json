@@ -2612,7 +2612,9 @@
         "Falling",
         "AffectedBy",
         "Submerged",
-        "AtSurface"
+        "AtSurface",
+        "Climbing",
+        "Flying"
       ]
     },
     "ActionPredicateNow": {
@@ -2807,6 +2809,127 @@
           "type": "number"
         }
       },
+      "additionalProperties": false
+    },
+    "WorldHoldSpend": {
+      "description": "What a hold spends while it is held: a body-lane state slot and the rate it drains at. The hold releases the tick the slot can no longer pay; refilling it, or trading for it, is a world\u0027s own rules\u0027 business.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "state": {
+          "description": "The declared state.body slot name.",
+          "type": "string"
+        },
+        "ratePerSecond": {
+          "description": "The positive rate the slot drains at, per second.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "state",
+        "ratePerSecond"
+      ],
+      "additionalProperties": false
+    },
+    "WorldHold": {
+      "description": "One authored hold row of a grounded kit\u0027s ordered Holds list \u2014 what may hold this body, in preference order. ResolveHold keeps the hold it has while its surface is still there and the same face, and otherwise takes the first row the world offers; ApplyHold applies Hold.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "name": {
+          "description": "The row\u0027s name, unique within the list \u2014 the body.hold read-back token.",
+          "type": "string"
+        },
+        "bond": {
+          "description": "Whether this row needs a surface (Surface) or holds the body where it is (Free).",
+          "enum": [
+            "Surface",
+            "Free"
+          ]
+        },
+        "hold": {
+          "description": "What holds the body once the row is taken.",
+          "enum": [
+            "None",
+            "Gravity",
+            "Grip",
+            "Lift"
+          ]
+        },
+        "cone": {
+          "description": "The inclusive angle band, in degrees, between an admitted surface normal and gravity-up: [0, 60] is floors, [60, 120] walls, [0, 180] everything. Required for Surface, refused for Free.",
+          "default": null
+        },
+        "grip": {
+          "description": "The inward pull, world units per second, under Grip. Applied as a positional standoff, so it closes a gap the surface opens without ever pushing the body through it.",
+          "type": "number",
+          "default": 0
+        },
+        "lift": {
+          "description": "The fraction of gravity cancelled under Lift: 1 hovers, 0.5 halves the fall.",
+          "type": "number",
+          "default": 0
+        },
+        "speed": {
+          "description": "The travel speed along the hold\u0027s tangent plane, world units per second, or null to ride the kit\u0027s own resolved move speed.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "reach": {
+          "description": "How far a surface row\u0027s probes search, world units. Required positive for Surface.",
+          "type": "number",
+          "default": 0
+        },
+        "upLean": {
+          "description": "How far the body\u0027s up axis blends from gravity-up toward the surface normal, in [0, 1].",
+          "type": "number",
+          "default": 0
+        },
+        "forward": {
+          "description": "Where the hold\u0027s frame takes its forward direction when the surface leaves it free.",
+          "enum": [
+            "Heading",
+            "Intent",
+            "Velocity"
+          ],
+          "default": "Heading"
+        },
+        "onDrive": {
+          "description": "Whether driving into an admitted face takes this row with no channel press.",
+          "type": "boolean",
+          "default": false
+        },
+        "driveAlignment": {
+          "description": "The least alignment, in [0, 1], between the commanded direction and the face\u0027s inward normal before OnDrive takes it. Inert without it.",
+          "type": "number",
+          "default": 0
+        },
+        "release": {
+          "description": "The declared channel name whose held read drops this row, or null for a row no channel can drop.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "spend": {
+          "$ref": "#/$defs/WorldHoldSpend",
+          "description": "What the row spends while held, or null for a row that spends nothing.",
+          "default": null
+        }
+      },
+      "required": [
+        "name",
+        "bond",
+        "hold"
+      ],
       "additionalProperties": false
     },
     "ActionEffectSetVerticalVelocity": {
@@ -3754,19 +3877,19 @@
       }
     },
     "WorldPlacementGrip": {
-      "description": "A placement\u0027s grip facet \u2014 overrides the world\u0027s DefaultGrip climb policy for every collider this row compiles, composing as the tighter authoring layer: present, it decides; absent, the row\u0027s colliders fall back to the world default. Requires Solid (nothing else compiles a collider a grip trait could apply to). Every collider a distribution/mirror expands from one row shares the row\u0027s single grip decision \u2014 a lattice of climbable handholds is authored as one placement, not one per copy.",
+      "description": "A placement\u0027s grip facet \u2014 overrides the world\u0027s DefaultHold hold policy for every collider this row compiles, composing as the tighter authoring layer: present, it decides; absent, the row\u0027s colliders fall back to the world default. Requires Solid (nothing else compiles a collider a grip trait could apply to). Every collider a distribution/mirror expands from one row shares the row\u0027s single grip decision \u2014 a lattice of holdable handholds is authored as one placement, not one per copy.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
-        "climbable": {
-          "description": "Whether this row\u0027s compiled surface(s) are climbable, overriding the world default.",
+        "holdable": {
+          "description": "Whether a body\u0027s surface hold may take this row\u0027s compiled surface(s), overriding the world default.",
           "type": "boolean"
         }
       },
       "required": [
-        "climbable"
+        "holdable"
       ],
       "additionalProperties": false
     },
@@ -3845,7 +3968,7 @@
         },
         "grip": {
           "$ref": "#/$defs/WorldPlacementGrip",
-          "description": "The placement\u0027s grip facet (see WorldPlacementGrip) \u2014 overrides the world\u0027s default climb policy for this row\u0027s compiled surface(s), or null to inherit the world default. Omitted from the wire when null. Requires Solid (validated).",
+          "description": "The placement\u0027s grip facet (see WorldPlacementGrip) \u2014 overrides the world\u0027s default hold policy for this row\u0027s compiled surface(s), or null to inherit the world default. Omitted from the wire when null. Requires Solid (validated).",
           "default": null
         }
       },
@@ -4380,6 +4503,8 @@
         "AffectedBy",
         "Submerged",
         "AtSurface",
+        "Climbing",
+        "Flying",
         null
       ]
     },

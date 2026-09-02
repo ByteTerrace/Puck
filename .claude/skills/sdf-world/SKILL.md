@@ -139,6 +139,15 @@ reads it rather than hand-syncing a second literal), and the
 > program's accumulator IS the object; the hazard begins the moment a program gains a floor or a second object.
 > (Evidence history: docs/sdf-accumulator-plan.md, retired 2026-07-09 — see git history.)
 >
+> **A subtraction is a bound in its own void.** `max(a, −b)` is the exact distance only where the subject `a` is the
+> nearest solid; inside the carved void, wherever `−b < a`, it returns `a` — the subject's carved-away face — and
+> wherever `−b` wins it returns the distance to the CARVE'S OWN boundary, with the carve's inward gradient. Rendering
+> never sees either (no zero crossing), but the CONTACT field (`SdfFieldEvaluator` mirrors the same blend tail) reads
+> them as surfaces: a body grounds on a carve box's bottom face and on a phantom lip about one radius wide inside the
+> rim, and `world.collision.probe` shows the tell (a positive distance with an up gradient in open air). Author a
+> carve to extend past every point a body can reach in the void (`puck.world.json`'s `pit` runs from below the safety
+> net to above head height), or build the void from union geometry when it must be exact.
+>
 > **`Xor` is EXEMPT — maskable-exact with a covering, union-margin bound (settled 2026-07-08, real-GPU slice
 > comparison).** `max(min(acc,b), -max(acc,b))` reduces to `min(acc,b)` ≡ plain union everywhere OUTSIDE the candidate
 > (`b > 0`) — the `-max(acc,b)` arm only wins when `acc + b < 0`, deeper inside than a first-hit march ever samples —

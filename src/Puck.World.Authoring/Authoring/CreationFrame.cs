@@ -53,6 +53,10 @@ public static class CreationFrame {
         ArgumentNullException.ThrowIfNull(document);
 
         return document with {
+            Effectors = ConvertList(
+                source: document.Effectors,
+                convert: FlipEffector
+            ),
             Cameras = ConvertList(
                 source: document.Cameras,
                 convert: camera => camera with { Position = Flip(value: camera.Position) }
@@ -74,9 +78,20 @@ public static class CreationFrame {
                 convert: shape => shape with {
                     Position = Flip(value: shape.Position),
                     Rotation = Flip(value: shape.Rotation),
+                    Joint = ((shape.Joint is { } joint)
+                        ? Flip(value: joint)
+                        : null),
                     Domain = ConvertList(
                         source: shape.Domain,
                         convert: FlipDomainOp
+                    ),
+                    Slides = ConvertList(
+                        source: shape.Slides,
+                        convert: FlipSlide
+                    ),
+                    Swings = ConvertList(
+                        source: shape.Swings,
+                        convert: FlipSwing
                     ),
                 }
             ),
@@ -111,6 +126,29 @@ public static class CreationFrame {
         ? (symmetry with { Normal = Flip(value: symmetry.Normal) })
         : op
     );
+
+    // A swing's pivot is a position and its axis is a direction, so both take the same Flip. Yaw180 is a proper
+    // rotation (det diag(-1, 1, -1) = +1), so a rotation axis carries no extra sign: conjugating axisAngle(a, θ) by
+    // M yields axisAngle(M a, θ) with the angle — and hence the amplitude, phase, and waveform — unchanged.
+    private static ShapeSwingDocument FlipSwing(ShapeSwingDocument swing) => swing with {
+        Axis = Flip(value: swing.Axis),
+        Pivot = Flip(value: swing.Pivot),
+    };
+    private static ShapeSlideDocument FlipSlide(ShapeSlideDocument slide) => slide with { Axis = Flip(value: slide.Axis) };
+
+    // An effector's probe direction is a direction and its body offset is a position, so both take the same Flip; the
+    // reach, standoff, weight, plant window and target-kind name are frame-invariant scalars and tokens. A state
+    // target's referenced cell holds a WORLD point, so it never crosses this boundary.
+    private static CreationEffectorDocument FlipEffector(CreationEffectorDocument effector) => effector with {
+        Target = effector.Target with {
+            Direction = ((effector.Target.Direction is { } direction)
+                ? Flip(value: direction)
+                : null),
+            Offset = ((effector.Target.Offset is { } offset)
+                ? Flip(value: offset)
+                : null),
+        },
+    };
 
     /// <summary>Converts an engine-frame document back to the author frame — the echo/save boundary. The identical
     /// transform to <see cref="ToEngine"/>: a 180° yaw is its own inverse.</summary>

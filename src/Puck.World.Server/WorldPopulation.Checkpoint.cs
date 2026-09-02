@@ -175,7 +175,8 @@ public sealed partial class WorldPopulation {
 
             body.SetContactConfiguration(
                 field: m_contactField,
-                upPolicy: m_bodyUpPolicy
+                upPolicy: m_bodyUpPolicy,
+                walkableThreshold: m_walkableThreshold
             );
             body.SetGravityField(field: m_gravityField);
             body.SetAttachmentPolicy(policy: m_fixedAttachment);

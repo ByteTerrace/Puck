@@ -67,30 +67,19 @@ public sealed partial class WorldBody {
             // drains identically whether the intent drives the avatar or the route target.
         } else {
             // The attachment surface reads its own attach/detach/reel channels directly (never through the kit's
-            // action table — see WorldBody.Attachment.cs), so it runs here, ahead of the mode dispatch below, on
+            // action table — see WorldBody.Attachment.cs), so it runs here, ahead of the program dispatch below, on
             // the SAME "intent reaches the avatar" gate as everything else in this branch. A detach that fires this
             // tick falls through to the ordinary ExecuteProgram path below in the SAME tick, already carrying the
-            // momentum Detach wrote into the vertical/planar channels.
-            ProcessAttachmentIntent(
-                intent: in intent,
-                stepTicks: stepTicks
-            );
+            // momentum Detach wrote into the vertical/planar channels. Gravity stays on while a tether holds and
+            // the kit's own program keeps integrating; WorldPopulation.ResolveTethers clamps the result to the rope
+            // AFTER every body this tick has advanced.
+            ProcessAttachmentIntent(intent: in intent);
             ProcessReel(
                 intent: in intent,
                 stepTicks: stepTicks
             );
 
-            if (m_attachmentMode == WorldBodyAttachmentMode.Climb) {
-                // Climb REPLACES the ordinary program dispatch entirely: grounding/gravity are suspended for as
-                // long as the grip holds, and the body moves in the gripped surface's tangent plane instead —
-                // see AdvanceClimb's own remarks. Grapple takes the opposite path (falls through below unchanged):
-                // gravity stays on and the kit's own program keeps integrating; WorldPopulation.ResolveTethers
-                // clamps the result to the rope AFTER every body this tick has advanced.
-                AdvanceClimb(
-                    intent: in intent,
-                    stepTicks: stepTicks
-                );
-            } else {
+            {
                 // moveSpeed goes through ResolveMoveSpeed's per-arm dispatch — grounded reads the rate live off the
                 // seated profile every frame (an identity.motion edit is real-time; a profileless stand-in falls back to the
                 // tuning's speed), clamped by the kit's own authored MoveSpeedEnvelope when declared; vehicle
@@ -470,7 +459,13 @@ public sealed partial class WorldBody {
     // kit's authored fall rate otherwise. The rise/fall asymmetry is SHAPING, not a source — under a solved field it
     // rides as the authored Rise:Fall ratio so a floaty top of the arc survives on a planetoid, and MaxFallSpeed
     // clamps either way.
-    private void ApplyVerticalGravity(ulong stepTicks) {
+    private void ApplyVerticalGravity(ulong stepTicks) => ApplyVerticalGravity(
+        scale: FixedQ4816.One,
+        stepTicks: stepTicks
+    );
+    // scale is the fraction of gravity that still reaches the body — a hold's lift cancels the rest. One is the
+    // unscaled arc; zero holds the ballistic channel where it is.
+    private void ApplyVerticalGravity(ulong stepTicks, FixedQ4816 scale) {
         var rising = (m_verticalVelocity > FixedQ4816.Zero);
         var gravity = (rising
             ? m_tuning.RiseGravity
@@ -490,7 +485,7 @@ public sealed partial class WorldBody {
 
         var gravityStep = m_verticalVelocityAccumulator.Integrate(
             elapsedTicks: stepTicks,
-            ratePerSecond: -gravity
+            ratePerSecond: -(gravity * scale)
         );
         var terminalVelocity = -m_tuning.MaxFallSpeed;
         var acceleratedVelocity = (m_verticalVelocity + gravityStep);
@@ -768,6 +763,9 @@ public sealed partial class WorldBody {
             case BodyMotionOp.ResolveVehicleFrame:
                 ResolveVehicleFrame(scratch: ref scratch);
                 break;
+            case BodyMotionOp.ResolveHold:
+                ResolveHold(scratch: ref scratch);
+                break;
             case BodyMotionOp.ShapeVehicleVelocity:
                 ShapeVehicleVelocity(scratch: ref scratch);
                 break;
@@ -782,6 +780,9 @@ public sealed partial class WorldBody {
                 break;
             case BodyMotionOp.ApplyBuoyancyAndSurface:
                 ApplyBuoyancyAndSurface(scratch: ref scratch);
+                break;
+            case BodyMotionOp.ApplyHold:
+                ApplyHold(scratch: ref scratch);
                 break;
             case BodyMotionOp.ApplyVerticalDrive:
                 ApplyVerticalDrive(scratch: ref scratch);
@@ -921,6 +922,10 @@ public sealed partial class WorldBody {
                 ResolveProgramContacts(scratch: ref scratch);
             }
         }
+
+        // The grip's inward standoff lands after the pose is committed, for the same reason the contact resolve
+        // lands after integration: it is a correction to where the body ended up, not a term in how it got there.
+        SeatToHold(stepTicks: stepTicks);
     }
     private static FixedQ4816 ExtractYaw(FixedQuaternion orientation) {
         var forward = orientation.Rotate(vector: -UnitZ);
@@ -1429,7 +1434,13 @@ public sealed partial class WorldBody {
                 stepTicks: scratch.StepTicks
             );
 
-            if (!m_bodyMotionProgram.OwnsVerticalContactState) {
+            if (
+                !m_bodyMotionProgram.OwnsVerticalContactState ||
+                HoldOwnsVerticalChannel
+            ) {
+                // A grip owns the whole tangent-plane velocity, vertical component included — splitting it against
+                // the body's up axis and storing the remainder as ballistic velocity would leave the climb's own
+                // rise to be re-added by gravity the tick the hold ends.
                 return;
             }
 

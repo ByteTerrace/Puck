@@ -54,29 +54,32 @@ public interface IContactField {
     /// <param name="up">The unit up axis on return.</param>
     /// <returns><see langword="true"/> when an up axis is available.</returns>
     bool TryUp(in FixedVector3 position, out FixedVector3 up);
-    /// <summary>Finds the nearest CLIMBABLE surface point within reach — the climb-attach query
-    /// (<see cref="FixedSurfaceQuery.TryNearest"/> gated by whichever climbability policy this provider composed at
-    /// build time). The default declines: only a provider that actually holds a climbable surface vocabulary
-    /// overrides this, so a field-quality world's bodies simply find no attach candidate rather than approximate
-    /// one.</summary>
-    /// <param name="probe">The world-space point to search from (a body's own position).</param>
-    /// <param name="reach">The non-negative maximum distance a result may sit from <paramref name="probe"/>.</param>
-    /// <param name="candidate">The nearest climbable surface point within reach, or <see langword="default"/> when
+    /// <summary>Finds the nearest HOLDABLE surface along a direction — the directed surface probe a hold both
+    /// enters and keeps itself by. An undirected nearest-surface query is not a question with a useful answer on a
+    /// world whose floor, walls, ramps and overhangs are one holdable placement: a body at a wall's foot is nearer
+    /// the floor, and a body under a ledge is nearer its underside. Asking along a direction — the commanded drive,
+    /// or the face's own inward normal — names the surface the body means. The default declines: only a provider
+    /// that holds a holdability vocabulary overrides this, so a field-quality world's bodies simply find no
+    /// candidate rather than approximate one.</summary>
+    /// <param name="origin">The world-space probe origin (a body's own mid-height).</param>
+    /// <param name="direction">The probe direction; need not be pre-normalized.</param>
+    /// <param name="maxDistance">The non-negative maximum distance a result may sit from <paramref name="origin"/>.</param>
+    /// <param name="candidate">The nearest holdable surface along the direction, or <see langword="default"/> when
     /// none qualifies.</param>
     /// <param name="grantedByOverride">Whether a per-surface override (rather than the provider's own default grip
-    /// policy) is what made <paramref name="candidate"/> climbable. Meaningless when this returns
+    /// policy) is what made <paramref name="candidate"/> holdable. Meaningless when this returns
     /// <see langword="false"/>.</param>
-    /// <returns><see langword="true"/> when a qualifying climbable surface exists.</returns>
-    bool TryNearestClimbableSurface(in FixedVector3 probe, FixedQ4816 reach, out FixedSurfaceAttachCandidate candidate, out bool grantedByOverride) {
+    /// <returns><see langword="true"/> when a qualifying holdable surface lies along the direction.</returns>
+    bool TryHoldableSurfaceAlongDirection(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, out FixedSurfaceAttachCandidate candidate, out bool grantedByOverride) {
         candidate = default;
         grantedByOverride = false;
 
         return false;
     }
     /// <summary>Finds the best grapple anchor candidate along an aim direction — the directed attach query
-    /// (<see cref="FixedSurfaceQuery.TryNearestDirected"/>), independent of any climbability policy: a grapple
-    /// anchors to any surface within the cone, climbable or not. The default declines, matching
-    /// <see cref="TryNearestClimbableSurface"/>.</summary>
+    /// (<see cref="FixedSurfaceQuery.TryNearestDirected"/>), independent of any holdability policy: a grapple
+    /// anchors to any surface within the cone, holdable or not. The default declines, matching
+    /// <see cref="TryHoldableSurfaceAlongDirection"/>.</summary>
     /// <param name="origin">The world-space aim origin (a body's own position).</param>
     /// <param name="direction">The aim direction; need not be pre-normalized.</param>
     /// <param name="maxDistance">The non-negative maximum distance a candidate's surface point may sit from

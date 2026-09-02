@@ -857,13 +857,80 @@ completed-document boundary, reference preserved on canonical write-back). A `pr
 coordinates are AUTHOR-frame, not world-frame: `puck.creation.v1` authors with +Z the front a shape
 faces — a half-turn about Y from the engine's −Z-forward — and `CreationFrame.ToEngine` converts once
 at `WorldPrototype.EngineDocument` (authored `[x, y, z]` lands at world `(−x, y, −z)`; pinned by
-`CreationAuthorFrameLawTests`, documented in `Puck.World.Authoring`'s README). Everything else — the
+`CreationAuthorFrameLawTests`, documented in `Puck.World.Authoring`'s README). A creation also
+carries its own animation, in three composable parts: a creation-level `drivers` list (≤ 8 —
+`{name, signal, cadence, when}`, where `signal` is `planarTravel`/`travel`/`time` (integrating) or
+`speed`/`verticalSpeed`/`turnRate` (instantaneous) and `when` is one token or an array of ≤ 4 that
+must all hold — a `Puck.Physics.Motion.BodyFacts` name, `always`, or the client-derived `moving`/
+`still` (eased rendered speed against `WorldGaitDrivers.MovingSpeed`), so a walker gated
+`["Grounded", "moving"]` returns its limbs to rest on a stop with no sim fact involved), and
+per-shape `swings`/`slides` (≤ 4 each) naming a driver, an `axis` (plus a
+`pivot` for a swing), an `amplitude`, a `phase`, and a `wave` (`sine`/`halfSine`/`linear`/`constant` —
+`constant` is the POSE BLEND, `amplitude · w`, how a climbing posture comes in on the `Climbing` gate;
+`curve:<row>` samples the world's `curves` row by arc fraction, Z as the value), plus a per-shape
+`parent` naming an EARLIER shape whose motion carries it (pivots included — the joint chain of a
+limb). A driver's `cadence` and a facet's `amplitude`/`phase` may reference a numeric state cell
+(`DocumentScalar`, resolved by the same walk as every document reference — a numeric cell is offered
+as its decimal spelling), and a driver's `signal` may be `state.<row>[.<key>]`, read at the frame's
+tick (a `cycle` row is a shared clock). The world validator refuses an undeclared curve or a
+non-numeric signal row (`ValidateCreationBindings`). One primitive covers a walker's limbs, a climber's, a wheel, a rotor, a
+tail, and a bobbing hull. It is presentation-only: `WorldStampPool.PackTransforms` composes it onto
+the per-frame dynamic transforms and nothing else reads it, so the SDF program, the colliders, the
+solid field, and simulation state are untouched — pinned by `CreationAnimationLawTests`, with the
+grammar and the worked rigs in `Puck.World.Authoring`'s README. A fourth, composing AFTER the
+drivers and the parent chain: an `effectors` list (≤ 8 — `{name, chain, tip, target, when, weight,
+plant}`) corrects the driver-posed skeleton so a named tip reaches a target. `chain` names the bones
+root→tip, each descending from the one before through `parent` (a bone's joint is the pivot of its
+first swing, its authored `joint` when it swings nothing, else its own position); two bones close
+analytically in the plane the driver-posed limb already bends in, three to eight sweep by cyclic
+coordinate descent. `target.kind` is `surface` (march the client's ONE shared static-scene
+`SdfFieldEvaluator` — the same one the chase camera's clearance sweep reads, held on `WorldClient`
+— from the posed tip along an author-frame `direction` up to `reach`, landing `standoff` off the
+hit's own normal; a `wallpaper` domain fold anywhere in the world makes that field unbuildable, so
+every probe there misses), `body` (another entity's root plus `offset`, in that body's attitude), or
+`state` (a text cell spelling a world `[x, y, z]`). `when`/`weight` gate and ease it exactly as a
+driver's do, blending the GOAL rather than the pose. `plant` holds the world target where it was
+when the named driver's phase entered `window` — a stance foot, a hand on a hold, one mechanism.
+Presentation-only on the same terms, pinned by `CreationEffectorLawTests`. Everything else — the
 census, simulation (30 Hz), host (windowed, loopback-default — `--listen` binds
 TCP), collision, gravity, channels, the `walk` body-motion program, the `walker` kit
 (`defaultSeatKit`), keyboard/gamepad bindings, the chase seat rig, the pip look, and grants — is the
 world document's own. A lattice trait's `color` speaks the same grammar (resolved live at
 emit — a state cell write recolors a height field on the next frame, no re-bake, bricks hold only
 distances; `world.fields` echoes the authored token).
+The world's one placement is the `debugRoom` prototype at origin: a 24 m platform (top at y = −0.5)
+carrying one fixture per contact contract, each with a `spawnPoints` row (engine frame) that stands
+the body in front of it — `origin`, `ramps`, `stairs`, `wall`, `pit`, `ladder`, `edge` —
+reachable by `body.pose spawn:<id> [body]` (the console mirror of a rule's `pose` effect naming a
+spawn point; seats still spawn at `origin` by the absent-`seatSpawns` derivation). Author-frame
+layout, +Z ahead of the origin spawn and +X the player's LEFT (the half-turn flips X): the scale
+ladder (0.5/1/2 m cubes) ahead-left, the slope fan (30/45/55/65/75°, bracketing
+`collision.maxSlopeDegrees` 60) ahead-right, the step stairs (rises 0.1/0.25/0.5/1 m) to the left,
+the wall with a 1.5 m-clearance and a 0.5 m-clearance overhang at the right edge, the pit (a
+`Subtraction` carve) behind, and 1 m compass posts on the platform's axis midpoints — `axisX` red,
+`axisZ` blue, a post at the ENGINE-positive end and a flat disc at the negative — with `farPillar`
+120 m ahead on the net as the fog/far-distance landmark. What it measures (`body.fly` from each
+spawn, `body.where` samples): the 30/45/55° ramps climb at walking speed, the 65/75° faces stop the
+body at their foot (`FixedContactPushMath` treats a non-walkable, non-ceiling normal as a WALL —
+penetration resolved across `up`, the approach clamp horizontal only — pinned by
+`FixedContactPushMathLawTests`); the 0.1 and 0.25 m rises are stepped by the capsule's rounded
+bottom and the 0.5 m rise blocks (there is no authored step height); a wall stops at radius + skin
+with y, pitch and roll unchanged; the high overhang is inert and the low one blocks; the pit and the
+edge both land the body upright on the net. The pit carries an SDF fact worth knowing before
+authoring any carve: `max(a, −b)` is exact only inside the subject, so inside the void the field
+reads the CARVE BOX'S OWN faces and the subject's carved-away faces as surfaces (a phantom floor the
+contact solver grounds on, a phantom lip ~radius wide at the rim) — the carve extends from below the
+net to above head height for exactly that reason, and a void that must be exact is built from union
+geometry instead. The chase rig's orbit yaw is `state.look.behind`, world-referenced, so a spawn's
+`yawDegrees` turns the body, never the camera. Three population creatures live on the platform as
+`inhabit` rows with `wander` producers (`spiderDen`, `dragonflyPerch`, `houndRun`), each a different
+hold list over the same primitives: the spider (`spiderKit`) grips any face in a `[0, 180]` cone,
+the dragonfly (`dragonflyKit`, the `fly` program) holds the air on full lift and keeps its altitude
+through the producer's `altitudeGain`, the hound (`houndKit`) walks the ground hold with a four-beat
+gait and planted paws; Wren's own hold list is `wall` (grip, `spend` against the `stamina` body slot,
+`jump` releases), `ground`, `air`, and her hands and feet are `effectors` on surface targets. Their
+homes sit away from the pit and the platform edge — a wander radius that reaches either walks the
+creature onto the safety net, which it then paces beneath the platform.
 An explicit path or the shipped default that cannot be loaded refuses the boot by name.
 `puck.world.frozen.json` ships beside them: the frozen floating-island diorama, reference-only,
 reachable via `--world`, never extended, deleted on owner order — the worked examples this file cites
@@ -953,7 +1020,9 @@ velocity through exactly ONE of two mechanisms — the engage/release
 `Response` table (`MotionResponse` rows, gated on movement regime) or a named
 `Dynamics` row (a pole-matched second-order follower — see the `dynamics`
 section above); a kit authoring both, or neither, refuses by name
-(`WorldDefinitionValidator.ValidatePlanarShaping`). `Dynamics` compiles once
+(`WorldDefinitionValidator.ValidatePlanarShaping`). A grounded row additionally
+authors `Holds` (below), the ordered list `ResolveHold`/`ApplyHold` read.
+`Dynamics` compiles once
 per kit (`WorldKit.Compile`) against the world's own `simulation.rateHz` —
 a world authoring no simulation rate cannot compile one and refuses by name.
 The follower's state lives in `WorldBody` as ordinary sim state, included in
@@ -1059,6 +1128,119 @@ can legitimately diverge from, but vehicle's `TopSpeed` IS the live-clamped
 read (`world.row.set kits …` retunes it in place), so requiring it to already
 conform would refuse the exact past-the-cap retune the envelope exists to
 catch.
+
+**Holds (`WorldMotionModel.Grounded.Holds`, a list of `WorldHold` rows →
+`FixedBodyHold[]`) — what may hold a body, in preference order.** A grounded
+kit authors an ordered list; the `ResolveHold` operation takes the first row
+the world offers and `ApplyHold` applies that row's vertical law. A kit
+authoring none is unchanged: its vertical channel is `ApplyVerticalGravity`'s
+alone, and the two operations are simply absent from its program.
+
+```json
+"holds": [
+  { "name": "wall", "bond": "Surface", "cone": [60, 120], "hold": "Grip", "grip": 1.0,
+    "reach": 0.8, "speed": 2.0, "upLean": 0.0, "forward": "Heading",
+    "onDrive": true, "driveAlignment": 0.5, "release": "jump",
+    "spend": { "state": "stamina", "ratePerSecond": 1.0 } },
+  { "name": "ground", "bond": "Surface", "cone": [0, 60], "hold": "Gravity", "reach": 1.2 },
+  { "name": "air", "bond": "Free", "hold": "Gravity" }
+]
+```
+
+`bond` is `Surface` (a contact-field face whose normal makes an angle inside
+`cone` degrees with GRAVITY-up — 0 a floor, 90 a wall, 180 a ceiling; the cone
+is measured against gravity-up, never the body's own leaned up) or `Free` (no
+surface at all). `hold` is `Gravity` (gravity holds the body against the face —
+the walkable case, integrating exactly as `ApplyVerticalGravity` does), `Grip`
+(a pull of `grip` u/s toward the face applied as a POSITIONAL standoff, gravity
+suspended while it holds), `Lift` (a fraction `lift` of gravity cancelled — 1
+hovers, and the `MoveUp` role drives vertical through the ordinary
+`ApplyVerticalDrive` op rather than a second implementation), or `None`.
+`speed` (u/s along the row's tangent plane, absent rides the kit's own resolved
+move speed), `reach` (how far a surface row's probes search; required positive),
+`onDrive` + `driveAlignment` (take the row by driving into a face in its cone),
+`release` (a declared channel whose HELD read drops the row — no latch, so
+holding it down keeps the body off the face), and `spend` (drain a body-lane
+Counter slot at a rate; the row becomes ineligible the tick the slot cannot
+pay, and a world's own rules refill it or trade for it — the engine has no
+stamina concept of its own).
+
+Frame rules per row: `upLean` in `[0, 1]` blends the body's up axis from
+gravity-up toward the face normal (0 keeps a body upright on a wall, 1 lays it
+on the face — and, because that axis is also what contact resolution grounds
+against, 1 makes the face read as ground); `forward` (`Heading`/`Intent`/
+`Velocity`) chooses what the body's drawn attitude tracks inside the row's own
+frame. Movement rides the face's own tangent plane: forward is gravity-up
+projected onto the face ("up the face"), right completes it, so
+`ComputePlanarTargetVelocity` needs no new operation. A face whose normal is
+parallel to gravity-up leaves that tangent undefined, and there the ordinary
+frame stands.
+
+**Resolution order, per tick.** What the body is actively DRIVING into outranks
+what it happens to be resting on, so the `onDrive` pass runs first over the
+ordered list. Otherwise the list decides, first match wins, with the row
+already held evaluated by whether its own face is still there (the directed
+tracking probe along that face's inward normal) rather than by a fresh take —
+so a row authored EARLIER still wins from where the body stands, which is why
+a walker authors `wall` before `ground`. A held non-walkable row also ends when
+the contact resolve has stood the body on something walkable and the body has
+stopped pulling itself along the face. When a held face ENDS while the body is
+still driving forward, one further pass reaches PAST the edge — up the last
+tangent by a body span and in past the face by a body width — and the body
+arrives one body span off whatever it finds there; that is the whole of the
+ledge transition, with no mantle phase.
+
+Every probe is DIRECTED, for the same reason a grip's always was: an undirected
+nearest-surface query on a world whose floor, walls, ramps and overhangs are one
+holdable placement answers with the floor a body is standing on.
+`IContactField.TryHoldableSurfaceAlongDirection` is that query; both providers
+answer it, the field by ray march (`RayHit.Normal` is documented ZERO — the
+surface orientation is a separate `TryFieldGradient` read one step back along
+the ray). Which surfaces admit a hold at all is the collision row's
+`defaultHold` (world-level) composed with a placement's own
+`grip: { holdable: … }` override.
+
+Validation (`WorldDefinitionValidator.ValidateHolds`): unique row names; a cone
+required for a `Surface` row and refused for a `Free` one, finite, inside
+`[0, 180]`, increasing; a positive `reach` on a `Surface` row; `upLean` and
+`driveAlignment` in `[0, 1]`; a positive `grip` on a `Grip` row and `Grip`/
+`onDrive` requiring `Surface`; `lift` in `[0, 1]`; `release` naming a declared
+composition channel; `spend.state` naming a declared body/identity Counter slot
+and a positive `spend.ratePerSecond`. A kit whose program selects
+`ResolveHold`/`ApplyHold` under a model that supplies no `Holds` facet refuses
+by name through the same `MotionTuningFacet` gate every other operation walks.
+
+Read back with `body.hold` (`[body.hold: body:<n> hold=<name|none>
+normal=(x, y, z) spend=<left|n/a>]`). The current row index, its anchor and
+normal, and the spend accumulator's remainder are simulation state: captured in
+`IntegrationResidue`, carried through `WorldAuthorityCheckpointCodec`, and part
+of the replay hash.
+
+**The `attachment` section (`WorldAttachmentSection` → `FixedWorldAttachment`)
+— the world's grapple surface.** Absent resolves to `Enabled: false`: no
+attach/detach/reel channel reaches any body. A body's attachment state is a
+MODE (`WorldBodyAttachmentMode` — `None`/`Grapple`), read directly off the
+intent by `WorldBody.Attachment.cs`, never through a kit's action table, and
+echoed by `body.attachment`; the section itself is echoed by
+`world.attach-policy`. Its fields are the aim ceiling and cone
+(`grappleMaxDistance`/`grappleAssistHalfAngleDegrees`), the rope
+(`reelRate`/`reelInFloor`), the release scale (`releaseMomentumScale`), and the
+three channel names. Surface holds are not authored here.
+
+**Body facts on the wire (`BodyFacts`, `Puck.Physics.Motion`).** The engine
+publishes each body's per-tick fact set on `EntitySnapshot.Facts` — one bit
+per body-state `ActionFact` (`grounded`, `airborne`, `rising`, `falling`,
+`submerged`, `atsurface`, `climbing` — holding a surface row whose face is
+outside the world's own walkable cone — and `flying` — holding a free row with
+lift; `AffectedBy` has no bit, being a relationship rather than a state). The mask is derived through the SAME
+predicate the kit's action gates read, so the snapshot, the gates, and the
+`body.where` echo cannot disagree; a decoder refuses an undeclared bit by
+name. `WorldSessionMirror.Facts(int)` and `WorldClient.Facts(int)` front it
+for presentation, which is how animation keys on regime without the client
+deriving one. `body.where` echoes it as `facts=` (lower-case, `|`-joined in
+bit order, `none` when empty). Facts are NOT mutually exclusive: a body can be
+grounded and rising in one tick, and a body on a wall reads `airborne|climbing`
+because contact resolution keeps running under every hold.
 
 `views.seatRig` is a `WorldCameraProgram` — an ordered op list, not a kind
 union (see views.md for the op table). Its `dynamics` op names a `dynamics`

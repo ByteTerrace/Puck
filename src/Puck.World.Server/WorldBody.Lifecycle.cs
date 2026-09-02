@@ -130,7 +130,18 @@ public sealed partial class WorldBody {
     // arm compiles STRAIGHT into the shared m_tuning slots (WorldMotionTuningFactory.Compile(WorldMotionModel.Swim) maps
     // ThrustSpeed/ThrustSpeedEnvelope onto MoveSpeed/MoveSpeedEnvelope) — no fork, so the grounded-shaped resolve is
     // already arm-correct for swim; only the swim-specific half (buoyancy, float depth, ...) needs its own record.
-    private void SetTuning(WorldMotionModel motion, FixedMotionDynamics? planarDynamics = null) {
+    private void SetTuning(WorldMotionModel motion, FixedMotionDynamics? planarDynamics = null, FixedBodyHold[]? holds = null) {
+        m_holds = (holds ?? []);
+
+        if (m_holdIndex >= m_holds.Length) {
+            // A retune that shortened (or dropped) the list cannot leave the body holding a row that no longer
+            // exists; the next ResolveHold re-takes from the new list.
+            m_holdIndex = -1;
+            m_holdAnchor = FixedVector3.Zero;
+            m_holdNormal = FixedVector3.Zero;
+            m_holdSpendAccumulator.Reset();
+        }
+
         switch (motion) {
             case WorldMotionModel.Grounded grounded:
                 m_motionArm = CompiledMotionArm.Grounded;
@@ -181,11 +192,12 @@ public sealed partial class WorldBody {
         );
     }
     /// <summary>Formats the standalone <c>body.where</c> echo — the bracket-tagged, index-prefixed line a piped run
-    /// asserts against — as the full 6DOF pose:
-    /// <c>[body.where: body:{N} pos=(x.xx, y.yy, z.zz) yaw=ddd° pitch=ddd° roll=ddd°]</c>. One format always. A grounded
-    /// entity keeps a canonical level orientation — <c>pitch=0 roll=0</c> — while <c>y</c> is its resolved ground foot
-    /// point (<c>0.00</c> on the flat plane, following the contact field where solids lift it). The bare planar
-    /// fragment is <see cref="DescribePose"/>.</summary>
+    /// asserts against — as the full 6DOF pose plus the fact mask:
+    /// <c>[body.where: body:{N} pos=(x.xx, y.yy, z.zz) yaw=ddd° pitch=ddd° roll=ddd° facts=grounded|climbing]</c>. One
+    /// format always. A grounded entity keeps a canonical level orientation — <c>pitch=0 roll=0</c> — while <c>y</c> is
+    /// its resolved ground foot point (<c>0.00</c> on the flat plane, following the contact field where solids lift
+    /// it). <c>facts=</c> is <see cref="Facts"/> spelled lower-case and <c>|</c>-joined in bit order (<c>none</c> when
+    /// empty), the same mask the snapshot publishes. The bare planar fragment is <see cref="DescribePose"/>.</summary>
     /// <param name="index">The 0-based body index to tag the line with.</param>
     /// <returns>The full bracketed <c>body.where</c> echo line.</returns>
     public string DescribeWhere(int index) {
@@ -194,7 +206,7 @@ public sealed partial class WorldBody {
 
         return string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"[body.where: body:{index} pos=({position.X:0.00}, {position.Y:0.00}, {position.Z:0.00}) yaw={CompassDegrees(radians: yaw):0}° pitch={CompassDegrees(radians: pitch):0}° roll={CompassDegrees(radians: roll):0}°]"
+            handler: $"[body.where: body:{index} pos=({position.X:0.00}, {position.Y:0.00}, {position.Z:0.00}) yaw={CompassDegrees(radians: yaw):0}° pitch={CompassDegrees(radians: pitch):0}° roll={CompassDegrees(radians: roll):0}° facts={BodyFactVocabulary.Describe(facts: Facts)}]"
         );
     }
     /// <summary>Enqueues a timed scripted segment onto the tape: while it is live it drives the avatar with
@@ -420,8 +432,14 @@ public sealed partial class WorldBody {
     /// <param name="planarDynamics">The kit's compiled second-order follower
     /// (<see cref="FixedWorldKit.PlanarDynamics"/>), or <see langword="null"/> when the kit shapes planar velocity
     /// through its response table instead.</param>
-    public void RecompileKit(WorldMotionModel motion, CompiledActionSpec?[]? actions, FixedQ4816[]? actionThresholds, ChannelShape[]? actionShapes, bool[]? roleMask, RoleChannelOrdinals roleOrdinals, CompiledActionStateSlot[]? actionState, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedWorldCollider? collider, FixedQ4816 maxSmoothError, int sprintChannelOrdinal = -1, int driftChannelOrdinal = -1, FixedMotionDynamics? planarDynamics = null) {
-        SetTuning(motion: motion, planarDynamics: planarDynamics);
+    /// <param name="holds">The kit's compiled ordered hold list (<see cref="FixedWorldKit.Holds"/>), or
+    /// <see langword="null"/> for a kit authoring none.</param>
+    public void RecompileKit(WorldMotionModel motion, CompiledActionSpec?[]? actions, FixedQ4816[]? actionThresholds, ChannelShape[]? actionShapes, bool[]? roleMask, RoleChannelOrdinals roleOrdinals, CompiledActionStateSlot[]? actionState, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedWorldCollider? collider, FixedQ4816 maxSmoothError, int sprintChannelOrdinal = -1, int driftChannelOrdinal = -1, FixedMotionDynamics? planarDynamics = null, FixedBodyHold[]? holds = null) {
+        SetTuning(
+            holds: holds,
+            motion: motion,
+            planarDynamics: planarDynamics
+        );
         CopyChannelBindings(
             actionShapes: actionShapes,
             actionThresholds: actionThresholds,
@@ -537,8 +555,11 @@ public sealed partial class WorldBody {
     /// that public physics abstraction provider-neutral.</summary>
     /// <param name="field">The world contact field.</param>
     /// <param name="upPolicy">The body-frame policy compiled from the live world's contact requirements.</param>
-    internal void SetContactConfiguration(IContactField? field, WorldBodyUpPolicy upPolicy) {
+    /// <param name="walkableThreshold">The compiled <c>cos(collision.maxSlopeDegrees)</c> a surface normal's
+    /// alignment with the body's up axis must clear to read as ground.</param>
+    internal void SetContactConfiguration(IContactField? field, WorldBodyUpPolicy upPolicy, FixedQ4816 walkableThreshold) {
         SetContactField(field: field);
+        SetWalkableThreshold(threshold: walkableThreshold);
 
         if (m_upPolicy != upPolicy) {
             // A policy transition invalidates the authority that produced the held axis. Snap to the new ambient
@@ -749,6 +770,9 @@ public sealed partial class WorldBody {
     public FixedQuaternion FixedOrientation => m_orientation;
     /// <summary>Gets the authoritative deterministic position.</summary>
     public FixedVector3 FixedPosition => m_position;
+    /// <summary>Gets the body's up axis — the direction its gravity opposes, its planar move plane is perpendicular
+    /// to, and its contact walkable test measures a surface normal against.</summary>
+    public FixedVector3 FixedUp => m_up;
     /// <summary>Gets the avatar's position at the top of the most recent <see cref="Advance"/> — the start point of
     /// the swept segment a portal-crossing scan tests against a slab. A hard teleport (<c>Pose</c>,
     /// <see cref="Reconcile"/>) resets this to the landing position, so the segment collapses to a point exactly
@@ -762,6 +786,23 @@ public sealed partial class WorldBody {
     /// <summary>Gets a value indicating whether the body is grounded this tick (resting on a walkable contact surface) — the
     /// <c>world.contacts</c> read-back.</summary>
     public bool Grounded => m_grounded;
+    /// <summary>Gets this body's publishable fact mask this tick — evaluated through the SAME predicate the kit's
+    /// action gates read (<c>FactHolds</c>), so the snapshot, the gates, and the <c>body.where</c> echo can never
+    /// disagree. Facts are not mutually exclusive: a body can be grounded and rising in one tick, and a climbing
+    /// body keeps whichever grounded/airborne answer its last contact resolve produced.</summary>
+    public BodyFacts Facts {
+        get {
+            var facts = BodyFacts.None;
+
+            foreach (var fact in BodyFactVocabulary.Publishable) {
+                if (FactHolds(fact: fact)) {
+                    facts |= BodyFactVocabulary.Bit(fact: fact);
+                }
+            }
+
+            return facts;
+        }
+    }
     /// <summary>Gets the latched resolved non-walkable contact normal — <see cref="FixedVector3.Zero"/> when nothing
     /// obstructs the body, a unit surface normal otherwise. A walkable push (the ground, a ramp) never sets this —
     /// only a contact whose alignment fails the grounded test does, which is exactly the witness

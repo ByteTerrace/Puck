@@ -12,15 +12,11 @@ internal sealed partial class PlayerCommandModule {
         provider: CultureInfo.InvariantCulture
     );
     private static string DescribeAttachmentMode(WorldBodyAttachmentMode mode) => (mode switch {
-        WorldBodyAttachmentMode.Climb => "climb",
         WorldBodyAttachmentMode.Grapple => "grapple",
         _ => "none",
     });
-    // The body.attachment read-back: mode, anchor, rope length (grapple only), the authored grip cost (echoed
-    // regardless of mode — see FixedWorldAttachment.GripCost's own remarks), and which policy layer granted an
-    // active climb.
+    // The body.attachment read-back: mode, anchor, and rope length. Surface holds are body.hold's to answer.
     private static string DescribeAttachment(int index, WorldBody body) {
-        var mode = body.AttachmentMode;
         var anchor = ((body.AttachmentAnchor is { } point)
             ? $"({DescribeAttachmentFixed(value: point.X)}, {DescribeAttachmentFixed(value: point.Y)}, {DescribeAttachmentFixed(value: point.Z)})"
             : "n/a"
@@ -29,12 +25,23 @@ internal sealed partial class PlayerCommandModule {
             ? DescribeAttachmentFixed(value: length)
             : "n/a"
         );
-        var policy = (mode switch {
-            WorldBodyAttachmentMode.Climb => (body.AttachmentGrantedByOverride ? "prototype-override" : "world-default"),
-            _ => "n/a",
-        });
 
-        return $"[body.attachment: body:{index} mode={DescribeAttachmentMode(mode: mode)} anchor={anchor} rope={rope} gripCost={DescribeAttachmentFixed(value: body.AttachmentGripCost)} policy={policy}]";
+        return $"[body.attachment: body:{index} mode={DescribeAttachmentMode(mode: body.AttachmentMode)} anchor={anchor} rope={rope}]";
+    }
+    // The body.hold read-back: which row of the kit's ordered hold list holds the body, the surface normal it holds
+    // (n/a for a free hold), and what the row still has left to spend (n/a for a row that spends nothing).
+    private static string DescribeHold(int index, WorldBody body) {
+        if (body.HoldName is not { } name) {
+            return $"[body.hold: body:{index} hold=none normal=n/a spend=n/a]";
+        }
+
+        var normal = body.HoldNormal;
+        var spend = ((body.HoldSpendRemaining is { } remaining)
+            ? DescribeAttachmentFixed(value: remaining)
+            : "n/a"
+        );
+
+        return $"[body.hold: body:{index} hold={name} normal={((normal == Puck.Maths.FixedVector3.Zero) ? "n/a" : $"({DescribeAttachmentFixed(value: normal.X)}, {DescribeAttachmentFixed(value: normal.Y)}, {DescribeAttachmentFixed(value: normal.Z)})")} spend={spend}]";
     }
     // Shared front matter for body.attach/body.detach: resolve the target, refuse by name when the world authors no
     // attachment section or no channel for this lane (a world authoring nothing keeps today's behavior — see
@@ -176,6 +183,26 @@ internal sealed partial class PlayerCommandModule {
             index: index
         ));
     }
+    private CommandResult HoldHandler(CommandContext context, WireArgs args) {
+        if (args.Count > 1) {
+            return CommandResult.Error(output: "[body.hold: expected at most 1 value — an optional body index]");
+        }
+
+        var (player, index, error) = ResolveTarget(
+            args: in args,
+            requiredCount: 0,
+            verb: "body.hold"
+        );
+
+        if (player is null) {
+            return CommandResult.Error(output: error!);
+        }
+
+        return new CommandResult(Output: DescribeHold(
+            body: player,
+            index: index
+        ));
+    }
     private CommandResult AttachmentHandler(CommandContext context, WireArgs args) {
         if (args.Count > 1) {
             return CommandResult.Error(output: "[body.attachment: expected at most 1 value — an optional body index]");
@@ -200,14 +227,14 @@ internal sealed partial class PlayerCommandModule {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "body.attach",
-            description: "Attempts the context-sensitive attach: body.attach [body] presses the world's authored attachment.attachChannel for one host step — climb wins when a climbable surface sits within attachment.climbReach of the body, otherwise the body's facing tries a grapple anchor within attachment.grappleMaxDistance/grappleAssistHalfAngleDegrees. A body already attached ignores it (body.detach first). Refuses by name when the world authors no attachment section or no attachChannel. Echoes the body.attachment read-back.",
+            description: "Throws the grapple: body.attach [body] presses the world's authored attachment.attachChannel for one host step — the body's facing tries an anchor within attachment.grappleMaxDistance/grappleAssistHalfAngleDegrees. A body already attached ignores it (body.detach first). Refuses by name when the world authors no attachment section or no attachChannel. Echoes the body.attachment read-back.",
             handler: AttachHandler,
             ackOnly: true
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "body.detach",
-            description: "Clears whichever attachment mode is active: body.detach [body] presses attachment.detachChannel for one host step. Restores ordinary locomotion, carrying the released velocity scaled by attachment.releaseMomentumScale. A friendly no-op when unattached. Echoes the body.attachment read-back.",
+            description: "Clears an active tether: body.detach [body] presses attachment.detachChannel for one host step. Restores ordinary locomotion, carrying the released velocity scaled by attachment.releaseMomentumScale. A friendly no-op when unattached. Echoes the body.attachment read-back.",
             handler: DetachHandler,
             ackOnly: true
         );
@@ -221,8 +248,14 @@ internal sealed partial class PlayerCommandModule {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "body.attachment",
-            description: "Echoes a body's attachment state: body.attachment [body] — [body.attachment: body:<n> mode=<none|climb|grapple> anchor=(x, y, z) rope=<length|n/a> gripCost=<c> policy=<world-default|prototype-override|n/a>]. anchor/rope/policy read n/a outside their governing mode.",
+            description: "Echoes a body's attachment state: body.attachment [body] — [body.attachment: body:<n> mode=<none|grapple> anchor=(x, y, z) rope=<length|n/a>]. anchor and rope read n/a while unattached. Surface holds are body.hold's to echo.",
             handler: AttachmentHandler
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "body.hold",
+            description: "Echoes which of a body's authored holds holds it: body.hold [body] — [body.hold: body:<n> hold=<name|none> normal=(x, y, z) spend=<left|n/a>]. hold names the row of the kit's motion.holds list the body currently holds; normal is the held surface's outward normal, n/a for a free hold or none at all; spend is what the row's spend.state slot has left, n/a for a row that spends nothing.",
+            handler: HoldHandler
         );
     }
 }

@@ -52,8 +52,11 @@ public abstract record WorldCollider {
 /// further from the body's up axis than this pushes the body but never grounds it — the walkable-slope limit.</param>
 /// <param name="GradientProbe">The finite-difference step field contact samples the surface normal with, in world
 /// units; 0 takes the evaluator's own default. Meaningful only when a requirement selects field contact.</param>
+/// <param name="DefaultHold">Whether a body's surface hold may take any solid surface by default. A placement's own
+/// <see cref="WorldPlacementGrip"/> overrides this for the colliders it compiles; the field lattice's own terrain,
+/// which no placement row owns, has only this. <see langword="false"/> (the default) holds nothing.</param>
 public sealed record WorldCollision(IReadOnlyList<WorldContactRequirement> Requirements, float ContactSkin,
-    int MaxIterations, float MaxSlopeDegrees, float GradientProbe) {
+    int MaxIterations, float MaxSlopeDegrees, float GradientProbe, bool DefaultHold = false) {
     /// <summary>Gets the inert absence — no requirements, zero skin, zero iterations, a solver that never relaxes.
     /// The engine holds no contact tuning of its own: the standard tuning is AUTHORED, in
     /// <c>Assets/worlds/standard.world.json</c>, and a world inherits it by naming that document as its basis. A
@@ -61,6 +64,7 @@ public sealed record WorldCollision(IReadOnlyList<WorldContactRequirement> Requi
     /// ever reads this.</summary>
     public static WorldCollision Absent { get; } = new(
         ContactSkin: 0f,
+        DefaultHold: false,
         GradientProbe: 0f,
         MaxIterations: 0,
         MaxSlopeDegrees: 0f,
@@ -235,7 +239,8 @@ public readonly record struct FixedWorldCollision(
     int MaxIterations,
     FixedQ4816 GroundedThreshold,
     FixedQ4816 GradientProbe,
-    bool GradientUp
+    bool GradientUp,
+    bool DefaultHold
 ) {
     /// <summary>Compiles the authored contact tuning to fixed point.</summary>
     public static FixedWorldCollision Compile(WorldCollision collision) => new(
@@ -243,6 +248,7 @@ public readonly record struct FixedWorldCollision(
         MaxIterations: collision.MaxIterations,
         GroundedThreshold: FixedQ4816.Cos(angle: FixedQ4816.FromDouble(value: (collision.MaxSlopeDegrees * (Math.PI / 180.0)))),
         GradientProbe: FixedQ4816.FromDouble(value: collision.GradientProbe),
-        GradientUp: ((collision.Requirements?.Contains(value: WorldContactRequirement.GradientDerivedUp)) ?? false)
+        GradientUp: ((collision.Requirements?.Contains(value: WorldContactRequirement.GradientDerivedUp)) ?? false),
+        DefaultHold: collision.DefaultHold
     );
 }

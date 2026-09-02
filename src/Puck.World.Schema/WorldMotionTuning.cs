@@ -70,6 +70,9 @@ public abstract record WorldMotionModel {
     /// what the player's identity requests. <see langword="null"/> reproduces today's unclamped behavior exactly;
     /// <c>Min == Max</c> pins the effective speed outright; a narrower-than-wide-open range still admits a bounded
     /// profile override. See <see cref="MotionScalarEnvelope"/>.</param>
+    /// <param name="Holds">The ordered list of what may hold this body — see <see cref="WorldHold"/> — read by the
+    /// <c>ResolveHold</c>/<c>ApplyHold</c> operations, or <see langword="null"/> (the default) for a kit whose
+    /// vertical channel is <c>ApplyVerticalGravity</c>'s alone.</param>
     public sealed record Grounded(
         float MoveSpeed,
         float TurnSpeed,
@@ -82,7 +85,8 @@ public abstract record WorldMotionModel {
         string? SprintChannel = null,
         MotionMoveFrame MoveFrame = MotionMoveFrame.World,
         bool FacingSnap = true,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] MotionScalarEnvelope? MoveSpeedEnvelope = null
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] MotionScalarEnvelope? MoveSpeedEnvelope = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldHold>? Holds = null
     ) : WorldMotionModel;
     /// <summary>
     /// Anisotropic body-frame locomotion — the racing-vehicle arm the <c>ResolveVehicleFrame</c>/
@@ -278,6 +282,13 @@ public abstract record WorldMotionModel {
         Swim swim => swim.Dynamics,
         _ => null,
     };
+    /// <summary>Gets the declared hold list of whichever arm this is (see <see cref="Grounded.Holds"/>),
+    /// null-coalesced to the empty list — an arm with no hold vocabulary reads identically to a row authoring
+    /// none.</summary>
+    public IReadOnlyList<WorldHold> DeclaredHolds => ((this switch {
+        Grounded grounded => grounded.Holds,
+        _ => null,
+    }) ?? []);
 }
 /// <summary>
 /// The world's motion defaults — the profileless locomotion speeds a stand-in with no seated profile advances on.

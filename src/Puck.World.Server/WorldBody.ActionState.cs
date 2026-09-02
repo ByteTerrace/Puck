@@ -477,6 +477,8 @@ public sealed partial class WorldBody {
             ActionFact.Falling => (m_verticalVelocity < FixedQ4816.Zero),
             ActionFact.Submerged => m_submerged,
             ActionFact.AtSurface => m_atSurface,
+            ActionFact.Climbing => HoldsUnwalkableSurface(),
+            ActionFact.Flying => HoldsFree(),
             _ => (m_affectingSubject >= 0),
         };
     }

@@ -3,7 +3,7 @@ using Puck.Maths;
 namespace Puck.Physics;
 
 /// <summary>
-/// The rope half of the climb/grapple primitive (a body constrained to an anchor): a distance-CAP constraint between a
+/// The rope half of the grapple primitive (a body constrained to an anchor): a distance-CAP constraint between a
 /// body and an anchor point, never a distance-PIN — the rope may go slack, but never stretch past <see cref="Length"/>.
 /// </summary>
 /// <remarks>

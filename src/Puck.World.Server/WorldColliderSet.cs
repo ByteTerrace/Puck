@@ -39,27 +39,26 @@ internal sealed class WorldColliderSet : IContactField {
     // Every ATTACHED solid row (Attach + Solid both set — refused only under the FIELD provider, see the validator):
     // its geometry cannot join m_colliders above because its origin/yaw are not the row's static authored transform,
     // they are a live body's pose. RefreshAttached recomputes m_attachedColliders from these once per tick. Attached
-    // colliders never carry a grip decision — climb/grapple queries search m_colliders alone (see TryNearestClimbableSurface/
-    // TryNearestSurfaceAlongDirection), so a moving carrier is never itself climbable or grappleable today.
+    // colliders never carry a grip decision — hold/grapple queries search m_colliders alone (see
+    // TryHoldableSurfaceAlongDirection/TryNearestSurfaceAlongDirection), so a moving carrier is never itself
+    // holdable or grappleable today.
     private readonly IReadOnlyList<(WorldPlacement Placement, WorldPrototype Creation)> m_attachedRows;
     private readonly FixedStaticCollider[] m_colliders;
-    // The CLIMBABLE subset of m_colliders, filtered at build time — never the full array gated after the fact.
-    // Filtering FIRST (rather than ranking m_colliders by nearest-overall and then checking whether that winner
-    // happens to be climbable) is the difference between "the nearest climbable surface in reach" and "the nearest
-    // surface in reach, IF it is climbable" — the latter would make an ordinary floor (always the practically
-    // nearest surface to a standing body) permanently shadow every climbable wall beside it. Parallel to
-    // m_climbableGrantedByOverride.
-    private readonly FixedStaticCollider[] m_climbableColliders;
+    // The holdable subset of m_colliders, filtered at build time rather than the full array gated after the fact:
+    // filtering first is the difference between "the nearest holdable surface along the probe" and "the nearest
+    // surface along the probe, if it is holdable", and the latter lets an ordinary floor shadow every holdable wall
+    // beside it. Parallel to m_holdableGrantedByOverride.
+    private readonly FixedStaticCollider[] m_holdableColliders;
     // Whether a per-placement WorldPlacementGrip override (rather than the world's own DefaultGrip) is what made
-    // the collider at the same index in m_climbableColliders climbable — the read-back's "which policy layer
-    // granted it" fact (see TryNearestClimbableSurface).
-    private readonly bool[] m_climbableGrantedByOverride;
+    // the collider at the same index in m_holdableColliders holdable — the read-back's "which policy layer granted
+    // it" fact.
+    private readonly bool[] m_holdableGrantedByOverride;
     private readonly FixedStaticContactSolver m_solver;
 
-    private WorldColliderSet(FixedStaticCollider[] colliders, FixedStaticCollider[] climbableColliders, bool[] climbableGrantedByOverride, FixedWorldCollision tuning, IReadOnlyList<(WorldPlacement Placement, WorldPrototype Creation)> attachedRows) {
+    private WorldColliderSet(FixedStaticCollider[] colliders, FixedStaticCollider[] holdableColliders, bool[] holdableGrantedByOverride, FixedWorldCollision tuning, IReadOnlyList<(WorldPlacement Placement, WorldPrototype Creation)> attachedRows) {
         m_colliders = colliders;
-        m_climbableColliders = climbableColliders;
-        m_climbableGrantedByOverride = climbableGrantedByOverride;
+        m_holdableColliders = holdableColliders;
+        m_holdableGrantedByOverride = holdableGrantedByOverride;
         m_attachedRows = attachedRows;
         m_solver = new FixedStaticContactSolver(
             ContactSkin: tuning.ContactSkin,
@@ -221,9 +220,9 @@ internal sealed class WorldColliderSet : IContactField {
 
         var tuning = FixedWorldCollision.Compile(collision: collision);
         var colliders = new List<FixedStaticCollider>();
-        var climbableColliders = new List<FixedStaticCollider>();
-        var climbableGrantedByOverride = new List<bool>();
-        var worldDefaultGrip = definition.Attachment.DefaultGrip;
+        var holdableColliders = new List<FixedStaticCollider>();
+        var holdableGrantedByOverride = new List<bool>();
+        var worldDefaultGrip = definition.Collision.DefaultHold;
         var attachedRows = new List<(WorldPlacement Placement, WorldPrototype Creation)>();
         var spheres = 0;
         var boxes = 0;
@@ -252,8 +251,8 @@ internal sealed class WorldColliderSet : IContactField {
             colliders.Add(item: screenCollider);
             // A screen carries no grip facet — its collider always follows the world default, never an override.
             if (worldDefaultGrip) {
-                climbableColliders.Add(item: screenCollider);
-                climbableGrantedByOverride.Add(item: false);
+                holdableColliders.Add(item: screenCollider);
+                holdableGrantedByOverride.Add(item: false);
             }
             boxes++;
         }
@@ -291,8 +290,8 @@ internal sealed class WorldColliderSet : IContactField {
             );
             // Every collider a distribution/mirror expands this ONE row into shares its ONE grip decision — see
             // WorldPlacementGrip's own remarks.
-            var placementClimbable = (placement.Grip?.Climbable ?? worldDefaultGrip);
-            var placementClimbableIsOverride = (placement.Grip is not null);
+            var placementHoldable = (placement.Grip?.Holdable ?? worldDefaultGrip);
+            var placementHoldableIsOverride = (placement.Grip is not null);
 
             CreationStampLattice.ForEachFixedInstance(
                 origin: FixedVector3.FromVector3(value: placement.Position),
@@ -347,9 +346,9 @@ internal sealed class WorldColliderSet : IContactField {
 
                         colliders.Add(item: placementCollider);
 
-                        if (placementClimbable) {
-                            climbableColliders.Add(item: placementCollider);
-                            climbableGrantedByOverride.Add(item: placementClimbableIsOverride);
+                        if (placementHoldable) {
+                            holdableColliders.Add(item: placementCollider);
+                            holdableGrantedByOverride.Add(item: placementHoldableIsOverride);
                         }
                     }
                 )
@@ -357,8 +356,8 @@ internal sealed class WorldColliderSet : IContactField {
         }
 
         return new WorldColliderSet(
-            climbableColliders: climbableColliders.ToArray(),
-            climbableGrantedByOverride: climbableGrantedByOverride.ToArray(),
+            holdableColliders: holdableColliders.ToArray(),
+            holdableGrantedByOverride: holdableGrantedByOverride.ToArray(),
             colliders: colliders.ToArray(),
             tuning: tuning,
             attachedRows: attachedRows
@@ -475,26 +474,25 @@ internal sealed class WorldColliderSet : IContactField {
         return true;
     }
     /// <inheritdoc/>
-    // Searches m_colliders alone (never m_attachedColliders — see the field's own remarks): the nearest surface
-    // overall must ALSO be climbable, or the attempt refuses outright, rather than skipping past it to a farther
-    // climbable one. A body standing beside a non-climbable wall with a climbable one further off does not climb.
-    public bool TryNearestClimbableSurface(in FixedVector3 probe, FixedQ4816 reach, out FixedSurfaceAttachCandidate candidate, out bool grantedByOverride) {
-        if (
-            !FixedSurfaceQuery.TryNearest(
+    // Searches m_holdableColliders alone (never m_attachedColliders — see the field's own remarks), with a zero
+    // assist cone: a hold aims at the surface it is already touching, not at a target it is trying to acquire.
+    public bool TryHoldableSurfaceAlongDirection(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, out FixedSurfaceAttachCandidate candidate, out bool grantedByOverride) {
+        if (!FixedSurfaceQuery.TryNearestDirected(
+            assistHalfAngle: FixedQ4816.Zero,
             candidate: out candidate,
-            colliders: m_climbableColliders,
+            colliders: m_holdableColliders,
+            direction: in direction,
             dynamicColliders: [],
-            probe: in probe,
-            reach: reach
-        )
-        ) {
+            maxDistance: maxDistance,
+            origin: in origin
+        )) {
             candidate = default;
             grantedByOverride = false;
 
             return false;
         }
 
-        grantedByOverride = m_climbableGrantedByOverride[candidate.ColliderIndex];
+        grantedByOverride = m_holdableGrantedByOverride[candidate.ColliderIndex];
 
         return true;
     }

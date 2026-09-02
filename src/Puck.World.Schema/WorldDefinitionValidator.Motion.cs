@@ -55,6 +55,7 @@ public static partial class WorldDefinitionValidator {
                 // requires SwimBuoyancy, which subsumes it.
                 BodyMotionOp.ComputeSwimTargetVelocity => (MotionTuningFacet.Sprint | MotionTuningFacet.SwimThrust),
                 BodyMotionOp.ApplyBuoyancyAndSurface => MotionTuningFacet.SwimBuoyancy,
+                BodyMotionOp.ResolveHold or BodyMotionOp.ApplyHold => (MotionTuningFacet.GravityArc | MotionTuningFacet.Holds),
                 _ => MotionTuningFacet.None,
             };
         }
@@ -68,7 +69,7 @@ public static partial class WorldDefinitionValidator {
     // WorldMotionModel.Grounded's remarks) — a strict superset of what free's operations read.
     private static MotionTuningFacet SuppliedMotionTuningFacets(WorldMotionModel model) => model switch {
         WorldMotionModel.Grounded => (MotionTuningFacet.Speed | MotionTuningFacet.GravityArc | MotionTuningFacet.GravityBleed
-            | MotionTuningFacet.PlanarResponse | MotionTuningFacet.Sprint | MotionTuningFacet.WorldFrame),
+            | MotionTuningFacet.PlanarResponse | MotionTuningFacet.Sprint | MotionTuningFacet.WorldFrame | MotionTuningFacet.Holds),
         // The vehicle arm carries its own gravity trio (contact-pinned variants run ApplyVerticalGravity; flying
         // variants bleed impulses through ApplyVerticalDecay) but none of grounded's planar-shaping facets — pairing
         // a vehicle model with ShapePlanarVelocity/ComputePlanarTargetVelocity/the yaw-frame ops refuses by name.
@@ -237,7 +238,7 @@ public static partial class WorldDefinitionValidator {
     }
     // A kit's full grounded locomotion tuning: speeds, gravity, and the velocity-response table every body
     // integrates under.
-    private static void ValidateGroundedMotion(WorldMotionModel.Grounded tuning, string path, ISet<string> channelNames, ISet<string> dynamicsNames, int simulationRateHz, List<string> errors) {
+    private static void ValidateGroundedMotion(WorldMotionModel.Grounded tuning, string path, ISet<string> channelNames, ISet<string> dynamicsNames, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, int simulationRateHz, List<string> errors) {
         RequirePositive(
             value: tuning.MoveSpeed,
             name: $"{path}.moveSpeed",
@@ -301,6 +302,148 @@ public static partial class WorldDefinitionValidator {
                 errors: errors
             );
         }
+
+        ValidateHolds(
+            channelNames: channelNames,
+            errors: errors,
+            holds: tuning.Holds,
+            path: $"{path}.holds",
+            stateSlots: stateSlots
+        );
+    }
+    // The ordered hold list: a unique name per row, a cone inside [0, 180] with min < max for a surface row (and no
+    // cone at all for a free one), the kind's own operands, and every named channel/state slot resolvable. Absent (a
+    // kit authoring none) validates nothing: the vertical channel is ApplyVerticalGravity's alone there.
+    private static void ValidateHolds(IReadOnlyList<WorldHold>? holds, string path, ISet<string> channelNames, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, List<string> errors) {
+        if (holds is not { Count: > 0 }) {
+            return;
+        }
+
+        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        for (var index = 0; (index < holds.Count); index++) {
+            var hold = holds[index];
+            var rowPath = $"{path}[{index}]";
+
+            if (hold is null) {
+                errors.Add(item: $"{rowPath} is required.");
+
+                continue;
+            }
+
+            RequireUniqueName(
+                errors: errors,
+                field: "",
+                path: rowPath,
+                seen: names,
+                value: hold.Name
+            );
+
+            if (!Enum.IsDefined(value: hold.Bond)) {
+                errors.Add(item: $"{rowPath}.bond '{hold.Bond}' is not a defined BodyHoldBond.");
+            }
+            if (!Enum.IsDefined(value: hold.Hold)) {
+                errors.Add(item: $"{rowPath}.hold '{hold.Hold}' is not a defined BodyHoldKind.");
+            }
+            if (!Enum.IsDefined(value: hold.Forward)) {
+                errors.Add(item: $"{rowPath}.forward '{hold.Forward}' is not a defined BodyHoldForward.");
+            }
+
+            RequireRange(
+                errors: errors,
+                max: 1f,
+                min: 0f,
+                name: $"{rowPath}.upLean",
+                value: hold.UpLean
+            );
+            RequireRange(
+                errors: errors,
+                max: 1f,
+                min: 0f,
+                name: $"{rowPath}.driveAlignment",
+                value: hold.DriveAlignment
+            );
+
+            if (hold.Speed is { } speed) {
+                RequirePositive(
+                    errors: errors,
+                    name: $"{rowPath}.speed",
+                    value: speed
+                );
+            }
+            if (hold.Bond == BodyHoldBond.Surface) {
+                if (hold.Cone is not { } cone) {
+                    errors.Add(item: $"{rowPath}.cone is required for a surface hold — the angle band, in degrees, between an admitted surface normal and gravity-up.");
+                } else if (
+                    !float.IsFinite(f: cone.X) ||
+                    !float.IsFinite(f: cone.Y) ||
+                    (cone.X < 0f) ||
+                    (cone.Y > 180f) ||
+                    (cone.X >= cone.Y)
+                ) {
+                    errors.Add(item: $"{rowPath}.cone [{cone.X}, {cone.Y}] must be finite, within [0, 180], and increasing.");
+                }
+
+                RequirePositive(
+                    errors: errors,
+                    name: $"{rowPath}.reach",
+                    value: hold.Reach
+                );
+            } else if (hold.Cone is not null) {
+                errors.Add(item: $"{rowPath}.cone is refused for a free hold — a free hold bonds to no surface for a cone to admit.");
+            }
+            if (hold.Hold == BodyHoldKind.Grip) {
+                RequirePositive(
+                    errors: errors,
+                    name: $"{rowPath}.grip",
+                    value: hold.Grip
+                );
+
+                if (hold.Bond != BodyHoldBond.Surface) {
+                    errors.Add(item: $"{rowPath}.hold 'Grip' requires bond 'Surface' — a grip pulls toward a surface normal.");
+                }
+            }
+            if (hold.Hold == BodyHoldKind.Lift) {
+                RequireRange(
+                    errors: errors,
+                    max: 1f,
+                    min: 0f,
+                    name: $"{rowPath}.lift",
+                    value: hold.Lift
+                );
+            }
+            if (
+                hold.OnDrive &&
+                (hold.Bond != BodyHoldBond.Surface)
+            ) {
+                errors.Add(item: $"{rowPath}.onDrive requires bond 'Surface' — there is no face for a drive to grab.");
+            }
+            if (
+                (hold.Release is { Length: > 0 } release) &&
+                !channelNames.Contains(item: release)
+            ) {
+                errors.Add(item: $"{rowPath}.release '{release}' names no declared composition channel.");
+            }
+            if (hold.Spend is { } spend) {
+                if (
+                    string.IsNullOrWhiteSpace(value: spend.State) ||
+                    !stateSlots.TryGetValue(
+                    key: spend.State,
+                    value: out var slot
+                )
+                ) {
+                    errors.Add(item: $"{rowPath}.spend.state '{spend.State}' names no declared body or identity state slot.");
+                } else if (slot.Kind != ActionStateKind.Counter) {
+                    errors.Add(item: $"{rowPath}.spend.state '{spend.State}' is a {slot.Kind} slot — a hold spends against a Counter.");
+                }
+
+                RequirePositive(
+                    errors: errors,
+                    name: $"{rowPath}.spend.ratePerSecond",
+                    value: spend.RatePerSecond
+                );
+            }
+        }
     }
     // The world motion defaults: positive speeds and correction smoothing distance.
     private static void ValidateMotionDefaults(in WorldMotionDefaults motion, string path, List<string> errors) {
@@ -323,7 +466,7 @@ public static partial class WorldDefinitionValidator {
     // The kit.motion gate: required (a kit with no declared model is a dead kit), coherent with its body motion
     // program's selected operations (program is null when ValidateKits already refused bodyMotionProgram, in which
     // case coherence has nothing sound to check against), and per-arm valid. A new arm is a new case below.
-    private static void ValidateMotionModel(WorldMotionModel? model, CompiledBodyMotionProgram? program, string path, ISet<string> channelNames, ISet<string> dynamicsNames, bool hasMedium, int simulationRateHz, List<string> errors) {
+    private static void ValidateMotionModel(WorldMotionModel? model, CompiledBodyMotionProgram? program, string path, ISet<string> channelNames, ISet<string> dynamicsNames, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, bool hasMedium, int simulationRateHz, List<string> errors) {
         if (model is null) {
             errors.Add(item: $"{path} is required.");
 
@@ -349,6 +492,7 @@ public static partial class WorldDefinitionValidator {
                     errors: errors,
                     path: path,
                     simulationRateHz: simulationRateHz,
+                    stateSlots: stateSlots,
                     tuning: grounded
                 );
 
@@ -935,5 +1079,10 @@ public static partial class WorldDefinitionValidator {
         /// <summary>Buoyancy/MaxRiseSpeed/MaxSinkSpeed/SurfaceSettleRate/FloatDepth — the medium dynamics
         /// (<see cref="BodyMotionOp.ApplyBuoyancyAndSurface"/>).</summary>
         SwimBuoyancy = 256,
+
+        /// <summary>The ordered hold list (<see cref="BodyMotionOp.ResolveHold"/>/
+        /// <see cref="BodyMotionOp.ApplyHold"/>), plus the gravity arc a hold's own gravity and lift laws
+        /// integrate.</summary>
+        Holds = 512,
     }
 }

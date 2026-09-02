@@ -367,9 +367,11 @@ public sealed partial class WorldBody {
     /// <param name="planarDynamics">The kit's compiled second-order follower
     /// (<see cref="FixedWorldKit.PlanarDynamics"/>), or <see langword="null"/> when the kit shapes planar velocity
     /// through its response table instead.</param>
+    /// <param name="holds">The kit's compiled ordered hold list (<see cref="FixedWorldKit.Holds"/>), or
+    /// <see langword="null"/> for a kit authoring none.</param>
     /// <exception cref="ArgumentNullException"><paramref name="program"/> or <paramref name="programs"/> is <see langword="null"/>.</exception>
-    public WorldBody(WorldMotionModel motion, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedQ4816 maxSmoothError, CompiledActionSpec?[]? actions = null, FixedQ4816[]? actionThresholds = null, ChannelShape[]? actionShapes = null, bool[]? roleMask = null, RoleChannelOrdinals roleOrdinals = default, CompiledActionStateSlot[]? actionState = null, FixedWorldCollider? collider = null, int sprintChannelOrdinal = -1, int driftChannelOrdinal = -1, FixedMotionDynamics? planarDynamics = null) {
-        SetTuning(motion: motion, planarDynamics: planarDynamics);
+    public WorldBody(WorldMotionModel motion, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedQ4816 maxSmoothError, CompiledActionSpec?[]? actions = null, FixedQ4816[]? actionThresholds = null, ChannelShape[]? actionShapes = null, bool[]? roleMask = null, RoleChannelOrdinals roleOrdinals = default, CompiledActionStateSlot[]? actionState = null, FixedWorldCollider? collider = null, int sprintChannelOrdinal = -1, int driftChannelOrdinal = -1, FixedMotionDynamics? planarDynamics = null, FixedBodyHold[]? holds = null) {
+        SetTuning(holds: holds, motion: motion, planarDynamics: planarDynamics);
         m_bodyMotionProgram = (program ?? throw new ArgumentNullException(paramName: nameof(program)));
         m_bodyMotionPrograms = (programs ?? throw new ArgumentNullException(paramName: nameof(programs)));
         CopyChannelBindings(

@@ -723,7 +723,14 @@ public sealed partial class WorldBody {
     /// <param name="ContactUpTurnRemainder">The measured-contact-normal turn accumulator's signed remainder.</param>
     /// <param name="PlanarFollowerSeeded">Whether the planar dynamics follower has consumed its first target.</param>
     /// <param name="VerticalFollowerSeeded">Whether the vertical dynamics follower has consumed its first target.</param>
-    /// <param name="Attachment">The body-local climb/grapple continuation state.</param>
+    /// <param name="Attachment">The body-local grapple continuation state.</param>
+    /// <param name="HoldIndex">The index into the kit's ordered hold list of the hold this body holds, or <c>-1</c>
+    /// when nothing holds it.</param>
+    /// <param name="HoldAnchor">The held surface point, or <see cref="FixedVector3.Zero"/> for a free (or absent)
+    /// hold.</param>
+    /// <param name="HoldNormal">The held surface's unit normal, on the same terms as
+    /// <paramref name="HoldAnchor"/>.</param>
+    /// <param name="HoldSpendRemainder">The hold spend rate accumulator's signed remainder.</param>
     public readonly record struct IntegrationResidue(
         FixedVector3 PreviousPosition,
         long PositionRemainderX,
@@ -746,23 +753,18 @@ public sealed partial class WorldBody {
         long ContactUpTurnRemainder,
         bool PlanarFollowerSeeded,
         bool VerticalFollowerSeeded,
-        AttachmentResidue Attachment
+        AttachmentResidue Attachment,
+        int HoldIndex,
+        FixedVector3 HoldAnchor,
+        FixedVector3 HoldNormal,
+        long HoldSpendRemainder
     );
     /// <summary>The checkpoint-only attachment state that remains meaningful only inside the same authoritative
     /// world's coordinate frame. It is intentionally not part of <see cref="TransferState"/>: a cross-world transfer
-    /// cannot carry a grip point or tether anchor whose geometry belongs to the source authority.</summary>
+    /// cannot carry a tether anchor whose geometry belongs to the source authority.</summary>
     /// <param name="Mode">The active attachment dispatch mode.</param>
     /// <param name="AttachPreviousBit">The attach channel's previous threshold-crossing image.</param>
     /// <param name="DetachPreviousBit">The detach channel's previous threshold-crossing image.</param>
-    /// <param name="ClimbAnchor">The gripped surface point.</param>
-    /// <param name="ClimbNormal">The gripped surface normal.</param>
-    /// <param name="ClimbTangentRight">The fixed climb plane's right tangent.</param>
-    /// <param name="ClimbTangentUp">The fixed climb plane's up tangent.</param>
-    /// <param name="ClimbVelocity">The most recent climb-plane velocity.</param>
-    /// <param name="ClimbRemainderX">The climb position accumulator's X remainder.</param>
-    /// <param name="ClimbRemainderY">The climb position accumulator's Y remainder.</param>
-    /// <param name="ClimbRemainderZ">The climb position accumulator's Z remainder.</param>
-    /// <param name="ClimbGrantedByOverride">Whether a placement-local grip override admitted the climb.</param>
     /// <param name="Tether">The complete rope constraint state, or <see langword="null"/> when none is attached.</param>
     /// <param name="TetherAnchorBodyIndex">The anchor body index, or <c>-1</c> for a world-point tether.</param>
     /// <param name="TetherAnchorPointOrLocalOffset">The world point or body-local anchor offset.</param>
@@ -770,15 +772,6 @@ public sealed partial class WorldBody {
         WorldBodyAttachmentMode Mode,
         bool AttachPreviousBit,
         bool DetachPreviousBit,
-        FixedVector3 ClimbAnchor,
-        FixedVector3 ClimbNormal,
-        FixedVector3 ClimbTangentRight,
-        FixedVector3 ClimbTangentUp,
-        FixedVector3 ClimbVelocity,
-        long ClimbRemainderX,
-        long ClimbRemainderY,
-        long ClimbRemainderZ,
-        bool ClimbGrantedByOverride,
         FixedTetherConstraintState? Tether,
         int TetherAnchorBodyIndex,
         FixedVector3 TetherAnchorPointOrLocalOffset
@@ -812,19 +805,14 @@ public sealed partial class WorldBody {
             Mode: m_attachmentMode,
             AttachPreviousBit: m_attachPreviousBit,
             DetachPreviousBit: m_detachPreviousBit,
-            ClimbAnchor: m_climbAnchor,
-            ClimbNormal: m_climbNormal,
-            ClimbTangentRight: m_climbTangentRight,
-            ClimbTangentUp: m_climbTangentUp,
-            ClimbVelocity: m_climbVelocity,
-            ClimbRemainderX: m_climbAccumulator.XRemainder,
-            ClimbRemainderY: m_climbAccumulator.YRemainder,
-            ClimbRemainderZ: m_climbAccumulator.ZRemainder,
-            ClimbGrantedByOverride: m_climbGrantedByOverride,
             Tether: m_tether?.CaptureState(),
             TetherAnchorBodyIndex: m_tetherAnchorBodyIndex,
             TetherAnchorPointOrLocalOffset: m_tetherAnchorPointOrLocalOffset
-        )
+        ),
+        HoldAnchor: m_holdAnchor,
+        HoldIndex: m_holdIndex,
+        HoldNormal: m_holdNormal,
+        HoldSpendRemainder: m_holdSpendAccumulator.Remainder
     );
     /// <summary>Restores a previously captured integration residue onto this body — called after
     /// <see cref="Pose(FixedVector3, FixedQ4816, FixedQ4816, FixedQ4816)"/> has already set position/orientation and
@@ -873,18 +861,13 @@ public sealed partial class WorldBody {
         m_attachmentMode = attachment.Mode;
         m_attachPreviousBit = attachment.AttachPreviousBit;
         m_detachPreviousBit = attachment.DetachPreviousBit;
-        m_climbAnchor = attachment.ClimbAnchor;
-        m_climbNormal = attachment.ClimbNormal;
-        m_climbTangentRight = attachment.ClimbTangentRight;
-        m_climbTangentUp = attachment.ClimbTangentUp;
-        m_climbVelocity = attachment.ClimbVelocity;
-        m_climbAccumulator = FixedVector3RateAccumulator.FromRemainders(
-            xRemainder: attachment.ClimbRemainderX,
-            yRemainder: attachment.ClimbRemainderY,
-            zRemainder: attachment.ClimbRemainderZ,
+        m_holdAnchor = residue.HoldAnchor;
+        m_holdIndex = residue.HoldIndex;
+        m_holdNormal = residue.HoldNormal;
+        m_holdSpendAccumulator = FixedRateAccumulator.FromRemainder(
+            remainder: residue.HoldSpendRemainder,
             ticksPerSecond: EngineTicksPerSecond
         );
-        m_climbGrantedByOverride = attachment.ClimbGrantedByOverride;
         m_tether = ((attachment.Tether is { } tether)
             ? FixedTetherConstraint.FromState(state: tether)
             : null

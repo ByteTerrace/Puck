@@ -96,14 +96,15 @@ public sealed record WorldPlacementFace(
 /// sphere follows the carrier, and an inactive carrier senses nobody rather than sensing at a stale point.</summary>
 /// <param name="Radius">The sensing radius, world units. Must be finite and positive (validated).</param>
 public sealed record WorldPlacementRegion(float Radius);
-/// <summary>A placement's grip facet — overrides the world's <see cref="WorldAttachmentSection.DefaultGrip"/> climb
+/// <summary>A placement's grip facet — overrides the world's <see cref="WorldCollision.DefaultHold"/> hold
 /// policy for every collider this row compiles, composing as the tighter authoring layer: present, it decides;
 /// absent, the row's colliders fall back to the world default. Requires <see cref="WorldPlacement.Solid"/> (nothing
 /// else compiles a collider a grip trait could apply to). Every collider a distribution/mirror expands from one row
-/// shares the row's single grip decision — a lattice of climbable handholds is authored as one placement, not one
+/// shares the row's single grip decision — a lattice of holdable handholds is authored as one placement, not one
 /// per copy.</summary>
-/// <param name="Climbable">Whether this row's compiled surface(s) are climbable, overriding the world default.</param>
-public sealed record WorldPlacementGrip(bool Climbable);
+/// <param name="Holdable">Whether a body's surface hold may take this row's compiled surface(s), overriding the
+/// world default.</param>
+public sealed record WorldPlacementGrip(bool Holdable);
 /// <summary>A placement's attach facet — binds the row's stamp to a live population body's transform, so the
 /// resolved world pose follows that body every tick (an avatar's hat, held item, nameplate, or aura) instead of
 /// sitting at the row's own authored <see cref="WorldPlacement.Position"/>/<see cref="WorldPlacement.YawDegrees"/>.
@@ -200,7 +201,7 @@ public sealed record WorldPlacementAttach(int BodyIndex, DocumentVector3 LocalOf
 /// placement that always shows <paramref name="PrototypeId"/>. Omitted from the wire when null. Refused together
 /// with <paramref name="Attach"/>, <paramref name="Inhabit"/>, and <paramref name="FaceSources"/>.</param>
 /// <param name="Grip">The placement's grip facet (see <see cref="WorldPlacementGrip"/>) — overrides the world's
-/// default climb policy for this row's compiled surface(s), or <see langword="null"/> to inherit the world default.
+/// default hold policy for this row's compiled surface(s), or <see langword="null"/> to inherit the world default.
 /// Omitted from the wire when null. Requires <paramref name="Solid"/> (validated).</param>
 public sealed record WorldPlacement(
     string Id,

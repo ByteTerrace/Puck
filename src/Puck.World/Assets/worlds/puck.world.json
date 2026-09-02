@@ -77,6 +77,13 @@
                   "sources": [
                     "mouse.button2"
                   ]
+                },
+                {
+                  "channel": "jump",
+                  "sources": [
+                    "gamepad.buttonSouth",
+                    "keyboard.space"
+                  ]
                 }
               ],
               "id": "base"
@@ -90,20 +97,46 @@
     }
   ],
   "bodies": {
-    "capacity": 4,
+    "capacity": 8,
     "localSeats": 2
   },
   "bodyMotionPrograms": [
+    {
+      "kind": "Producer",
+      "name": "wander",
+      "operations": [
+        "ProduceWanderIntent"
+      ],
+      "version": "puck.body-motion.v1"
+    },
     {
       "kind": "Motion",
       "name": "walk",
       "operations": [
         "ResolveYawAttitudeAndPlanarFrame",
+        "ResolveHold",
         "ComputePlanarTargetVelocity",
         "ShapePlanarVelocity",
         "SnapYawToPlanarIntent",
         "RunActionTriggers",
-        "ApplyVerticalGravity",
+        "ApplyHold",
+        "IntegratePlanarAndVerticalVelocity",
+        "CommitPose"
+      ],
+      "version": "puck.body-motion.v1"
+    },
+    {
+      "kind": "Motion",
+      "name": "fly",
+      "operations": [
+        "ResolveYawAttitudeAndPlanarFrame",
+        "ResolveHold",
+        "ComputePlanarTargetVelocity",
+        "ShapePlanarVelocity",
+        "SnapYawToPlanarIntent",
+        "RunActionTriggers",
+        "ApplyHold",
+        "ApplyVerticalDrive",
         "IntegratePlanarAndVerticalVelocity",
         "CommitPose"
       ],
@@ -142,6 +175,16 @@
       "name": "faceY",
       "role": "FaceY",
       "shape": "Bipolar"
+    },
+    {
+      "composition": true,
+      "name": "jump",
+      "shape": "Binary"
+    },
+    {
+      "name": "rise",
+      "role": "MoveUp",
+      "shape": "Bipolar"
     }
   ],
   "collision": {
@@ -153,6 +196,167 @@
       "SmoothUnionContact"
     ]
   },
+  "curves": [
+    {
+      "closed": false,
+      "knots": [
+        {
+          "curvature": 0.0,
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "tangentYaw": 1.133
+        },
+        {
+          "curvature": -0.4633,
+          "position": [
+            0.25,
+            0.0,
+            0.4935
+          ],
+          "tangentYaw": 1.0306
+        },
+        {
+          "curvature": -1.9649,
+          "position": [
+            0.5,
+            0.0,
+            0.792
+          ],
+          "tangentYaw": 0.618
+        },
+        {
+          "curvature": -1.2482,
+          "position": [
+            0.75,
+            0.0,
+            0.878
+          ],
+          "tangentYaw": 0.0785
+        },
+        {
+          "curvature": 0.1974,
+          "position": [
+            1.0,
+            0.0,
+            0.88
+          ],
+          "tangentYaw": 0.0
+        },
+        {
+          "curvature": -1.2482,
+          "position": [
+            1.25,
+            0.0,
+            0.878
+          ],
+          "tangentYaw": -0.0785
+        },
+        {
+          "curvature": -1.9649,
+          "position": [
+            1.5,
+            0.0,
+            0.792
+          ],
+          "tangentYaw": -0.618
+        },
+        {
+          "curvature": -0.4633,
+          "position": [
+            1.75,
+            0.0,
+            0.4935
+          ],
+          "tangentYaw": -1.0306
+        },
+        {
+          "curvature": -0.0,
+          "position": [
+            2.0,
+            0.0,
+            0.0
+          ],
+          "tangentYaw": -1.133
+        },
+        {
+          "curvature": 0.4633,
+          "position": [
+            2.25,
+            0.0,
+            -0.4935
+          ],
+          "tangentYaw": -1.0306
+        },
+        {
+          "curvature": 1.9649,
+          "position": [
+            2.5,
+            0.0,
+            -0.792
+          ],
+          "tangentYaw": -0.618
+        },
+        {
+          "curvature": 1.2482,
+          "position": [
+            2.75,
+            0.0,
+            -0.878
+          ],
+          "tangentYaw": -0.0785
+        },
+        {
+          "curvature": -0.1974,
+          "position": [
+            3.0,
+            0.0,
+            -0.88
+          ],
+          "tangentYaw": 0.0
+        },
+        {
+          "curvature": 1.2482,
+          "position": [
+            3.25,
+            0.0,
+            -0.878
+          ],
+          "tangentYaw": 0.0785
+        },
+        {
+          "curvature": 1.9649,
+          "position": [
+            3.5,
+            0.0,
+            -0.792
+          ],
+          "tangentYaw": 0.618
+        },
+        {
+          "curvature": 0.4633,
+          "position": [
+            3.75,
+            0.0,
+            -0.4935
+          ],
+          "tangentYaw": 1.0306
+        },
+        {
+          "curvature": -0.0,
+          "position": [
+            4.0,
+            0.0,
+            -0.0
+          ],
+          "tangentYaw": 1.133
+        }
+      ],
+      "name": "strideCurve"
+    }
+  ],
   "defaultSeatKit": "walker",
   "documentId": "puck",
   "dynamics": [
@@ -214,6 +418,44 @@
           "$type": "grounded",
           "facingSnap": false,
           "fallGravity": 46,
+          "holds": [
+            {
+              "bond": "Surface",
+              "cone": [
+                60,
+                120
+              ],
+              "driveAlignment": 0.5,
+              "forward": "Heading",
+              "grip": 1.0,
+              "hold": "Grip",
+              "name": "wall",
+              "onDrive": true,
+              "reach": 0.8,
+              "release": "jump",
+              "speed": 2.0,
+              "spend": {
+                "ratePerSecond": 1.0,
+                "state": "stamina"
+              },
+              "upLean": 0.0
+            },
+            {
+              "bond": "Surface",
+              "cone": [
+                0,
+                60
+              ],
+              "hold": "Gravity",
+              "name": "ground",
+              "reach": 1.2
+            },
+            {
+              "bond": "Free",
+              "hold": "Gravity",
+              "name": "air"
+            }
+          ],
           "maxFallSpeed": 40,
           "moveSpeed": 4,
           "response": [],
@@ -222,13 +464,234 @@
           "turnSpeed": 2.5
         },
         "name": "walker"
+      },
+      {
+        "bodyContact": "Solid",
+        "bodyMotionProgram": "walk",
+        "collider": {
+          "$type": "capsule",
+          "endpoint": [
+            0,
+            0.2,
+            0
+          ],
+          "radius": 0.14
+        },
+        "motion": {
+          "$type": "grounded",
+          "facingSnap": true,
+          "fallGravity": 46,
+          "holds": [
+            {
+              "bond": "Surface",
+              "cone": [
+                0,
+                180
+              ],
+              "driveAlignment": 0.3,
+              "forward": "Heading",
+              "grip": 1.0,
+              "hold": "Grip",
+              "name": "any",
+              "onDrive": true,
+              "reach": 0.5,
+              "speed": 1.6,
+              "upLean": 0.0
+            },
+            {
+              "bond": "Surface",
+              "cone": [
+                0,
+                60
+              ],
+              "hold": "Gravity",
+              "name": "ground",
+              "reach": 0.6
+            },
+            {
+              "bond": "Free",
+              "hold": "Gravity",
+              "name": "air"
+            }
+          ],
+          "maxFallSpeed": 40,
+          "moveSpeed": 1.6,
+          "response": [],
+          "riseGravity": 28,
+          "sprintMultiplier": 1,
+          "turnSpeed": 2.5
+        },
+        "name": "spiderKit",
+        "producers": {
+          "wander": {
+            "channels": {},
+            "scalars": {
+              "activityRateBase": 1.0,
+              "activityRateRange": 0.3,
+              "altitudeBase": 0.0,
+              "altitudeGain": 0.5,
+              "altitudeRange": 0.0,
+              "forward": 1.0,
+              "inwardGain": 3.0,
+              "pitchWave": 0.0,
+              "pressThreshold": 0.0,
+              "rollTurn": 0.0,
+              "softRadius": 2.5,
+              "strafeWave": 0.0,
+              "turnScale": 3.0,
+              "turnWave": 0.0,
+              "upWave": 0.0,
+              "weaveAmplitude": 0.4,
+              "weaveFrequencyBase": 0.6,
+              "weaveFrequencyRange": 0.2
+            }
+          }
+        }
+      },
+      {
+        "bodyContact": "Solid",
+        "bodyMotionProgram": "fly",
+        "collider": {
+          "$type": "capsule",
+          "endpoint": [
+            0,
+            0.05,
+            0
+          ],
+          "radius": 0.08
+        },
+        "motion": {
+          "$type": "grounded",
+          "facingSnap": true,
+          "fallGravity": 46,
+          "holds": [
+            {
+              "bond": "Free",
+              "forward": "Heading",
+              "hold": "Lift",
+              "lift": 1.0,
+              "name": "air",
+              "speed": 3.0,
+              "upLean": 0.0
+            },
+            {
+              "bond": "Surface",
+              "cone": [
+                0,
+                60
+              ],
+              "hold": "Gravity",
+              "name": "ground",
+              "reach": 0.4
+            }
+          ],
+          "maxFallSpeed": 40,
+          "moveSpeed": 3.0,
+          "response": [],
+          "riseGravity": 28,
+          "sprintMultiplier": 1,
+          "turnSpeed": 2.5
+        },
+        "name": "dragonflyKit",
+        "producers": {
+          "wander": {
+            "channels": {},
+            "scalars": {
+              "activityRateBase": 1.0,
+              "activityRateRange": 0.3,
+              "altitudeBase": 0.0,
+              "altitudeGain": 0.6,
+              "altitudeRange": 0.0,
+              "forward": 1.0,
+              "inwardGain": 3.0,
+              "pitchWave": 0.0,
+              "pressThreshold": 0.0,
+              "rollTurn": 0.0,
+              "softRadius": 2.5,
+              "strafeWave": 0.0,
+              "turnScale": 3.0,
+              "turnWave": 0.0,
+              "upWave": 0.0,
+              "weaveAmplitude": 0.4,
+              "weaveFrequencyBase": 0.6,
+              "weaveFrequencyRange": 0.2
+            }
+          }
+        }
+      },
+      {
+        "bodyContact": "Solid",
+        "bodyMotionProgram": "walk",
+        "collider": {
+          "$type": "capsule",
+          "endpoint": [
+            0,
+            0.5,
+            0
+          ],
+          "radius": 0.16
+        },
+        "motion": {
+          "$type": "grounded",
+          "facingSnap": true,
+          "fallGravity": 46,
+          "holds": [
+            {
+              "bond": "Surface",
+              "cone": [
+                0,
+                60
+              ],
+              "hold": "Gravity",
+              "name": "ground",
+              "reach": 0.8
+            },
+            {
+              "bond": "Free",
+              "hold": "Gravity",
+              "name": "air"
+            }
+          ],
+          "maxFallSpeed": 40,
+          "moveSpeed": 3.2,
+          "response": [],
+          "riseGravity": 28,
+          "sprintMultiplier": 1,
+          "turnSpeed": 2.5
+        },
+        "name": "houndKit",
+        "producers": {
+          "wander": {
+            "channels": {},
+            "scalars": {
+              "activityRateBase": 1.0,
+              "activityRateRange": 0.3,
+              "altitudeBase": 0.0,
+              "altitudeGain": 0.5,
+              "altitudeRange": 0.0,
+              "forward": 1.0,
+              "inwardGain": 3.0,
+              "pitchWave": 0.0,
+              "pressThreshold": 0.0,
+              "rollTurn": 0.0,
+              "softRadius": 2.5,
+              "strafeWave": 0.0,
+              "turnScale": 3.0,
+              "turnWave": 0.0,
+              "upWave": 0.0,
+              "weaveAmplitude": 0.4,
+              "weaveFrequencyBase": 0.6,
+              "weaveFrequencyRange": 0.2
+            }
+          }
+        }
       }
     ]
   },
   "looks": {
     "assignment": {
       "rows": [
-        "pip"
+        "wren"
       ],
       "sequence": {
         "name": "r1",
@@ -251,11 +714,53 @@
           "replayFrames": false,
           "secondsPerFrame": 0
         },
-        "name": "pip",
+        "name": "wren",
         "scale": 1,
         "source": {
           "$type": "creation",
-          "prototypeId": "pip"
+          "prototypeId": "wren"
+        }
+      },
+      {
+        "motion": {
+          "cues": [],
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "spider",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "spider"
+        }
+      },
+      {
+        "motion": {
+          "cues": [],
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "dragonfly",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "dragonfly"
+        }
+      },
+      {
+        "motion": {
+          "cues": [],
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "hound",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "hound"
         }
       }
     ]
@@ -263,6 +768,9 @@
   "placements": {
     "rows": [
       {
+        "grip": {
+          "holdable": true
+        },
         "id": "debugRoom",
         "position": [
           0,
@@ -275,210 +783,117 @@
           "margin": 0
         },
         "yawDegrees": 0
+      },
+      {
+        "id": "farPillar",
+        "position": [
+          0,
+          -16,
+          -120
+        ],
+        "prototypeId": "farPillar",
+        "scale": 1,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0
+      },
+      {
+        "id": "spiderDen",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.618034
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.5
+            }
+          },
+          "kit": "spiderKit",
+          "look": "spider",
+          "source": {
+            "$type": "producer",
+            "name": "wander"
+          }
+        },
+        "position": [
+          6.5,
+          0,
+          6.0
+        ],
+        "prototypeId": "spider",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "dragonflyPerch",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.618034
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.5
+            }
+          },
+          "kit": "dragonflyKit",
+          "look": "dragonfly",
+          "source": {
+            "$type": "producer",
+            "name": "wander"
+          }
+        },
+        "position": [
+          -3.0,
+          1.5,
+          -2.0
+        ],
+        "prototypeId": "dragonfly",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "houndRun",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.618034
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.5
+            }
+          },
+          "kit": "houndKit",
+          "look": "hound",
+          "source": {
+            "$type": "producer",
+            "name": "wander"
+          }
+        },
+        "position": [
+          -6.0,
+          0,
+          -2.0
+        ],
+        "prototypeId": "hound",
+        "scale": 1,
+        "yawDegrees": 0
       }
     ]
   },
   "prototypes": [
-    {
-      "document": {
-        "frames": [
-          {
-            "name": "blink",
-            "transforms": [
-              {
-                "id": 0,
-                "position": [
-                  0,
-                  0.5,
-                  0
-                ],
-                "rotation": "state.transforms.identity",
-                "scale": [
-                  0.35,
-                  1.75,
-                  0.35
-                ]
-              },
-              {
-                "id": 1,
-                "position": [
-                  0.2,
-                  1.1,
-                  0.0
-                ],
-                "rotation": "state.transforms.identity",
-                "scale": [
-                  0.14,
-                  0.14,
-                  0.14
-                ]
-              },
-              {
-                "id": 2,
-                "position": [
-                  0.2,
-                  1.1,
-                  0.0
-                ],
-                "rotation": "state.transforms.identity",
-                "scale": [
-                  0.055,
-                  0.055,
-                  0.055
-                ]
-              },
-              {
-                "id": 3,
-                "position": [
-                  -0.2,
-                  1.1,
-                  0.0
-                ],
-                "rotation": "state.transforms.identity",
-                "scale": [
-                  0.14,
-                  0.14,
-                  0.14
-                ]
-              },
-              {
-                "id": 4,
-                "position": [
-                  -0.2,
-                  1.1,
-                  0.0
-                ],
-                "rotation": "state.transforms.identity",
-                "scale": [
-                  0.055,
-                  0.055,
-                  0.055
-                ]
-              }
-            ]
-          }
-        ],
-        "name": "pip",
-        "palette": [
-          {
-            "color": "state.colors.avatarBody"
-          },
-          {
-            "color": "state.colors.avatarMark"
-          },
-          {
-            "color": "state.colors.avatarEye"
-          },
-          {
-            "color": "state.colors.avatarPupil"
-          }
-        ],
-        "schema": "puck.creation.v1",
-        "shapes": [
-          {
-            "blend": "Union",
-            "group": 0,
-            "id": 0,
-            "material": 0,
-            "name": "pip",
-            "position": [
-              0,
-              0.5,
-              0
-            ],
-            "rotation": "state.transforms.identity",
-            "scale": [
-              0.35,
-              1.75,
-              0.35
-            ],
-            "smooth": 0,
-            "type": "Capsule"
-          },
-          {
-            "blend": "Union",
-            "group": 0,
-            "id": 1,
-            "material": 2,
-            "name": "eyeLeft",
-            "position": [
-              0.2,
-              1.1,
-              0.42
-            ],
-            "rotation": "state.transforms.identity",
-            "scale": [
-              0.14,
-              0.14,
-              0.14
-            ],
-            "smooth": 0,
-            "type": "Sphere"
-          },
-          {
-            "blend": "Union",
-            "group": 0,
-            "id": 2,
-            "material": 3,
-            "name": "pupilLeft",
-            "position": [
-              0.2,
-              1.1,
-              0.54
-            ],
-            "rotation": "state.transforms.identity",
-            "scale": [
-              0.055,
-              0.055,
-              0.055
-            ],
-            "smooth": 0,
-            "type": "Sphere"
-          },
-          {
-            "blend": "Union",
-            "group": 0,
-            "id": 3,
-            "material": 2,
-            "name": "eyeRight",
-            "position": [
-              -0.2,
-              1.1,
-              0.42
-            ],
-            "rotation": "state.transforms.identity",
-            "scale": [
-              0.14,
-              0.14,
-              0.14
-            ],
-            "smooth": 0,
-            "type": "Sphere"
-          },
-          {
-            "blend": "Union",
-            "group": 0,
-            "id": 4,
-            "material": 3,
-            "name": "pupilRight",
-            "position": [
-              -0.2,
-              1.1,
-              0.54
-            ],
-            "rotation": "state.transforms.identity",
-            "scale": [
-              0.055,
-              0.055,
-              0.055
-            ],
-            "smooth": 0,
-            "type": "Sphere"
-          }
-        ]
-      },
-      "id": "pip"
-    },
     {
       "document": {
         "name": "debugRoom",
@@ -488,6 +903,12 @@
           },
           {
             "color": "state.colors.groundPrimary"
+          },
+          {
+            "color": "state.colors.axisX"
+          },
+          {
+            "color": "state.colors.axisZ"
           }
         ],
         "schema": "puck.creation.v1",
@@ -504,9 +925,9 @@
             ],
             "rotation": "state.transforms.identity",
             "scale": [
-              10,
+              12,
               0.5,
-              10
+              12
             ],
             "smooth": 0,
             "type": "Box"
@@ -567,10 +988,4689 @@
             ],
             "smooth": 0,
             "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 4,
+            "material": 1,
+            "name": "ramp30",
+            "position": [
+              -1.5,
+              0.3268,
+              4.8321
+            ],
+            "rotation": [
+              -0.2588,
+              0,
+              0,
+              0.9659
+            ],
+            "scale": [
+              0.75,
+              0.2,
+              2
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 5,
+            "material": 1,
+            "name": "ramp45",
+            "position": [
+              -3.5,
+              0.7728,
+              4.5556
+            ],
+            "rotation": [
+              -0.3827,
+              0,
+              0,
+              0.9239
+            ],
+            "scale": [
+              0.75,
+              0.2,
+              2
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 6,
+            "material": 1,
+            "name": "ramp55",
+            "position": [
+              -5.5,
+              1.0236,
+              4.311
+            ],
+            "rotation": [
+              -0.4617,
+              0,
+              0,
+              0.887
+            ],
+            "scale": [
+              0.75,
+              0.2,
+              2
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 7,
+            "material": 1,
+            "name": "ramp65",
+            "position": [
+              -7.5,
+              1.2281,
+              4.0265
+            ],
+            "rotation": [
+              -0.5373,
+              0,
+              0,
+              0.8434
+            ],
+            "scale": [
+              0.75,
+              0.2,
+              2
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 8,
+            "material": 1,
+            "name": "ramp75",
+            "position": [
+              -9.5,
+              1.3801,
+              3.7108
+            ],
+            "rotation": [
+              -0.6088,
+              0,
+              0,
+              0.7934
+            ],
+            "scale": [
+              0.75,
+              0.2,
+              2
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 9,
+            "material": 1,
+            "name": "step1",
+            "position": [
+              3.5,
+              -0.45,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.5,
+              0.05,
+              1
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 10,
+            "material": 0,
+            "name": "step2",
+            "position": [
+              4.5,
+              -0.325,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.5,
+              0.175,
+              1
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 11,
+            "material": 1,
+            "name": "step3",
+            "position": [
+              5.5,
+              -0.075,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.5,
+              0.425,
+              1
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 12,
+            "material": 0,
+            "name": "step4",
+            "position": [
+              6.5,
+              0.425,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.5,
+              0.925,
+              1
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 13,
+            "material": 1,
+            "name": "wall",
+            "position": [
+              -10.5,
+              1.0,
+              -3
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.25,
+              1.5,
+              2
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 14,
+            "material": 0,
+            "name": "overhangHigh",
+            "position": [
+              -7.75,
+              1.6,
+              -8
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              1.0,
+              0.1,
+              1
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 15,
+            "material": 0,
+            "name": "overhangLow",
+            "position": [
+              -7.75,
+              0.6,
+              -6
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              1.0,
+              0.1,
+              1
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Subtraction",
+            "id": 16,
+            "material": 0,
+            "name": "pit",
+            "position": [
+              0,
+              -6.5,
+              -6
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              1.5,
+              10.5,
+              1.5
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 17,
+            "material": 2,
+            "name": "axisXPositive",
+            "position": [
+              -11,
+              0.0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.15,
+              0.5,
+              0.15
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          },
+          {
+            "blend": "Union",
+            "id": 18,
+            "material": 2,
+            "name": "axisXNegative",
+            "position": [
+              11,
+              -0.45,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.5,
+              0.05,
+              0.5
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          },
+          {
+            "blend": "Union",
+            "id": 19,
+            "material": 3,
+            "name": "axisZPositive",
+            "position": [
+              0,
+              0.0,
+              -11
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.15,
+              0.5,
+              0.15
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          },
+          {
+            "blend": "Union",
+            "id": 20,
+            "material": 3,
+            "name": "axisZNegative",
+            "position": [
+              0,
+              -0.45,
+              11
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.5,
+              0.05,
+              0.5
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
           }
         ]
       },
       "id": "debugRoom"
+    },
+    {
+      "document": {
+        "name": "farPillar",
+        "palette": [
+          {
+            "color": "state.colors.groundPrimary"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "pillar",
+            "position": [
+              0,
+              30,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              2,
+              30,
+              2
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          }
+        ]
+      },
+      "id": "farPillar"
+    },
+    {
+      "document": {
+        "drivers": [
+          {
+            "cadence": "state.strideCadence",
+            "name": "stride",
+            "signal": "planarTravel",
+            "when": [
+              "Grounded",
+              "moving"
+            ]
+          },
+          {
+            "cadence": 12.0,
+            "name": "bob",
+            "signal": "planarTravel",
+            "when": [
+              "Grounded",
+              "moving"
+            ]
+          },
+          {
+            "cadence": 8.0,
+            "name": "reach",
+            "signal": "travel",
+            "when": [
+              "Climbing",
+              "moving"
+            ]
+          },
+          {
+            "cadence": 0.0,
+            "name": "cling",
+            "signal": "time",
+            "when": [
+              "Climbing"
+            ]
+          },
+          {
+            "cadence": "state.swayRate",
+            "name": "sway",
+            "signal": "state.swayClock",
+            "when": [
+              "moving"
+            ]
+          },
+          {
+            "cadence": 1.6,
+            "name": "breath",
+            "signal": "time",
+            "when": [
+              "still"
+            ]
+          }
+        ],
+        "effectors": [
+          {
+            "chain": [
+              "thighLeft",
+              "shinLeft"
+            ],
+            "name": "footLeft",
+            "plant": {
+              "driver": "stride",
+              "window": [
+                0.0,
+                3.141592653589793
+              ]
+            },
+            "target": {
+              "direction": [
+                0,
+                -1,
+                0
+              ],
+              "kind": "surface",
+              "reach": 0.4,
+              "standoff": 0.06
+            },
+            "tip": "bootLeft",
+            "when": [
+              "Grounded"
+            ]
+          },
+          {
+            "chain": [
+              "thighRight",
+              "shinRight"
+            ],
+            "name": "footRight",
+            "plant": {
+              "driver": "stride",
+              "window": [
+                3.141592653589793,
+                6.28
+              ]
+            },
+            "target": {
+              "direction": [
+                0,
+                -1,
+                0
+              ],
+              "kind": "surface",
+              "reach": 0.4,
+              "standoff": 0.06
+            },
+            "tip": "bootRight",
+            "when": [
+              "Grounded"
+            ]
+          },
+          {
+            "chain": [
+              "upperArmLeft",
+              "forearmLeft"
+            ],
+            "name": "handLeft",
+            "target": {
+              "direction": [
+                0,
+                0,
+                1
+              ],
+              "kind": "surface",
+              "reach": 0.6,
+              "standoff": 0.03
+            },
+            "tip": "handLeft",
+            "when": [
+              "Climbing"
+            ]
+          },
+          {
+            "chain": [
+              "upperArmRight",
+              "forearmRight"
+            ],
+            "name": "handRight",
+            "target": {
+              "direction": [
+                0,
+                0,
+                1
+              ],
+              "kind": "surface",
+              "reach": 0.6,
+              "standoff": 0.03
+            },
+            "tip": "handRight",
+            "when": [
+              "Climbing"
+            ]
+          }
+        ],
+        "frames": [
+          {
+            "name": "blink",
+            "transforms": [
+              {
+                "id": 19,
+                "position": [
+                  0.067,
+                  1.5,
+                  0.148
+                ],
+                "rotation": "state.transforms.identity",
+                "scale": [
+                  0.034,
+                  0.004,
+                  0.03
+                ]
+              },
+              {
+                "id": 22,
+                "position": [
+                  -0.067,
+                  1.5,
+                  0.148
+                ],
+                "rotation": "state.transforms.identity",
+                "scale": [
+                  0.034,
+                  0.004,
+                  0.03
+                ]
+              },
+              {
+                "id": 20,
+                "position": [
+                  0.067,
+                  1.498,
+                  0.168
+                ],
+                "rotation": "state.transforms.identity",
+                "scale": [
+                  0.021,
+                  0.004,
+                  0.018
+                ]
+              },
+              {
+                "id": 23,
+                "position": [
+                  -0.067,
+                  1.498,
+                  0.168
+                ],
+                "rotation": "state.transforms.identity",
+                "scale": [
+                  0.021,
+                  0.004,
+                  0.018
+                ]
+              }
+            ]
+          }
+        ],
+        "name": "wren",
+        "palette": [
+          {
+            "color": "state.avatar.skin"
+          },
+          {
+            "color": "state.avatar.hair"
+          },
+          {
+            "color": "state.avatar.eyeWhite"
+          },
+          {
+            "color": "state.avatar.iris"
+          },
+          {
+            "color": "state.avatar.cape"
+          },
+          {
+            "color": "state.avatar.tunic"
+          },
+          {
+            "color": "state.avatar.sash"
+          },
+          {
+            "color": "state.avatar.trousers"
+          },
+          {
+            "color": "state.avatar.boots"
+          },
+          {
+            "color": "state.avatar.cuff"
+          },
+          {
+            "color": "state.avatar.gloves"
+          },
+          {
+            "color": "state.avatar.satchel"
+          },
+          {
+            "color": "state.avatar.pendant"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "SmoothUnion",
+            "group": 0,
+            "id": 0,
+            "material": 5,
+            "name": "chest",
+            "position": [
+              0.0,
+              1.06,
+              0.0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.17,
+              0.17,
+              0.105
+            ],
+            "slides": [
+              {
+                "amplitude": 0.018,
+                "axis": [
+                  0,
+                  1,
+                  0
+                ],
+                "driver": "bob",
+                "phase": 0.0,
+                "wave": "sine"
+              },
+              {
+                "amplitude": 0.006,
+                "axis": [
+                  0,
+                  0,
+                  1
+                ],
+                "driver": "breath",
+                "phase": 0.0,
+                "wave": "sine"
+              }
+            ],
+            "smooth": 0.05,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 1,
+            "material": 5,
+            "name": "waist",
+            "parent": "chest",
+            "position": [
+              0.0,
+              0.9,
+              0.0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.155,
+              0.06,
+              0.155
+            ],
+            "smooth": 0.0,
+            "type": "Cylinder"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 2,
+            "material": 6,
+            "name": "sash",
+            "parent": "chest",
+            "position": [
+              0.0,
+              0.925,
+              0.0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.185,
+              0.032,
+              0.125
+            ],
+            "smooth": 0.0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 3,
+            "material": 6,
+            "name": "sashKnot",
+            "parent": "chest",
+            "position": [
+              0.15,
+              0.92,
+              0.09
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.035,
+              0.03,
+              0.03
+            ],
+            "smooth": 0.0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 4,
+            "material": 6,
+            "name": "sashTail",
+            "parent": "chest",
+            "position": [
+              0.165,
+              0.8,
+              0.07
+            ],
+            "rotation": [
+              -0.0,
+              -0.0,
+              -0.1045,
+              0.9945
+            ],
+            "scale": [
+              0.028,
+              0.1,
+              0.014
+            ],
+            "smooth": 0.0,
+            "swings": [
+              {
+                "amplitude": 0.25,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "sway",
+                "phase": 0.6,
+                "pivot": [
+                  0.165,
+                  0.9,
+                  0.07
+                ],
+                "wave": "sine"
+              }
+            ],
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 5,
+            "material": 11,
+            "name": "strap",
+            "parent": "chest",
+            "position": [
+              -0.14,
+              0.86,
+              0.1
+            ],
+            "rotation": [
+              -0.0,
+              -0.0,
+              -0.2756,
+              0.9613
+            ],
+            "scale": [
+              0.014,
+              0.66,
+              0.014
+            ],
+            "smooth": 0.0,
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 6,
+            "material": 11,
+            "name": "satchel",
+            "parent": "chest",
+            "position": [
+              -0.19,
+              0.84,
+              -0.02
+            ],
+            "rotation": [
+              0.0,
+              0.1736,
+              0.0,
+              0.9848
+            ],
+            "scale": [
+              0.055,
+              0.05,
+              0.03
+            ],
+            "smooth": 0.0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 7,
+            "material": 12,
+            "name": "pendant",
+            "parent": "chest",
+            "position": [
+              0.0,
+              1.17,
+              0.125
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.02,
+              0.024,
+              0.016
+            ],
+            "smooth": 0.0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "group": 0,
+            "id": 8,
+            "material": 4,
+            "name": "mantle",
+            "parent": "chest",
+            "position": [
+              0.0,
+              1.235,
+              -0.01
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.27,
+              0.085,
+              0.27
+            ],
+            "smooth": 0.04,
+            "swings": [
+              {
+                "amplitude": 0.06,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "sway",
+                "phase": 0.0,
+                "pivot": [
+                  0.0,
+                  1.32,
+                  0.0
+                ],
+                "wave": "sine"
+              }
+            ],
+            "type": "Cylinder"
+          },
+          {
+            "blend": "SmoothUnion",
+            "group": 0,
+            "id": 9,
+            "material": 4,
+            "name": "mantleBack",
+            "parent": "chest",
+            "position": [
+              0.0,
+              1.12,
+              -0.115
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.19,
+              0.14,
+              0.03
+            ],
+            "smooth": 0.04,
+            "swings": [
+              {
+                "amplitude": 0.12,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "sway",
+                "phase": 0.0,
+                "pivot": [
+                  0.0,
+                  1.32,
+                  0.0
+                ],
+                "wave": "sine"
+              }
+            ],
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 10,
+            "material": 4,
+            "name": "hood",
+            "parent": "chest",
+            "position": [
+              0.0,
+              1.31,
+              -0.12
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.105,
+              0.08,
+              0.09
+            ],
+            "smooth": 0.0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 11,
+            "material": 0,
+            "name": "neck",
+            "parent": "chest",
+            "position": [
+              0.0,
+              1.3,
+              0.0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.048,
+              0.05,
+              0.048
+            ],
+            "smooth": 0.0,
+            "type": "Cylinder"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 12,
+            "material": 0,
+            "name": "head",
+            "parent": "chest",
+            "position": [
+              0.0,
+              1.51,
+              0.0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.185,
+              0.19,
+              0.178
+            ],
+            "smooth": 0.0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "group": 0,
+            "id": 13,
+            "material": 0,
+            "name": "jaw",
+            "parent": "chest",
+            "position": [
+              0.0,
+              1.445,
+              0.02
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.115,
+              0.08,
+              0.105
+            ],
+            "smooth": 0.05,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 14,
+            "material": 1,
+            "name": "hairCap",
+            "parent": "chest",
+            "position": [
+              0.0,
+              1.585,
+              -0.04
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.2,
+              0.165,
+              0.2
+            ],
+            "smooth": 0.0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "group": 0,
+            "id": 15,
+            "material": 1,
+            "name": "fringe",
+            "parent": "chest",
+            "position": [
+              0.06,
+              1.6,
+              0.12
+            ],
+            "rotation": [
+              -0.0,
+              -0.0,
+              -0.1564,
+              0.9877
+            ],
+            "scale": [
+              0.14,
+              0.045,
+              0.075
+            ],
+            "smooth": 0.03,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 16,
+            "material": 1,
+            "name": "fringeSweep",
+            "parent": "chest",
+            "position": [
+              0.16,
+              1.47,
+              0.09
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.2164,
+              0.9763
+            ],
+            "scale": [
+              0.05,
+              0.16,
+              0.05
+            ],
+            "smooth": 0.0,
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 17,
+            "material": 1,
+            "name": "ponytailRoot",
+            "parent": "chest",
+            "position": [
+              0.0,
+              1.55,
+              -0.2
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.06,
+              0.05,
+              0.05
+            ],
+            "smooth": 0.0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 18,
+            "material": 1,
+            "name": "ponytail",
+            "parent": "chest",
+            "position": [
+              0.0,
+              1.33,
+              -0.3
+            ],
+            "rotation": [
+              0.2011,
+              0.0,
+              -0.0,
+              0.9796
+            ],
+            "scale": [
+              0.04,
+              0.4569,
+              0.04
+            ],
+            "smooth": 0.0,
+            "swings": [
+              {
+                "amplitude": 0.22,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "sway",
+                "phase": 1.5708,
+                "pivot": [
+                  0.0,
+                  1.54,
+                  -0.21
+                ],
+                "wave": "sine"
+              }
+            ],
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 19,
+            "material": 2,
+            "name": "eyeLeft",
+            "parent": "chest",
+            "position": [
+              0.067,
+              1.5,
+              0.148
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.034,
+              0.042,
+              0.03
+            ],
+            "smooth": 0.0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 20,
+            "material": 3,
+            "name": "irisLeft",
+            "parent": "chest",
+            "position": [
+              0.067,
+              1.498,
+              0.168
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.021,
+              0.028,
+              0.018
+            ],
+            "smooth": 0.0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 21,
+            "material": 0,
+            "name": "earLeft",
+            "parent": "chest",
+            "position": [
+              0.1742,
+              1.495,
+              0.0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.028,
+              0.036,
+              0.024
+            ],
+            "smooth": 0.0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 22,
+            "material": 2,
+            "name": "eyeRight",
+            "parent": "chest",
+            "position": [
+              -0.067,
+              1.5,
+              0.148
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.034,
+              0.042,
+              0.03
+            ],
+            "smooth": 0.0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 23,
+            "material": 3,
+            "name": "irisRight",
+            "parent": "chest",
+            "position": [
+              -0.067,
+              1.498,
+              0.168
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.021,
+              0.028,
+              0.018
+            ],
+            "smooth": 0.0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 24,
+            "material": 0,
+            "name": "earRight",
+            "parent": "chest",
+            "position": [
+              -0.1742,
+              1.495,
+              0.0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.028,
+              0.036,
+              0.024
+            ],
+            "smooth": 0.0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 25,
+            "material": 4,
+            "name": "shoulderLeft",
+            "parent": "chest",
+            "position": [
+              0.235,
+              1.235,
+              0.0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.072,
+              0.066,
+              0.07
+            ],
+            "smooth": 0.0,
+            "swings": [
+              {
+                "amplitude": -2.7,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "cling",
+                "phase": 0.0,
+                "pivot": [
+                  0.235,
+                  1.235,
+                  0.0
+                ],
+                "wave": "constant"
+              },
+              {
+                "amplitude": 0.15,
+                "axis": [
+                  0,
+                  0,
+                  1
+                ],
+                "driver": "cling",
+                "phase": 0.0,
+                "pivot": [
+                  0.235,
+                  1.235,
+                  0.0
+                ],
+                "wave": "constant"
+              },
+              {
+                "amplitude": -0.5,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "stride",
+                "phase": 3.14159,
+                "pivot": [
+                  0.235,
+                  1.235,
+                  0.0
+                ],
+                "wave": "curve:strideCurve"
+              },
+              {
+                "amplitude": -0.4,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "reach",
+                "phase": 0.0,
+                "pivot": [
+                  0.235,
+                  1.235,
+                  0.0
+                ],
+                "wave": "sine"
+              }
+            ],
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 26,
+            "material": 5,
+            "name": "upperArmLeft",
+            "parent": "chest",
+            "position": [
+              0.265,
+              1.0,
+              0.02
+            ],
+            "rotation": [
+              -0.0422,
+              0.0,
+              0.0633,
+              0.9971
+            ],
+            "scale": [
+              0.052,
+              0.4755,
+              0.052
+            ],
+            "smooth": 0.0,
+            "swings": [
+              {
+                "amplitude": -2.7,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "cling",
+                "phase": 0.0,
+                "pivot": [
+                  0.235,
+                  1.235,
+                  0.0
+                ],
+                "wave": "constant"
+              },
+              {
+                "amplitude": 0.15,
+                "axis": [
+                  0,
+                  0,
+                  1
+                ],
+                "driver": "cling",
+                "phase": 0.0,
+                "pivot": [
+                  0.235,
+                  1.235,
+                  0.0
+                ],
+                "wave": "constant"
+              },
+              {
+                "amplitude": -0.5,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "stride",
+                "phase": 3.14159,
+                "pivot": [
+                  0.235,
+                  1.235,
+                  0.0
+                ],
+                "wave": "curve:strideCurve"
+              },
+              {
+                "amplitude": -0.4,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "reach",
+                "phase": 0.0,
+                "pivot": [
+                  0.235,
+                  1.235,
+                  0.0
+                ],
+                "wave": "sine"
+              }
+            ],
+            "type": "Capsule"
+          },
+          {
+            "blend": "SmoothUnion",
+            "group": 0,
+            "id": 27,
+            "material": 0,
+            "name": "forearmLeft",
+            "parent": "upperArmLeft",
+            "position": [
+              0.275,
+              0.79,
+              0.1
+            ],
+            "rotation": [
+              -0.1809,
+              0.0,
+              0.0226,
+              0.9833
+            ],
+            "scale": [
+              0.046,
+              0.4499,
+              0.046
+            ],
+            "smooth": 0.02,
+            "swings": [
+              {
+                "amplitude": 0.3,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "cling",
+                "phase": 0.0,
+                "pivot": [
+                  0.265,
+                  1.0,
+                  0.02
+                ],
+                "wave": "constant"
+              },
+              {
+                "amplitude": -0.65,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "stride",
+                "phase": 3.14159,
+                "pivot": [
+                  0.265,
+                  1.0,
+                  0.02
+                ],
+                "wave": "halfSine"
+              },
+              {
+                "amplitude": 0.5,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "reach",
+                "phase": 0.0,
+                "pivot": [
+                  0.265,
+                  1.0,
+                  0.02
+                ],
+                "wave": "halfSine"
+              }
+            ],
+            "type": "Capsule"
+          },
+          {
+            "blend": "SmoothUnion",
+            "group": 0,
+            "id": 28,
+            "material": 10,
+            "name": "handLeft",
+            "parent": "forearmLeft",
+            "position": [
+              0.277,
+              0.745,
+              0.13
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.05,
+              0.062,
+              0.042
+            ],
+            "smooth": 0.02,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 29,
+            "material": 4,
+            "name": "shoulderRight",
+            "parent": "chest",
+            "position": [
+              -0.235,
+              1.235,
+              0.0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.072,
+              0.066,
+              0.07
+            ],
+            "smooth": 0.0,
+            "swings": [
+              {
+                "amplitude": -2.7,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "cling",
+                "phase": 0.0,
+                "pivot": [
+                  -0.235,
+                  1.235,
+                  0.0
+                ],
+                "wave": "constant"
+              },
+              {
+                "amplitude": -0.15,
+                "axis": [
+                  0,
+                  0,
+                  1
+                ],
+                "driver": "cling",
+                "phase": 0.0,
+                "pivot": [
+                  -0.235,
+                  1.235,
+                  0.0
+                ],
+                "wave": "constant"
+              },
+              {
+                "amplitude": -0.5,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "stride",
+                "phase": 0.0,
+                "pivot": [
+                  -0.235,
+                  1.235,
+                  0.0
+                ],
+                "wave": "curve:strideCurve"
+              },
+              {
+                "amplitude": -0.4,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "reach",
+                "phase": 3.14159,
+                "pivot": [
+                  -0.235,
+                  1.235,
+                  0.0
+                ],
+                "wave": "sine"
+              }
+            ],
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 30,
+            "material": 5,
+            "name": "upperArmRight",
+            "parent": "chest",
+            "position": [
+              -0.265,
+              1.0,
+              0.02
+            ],
+            "rotation": [
+              -0.0422,
+              0.0,
+              -0.0633,
+              0.9971
+            ],
+            "scale": [
+              0.052,
+              0.4755,
+              0.052
+            ],
+            "smooth": 0.0,
+            "swings": [
+              {
+                "amplitude": -2.7,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "cling",
+                "phase": 0.0,
+                "pivot": [
+                  -0.235,
+                  1.235,
+                  0.0
+                ],
+                "wave": "constant"
+              },
+              {
+                "amplitude": -0.15,
+                "axis": [
+                  0,
+                  0,
+                  1
+                ],
+                "driver": "cling",
+                "phase": 0.0,
+                "pivot": [
+                  -0.235,
+                  1.235,
+                  0.0
+                ],
+                "wave": "constant"
+              },
+              {
+                "amplitude": -0.5,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "stride",
+                "phase": 0.0,
+                "pivot": [
+                  -0.235,
+                  1.235,
+                  0.0
+                ],
+                "wave": "curve:strideCurve"
+              },
+              {
+                "amplitude": -0.4,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "reach",
+                "phase": 3.14159,
+                "pivot": [
+                  -0.235,
+                  1.235,
+                  0.0
+                ],
+                "wave": "sine"
+              }
+            ],
+            "type": "Capsule"
+          },
+          {
+            "blend": "SmoothUnion",
+            "group": 0,
+            "id": 31,
+            "material": 0,
+            "name": "forearmRight",
+            "parent": "upperArmRight",
+            "position": [
+              -0.275,
+              0.79,
+              0.1
+            ],
+            "rotation": [
+              -0.1809,
+              0.0,
+              -0.0226,
+              0.9833
+            ],
+            "scale": [
+              0.046,
+              0.4499,
+              0.046
+            ],
+            "smooth": 0.02,
+            "swings": [
+              {
+                "amplitude": 0.3,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "cling",
+                "phase": 0.0,
+                "pivot": [
+                  -0.265,
+                  1.0,
+                  0.02
+                ],
+                "wave": "constant"
+              },
+              {
+                "amplitude": -0.65,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "stride",
+                "phase": 0.0,
+                "pivot": [
+                  -0.265,
+                  1.0,
+                  0.02
+                ],
+                "wave": "halfSine"
+              },
+              {
+                "amplitude": 0.5,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "reach",
+                "phase": 3.14159,
+                "pivot": [
+                  -0.265,
+                  1.0,
+                  0.02
+                ],
+                "wave": "halfSine"
+              }
+            ],
+            "type": "Capsule"
+          },
+          {
+            "blend": "SmoothUnion",
+            "group": 0,
+            "id": 32,
+            "material": 10,
+            "name": "handRight",
+            "parent": "forearmRight",
+            "position": [
+              -0.277,
+              0.745,
+              0.13
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.05,
+              0.062,
+              0.042
+            ],
+            "smooth": 0.02,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "group": 0,
+            "id": 33,
+            "material": 7,
+            "name": "hips",
+            "position": [
+              0.0,
+              0.8,
+              0.0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.16,
+              0.1,
+              0.125
+            ],
+            "smooth": 0.04,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 34,
+            "material": 7,
+            "name": "thighLeft",
+            "position": [
+              0.092,
+              0.45,
+              0.01
+            ],
+            "rotation": [
+              -0.0143,
+              0.0,
+              0.01,
+              0.9998
+            ],
+            "scale": [
+              0.072,
+              0.7004,
+              0.072
+            ],
+            "smooth": 0.0,
+            "swings": [
+              {
+                "amplitude": -0.7,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "cling",
+                "phase": 0.0,
+                "pivot": [
+                  0.085,
+                  0.8,
+                  0.0
+                ],
+                "wave": "constant"
+              },
+              {
+                "amplitude": 0.2,
+                "axis": [
+                  0,
+                  0,
+                  1
+                ],
+                "driver": "cling",
+                "phase": 0.0,
+                "pivot": [
+                  0.085,
+                  0.8,
+                  0.0
+                ],
+                "wave": "constant"
+              },
+              {
+                "amplitude": -0.55,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "stride",
+                "phase": 0.0,
+                "pivot": [
+                  0.085,
+                  0.8,
+                  0.0
+                ],
+                "wave": "curve:strideCurve"
+              },
+              {
+                "amplitude": -0.4,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "reach",
+                "phase": 3.14159,
+                "pivot": [
+                  0.085,
+                  0.8,
+                  0.0
+                ],
+                "wave": "sine"
+              }
+            ],
+            "type": "Capsule"
+          },
+          {
+            "blend": "SmoothUnion",
+            "group": 0,
+            "id": 35,
+            "material": 8,
+            "name": "shinLeft",
+            "parent": "thighLeft",
+            "position": [
+              0.092,
+              0.11,
+              0.0
+            ],
+            "rotation": [
+              0.0147,
+              0.0,
+              -0.0,
+              0.9999
+            ],
+            "scale": [
+              0.06,
+              0.6803,
+              0.06
+            ],
+            "smooth": 0.02,
+            "swings": [
+              {
+                "amplitude": 1.15,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "cling",
+                "phase": 0.0,
+                "pivot": [
+                  0.092,
+                  0.45,
+                  0.01
+                ],
+                "wave": "constant"
+              },
+              {
+                "amplitude": 0.9,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "stride",
+                "phase": 1.5708,
+                "pivot": [
+                  0.092,
+                  0.45,
+                  0.01
+                ],
+                "wave": "halfSine"
+              },
+              {
+                "amplitude": 0.45,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "reach",
+                "phase": 3.14159,
+                "pivot": [
+                  0.092,
+                  0.45,
+                  0.01
+                ],
+                "wave": "halfSine"
+              }
+            ],
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 36,
+            "material": 9,
+            "name": "cuffLeft",
+            "parent": "shinLeft",
+            "position": [
+              0.092,
+              0.4,
+              0.01
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.072,
+              0.02,
+              0.072
+            ],
+            "smooth": 0.0,
+            "type": "Cylinder"
+          },
+          {
+            "blend": "SmoothUnion",
+            "group": 0,
+            "id": 37,
+            "material": 8,
+            "name": "bootLeft",
+            "parent": "shinLeft",
+            "position": [
+              0.092,
+              0.055,
+              0.035
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.066,
+              0.05,
+              0.115
+            ],
+            "smooth": 0.03,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 38,
+            "material": 7,
+            "name": "thighRight",
+            "position": [
+              -0.092,
+              0.45,
+              0.01
+            ],
+            "rotation": [
+              -0.0143,
+              0.0,
+              -0.01,
+              0.9998
+            ],
+            "scale": [
+              0.072,
+              0.7004,
+              0.072
+            ],
+            "smooth": 0.0,
+            "swings": [
+              {
+                "amplitude": -0.7,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "cling",
+                "phase": 0.0,
+                "pivot": [
+                  -0.085,
+                  0.8,
+                  0.0
+                ],
+                "wave": "constant"
+              },
+              {
+                "amplitude": -0.2,
+                "axis": [
+                  0,
+                  0,
+                  1
+                ],
+                "driver": "cling",
+                "phase": 0.0,
+                "pivot": [
+                  -0.085,
+                  0.8,
+                  0.0
+                ],
+                "wave": "constant"
+              },
+              {
+                "amplitude": -0.55,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "stride",
+                "phase": 3.14159,
+                "pivot": [
+                  -0.085,
+                  0.8,
+                  0.0
+                ],
+                "wave": "curve:strideCurve"
+              },
+              {
+                "amplitude": -0.4,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "reach",
+                "phase": 0.0,
+                "pivot": [
+                  -0.085,
+                  0.8,
+                  0.0
+                ],
+                "wave": "sine"
+              }
+            ],
+            "type": "Capsule"
+          },
+          {
+            "blend": "SmoothUnion",
+            "group": 0,
+            "id": 39,
+            "material": 8,
+            "name": "shinRight",
+            "parent": "thighRight",
+            "position": [
+              -0.092,
+              0.11,
+              0.0
+            ],
+            "rotation": [
+              0.0147,
+              0.0,
+              -0.0,
+              0.9999
+            ],
+            "scale": [
+              0.06,
+              0.6803,
+              0.06
+            ],
+            "smooth": 0.02,
+            "swings": [
+              {
+                "amplitude": 1.15,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "cling",
+                "phase": 0.0,
+                "pivot": [
+                  -0.092,
+                  0.45,
+                  0.01
+                ],
+                "wave": "constant"
+              },
+              {
+                "amplitude": 0.9,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "stride",
+                "phase": 4.71239,
+                "pivot": [
+                  -0.092,
+                  0.45,
+                  0.01
+                ],
+                "wave": "halfSine"
+              },
+              {
+                "amplitude": 0.45,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "reach",
+                "phase": 0.0,
+                "pivot": [
+                  -0.092,
+                  0.45,
+                  0.01
+                ],
+                "wave": "halfSine"
+              }
+            ],
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 40,
+            "material": 9,
+            "name": "cuffRight",
+            "parent": "shinRight",
+            "position": [
+              -0.092,
+              0.4,
+              0.01
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.072,
+              0.02,
+              0.072
+            ],
+            "smooth": 0.0,
+            "type": "Cylinder"
+          },
+          {
+            "blend": "SmoothUnion",
+            "group": 0,
+            "id": 41,
+            "material": 8,
+            "name": "bootRight",
+            "parent": "shinRight",
+            "position": [
+              -0.092,
+              0.055,
+              0.035
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.066,
+              0.05,
+              0.115
+            ],
+            "smooth": 0.03,
+            "type": "Box"
+          }
+        ]
+      },
+      "id": "wren"
+    },
+    {
+      "document": {
+        "drivers": [
+          {
+            "cadence": 14.0,
+            "name": "stride",
+            "signal": "planarTravel",
+            "when": [
+              "moving"
+            ]
+          },
+          {
+            "cadence": 3.0,
+            "name": "breath",
+            "signal": "time",
+            "when": [
+              "still"
+            ]
+          }
+        ],
+        "effectors": [
+          {
+            "chain": [
+              "coxaLeft1",
+              "femurLeft1"
+            ],
+            "name": "footLeft1",
+            "plant": {
+              "driver": "stride",
+              "window": [
+                0.0,
+                3.141592653589793
+              ]
+            },
+            "target": {
+              "direction": [
+                0,
+                -1,
+                0
+              ],
+              "kind": "surface",
+              "reach": 0.45,
+              "standoff": 0.02
+            },
+            "tip": "femurLeft1",
+            "when": [
+              "always"
+            ]
+          },
+          {
+            "chain": [
+              "coxaLeft2",
+              "femurLeft2"
+            ],
+            "name": "footLeft2",
+            "plant": {
+              "driver": "stride",
+              "window": [
+                3.141592653589793,
+                6.28
+              ]
+            },
+            "target": {
+              "direction": [
+                0,
+                -1,
+                0
+              ],
+              "kind": "surface",
+              "reach": 0.45,
+              "standoff": 0.02
+            },
+            "tip": "femurLeft2",
+            "when": [
+              "always"
+            ]
+          },
+          {
+            "chain": [
+              "coxaLeft3",
+              "femurLeft3"
+            ],
+            "name": "footLeft3",
+            "plant": {
+              "driver": "stride",
+              "window": [
+                0.0,
+                3.141592653589793
+              ]
+            },
+            "target": {
+              "direction": [
+                0,
+                -1,
+                0
+              ],
+              "kind": "surface",
+              "reach": 0.45,
+              "standoff": 0.02
+            },
+            "tip": "femurLeft3",
+            "when": [
+              "always"
+            ]
+          },
+          {
+            "chain": [
+              "coxaLeft4",
+              "femurLeft4"
+            ],
+            "name": "footLeft4",
+            "plant": {
+              "driver": "stride",
+              "window": [
+                3.141592653589793,
+                6.28
+              ]
+            },
+            "target": {
+              "direction": [
+                0,
+                -1,
+                0
+              ],
+              "kind": "surface",
+              "reach": 0.45,
+              "standoff": 0.02
+            },
+            "tip": "femurLeft4",
+            "when": [
+              "always"
+            ]
+          },
+          {
+            "chain": [
+              "coxaRight1",
+              "femurRight1"
+            ],
+            "name": "footRight1",
+            "plant": {
+              "driver": "stride",
+              "window": [
+                3.141592653589793,
+                6.28
+              ]
+            },
+            "target": {
+              "direction": [
+                0,
+                -1,
+                0
+              ],
+              "kind": "surface",
+              "reach": 0.45,
+              "standoff": 0.02
+            },
+            "tip": "femurRight1",
+            "when": [
+              "always"
+            ]
+          },
+          {
+            "chain": [
+              "coxaRight2",
+              "femurRight2"
+            ],
+            "name": "footRight2",
+            "plant": {
+              "driver": "stride",
+              "window": [
+                0.0,
+                3.141592653589793
+              ]
+            },
+            "target": {
+              "direction": [
+                0,
+                -1,
+                0
+              ],
+              "kind": "surface",
+              "reach": 0.45,
+              "standoff": 0.02
+            },
+            "tip": "femurRight2",
+            "when": [
+              "always"
+            ]
+          },
+          {
+            "chain": [
+              "coxaRight3",
+              "femurRight3"
+            ],
+            "name": "footRight3",
+            "plant": {
+              "driver": "stride",
+              "window": [
+                3.141592653589793,
+                6.28
+              ]
+            },
+            "target": {
+              "direction": [
+                0,
+                -1,
+                0
+              ],
+              "kind": "surface",
+              "reach": 0.45,
+              "standoff": 0.02
+            },
+            "tip": "femurRight3",
+            "when": [
+              "always"
+            ]
+          },
+          {
+            "chain": [
+              "coxaRight4",
+              "femurRight4"
+            ],
+            "name": "footRight4",
+            "plant": {
+              "driver": "stride",
+              "window": [
+                0.0,
+                3.141592653589793
+              ]
+            },
+            "target": {
+              "direction": [
+                0,
+                -1,
+                0
+              ],
+              "kind": "surface",
+              "reach": 0.45,
+              "standoff": 0.02
+            },
+            "tip": "femurRight4",
+            "when": [
+              "always"
+            ]
+          }
+        ],
+        "name": "spider",
+        "palette": [
+          {
+            "color": "state.spiderColors.body"
+          },
+          {
+            "color": "state.spiderColors.leg"
+          },
+          {
+            "color": "state.spiderColors.eye"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "SmoothUnion",
+            "group": 0,
+            "id": 0,
+            "material": 0,
+            "name": "abdomen",
+            "position": [
+              0.0,
+              0.22,
+              -0.16
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.16,
+              0.135,
+              0.18
+            ],
+            "slides": [
+              {
+                "amplitude": 0.006,
+                "axis": [
+                  0,
+                  1,
+                  0
+                ],
+                "driver": "breath",
+                "phase": 0.0,
+                "wave": "sine"
+              }
+            ],
+            "smooth": 0.04,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "group": 0,
+            "id": 1,
+            "material": 0,
+            "name": "thorax",
+            "parent": "abdomen",
+            "position": [
+              0.0,
+              0.21,
+              0.08
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.12,
+              0.1,
+              0.12
+            ],
+            "smooth": 0.04,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 2,
+            "material": 2,
+            "name": "eyeLeft",
+            "parent": "abdomen",
+            "position": [
+              0.05,
+              0.25,
+              0.19
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.025,
+              0.025,
+              0.02
+            ],
+            "smooth": 0.0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 3,
+            "material": 2,
+            "name": "eyeRight",
+            "parent": "abdomen",
+            "position": [
+              -0.05,
+              0.25,
+              0.19
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.025,
+              0.025,
+              0.02
+            ],
+            "smooth": 0.0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 4,
+            "material": 1,
+            "name": "coxaLeft1",
+            "parent": "thorax",
+            "position": [
+              0.2532,
+              0.34,
+              0.2886
+            ],
+            "rotation": [
+              -0.5594,
+              0.0,
+              0.6666,
+              0.4927
+            ],
+            "scale": [
+              0.02,
+              0.4665,
+              0.02
+            ],
+            "smooth": 0.0,
+            "swings": [
+              {
+                "amplitude": 0.35,
+                "axis": [
+                  0,
+                  1,
+                  0
+                ],
+                "driver": "stride",
+                "phase": 0.0,
+                "pivot": [
+                  0.1,
+                  0.22,
+                  0.16
+                ],
+                "wave": "sine"
+              },
+              {
+                "amplitude": 0.5,
+                "axis": [
+                  0.6427876096865393,
+                  0.0,
+                  -0.766044443118978
+                ],
+                "driver": "stride",
+                "phase": 1.5708,
+                "pivot": [
+                  0.1,
+                  0.22,
+                  0.16
+                ],
+                "wave": "halfSine"
+              }
+            ],
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 5,
+            "material": 1,
+            "name": "femurLeft1",
+            "parent": "coxaLeft1",
+            "position": [
+              0.3758,
+              0.0,
+              0.3914
+            ],
+            "rotation": [
+              -0.1402,
+              0.0,
+              0.1671,
+              0.9759
+            ],
+            "scale": [
+              0.016,
+              0.7515,
+              0.016
+            ],
+            "smooth": 0.0,
+            "swings": [
+              {
+                "amplitude": -0.6,
+                "axis": [
+                  0.6427876096865393,
+                  0.0,
+                  -0.766044443118978
+                ],
+                "driver": "stride",
+                "phase": 1.5708,
+                "pivot": [
+                  0.2532,
+                  0.34,
+                  0.2886
+                ],
+                "wave": "halfSine"
+              }
+            ],
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 6,
+            "material": 1,
+            "name": "coxaLeft2",
+            "parent": "thorax",
+            "position": [
+              0.2932,
+              0.34,
+              0.1218
+            ],
+            "rotation": [
+              -0.2252,
+              0.0,
+              0.8405,
+              0.4927
+            ],
+            "scale": [
+              0.02,
+              0.4665,
+              0.02
+            ],
+            "smooth": 0.0,
+            "swings": [
+              {
+                "amplitude": 0.35,
+                "axis": [
+                  0,
+                  1,
+                  0
+                ],
+                "driver": "stride",
+                "phase": 3.14159,
+                "pivot": [
+                  0.1,
+                  0.22,
+                  0.07
+                ],
+                "wave": "sine"
+              },
+              {
+                "amplitude": 0.5,
+                "axis": [
+                  0.25881904510252074,
+                  0.0,
+                  -0.9659258262890683
+                ],
+                "driver": "stride",
+                "phase": 4.71239,
+                "pivot": [
+                  0.1,
+                  0.22,
+                  0.07
+                ],
+                "wave": "halfSine"
+              }
+            ],
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 7,
+            "material": 1,
+            "name": "femurLeft2",
+            "parent": "coxaLeft2",
+            "position": [
+              0.4477,
+              0.0,
+              0.1632
+            ],
+            "rotation": [
+              -0.0565,
+              0.0,
+              0.2107,
+              0.9759
+            ],
+            "scale": [
+              0.016,
+              0.7515,
+              0.016
+            ],
+            "smooth": 0.0,
+            "swings": [
+              {
+                "amplitude": -0.6,
+                "axis": [
+                  0.25881904510252074,
+                  0.0,
+                  -0.9659258262890683
+                ],
+                "driver": "stride",
+                "phase": 4.71239,
+                "pivot": [
+                  0.2932,
+                  0.34,
+                  0.1218
+                ],
+                "wave": "halfSine"
+              }
+            ],
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 8,
+            "material": 1,
+            "name": "coxaLeft3",
+            "parent": "thorax",
+            "position": [
+              0.2932,
+              0.34,
+              -0.0718
+            ],
+            "rotation": [
+              0.2252,
+              0.0,
+              0.8405,
+              0.4927
+            ],
+            "scale": [
+              0.02,
+              0.4665,
+              0.02
+            ],
+            "smooth": 0.0,
+            "swings": [
+              {
+                "amplitude": 0.35,
+                "axis": [
+                  0,
+                  1,
+                  0
+                ],
+                "driver": "stride",
+                "phase": 0.0,
+                "pivot": [
+                  0.1,
+                  0.22,
+                  -0.02
+                ],
+                "wave": "sine"
+              },
+              {
+                "amplitude": 0.5,
+                "axis": [
+                  -0.25881904510252074,
+                  0.0,
+                  -0.9659258262890683
+                ],
+                "driver": "stride",
+                "phase": 1.5708,
+                "pivot": [
+                  0.1,
+                  0.22,
+                  -0.02
+                ],
+                "wave": "halfSine"
+              }
+            ],
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 9,
+            "material": 1,
+            "name": "femurLeft3",
+            "parent": "coxaLeft3",
+            "position": [
+              0.4477,
+              0.0,
+              -0.1132
+            ],
+            "rotation": [
+              0.0565,
+              0.0,
+              0.2107,
+              0.9759
+            ],
+            "scale": [
+              0.016,
+              0.7515,
+              0.016
+            ],
+            "smooth": 0.0,
+            "swings": [
+              {
+                "amplitude": -0.6,
+                "axis": [
+                  -0.25881904510252074,
+                  0.0,
+                  -0.9659258262890683
+                ],
+                "driver": "stride",
+                "phase": 1.5708,
+                "pivot": [
+                  0.2932,
+                  0.34,
+                  -0.0718
+                ],
+                "wave": "halfSine"
+              }
+            ],
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 10,
+            "material": 1,
+            "name": "coxaLeft4",
+            "parent": "thorax",
+            "position": [
+              0.2532,
+              0.34,
+              -0.2386
+            ],
+            "rotation": [
+              0.5594,
+              0.0,
+              0.6666,
+              0.4927
+            ],
+            "scale": [
+              0.02,
+              0.4665,
+              0.02
+            ],
+            "smooth": 0.0,
+            "swings": [
+              {
+                "amplitude": 0.35,
+                "axis": [
+                  0,
+                  1,
+                  0
+                ],
+                "driver": "stride",
+                "phase": 3.14159,
+                "pivot": [
+                  0.1,
+                  0.22,
+                  -0.11
+                ],
+                "wave": "sine"
+              },
+              {
+                "amplitude": 0.5,
+                "axis": [
+                  -0.6427876096865393,
+                  0.0,
+                  -0.766044443118978
+                ],
+                "driver": "stride",
+                "phase": 4.71239,
+                "pivot": [
+                  0.1,
+                  0.22,
+                  -0.11
+                ],
+                "wave": "halfSine"
+              }
+            ],
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 11,
+            "material": 1,
+            "name": "femurLeft4",
+            "parent": "coxaLeft4",
+            "position": [
+              0.3758,
+              0.0,
+              -0.3414
+            ],
+            "rotation": [
+              0.1402,
+              0.0,
+              0.1671,
+              0.9759
+            ],
+            "scale": [
+              0.016,
+              0.7515,
+              0.016
+            ],
+            "smooth": 0.0,
+            "swings": [
+              {
+                "amplitude": -0.6,
+                "axis": [
+                  -0.6427876096865393,
+                  0.0,
+                  -0.766044443118978
+                ],
+                "driver": "stride",
+                "phase": 4.71239,
+                "pivot": [
+                  0.2532,
+                  0.34,
+                  -0.2386
+                ],
+                "wave": "halfSine"
+              }
+            ],
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 12,
+            "material": 1,
+            "name": "coxaRight1",
+            "parent": "thorax",
+            "position": [
+              -0.2532,
+              0.34,
+              0.2886
+            ],
+            "rotation": [
+              -0.5594,
+              0.0,
+              -0.6666,
+              0.4927
+            ],
+            "scale": [
+              0.02,
+              0.4665,
+              0.02
+            ],
+            "smooth": 0.0,
+            "swings": [
+              {
+                "amplitude": -0.35,
+                "axis": [
+                  0,
+                  1,
+                  0
+                ],
+                "driver": "stride",
+                "phase": 3.14159,
+                "pivot": [
+                  -0.1,
+                  0.22,
+                  0.16
+                ],
+                "wave": "sine"
+              },
+              {
+                "amplitude": 0.5,
+                "axis": [
+                  0.6427876096865393,
+                  0.0,
+                  0.766044443118978
+                ],
+                "driver": "stride",
+                "phase": 4.71239,
+                "pivot": [
+                  -0.1,
+                  0.22,
+                  0.16
+                ],
+                "wave": "halfSine"
+              }
+            ],
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 13,
+            "material": 1,
+            "name": "femurRight1",
+            "parent": "coxaRight1",
+            "position": [
+              -0.3758,
+              0.0,
+              0.3914
+            ],
+            "rotation": [
+              -0.1402,
+              0.0,
+              -0.1671,
+              0.9759
+            ],
+            "scale": [
+              0.016,
+              0.7515,
+              0.016
+            ],
+            "smooth": 0.0,
+            "swings": [
+              {
+                "amplitude": -0.6,
+                "axis": [
+                  0.6427876096865393,
+                  0.0,
+                  0.766044443118978
+                ],
+                "driver": "stride",
+                "phase": 4.71239,
+                "pivot": [
+                  -0.2532,
+                  0.34,
+                  0.2886
+                ],
+                "wave": "halfSine"
+              }
+            ],
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 14,
+            "material": 1,
+            "name": "coxaRight2",
+            "parent": "thorax",
+            "position": [
+              -0.2932,
+              0.34,
+              0.1218
+            ],
+            "rotation": [
+              -0.2252,
+              0.0,
+              -0.8405,
+              0.4927
+            ],
+            "scale": [
+              0.02,
+              0.4665,
+              0.02
+            ],
+            "smooth": 0.0,
+            "swings": [
+              {
+                "amplitude": -0.35,
+                "axis": [
+                  0,
+                  1,
+                  0
+                ],
+                "driver": "stride",
+                "phase": 0.0,
+                "pivot": [
+                  -0.1,
+                  0.22,
+                  0.07
+                ],
+                "wave": "sine"
+              },
+              {
+                "amplitude": 0.5,
+                "axis": [
+                  0.25881904510252074,
+                  0.0,
+                  0.9659258262890683
+                ],
+                "driver": "stride",
+                "phase": 1.5708,
+                "pivot": [
+                  -0.1,
+                  0.22,
+                  0.07
+                ],
+                "wave": "halfSine"
+              }
+            ],
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 15,
+            "material": 1,
+            "name": "femurRight2",
+            "parent": "coxaRight2",
+            "position": [
+              -0.4477,
+              0.0,
+              0.1632
+            ],
+            "rotation": [
+              -0.0565,
+              0.0,
+              -0.2107,
+              0.9759
+            ],
+            "scale": [
+              0.016,
+              0.7515,
+              0.016
+            ],
+            "smooth": 0.0,
+            "swings": [
+              {
+                "amplitude": -0.6,
+                "axis": [
+                  0.25881904510252074,
+                  0.0,
+                  0.9659258262890683
+                ],
+                "driver": "stride",
+                "phase": 1.5708,
+                "pivot": [
+                  -0.2932,
+                  0.34,
+                  0.1218
+                ],
+                "wave": "halfSine"
+              }
+            ],
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 16,
+            "material": 1,
+            "name": "coxaRight3",
+            "parent": "thorax",
+            "position": [
+              -0.2932,
+              0.34,
+              -0.0718
+            ],
+            "rotation": [
+              0.2252,
+              0.0,
+              -0.8405,
+              0.4927
+            ],
+            "scale": [
+              0.02,
+              0.4665,
+              0.02
+            ],
+            "smooth": 0.0,
+            "swings": [
+              {
+                "amplitude": -0.35,
+                "axis": [
+                  0,
+                  1,
+                  0
+                ],
+                "driver": "stride",
+                "phase": 3.14159,
+                "pivot": [
+                  -0.1,
+                  0.22,
+                  -0.02
+                ],
+                "wave": "sine"
+              },
+              {
+                "amplitude": 0.5,
+                "axis": [
+                  -0.25881904510252074,
+                  0.0,
+                  0.9659258262890683
+                ],
+                "driver": "stride",
+                "phase": 4.71239,
+                "pivot": [
+                  -0.1,
+                  0.22,
+                  -0.02
+                ],
+                "wave": "halfSine"
+              }
+            ],
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 17,
+            "material": 1,
+            "name": "femurRight3",
+            "parent": "coxaRight3",
+            "position": [
+              -0.4477,
+              0.0,
+              -0.1132
+            ],
+            "rotation": [
+              0.0565,
+              0.0,
+              -0.2107,
+              0.9759
+            ],
+            "scale": [
+              0.016,
+              0.7515,
+              0.016
+            ],
+            "smooth": 0.0,
+            "swings": [
+              {
+                "amplitude": -0.6,
+                "axis": [
+                  -0.25881904510252074,
+                  0.0,
+                  0.9659258262890683
+                ],
+                "driver": "stride",
+                "phase": 4.71239,
+                "pivot": [
+                  -0.2932,
+                  0.34,
+                  -0.0718
+                ],
+                "wave": "halfSine"
+              }
+            ],
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 18,
+            "material": 1,
+            "name": "coxaRight4",
+            "parent": "thorax",
+            "position": [
+              -0.2532,
+              0.34,
+              -0.2386
+            ],
+            "rotation": [
+              0.5594,
+              0.0,
+              -0.6666,
+              0.4927
+            ],
+            "scale": [
+              0.02,
+              0.4665,
+              0.02
+            ],
+            "smooth": 0.0,
+            "swings": [
+              {
+                "amplitude": -0.35,
+                "axis": [
+                  0,
+                  1,
+                  0
+                ],
+                "driver": "stride",
+                "phase": 0.0,
+                "pivot": [
+                  -0.1,
+                  0.22,
+                  -0.11
+                ],
+                "wave": "sine"
+              },
+              {
+                "amplitude": 0.5,
+                "axis": [
+                  -0.6427876096865393,
+                  0.0,
+                  0.766044443118978
+                ],
+                "driver": "stride",
+                "phase": 1.5708,
+                "pivot": [
+                  -0.1,
+                  0.22,
+                  -0.11
+                ],
+                "wave": "halfSine"
+              }
+            ],
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 19,
+            "material": 1,
+            "name": "femurRight4",
+            "parent": "coxaRight4",
+            "position": [
+              -0.3758,
+              0.0,
+              -0.3414
+            ],
+            "rotation": [
+              0.1402,
+              0.0,
+              -0.1671,
+              0.9759
+            ],
+            "scale": [
+              0.016,
+              0.7515,
+              0.016
+            ],
+            "smooth": 0.0,
+            "swings": [
+              {
+                "amplitude": -0.6,
+                "axis": [
+                  -0.6427876096865393,
+                  0.0,
+                  0.766044443118978
+                ],
+                "driver": "stride",
+                "phase": 1.5708,
+                "pivot": [
+                  -0.2532,
+                  0.34,
+                  -0.2386
+                ],
+                "wave": "halfSine"
+              }
+            ],
+            "type": "Capsule"
+          }
+        ]
+      },
+      "id": "spider"
+    },
+    {
+      "document": {
+        "drivers": [
+          {
+            "cadence": 40.0,
+            "name": "wingbeat",
+            "signal": "time",
+            "when": [
+              "Flying"
+            ]
+          },
+          {
+            "cadence": 4.0,
+            "name": "hover",
+            "signal": "time",
+            "when": [
+              "Flying"
+            ]
+          }
+        ],
+        "name": "dragonfly",
+        "palette": [
+          {
+            "color": "state.dragonflyColors.body"
+          },
+          {
+            "color": "state.dragonflyColors.wing"
+          },
+          {
+            "color": "state.dragonflyColors.eye"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "SmoothUnion",
+            "group": 0,
+            "id": 0,
+            "material": 0,
+            "name": "thorax",
+            "position": [
+              0.0,
+              0.9,
+              0.0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.065,
+              0.065,
+              0.085
+            ],
+            "slides": [
+              {
+                "amplitude": 0.04,
+                "axis": [
+                  0,
+                  1,
+                  0
+                ],
+                "driver": "hover",
+                "phase": 0.0,
+                "wave": "sine"
+              }
+            ],
+            "smooth": 0.03,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 1,
+            "material": 0,
+            "name": "abdomen",
+            "parent": "thorax",
+            "position": [
+              0.0,
+              0.9,
+              -0.4
+            ],
+            "rotation": [
+              0.7071,
+              0.0,
+              -0.0,
+              0.7071
+            ],
+            "scale": [
+              0.025,
+              0.68,
+              0.025
+            ],
+            "smooth": 0.0,
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 2,
+            "material": 0,
+            "name": "head",
+            "parent": "thorax",
+            "position": [
+              0.0,
+              0.91,
+              0.11
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.045,
+              0.045,
+              0.045
+            ],
+            "smooth": 0.0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 3,
+            "material": 2,
+            "name": "eyeLeft",
+            "parent": "thorax",
+            "position": [
+              0.03,
+              0.93,
+              0.13
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.025,
+              0.028,
+              0.025
+            ],
+            "smooth": 0.0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 4,
+            "material": 2,
+            "name": "eyeRight",
+            "parent": "thorax",
+            "position": [
+              -0.03,
+              0.93,
+              0.13
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.025,
+              0.028,
+              0.025
+            ],
+            "smooth": 0.0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 5,
+            "material": 1,
+            "name": "wingLeft1",
+            "parent": "thorax",
+            "position": [
+              0.21,
+              0.94,
+              0.03
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.16,
+              0.005,
+              0.05
+            ],
+            "smooth": 0.0,
+            "swings": [
+              {
+                "amplitude": -0.6,
+                "axis": [
+                  0,
+                  0,
+                  1
+                ],
+                "driver": "wingbeat",
+                "phase": 0.0,
+                "pivot": [
+                  0.05,
+                  0.94,
+                  0.03
+                ],
+                "wave": "sine"
+              }
+            ],
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 6,
+            "material": 1,
+            "name": "wingLeft2",
+            "parent": "thorax",
+            "position": [
+              0.2,
+              0.94,
+              -0.03
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.15,
+              0.005,
+              0.05
+            ],
+            "smooth": 0.0,
+            "swings": [
+              {
+                "amplitude": -0.6,
+                "axis": [
+                  0,
+                  0,
+                  1
+                ],
+                "driver": "wingbeat",
+                "phase": 3.14159,
+                "pivot": [
+                  0.05,
+                  0.94,
+                  -0.03
+                ],
+                "wave": "sine"
+              }
+            ],
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 7,
+            "material": 1,
+            "name": "wingRight1",
+            "parent": "thorax",
+            "position": [
+              -0.21,
+              0.94,
+              0.03
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.16,
+              0.005,
+              0.05
+            ],
+            "smooth": 0.0,
+            "swings": [
+              {
+                "amplitude": 0.6,
+                "axis": [
+                  0,
+                  0,
+                  1
+                ],
+                "driver": "wingbeat",
+                "phase": 0.0,
+                "pivot": [
+                  -0.05,
+                  0.94,
+                  0.03
+                ],
+                "wave": "sine"
+              }
+            ],
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 8,
+            "material": 1,
+            "name": "wingRight2",
+            "parent": "thorax",
+            "position": [
+              -0.2,
+              0.94,
+              -0.03
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.15,
+              0.005,
+              0.05
+            ],
+            "smooth": 0.0,
+            "swings": [
+              {
+                "amplitude": 0.6,
+                "axis": [
+                  0,
+                  0,
+                  1
+                ],
+                "driver": "wingbeat",
+                "phase": 3.14159,
+                "pivot": [
+                  -0.05,
+                  0.94,
+                  -0.03
+                ],
+                "wave": "sine"
+              }
+            ],
+            "type": "Box"
+          }
+        ]
+      },
+      "id": "dragonfly"
+    },
+    {
+      "document": {
+        "drivers": [
+          {
+            "cadence": 7.0,
+            "name": "stride",
+            "signal": "planarTravel",
+            "when": [
+              "Grounded",
+              "moving"
+            ]
+          },
+          {
+            "cadence": 14.0,
+            "name": "bob",
+            "signal": "planarTravel",
+            "when": [
+              "Grounded",
+              "moving"
+            ]
+          },
+          {
+            "cadence": 6.0,
+            "name": "wag",
+            "signal": "time",
+            "when": [
+              "Grounded"
+            ]
+          }
+        ],
+        "effectors": [
+          {
+            "chain": [
+              "upperForeLeft",
+              "lowerForeLeft"
+            ],
+            "name": "pawForeLeft",
+            "plant": {
+              "driver": "stride",
+              "window": [
+                0.0,
+                3.141592653589793
+              ]
+            },
+            "target": {
+              "direction": [
+                0,
+                -1,
+                0
+              ],
+              "kind": "surface",
+              "reach": 0.4,
+              "standoff": 0.03
+            },
+            "tip": "pawForeLeft",
+            "when": [
+              "Grounded"
+            ]
+          },
+          {
+            "chain": [
+              "upperHindLeft",
+              "lowerHindLeft"
+            ],
+            "name": "pawHindLeft",
+            "plant": {
+              "driver": "stride",
+              "window": [
+                3.141592653589793,
+                6.28
+              ]
+            },
+            "target": {
+              "direction": [
+                0,
+                -1,
+                0
+              ],
+              "kind": "surface",
+              "reach": 0.4,
+              "standoff": 0.03
+            },
+            "tip": "pawHindLeft",
+            "when": [
+              "Grounded"
+            ]
+          },
+          {
+            "chain": [
+              "upperForeRight",
+              "lowerForeRight"
+            ],
+            "name": "pawForeRight",
+            "plant": {
+              "driver": "stride",
+              "window": [
+                3.141592653589793,
+                6.28
+              ]
+            },
+            "target": {
+              "direction": [
+                0,
+                -1,
+                0
+              ],
+              "kind": "surface",
+              "reach": 0.4,
+              "standoff": 0.03
+            },
+            "tip": "pawForeRight",
+            "when": [
+              "Grounded"
+            ]
+          },
+          {
+            "chain": [
+              "upperHindRight",
+              "lowerHindRight"
+            ],
+            "name": "pawHindRight",
+            "plant": {
+              "driver": "stride",
+              "window": [
+                0.0,
+                3.141592653589793
+              ]
+            },
+            "target": {
+              "direction": [
+                0,
+                -1,
+                0
+              ],
+              "kind": "surface",
+              "reach": 0.4,
+              "standoff": 0.03
+            },
+            "tip": "pawHindRight",
+            "when": [
+              "Grounded"
+            ]
+          }
+        ],
+        "name": "hound",
+        "palette": [
+          {
+            "color": "state.houndColors.coat"
+          },
+          {
+            "color": "state.houndColors.belly"
+          },
+          {
+            "color": "state.houndColors.eye"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "SmoothUnion",
+            "group": 0,
+            "id": 0,
+            "material": 0,
+            "name": "chest",
+            "position": [
+              0.0,
+              0.52,
+              0.22
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.15,
+              0.15,
+              0.2
+            ],
+            "slides": [
+              {
+                "amplitude": 0.02,
+                "axis": [
+                  0,
+                  1,
+                  0
+                ],
+                "driver": "bob",
+                "phase": 0.0,
+                "wave": "sine"
+              }
+            ],
+            "smooth": 0.05,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "group": 0,
+            "id": 1,
+            "material": 0,
+            "name": "rump",
+            "parent": "chest",
+            "position": [
+              0.0,
+              0.5,
+              -0.22
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.14,
+              0.14,
+              0.18
+            ],
+            "smooth": 0.05,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "group": 0,
+            "id": 2,
+            "material": 1,
+            "name": "belly",
+            "parent": "chest",
+            "position": [
+              0.0,
+              0.46,
+              -0.12
+            ],
+            "rotation": [
+              0.7071,
+              0.0,
+              -0.0,
+              0.7071
+            ],
+            "scale": [
+              0.12,
+              0.48,
+              0.12
+            ],
+            "smooth": 0.05,
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 3,
+            "material": 0,
+            "name": "neck",
+            "parent": "chest",
+            "position": [
+              0.0,
+              0.62,
+              0.4
+            ],
+            "rotation": [
+              -0.8944,
+              0.0,
+              -0.0,
+              0.4472
+            ],
+            "scale": [
+              0.06,
+              0.2,
+              0.06
+            ],
+            "smooth": 0.0,
+            "type": "Capsule"
+          },
+          {
+            "blend": "SmoothUnion",
+            "group": 0,
+            "id": 4,
+            "material": 0,
+            "name": "head",
+            "parent": "chest",
+            "position": [
+              0.0,
+              0.68,
+              0.5
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.09,
+              0.08,
+              0.11
+            ],
+            "smooth": 0.03,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 5,
+            "material": 1,
+            "name": "muzzle",
+            "parent": "chest",
+            "position": [
+              0.0,
+              0.64,
+              0.61
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.05,
+              0.045,
+              0.065
+            ],
+            "smooth": 0.0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 6,
+            "material": 2,
+            "name": "eyeLeft",
+            "parent": "chest",
+            "position": [
+              0.05,
+              0.71,
+              0.58
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.02,
+              0.022,
+              0.015
+            ],
+            "smooth": 0.0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 7,
+            "material": 0,
+            "name": "earLeft",
+            "parent": "chest",
+            "position": [
+              0.07,
+              0.72,
+              0.46
+            ],
+            "rotation": [
+              -0.0,
+              -0.0,
+              -0.1736,
+              0.9848
+            ],
+            "scale": [
+              0.025,
+              0.07,
+              0.025
+            ],
+            "smooth": 0.0,
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 8,
+            "material": 2,
+            "name": "eyeRight",
+            "parent": "chest",
+            "position": [
+              -0.05,
+              0.71,
+              0.58
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.02,
+              0.022,
+              0.015
+            ],
+            "smooth": 0.0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 9,
+            "material": 0,
+            "name": "earRight",
+            "parent": "chest",
+            "position": [
+              -0.07,
+              0.72,
+              0.46
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.1736,
+              0.9848
+            ],
+            "scale": [
+              0.025,
+              0.07,
+              0.025
+            ],
+            "smooth": 0.0,
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 10,
+            "material": 0,
+            "name": "tail",
+            "parent": "chest",
+            "position": [
+              0.0,
+              0.62,
+              -0.62
+            ],
+            "rotation": [
+              0.7882,
+              0.0,
+              -0.0,
+              0.6154
+            ],
+            "scale": [
+              0.03,
+              0.4948,
+              0.03
+            ],
+            "smooth": 0.0,
+            "swings": [
+              {
+                "amplitude": 0.45,
+                "axis": [
+                  0,
+                  1,
+                  0
+                ],
+                "driver": "wag",
+                "phase": 0.0,
+                "pivot": [
+                  0.0,
+                  0.56,
+                  -0.38
+                ],
+                "wave": "sine"
+              }
+            ],
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 11,
+            "material": 0,
+            "name": "upperForeLeft",
+            "parent": "chest",
+            "position": [
+              0.12,
+              0.26,
+              0.22
+            ],
+            "rotation": [
+              0.0453,
+              0.0,
+              0.0226,
+              0.9987
+            ],
+            "scale": [
+              0.045,
+              0.4423,
+              0.045
+            ],
+            "smooth": 0.0,
+            "swings": [
+              {
+                "amplitude": -0.55,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "stride",
+                "phase": 0.0,
+                "pivot": [
+                  0.11,
+                  0.48,
+                  0.24
+                ],
+                "wave": "sine"
+              }
+            ],
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 12,
+            "material": 0,
+            "name": "lowerForeLeft",
+            "parent": "upperForeLeft",
+            "position": [
+              0.12,
+              0.05,
+              0.26
+            ],
+            "rotation": [
+              -0.094,
+              0.0,
+              -0.0,
+              0.9956
+            ],
+            "scale": [
+              0.035,
+              0.4276,
+              0.035
+            ],
+            "smooth": 0.0,
+            "swings": [
+              {
+                "amplitude": 0.8,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "stride",
+                "phase": 1.5708,
+                "pivot": [
+                  0.12,
+                  0.26,
+                  0.22
+                ],
+                "wave": "halfSine"
+              }
+            ],
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 13,
+            "material": 1,
+            "name": "pawForeLeft",
+            "parent": "lowerForeLeft",
+            "position": [
+              0.12,
+              0.04,
+              0.29
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.045,
+              0.035,
+              0.05
+            ],
+            "smooth": 0.0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 14,
+            "material": 0,
+            "name": "upperHindLeft",
+            "parent": "chest",
+            "position": [
+              0.12,
+              0.26,
+              -0.24
+            ],
+            "rotation": [
+              0.0453,
+              0.0,
+              0.0226,
+              0.9987
+            ],
+            "scale": [
+              0.045,
+              0.4423,
+              0.045
+            ],
+            "smooth": 0.0,
+            "swings": [
+              {
+                "amplitude": -0.55,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "stride",
+                "phase": 3.14159,
+                "pivot": [
+                  0.11,
+                  0.48,
+                  -0.22
+                ],
+                "wave": "sine"
+              }
+            ],
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 15,
+            "material": 0,
+            "name": "lowerHindLeft",
+            "parent": "upperHindLeft",
+            "position": [
+              0.12,
+              0.05,
+              -0.2
+            ],
+            "rotation": [
+              -0.094,
+              0.0,
+              -0.0,
+              0.9956
+            ],
+            "scale": [
+              0.035,
+              0.4276,
+              0.035
+            ],
+            "smooth": 0.0,
+            "swings": [
+              {
+                "amplitude": 0.8,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "stride",
+                "phase": 4.71239,
+                "pivot": [
+                  0.12,
+                  0.26,
+                  -0.24
+                ],
+                "wave": "halfSine"
+              }
+            ],
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 16,
+            "material": 1,
+            "name": "pawHindLeft",
+            "parent": "lowerHindLeft",
+            "position": [
+              0.12,
+              0.04,
+              -0.17
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.045,
+              0.035,
+              0.05
+            ],
+            "smooth": 0.0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 17,
+            "material": 0,
+            "name": "upperForeRight",
+            "parent": "chest",
+            "position": [
+              -0.12,
+              0.26,
+              0.22
+            ],
+            "rotation": [
+              0.0453,
+              0.0,
+              -0.0226,
+              0.9987
+            ],
+            "scale": [
+              0.045,
+              0.4423,
+              0.045
+            ],
+            "smooth": 0.0,
+            "swings": [
+              {
+                "amplitude": -0.55,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "stride",
+                "phase": 3.14159,
+                "pivot": [
+                  -0.11,
+                  0.48,
+                  0.24
+                ],
+                "wave": "sine"
+              }
+            ],
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 18,
+            "material": 0,
+            "name": "lowerForeRight",
+            "parent": "upperForeRight",
+            "position": [
+              -0.12,
+              0.05,
+              0.26
+            ],
+            "rotation": [
+              -0.094,
+              0.0,
+              -0.0,
+              0.9956
+            ],
+            "scale": [
+              0.035,
+              0.4276,
+              0.035
+            ],
+            "smooth": 0.0,
+            "swings": [
+              {
+                "amplitude": 0.8,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "stride",
+                "phase": 4.71239,
+                "pivot": [
+                  -0.12,
+                  0.26,
+                  0.22
+                ],
+                "wave": "halfSine"
+              }
+            ],
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 19,
+            "material": 1,
+            "name": "pawForeRight",
+            "parent": "lowerForeRight",
+            "position": [
+              -0.12,
+              0.04,
+              0.29
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.045,
+              0.035,
+              0.05
+            ],
+            "smooth": 0.0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 20,
+            "material": 0,
+            "name": "upperHindRight",
+            "parent": "chest",
+            "position": [
+              -0.12,
+              0.26,
+              -0.24
+            ],
+            "rotation": [
+              0.0453,
+              0.0,
+              -0.0226,
+              0.9987
+            ],
+            "scale": [
+              0.045,
+              0.4423,
+              0.045
+            ],
+            "smooth": 0.0,
+            "swings": [
+              {
+                "amplitude": -0.55,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "stride",
+                "phase": 0.0,
+                "pivot": [
+                  -0.11,
+                  0.48,
+                  -0.22
+                ],
+                "wave": "sine"
+              }
+            ],
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 21,
+            "material": 0,
+            "name": "lowerHindRight",
+            "parent": "upperHindRight",
+            "position": [
+              -0.12,
+              0.05,
+              -0.2
+            ],
+            "rotation": [
+              -0.094,
+              0.0,
+              -0.0,
+              0.9956
+            ],
+            "scale": [
+              0.035,
+              0.4276,
+              0.035
+            ],
+            "smooth": 0.0,
+            "swings": [
+              {
+                "amplitude": 0.8,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "driver": "stride",
+                "phase": 1.5708,
+                "pivot": [
+                  -0.12,
+                  0.26,
+                  -0.24
+                ],
+                "wave": "halfSine"
+              }
+            ],
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 22,
+            "material": 1,
+            "name": "pawHindRight",
+            "parent": "lowerHindRight",
+            "position": [
+              -0.12,
+              0.04,
+              -0.17
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.045,
+              0.035,
+              0.05
+            ],
+            "smooth": 0.0,
+            "type": "Sphere"
+          }
+        ]
+      },
+      "id": "hound"
     }
   ],
   "render": {
@@ -610,7 +5710,80 @@
   "simulation": {
     "rateHz": 30
   },
+  "spawnPoints": [
+    {
+      "id": "origin",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "yawDegrees": 0
+    },
+    {
+      "id": "ramps",
+      "position": [
+        5.5,
+        0,
+        -1
+      ],
+      "yawDegrees": 0
+    },
+    {
+      "id": "stairs",
+      "position": [
+        -2,
+        0,
+        0
+      ],
+      "yawDegrees": 90
+    },
+    {
+      "id": "wall",
+      "position": [
+        3,
+        0,
+        3
+      ],
+      "yawDegrees": -90
+    },
+    {
+      "id": "pit",
+      "position": [
+        0,
+        0,
+        3
+      ],
+      "yawDegrees": 180
+    },
+    {
+      "id": "ladder",
+      "position": [
+        -2,
+        0,
+        -6
+      ],
+      "yawDegrees": 90
+    },
+    {
+      "id": "edge",
+      "position": [
+        0,
+        0,
+        -9
+      ],
+      "yawDegrees": 0
+    }
+  ],
   "state": {
+    "body": [
+      {
+        "initial": 12,
+        "kind": "Counter",
+        "name": "stamina",
+        "resetFact": "Grounded"
+      }
+    ],
     "world": [
       {
         "cells": [
@@ -621,6 +5794,152 @@
         ],
         "kind": "fixed",
         "name": "look"
+      },
+      {
+        "cells": [
+          {
+            "key": "skin",
+            "value": "#F1CFB3"
+          },
+          {
+            "key": "hair",
+            "value": "#B8562F"
+          },
+          {
+            "key": "eyeWhite",
+            "value": "#FFFFFF"
+          },
+          {
+            "key": "iris",
+            "value": "#2F7F6F"
+          },
+          {
+            "key": "cape",
+            "value": "#4E6E8E"
+          },
+          {
+            "key": "tunic",
+            "value": "#EFE4CB"
+          },
+          {
+            "key": "sash",
+            "value": "#D8A23E"
+          },
+          {
+            "key": "trousers",
+            "value": "#4A3A5E"
+          },
+          {
+            "key": "boots",
+            "value": "#383842"
+          },
+          {
+            "key": "cuff",
+            "value": "#9A9AA6"
+          },
+          {
+            "key": "gloves",
+            "value": "#6E4B33"
+          },
+          {
+            "key": "satchel",
+            "value": "#7B5233"
+          },
+          {
+            "key": "pendant",
+            "value": "#5AD1C6"
+          }
+        ],
+        "kind": "text",
+        "name": "avatar"
+      },
+      {
+        "draw": {
+          "generator": {
+            "rangeMax": 8,
+            "rangeMin": 5,
+            "source": "uniformRange"
+          },
+          "timing": "boot"
+        },
+        "kind": "fixed",
+        "name": "strideCadence"
+      },
+      {
+        "draw": {
+          "generator": {
+            "rangeMax": 6,
+            "rangeMin": 3,
+            "source": "uniformRange"
+          },
+          "timing": "boot"
+        },
+        "kind": "fixed",
+        "name": "swayRate"
+      },
+      {
+        "cycle": {
+          "output": "Turns",
+          "plane": 0,
+          "ticksPerStep": 1
+        },
+        "kind": "fixed",
+        "name": "swayClock",
+        "value": "0"
+      },
+      {
+        "cells": [
+          {
+            "key": "body",
+            "value": "#2B2430"
+          },
+          {
+            "key": "leg",
+            "value": "#3A3140"
+          },
+          {
+            "key": "eye",
+            "value": "#C8F03C"
+          }
+        ],
+        "kind": "text",
+        "name": "spiderColors"
+      },
+      {
+        "cells": [
+          {
+            "key": "body",
+            "value": "#2E7D8C"
+          },
+          {
+            "key": "wing",
+            "value": "#CFE9F0"
+          },
+          {
+            "key": "eye",
+            "value": "#1B3A44"
+          }
+        ],
+        "kind": "text",
+        "name": "dragonflyColors"
+      },
+      {
+        "cells": [
+          {
+            "key": "coat",
+            "value": "#8A5A2B"
+          },
+          {
+            "key": "belly",
+            "value": "#E9D3B0"
+          },
+          {
+            "key": "eye",
+            "value": "#1E1410"
+          }
+        ],
+        "kind": "text",
+        "name": "houndColors"
       }
     ]
   },

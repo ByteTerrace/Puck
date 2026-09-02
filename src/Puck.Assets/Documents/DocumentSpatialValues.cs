@@ -221,3 +221,47 @@ public sealed class DocumentQuaternionJsonConverter : JsonConverter<DocumentQuat
         }
     }
 }
+
+/// <summary>A number authored as a JSON number or as a symbolic reference string (<c>state.&lt;row&gt;[.&lt;key&gt;]</c>),
+/// resolved by its containing document from a numeric or text cell.</summary>
+[JsonConverter(typeof(DocumentScalarJsonConverter))]
+public sealed class DocumentScalar : DocumentSpatialValue<float>, IEquatable<DocumentScalar> {
+    /// <summary>Initializes a new instance of the <see cref="DocumentScalar"/> class holding a literal.</summary>
+    /// <param name="value">The literal value.</param>
+    public DocumentScalar(float value) : base(value: value) {
+    }
+
+    internal DocumentScalar(string reference) : base(reference: reference) {
+    }
+
+    /// <inheritdoc/>
+    public override string ExpectedValue => "a number";
+
+    /// <summary>Wraps a literal without allocation at call sites.</summary>
+    public static implicit operator DocumentScalar(float value) => new(value: value);
+    /// <summary>Reads the resolved value.</summary>
+    public static implicit operator float(DocumentScalar value) => value.Value;
+
+    /// <inheritdoc/>
+    public bool Equals(DocumentScalar? other) => EqualsCore(other: other);
+    /// <inheritdoc/>
+    public override bool Equals(object? obj) => ((obj is DocumentScalar other) && Equals(other: other));
+    /// <inheritdoc/>
+    public override int GetHashCode() => GetHashCodeCore();
+}
+/// <summary>Reads and writes <see cref="DocumentScalar"/>.</summary>
+public sealed class DocumentScalarJsonConverter : JsonConverter<DocumentScalar> {
+    /// <inheritdoc/>
+    public override DocumentScalar Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+        ((reader.TokenType == JsonTokenType.String)
+            ? new DocumentScalar(reference: DocumentSpatialValueJson.ReadReference(kind: "number", reader: ref reader))
+            : new DocumentScalar(value: reader.GetSingle()));
+    /// <inheritdoc/>
+    public override void Write(Utf8JsonWriter writer, DocumentScalar value, JsonSerializerOptions options) {
+        if (value.Reference is { } reference) {
+            writer.WriteStringValue(value: reference);
+        } else {
+            writer.WriteNumberValue(value: value.Value);
+        }
+    }
+}

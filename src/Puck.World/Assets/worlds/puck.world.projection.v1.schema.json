@@ -4512,7 +4512,9 @@
                                     "Falling",
                                     "AffectedBy",
                                     "Submerged",
-                                    "AtSurface"
+                                    "AtSurface",
+                                    "Climbing",
+                                    "Flying"
                                   ]
                                 }
                               },
@@ -4535,7 +4537,9 @@
                                     "Falling",
                                     "AffectedBy",
                                     "Submerged",
-                                    "AtSurface"
+                                    "AtSurface",
+                                    "Climbing",
+                                    "Flying"
                                   ]
                                 },
                                 "windowSeconds": {
@@ -4655,7 +4659,9 @@
                                               "Falling",
                                               "AffectedBy",
                                               "Submerged",
-                                              "AtSurface"
+                                              "AtSurface",
+                                              "Climbing",
+                                              "Flying"
                                             ]
                                           }
                                         },
@@ -4678,7 +4684,9 @@
                                               "Falling",
                                               "AffectedBy",
                                               "Submerged",
-                                              "AtSurface"
+                                              "AtSurface",
+                                              "Climbing",
+                                              "Flying"
                                             ]
                                           },
                                           "windowSeconds": {
@@ -4850,6 +4858,131 @@
                     "additionalProperties": false,
                     "default": null
                   },
+                  "holds": {
+                    "description": "The ordered list of what may hold this body \u2014 see WorldHold \u2014 read by the ResolveHold/ApplyHold operations, or null (the default) for a kit whose vertical channel is ApplyVerticalGravity\u0027s alone.",
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "description": "One authored hold row of a grounded kit\u0027s ordered Holds list \u2014 what may hold this body, in preference order. ResolveHold keeps the hold it has while its surface is still there and the same face, and otherwise takes the first row the world offers; ApplyHold applies Hold.",
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "name": {
+                          "description": "The row\u0027s name, unique within the list \u2014 the body.hold read-back token.",
+                          "type": "string"
+                        },
+                        "bond": {
+                          "description": "Whether this row needs a surface (Surface) or holds the body where it is (Free).",
+                          "enum": [
+                            "Surface",
+                            "Free"
+                          ]
+                        },
+                        "hold": {
+                          "description": "What holds the body once the row is taken.",
+                          "enum": [
+                            "None",
+                            "Gravity",
+                            "Grip",
+                            "Lift"
+                          ]
+                        },
+                        "cone": {
+                          "description": "The inclusive angle band, in degrees, between an admitted surface normal and gravity-up: [0, 60] is floors, [60, 120] walls, [0, 180] everything. Required for Surface, refused for Free.",
+                          "default": null
+                        },
+                        "grip": {
+                          "description": "The inward pull, world units per second, under Grip. Applied as a positional standoff, so it closes a gap the surface opens without ever pushing the body through it.",
+                          "type": "number",
+                          "default": 0
+                        },
+                        "lift": {
+                          "description": "The fraction of gravity cancelled under Lift: 1 hovers, 0.5 halves the fall.",
+                          "type": "number",
+                          "default": 0
+                        },
+                        "speed": {
+                          "description": "The travel speed along the hold\u0027s tangent plane, world units per second, or null to ride the kit\u0027s own resolved move speed.",
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "reach": {
+                          "description": "How far a surface row\u0027s probes search, world units. Required positive for Surface.",
+                          "type": "number",
+                          "default": 0
+                        },
+                        "upLean": {
+                          "description": "How far the body\u0027s up axis blends from gravity-up toward the surface normal, in [0, 1].",
+                          "type": "number",
+                          "default": 0
+                        },
+                        "forward": {
+                          "description": "Where the hold\u0027s frame takes its forward direction when the surface leaves it free.",
+                          "enum": [
+                            "Heading",
+                            "Intent",
+                            "Velocity"
+                          ],
+                          "default": "Heading"
+                        },
+                        "onDrive": {
+                          "description": "Whether driving into an admitted face takes this row with no channel press.",
+                          "type": "boolean",
+                          "default": false
+                        },
+                        "driveAlignment": {
+                          "description": "The least alignment, in [0, 1], between the commanded direction and the face\u0027s inward normal before OnDrive takes it. Inert without it.",
+                          "type": "number",
+                          "default": 0
+                        },
+                        "release": {
+                          "description": "The declared channel name whose held read drops this row, or null for a row no channel can drop.",
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "spend": {
+                          "description": "What the row spends while held, or null for a row that spends nothing.",
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "properties": {
+                            "state": {
+                              "description": "The declared state.body slot name.",
+                              "type": "string"
+                            },
+                            "ratePerSecond": {
+                              "description": "The positive rate the slot drains at, per second.",
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "state",
+                            "ratePerSecond"
+                          ],
+                          "additionalProperties": false,
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "bond",
+                        "hold"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "default": null
+                  },
                   "declaredSprintChannel": {
                     "description": "The declared held-multiplier channel of whichever arm this is \u2014 SprintChannel, SprintChannel, or the vehicle arm\u0027s BoostChannel (the same held-multiplier seam under a different name) \u2014 or null for an arm (or a declaration) without one. The one sprint-resolution read Compile and the seat binding surfaces share, so a new arm extends it here instead of each caller growing its own cast chain.",
                     "type": [
@@ -4884,6 +5017,16 @@
                       "string",
                       "null"
                     ]
+                  },
+                  "declaredHolds": {
+                    "description": "Gets the declared hold list of whichever arm this is (see Holds), null-coalesced to the empty list \u2014 an arm with no hold vocabulary reads identically to a row authoring none.",
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "$ref": "#/properties/kits/items/properties/motion/anyOf/0/properties/holds/items"
+                    }
                   }
                 },
                 "required": [
@@ -5038,6 +5181,16 @@
                       "string",
                       "null"
                     ]
+                  },
+                  "declaredHolds": {
+                    "description": "Gets the declared hold list of whichever arm this is (see Holds), null-coalesced to the empty list \u2014 an arm with no hold vocabulary reads identically to a row authoring none.",
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "$ref": "#/properties/kits/items/properties/motion/anyOf/0/properties/holds/items"
+                    }
                   }
                 },
                 "required": [
@@ -5192,6 +5345,16 @@
                       "string",
                       "null"
                     ]
+                  },
+                  "declaredHolds": {
+                    "description": "Gets the declared hold list of whichever arm this is (see Holds), null-coalesced to the empty list \u2014 an arm with no hold vocabulary reads identically to a row authoring none.",
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "$ref": "#/properties/kits/items/properties/motion/anyOf/0/properties/holds/items"
+                    }
                   }
                 },
                 "required": [
@@ -7347,19 +7510,19 @@
             "default": null
           },
           "grip": {
-            "description": "The placement\u0027s grip facet (see WorldPlacementGrip) \u2014 overrides the world\u0027s default climb policy for this row\u0027s compiled surface(s), or null to inherit the world default. Omitted from the wire when null. Requires Solid (validated).",
+            "description": "The placement\u0027s grip facet (see WorldPlacementGrip) \u2014 overrides the world\u0027s default hold policy for this row\u0027s compiled surface(s), or null to inherit the world default. Omitted from the wire when null. Requires Solid (validated).",
             "type": [
               "object",
               "null"
             ],
             "properties": {
-              "climbable": {
-                "description": "Whether this row\u0027s compiled surface(s) are climbable, overriding the world default.",
+              "holdable": {
+                "description": "Whether a body\u0027s surface hold may take this row\u0027s compiled surface(s), overriding the world default.",
                 "type": "boolean"
               }
             },
             "required": [
-              "climbable"
+              "holdable"
             ],
             "additionalProperties": false,
             "default": null
@@ -7977,6 +8140,11 @@
         "gradientProbe": {
           "description": "The finite-difference step field contact samples the surface normal with, in world units; 0 takes the evaluator\u0027s own default. Meaningful only when a requirement selects field contact.",
           "type": "number"
+        },
+        "defaultHold": {
+          "description": "Whether a body\u0027s surface hold may take any solid surface by default. A placement\u0027s own WorldPlacementGrip overrides this for the colliders it compiles; the field lattice\u0027s own terrain, which no placement row owns, has only this. false (the default) holds nothing.",
+          "type": "boolean",
+          "default": false
         }
       },
       "required": [
@@ -10180,7 +10348,7 @@
                 "additionalProperties": false
               },
               {
-                "description": "Every cell drawn from a numeric authored-randomness source \u2014 the per-cell lattice draw. The fill is one pass of the row\u0027s own draw stream (seeded through the same ladder as a state-row site, under the row\u0027s state.\u003Crow\u003E descriptor): cell k, in cell-index order, takes the sample a site at drawCursor \u002B k would draw, so a weighted source under a deck mode deals its cards across the field and reshuffles as it goes. The row\u0027s DrawCursor/DrawDecks name the pass currently painted; generate \u003Crow\u003E advances them one whole pass and repaints, and a boot paints the pass the document names, so a saved document reloads onto the field it last drew.",
+                "description": "Every cell drawn from a numeric authored-randomness source \u2014 the per-cell lattice draw. The fill is one pass of the row\u0027s own draw stream (seeded through the same ladder as a state-row site, under the row\u0027s state.\u003Crow\u003E descriptor): cell k, in cell-index order, takes the sample a site at drawCursor \u002B k would draw, so a weighted source under a deck mode deals its cards across the field and reshuffles as it goes. The row\u0027s DrawCursor/DrawDecks name the pass currently painted; generate \u003Crow\u003E advances them one whole pass and repaints. Draw occupies its authored paint position (overwriting earlier fills and preceding later fills); boot, rebuild, load/reset, and a draw-rewinding undo repaint the pass the document names.",
                 "properties": {
                   "$type": {
                     "const": "draw"

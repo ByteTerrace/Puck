@@ -25,12 +25,14 @@ public sealed partial class WorldPopulation {
             maxSmoothError: m_fixedMotion.MaxSmoothError,
             sprintChannelOrdinal: kit.SprintChannelOrdinal,
             driftChannelOrdinal: kit.DriftChannelOrdinal,
+            holds: kit.Holds,
             planarDynamics: kit.PlanarDynamics
         );
 
         body.SetContactConfiguration(
             field: m_contactField,
-            upPolicy: m_bodyUpPolicy
+            upPolicy: m_bodyUpPolicy,
+                walkableThreshold: m_walkableThreshold
         );
         body.SetGravityField(field: m_gravityField);
         body.SetAttachmentPolicy(policy: m_fixedAttachment);
@@ -88,12 +90,14 @@ public sealed partial class WorldPopulation {
             maxSmoothError: m_fixedMotion.MaxSmoothError,
             sprintChannelOrdinal: kit.SprintChannelOrdinal,
             driftChannelOrdinal: kit.DriftChannelOrdinal,
+            holds: kit.Holds,
             planarDynamics: kit.PlanarDynamics
         );
 
         player.SetContactConfiguration(
             field: m_contactField,
-            upPolicy: m_bodyUpPolicy
+            upPolicy: m_bodyUpPolicy,
+                walkableThreshold: m_walkableThreshold
         );
         player.SetGravityField(field: m_gravityField);
         player.SetAttachmentPolicy(policy: m_fixedAttachment);
@@ -254,6 +258,7 @@ public sealed partial class WorldPopulation {
             maxSmoothError: m_fixedMotion.MaxSmoothError,
             sprintChannelOrdinal: m_kits[m_seatKit].SprintChannelOrdinal,
             driftChannelOrdinal: m_kits[m_seatKit].DriftChannelOrdinal,
+            holds: m_kits[m_seatKit].Holds,
             planarDynamics: m_kits[m_seatKit].PlanarDynamics
         ) {
             Profile = profile,
@@ -261,7 +266,8 @@ public sealed partial class WorldPopulation {
 
         body.SetContactConfiguration(
             field: m_contactField,
-            upPolicy: m_bodyUpPolicy
+            upPolicy: m_bodyUpPolicy,
+                walkableThreshold: m_walkableThreshold
         );
         body.SetGravityField(field: m_gravityField);
         body.SetAttachmentPolicy(policy: m_fixedAttachment);
@@ -689,6 +695,7 @@ public sealed partial class WorldPopulation {
                 maxSmoothError: m_fixedMotion.MaxSmoothError,
                 sprintChannelOrdinal: m_kits[kitIndex].SprintChannelOrdinal,
                 driftChannelOrdinal: m_kits[kitIndex].DriftChannelOrdinal,
+                holds: m_kits[kitIndex].Holds,
                 planarDynamics: m_kits[kitIndex].PlanarDynamics
             );
         }
@@ -851,6 +858,7 @@ public sealed partial class WorldPopulation {
             maxSmoothError: m_fixedMotion.MaxSmoothError,
             sprintChannelOrdinal: m_kits[m_seatKit].SprintChannelOrdinal,
             driftChannelOrdinal: m_kits[m_seatKit].DriftChannelOrdinal,
+            holds: m_kits[m_seatKit].Holds,
             planarDynamics: m_kits[m_seatKit].PlanarDynamics
         ) {
             Profile = profile,
@@ -858,7 +866,8 @@ public sealed partial class WorldPopulation {
 
         body.SetContactConfiguration(
             field: m_contactField,
-            upPolicy: m_bodyUpPolicy
+            upPolicy: m_bodyUpPolicy,
+                walkableThreshold: m_walkableThreshold
         );
         body.SetGravityField(field: m_gravityField);
         body.SetAttachmentPolicy(policy: m_fixedAttachment);

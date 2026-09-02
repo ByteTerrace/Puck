@@ -199,7 +199,7 @@ as ordinary `WorldBody` sim state (`WorldBody.Dynamics.cs`); a swim kit's
 vertical lane carries the scalar counterpart. Cross-world motion continuity
 round-trips their values through `TransferState`. A same-world authority
 checkpoint additionally carries their seeded latches, the arbitrary-up
-frame/reseat/turn fractions, and complete climb/grapple state through
+frame/reseat/turn fractions, and complete hold/grapple state through
 `IntegrationResidue`/`WorldAuthorityCheckpointCodec` (`SupportedVersion`,
 bumped whenever the fail-closed wire shape changes).
 
