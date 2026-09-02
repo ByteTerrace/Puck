@@ -9,7 +9,7 @@ namespace Puck.World;
 /// <see cref="Puck.Commands.CommandArgs.TryParseInt(string, out int)"/>. Also owns the trailing
 /// <c>instance:&lt;name&gt;</c> token grammar — see <see cref="InstanceTokenPrefix"/>. The bracket-splice echo
 /// surgery every instance-addressed verb shares lives in
-/// <see cref="Puck.Commands.CommandEcho.SpliceTag(string, string)"/>.
+/// <see cref="Puck.Commands.CommandEcho.SpliceTag(string, string, string)"/>.
 /// </summary>
 internal static class WorldArgs {
     /// <summary>Parses an integer index token at <paramref name="at"/> constrained to <c>[min, max]</c>. When

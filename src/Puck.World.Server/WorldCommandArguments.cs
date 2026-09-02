@@ -20,6 +20,18 @@ public static class WorldCommandArguments {
     /// <summary>Strips <paramref name="tokens"/> leading whitespace-separated tokens — the verb plus however many
     /// address tokens the verb spells before its tail (<c>world.row.set</c> strips verb + path,
     /// <c>world.state.cell.set</c> strips verb + row + key, <c>identity.deliver</c> strips five).</summary>
+    /// <remarks>
+    /// The split is <see cref="char.IsWhiteSpace(char)"/>, matching the registry's own wire tokenizer exactly: a
+    /// narrower set (space and tab) would return an empty tail for a vertical-tab-separated line the tokenizer had
+    /// already split correctly, so the verb would answer with its usage refusal for a line it accepted.
+    /// <para>A tail that is EXACTLY one double-quoted token has that one surrounding pair removed. Such a line went
+    /// through System.CommandLine's splitter, which strips the pair before the handler's <see cref="WireArgs"/> ever
+    /// sees it, so leaving it on here would hand a quoted-and-unquoted verb two different answers for the same line
+    /// (<c>world.hud.template "{world.tick} ticks"</c> would render its own quotes into the HUD). The strip is
+    /// deliberately narrow — a tail carrying any further <c>"</c> is returned verbatim — because the whole reason this
+    /// reads the raw line is that interior spacing must survive, and a general unquote would have to re-tokenize the
+    /// tail to find the runs, collapsing exactly what was being preserved.</para>
+    /// </remarks>
     /// <param name="context">The invoking context, whose <see cref="CommandContext.Text"/> carries the raw line.</param>
     /// <param name="args">The tokenized arguments, the fallback when no raw line exists (a bound or programmatic call).</param>
     /// <param name="tokens">How many leading tokens to strip, the verb included.</param>
@@ -29,10 +41,7 @@ public static class WorldCommandArguments {
             var span = text.AsSpan().TrimStart();
 
             for (var skip = 0; (skip < tokens); skip++) {
-                var separator = span.IndexOfAny(
-                    value0: ' ',
-                    value1: '\t'
-                );
+                var separator = IndexOfWhiteSpace(span: span);
 
                 if (separator < 0) {
                     return string.Empty;
@@ -41,9 +50,36 @@ public static class WorldCommandArguments {
                 span = span[(separator + 1)..].TrimStart();
             }
 
-            return span.Trim().ToString();
+            return Unwrap(tail: span.Trim());
         }
 
         return args.Tail(start: (tokens - 1));
+    }
+
+    // The first whitespace character by CATEGORY, the rule CommandRegistry's wire tokenizer splits a submitted line
+    // on. Scanned rather than looked up because char.IsWhiteSpace is a Unicode category test, not a listed set.
+    private static int IndexOfWhiteSpace(ReadOnlySpan<char> span) {
+        for (var index = 0; (index < span.Length); index++) {
+            if (char.IsWhiteSpace(c: span[index])) {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+    // Removes ONE surrounding double-quote pair from a tail that is a single quoted token. A tail carrying any further
+    // '"' is more than one token (`"a" "b"`) or an escaped run this method has no business re-tokenizing, and is
+    // returned as written.
+    private static string Unwrap(ReadOnlySpan<char> tail) {
+        if (
+            (tail.Length >= 2) &&
+            (tail[0] == '"') &&
+            (tail[^1] == '"') &&
+            (tail[1..^1].IndexOf(value: '"') < 0)
+        ) {
+            return tail[1..^1].ToString();
+        }
+
+        return tail.ToString();
     }
 }

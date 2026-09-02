@@ -23,6 +23,9 @@ public sealed class TextCommandSource : ITextCommandSink {
     private readonly ConcurrentQueue<TextCommandSession> m_pending = new();
     private readonly CommandRegistry m_registry;
 
+    // See HoldGate's remarks: volatile because a host may arm the gate from a thread other than the one that drains.
+    private volatile Func<bool>? m_holdGate;
+
     /// <summary>Gets or sets an optional per-frame hold gate the drain honors: while it returns <see langword="true"/>,
     /// <see cref="Collect"/> dequeues nothing (and a line whose handler turns the gate on stops the drain immediately),
     /// so a queued command stream resumes only once the gate lets go. This is the seam that lets a scripted-console
@@ -30,7 +33,15 @@ public sealed class TextCommandSource : ITextCommandSink {
     /// or until a transition quiesces: the host sets a gate that counts produced frames, and the queued verbs after the
     /// gate wait on the frame boundary rather than all running the frame they arrive. <see langword="null"/> (the
     /// default) never holds, so an unwired run drains every line each frame exactly as before.</summary>
-    public Func<bool>? HoldGate { get; set; }
+    /// <remarks>THREADING: unlike <see cref="Enqueue"/>, which any producer may call, this is read on the frame thread
+    /// inside <see cref="Collect"/> and is expected to be set from there too — in practice by a handler the drain
+    /// itself just ran. The backing field is <see langword="volatile"/> so a host that arms the gate from another
+    /// thread is seen by the next drain rather than by whichever one the JIT decides to reload on; the gate's own
+    /// delegate is invoked on the frame thread, so whatever it reads must be safe to read there.</remarks>
+    public Func<bool>? HoldGate {
+        get => m_holdGate;
+        set => m_holdGate = value;
+    }
 
     /// <summary>Initializes a new instance of the <see cref="TextCommandSource"/> class.</summary>
     /// <param name="registry">The registry whose text path each enqueued line is submitted to.</param>

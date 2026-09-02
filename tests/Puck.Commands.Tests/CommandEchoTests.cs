@@ -102,20 +102,26 @@ public sealed class CommandEchoTests {
         // The ordinary case is untouched: a safe name splices verbatim, so every existing instance/anchor tag reads
         // exactly as it did.
         Assert.Equal(
-            actual: CommandEcho.SpliceTag(tag: "instance:alpha", text: echo),
+            actual: CommandEcho.SpliceTag(prefix: "instance:", text: echo, value: "alpha"),
             expected: "[world.inhabitants: bodyIndex=0 instance:alpha]"
         );
 
-        // A name carrying a delimiter is spliced as ONE quoted token rather than closing the envelope it is being
-        // spliced into.
+        // A name carrying a delimiter is spliced as ONE token rather than closing the envelope it is being spliced
+        // into — and the reserved PREFIX stays outside the quote, because the readers of these tags test for exactly
+        // that prefix. Quoting the whole tag produced `"instance:my world"`, still one well-formed token and still
+        // invisible to WorldArgs.IsInstanceToken.
         Assert.Equal(
-            actual: CommandEcho.SpliceTag(tag: "instance:my world]", text: echo),
-            expected: "[world.inhabitants: bodyIndex=0 \"instance:my world]\"]"
+            actual: CommandEcho.SpliceTag(prefix: "instance:", text: echo, value: "my world]"),
+            expected: "[world.inhabitants: bodyIndex=0 instance:\"my world]\"]"
+        );
+        Assert.Equal(
+            actual: CommandEcho.SpliceTag(prefix: "instance:", text: echo, value: "my world"),
+            expected: "[world.inhabitants: bodyIndex=0 instance:\"my world\"]"
         );
 
         // A text that is not a closed echo is still returned untouched.
         Assert.Equal(
-            actual: CommandEcho.SpliceTag(tag: "instance:my world", text: "not an echo"),
+            actual: CommandEcho.SpliceTag(prefix: "instance:", text: "not an echo", value: "my world"),
             expected: "not an echo"
         );
     }
@@ -142,5 +148,110 @@ public sealed class CommandEchoTests {
             .Close();
 
         Assert.Equal(actual: line, expected: "[world.market: feeBasisPoints=1000 | listing id=1 status=Active]");
+    }
+    [Fact]
+    public void ASplicedTagSurvivesTheRoundTripBackThroughTheConsole() {
+        const string echo = "[world.inhabitants: bodyIndex=0]";
+
+        var seen = new List<string>();
+        var registry = new CommandRegistry(modules: [new TokenProbeModule(seen: seen)]);
+        var tagged = CommandEcho.SpliceTag(prefix: "instance:", text: echo, value: "my world");
+        var tag = tagged[(tagged.IndexOf(comparisonType: StringComparison.Ordinal, value: " instance:") + 1)..^1];
+
+        _ = registry.Submit(line: $"token.probe {tag}");
+
+        // The whole point of the tag: a script reads it off the echo and hands it straight back as an argument. It
+        // must arrive as ONE token whose reserved prefix is still the leading characters — the test every
+        // instance-addressed verb applies (WorldArgs.IsInstanceToken) — with the console's own splitter removing the
+        // value's quotes exactly as it does for a Field.
+        var token = Assert.Single(collection: seen);
+
+        Assert.Equal(actual: token, expected: "instance:my world");
+        Assert.StartsWith(actualString: token, comparisonType: StringComparison.Ordinal, expectedStartString: "instance:");
+    }
+    [Theory]
+    // Every shape Quote can emit round-trips through its own inverse, including the ones the old published rule got
+    // wrong: a value carrying spaces, quotes, backslashes, the envelope's own ']' and the segment '|', and the line
+    // breaks that are escaped rather than carried.
+    [InlineData("plain")]
+    [InlineData("C:\\my games\\cache")]
+    [InlineData("[seat1|seat2]")]
+    [InlineData("he said \"hi\"")]
+    [InlineData("two\nlines")]
+    [InlineData("carriage\r\nreturn")]
+    [InlineData("line\tbreak")]
+    [InlineData("a\vb")]
+    [InlineData("")]
+    public void QuoteAndUnquoteAreExactInverses(string value) {
+        Assert.Equal(actual: CommandEcho.Unquote(token: CommandEcho.Quote(value: value)), expected: value);
+    }
+    [Fact]
+    public void AWholeEchoLineDecodesInOnePassThatASplitCannotDo() {
+        var line = CommandEcho.Open(verb: "world.update")
+            .Field(key: "path", value: "C:\\my games")
+            .Field(key: "members", value: "[seat1|seat2]")
+            .Segment()
+            .Head(head: "listing")
+            .Close();
+        var tokens = new List<string>();
+        var index = 0;
+
+        while (CommandEcho.TryReadToken(
+            index: ref index,
+            line: line,
+            token: out var token
+        )) {
+            tokens.Add(item: token);
+        }
+
+        // The quoting opens where the VALUE does, mid-token, so a driver that split on whitespace FIRST got
+        // `path="C:\\my` and `games"` and decoded neither. One pass keeps the field whole.
+        Assert.Equal(actual: tokens, expected: ["[world.update:", "path=C:\\my games", "members=[seat1|seat2]", "|", "listing]"]);
+    }
+    [Fact]
+    public void ASplicedTagDecodesThroughTheSameOnePass() {
+        var tagged = CommandEcho.SpliceTag(
+            prefix: "instance:",
+            text: CommandEcho.Open(verb: "world.inhabitants").Field(key: "bodyIndex", value: 0).Close(),
+            value: "my world"
+        );
+        var tokens = new List<string>();
+        var index = 0;
+
+        while (CommandEcho.TryReadToken(
+            index: ref index,
+            line: tagged,
+            token: out var token
+        )) {
+            tokens.Add(item: token);
+        }
+
+        Assert.Equal(actual: tokens, expected: ["[world.inhabitants:", "bodyIndex=0", "instance:my world]"]);
+    }
+    [Fact]
+    public void ReadingPastTheEndOfALineAnswersFalseRatherThanLooping() {
+        var index = 0;
+
+        Assert.True(condition: CommandEcho.TryReadToken(index: ref index, line: "  only  ", token: out var token));
+        Assert.Equal(actual: token, expected: "only");
+        Assert.False(condition: CommandEcho.TryReadToken(index: ref index, line: "  only  ", token: out var trailing));
+        Assert.Equal(actual: trailing, expected: string.Empty);
+    }
+
+    private sealed class TokenProbeModule(List<string> seen) : ICommandModule {
+        public IEnumerable<CommandDefinition> GetCommands() {
+            yield return CommandDefinition.WithWireArgs(
+                name: "token.probe",
+                description: "Records every trailing token it was handed.",
+                handler: (_, args) => {
+                    for (var index = 0; (index < args.Count); index++) {
+                        seen.Add(item: args[index].ToString());
+                    }
+
+                    return CommandResult.None;
+                },
+                bindability: CommandBindability.Unbindable
+            );
+        }
     }
 }

@@ -1,6 +1,9 @@
-namespace Puck.Commands;
+namespace Puck.World;
 
 /// <summary>Helpers for comparing the per-tick state-hash traces a determinism/replay check produces.</summary>
+/// <remarks>This lives beside its callers — <see cref="WorldReplayTape"/> and <see cref="WorldReplayInspector"/>, the
+/// only things in the tree that hold two traces at once — rather than in the commands package, which knows nothing
+/// about state hashes and would have published this as part of a command surface.</remarks>
 public static class HashTrace {
     /// <summary>Returns the first tick at which two traces differ, or <c>-1</c> when they are identical (length included).</summary>
     /// <param name="left">The first trace.</param>
