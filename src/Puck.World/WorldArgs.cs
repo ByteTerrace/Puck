@@ -78,10 +78,11 @@ internal static class WorldArgs {
         comparisonType: StringComparison.OrdinalIgnoreCase,
         value: InstanceTokenPrefix
     );
-    /// <summary>Parses the name out of a token already confirmed by <see cref="IsInstanceToken"/>: refuses an empty
-    /// name and refuses the literal boot-instance name as redundant addressing (the boot world is already the
-    /// default — omit the token to address it). Does not check whether a running instance answers to the resolved
-    /// name; a caller that needs the resolved <see cref="WorldInstance"/> follows up with
+    /// <summary>Parses the name out of a token already confirmed by <see cref="IsInstanceToken"/>: decodes the echo's
+    /// escapes (see the remarks), refuses an empty name, and refuses the literal boot-instance name as redundant
+    /// addressing (the boot world is already the default — omit the token to address it). Does not check whether a
+    /// running instance answers to the resolved name; a caller that needs the resolved <see cref="WorldInstance"/>
+    /// follows up with
     /// <see cref="TryResolveInstance(ReadOnlySpan{char}, string, WorldInstanceHost, out WorldInstance?, out CommandResult?)"/>,
     /// and a caller that defers existence to its own downstream refusal (e.g. <c>world.rate</c>'s <c>TryPause</c>/
     /// <c>TryResume</c>/<c>TryDescribeRate</c>) stops here.</summary>
@@ -90,8 +91,15 @@ internal static class WorldArgs {
     /// <param name="name">The parsed instance name on success.</param>
     /// <param name="error">The refusal, on failure.</param>
     /// <returns>Whether a candidate name was parsed.</returns>
+    /// <remarks>This is the READ side of the tag every instance-addressed echo writes with
+    /// <see cref="Puck.Commands.CommandEcho.SpliceTag(string, string, string)"/>, and the tag exists to be copied off
+    /// an echo and handed straight back. By the time the token arrives, System.CommandLine's splitter has removed the
+    /// value's surrounding quotes and left its escapes alone — that splitter knows nothing else — so the name is
+    /// finished here with <see cref="Puck.Commands.CommandEcho.Unescape(string)"/>. Without it a world named
+    /// <c>C:\my games</c> came back with its backslash doubled and one named <c>say "hi"</c> came back with both quotes
+    /// replaced by backslashes, which is to say the round trip the tag promises did not hold for either.</remarks>
     public static bool TryParseInstanceName(ReadOnlySpan<char> token, string verb, out string name, out CommandResult? error) {
-        var candidate = token[InstanceTokenPrefix.Length..].ToString();
+        var candidate = CommandEcho.Unescape(value: token[InstanceTokenPrefix.Length..].ToString());
 
         if (string.IsNullOrWhiteSpace(value: candidate)) {
             name = string.Empty;

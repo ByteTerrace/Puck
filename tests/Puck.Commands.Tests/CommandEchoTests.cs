@@ -51,16 +51,17 @@ public sealed class CommandEchoTests {
     [InlineData("C:\\my games", "\"C:\\\\my games\"")]
     [InlineData("[seat1]", "\"[seat1]\"")]
     [InlineData("a|b", "\"a|b\"")]
-    [InlineData("say \"hi\"", "\"say \\\"hi\\\"\"")]
-    // A backslash is not itself reserved — it is only special INSIDE a quoted run — so a path carrying one but no
-    // reserved character still rides through verbatim.
-    [InlineData("C:\\games\\", "C:\\games\\")]
-    // ...and when something else does force the quoting, the trailing backslash is escaped so it cannot swallow the
-    // closing '"' and leave the run unterminated.
-    [InlineData("C:\\my games\\", "\"C:\\\\my games\\\\\"")]
+    // An interior quote rides as \u0022 rather than \": the console splitter that re-reads a resubmitted token has no
+    // escapes at all, so it would read the '"' of a \" pair as the end of the run.
+    [InlineData("say \"hi\"", "\"say \\u0022hi\\u0022\"")]
+    // A backslash nothing else reserves still forces the quoting, because it is the escape introducer and the reader
+    // on the far side of the console splitter sees the value with its quotes already removed: only a doubled literal
+    // backslash lets that reader tell an escape from a path separator.
+    [InlineData("C:\\games\\", "\"C:\\\\games\\\\\"")]
     // Whitespace is char.IsWhiteSpace, not a listed set: a vertical tab and a non-breaking space split a reader that
-    // splits the way the wire tokenizer does, so both are reserved too.
-    [InlineData("a\vb", "\"a\vb\"")]
+    // splits the way the wire tokenizer does, so both are reserved too. The vertical tab is additionally a CONTROL
+    // character, which .NET counts as a line ending, so quoting alone cannot contain it and it is escaped.
+    [InlineData("a\vb", "\"a\\u000bb\"")]
     [InlineData("a\u00a0b", "\"a\u00a0b\"")]
     public void AValueIsQuotedExactlyWhenItCarriesAReservedCharacter(string value, string expected) {
         Assert.Equal(actual: CommandEcho.Quote(value: value), expected: expected);
@@ -80,6 +81,30 @@ public sealed class CommandEchoTests {
             key: "message",
             value: value
         ).Close(), comparisonType: StringComparison.Ordinal, expectedSubstring: "\n");
+    }
+    [Theory]
+    // .NET's own line-ending rule — the one string.ReplaceLineEndings and MemoryExtensions.EnumerateLines apply, and
+    // therefore the one a driver reading an echo stream applies — breaks on far more than '\n' and '\r'. Escaping only
+    // the three ASCII breaks left `[world.note: message="two<FF>lines"]` as TWO lines for every such reader, which is
+    // exactly the tear the escaping exists to prevent. The repository's own wire tests use '\f' as a separator, so this
+    // is not hypothetical.
+    [InlineData("two\flines", "\"two\\u000clines\"")]
+    [InlineData("two\u0085lines", "\"two\\u0085lines\"")]
+    [InlineData("two\u2028lines", "\"two\\u2028lines\"")]
+    [InlineData("two\u2029lines", "\"two\\u2029lines\"")]
+    // A control character that is not whitespace at all did not even force the quoting before, so it rode through raw.
+    [InlineData("bell\u0007", "\"bell\\u0007\"")]
+    public void EveryControlCharacterAndUnicodeSeparatorIsEscapedSoAnEchoIsStillOneLine(string value, string expected) {
+        Assert.Equal(actual: CommandEcho.Quote(value: value), expected: expected);
+
+        var line = CommandEcho.Open(verb: "world.note").Field(
+            key: "message",
+            value: value
+        ).Close();
+
+        _ = Assert.Single(collection: line.ReplaceLineEndings(replacementText: "\n").Split(separator: '\n'));
+        // The escape is the writer's, so the reader has to be its exact inverse or the value comes back mangled.
+        Assert.Equal(actual: CommandEcho.Unquote(token: CommandEcho.Quote(value: value)), expected: value);
     }
     [Fact]
     public void AFieldValueCarryingADelimiterCannotEndTheTokenSegmentOrEnvelope() {
@@ -227,6 +252,69 @@ public sealed class CommandEchoTests {
         }
 
         Assert.Equal(actual: tokens, expected: ["[world.inhabitants:", "bodyIndex=0", "instance:my world]"]);
+    }
+    [Theory]
+    // The two characters the old encoding could not carry through a resubmit. A '\' was doubled and never undone; a
+    // '"' was written `\"`, which the console splitter read as "a literal backslash, then the end of the run" — so
+    // `say "hi"` arrived as `say \hi\`, with both quotes gone and two backslashes invented.
+    [InlineData("C:\\my games")]
+    [InlineData("say \"hi\"")]
+    [InlineData("C:\\games\\")]
+    [InlineData("a\\\"b")]
+    [InlineData("\"")]
+    [InlineData("plain")]
+    [InlineData("my world")]
+    [InlineData("]|")]
+    public void ASplicedTagSurvivesTheConsoleResubmit(string value) {
+        const string echo = "[world.inhabitants: bodyIndex=0]";
+
+        var seen = new List<string>();
+        var registry = new CommandRegistry(modules: [new TokenProbeModule(seen: seen)]);
+        var tagged = CommandEcho.SpliceTag(prefix: "instance:", text: echo, value: value);
+        var tag = tagged[(tagged.IndexOf(comparisonType: StringComparison.Ordinal, value: " instance:") + 1)..^1];
+
+        _ = registry.Submit(line: $"token.probe {tag}");
+
+        // ONE token, whose reserved prefix is still its leading characters — the test every instance-addressed verb
+        // applies before it parses the name.
+        var token = Assert.Single(collection: seen);
+
+        Assert.StartsWith(actualString: token, comparisonType: StringComparison.Ordinal, expectedStartString: "instance:");
+
+        // The console's splitter removed the quotes and left the escapes; the verb finishes the decode. That second
+        // half is what makes the round trip SpliceTag promises actually hold.
+        Assert.Equal(actual: CommandEcho.Unescape(value: token["instance:".Length..]), expected: value);
+    }
+    [Theory]
+    // Unescape is the half of the decoding the console splitter does not do, so it inverts Quote for a value whose
+    // delimiting quotes are already gone.
+    [InlineData("C:\\my games")]
+    [InlineData("say \"hi\"")]
+    [InlineData("two\nlines")]
+    [InlineData("a\tb")]
+    [InlineData("")]
+    [InlineData("plain")]
+    public void UnescapeInvertsQuoteForAValueWhoseQuotesAnotherSplitterRemoved(string value) {
+        var quoted = CommandEcho.Quote(value: value);
+        var stripped = (quoted.StartsWith(comparisonType: StringComparison.Ordinal, value: "\"")
+            ? quoted[1..^1]
+            : quoted);
+
+        Assert.Equal(actual: CommandEcho.Unescape(value: stripped), expected: value);
+        // A value carrying no escape at all is its own decoding, which is the overwhelmingly common case.
+        Assert.Equal(actual: CommandEcho.Unescape(value: "alpha"), expected: "alpha");
+    }
+    [Fact]
+    public void AnInteriorQuoteRidesAsAUnicodeEscapeRatherThanABackslashPair() {
+        // The console splitter has no escapes at all: it toggles on '"' and passes everything else. `\"` therefore
+        // reads to it as a literal backslash followed by the END of the quoted run, which is unrecoverable. Writing the
+        // quote as \u0022 leaves the run balanced for BOTH readers.
+        Assert.Equal(actual: CommandEcho.Quote(value: "say \"hi\""), expected: "\"say \\u0022hi\\u0022\"");
+        Assert.Equal(actual: CommandEcho.Unquote(token: CommandEcho.Quote(value: "say \"hi\"")), expected: "say \"hi\"");
+
+        // A backslash forces the quoting even with nothing else reserved in the value, because Unescape reads a value
+        // whose quotes are gone and can only trust a '\' to be an escape if a literal one was always written doubled.
+        Assert.Equal(actual: CommandEcho.Quote(value: "C:\\games\\"), expected: "\"C:\\\\games\\\\\"");
     }
     [Fact]
     public void ReadingPastTheEndOfALineAnswersFalseRatherThanLooping() {

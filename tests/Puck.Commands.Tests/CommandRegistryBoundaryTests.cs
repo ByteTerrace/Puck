@@ -76,9 +76,60 @@ public sealed class CommandRegistryBoundaryTests {
         registry.ApplySnapshot(snapshot: in snapshot);
 
         Assert.Equal(actual: seen, expected: ["bound.probe"]);
-        // The swallowed notification carried a verdict that never reached its sink, so it is counted like any other
-        // refusal rather than passing silently.
-        Assert.Equal(expected: "[wire.errors: 1 rejected]", actual: registry.Submit(line: "wire.errors").Output);
+        // The swallowed notification carried a verdict that never reached its sink, so it is counted rather than
+        // passing silently — but as an observer fault, in its own segment. Nothing was submitted here at all.
+        Assert.Equal(expected: "[wire.errors: 0 rejected | 1 observer fault]", actual: registry.Submit(line: "wire.errors").Output);
+    }
+    [Fact]
+    public void ObserverFaultsAreCountedApartFromTheCallersRefusedLines() {
+        var registry = new CommandRegistry(
+            modules: [new BoundProbeModule()],
+            observers: [new ThrowingObserver(), new ThrowingObserver(), new ThrowingObserver()]
+        );
+        var router = new InputRouter(
+            registry: registry,
+            bindings: new FixedBindings(command: "bound.probe"),
+            principalResolver: new ConsolePrincipal()
+        );
+
+        router.Capture(signal: InputSignal.Press(source: "key.a"));
+
+        var snapshot = Tick(router: router);
+
+        registry.ApplySnapshot(snapshot: in snapshot);
+
+        // ONE bound press, no submitted line anywhere — yet each of the three sinks threw. Folding those into
+        // wire.errors reported `3 rejected` for a caller that had submitted nothing, so a scripted driver asserting
+        // zero refusals was poisoned by a broken UI sink on a gamepad press.
+        Assert.Equal(expected: "[wire.errors: 0 rejected | 3 observer faults]", actual: registry.Submit(line: "wire.errors").Output);
+
+        // A genuinely refused line still lands on the refusal count, beside the faults rather than mixed into them.
+        _ = registry.Submit(line: "does.not.exist");
+        Assert.Equal(expected: "[wire.errors: 1 rejected | 3 observer faults]", actual: registry.Submit(line: "wire.errors reset").Output);
+        Assert.Equal(expected: "[wire.errors: 0 rejected]", actual: registry.Submit(line: "wire.errors").Output);
+    }
+    [Fact]
+    public void AMalformedDeferredLineWithABrokenSinkIsStillOneRefusal() {
+        var registry = new CommandRegistry(
+            modules: [new StrictSimulationModule()],
+            observers: [new ThrowingObserver()]
+        );
+        var router = new InputRouter(
+            registry: registry,
+            bindings: new EmptyBindings(),
+            principalResolver: new ConsolePrincipal()
+        );
+
+        registry.RouteSimulationTo(sink: router.ConsoleTextSink);
+
+        // Submit accepted the line (its arguments are read a tick later), and the apply-time decode then refused it and
+        // told the observer, which threw. One caller line, one refusal — the observer's own fault used to add a second.
+        Assert.Equal(actual: registry.Submit(line: "sim.strict a b c d e"), expected: CommandResult.None);
+
+        var snapshot = Tick(router: router);
+
+        registry.ApplySnapshot(snapshot: in snapshot);
+        Assert.Equal(expected: "[wire.errors: 1 rejected | 1 observer fault]", actual: registry.Submit(line: "wire.errors").Output);
     }
     [Fact]
     public void AFaultTheHandlerBoundaryCannotContainStillReleasesTheEntrysBarrier() {
@@ -180,6 +231,50 @@ public sealed class CommandRegistryBoundaryTests {
         source.Collect();
 
         Assert.Equal(actual: submitted, expected: ["sim.cancel", "sum 2 3"]);
+    }
+    [Fact]
+    public void ACancellationReleasesTheBarriersOfTheEntriesItLeavesUnapplied() {
+        var applied = new List<string>();
+        var submitted = new List<string>();
+        var registry = new CommandRegistry(modules: [
+            new SumModule(),
+            new CancellingSimulationModule(),
+            new RecordingSimulationModule(applied: applied),
+        ]);
+        var router = new InputRouter(
+            registry: registry,
+            bindings: new EmptyBindings(),
+            principalResolver: new ConsolePrincipal()
+        );
+        var source = new TextCommandSource(registry: registry);
+        var session = source.CreateSeatSession(
+            onResult: (line, _) => submitted.Add(item: line),
+            router: router,
+            slot: 0
+        );
+
+        // Collect keeps draining Simulation-routed lines, so BOTH deferred lines fold into the same tick and each one
+        // holds a Begin() on this session's barrier. The immediate line behind them waits for that barrier to clear.
+        session.Enqueue(line: "sim.cancel");
+        session.Enqueue(line: "sim.record second");
+        session.Enqueue(line: "sum 2 3");
+        source.Collect();
+
+        Assert.Equal(actual: submitted, expected: ["sim.cancel", "sim.record second"]);
+
+        var snapshot = Tick(router: router);
+
+        _ = Assert.Throws<OperationCanceledException>(testCode: () => registry.ApplySnapshot(snapshot: in snapshot));
+
+        // The cancellation applies a PREFIX: the second entry never ran.
+        Assert.Empty(collection: applied);
+
+        // …but it is never going to run either, so its barrier had to be released on the way out. Leaving it standing
+        // suspended the session permanently — Collect saw a pending submission for a line the tick had abandoned and
+        // rotated the session to the tail on every frame from then on, so `sum 2 3` never drained.
+        source.Collect();
+
+        Assert.Equal(actual: submitted, expected: ["sim.cancel", "sim.record second", "sum 2 3"]);
     }
     [Fact]
     public void ATextEntryNamingAnIdThisRegistryCannotDecodeIsSkippedWithoutStrandingItsSession() {
@@ -300,6 +395,20 @@ public sealed class CommandRegistryBoundaryTests {
                     return CommandResult.None;
                 },
                 bindability: CommandBindability.Bindable,
+                routing: CommandRouting.Simulation
+            );
+        }
+    }
+    private sealed class StrictSimulationModule : ICommandModule {
+        public IEnumerable<CommandDefinition> GetCommands() {
+            // A bare verb: its text command takes no arguments at all, so a line carrying some is accepted at submit
+            // (Simulation defers its parse) and refused when the tick decodes it.
+            yield return CommandDefinition.Verb(
+                name: "sim.strict",
+                description: "A deferred verb whose text command accepts no arguments.",
+                valueKind: CommandValueKind.Digital,
+                handler: static _ => CommandResult.None,
+                bindability: CommandBindability.Unbindable,
                 routing: CommandRouting.Simulation
             );
         }

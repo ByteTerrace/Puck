@@ -26,16 +26,21 @@ namespace Puck.Commands;
 /// what this writer reserves is exactly what that reader separates on rather than an ASCII approximation of it.</para>
 /// <para>A value needing no quoting is emitted verbatim, so every echo that was already unambiguous reads exactly as
 /// it did. One that needs it is emitted as a double-quoted run in which <c>'\'</c> and <c>'"'</c> are
-/// backslash-escaped and a line break is escaped rather than carried (<c>\n</c>, <c>\r</c>, and <c>\t</c> beside
-/// them) — quoting a raw newline would still leave the record split across two lines, which is precisely the split a
-/// line-oriented driver makes FIRST, before it unquotes anything. An echo is therefore always exactly one line.</para>
+/// backslash-escaped and a line break is escaped rather than carried — quoting a raw newline would still leave the
+/// record split across two lines, which is precisely the split a line-oriented driver makes FIRST, before it unquotes
+/// anything. That is why the escaped set is wider than <c>\n</c> and <c>\r</c>: .NET's own line-ending rule
+/// (<see cref="string.ReplaceLineEndings()"/>, <see cref="MemoryExtensions.EnumerateLines(ReadOnlySpan{char})"/>) also
+/// breaks on <c>U+000B</c>, <c>U+000C</c>, <c>U+0085</c>, <c>U+2028</c> and <c>U+2029</c>, so every control character
+/// and both Unicode separators are escaped — the three familiar ones as <c>\n</c>, <c>\r</c> and <c>\t</c> and the rest
+/// as <c>\uXXXX</c>. An echo is therefore always exactly one line, whatever a value carries.</para>
 /// <para><b>Reading it back.</b> The quoting opens where the VALUE begins, not where the token does — a
 /// <see cref="Field(string, string)"/> emits <c>key="…"</c> and a <see cref="SpliceTag(string, string, string)"/> emits
 /// <c>prefix:"…"</c> — so a reader that splits the envelope body on whitespace first has already torn
 /// <c>path="C:\\my games"</c> into two pieces before it looks for a quote. Undoing an echo is therefore ONE pass over
 /// the line, not a split followed by an unquote: a token runs until the first whitespace that is not inside a quoted
 /// run; a <c>'"'</c> opens or closes such a run and is not itself part of the value; and inside a run <c>\n</c>,
-/// <c>\r</c> and <c>\t</c> are those three characters while <c>\x</c> is <c>x</c>.
+/// <c>\r</c> and <c>\t</c> are those three characters, <c>\uXXXX</c> is the character at that code point, and
+/// <c>\x</c> is <c>x</c>.
 /// <see cref="TryReadToken(string, ref int, out string)"/> is that pass, and
 /// <see cref="Unquote(string)"/> is the exact inverse of <see cref="Quote(string)"/> for one token already in hand —
 /// they exist so a driver reads back through the writer's own rule instead of a second, drifting copy of it.</para>
@@ -72,15 +77,17 @@ public sealed class CommandEcho {
 
         foreach (var character in value) {
             switch (character) {
-                // '\' is escaped even though it is not itself reserved: without it a value ending in one
-                // (`C:\games\`) would leave the closing '"' looking escaped, and the run would never end.
-                case '"':
+                // '\' introduces every escape, so it escapes itself. It is also why a value carrying one is quoted at
+                // all (see NeedsQuoting): the console's splitter hands a resubmitted token to a verb with the quotes
+                // already stripped, and a reader looking at that bare value can only treat every '\' as an escape if
+                // the writer never emitted a literal one.
                 case '\\':
-                    _ = builder.Append(value: '\\').Append(value: character);
+                    _ = builder.Append(value: "\\\\");
 
                     break;
                 // The line breaks are the one class of reserved character quoting alone cannot contain — a driver
                 // splits the stream into lines BEFORE it looks for tokens — so they are escaped rather than carried.
+                // These three have short spellings because they are the ones a human reads back off a console.
                 case '\n':
                     _ = builder.Append(value: "\\n");
 
@@ -93,10 +100,18 @@ public sealed class CommandEcho {
                     _ = builder.Append(value: "\\t");
 
                     break;
-                // Every other reserved character (a space, a '|', a ']', an exotic whitespace) is contained by the
-                // quoting itself and rides through as written.
                 default:
-                    _ = builder.Append(value: character);
+                    // Every other character the quoting alone cannot contain — see MustEscape — rides as \uXXXX,
+                    // including the '"' that would otherwise close the run. A space, a '|' and a ']' ARE contained by
+                    // the quoting and ride through as written.
+                    if (MustEscape(character: character)) {
+                        AppendUnicodeEscape(
+                            builder: builder,
+                            character: character
+                        );
+                    } else {
+                        _ = builder.Append(value: character);
+                    }
 
                     break;
             }
@@ -110,8 +125,8 @@ public sealed class CommandEcho {
     /// <see cref="SpliceTag(string, string, string)"/> produce.</summary>
     /// <remarks>Leading whitespace is skipped, then the token runs to the first whitespace OUTSIDE a quoted run. A
     /// <c>'"'</c> opens or closes a run and is never part of the value, so <c>key="a b"</c> comes back whole as
-    /// <c>key=a b</c>; inside a run <c>\n</c>, <c>\r</c> and <c>\t</c> decode to those characters and <c>\x</c> to
-    /// <c>x</c>. Splitting the line on whitespace FIRST and unquoting afterwards cannot work — the quoting opens where
+    /// <c>key=a b</c>; inside a run <c>\n</c>, <c>\r</c> and <c>\t</c> decode to those characters, <c>\uXXXX</c> to the
+    /// character at that code point, and <c>\x</c> to <c>x</c>. Splitting the line on whitespace FIRST and unquoting afterwards cannot work — the quoting opens where
     /// the value does, mid-token, so the split has already landed inside it.
     /// <para>This reads tokens, not structure: the caller still decides what the envelope, the <c>" | "</c> segment
     /// separators, and a token's own <c>=</c> or <c>:</c> mean.</para></remarks>
@@ -162,18 +177,30 @@ public sealed class CommandEcho {
                 continue;
             }
 
-            // Escapes are read only INSIDE a run, because Quote only writes them there: an unquoted value carrying a
-            // backslash (`C:\games\`) needed no quoting in the first place and means the backslash literally.
+            // Escapes are read only INSIDE a run, because Quote only writes them there: a value carrying a backslash is
+            // always quoted (see NeedsQuoting), so an UNQUOTED backslash cannot have come from this writer and means
+            // itself — which is what a reader handed foreign text should make of it.
             if (
                 quoted &&
                 (character == '\\') &&
                 ((index + 1) < line.Length)
             ) {
+                if (TryReadUnicodeEscape(
+                    character: out var escaped,
+                    index: index,
+                    line: line
+                )) {
+                    _ = builder.Append(value: escaped);
+                    index += 6;
+
+                    continue;
+                }
+
                 _ = builder.Append(value: (line[(index + 1)] switch {
                     'n' => '\n',
                     'r' => '\r',
                     't' => '\t',
-                    var escaped => escaped,
+                    var other => other,
                 }));
                 index += 2;
 
@@ -209,21 +236,141 @@ public sealed class CommandEcho {
             : string.Empty
         );
     }
+    /// <summary>Decodes the escapes <see cref="Quote(string)"/> wrote for a value whose surrounding quoted run some
+    /// OTHER splitter has already removed — the console's, when an operator copies a
+    /// <see cref="SpliceTag(string, string, string)"/> tag off an echo and hands it straight back as an argument.</summary>
+    /// <remarks>
+    /// Two readers undo this writer, and only one of them is ours. <see cref="TryReadToken(string, ref int, out string)"/>
+    /// reads a whole echo LINE and understands both halves of the encoding: the quoted run and the escapes inside it.
+    /// System.CommandLine's command-line splitter, which every resubmitted line goes through, understands only the
+    /// first: <c>'"'</c> opens and closes a run and nothing else means anything, so it hands the verb a value with its
+    /// delimiting quotes gone and every escape still in it. This is the second half, applied by that verb.
+    /// <para>The encoding is chosen so both readers can succeed. A <c>'"'</c> inside a value is written <c>\u0022</c>
+    /// rather than <c>\"</c>, because the splitter has no escapes at all and would read the <c>'"'</c> of a <c>\"</c>
+    /// pair as the run's end — <c>say \"hi\"</c> came back as <c>say \hi\</c>, with both quotes gone and two
+    /// backslashes invented. And a value carrying a literal <c>'\'</c> is always quoted, so that after the splitter has
+    /// stripped the quotes every remaining <c>'\'</c> is unambiguously an escape and this method can invert it.</para>
+    /// <para>The consequence is that a value reaching a verb through this door is written in the echo's own escape
+    /// grammar: a hand-typed backslash means an escape here, and a hand-typed literal one is doubled.</para>
+    /// </remarks>
+    /// <param name="value">The value, quotes already removed by the splitter that delivered it.</param>
+    /// <returns>The decoded value.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="value"/> is <see langword="null"/>.</exception>
+    public static string Unescape(string value) {
+        ArgumentNullException.ThrowIfNull(value);
 
+        // The overwhelmingly common case: an ordinary name, carrying no escape at all.
+        if (value.IndexOf(value: '\\') < 0) {
+            return value;
+        }
+
+        var builder = new StringBuilder(capacity: value.Length);
+        var index = 0;
+
+        while (index < value.Length) {
+            var character = value[index];
+
+            if (
+                (character == '\\') &&
+                ((index + 1) < value.Length)
+            ) {
+                if (TryReadUnicodeEscape(
+                    character: out var escaped,
+                    index: index,
+                    line: value
+                )) {
+                    _ = builder.Append(value: escaped);
+                    index += 6;
+
+                    continue;
+                }
+
+                _ = builder.Append(value: (value[(index + 1)] switch {
+                    'n' => '\n',
+                    'r' => '\r',
+                    't' => '\t',
+                    var other => other,
+                }));
+                index += 2;
+
+                continue;
+            }
+
+            _ = builder.Append(value: character);
+            index++;
+        }
+
+        return builder.ToString();
+    }
+
+    // Writes one character as the \uXXXX escape the reader inverts — four lowercase hex digits, always, so the reader
+    // can find the escape's end by counting rather than by scanning.
+    private static void AppendUnicodeEscape(StringBuilder builder, char character) {
+        Span<char> hex = stackalloc char[4];
+
+        _ = ((ushort)character).TryFormat(
+            destination: hex,
+            charsWritten: out _,
+            format: "x4",
+            provider: CultureInfo.InvariantCulture
+        );
+        _ = builder.Append(value: "\\u").Append(value: hex);
+    }
+    // THE ONE RULE for "this character cannot ride inside a quoted run as written", so Quote and the reader that
+    // inverts it cannot drift apart. Quoting contains everything a token or a segment split would find, but it cannot
+    // contain a LINE break: a driver splits the stream into lines first, before it looks for tokens at all, so a
+    // character .NET counts as a line ending tears the record in half however well quoted it is. That set is wider than
+    // '\n' and '\r' — ReplaceLineEndings and EnumerateLines also break on U+000B, U+000C, U+0085, U+2028 and U+2029 —
+    // and a listed set would have to be re-derived every time one is added, so the test is the CATEGORY: every control
+    // character, plus the two Unicode separators that are not control characters, plus the '"' itself — see Unescape
+    // for why that one may not ride as `\"`.
+    private static bool MustEscape(char character) => (
+        char.IsControl(c: character) ||
+        (character == '"') ||
+        (char.GetUnicodeCategory(c: character) is (UnicodeCategory.LineSeparator or UnicodeCategory.ParagraphSeparator))
+    );
     // Whether a driver's own split could land inside this value. Whitespace is tested by CATEGORY rather than against
     // a listed set: char.IsWhiteSpace is the rule CommandRegistry's wire tokenizer splits on, and a listed set would
     // let a vertical tab or a non-breaking space through unquoted for a reader that splits the way the wire does.
+    //
+    // A '\' forces quoting even though nothing splits on it: it is the escape introducer, and Unescape reads a value
+    // whose quotes some other splitter has already removed, so it cannot tell an escape from a literal backslash
+    // unless every literal one was written doubled. Quoting is what guarantees that.
     private static bool NeedsQuoting(string value) {
         foreach (var character in value) {
             if (
                 char.IsWhiteSpace(c: character) ||
-                (character == '"') ||
+                (character == '\\') ||
                 (character == ']') ||
-                (character == '|')
+                (character == '|') ||
+                MustEscape(character: character)
             ) {
                 return true;
             }
         }
+
+        return false;
+    }
+    // Reads a \uXXXX escape at `index` (which addresses its '\'), or answers false for anything else — a short line, a
+    // different escape letter, a digit that is not hex. Strict AllowHexSpecifier rather than NumberStyles.HexNumber:
+    // the latter tolerates surrounding whitespace, which would let `\u 41` decode as a character.
+    private static bool TryReadUnicodeEscape(string line, int index, out char character) {
+        if (
+            (line[(index + 1)] == 'u') &&
+            ((index + 6) <= line.Length) &&
+            ushort.TryParse(
+            s: line.AsSpan(length: 4, start: (index + 2)),
+            provider: CultureInfo.InvariantCulture,
+            style: NumberStyles.AllowHexSpecifier,
+            result: out var scalar
+        )
+        ) {
+            character = ((char)scalar);
+
+            return true;
+        }
+
+        character = '\0';
 
         return false;
     }
@@ -313,10 +460,14 @@ public sealed class CommandEcho {
     /// thing it was written for. The prefix therefore rides through verbatim (callers spell a declared literal there —
     /// <c>instance:</c>, <c>anchor=body:</c> — never interpolated text) and only the value goes through
     /// <see cref="Quote(string)"/>, which is enough for the whole tag to stay one token.
-    /// <para>A quoted value reads back exactly as <see cref="Field(string, string)"/>'s does: the console's own
-    /// splitter removes the pair when the line is resubmitted, so <c>instance:"my world"</c> reaches a verb as the
-    /// single token <c>instance:my world</c>, and <see cref="TryReadToken(string, ref int, out string)"/> is the same
-    /// rule for a driver reading the echo directly.</para>
+    /// <para>A quoted value reads back exactly as <see cref="Field(string, string)"/>'s does, but which reader is doing
+    /// the reading decides how much of the decoding is left. A driver reading the echo LINE uses
+    /// <see cref="TryReadToken(string, ref int, out string)"/>, which undoes the whole encoding. A resubmitted line
+    /// goes through the console's own splitter instead, and that splitter knows only about <c>'"'</c>: it removes the
+    /// pair — so <c>instance:"my world"</c> reaches a verb as the single token <c>instance:my world</c>, with the
+    /// reserved prefix still leading — and leaves every escape inside untouched. The verb receiving such a token
+    /// therefore finishes the job with <see cref="Unescape(string)"/>, which is why <see cref="Quote(string)"/> writes
+    /// an interior <c>'"'</c> as <c>\u0022</c> rather than <c>\"</c> and always quotes a value carrying <c>'\'</c>.</para>
     /// </remarks>
     /// <param name="text">The bracketed echo to tag.</param>
     /// <param name="prefix">The tag's declared literal key, including its own separator (e.g. <c>instance:</c>).</param>
