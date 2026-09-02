@@ -19,6 +19,21 @@ public sealed class BindingDocumentWireShapeTests {
         "page",
     ];
 
+    // The `document` member of every bindingOverlays row of the shipped basis world, as authored. Held as
+    // JsonElement rather than a parsed model so each caller decides which context reads it.
+    private static IEnumerable<JsonElement> BasisBindingOverlays() {
+        using var basis = JsonDocument.Parse(json: File.ReadAllText(path: Path.Combine(
+            path1: AppContext.BaseDirectory,
+            path2: "Assets",
+            path3: "puck.basis.frozen.json"
+        )));
+
+        foreach (var overlay in basis.RootElement.GetProperty(propertyName: "bindingOverlays").EnumerateArray()) {
+            if (overlay.TryGetProperty(propertyName: "document", value: out var document)) {
+                yield return document.Clone();
+            }
+        }
+    }
     private static BindingProfileDocument Document() => new(
         Chords: [
             new BindingChordDefinition(
@@ -82,6 +97,61 @@ public sealed class BindingDocumentWireShapeTests {
         }
 
         Assert.Equal(actual: string.Join(separator: ", ", values: offenders), expected: string.Empty);
+    }
+    [Fact]
+    public void TheShippedBasisBindingsWriteTheSameBytesThroughBothContexts() {
+        // The one-canonical-wire-shape claim, made on real authored data rather than a fixture: every binding
+        // document the shipped basis world carries is read through the WORLD's context and written back through
+        // BOTH — Puck.Commands' package-local BindingProfileJsonContext and the world document's own writer — and
+        // the two must be the same bytes. They agree because neither context defines the shape: CommandValue,
+        // ChannelRef, DocumentIdentifier and every binding enum declare their converter on the TYPE, so a future
+        // edit that moved one back onto a context's converter list would break this by construction.
+        var documents = 0;
+
+        foreach (var overlay in BasisBindingOverlays()) {
+            var document = overlay.Deserialize(jsonTypeInfo: WorldJsonContext.Default.BindingProfileDocument);
+
+            Assert.NotNull(@object: document);
+            Assert.Equal(
+                actual: JsonSerializer.Serialize(
+                    jsonTypeInfo: BindingProfileJsonContext.Default.BindingProfileDocument,
+                    value: document
+                ),
+                expected: JsonSerializer.Serialize(
+                    jsonTypeInfo: WorldJsonContext.Default.BindingProfileDocument,
+                    value: document
+                )
+            );
+            ++documents;
+        }
+
+        // The fixture is only worth anything if the basis actually carries bindings; a silently empty walk would
+        // pass every assertion above.
+        Assert.True(condition: (documents > 0));
+    }
+    [Fact]
+    public void TheShippedBasisBindingsReadBackThroughThePackageContextAlone() {
+        // The consumer's path, with no world assembly anywhere near it: read the authored section through
+        // Puck.Commands' own context, write it back, and the text is stable. This is what a Native AOT consumer
+        // does; the World's context never touches it.
+        foreach (var overlay in BasisBindingOverlays()) {
+            var document = overlay.Deserialize(jsonTypeInfo: BindingProfileJsonContext.Default.BindingProfileDocument);
+            var written = JsonSerializer.Serialize(
+                jsonTypeInfo: BindingProfileJsonContext.Default.BindingProfileDocument,
+                value: document
+            );
+
+            Assert.Equal(
+                actual: JsonSerializer.Serialize(
+                    jsonTypeInfo: BindingProfileJsonContext.Default.BindingProfileDocument,
+                    value: JsonSerializer.Deserialize(
+                        json: written,
+                        jsonTypeInfo: BindingProfileJsonContext.Default.BindingProfileDocument
+                    )
+                ),
+                expected: written
+            );
+        }
     }
     [Fact]
     public void AWrittenBindingDocumentReadsBackIdentically() {

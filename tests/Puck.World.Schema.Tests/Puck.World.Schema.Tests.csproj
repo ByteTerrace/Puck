@@ -16,4 +16,14 @@
     <ItemGroup>
         <ProjectReference Include="..\..\src\Puck.World.Schema\Puck.World.Schema.csproj" />
     </ItemGroup>
+    <ItemGroup>
+        <!-- The SHIPPED basis world, read as-authored by BindingDocumentWireShapeTests: the binding sections it
+             carries are the real thing a consumer round-trips, not a fixture written to pass. Linked rather than
+             copied so the file has exactly one home. -->
+        <Content
+            CopyToOutputDirectory="PreserveNewest"
+            Include="..\..\src\Puck.World\Assets\worlds\puck.basis.frozen.json"
+            Link="Assets\puck.basis.frozen.json"
+        />
+    </ItemGroup>
 </Project>

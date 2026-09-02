@@ -13,6 +13,10 @@
         <PackageReference Include="System.CommandLine" Version="[2.*, )" />
     </ItemGroup>
     <ItemGroup>
+        <!-- Every enum in the binding document carries [JsonConverter(typeof(StrictEnumConverter<T>))] at its own
+             declaration, which is Puck.Abstractions.Documents' type. Declared rather than left to arrive through
+             Puck.Assets: this project names the type in its own source, so the edge belongs in its own file. -->
+        <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
         <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
         <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
     </ItemGroup>

@@ -61,6 +61,7 @@ public sealed record BindingWheelDefinition(
 }
 /// <summary>A spatial input's sector-selection geometry. Pointer input authors this today; a future touch binding
 /// can reuse the same policy without pretending a touch location is an analog stick.</summary>
+[JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<BindingWheelSpatialSelectionMode>))]
 public enum BindingWheelSpatialSelectionMode {
     /// <summary>The spatial input does not participate in radial selection.</summary>
     Disabled,
@@ -75,6 +76,7 @@ public enum BindingWheelSpatialSelectionMode {
     HitTarget,
 }
 /// <summary>Where the radial hub is anchored for the lifetime of one open gesture.</summary>
+[JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<BindingWheelPlacement>))]
 public enum BindingWheelPlacement {
     /// <summary>At the pointer's opening position when one is available; otherwise at viewport center.</summary>
     Pointer,
@@ -83,6 +85,7 @@ public enum BindingWheelPlacement {
     ViewportCenter,
 }
 /// <summary>How a wheel chooses among its authored rings.</summary>
+[JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<BindingWheelRingSelectionMode>))]
 public enum BindingWheelRingSelectionMode {
     /// <summary>The active ring is selected explicitly by <c>player.wheel.ring</c> bindings or pointer-wheel input.</summary>
     Explicit,

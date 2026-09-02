@@ -8,6 +8,7 @@ namespace Puck.Commands;
 /// driven as either a discrete action or a continuous, per-frame control without the consumer
 /// needing to know where the value originated.
 /// </remarks>
+[System.Text.Json.Serialization.JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<CommandValueKind>))]
 public enum CommandValueKind {
     /// <summary>A boolean state (0 or 1), such as a press/release action like <c>jump</c> or <c>exit</c>.</summary>
     Digital = 0,

@@ -396,9 +396,9 @@ internal sealed class StrictEnumReachability {
     /// <summary>
     /// Every type <paramref name="context"/>'s <c>[JsonSourceGenerationOptions(Converters = ...)]</c> array names a
     /// converter for, recovered by walking each listed converter class's base-type chain to the closed
-    /// <c>JsonConverter&lt;T&gt;</c> it derives from and reading off <c>T</c>. This is what lets
-    /// <c>StrictEnumConverter&lt;CommandPhase&gt;</c> (registered here because that enum lives in a project that
-    /// cannot reference <c>Puck.Abstractions</c>) and the bespoke
+    /// <c>JsonConverter&lt;T&gt;</c> it derives from and reading off <c>T</c>. This is what lets a closed
+    /// <c>StrictEnumConverter&lt;TEnum&gt;</c> registered on a context (rather than at the enum's own declaration,
+    /// which is where every enum that CAN name the converter carries it) and the bespoke
     /// <c>WorldBackendPreferenceJsonConverter</c>/<c>SurfaceFormatJsonConverter</c>/<c>GrantSubjectJsonConverter</c>/
     /// <c>WorldPrincipalJsonConverter</c>/<c>Vector3JsonConverter</c>/document-bridge converters all count as
     /// "explicitly converted" without this analyzer special-casing any of their names.
