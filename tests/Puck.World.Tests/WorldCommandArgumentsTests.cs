@@ -70,6 +70,30 @@ public sealed class WorldCommandArgumentsTests {
         Assert.Equal(expected: "{\"id\":\"hp\"}", actual: registry.Submit(line: "tail.between {\"id\":\"hp\"}").Output);
     }
     [Fact]
+    public void ATrailingTokenIsStrippedByTheSameSplitterThatCountedIt() {
+        var registry = Registry();
+
+        // The count comes from the PARSER's token list and the strip from a scan of the raw line, so the two have to
+        // read a quoted run the same way. A quote-blind backwards scan found the space INSIDE `"x y"` and answered
+        // `"{a}" "x` — the trailing token torn in half and the tail wearing the other half.
+        Assert.Equal(expected: "{a}", actual: registry.Submit(line: "tail.between \"{a}\" \"x y\"").Output);
+        Assert.Equal(expected: "{a} {b}", actual: registry.Submit(line: "tail.between {a} {b} \"x y\"").Output);
+        // A quoted LEADING token is one token to the parser too, so the address strip must not cut it either.
+        Assert.Equal(expected: "the rest", actual: registry.Submit(line: "tail.after \"an address\" the rest").Output);
+    }
+    [Fact]
+    public void ADeeperAddressStillFindsItsOptionalKeyword() {
+        var registry = Registry();
+
+        // tail.deep spells verb + one address token before its tail. The floor for recognizing the trailing keyword is
+        // therefore three tokens, not two: `tail.deep row force` names a tail called `force` after the address `row`,
+        // exactly as `world.load force` names a file called `force`. The hard-coded floor of 2 read this as a flagged
+        // line with an EMPTY tail.
+        Assert.Equal(expected: "force|plain", actual: registry.Submit(line: "tail.deep row force").Output);
+        Assert.Equal(expected: "w.json|force", actual: registry.Submit(line: "tail.deep row w.json force").Output);
+        Assert.Equal(expected: "a tail|force", actual: registry.Submit(line: "tail.deep row a tail force").Output);
+    }
+    [Fact]
     public void AnOptionalTrailingKeywordIsRecognizedWhateverWhitespacePrecedesIt() {
         var registry = Registry();
 
@@ -127,6 +151,24 @@ public sealed class WorldCommandArgumentsTests {
                         ? 0
                         : 1)
                 )),
+                bindability: CommandBindability.Unbindable
+            );
+            yield return CommandDefinition.WithWireArgs(
+                name: "tail.deep",
+                description: "Echoes the raw tail after its verb and one address token, less an optional trailing `force` word, then whether that word was there.",
+                handler: static (context, args) => {
+                    var tail = WorldCommandArguments.RawBeforeKeyword(
+                        args: in args,
+                        context: context,
+                        keyword: "force",
+                        leadingTokens: 2,
+                        present: out var present
+                    );
+
+                    return new CommandResult(Output: $"{tail}|{(present
+                        ? "force"
+                        : "plain")}");
+                },
                 bindability: CommandBindability.Unbindable
             );
             yield return CommandDefinition.WithWireArgs(

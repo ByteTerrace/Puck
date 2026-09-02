@@ -21,9 +21,13 @@ public static class WorldCommandArguments {
     /// address tokens the verb spells before its tail (<c>world.row.set</c> strips verb + path,
     /// <c>world.state.cell.set</c> strips verb + row + key, <c>identity.deliver</c> strips five).</summary>
     /// <remarks>
-    /// The split is <see cref="char.IsWhiteSpace(char)"/>, matching the registry's own wire tokenizer exactly: a
-    /// narrower set (space and tab) would return an empty tail for a vertical-tab-separated line the tokenizer had
-    /// already split correctly, so the verb would answer with its usage refusal for a line it accepted.
+    /// The split is <see cref="char.IsWhiteSpace(char)"/> OUTSIDE a double-quoted run, which is what both tokenizers a
+    /// submitted line can travel agree on. The whitespace rule is by category, matching the registry's own wire
+    /// tokenizer exactly: a narrower set (space and tab) would return an empty tail for a vertical-tab-separated line
+    /// the tokenizer had already split correctly, so the verb would answer with its usage refusal for a line it
+    /// accepted. The quote rule matches System.CommandLine's splitter, which every quoted line falls through to: a
+    /// leading address token spelled <c>"my path"</c> is ONE token there, and a quote-blind scan would strip half of it
+    /// and leave the other half glued to the front of the tail.
     /// <para>A tail that is EXACTLY one double-quoted token has that one surrounding pair removed. Such a line went
     /// through System.CommandLine's splitter, which strips the pair before the handler's <see cref="WireArgs"/> ever
     /// sees it, so leaving it on here would hand a quoted-and-unquoted verb two different answers for the same line
@@ -41,7 +45,7 @@ public static class WorldCommandArguments {
             var span = text.AsSpan().TrimStart();
 
             for (var skip = 0; (skip < tokens); skip++) {
-                var separator = IndexOfWhiteSpace(span: span);
+                var separator = EndOfToken(span: span);
 
                 if (separator < 0) {
                     return string.Empty;
@@ -59,10 +63,13 @@ public static class WorldCommandArguments {
     /// strips <paramref name="trailingTokens"/> whitespace-delimited tokens off the END — the shape a verb whose
     /// free-text tail sits BEFORE a fixed positional suffix needs (<c>identity.hud &lt;panel-json&gt; [player]</c>,
     /// <c>world.load &lt;path&gt; [force]</c>).</summary>
-    /// <remarks>The trailing split is <see cref="char.IsWhiteSpace(char)"/> for the same reason the leading one is: a
-    /// narrower space-and-tab scan finds no separator in a vertical-tab-separated line the registry's own tokenizer
-    /// had already split correctly, so the suffix stays glued to the tail and the verb tries to parse
-    /// <c>{"id":"hp"}\v3</c> as its payload.
+    /// <remarks>The trailing split is the same one the leading split uses, and for the same reason — the two ends have
+    /// to agree with each other and with the tokenizer that COUNTED the tokens. A narrower space-and-tab scan finds no
+    /// separator in a vertical-tab-separated line the registry's own tokenizer had already split correctly, so the
+    /// suffix stays glued to the tail and the verb tries to parse <c>{"id":"hp"}\v3</c> as its payload; and a
+    /// quote-blind scan disagrees with the parser that produced <paramref name="args"/> about where the trailing token
+    /// begins, so <c>verb "{a}" "x y"</c> — two tokens by that count — was cut at the space INSIDE the trailing one and
+    /// answered <c>"{a}" "x</c>.
     /// <para>A line carrying fewer tokens than <paramref name="trailingTokens"/> names has no tail at all and answers
     /// <see cref="string.Empty"/>, matching <see cref="RawAfter"/>'s answer for an address longer than its line.</para></remarks>
     /// <param name="context">The invoking context, whose <see cref="CommandContext.Text"/> carries the raw line.</param>
@@ -86,13 +93,13 @@ public static class WorldCommandArguments {
         for (var strip = 0; (strip < trailingTokens); strip++) {
             span = span.TrimEnd();
 
-            var separator = LastIndexOfWhiteSpace(span: span);
+            var start = LastTokenStart(span: span);
 
-            if (separator < 0) {
+            if (start < 0) {
                 return string.Empty;
             }
 
-            span = span[..separator];
+            span = span[..start];
         }
 
         return Unwrap(tail: span.Trim());
@@ -115,7 +122,12 @@ public static class WorldCommandArguments {
     /// <returns>The text between the leading tokens and the keyword, or <see cref="string.Empty"/> when the line
     /// carries none.</returns>
     public static string RawBeforeKeyword(CommandContext context, in WireArgs args, int leadingTokens, string keyword, out bool present) {
-        present = ((args.Count >= 2) && args.Is(
+        // The floor is "a token precedes the keyword", and what that costs depends on the address the verb spells:
+        // args excludes the verb, so leadingTokens - 1 of them are address, and one more has to be there for the
+        // keyword to be a flag rather than the tail itself. A hard-coded 2 is only that expression at leadingTokens 1
+        // — the one caller today — and read `verb <address> force` as a flagged line with an EMPTY tail for anything
+        // deeper, which is the opposite of the rule stated below.
+        present = ((args.Count >= (leadingTokens + 1)) && args.Is(
             index: (args.Count - 1),
             value: keyword
         ));
@@ -130,29 +142,63 @@ public static class WorldCommandArguments {
         );
     }
 
-    // The first whitespace character by CATEGORY, the rule CommandRegistry's wire tokenizer splits a submitted line
-    // on. Scanned rather than looked up because char.IsWhiteSpace is a Unicode category test, not a listed set.
-    private static int IndexOfWhiteSpace(ReadOnlySpan<char> span) {
+    // THE ONE TOKEN RULE this reconstruction reads by, so both of its ends and the tokenizer that counted the line's
+    // tokens agree about where a token begins. A token ends at the first whitespace OUTSIDE a double-quoted run:
+    // whitespace by CATEGORY (scanned rather than looked up, because char.IsWhiteSpace is a Unicode category test and
+    // not a listed set — the rule CommandRegistry's wire tokenizer splits on), and the quote toggle because a quoted
+    // line reaches the handler through System.CommandLine's splitter, for which `"x y"` is one token.
+    //
+    // Answers the separator's index, or -1 when the token runs to the end of the span and nothing follows it.
+    private static int EndOfToken(ReadOnlySpan<char> span) {
+        var quoted = false;
+
         for (var index = 0; (index < span.Length); index++) {
-            if (char.IsWhiteSpace(c: span[index])) {
+            var character = span[index];
+
+            if (character == '"') {
+                quoted = !quoted;
+            } else if (
+                !quoted &&
+                char.IsWhiteSpace(c: character)
+            ) {
                 return index;
             }
         }
 
         return -1;
     }
-    // The LAST whitespace character by CATEGORY — IndexOfWhiteSpace's mirror, and the split a verb whose free-text
-    // tail sits BEFORE a fixed positional suffix needs. Scanned for the same reason, and it matters for the same
-    // reason: `anyOf: [' ', '\t']` finds NO separator in a vertical-tab-separated line, so the suffix the verb was
-    // told to strip stays attached to a payload the registry's tokenizer had already split correctly.
-    private static int LastIndexOfWhiteSpace(ReadOnlySpan<char> span) {
-        for (var index = (span.Length - 1); (index >= 0); index--) {
-            if (char.IsWhiteSpace(c: span[index])) {
-                return index;
+    // Where the span's LAST token begins, under EndOfToken's rule — the split a verb whose free-text tail sits BEFORE a
+    // fixed positional suffix needs. Answers -1 when the span holds fewer than two tokens: the whole span is then the
+    // suffix and there is no tail left in front of it, which is what an address longer than its line answers too.
+    private static int LastTokenStart(ReadOnlySpan<char> span) {
+        var count = 0;
+        var index = 0;
+        var start = -1;
+
+        while (index < span.Length) {
+            while (
+                (index < span.Length) &&
+                char.IsWhiteSpace(c: span[index])
+            ) {
+                index++;
             }
+
+            if (index >= span.Length) {
+                break;
+            }
+
+            var separator = EndOfToken(span: span[index..]);
+
+            count++;
+            start = index;
+            index = ((separator < 0)
+                ? span.Length
+                : (index + separator));
         }
 
-        return -1;
+        return ((count >= 2)
+            ? start
+            : -1);
     }
     // Removes ONE surrounding double-quote pair from a tail that is a single quoted token. A tail carrying any further
     // '"' is more than one token (`"a" "b"`) or an escaped run this method has no business re-tokenizing, and is
