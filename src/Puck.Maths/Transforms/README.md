@@ -18,7 +18,10 @@ Every transform here has one shape:
   for the exact transforms, within a measured bound for the fixed-point ones).
 - The two spectral transforms — number-theoretic and Fourier — also offer
   `PointwiseMultiply` and `Convolve`, the cyclic convolution as
-  forward–forward–pointwise–inverse.
+  forward–forward–pointwise–inverse. A pointwise destination may be exactly
+  either operand but may not partially overlap one. Convolution accepts the
+  exact same span as both operands for self-convolution, refuses partial
+  operand overlap, and requires a destination disjoint from both operands.
 - A length that is not a positive power of two is refused with
   `ArgumentOutOfRangeException` at `Create` (or `ArgumentException` on the span
   for the plan-free transform); a span whose length is not the plan's is
@@ -64,14 +67,16 @@ residues before it returns.
 
 **Convolution.** `Convolve` overwrites `left` and `right` with their forward
 transforms; only `destination` and a fresh pair of scratch spans are needed
-for repeated calls.
+for repeated calls. Passing the exact same span for `left` and `right` computes
+a self-convolution with one forward transform. Other operand overlap is
+refused, and `destination` must be disjoint from both.
 
 | Operation | Semantics |
 |---|---|
 | `Forward` | `X[k] = sum over n of x[n] * root^(nk)`, in place. |
 | `Inverse` | The exact inverse of `Forward`, in place: the conjugate network, then a multiply by the field inverse of `N`. |
-| `PointwiseMultiply` | The elementwise field product of two spans; the destination may alias either. |
-| `Convolve` | Forward, forward, pointwise multiply, inverse — the exact cyclic convolution. |
+| `PointwiseMultiply` | The elementwise field product; the destination may be exactly either operand, but shifted overlap is refused. |
+| `Convolve` | Forward, forward, pointwise multiply, inverse — the exact cyclic convolution; exact operand alias is self-convolution, while the destination stays disjoint. |
 
 ## `WalshHadamardTransform`
 
@@ -85,9 +90,10 @@ recursive doubling `H(2N) = [[H, H], [H, -H]]` produces, not the sequency
 (Walsh) ordering. Bin zero is the plain sum.
 
 **Inverse.** Because `H * H = N * I`, `Inverse` is a second forward pass
-followed by an arithmetic shift right by `log2(N)`: exact on any spectrum
-`Forward` produced (every element of `H * H * x` is a multiple of `N`), and a
-floor division by `N` on any other.
+followed by an arithmetic shift right by `log2(N)`: exact on a spectrum
+`Forward` produced when both passes remain inside the carrier's no-wrap
+envelope, and a floor division by `N` on an arbitrary spectrum. Once a forward
+pass wraps, the lost high bits cannot be reconstructed by the inverse.
 
 **Lanes.** The `long` and `int` carriers run every stage whose half-length
 covers a whole `Vector<T>` lane-parallel; the first stages and every other
@@ -122,11 +128,13 @@ by `1/N` — which underflows to zero once `N > 2^16`, past `FixedQ4816`'s
 sixteen fraction bits. Each inverse butterfly rounds once: the twiddle product
 stays at Q32, the other operand is lifted to Q32, and their sum or difference
 rounds to Q16 at a seventeen-bit shift, so the halving costs no rounding of
-its own. `Inverse` never overflows past its own input's scale;
-`Forward` can grow up to a factor of `N` across its stages, and `Convolve`'s
-output grows as `N` times the product of the operands' amplitudes, so a
-caller at a large length or amplitude pre-scales to stay inside `FixedQ4816`'s
-raw range.
+its own. The per-stage halving bounds ideal inverse growth, but an inverse
+butterfly still mixes complex components before narrowing and a full-scale
+arbitrary spectrum can overflow. Both directions use unchecked arithmetic:
+`Forward` can grow up to a factor of `N`, an arbitrary inverse spectrum can
+leave the carrier during component mixing, and `Convolve`'s output grows as
+`N` times the product of the operands' amplitudes. Callers pre-scale every
+input whose intermediates can leave `FixedQ4816`'s raw range.
 
 **Twiddles.** `Create` builds each forward twiddle independently via
 `FixedComplex.FromAngle(FixedQ4816.FromDouble(angle))` — one
@@ -141,8 +149,8 @@ conjugates of the forward ones.
 | `Inverse` | The per-stage-halved inverse transform, in place; one rounding per butterfly component. |
 | `ForwardReal` | Embeds a real sequence (zero imaginary parts) and forwards it. |
 | `InverseReal` | Inverts a spectrum and discards the imaginary part of each restored sample. |
-| `PointwiseMultiply` | The elementwise `FixedComplex` product; the destination may alias either operand. |
-| `Convolve` | Forward, forward, pointwise multiply, inverse — the cyclic convolution within a measured bound. |
+| `PointwiseMultiply` | The elementwise `FixedComplex` product; the destination may be exactly either operand, but shifted overlap is refused. |
+| `Convolve` | Forward, forward, pointwise multiply, inverse — bounded cyclic convolution; exact operand alias is self-convolution, while the destination stays disjoint. |
 
 ## `FixedCosineTransform`
 
@@ -202,5 +210,7 @@ sum built from the same `SinCos` kernel with a different schedule, the wiring
 of the real wrappers and the pointwise product, and refusals.
 
 `puck bench --filter '*Ntt*'`, `'*Wht*'`, `'*Fft*'` and `'*Dct*'` measure
-`Forward`/`Inverse` latency and each transform against its O(N^2) baseline;
-none gates a value.
+`Forward`/`Inverse` latency on a pristine input per invocation and each
+transform against its O(N^2) baseline. `puck bench --filter
+'*TransformPlanCreation*'` measures the time and allocation cost of building
+the reusable plans; none gates a value.

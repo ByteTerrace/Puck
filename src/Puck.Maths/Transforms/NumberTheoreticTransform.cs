@@ -54,7 +54,7 @@ public static class NumberTheoreticTransform {
 
         var ring = Ring;
 
-        for (var length = 2; (length <= n); length <<= 1) {
+        for (var length = 2; ; length <<= 1) {
             var half = (length >> 1);
             var step = (n / length);
 
@@ -87,6 +87,8 @@ public static class NumberTheoreticTransform {
                     twiddleIndex += step;
                 }
             }
+
+            if (length == n) { break; }
         }
     }
     private static void Encode(Span<ulong> values) {
@@ -112,14 +114,14 @@ public static class NumberTheoreticTransform {
     /// <summary>Computes the exact cyclic convolution of two length-<c>N</c> sequences.</summary>
     /// <param name="plan">The plan for length <c>N</c>; <paramref name="left"/>, <paramref name="right"/> and <paramref name="destination"/> must all have length <c>N</c>.</param>
     /// <param name="left">The first sequence; overwritten with its forward transform.</param>
-    /// <param name="right">The second sequence; overwritten with its forward transform.</param>
+    /// <param name="right">The second sequence; overwritten with its forward transform. It may be the exact same span as <paramref name="left"/> for a self-convolution, but may not otherwise overlap it.</param>
     /// <param name="destination">Receives the convolution; may not alias <paramref name="left"/> or <paramref name="right"/>.</param>
     /// <remarks>
     /// Forward both operands, multiply pointwise, and invert — the convolution theorem, exact because every step is
     /// exact field arithmetic. <c>destination[k] = sum over i of left[i] * right[(k - i) mod N]</c>, reduced modulo
     /// <see cref="Modulus"/>.
     /// </remarks>
-    /// <exception cref="ArgumentException">A span's length does not equal <paramref name="plan"/>'s length.</exception>
+    /// <exception cref="ArgumentException">A span's length does not equal <paramref name="plan"/>'s length; <paramref name="left"/> and <paramref name="right"/> partially overlap; or <paramref name="destination"/> overlaps an operand.</exception>
     public static void Convolve(NumberTheoreticTransformPlan plan, Span<ulong> left, Span<ulong> right, Span<ulong> destination) {
         TransformKernels.RequireLength(
             expected: plan.Length,
@@ -136,24 +138,31 @@ public static class NumberTheoreticTransform {
             parameterName: nameof(destination),
             values: ((ReadOnlySpan<ulong>)destination)
         );
+        var sameOperands = TransformKernels.RequireConvolutionAliasing(
+            destination: ((ReadOnlySpan<ulong>)destination),
+            left: ((ReadOnlySpan<ulong>)left),
+            right: ((ReadOnlySpan<ulong>)right)
+        );
 
         var ring = Ring;
 
         Encode(values: left);
-        Encode(values: right);
+        if (!sameOperands) { Encode(values: right); }
         Butterfly(
             twiddles: plan.ForwardTwiddles,
             values: left
         );
-        Butterfly(
-            twiddles: plan.ForwardTwiddles,
-            values: right
-        );
+        if (!sameOperands) {
+            Butterfly(
+                twiddles: plan.ForwardTwiddles,
+                values: right
+            );
+        }
 
         for (var i = 0; (i < destination.Length); ++i) {
             destination[i] = ring.Multiply(
                 left: left[i],
-                right: right[i]
+                right: (sameOperands ? left[i] : right[i])
             );
         }
 
@@ -169,10 +178,12 @@ public static class NumberTheoreticTransform {
             scale: 1UL,
             values: left
         );
-        DecodeScaled(
-            scale: 1UL,
-            values: right
-        );
+        if (!sameOperands) {
+            DecodeScaled(
+                scale: 1UL,
+                values: right
+            );
+        }
     }
     /// <summary>Computes the forward transform in place: <c>X[k] = sum over n of x[n] * root^(n*k)</c>.</summary>
     /// <param name="plan">The plan for the length of <paramref name="values"/>.</param>
@@ -217,10 +228,15 @@ public static class NumberTheoreticTransform {
     /// <summary>Multiplies two sequences elementwise in the field.</summary>
     /// <param name="left">The first sequence.</param>
     /// <param name="right">The second sequence, the same length as <paramref name="left"/>.</param>
-    /// <param name="destination">Receives the elementwise product, the same length as the operands; may alias either.</param>
-    /// <exception cref="ArgumentException">The three spans do not share one length; <c>ParamName</c> names the first that disagrees with <paramref name="left"/>.</exception>
+    /// <param name="destination">Receives the elementwise product, the same length as the operands; may be the exact same span as either operand, but may not otherwise overlap one.</param>
+    /// <exception cref="ArgumentException">The three spans do not share one length, or <paramref name="destination"/> partially overlaps an operand. <c>ParamName</c> names the refused span.</exception>
     public static void PointwiseMultiply(ReadOnlySpan<ulong> left, ReadOnlySpan<ulong> right, Span<ulong> destination) {
         TransformKernels.RequireMatchingLengths(
+            destination: ((ReadOnlySpan<ulong>)destination),
+            left: left,
+            right: right
+        );
+        TransformKernels.RequirePointwiseAliasing(
             destination: ((ReadOnlySpan<ulong>)destination),
             left: left,
             right: right

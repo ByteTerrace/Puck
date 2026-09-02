@@ -623,7 +623,7 @@ internal static class PresentedStructureClaims {
         // The Ostrowski copy folds the SAME recurrence into its convergent denominators, so the transfer's first
         // entry over a_1..a_k is the denominator q_k the shipped evaluator reports for the representation 1.q_k.
         foreach (var (p, q, d, r) in new (long P, long Q, long D, long R)[] { (0, 1, 2, 1), (1, 1, 5, 2) }) {
-            var system = QuadraticOstrowskiSystem.Create(basis: QuadraticSurd.Create(denominator: r, radicand: d, rationalNumerator: p, surdNumerator: q));
+            var system = QuadraticOstrowskiSystem.Create(basis: RealQuadratic.Create(denominator: r, radicand: d, rationalNumerator: p, surdNumerator: q));
 
             for (var length = 1; (length <= 8); ++length) {
                 var quotients = new BigInteger[length];
@@ -661,7 +661,7 @@ internal static class PresentedStructureClaims {
                     var entryC = transfer.Entry(column: 0, row: 1, value: product);
                     var entryD = transfer.Entry(column: 1, row: 1, value: product);
                     var discriminant = (((entryD - entryA) * (entryD - entryA)) + ((4 * entryB) * entryC));
-                    var tail = QuadraticSurd.Create(rationalNumerator: (entryA - entryD), surdNumerator: BigInteger.One, radicand: discriminant, denominator: (2 * entryC));
+                    var tail = RealQuadratic.Create(rationalNumerator: (entryA - entryD), surdNumerator: BigInteger.One, radicand: discriminant, denominator: (2 * entryC));
 
                     if (tail != SturmianReturnSpectrumResearch.PeriodicTail(period: period, start: start, step: step)) {
                         return $"the Sturmian periodic tail at start {start} step {step} disagrees with the transfer product";

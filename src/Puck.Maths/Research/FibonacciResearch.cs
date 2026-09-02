@@ -10,11 +10,11 @@ namespace Puck.Maths.Research;
 /// </remarks>
 public readonly record struct GoldenInteger(BigInteger A, BigInteger B) {
     /// <summary>Gets the exact conjugate embedding <c>A + B·(1−τ)</c>.</summary>
-    public QuadraticSurd ConjugateEmbedding =>
-        (QuadraticSurd.Rational(value: A) + (QuadraticSurd.Rational(value: B) * FibonacciResearch.GoldenConjugate));
+    public RealQuadratic ConjugateEmbedding =>
+        (RealQuadratic.Rational(value: A) + (RealQuadratic.Rational(value: B) * FibonacciResearch.GoldenConjugate));
     /// <summary>Gets the exact real embedding <c>A + B·τ</c>.</summary>
-    public QuadraticSurd Embedding =>
-        (QuadraticSurd.Rational(value: A) + (QuadraticSurd.Rational(value: B) * FibonacciResearch.GoldenRatio));
+    public RealQuadratic Embedding =>
+        (RealQuadratic.Rational(value: A) + (RealQuadratic.Rational(value: B) * FibonacciResearch.GoldenRatio));
     /// <summary>Gets the integral algebraic norm <c>A² + A·B − B²</c>.</summary>
     public BigInteger Norm => (((A * A) + (A * B)) - (B * B));
 
@@ -60,23 +60,23 @@ public enum GoldenProjectiveOrbit {
 /// <summary>Exact Fibonacci and golden-ring tools backed by the proved two-adic formulas.</summary>
 public static class FibonacciResearch {
     /// <summary>Gets <c>τ = (1 + √5) / 2</c>.</summary>
-    public static QuadraticSurd GoldenRatio { get; } = QuadraticSurd.Create(
+    public static RealQuadratic GoldenRatio { get; } = RealQuadratic.Create(
         denominator: 2,
         radicand: 5,
         rationalNumerator: 1,
         surdNumerator: 1
     );
     /// <summary>Gets the conjugate <c>1−τ = (1 − √5) / 2</c>.</summary>
-    public static QuadraticSurd GoldenConjugate { get; } = QuadraticSurd.Create(
+    public static RealQuadratic GoldenConjugate { get; } = RealQuadratic.Create(
         denominator: 2,
         radicand: 5,
         rationalNumerator: 1,
         surdNumerator: -1
     );
 
-    internal static QuadraticSurd GoldenPower(int exponent) {
+    internal static RealQuadratic GoldenPower(int exponent) {
         ArgumentOutOfRangeException.ThrowIfNegative(exponent);
-        var result = QuadraticSurd.One;
+        var result = RealQuadratic.One;
         var factor = GoldenRatio;
         var remaining = exponent;
 
@@ -238,35 +238,35 @@ public readonly record struct FibonacciSymmetricMinimum(
     BigInteger Kappa
 ) {
     /// <summary>Gets the exact asymptotic critical exponent of the symmetric Fibonacci construction.</summary>
-    public QuadraticSurd CriticalExponent =>
-        (QuadraticSurd.One +
+    public RealQuadratic CriticalExponent =>
+        (RealQuadratic.One +
         ((FibonacciResearch.GoldenRatio * FibonacciResearch.GoldenRatio) /
-            (QuadraticSurd.Rational(value: Period) * Weight)));
+            (RealQuadratic.Rational(value: Period) * Weight)));
     /// <summary>Gets the exact strict admissibility cutoff <c>τ²/H</c>.</summary>
-    public QuadraticSurd Cutoff =>
+    public RealQuadratic Cutoff =>
         ((FibonacciResearch.GoldenRatio * FibonacciResearch.GoldenRatio) /
-        QuadraticSurd.Rational(value: Period));
+        RealQuadratic.Rational(value: Period));
     /// <summary>Gets <c>H²(E*−1) = H·τ²/Weight</c>.</summary>
-    public QuadraticSurd DeterminantNormalizedExcess =>
-        (((QuadraticSurd.Rational(value: Period) * FibonacciResearch.GoldenRatio) *
+    public RealQuadratic DeterminantNormalizedExcess =>
+        (((RealQuadratic.Rational(value: Period) * FibonacciResearch.GoldenRatio) *
             FibonacciResearch.GoldenRatio) / Weight);
     /// <summary>Gets the exact approximation error <c>|Lambda·τ − Kappa|</c>.</summary>
-    public QuadraticSurd Error =>
-        ((QuadraticSurd.Rational(value: Lambda) * FibonacciResearch.GoldenRatio) -
-            QuadraticSurd.Rational(value: Kappa)).Abs();
+    public RealQuadratic Error =>
+        ((RealQuadratic.Rational(value: Lambda) * FibonacciResearch.GoldenRatio) -
+            RealQuadratic.Rational(value: Kappa)).Abs();
     /// <summary>
     /// Gets whether the determinant-normalized candidate is strictly below the proved non-Fibonacci gap
     /// <c>8/3</c>.
     /// </summary>
     public bool IsBelowThreeCellGap =>
-        (DeterminantNormalizedExcess < QuadraticSurd.Rational(
+        (DeterminantNormalizedExcess < RealQuadratic.Rational(
             denominator: 3,
             numerator: 8
         ));
     /// <summary>Gets the exact minimum weight <c>Lambda + Kappa·τ = τ^(N+1)</c>.</summary>
-    public QuadraticSurd Weight =>
-        (QuadraticSurd.Rational(value: Lambda) +
-        (QuadraticSurd.Rational(value: Kappa) * FibonacciResearch.GoldenRatio));
+    public RealQuadratic Weight =>
+        (RealQuadratic.Rational(value: Lambda) +
+        (RealQuadratic.Rational(value: Kappa) * FibonacciResearch.GoldenRatio));
 
     private static FibonacciSymmetricMinimum FromFibonacciPair(BigInteger period, int scaleIndex) {
         var (lambda, kappa) = FibonacciResearch.FibonacciPair(index: scaleIndex);
@@ -282,8 +282,8 @@ public readonly record struct FibonacciSymmetricMinimum(
     public static FibonacciSymmetricMinimum Find(BigInteger period) {
         if (period.Sign <= 0) { throw new ArgumentOutOfRangeException(paramName: nameof(period)); }
 
-        var periodValue = QuadraticSurd.Rational(value: period);
-        var power = QuadraticSurd.One;
+        var periodValue = RealQuadratic.Rational(value: period);
+        var power = RealQuadratic.One;
         var exponent = 0;
 
         while ((power * FibonacciResearch.GoldenRatio) <= periodValue) {
@@ -326,7 +326,7 @@ public readonly record struct FibonacciSymmetricMinimum(
 
         var lowerPower = FibonacciResearch.GoldenPower(exponent: (ScaleIndex + 1));
         var upperPower = FibonacciResearch.GoldenPower(exponent: (ScaleIndex + 2));
-        var periodValue = QuadraticSurd.Rational(value: Period);
+        var periodValue = RealQuadratic.Rational(value: Period);
 
         if (
             (lowerPower > periodValue) ||
@@ -378,8 +378,8 @@ public readonly record struct FibonacciRulerLetter(bool BaseLetter, int Color) {
 /// the occurrence color is <c>min(v₂(rank+1), RulerDepth)</c>. No prefix is materialized.
 /// </remarks>
 public sealed class FibonacciRulerWordIndex {
-    private static readonly QuadraticSurd BaseSlope =
-        (QuadraticSurd.One - (QuadraticSurd.One / FibonacciResearch.GoldenRatio));
+    private static readonly RealQuadratic BaseSlope =
+        (RealQuadratic.One - (RealQuadratic.One / FibonacciResearch.GoldenRatio));
 
     /// <summary>Creates the construction on <c>2·(rulerDepth+1)</c> letters.</summary>
     public FibonacciRulerWordIndex(int rulerDepth) {
@@ -470,6 +470,6 @@ public sealed class FibonacciRulerWordIndex {
     /// <summary>Counts true base letters in <c>[0, exclusiveEnd)</c>.</summary>
     public BigInteger TruePrefixCount(BigInteger exclusiveEnd) {
         if (exclusiveEnd.Sign < 0) { throw new ArgumentOutOfRangeException(paramName: nameof(exclusiveEnd)); }
-        return (QuadraticSurd.Rational(value: (exclusiveEnd + BigInteger.One)) * BaseSlope).Floor();
+        return (RealQuadratic.Rational(value: (exclusiveEnd + BigInteger.One)) * BaseSlope).Floor();
     }
 }

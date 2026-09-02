@@ -33,12 +33,12 @@ public readonly record struct FibonacciPeriodDecompositionCertificate(
     BigInteger CentralFactorLength
 ) {
     /// <summary>Gets the exact strip cutoff <c>τ²</c>.</summary>
-    public static QuadraticSurd StripCutoff =>
+    public static RealQuadratic StripCutoff =>
         (FibonacciResearch.GoldenRatio * FibonacciResearch.GoldenRatio);
     /// <summary>Gets the exact strip quantity <c>|l·τ−k|</c>.</summary>
-    public QuadraticSurd StripError =>
-        ((QuadraticSurd.Rational(value: ShortBlockCount) * FibonacciResearch.GoldenRatio) -
-            QuadraticSurd.Rational(value: LongBlockCount)).Abs();
+    public RealQuadratic StripError =>
+        ((RealQuadratic.Rational(value: ShortBlockCount) * FibonacciResearch.GoldenRatio) -
+            RealQuadratic.Rational(value: LongBlockCount)).Abs();
 
     /// <summary>Rechecks every clause of the corresponding Lean predicate.</summary>
     public bool Verify(FibonacciRulerWordIndex word) {
@@ -105,8 +105,8 @@ public readonly record struct FibonacciCanonicalReturnProfile(
     BigInteger LongCoordinate,
     BigInteger CentralFactorLength
 ) {
-    private static QuadraticSurd BaseSlope =>
-        (QuadraticSurd.One - (QuadraticSurd.One / FibonacciResearch.GoldenRatio));
+    private static RealQuadratic BaseSlope =>
+        (RealQuadratic.One - (RealQuadratic.One / FibonacciResearch.GoldenRatio));
 
     /// <summary>
     /// Gets whether the two convergent denominators used by the Lean bracket fit inside
@@ -119,7 +119,7 @@ public readonly record struct FibonacciCanonicalReturnProfile(
         }
     }
     /// <summary>Gets the sum of the two exact convergent-error magnitudes.</summary>
-    public QuadraticSurd ApproximantErrorRadius =>
+    public RealQuadratic ApproximantErrorRadius =>
         (ShortApproximantError.Abs() + LongApproximantError.Abs());
     /// <summary>
     /// Gets whether the neighboring-error radius is exactly the canonical mechanical cutoff.
@@ -131,9 +131,9 @@ public readonly record struct FibonacciCanonicalReturnProfile(
         (((ShortApproximantError.Sign < 0) && (LongApproximantError.Sign > 0)) ||
         ((ShortApproximantError.Sign > 0) && (LongApproximantError.Sign < 0)));
     /// <summary>Gets the exact coordinate-strip quantity <c>|l·τ−k|</c>.</summary>
-    public QuadraticSurd CoordinateStripError =>
-        ((QuadraticSurd.Rational(value: ShortCoordinate) * FibonacciResearch.GoldenRatio) -
-            QuadraticSurd.Rational(value: LongCoordinate)).Abs();
+    public RealQuadratic CoordinateStripError =>
+        ((RealQuadratic.Rational(value: ShortCoordinate) * FibonacciResearch.GoldenRatio) -
+            RealQuadratic.Rational(value: LongCoordinate)).Abs();
     /// <summary>Gets whether the coordinates lie in the open strip <c>|l·τ−k| &lt; τ²</c>.</summary>
     public bool CoordinateStripHolds =>
         (CoordinateStripError < FibonacciPeriodDecompositionCertificate.StripCutoff);
@@ -146,39 +146,39 @@ public readonly record struct FibonacciCanonicalReturnProfile(
     /// Gets the error of the long neighboring convergent
     /// <c>F_(phase+2)·τ⁻² − F_phase</c>.
     /// </summary>
-    public QuadraticSurd LongApproximantError {
+    public RealQuadratic LongApproximantError {
         get {
             var (phaseValue, phasePlusOne) = FibonacciResearch.FibonacciPair(index: Phase);
             var phasePlusTwo = (phaseValue + phasePlusOne);
 
-            return ((QuadraticSurd.Rational(value: phasePlusTwo) * BaseSlope) -
-                QuadraticSurd.Rational(value: phaseValue));
+            return ((RealQuadratic.Rational(value: phasePlusTwo) * BaseSlope) -
+                RealQuadratic.Rational(value: phaseValue));
         }
     }
     /// <summary>Gets whether the exact mechanical-error inequality proved in Lean holds.</summary>
     public bool MechanicalBoundHolds => (MechanicalError < MechanicalCutoff);
     /// <summary>Gets the canonical cutoff <c>τ^(-phase)</c>.</summary>
-    public QuadraticSurd MechanicalCutoff =>
-        (QuadraticSurd.One / FibonacciResearch.GoldenPower(exponent: Phase));
+    public RealQuadratic MechanicalCutoff =>
+        (RealQuadratic.One / FibonacciResearch.GoldenPower(exponent: Phase));
     /// <summary>Gets the absolute mechanical discrepancy.</summary>
-    public QuadraticSurd MechanicalError => SignedMechanicalError.Abs();
+    public RealQuadratic MechanicalError => SignedMechanicalError.Abs();
     /// <summary>
     /// Gets the error of the short neighboring convergent
     /// <c>F_(phase+1)·τ⁻² − F_(phase−1)</c>.
     /// </summary>
-    public QuadraticSurd ShortApproximantError {
+    public RealQuadratic ShortApproximantError {
         get {
             var (phaseMinusOne, phaseValue) = FibonacciResearch.FibonacciPair(index: (Phase - 1));
             var phasePlusOne = (phaseMinusOne + phaseValue);
 
-            return ((QuadraticSurd.Rational(value: phasePlusOne) * BaseSlope) -
-                QuadraticSurd.Rational(value: phaseMinusOne));
+            return ((RealQuadratic.Rational(value: phasePlusOne) * BaseSlope) -
+                RealQuadratic.Rational(value: phaseMinusOne));
         }
     }
     /// <summary>Gets the signed mechanical discrepancy <c>root·τ⁻² − trueCount</c>.</summary>
-    public QuadraticSurd SignedMechanicalError =>
-        ((QuadraticSurd.Rational(value: Root) * BaseSlope) -
-        QuadraticSurd.Rational(value: RootCounts.TrueCount));
+    public RealQuadratic SignedMechanicalError =>
+        ((RealQuadratic.Rational(value: Root) * BaseSlope) -
+        RealQuadratic.Rational(value: RootCounts.TrueCount));
 
     /// <summary>
     /// Converts the profile to the exact Lean period-decomposition certificate when the two

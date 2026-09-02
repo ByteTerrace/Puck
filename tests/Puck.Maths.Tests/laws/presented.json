@@ -7025,7 +7025,7 @@
         "Kind": "Classical",
         "Flavor": "None",
         "Subject": "PresentationCertificate\u003CQuadraticSurd\u003E.BraidingCharge of the mirror pair at a swap charge of two",
-        "Against": "one half, QuadraticSurd.Rational(1, 2) at Subjects.cs:7502-7505",
+        "Against": "one half, RealQuadratic.Rational(1, 2) at Subjects.cs:7502-7505",
         "Shared": "",
         "Citation": "re-derived by hand from the declared swap charge; a single point",
         "Absolute": ""
@@ -8993,43 +8993,43 @@
         "Name": "Trace"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "Algebra"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "Certificate"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "CharacteristicPolynomial"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "Coefficient"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "DegreeBound"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "DynamicalZeta"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "Order"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "PowerSum"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "Series"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "TryCreate"
       },
       {
@@ -9304,43 +9304,43 @@
         "Name": "Quiver"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "Algebra"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "Certificate"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "CharacteristicPolynomial"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "Coefficient"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "DegreeBound"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "DynamicalZeta"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "Order"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "PowerSum"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "Series"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "TryCreate"
       },
       {
@@ -9573,43 +9573,43 @@
         "Name": "Item"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "Algebra"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "Certificate"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "CharacteristicPolynomial"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "Coefficient"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "DegreeBound"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "DynamicalZeta"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "Order"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "PowerSum"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "Series"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "TryCreate"
       },
       {
@@ -9838,43 +9838,43 @@
         "Name": "Quiver"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "Algebra"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "Certificate"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "CharacteristicPolynomial"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "Coefficient"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "DegreeBound"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "DynamicalZeta"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "Order"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "PowerSum"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "Series"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "TryCreate"
       },
       {
@@ -12681,7 +12681,7 @@
         "Kind": "SharedSubstrate",
         "Flavor": "IntraPresented",
         "Subject": "PlatStateSum.Evaluate on a word with a curl appended, prepended, or mirrored",
-        "Against": "the unperturbed value times minus the crossing charge cubed, or its inverse, formed in QuadraticSurd",
+        "Against": "the unperturbed value times minus the crossing charge cubed, or its inverse, formed in RealQuadratic",
         "Shared": "the same PlatStateSum, and the scalar factor is formed in the subject\u0027s own carrier",
         "Citation": "",
         "Absolute": ""
@@ -12814,43 +12814,43 @@
         "Name": "RuleIndex"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "Algebra"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "Certificate"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "CharacteristicPolynomial"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "Coefficient"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "DegreeBound"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "DynamicalZeta"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "Order"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "PowerSum"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "Series"
       },
       {
-        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.GraphZeta\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "TryCreate"
       },
       {
@@ -13981,23 +13981,23 @@
         "Name": "RowCell"
       },
       {
-        "Type": "Puck.Maths.FieldHomology\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.FieldHomology\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "BettiNumber"
       },
       {
-        "Type": "Puck.Maths.FieldHomology\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.FieldHomology\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "BoundaryRank"
       },
       {
-        "Type": "Puck.Maths.FieldHomology\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.FieldHomology\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "Create"
       },
       {
-        "Type": "Puck.Maths.FieldHomology\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.FieldHomology\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "Dimension"
       },
       {
-        "Type": "Puck.Maths.FieldHomology\u00602[[Puck.Maths.QuadraticSurd, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Type": "Puck.Maths.FieldHomology\u00602[[Puck.Maths.RealQuadratic, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null],[Puck.Maths.RationalMaterial, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "Name": "EulerCharacteristic"
       },
       {

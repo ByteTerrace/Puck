@@ -415,7 +415,7 @@
         "Kind": "Classical",
         "Flavor": "None",
         "Subject": "the exact characteristic root",
-        "Against": "the characteristic-polynomial identity checked in EXACT QuadraticSurd field arithmetic — no floating point anywhere",
+        "Against": "the characteristic-polynomial identity checked in EXACT RealQuadratic field arithmetic — no floating point anywhere",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -442,7 +442,7 @@
         "Kind": "Classical",
         "Flavor": "None",
         "Subject": "the polynomial continued-fraction analysis slope and offset",
-        "Against": "hand-declared exact QuadraticSurd constants — exact on both sides, no floating point",
+        "Against": "hand-declared exact RealQuadratic constants — exact on both sides, no floating point",
         "Shared": "",
         "Citation": "",
         "Absolute": ""

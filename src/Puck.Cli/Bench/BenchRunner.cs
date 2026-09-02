@@ -4,9 +4,10 @@ using BenchmarkDotNet.Running;
 
 namespace Puck.Cli.Bench;
 
-// The `puck bench` verb: the on-demand Puck.Maths microscope. Every benchmark class is named 1:1 after a
-// scenario of the standalone quadratic-algebra bench, which no longer builds — of that scenario grid only
-// the complex-multiply ratio is still measured anywhere, by BenchTests in tests/Puck.Maths.Tests.
+// The `puck bench` verb: the on-demand Puck.Maths microscope. The original algebra classes remain named 1:1 after
+// scenarios of the standalone quadratic-algebra bench, which no longer builds; workload-specific classes cover
+// transforms and other Maths kernels. Of the retired grid only the complex-multiply ratio is still measured
+// automatically, by BenchTests in tests/Puck.Maths.Tests.
 //
 //   puck bench --filter '*Norm*'
 //

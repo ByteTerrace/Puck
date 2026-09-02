@@ -334,14 +334,13 @@ not the verdict.
 | Speed | Fast, runs in CI | Slow, run by hand on a quiet machine |
 | Determinism | Fixed seeds, zero-alloc asserted | Same fixed seeds and regimes; framework owns the timing loop |
 
-### Scenario ↔ bench mapping
+### Benchmark inventory
 
-Every benchmark class is named **1:1** after a scenario of the standalone
-quadratic-algebra bench, and every method name is stable, so a row here lines up
-with a row that bench produced on the same machine. That bench no longer builds;
-of the grid below, **only scenario 1's generic/hand ratio is measured by anything
-automatic** (the test-suite ratio gate). The other seven are exercised by this
-verb, by hand, and nowhere else.
+The original algebra benchmark classes retain a **1:1** mapping to scenarios
+from the retired standalone quadratic-algebra bench. Their method names remain
+stable so historical rows can be compared on the same machine. Of the grid
+below, **only scenario 1's generic/hand ratio is measured automatically** by the
+test-suite ratio gate; the other seven are manual microscope workloads.
 
 | Bench scenario | Class here | Methods |
 |---|---|---|
@@ -353,6 +352,24 @@ verb, by hand, and nowhere else.
 | `5. dual quaternion mul (latency)`  | `DualQuaternionMul`  | `Hand` (baseline), `GenericStatic`, `GenericLocal` |
 | `6a. extension mul (latency)`       | `ExtensionMul`       | `Hand` (baseline), `GenericStatic`, `GenericLocal` |
 | `6b. extension-only operations`     | `ExtensionOnly`      | `Frobenius`, `BatchInverse` (no generic counterpart — structural gap) |
+
+The microscope also contains workload-specific classes that never belonged to
+that retired scenario grid. Transform families include direct/naive baselines,
+pristine-input forward/inverse latency, and explicit plan-construction cost:
+
+| Workload | Classes | What is measured |
+|---|---|---|
+| Number-theoretic transform | `NttConvolveVsNaive`, `NttForwardInverse` | Cyclic convolution against the O(N²) definition; forward/inverse latency. |
+| Walsh–Hadamard transform | `WhtForwardVsNaive`, `WhtForwardInverse` | Network against the O(N²) definition; forward/inverse latency. |
+| Fixed Fourier transform | `FftForwardVsDirectSum`, `FftForwardInverse`, `FftConvolveVsNaive` | Forward/convolution against direct definitions; forward/inverse latency. |
+| Fixed cosine transform | `DctForwardVsDirectSum`, `DctForwardInverse` | Fourier route against the direct DCT; forward/inverse latency. |
+| Reusable transform plans | `TransformPlanCreation` | Construction time and allocated bytes for NTT, FFT and DCT plans. |
+
+Each forward/inverse latency class uses one invocation per iteration and
+restores its working array in `IterationSetup`, outside the timed operation, so
+every sample measures the same data regime rather than another transform of the
+previous sample. Inverse inputs are valid spectra precomputed once from the
+matching forward inputs during global setup.
 
 `GenericStatic` reads the algebra from a static-readonly field (the JIT may fold
 `P`/`Q` to constants after tier-up); `GenericLocal` receives it as a

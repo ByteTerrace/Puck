@@ -3,8 +3,8 @@ using System.Numerics;
 namespace Puck.Maths;
 
 /// <summary>
-/// Provides exact operations on arbitrary-width signed integers: the floor square root, the modular inverse, and the
-/// modular square root over an odd prime.
+/// Provides exact operations on arbitrary-width signed integers: the floor square root, the modular inverse, the
+/// modular square root over an odd prime, and the correctly rounded conversion to <see cref="double"/>.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -375,6 +375,87 @@ public static class BigIntegerFunctions {
 
             estimate = next;
         }
+    }
+    /// <summary>Converts <paramref name="value"/> · 2^<paramref name="binaryExponent"/> to the nearest <see cref="double"/>, ties to even.</summary>
+    /// <param name="value">The integer.</param>
+    /// <param name="binaryExponent">The power of two the integer is scaled by; zero converts the integer itself.</param>
+    /// <returns>The correctly rounded <see cref="double"/>: infinite past the overflow midpoint, subnormal or zero below the normal range.</returns>
+    /// <remarks>
+    /// The platform's own <see cref="BigInteger"/> to <see cref="double"/> conversion truncates toward zero, so a value
+    /// wider than fifty-three bits can land one unit in the last place short of the nearest double; this conversion
+    /// rounds the discarded bits and is the one every exact type in this library converts through.
+    /// </remarks>
+    public static double ToDouble(BigInteger value, int binaryExponent = 0) {
+        if (value.IsZero) { return 0.0; }
+
+        var result = RoundToDouble(
+            binaryExponent: binaryExponent,
+            hasRemainder: false,
+            magnitude: BigInteger.Abs(value: value)
+        );
+
+        return ((value.Sign < 0) ? -result : result);
+    }
+    /// <summary>Converts a toward-zero truncation of a magnitude to the nearest <see cref="double"/> of the value it
+    /// truncates, so a quotient's discarded remainder still steers the rounding.</summary>
+    /// <param name="truncatedMagnitude">The truncated magnitude, non-negative and at least fifty-four bits wide when a remainder is reported, so the remainder sits wholly below the rounding position.</param>
+    /// <param name="binaryExponent">The power of two the magnitude is scaled by.</param>
+    /// <param name="hasRemainder">Whether the true magnitude lies strictly between the truncation and the truncation plus one unit.</param>
+    /// <returns>The nearest <see cref="double"/> to the true magnitude, ties to even; the caller restores the sign.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="truncatedMagnitude"/> is negative.</exception>
+    /// <exception cref="ArgumentException"><paramref name="hasRemainder"/> is set on a magnitude narrower than fifty-four bits, whose remainder could reach the rounding position.</exception>
+    public static double ToDouble(BigInteger truncatedMagnitude, int binaryExponent, bool hasRemainder) {
+        if (truncatedMagnitude.Sign < 0) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(truncatedMagnitude), message: "A truncated magnitude is non-negative; the caller carries the sign.");
+        }
+
+        if (hasRemainder && (truncatedMagnitude.GetBitLength() < 54L)) {
+            throw new ArgumentException(message: "A remainder can only steer the rounding of a magnitude at least fifty-four bits wide.", paramName: nameof(truncatedMagnitude));
+        }
+
+        if (truncatedMagnitude.IsZero) { return 0.0; }
+
+        return RoundToDouble(
+            binaryExponent: binaryExponent,
+            hasRemainder: hasRemainder,
+            magnitude: truncatedMagnitude
+        );
+    }
+
+    // Round-to-nearest-even of magnitude · 2^binaryExponent for a positive magnitude: the kept width is fifty-three
+    // bits, or fewer below the normal range so the result lands on the subnormal grid; the first discarded bit is the
+    // round bit, and every bit under it plus any reported remainder forms the sticky bit. An exactly representable
+    // magnitude is scaled without rounding.
+    private static double RoundToDouble(BigInteger magnitude, int binaryExponent, bool hasRemainder) {
+        var bits = (long)magnitude.GetBitLength();
+        var top = (bits + binaryExponent);
+
+        if (top > 1024L) { return double.PositiveInfinity; }
+
+        var precision = Math.Min(val1: 53L, val2: (top + 1074L));
+
+        if (precision < 0L) { return 0.0; }
+
+        var drop = (bits - precision);
+
+        if (drop <= 0L) {
+            return Math.ScaleB(
+                n: binaryExponent,
+                x: ((double)((long)magnitude))
+            );
+        }
+
+        var shifted = ((long)(magnitude >> ((int)(drop - 1L))));
+        var kept = (shifted >> 1);
+        var roundBit = ((shifted & 1L) != 0L);
+        var sticky = (hasRemainder || (BigInteger.TrailingZeroCount(value: magnitude) < (drop - 1L)));
+
+        if (roundBit && (sticky || ((kept & 1L) != 0L))) { ++kept; }
+
+        return Math.ScaleB(
+            n: ((int)(binaryExponent + drop)),
+            x: ((double)kept)
+        );
     }
     /// <summary>Attempts to compute a square root of a value modulo an odd prime.</summary>
     /// <param name="value">The value to take the root of. It is reduced modulo <paramref name="oddPrime"/> on entry, so any sign and magnitude are admitted.</param>

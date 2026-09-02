@@ -50,6 +50,10 @@ public class WhtForwardVsNaive {
 // representative of a large one.
 [MemoryDiagnoser]
 public class WhtForwardInverse {
+    private long[] m_smallForwardInput = [];
+    private long[] m_largeForwardInput = [];
+    private long[] m_smallInverseInput = [];
+    private long[] m_largeInverseInput = [];
     private long[] m_smallValues = [];
     private long[] m_largeValues = [];
 
@@ -57,12 +61,27 @@ public class WhtForwardInverse {
     public void Setup() {
         var rng = new Random(Seed: Operands.Seed);
 
-        m_smallValues = new long[256];
-        m_largeValues = new long[16384];
+        m_smallForwardInput = new long[256];
+        m_largeForwardInput = new long[16384];
+        m_smallValues = new long[m_smallForwardInput.Length];
+        m_largeValues = new long[m_largeForwardInput.Length];
 
-        for (var i = 0; (i < m_smallValues.Length); ++i) { m_smallValues[i] = Operands.NarrowRaw(rng: rng); }
-        for (var i = 0; (i < m_largeValues.Length); ++i) { m_largeValues[i] = Operands.NarrowRaw(rng: rng); }
+        for (var i = 0; (i < m_smallForwardInput.Length); ++i) { m_smallForwardInput[i] = Operands.NarrowRaw(rng: rng); }
+        for (var i = 0; (i < m_largeForwardInput.Length); ++i) { m_largeForwardInput[i] = Operands.NarrowRaw(rng: rng); }
+
+        m_smallInverseInput = ((long[])m_smallForwardInput.Clone());
+        m_largeInverseInput = ((long[])m_largeForwardInput.Clone());
+        WalshHadamardTransform.Forward<long>(values: m_smallInverseInput);
+        WalshHadamardTransform.Forward<long>(values: m_largeInverseInput);
     }
+    [IterationSetup(Target = nameof(ForwardSmall))]
+    public void ResetForwardSmall() => m_smallForwardInput.CopyTo(array: m_smallValues, index: 0);
+    [IterationSetup(Target = nameof(InverseSmall))]
+    public void ResetInverseSmall() => m_smallInverseInput.CopyTo(array: m_smallValues, index: 0);
+    [IterationSetup(Target = nameof(ForwardLarge))]
+    public void ResetForwardLarge() => m_largeForwardInput.CopyTo(array: m_largeValues, index: 0);
+    [IterationSetup(Target = nameof(InverseLarge))]
+    public void ResetInverseLarge() => m_largeInverseInput.CopyTo(array: m_largeValues, index: 0);
     [Benchmark]
     public long ForwardSmall() {
         WalshHadamardTransform.Forward<long>(values: m_smallValues);

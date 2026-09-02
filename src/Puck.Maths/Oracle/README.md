@@ -168,7 +168,7 @@ in the Carrier column. Four carriers deserve a word of their own. `FixedQ4816`
 is the library's signed fixed-point scalar: 48 integer bits and 16 fraction
 bits, which is what the name Q48.16 records, so it represents fractions exactly
 on a grid of 2⁻¹⁶ rather than using floating point. `UnitInterval32` is the
-closed interval [0, 1] on a 2⁻³² grid. `QuadraticSurd` is an exact value of the
+closed interval [0, 1] on a 2⁻³² grid. `RealQuadratic` is an exact value of the
 form (a + b·√d)/c, carried without floating point. `BigInteger` is .NET's
 arbitrary-width integer, which never overflows.
 
@@ -192,7 +192,7 @@ qualified by it.
 | `TropicalMaterial` | nonnegative `FixedQ4816` plus the infinity sentinel | min | saturating `+` | idempotent exact semiring | exact |
 | `FixedMaterial` | `FixedQ4816` | wrapping `+` | wrapping one-rounding product | signed scheduled material | per-operation schedule; not globally associative |
 | `IntegerMaterial` | `BigInteger` | `+` | `*` | signed exact semiring | exact |
-| `RationalMaterial` | `QuadraticSurd` | `+` | `*` | field | exact |
+| `RationalMaterial` | `RealQuadratic` | `+` | `*` | field | exact |
 | `PrimeFieldMaterial` | canonical `ulong` residues mod the instance modulus | `+` | `*` | field | exact |
 | `MostLikelyPathMaterial` | `UnitInterval32` | max | one-rounding product | scheduled material | one rounding; product is not globally associative |
 | `FuzzyMaterial` | `UnitInterval32` | max | min | complemented exact semiring | exact |

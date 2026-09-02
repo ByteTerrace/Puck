@@ -220,10 +220,12 @@ public readonly record struct CompiledDiscreteMeasure64 {
         out DiscreteMeasureCompilationFailure failure) {
         // Unreachable through the public surface: DiscreteMeasure.Create validates the shared quadratic field with
         // `rate + offset`, so a constructed measure's operands always have a common radical part.
-        if (!QuadraticSurd.TryCommonRadicalParts(
+        if (!RealQuadratic.TryCommonField(
+            field: out var commonField,
             left: source.Rate,
-            result: out var common,
-            right: source.Offset
+            leftSurdNumerator: out var rateSurdNumerator,
+            right: source.Offset,
+            rightSurdNumerator: out var offsetSurdNumerator
         )) {
             compiled = default;
             failure = DiscreteMeasureCompilationFailure.CoefficientOutOfRange;
@@ -234,10 +236,10 @@ public readonly record struct CompiledDiscreteMeasure64 {
         var rateScale = (denominator / source.Rate.Denominator);
         var offsetScale = (denominator / source.Offset.Denominator);
         var rateRational = (source.Rate.RationalNumerator * rateScale);
-        var rateSurd = (common.LeftSurdNumerator * rateScale);
+        var rateSurd = (rateSurdNumerator * rateScale);
         var offsetRational = (source.Offset.RationalNumerator * offsetScale);
-        var offsetSurd = (common.RightSurdNumerator * offsetScale);
-        var radicand = common.Radicand;
+        var offsetSurd = (offsetSurdNumerator * offsetScale);
+        var radicand = commonField.Radicand;
 
         if (
             !TryInt64Coefficient(

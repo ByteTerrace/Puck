@@ -608,103 +608,103 @@
     ]
   },
   {
-    "Id": "core.quadratic-surd-field-and-conversion",
+    "Id": "core.real-quadratic-field-and-conversion",
     "Tier": "Default",
     "Members": [
       {
-        "Type": "Puck.Maths.QuadraticSurd",
+        "Type": "Puck.Maths.RealQuadratic",
         "Name": "Abs"
       },
       {
-        "Type": "Puck.Maths.QuadraticSurd",
+        "Type": "Puck.Maths.RealQuadratic",
         "Name": "Ceiling"
       },
       {
-        "Type": "Puck.Maths.QuadraticSurd",
+        "Type": "Puck.Maths.RealQuadratic",
         "Name": "CompareTo"
       },
       {
-        "Type": "Puck.Maths.QuadraticSurd",
+        "Type": "Puck.Maths.RealQuadratic",
         "Name": "Create"
       },
       {
-        "Type": "Puck.Maths.QuadraticSurd",
+        "Type": "Puck.Maths.RealQuadratic",
         "Name": "Denominator"
       },
       {
-        "Type": "Puck.Maths.QuadraticSurd",
+        "Type": "Puck.Maths.RealQuadratic",
         "Name": "Floor"
       },
       {
-        "Type": "Puck.Maths.QuadraticSurd",
+        "Type": "Puck.Maths.RealQuadratic",
         "Name": "IsRational"
       },
       {
-        "Type": "Puck.Maths.QuadraticSurd",
+        "Type": "Puck.Maths.RealQuadratic",
         "Name": "One"
       },
       {
-        "Type": "Puck.Maths.QuadraticSurd",
+        "Type": "Puck.Maths.RealQuadratic",
         "Name": "Radicand"
       },
       {
-        "Type": "Puck.Maths.QuadraticSurd",
+        "Type": "Puck.Maths.RealQuadratic",
         "Name": "Rational"
       },
       {
-        "Type": "Puck.Maths.QuadraticSurd",
+        "Type": "Puck.Maths.RealQuadratic",
         "Name": "RationalNumerator"
       },
       {
-        "Type": "Puck.Maths.QuadraticSurd",
+        "Type": "Puck.Maths.RealQuadratic",
         "Name": "Sign"
       },
       {
-        "Type": "Puck.Maths.QuadraticSurd",
+        "Type": "Puck.Maths.RealQuadratic",
         "Name": "SurdNumerator"
       },
       {
-        "Type": "Puck.Maths.QuadraticSurd",
+        "Type": "Puck.Maths.RealQuadratic",
         "Name": "ToDouble"
       },
       {
-        "Type": "Puck.Maths.QuadraticSurd",
+        "Type": "Puck.Maths.RealQuadratic",
         "Name": "Zero"
       },
       {
-        "Type": "Puck.Maths.QuadraticSurd",
+        "Type": "Puck.Maths.RealQuadratic",
         "Name": "op_Addition"
       },
       {
-        "Type": "Puck.Maths.QuadraticSurd",
+        "Type": "Puck.Maths.RealQuadratic",
         "Name": "op_Division"
       },
       {
-        "Type": "Puck.Maths.QuadraticSurd",
+        "Type": "Puck.Maths.RealQuadratic",
         "Name": "op_GreaterThan"
       },
       {
-        "Type": "Puck.Maths.QuadraticSurd",
+        "Type": "Puck.Maths.RealQuadratic",
         "Name": "op_GreaterThanOrEqual"
       },
       {
-        "Type": "Puck.Maths.QuadraticSurd",
+        "Type": "Puck.Maths.RealQuadratic",
         "Name": "op_LessThan"
       },
       {
-        "Type": "Puck.Maths.QuadraticSurd",
+        "Type": "Puck.Maths.RealQuadratic",
         "Name": "op_LessThanOrEqual"
       },
       {
-        "Type": "Puck.Maths.QuadraticSurd",
+        "Type": "Puck.Maths.RealQuadratic",
         "Name": "op_Multiply"
       },
       {
-        "Type": "Puck.Maths.QuadraticSurd",
+        "Type": "Puck.Maths.RealQuadratic",
         "Name": "op_Subtraction"
       },
       {
-        "Type": "Puck.Maths.QuadraticSurd",
+        "Type": "Puck.Maths.RealQuadratic",
         "Name": "op_UnaryNegation"
       }
     ],
@@ -712,7 +712,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "the exact real-quadratic field identities, square-equivalent equality/order, floor/ceiling/sign accessors, and huge shared-scale binary64 conversion including an exact-conjugate cancellation family",
+        "Subject": "the exact real-quadratic field identities over the canonical descriptor-plus-coordinates form (\u221A8 and 2\u00B7\u221A2 are one tuple), square-equivalent equality and ordering, floor, ceiling and sign accessors, and the exact binary64 conversion \u2014 one integer square root at a scale refined from the floored magnitude, one integer conversion \u2014 including a cancelling Pell-like pair whose terms are each 10^800 wide and whose value is one",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -1149,6 +1149,154 @@
         "Against": "FixedPointRounding.RoundRational called DIRECTLY on the SAME (numerator, denominator, fractionBitCount) decimal.GetBits decomposes into — carriage only: agreement proves ScaleDecimalWide is wired to the shared core rather than carrying a second, independently rounding body, never that the core itself rounds correctly",
         "Shared": "FixedPointRounding.RoundRational (internal) — the identical unbounded rational-rounding body FixedPointRounding.TryRoundRational (public) narrows to a signed 64-bit raw, and the one core SecondOrderExactMath.RoundToGuardScale routes through at its own working scale",
         "Citation": "RoundRational's own correctness is independent evidence elsewhere: core.round-rational-scales-ties-and-refuses pins its public TryRoundRational face against an exact BigInteger reference, and q1648.decimal-conversion-modes/q3232.decimal-conversion-modes pin ScaleDecimalWide's PUBLIC decimal-conversion entry points against a wholly independent oracle that never calls RoundRational at all",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.real-quadratic-field-descriptor",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.RealQuadraticField",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.RealQuadraticField",
+        "Name": "Radicand"
+      },
+      {
+        "Type": "Puck.Maths.RealQuadraticField",
+        "Name": "IsRationals"
+      },
+      {
+        "Type": "Puck.Maths.RealQuadraticField",
+        "Name": "Rationals"
+      },
+      {
+        "Type": "Puck.Maths.RealQuadraticField",
+        "Name": "Sqrt"
+      },
+      {
+        "Type": "Puck.Maths.RealQuadraticField",
+        "Name": "Element"
+      },
+      {
+        "Type": "Puck.Maths.RealQuadraticField",
+        "Name": "SmallPrimeBound"
+      },
+      {
+        "Type": "Puck.Maths.RealQuadratic",
+        "Name": "Field"
+      },
+      {
+        "Type": "Puck.Maths.RealQuadratic",
+        "Name": "RationalPart"
+      },
+      {
+        "Type": "Puck.Maths.RealQuadratic",
+        "Name": "SurdPart"
+      },
+      {
+        "Type": "Puck.Maths.RealQuadratic",
+        "Name": "Conjugate"
+      },
+      {
+        "Type": "Puck.Maths.RealQuadratic",
+        "Name": "Norm"
+      },
+      {
+        "Type": "Puck.Maths.RealQuadratic",
+        "Name": "Trace"
+      },
+      {
+        "Type": "Puck.Maths.RealQuadratic",
+        "Name": "FromRational"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "RealQuadraticField.Create canonicalizes its radicand: 8 names the field of \u221a2 with scale 2 and 12 the field of \u221a3 with scale 2, so the two spellings of one field are one descriptor; a perfect square (4, 1) is refused as ArgumentException and a non-positive radicand (0, -2) as ArgumentOutOfRangeException; Rationals reports IsRationals and refuses Sqrt with InvalidOperationException.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "values of one field compare as tuples: \u221a8 and 2\u00b7\u221a2 carry the same field, the same surd numerator 2, equal hash codes, and Element(0, 2, 1) on the field of 2 is that same value; Sqrt \u00b7 Sqrt is the rational radicand and Sqrt + Sqrt the doubled coordinate.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "a square factor above SmallPrimeBound (1031\u00b2) survives canonicalization, and equality, GetHashCode, CompareTo, addition and multiplication still identify \u221a(2\u00b71031\u00b2) with 1031\u00b7\u221a2 exactly by the ratio test \u2014 correctness never rests on the bound, only the tuple fast path does.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Conjugate negates the surd coordinate, x \u00b7 Conjugate(x) is FromRational(Norm(x)) and x + Conjugate(x) is FromRational(Trace(x)) on the golden ratio (norm \u22121, trace 1); RationalPart and SurdPart read the reduced coordinates; Field reads the descriptor, Rationals for a rational value; FromRational reduces its argument; a perfect-square radicand folds into the rational part; and two genuinely different fields refuse to add or multiply with ArgumentException while still ordering exactly.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "ToDouble on the golden ratio, its negation and its conjugate, on \u221A8 and on a radicand carrying a hidden square factor",
+        "Against": "the exact ordering of the value against the midpoints between the returned double and its two binary64 neighbours, formed as exact rationals from the doubles\u0027 mantissas and exponents, a tie admitted only toward an even mantissa; the platform\u0027s correctly rounded Math.Sqrt of 2 and 8 additionally agrees where it applies. The subject never calls Math.Sqrt, reaching its double through one exact integer square root at a 60-bit-plus scale and the library\u0027s own correctly rounded conversion, since the platform\u0027s cast truncates",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.big-integer-to-double-vs-exact-neighbours",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BigIntegerFunctions",
+        "Name": "ToDouble"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BigIntegerFunctions.ToDouble over sixteen widths around the mantissa boundary (1 through 1025 bits), seven offsets about each power of two, both signs and eighteen binary exponents spanning the subnormal floor, the underflow and overflow midpoints and the ordinary range",
+        "Against": "an exact neighbour oracle that decomposes the returned double and its two binary64 neighbours into integer mantissa and power-of-two exponent and compares the three distances to the exact value in integer arithmetic, admitting a tie only toward an even mantissa, and deciding infinity and zero against the exact overflow and underflow midpoints \u2014 no floating-point operation participates",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the pinned edges: zero, small exact integers under positive and negative exponents, the least subnormal, MaxValue from its mantissa and exponent, and the overflow midpoint at both signs reaching infinity.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the truncated form: one magnitude at an exact tie rounds to even without a remainder and up with one; a negative magnitude is refused with ArgumentOutOfRangeException and a remainder under a fifty-three-bit magnitude with ArgumentException; and four toward-zero quotients at a hundred-bit scale, remainder reported, land on the nearest double of the exact fraction under the same neighbour oracle.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
         "Absolute": ""
       }
     ]

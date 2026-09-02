@@ -61,10 +61,10 @@ public sealed class RadicalShadowAnalysisLimits {
 /// <summary>Exact affine and channel-envelope quantities derived from radical tower parameters.</summary>
 public sealed class RadicalShadowTowerLaw {
     internal RadicalShadowTowerLaw(
-        QuadraticSurd slope,
-        QuadraticSurd center,
-        QuadraticSurd kappa,
-        QuadraticSurd activationThreshold,
+        RealQuadratic slope,
+        RealQuadratic center,
+        RealQuadratic kappa,
+        RealQuadratic activationThreshold,
         BigInteger channelNormResidue,
         BigInteger channelNormModulus
     ) {
@@ -77,23 +77,23 @@ public sealed class RadicalShadowTowerLaw {
     }
 
     /// <summary>Gets <c>8 d^(3/2) |kappa|</c>, the strict first-order channel-activation threshold.</summary>
-    public QuadraticSurd ActivationThreshold { get; }
+    public RealQuadratic ActivationThreshold { get; }
     /// <summary>Gets the affine offset <c>u/(2 sqrt(d))+w/2</c>.</summary>
-    public QuadraticSurd Center { get; }
+    public RealQuadratic Center { get; }
     /// <summary>Gets the modulus <c>4d</c> for <see cref="ChannelNormResidue"/>.</summary>
     public BigInteger ChannelNormModulus { get; }
     /// <summary>Gets the required residue class of a channel norm.</summary>
     public BigInteger ChannelNormResidue { get; }
     /// <summary>Gets the exact first residual coefficient in <c>t_n=sqrt(d)n+c+kappa/n+O(n^-2)</c>.</summary>
-    public QuadraticSurd Kappa { get; }
+    public RealQuadratic Kappa { get; }
     /// <summary>Gets the exact affine slope <c>sqrt(d)</c>.</summary>
-    public QuadraticSurd Slope { get; }
+    public RealQuadratic Slope { get; }
 
     /// <summary>Returns the exact affine center <c>sqrt(d)n+c</c>.</summary>
     /// <param name="index">The positive tower index.</param>
     /// <returns>The exact quadratic surd at the affine center.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is not positive.</exception>
-    public QuadraticSurd AffineCenterAt(BigInteger index) {
+    public RealQuadratic AffineCenterAt(BigInteger index) {
         if (index <= BigInteger.Zero) {
             throw new ArgumentOutOfRangeException(
                 paramName: nameof(index),
@@ -101,7 +101,7 @@ public sealed class RadicalShadowTowerLaw {
             );
         }
 
-        return ((Slope * QuadraticSurd.Rational(value: index)) + Center);
+        return ((Slope * RealQuadratic.Rational(value: index)) + Center);
     }
     /// <summary>Returns the floor of the exact affine center.</summary>
     /// <param name="index">The positive tower index.</param>
@@ -312,27 +312,27 @@ public sealed class RadicalShadowTowerAnalysis {
 /// <summary>Performs exact, deterministic first-pass analysis of radical shadow towers.</summary>
 public static class RadicalShadowTowerAnalyzer {
     internal static RadicalShadowTowerLaw Derive(RadicalShadowTowerParameters parameters) {
-        var slope = QuadraticSurd.Create(
+        var slope = RealQuadratic.Create(
             denominator: BigInteger.One,
             radicand: parameters.D,
             rationalNumerator: BigInteger.Zero,
             surdNumerator: BigInteger.One
         );
-        var center = QuadraticSurd.Create(
+        var center = RealQuadratic.Create(
             denominator: (2 * parameters.D),
             radicand: parameters.D,
             rationalNumerator: (parameters.W * parameters.D),
             surdNumerator: parameters.U
         );
         var numerator = (
-            ((QuadraticSurd.Rational(value: parameters.V) +
-            (QuadraticSurd.Rational(value: parameters.W) * slope)) +
-            (QuadraticSurd.Rational(value: parameters.W) * center)) -
+            ((RealQuadratic.Rational(value: parameters.V) +
+            (RealQuadratic.Rational(value: parameters.W) * slope)) +
+            (RealQuadratic.Rational(value: parameters.W) * center)) -
             (center * center)
         );
-        var kappa = (numerator / (QuadraticSurd.Rational(value: 2) * slope));
+        var kappa = (numerator / (RealQuadratic.Rational(value: 2) * slope));
         var threshold = (
-            (QuadraticSurd.Rational(value: (8 * parameters.D)) *
+            (RealQuadratic.Rational(value: (8 * parameters.D)) *
             slope) *
             kappa.Abs()
         );

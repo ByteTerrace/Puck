@@ -50,32 +50,32 @@ internal static class DoublingTowerClaims {
     ];
 
     // ---------------------------------------------------------------------------------------------------------
-    // QuadraticAlgebra<BigInteger> vs QuadraticSurd, under x = (k + √Δ)/2, Δ = k² + 4 — the (k,1)/BigInteger ==
-    // QuadraticSurd twin. No other law compares QuadraticAlgebra's own arithmetic against QuadraticSurd, and without
+    // QuadraticAlgebra<BigInteger> vs RealQuadratic, under x = (k + √Δ)/2, Δ = k² + 4 — the (k,1)/BigInteger ==
+    // RealQuadratic twin. No other law compares QuadraticAlgebra's own arithmetic against RealQuadratic, and without
     // this one Add, Subtract, Conjugate and Trace stand uncovered.
 
-    public static string? QuadraticSurdTwinLaneSurface() {
+    public static string? RealQuadraticTwinLaneSurface() {
         foreach (var k in new long[] { 1L, 2L, 3L, 5L }) {
             var kBig = new BigInteger(value: k);
             var alg = QuadraticAlgebra<BigInteger>.Create(p: kBig, q: BigInteger.One);
             var radicand = ((kBig * kBig) + 4);
 
-            QuadraticSurd ToSurd(QuadraticAlgebra<BigInteger>.Element e) =>
-                QuadraticSurd.Create(rationalNumerator: ((2 * e.U) + (e.V * kBig)), surdNumerator: e.V, radicand: radicand, denominator: 2);
+            RealQuadratic ToSurd(QuadraticAlgebra<BigInteger>.Element e) =>
+                RealQuadratic.Create(rationalNumerator: ((2 * e.U) + (e.V * kBig)), surdNumerator: e.V, radicand: radicand, denominator: 2);
 
             for (var step = 0; (step < 300); ++step) {
                 var eA = new QuadraticAlgebra<BigInteger>.Element(U: DeterministicSmallInteger(bound: 1000, lane: 0, step: step), V: DeterministicSmallInteger(bound: 1000, lane: 1, step: step));
                 var eB = new QuadraticAlgebra<BigInteger>.Element(U: DeterministicSmallInteger(bound: 1000, lane: 2, step: step), V: DeterministicSmallInteger(bound: 1000, lane: 3, step: step));
                 var sA = ToSurd(e: eA);
                 var sB = ToSurd(e: eB);
-                var conjA = QuadraticSurd.Create(rationalNumerator: sA.RationalNumerator, surdNumerator: -sA.SurdNumerator, radicand: sA.Radicand, denominator: sA.Denominator);
+                var conjA = RealQuadratic.Create(rationalNumerator: sA.RationalNumerator, surdNumerator: -sA.SurdNumerator, radicand: sA.Radicand, denominator: sA.Denominator);
 
-                if (ToSurd(e: alg.Add(left: eA, right: eB)) != (sA + sB)) { return $"k={k}: Add disagrees with QuadraticSurd at step {step}"; }
-                if (ToSurd(e: alg.Subtract(left: eA, right: eB)) != (sA - sB)) { return $"k={k}: Subtract disagrees with QuadraticSurd at step {step}"; }
-                if (ToSurd(e: alg.Multiply(left: eA, right: eB)) != (sA * sB)) { return $"k={k}: Multiply disagrees with QuadraticSurd at step {step}"; }
-                if (ToSurd(e: alg.Conjugate(value: eA)) != conjA) { return $"k={k}: Conjugate disagrees with QuadraticSurd at step {step}"; }
-                if (QuadraticSurd.Rational(value: alg.Norm(value: eA)) != (sA * conjA)) { return $"k={k}: Norm disagrees with QuadraticSurd at step {step}"; }
-                if (QuadraticSurd.Rational(value: alg.Trace(value: eA)) != (sA + conjA)) { return $"k={k}: Trace disagrees with QuadraticSurd at step {step}"; }
+                if (ToSurd(e: alg.Add(left: eA, right: eB)) != (sA + sB)) { return $"k={k}: Add disagrees with RealQuadratic at step {step}"; }
+                if (ToSurd(e: alg.Subtract(left: eA, right: eB)) != (sA - sB)) { return $"k={k}: Subtract disagrees with RealQuadratic at step {step}"; }
+                if (ToSurd(e: alg.Multiply(left: eA, right: eB)) != (sA * sB)) { return $"k={k}: Multiply disagrees with RealQuadratic at step {step}"; }
+                if (ToSurd(e: alg.Conjugate(value: eA)) != conjA) { return $"k={k}: Conjugate disagrees with RealQuadratic at step {step}"; }
+                if (RealQuadratic.Rational(value: alg.Norm(value: eA)) != (sA * conjA)) { return $"k={k}: Norm disagrees with RealQuadratic at step {step}"; }
+                if (RealQuadratic.Rational(value: alg.Trace(value: eA)) != (sA + conjA)) { return $"k={k}: Trace disagrees with RealQuadratic at step {step}"; }
             }
         }
 

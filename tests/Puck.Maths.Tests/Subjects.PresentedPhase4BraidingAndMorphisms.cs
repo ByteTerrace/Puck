@@ -260,12 +260,12 @@ internal static partial class Subjects {
             swapCharge: 2,
             material: default
         ));
-        var rational = PresentedAlgebra<QuadraticSurd, RationalMaterial>.Create(presentation: HalvedSwapPresentation<QuadraticSurd, RationalMaterial>(
-            one: QuadraticSurd.Rational(
+        var rational = PresentedAlgebra<RealQuadratic, RationalMaterial>.Create(presentation: HalvedSwapPresentation<RealQuadratic, RationalMaterial>(
+            one: RealQuadratic.Rational(
                 denominator: 1,
                 numerator: 1
             ),
-            swapCharge: QuadraticSurd.Rational(
+            swapCharge: RealQuadratic.Rational(
                 denominator: 1,
                 numerator: 2
             ),
@@ -324,7 +324,7 @@ internal static partial class Subjects {
             return "halved swap: the field material's uncharged pairs are not exactly the ones that annihilate both ways, where inverting the cell's own charge names every coefficient a pair constrains";
         }
 
-        var half = QuadraticSurd.Rational(
+        var half = RealQuadratic.Rational(
             denominator: 2,
             numerator: 1
         );

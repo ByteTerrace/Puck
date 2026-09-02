@@ -13,10 +13,11 @@ namespace Puck.Maths;
 /// happens). <see cref="Inverse"/> instead halves every component at each of the <c>log2(N)</c> butterfly stages, so
 /// the accumulated <c>1/N</c> normalization is reached by exact bit shifts of a representable quantity rather than by
 /// one late multiply by <c>1/N</c> — which underflows to zero once <c>N &gt; 2^16</c>, past <see cref="FixedQ4816"/>'s
-/// sixteen fraction bits. <see cref="Inverse"/> therefore never overflows past its own input's scale (repeated
-/// halving only shrinks), while <see cref="Forward"/> can grow a factor of up to <c>N</c> across its stages and
-/// documents that as an envelope: callers with wide-length, full-scale inputs must pre-scale to stay inside
-/// <see cref="FixedQ4816"/>'s raw range.
+/// sixteen fraction bits. The stage halving bounds ideal inverse growth, but each butterfly still forms a complex
+/// sum or difference before narrowing to <see cref="FixedQ4816"/>; a full-scale arbitrary spectrum can therefore
+/// overflow a component. Arithmetic is unchecked in both directions. Callers must pre-scale any input whose
+/// intermediate values can leave <see cref="FixedQ4816"/>'s raw range; <see cref="Forward"/> can grow by up to
+/// <c>N</c> and an arbitrary inverse spectrum can grow during component mixing despite the per-stage halving.
 /// </para>
 /// <para>
 /// Every butterfly rounds each returned component once. The forward butterfly's twiddle multiply is
@@ -48,7 +49,7 @@ public static class FixedFourierTransform {
 
         TransformKernels.BitReversePermute(values: values);
 
-        for (var length = 2; (length <= n); length <<= 1) {
+        for (var length = 2; ; length <<= 1) {
             var half = (length >> 1);
             var step = (n / length);
 
@@ -72,6 +73,8 @@ public static class FixedFourierTransform {
                     twiddleIndex += step;
                 }
             }
+
+            if (length == n) { break; }
         }
     }
     private static void InverseButterfly(ReadOnlySpan<FixedComplex> twiddles, Span<FixedComplex> values) {
@@ -81,7 +84,7 @@ public static class FixedFourierTransform {
 
         TransformKernels.BitReversePermute(values: values);
 
-        for (var length = 2; (length <= n); length <<= 1) {
+        for (var length = 2; ; length <<= 1) {
             var half = (length >> 1);
             var step = (n / length);
 
@@ -105,6 +108,8 @@ public static class FixedFourierTransform {
                     twiddleIndex += step;
                 }
             }
+
+            if (length == n) { break; }
         }
     }
     // Returns ((u + w·v) / 2, (u − w·v) / 2) with one rounding per component: w·v at exact Q32, u lifted to Q32, the
@@ -168,7 +173,7 @@ public static class FixedFourierTransform {
     /// <summary>Computes the cyclic convolution of two length-<c>N</c> sequences.</summary>
     /// <param name="plan">The plan for length <c>N</c>; <paramref name="left"/>, <paramref name="right"/> and <paramref name="destination"/> must all have length <c>N</c>.</param>
     /// <param name="left">The first sequence; overwritten with its forward transform.</param>
-    /// <param name="right">The second sequence; overwritten with its forward transform.</param>
+    /// <param name="right">The second sequence; overwritten with its forward transform. It may be the exact same span as <paramref name="left"/> for a self-convolution, but may not otherwise overlap it.</param>
     /// <param name="destination">Receives the convolution; may not alias <paramref name="left"/> or <paramref name="right"/>.</param>
     /// <remarks>
     /// Forward both operands, multiply pointwise, and invert — the convolution theorem. Ideally
@@ -176,7 +181,7 @@ public static class FixedFourierTransform {
     /// bound the <c>fft.*</c> laws measure, and its magnitude grows as <c>N</c> times the product of the operands'
     /// amplitudes, so a caller at a wide length or a large amplitude pre-scales the operands as for <see cref="Forward"/>.
     /// </remarks>
-    /// <exception cref="ArgumentException">A span's length does not equal <paramref name="plan"/>'s length.</exception>
+    /// <exception cref="ArgumentException">A span's length does not equal <paramref name="plan"/>'s length; <paramref name="left"/> and <paramref name="right"/> partially overlap; or <paramref name="destination"/> overlaps an operand.</exception>
     public static void Convolve(FixedFourierTransformPlan plan, Span<FixedComplex> left, Span<FixedComplex> right, Span<FixedComplex> destination) {
         TransformKernels.RequireLength(
             expected: plan.Length,
@@ -193,19 +198,26 @@ public static class FixedFourierTransform {
             parameterName: nameof(destination),
             values: ((ReadOnlySpan<FixedComplex>)destination)
         );
+        var sameOperands = TransformKernels.RequireConvolutionAliasing(
+            destination: ((ReadOnlySpan<FixedComplex>)destination),
+            left: ((ReadOnlySpan<FixedComplex>)left),
+            right: ((ReadOnlySpan<FixedComplex>)right)
+        );
 
         Forward(
             plan: plan,
             values: left
         );
-        Forward(
-            plan: plan,
-            values: right
-        );
+        if (!sameOperands) {
+            Forward(
+                plan: plan,
+                values: right
+            );
+        }
         PointwiseMultiply(
             destination: destination,
             left: left,
-            right: right
+            right: (sameOperands ? left : right)
         );
         Inverse(
             plan: plan,
@@ -258,7 +270,7 @@ public static class FixedFourierTransform {
     }
     /// <summary>Computes the inverse transform in place.</summary>
     /// <param name="plan">The plan for the length of <paramref name="values"/>.</param>
-    /// <param name="values">The transformed sequence, restored in place.</param>
+    /// <param name="values">The transformed sequence, restored in place. Callers must pre-scale arbitrary spectra whose butterfly intermediates can exceed <see cref="FixedQ4816"/>'s raw range.</param>
     /// <exception cref="ArgumentException">The length of <paramref name="values"/> does not equal the length of <paramref name="plan"/>.</exception>
     public static void Inverse(FixedFourierTransformPlan plan, Span<FixedComplex> values) {
         TransformKernels.RequireLength(
@@ -302,10 +314,15 @@ public static class FixedFourierTransform {
     /// component rounded once.</summary>
     /// <param name="left">The first sequence.</param>
     /// <param name="right">The second sequence, the same length as <paramref name="left"/>.</param>
-    /// <param name="destination">Receives the elementwise product, the same length as the operands; may alias either.</param>
-    /// <exception cref="ArgumentException">The three spans do not share one length; <c>ParamName</c> names the first that disagrees with <paramref name="left"/>.</exception>
+    /// <param name="destination">Receives the elementwise product, the same length as the operands; may be the exact same span as either operand, but may not otherwise overlap one.</param>
+    /// <exception cref="ArgumentException">The three spans do not share one length, or <paramref name="destination"/> partially overlaps an operand. <c>ParamName</c> names the refused span.</exception>
     public static void PointwiseMultiply(ReadOnlySpan<FixedComplex> left, ReadOnlySpan<FixedComplex> right, Span<FixedComplex> destination) {
         TransformKernels.RequireMatchingLengths(
+            destination: ((ReadOnlySpan<FixedComplex>)destination),
+            left: left,
+            right: right
+        );
+        TransformKernels.RequirePointwiseAliasing(
             destination: ((ReadOnlySpan<FixedComplex>)destination),
             left: left,
             right: right

@@ -30,7 +30,7 @@ public sealed class IntegerNumerationSystem {
     /// <summary>Gets the number of digit values accepted by this system, beginning at zero.</summary>
     public int AlphabetSize { get; }
     /// <summary>Gets the quadratic irrational defining an Ostrowski system, or <see langword="null"/> for a positional system.</summary>
-    public QuadraticSurd? Basis => m_ostrowski?.Basis;
+    public RealQuadratic? Basis => m_ostrowski?.Basis;
     /// <summary>Gets the representation kind.</summary>
     public IntegerNumerationKind Kind { get; }
     /// <summary>Gets the positional radix, or zero for an Ostrowski system.</summary>
@@ -158,7 +158,7 @@ public sealed class IntegerNumerationSystem {
     /// <paramref name="basis"/> is not a positive quadratic irrational, or one of its periodic digit bounds exceeds
     /// the signed 32-bit digit alphabet supported by deterministic output automata.
     /// </exception>
-    public static IntegerNumerationSystem QuadraticOstrowski(QuadraticSurd basis) {
+    public static IntegerNumerationSystem QuadraticOstrowski(RealQuadratic basis) {
         var system = QuadraticOstrowskiSystem.Create(basis: basis);
         var maximumDigit = system.ContinuedFractionPrefix
             .Skip(count: 1)

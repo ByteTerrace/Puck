@@ -2052,10 +2052,10 @@ internal static partial class LawRegistry {
             )
         ),
         Case(
-            id: "algebra.quadratic-surd-twin-lane",
+            id: "algebra.real-quadratic-twin-lane",
             run: () => Laws.Claim(
-                claim: DoublingTowerClaims.QuadraticSurdTwinLaneSurface,
-                lawId: "algebra.quadratic-surd-twin-lane"
+                claim: DoublingTowerClaims.RealQuadraticTwinLaneSurface,
+                lawId: "algebra.real-quadratic-twin-lane"
             )
         ),
         Case(

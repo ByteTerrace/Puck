@@ -9,7 +9,7 @@ namespace Puck.Maths.Tests;
 /// <remarks>
 /// Every reference computation below is written out in this file rather than calling <c>Oracles.cs</c> or any
 /// <c>Puck.Maths</c> kernel, per the shared-nothing discipline. The reference side never touches
-/// <c>QuadraticSurd</c>: a floor of <c>n·(a + b·√d)/c</c> is an integer square root plus a floor division, a
+/// <c>RealQuadratic</c>: a floor of <c>n·(a + b·√d)/c</c> is an integer square root plus a floor division, a
 /// comparison against a surd is a cleared-denominator sign evaluation (<see cref="SurdSign"/>), and a comparison of
 /// two distances <c>|A + B·√d|</c> is a squared cross-comparison (<see cref="MagnitudeCompare"/>) — no square root
 /// is ever approximated and no floating point appears anywhere.
@@ -150,12 +150,12 @@ internal static class QuantizationClaims {
             numerator: ((n * a) + surdPart)
         );
     }
-    private static QuadraticSurd Surd(long a, long b, long d, long c) => ((b == 0L)
-        ? QuadraticSurd.Rational(
+    private static RealQuadratic Surd(long a, long b, long d, long c) => ((b == 0L)
+        ? RealQuadratic.Rational(
             denominator: c,
             numerator: a
         )
-        : QuadraticSurd.Create(
+        : RealQuadratic.Create(
             denominator: c,
             radicand: d,
             rationalNumerator: a,
@@ -396,7 +396,7 @@ internal static class QuantizationClaims {
 
         foreach (var (exactNumerator, exactDenominator, approximateNumerator, approximateDenominator) in RationalPairBattery) {
             var (index, witness) = BeattyQuantization.FirstFloorDisagreement(
-                exact: QuadraticSurd.Rational(
+                exact: RealQuadratic.Rational(
                     denominator: exactDenominator,
                     numerator: exactNumerator
                 ),
@@ -436,7 +436,7 @@ internal static class QuantizationClaims {
 
         try {
             _ = BeattyQuantization.CertifySlope(
-                slope: QuadraticSurd.Rational(
+                slope: RealQuadratic.Rational(
                     denominator: 2,
                     numerator: 3
                 ),
@@ -448,7 +448,7 @@ internal static class QuantizationClaims {
         }
         try {
             _ = BeattyQuantization.FirstFloorDisagreement(
-                exact: QuadraticSurd.Rational(
+                exact: RealQuadratic.Rational(
                     denominator: 7,
                     numerator: 3
                 ),
@@ -461,7 +461,7 @@ internal static class QuantizationClaims {
         }
         try {
             _ = BeattyQuantization.FirstFloorDisagreement(
-                exact: QuadraticSurd.Rational(
+                exact: RealQuadratic.Rational(
                     denominator: 7,
                     numerator: 3
                 ),

@@ -19,13 +19,13 @@ public readonly record struct PolynomialContinuedFractionParameters(
 /// <param name="Correction">The rational pole numerator <c>c</c>.</param>
 /// <param name="PoleOffset">The rational pole offset <c>d</c>.</param>
 public readonly record struct PolynomialLinearFractionalTailCertificate(
-    QuadraticSurd Slope,
-    QuadraticSurd Offset,
-    QuadraticSurd Correction,
-    QuadraticSurd PoleOffset
+    RealQuadratic Slope,
+    RealQuadratic Offset,
+    RealQuadratic Correction,
+    RealQuadratic PoleOffset
 ) {
     /// <summary>Evaluates the certified closed form at a positive integer index.</summary>
-    public QuadraticSurd Evaluate(BigInteger tailIndex) {
+    public RealQuadratic Evaluate(BigInteger tailIndex) {
         if (tailIndex <= BigInteger.Zero) {
             throw new ArgumentOutOfRangeException(
                 paramName: nameof(tailIndex),
@@ -33,11 +33,11 @@ public readonly record struct PolynomialLinearFractionalTailCertificate(
             );
         }
 
-        var affine = ((Slope * QuadraticSurd.Rational(value: tailIndex)) + Offset);
+        var affine = ((Slope * RealQuadratic.Rational(value: tailIndex)) + Offset);
 
-        return ((Correction == QuadraticSurd.Zero)
+        return ((Correction == RealQuadratic.Zero)
             ? affine
-            : (affine + (Correction / (QuadraticSurd.Rational(value: tailIndex) + PoleOffset)))
+            : (affine + (Correction / (RealQuadratic.Rational(value: tailIndex) + PoleOffset)))
         );
     }
 }
@@ -138,9 +138,9 @@ public readonly record struct PolynomialBeattyShadowNormCertificate(
 public sealed partial class PolynomialContinuedFractionAnalysis {
     internal PolynomialContinuedFractionAnalysis(
         PolynomialContinuedFractionParameters parameters,
-        QuadraticSurd slope,
-        QuadraticSurd offset,
-        QuadraticSurd affineResidual,
+        RealQuadratic slope,
+        RealQuadratic offset,
+        RealQuadratic affineResidual,
         PolynomialTailIntervalCertificate intervalCertificate) {
         Parameters = parameters;
         Slope = slope;
@@ -156,11 +156,11 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
     /// <summary>Gets the recurrence coefficients.</summary>
     public PolynomialContinuedFractionParameters Parameters { get; }
     /// <summary>Gets the exact positive root of <c>λ²−pλ−r=0</c>.</summary>
-    public QuadraticSurd Slope { get; }
+    public RealQuadratic Slope { get; }
     /// <summary>Gets the exact constant term <c>β</c> in the affine center <c>xₙ=λn+β</c>.</summary>
-    public QuadraticSurd Offset { get; }
+    public RealQuadratic Offset { get; }
     /// <summary>Gets the exact constant <c>R</c> for which <c>Tₙ(xₙ₊₁)−xₙ=R/xₙ₊₁</c>.</summary>
-    public QuadraticSurd AffineResidual { get; }
+    public RealQuadratic AffineResidual { get; }
     /// <summary>Gets the constructive <c>|sₙ−xₙ| ≤ H/n</c> certificate.</summary>
     public PolynomialTailIntervalCertificate IntervalCertificate { get; }
 
@@ -193,13 +193,13 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
             left: Slope.Radicand,
             right: Offset.Radicand
         );
-        var conjugateSlopeMagnitudeCeiling = QuadraticSurd.Create(
+        var conjugateSlopeMagnitudeCeiling = RealQuadratic.Create(
             rationalNumerator: BigInteger.Zero,
             surdNumerator: (2 * BigInteger.Abs(value: slopeSurdNumerator)),
             radicand: radicand,
             denominator: commonDenominator
         ).Ceiling();
-        var conjugateOffsetMagnitudeCeiling = QuadraticSurd.Create(
+        var conjugateOffsetMagnitudeCeiling = RealQuadratic.Create(
             rationalNumerator: BigInteger.Zero,
             surdNumerator: (2 * BigInteger.Abs(value: offsetSurdNumerator)),
             radicand: radicand,
@@ -241,11 +241,11 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         var scale = certificate.SlopeLowerDenominator;
         var lowerOneNumerator = certificate.CenterSlopeLowerNumerator;
         var lowerTwoNumerator = certificate.PositiveTrapSlopeNumerator;
-        var lowerOne = QuadraticSurd.Rational(
+        var lowerOne = RealQuadratic.Rational(
             denominator: scale,
             numerator: lowerOneNumerator
         );
-        var lowerTwo = QuadraticSurd.Rational(
+        var lowerTwo = RealQuadratic.Rational(
             denominator: scale,
             numerator: lowerTwoNumerator
         );
@@ -253,8 +253,8 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         if (
             (lowerTwo >= lowerOne) ||
             (lowerOne >= Slope) ||
-            ((lowerOne * lowerTwo) <= QuadraticSurd.Rational(value: Parameters.NumeratorQuadratic)) ||
-            (QuadraticSurd.Rational(value: certificate.ResidualMagnitudeCeiling) < AffineResidual.Abs())
+            ((lowerOne * lowerTwo) <= RealQuadratic.Rational(value: Parameters.NumeratorQuadratic)) ||
+            (RealQuadratic.Rational(value: certificate.ResidualMagnitudeCeiling) < AffineResidual.Abs())
         ) {
             return false;
         }
@@ -262,7 +262,7 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         var successor = (certificate.Cutoff + 1);
         var successorSquared = (successor * successor);
 
-        if ((Slope + (Offset / QuadraticSurd.Rational(value: successor))) < lowerOne) { return false; }
+        if ((Slope + (Offset / RealQuadratic.Rational(value: successor))) < lowerOne) { return false; }
 
         var positiveLinear = BigInteger.Max(
             left: BigInteger.Zero,
@@ -291,14 +291,14 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
     }
     /// <summary>Returns the exact affine center <c>xₙ=λn+β</c>.</summary>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="tailIndex"/> is not positive.</exception>
-    public QuadraticSurd AffineCenter(BigInteger tailIndex) {
+    public RealQuadratic AffineCenter(BigInteger tailIndex) {
         PolynomialTailIndex.RequirePositive(tailIndex: tailIndex);
 
-        return ((Slope * QuadraticSurd.Rational(value: tailIndex)) + Offset);
+        return ((Slope * RealQuadratic.Rational(value: tailIndex)) + Offset);
     }
     /// <summary>Returns the certified interval <c>[xₙ−H/n, xₙ+H/n]</c> containing the unique positive tail.</summary>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="tailIndex"/> precedes the certificate cutoff.</exception>
-    public (QuadraticSurd Lower, QuadraticSurd Upper) CertifiedInterval(BigInteger tailIndex) {
+    public (RealQuadratic Lower, RealQuadratic Upper) CertifiedInterval(BigInteger tailIndex) {
         if (tailIndex < IntervalCertificate.Cutoff) {
             throw new ArgumentOutOfRangeException(
                 paramName: nameof(tailIndex),
@@ -307,7 +307,7 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         }
 
         var center = AffineCenter(tailIndex: tailIndex);
-        var radius = QuadraticSurd.Rational(
+        var radius = RealQuadratic.Rational(
             numerator: IntervalCertificate.RadiusNumerator,
             denominator: tailIndex
         );
@@ -316,7 +316,7 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
     }
     /// <summary>Evaluates the recurrence map <c>Tₙ(y)=p·n+q+(r·n²+u·n+v)/y</c> exactly.</summary>
     /// <exception cref="ArgumentOutOfRangeException">The index or denominator is not positive.</exception>
-    public QuadraticSurd Map(BigInteger tailIndex, QuadraticSurd nextTail) {
+    public RealQuadratic Map(BigInteger tailIndex, RealQuadratic nextTail) {
         PolynomialTailIndex.RequirePositive(tailIndex: tailIndex);
         if (nextTail.Sign <= 0) {
             throw new ArgumentOutOfRangeException(
@@ -329,8 +329,8 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         var numerator = ((((Parameters.NumeratorQuadratic * tailIndex) * tailIndex) +
             (Parameters.NumeratorLinear * tailIndex)) + Parameters.NumeratorConstant);
 
-        return (QuadraticSurd.Rational(value: baseTerm) +
-            (QuadraticSurd.Rational(value: numerator) / nextTail));
+        return (RealQuadratic.Rational(value: baseTerm) +
+            (RealQuadratic.Rational(value: numerator) / nextTail));
     }
     /// <summary>
     /// Returns <paramref name="termCount"/> exact coefficients <c>c₀,…,cₘ₋₁</c> such that the unique positive
@@ -338,7 +338,7 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
     /// </summary>
     /// <remarks>The first coefficient is exactly <see cref="Offset"/>. No fixed maximum order is imposed.</remarks>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="termCount"/> is negative.</exception>
-    public IReadOnlyList<QuadraticSurd> AsymptoticCoefficients(int termCount) {
+    public IReadOnlyList<RealQuadratic> AsymptoticCoefficients(int termCount) {
         if (termCount < 0) {
             throw new ArgumentOutOfRangeException(
                 paramName: nameof(termCount),
@@ -347,28 +347,28 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         }
         if (termCount == 0) { return []; }
 
-        var coefficients = new QuadraticSurd[termCount];
+        var coefficients = new RealQuadratic[termCount];
         var lambdaSquared = (Slope * Slope);
-        var solveDivisor = (QuadraticSurd.One +
-            (QuadraticSurd.Rational(value: Parameters.NumeratorQuadratic) / lambdaSquared));
+        var solveDivisor = (RealQuadratic.One +
+            (RealQuadratic.Rational(value: Parameters.NumeratorQuadratic) / lambdaSquared));
 
         for (var order = 0; (order < termCount); ++order) {
             // Factor S(n+1)=(lambda/t)G(t), t=1/n. With the current unknown coefficient set to zero,
             // invert G as a formal series and read the t^order coefficient of the recurrence's right side.
             var maximumDegree = (order + 1);
-            var g = new QuadraticSurd[(maximumDegree + 1)];
-            var inverse = new QuadraticSurd[(maximumDegree + 1)];
+            var g = new RealQuadratic[(maximumDegree + 1)];
+            var inverse = new RealQuadratic[(maximumDegree + 1)];
 
             Array.Fill(
                 array: g,
-                value: QuadraticSurd.Zero
+                value: RealQuadratic.Zero
             );
             Array.Fill(
                 array: inverse,
-                value: QuadraticSurd.Zero
+                value: RealQuadratic.Zero
             );
-            g[0] = QuadraticSurd.One;
-            g[1] = QuadraticSurd.One; // the +lambda in lambda(n+1)
+            g[0] = RealQuadratic.One;
+            g[1] = RealQuadratic.One; // the +lambda in lambda(n+1)
 
             for (var coefficientIndex = 0; (coefficientIndex < order); ++coefficientIndex) {
                 var scaledCoefficient = (coefficients[coefficientIndex] / Slope);
@@ -381,14 +381,14 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
                     );
 
                     g[(firstDegree + extraDegree)] +=
-                        (scaledCoefficient * QuadraticSurd.Rational(value: binomial));
+                        (scaledCoefficient * RealQuadratic.Rational(value: binomial));
                 }
             }
 
-            inverse[0] = QuadraticSurd.One;
+            inverse[0] = RealQuadratic.One;
 
             for (var degree = 1; (degree <= maximumDegree); ++degree) {
-                var convolution = QuadraticSurd.Zero;
+                var convolution = RealQuadratic.Zero;
 
                 for (var leftDegree = 1; (leftDegree <= degree); ++leftDegree) {
                     convolution += (g[leftDegree] * inverse[(degree - leftDegree)]);
@@ -398,17 +398,17 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
             }
 
             var recurrenceCoefficient =
-                ((QuadraticSurd.Rational(value: Parameters.NumeratorQuadratic) * inverse[(order + 1)]) +
-                (QuadraticSurd.Rational(value: Parameters.NumeratorLinear) * inverse[order]));
+                ((RealQuadratic.Rational(value: Parameters.NumeratorQuadratic) * inverse[(order + 1)]) +
+                (RealQuadratic.Rational(value: Parameters.NumeratorLinear) * inverse[order]));
 
             if (order >= 1) {
                 recurrenceCoefficient +=
-                    (QuadraticSurd.Rational(value: Parameters.NumeratorConstant) * inverse[(order - 1)]);
+                    (RealQuadratic.Rational(value: Parameters.NumeratorConstant) * inverse[(order - 1)]);
             }
 
             recurrenceCoefficient /= Slope;
             if (order == 0) {
-                recurrenceCoefficient += QuadraticSurd.Rational(value: Parameters.Constant);
+                recurrenceCoefficient += RealQuadratic.Rational(value: Parameters.Constant);
             }
 
             coefficients[order] = (recurrenceCoefficient / solveDivisor);
@@ -447,7 +447,7 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
             out var lowerTwoNumerator
         );
 
-        var lowerOne = QuadraticSurd.Rational(
+        var lowerOne = RealQuadratic.Rational(
             denominator: scale,
             numerator: lowerOneNumerator
         );
@@ -455,7 +455,7 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         var residualMagnitudeCeiling = (residualCoefficientMagnitude / lowerOne).Ceiling();
         var centerCorrectionMagnitude = coefficients
             .Aggregate(
-            QuadraticSurd.Zero,
+            RealQuadratic.Zero,
             (sum, coefficient) => (sum + coefficient.Abs())
         );
         var positiveLinear = BigInteger.Max(
@@ -474,7 +474,7 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
 
             // z_t/t >= lambda-sum(|c_j|)/t for t>=1.
             var centerSlopeLower = (Slope -
-                (centerCorrectionMagnitude / QuadraticSurd.Rational(value: successor)));
+                (centerCorrectionMagnitude / RealQuadratic.Rational(value: successor)));
 
             if (centerSlopeLower > lowerOne) {
                 var wNumerator = (((Parameters.NumeratorQuadratic * successorSquared) +
@@ -536,11 +536,11 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         var scale = certificate.SlopeLowerDenominator;
         var lowerOneNumerator = certificate.CenterSlopeLowerNumerator;
         var lowerTwoNumerator = certificate.PositiveTrapSlopeNumerator;
-        var lowerOne = QuadraticSurd.Rational(
+        var lowerOne = RealQuadratic.Rational(
             denominator: scale,
             numerator: lowerOneNumerator
         );
-        var lowerTwo = QuadraticSurd.Rational(
+        var lowerTwo = RealQuadratic.Rational(
             denominator: scale,
             numerator: lowerTwoNumerator
         );
@@ -548,26 +548,26 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         if (
             (lowerTwo >= lowerOne) ||
             (lowerOne >= Slope) ||
-            ((lowerOne * lowerTwo) <= QuadraticSurd.Rational(value: Parameters.NumeratorQuadratic))
+            ((lowerOne * lowerTwo) <= RealQuadratic.Rational(value: Parameters.NumeratorQuadratic))
         ) {
             return false;
         }
 
         var residualCoefficientMagnitude = PolynomialCoefficientMagnitude(polynomial: residualPolynomial);
 
-        if (QuadraticSurd.Rational(value: certificate.ResidualMagnitudeCeiling) <
+        if (RealQuadratic.Rational(value: certificate.ResidualMagnitudeCeiling) <
             (residualCoefficientMagnitude / lowerOne)) {
             return false;
         }
 
         var centerCorrectionMagnitude = coefficients
             .Aggregate(
-            QuadraticSurd.Zero,
+            RealQuadratic.Zero,
             (sum, coefficient) => (sum + coefficient.Abs())
         );
         var successor = (certificate.Cutoff + 1);
 
-        if ((Slope - (centerCorrectionMagnitude / QuadraticSurd.Rational(value: successor))) <= lowerOne) {
+        if ((Slope - (centerCorrectionMagnitude / RealQuadratic.Rational(value: successor))) <= lowerOne) {
             return false;
         }
 
@@ -602,15 +602,15 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
     }
     /// <summary>Returns the exact center of the requested finite asymptotic expansion.</summary>
     /// <exception cref="ArgumentOutOfRangeException">The index is not positive or the term count is negative.</exception>
-    public QuadraticSurd AsymptoticCenter(BigInteger tailIndex, int termCount) {
+    public RealQuadratic AsymptoticCenter(BigInteger tailIndex, int termCount) {
         PolynomialTailIndex.RequirePositive(tailIndex: tailIndex);
         var coefficients = AsymptoticCoefficients(termCount: termCount);
-        var center = (Slope * QuadraticSurd.Rational(value: tailIndex));
+        var center = (Slope * RealQuadratic.Rational(value: tailIndex));
         var denominatorPower = BigInteger.One;
 
         for (var index = 0; (index < coefficients.Count); ++index) {
             if (index > 0) { denominatorPower *= tailIndex; }
-            center += (coefficients[index] / QuadraticSurd.Rational(value: denominatorPower));
+            center += (coefficients[index] / RealQuadratic.Rational(value: denominatorPower));
         }
 
         return center;
@@ -618,7 +618,7 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
     /// <summary>Returns the certified arbitrary-order interval associated with <paramref name="certificate"/>.</summary>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="tailIndex"/> precedes the certificate cutoff.</exception>
     /// <exception cref="ArgumentException">The certificate does not verify for this analysis.</exception>
-    public (QuadraticSurd Lower, QuadraticSurd Upper) CertifiedAsymptoticInterval(
+    public (RealQuadratic Lower, RealQuadratic Upper) CertifiedAsymptoticInterval(
         BigInteger tailIndex,
         PolynomialTailAsymptoticCertificate certificate) {
         if (!VerifyAsymptoticIntervalCertificate(certificate: certificate)) {
@@ -638,7 +638,7 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
             tailIndex: tailIndex,
             termCount: certificate.Order
         );
-        var radius = QuadraticSurd.Rational(
+        var radius = RealQuadratic.Rational(
             numerator: certificate.RadiusNumerator,
             denominator: BigInteger.Pow(
                 exponent: certificate.Order,
@@ -655,10 +655,10 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
     /// positivity at every positive index, and positive-tail uniqueness identifies the closed form with the infinite
     /// tail.
     /// </summary>
-    public bool TryCertifiedRationalTail(BigInteger tailIndex, out QuadraticSurd tail) {
+    public bool TryCertifiedRationalTail(BigInteger tailIndex, out RealQuadratic tail) {
         PolynomialTailIndex.RequirePositive(tailIndex: tailIndex);
         if (!TryRationalTailCertificate(certificate: out var certificate)) {
-            tail = QuadraticSurd.Zero;
+            tail = RealQuadratic.Zero;
             return false;
         }
 
@@ -675,19 +675,19 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
             !Slope.IsRational ||
             !Offset.IsRational
         ) { return false; }
-        if (AffineResidual == QuadraticSurd.Zero) {
+        if (AffineResidual == RealQuadratic.Zero) {
             certificate = new PolynomialLinearFractionalTailCertificate(
                 Slope: Slope,
                 Offset: Offset,
-                Correction: QuadraticSurd.Zero,
-                PoleOffset: QuadraticSurd.Zero
+                Correction: RealQuadratic.Zero,
+                PoleOffset: RealQuadratic.Zero
             );
             return VerifyLinearFractionalTailCertificate(certificate: certificate);
         }
 
-        var p = QuadraticSurd.Rational(value: Parameters.Linear);
-        var q = QuadraticSurd.Rational(value: Parameters.Constant);
-        var two = QuadraticSurd.Rational(value: 2);
+        var p = RealQuadratic.Rational(value: Parameters.Linear);
+        var q = RealQuadratic.Rational(value: Parameters.Constant);
+        var two = RealQuadratic.Rational(value: 2);
         var twiceSlopeMinusP = ((two * Slope) - p);
 
         if (twiceSlopeMinusP.Sign == 0) { return false; }
@@ -723,11 +723,11 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
             return false;
         }
 
-        if (certificate.Correction == QuadraticSurd.Zero) {
+        if (certificate.Correction == RealQuadratic.Zero) {
             return
                 (
-                (certificate.PoleOffset == QuadraticSurd.Zero) &&
-                (AffineResidual == QuadraticSurd.Zero) &&
+                (certificate.PoleOffset == RealQuadratic.Zero) &&
+                (AffineResidual == RealQuadratic.Zero) &&
                 RationalLinearFractionalTailIsPositive(
                 slope: certificate.Slope,
                 offset: certificate.Offset,
@@ -737,9 +737,9 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
             );
         }
 
-        var p = QuadraticSurd.Rational(value: Parameters.Linear);
-        var q = QuadraticSurd.Rational(value: Parameters.Constant);
-        var two = QuadraticSurd.Rational(value: 2);
+        var p = RealQuadratic.Rational(value: Parameters.Linear);
+        var q = RealQuadratic.Rational(value: Parameters.Constant);
+        var two = RealQuadratic.Rational(value: 2);
         var twiceSlopeMinusP = ((two * certificate.Slope) - p);
 
         if (
@@ -761,9 +761,9 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
 
         return
             (
-            (expectedQuadratic == QuadraticSurd.Rational(value: Parameters.NumeratorQuadratic)) &&
-            (expectedLinear == QuadraticSurd.Rational(value: Parameters.NumeratorLinear)) &&
-            (expectedConstant == QuadraticSurd.Rational(value: Parameters.NumeratorConstant)) &&
+            (expectedQuadratic == RealQuadratic.Rational(value: Parameters.NumeratorQuadratic)) &&
+            (expectedLinear == RealQuadratic.Rational(value: Parameters.NumeratorLinear)) &&
+            (expectedConstant == RealQuadratic.Rational(value: Parameters.NumeratorConstant)) &&
             RationalLinearFractionalTailIsPositive(
             slope: certificate.Slope,
             offset: certificate.Offset,
@@ -792,7 +792,7 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
             return true;
         }
 
-        if (AffineResidual == QuadraticSurd.Zero) {
+        if (AffineResidual == RealQuadratic.Zero) {
             floor = AffineCenter(tailIndex: tailIndex).Floor();
             return true;
         }
@@ -844,14 +844,14 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         return false;
     }
 
-    private QuadraticSurd[] TruncatedCenterResidualPolynomial(IReadOnlyList<QuadraticSurd> coefficients) {
+    private RealQuadratic[] TruncatedCenterResidualPolynomial(IReadOnlyList<RealQuadratic> coefficients) {
         var order = coefficients.Count;
         var denominatorPower = (order - 1);
-        var centerNumerator = new QuadraticSurd[(order + 1)];
+        var centerNumerator = new RealQuadratic[(order + 1)];
 
         Array.Fill(
             array: centerNumerator,
-            value: QuadraticSurd.Zero
+            value: RealQuadratic.Zero
         );
         centerNumerator[order] = Slope;
 
@@ -863,19 +863,19 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
             polynomial: centerNumerator,
             shift: BigInteger.One
         );
-        var baseNumerator = new QuadraticSurd[(order + 1)];
+        var baseNumerator = new RealQuadratic[(order + 1)];
 
         Array.Fill(
             array: baseNumerator,
-            value: QuadraticSurd.Zero
+            value: RealQuadratic.Zero
         );
-        baseNumerator[denominatorPower] = QuadraticSurd.Rational(value: Parameters.Constant);
-        baseNumerator[(denominatorPower + 1)] = QuadraticSurd.Rational(value: Parameters.Linear);
+        baseNumerator[denominatorPower] = RealQuadratic.Rational(value: Parameters.Constant);
+        baseNumerator[(denominatorPower + 1)] = RealQuadratic.Rational(value: Parameters.Linear);
         baseNumerator = AddPolynomials(
             left: baseNumerator,
             right: ScalePolynomial(
                 polynomial: centerNumerator,
-                scale: -QuadraticSurd.One
+                scale: -RealQuadratic.One
             )
         );
 
@@ -884,18 +884,18 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
             right: successorCenterNumerator
         );
         var numeratorPolynomial = new[] {
-            QuadraticSurd.Rational(value: Parameters.NumeratorConstant),
-            QuadraticSurd.Rational(value: Parameters.NumeratorLinear),
-            QuadraticSurd.Rational(value: Parameters.NumeratorQuadratic),
+            RealQuadratic.Rational(value: Parameters.NumeratorConstant),
+            RealQuadratic.Rational(value: Parameters.NumeratorLinear),
+            RealQuadratic.Rational(value: Parameters.NumeratorQuadratic),
         };
         var shiftedNumerator = ShiftPolynomialByDegree(
             degree: denominatorPower,
             polynomial: numeratorPolynomial
         );
-        var successorPowerPolynomial = new QuadraticSurd[(denominatorPower + 1)];
+        var successorPowerPolynomial = new RealQuadratic[(denominatorPower + 1)];
 
         for (var degree = 0; (degree <= denominatorPower); ++degree) {
-            successorPowerPolynomial[degree] = QuadraticSurd.Rational(value: BinomialCoefficient(
+            successorPowerPolynomial[degree] = RealQuadratic.Rational(value: BinomialCoefficient(
                 lower: degree,
                 upper: denominatorPower
             ));
@@ -918,7 +918,7 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
 
         while (true) {
             scale = (BigInteger.One << precisionBits);
-            var scaledFloor = (Slope * QuadraticSurd.Rational(value: scale)).Floor();
+            var scaledFloor = (Slope * RealQuadratic.Rational(value: scale)).Floor();
 
             lowerOneNumerator = (scaledFloor - 1);
             lowerTwoNumerator = (scaledFloor - 2);
@@ -934,27 +934,27 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
             precisionBits = checked((precisionBits * 2));
         }
     }
-    private static QuadraticSurd PolynomialCoefficientMagnitude(QuadraticSurd[] polynomial) =>
+    private static RealQuadratic PolynomialCoefficientMagnitude(RealQuadratic[] polynomial) =>
         polynomial.Aggregate(
-            QuadraticSurd.Zero,
+            RealQuadratic.Zero,
             (sum, coefficient) => (sum + coefficient.Abs())
         );
-    private static int PolynomialDegree(QuadraticSurd[] polynomial) {
+    private static int PolynomialDegree(RealQuadratic[] polynomial) {
         for (var degree = (polynomial.Length - 1); (degree >= 0); --degree) {
-            if (polynomial[degree] != QuadraticSurd.Zero) { return degree; }
+            if (polynomial[degree] != RealQuadratic.Zero) { return degree; }
         }
 
         return -1;
     }
-    private static QuadraticSurd[] AddPolynomials(QuadraticSurd[] left, QuadraticSurd[] right) {
-        var result = new QuadraticSurd[Math.Max(
+    private static RealQuadratic[] AddPolynomials(RealQuadratic[] left, RealQuadratic[] right) {
+        var result = new RealQuadratic[Math.Max(
             val1: left.Length,
             val2: right.Length
         )];
 
         Array.Fill(
             array: result,
-            value: QuadraticSurd.Zero
+            value: RealQuadratic.Zero
         );
 
         for (var index = 0; (index < left.Length); ++index) { result[index] += left[index]; }
@@ -962,14 +962,14 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
 
         return TrimPolynomial(polynomial: result);
     }
-    private static QuadraticSurd[] ScalePolynomial(QuadraticSurd[] polynomial, QuadraticSurd scale) =>
+    private static RealQuadratic[] ScalePolynomial(RealQuadratic[] polynomial, RealQuadratic scale) =>
         polynomial.Select(selector: coefficient => (coefficient * scale)).ToArray();
-    private static QuadraticSurd[] MultiplyPolynomials(QuadraticSurd[] left, QuadraticSurd[] right) {
-        var result = new QuadraticSurd[((left.Length + right.Length) - 1)];
+    private static RealQuadratic[] MultiplyPolynomials(RealQuadratic[] left, RealQuadratic[] right) {
+        var result = new RealQuadratic[((left.Length + right.Length) - 1)];
 
         Array.Fill(
             array: result,
-            value: QuadraticSurd.Zero
+            value: RealQuadratic.Zero
         );
 
         for (var leftDegree = 0; (leftDegree < left.Length); ++leftDegree) {
@@ -980,19 +980,19 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
 
         return TrimPolynomial(polynomial: result);
     }
-    private static QuadraticSurd[] ShiftPolynomial(QuadraticSurd[] polynomial, BigInteger shift) {
-        var result = new QuadraticSurd[polynomial.Length];
+    private static RealQuadratic[] ShiftPolynomial(RealQuadratic[] polynomial, BigInteger shift) {
+        var result = new RealQuadratic[polynomial.Length];
 
         Array.Fill(
             array: result,
-            value: QuadraticSurd.Zero
+            value: RealQuadratic.Zero
         );
 
         for (var sourceDegree = 0; (sourceDegree < polynomial.Length); ++sourceDegree) {
             var shiftPower = BigInteger.One;
 
             for (var targetDegree = sourceDegree; (targetDegree >= 0); --targetDegree) {
-                result[targetDegree] += (polynomial[sourceDegree] * QuadraticSurd.Rational(value: (BinomialCoefficient(
+                result[targetDegree] += (polynomial[sourceDegree] * RealQuadratic.Rational(value: (BinomialCoefficient(
                     lower: targetDegree,
                     upper: sourceDegree
                 ) * shiftPower)));
@@ -1002,12 +1002,12 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
 
         return TrimPolynomial(polynomial: result);
     }
-    private static QuadraticSurd[] ShiftPolynomialByDegree(QuadraticSurd[] polynomial, int degree) {
-        var result = new QuadraticSurd[(polynomial.Length + degree)];
+    private static RealQuadratic[] ShiftPolynomialByDegree(RealQuadratic[] polynomial, int degree) {
+        var result = new RealQuadratic[(polynomial.Length + degree)];
 
         Array.Fill(
             array: result,
-            value: QuadraticSurd.Zero
+            value: RealQuadratic.Zero
         );
         Array.Copy(
             destinationArray: result,
@@ -1018,11 +1018,11 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         );
         return result;
     }
-    private static QuadraticSurd[] TrimPolynomial(QuadraticSurd[] polynomial) {
+    private static RealQuadratic[] TrimPolynomial(RealQuadratic[] polynomial) {
         var degree = PolynomialDegree(polynomial: polynomial);
 
         return ((degree < 0)
-            ? [QuadraticSurd.Zero]
+            ? [RealQuadratic.Zero]
             : polynomial[..(degree + 1)]
         );
     }
@@ -1060,10 +1060,10 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
     }
     /// <summary>Proves <c>lambda*n+beta+c/(n+d) &gt; 0</c> at every positive integer without scanning an unbounded prefix.</summary>
     private static bool RationalLinearFractionalTailIsPositive(
-        QuadraticSurd slope,
-        QuadraticSurd offset,
-        QuadraticSurd correction,
-        QuadraticSurd poleOffset) {
+        RealQuadratic slope,
+        RealQuadratic offset,
+        RealQuadratic correction,
+        RealQuadratic poleOffset) {
         // Clear the positive denominators from
         // ((lambda*n+beta)*(n+d)+c)/(n+d). The denominator is linear with positive leading coefficient; the numerator
         // is a convex quadratic. If the denominator changes sign inside the positive integers, strict sign agreement
@@ -1171,9 +1171,9 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
 public static class PolynomialContinuedFractionTail {
     private static PolynomialTailIntervalCertificate BuildIntervalCertificate(
         PolynomialContinuedFractionParameters parameters,
-        QuadraticSurd slope,
-        QuadraticSurd offset,
-        QuadraticSurd residual) {
+        RealQuadratic slope,
+        RealQuadratic offset,
+        RealQuadratic residual) {
         // Choose exact dyadic L2<L1<lambda with L1*L2>r. Such a pair always exists because lambda^2>r.
         var precisionBits = 8;
         BigInteger scale;
@@ -1182,7 +1182,7 @@ public static class PolynomialContinuedFractionTail {
 
         while (true) {
             scale = (BigInteger.One << precisionBits);
-            var scaledFloor = (slope * QuadraticSurd.Rational(value: scale)).Floor();
+            var scaledFloor = (slope * RealQuadratic.Rational(value: scale)).Floor();
 
             lowerOneNumerator = (scaledFloor - 1);
             lowerTwoNumerator = (scaledFloor - 2);
@@ -1212,12 +1212,12 @@ public static class PolynomialContinuedFractionTail {
         while (true) {
             var successor = (cutoff + 1);
             var successorSquared = (successor * successor);
-            var lowerOne = QuadraticSurd.Rational(
+            var lowerOne = RealQuadratic.Rational(
                 denominator: scale,
                 numerator: lowerOneNumerator
             );
             var centerRatioLower = ((slope +
-                (offset / QuadraticSurd.Rational(value: successor))) - lowerOne);
+                (offset / RealQuadratic.Rational(value: successor))) - lowerOne);
 
             if (centerRatioLower.Sign > 0) {
                 // B_n/(n+1)^2 <= r + max(u,0)/(N+1) + max(v,0)/(N+1)^2 = W.
@@ -1342,7 +1342,7 @@ public static class PolynomialContinuedFractionTail {
             NumeratorQuadratic: numeratorQuadratic
         );
         var discriminant = ((linear * linear) + (4 * numeratorQuadratic));
-        var slope = QuadraticSurd.Create(
+        var slope = RealQuadratic.Create(
             rationalNumerator: linear,
             surdNumerator: BigInteger.One,
             radicand: discriminant,
@@ -1350,12 +1350,12 @@ public static class PolynomialContinuedFractionTail {
         );
         var slopeSquared = (slope * slope);
         var offset = ((
-            (QuadraticSurd.Rational(value: constant) * slopeSquared) +
-            (QuadraticSurd.Rational(value: (numeratorLinear - numeratorQuadratic)) * slope)
-        ) / (slopeSquared + QuadraticSurd.Rational(value: numeratorQuadratic)));
+            (RealQuadratic.Rational(value: constant) * slopeSquared) +
+            (RealQuadratic.Rational(value: (numeratorLinear - numeratorQuadratic)) * slope)
+        ) / (slopeSquared + RealQuadratic.Rational(value: numeratorQuadratic)));
         var residual = ((
-            (QuadraticSurd.Rational(value: constant) - offset) * (slope + offset)
-        ) + QuadraticSurd.Rational(value: numeratorConstant));
+            (RealQuadratic.Rational(value: constant) - offset) * (slope + offset)
+        ) + RealQuadratic.Rational(value: numeratorConstant));
         var certificate = BuildIntervalCertificate(
             offset: offset,
             parameters: parameters,

@@ -48,7 +48,7 @@ public sealed class AutomaticSequenceCodecTests {
     }
     [Fact]
     public void QuadraticOstrowskiSequenceRoundTrips() {
-        var numeration = IntegerNumerationSystem.QuadraticOstrowski(basis: QuadraticSurd.Create(
+        var numeration = IntegerNumerationSystem.QuadraticOstrowski(basis: RealQuadratic.Create(
             denominator: 1,
             radicand: 2,
             rationalNumerator: 0,

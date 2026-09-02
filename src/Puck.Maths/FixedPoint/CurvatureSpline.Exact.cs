@@ -523,9 +523,7 @@ internal static class CurvatureSplineExactMath {
         for (var j = 0; (j < subintervalCount); ++j) {
             var increment = ((speeds[(2 * j)] + (RationalFour * speeds[((2 * j) + 1)]) + speeds[((2 * j) + 2)]) / panelTimesSix);
 
-            // Reduced every step: Rational's operators never divide out a common factor, and an unreduced running sum
-            // of guard-scale roots grows its denominator multiplicatively with the panel index.
-            cumulative = Reduce(value: (cumulative + increment));
+            cumulative += increment;
             table[(j + 1)] = RoundQ32(value: cumulative, segmentIndex: segmentIndex, detail: $"the arc-length table entry at t = {(j + 1)}/{subintervalCount}");
         }
 
@@ -623,19 +621,9 @@ internal static class CurvatureSplineExactMath {
         var scaled = ((numerator << (2 * GuardBits)) / denominator);
         var root = BigIntegerFunctions.SquareRoot(value: scaled);
 
-        return Reduce(value: new Rational(root, (BigInteger.One << GuardBits)));
+        return new Rational(root, (BigInteger.One << GuardBits));
     }
 
-    private static Rational Reduce(Rational value) {
-        var numerator = value.Numerator;
-        var denominator = value.Denominator;
-
-        if (numerator.IsZero) { return RationalZero; }
-
-        var gcd = BigInteger.GreatestCommonDivisor(left: BigInteger.Abs(value: numerator), right: BigInteger.Abs(value: denominator));
-
-        return ((gcd.IsOne) ? value : new Rational((numerator / gcd), (denominator / gcd)));
-    }
 
     // --- Exact rational polynomial arithmetic and Sturm-sequence real-root isolation, shared by the tangent-length
     // quartic and the interior-cusp cubic. Coefficients are ascending by degree; DegreeOf reports −1 for the zero
@@ -645,7 +633,7 @@ internal static class CurvatureSplineExactMath {
         var result = RationalZero;
 
         for (var i = (coefficients.Length - 1); (i >= 0); --i) {
-            result = Reduce(value: ((result * x) + coefficients[i]));
+            result = ((result * x) + coefficients[i]);
         }
 
         return result;
@@ -670,7 +658,7 @@ internal static class CurvatureSplineExactMath {
         var result = new Rational[degree];
 
         for (var i = 1; (i <= degree); ++i) {
-            result[(i - 1)] = Reduce(value: (coefficients[i] * new Rational((i * BigInteger.One), BigInteger.One)));
+            result[(i - 1)] = (coefficients[i] * new Rational((i * BigInteger.One), BigInteger.One));
         }
 
         return result;
@@ -690,7 +678,7 @@ internal static class CurvatureSplineExactMath {
             var shift = (remainderDegree - divisorDegree);
 
             for (var i = 0; (i <= divisorDegree); ++i) {
-                remainder[(shift + i)] = Reduce(value: (remainder[(shift + i)] - (scale * divisor[i])));
+                remainder[(shift + i)] = (remainder[(shift + i)] - (scale * divisor[i]));
             }
         }
 
@@ -728,18 +716,12 @@ internal static class CurvatureSplineExactMath {
         return variations;
     }
 
-    // Reduced on entry and after every step: the bisection loop below feeds this its own running midpoint on every
-    // iteration, and an unreduced Rational's numerator/denominator bit length compounds with every `+`/`*` (neither
-    // operator divides out a common factor), which would blow the guard-precision bisection up to astronomical
-    // BigIntegers within a few dozen halvings.
     private static Rational NudgeAwayFromRoot(Rational[] leading, Rational x, bool negative) {
         var step = (negative ? -RootNudge : RootNudge);
         var guard = 0;
 
-        x = Reduce(value: x);
-
         while (SignOf(value: Evaluate(coefficients: leading, x: x)) == 0) {
-            x = Reduce(value: (x + step));
+            x = (x + step);
 
             if (++guard > 64) { break; } // a polynomial identically zero at every nudge cannot occur for our inputs.
         }

@@ -6,7 +6,7 @@ namespace Puck.Maths;
 /// <summary>The exact eventually-periodic Ostrowski numeration system of a positive quadratic irrational.</summary>
 public sealed class QuadraticOstrowskiSystem {
     private QuadraticOstrowskiSystem(
-        QuadraticSurd basis,
+        RealQuadratic basis,
         BigInteger[] continuedFractionPrefix,
         BigInteger[] continuedFractionPeriod) {
         Basis = basis;
@@ -15,7 +15,7 @@ public sealed class QuadraticOstrowskiSystem {
     }
 
     /// <summary>Gets the quadratic irrational defining the convergent-denominator basis.</summary>
-    public QuadraticSurd Basis { get; }
+    public RealQuadratic Basis { get; }
     /// <summary>Gets one nonempty repeating block of partial quotients.</summary>
     public IReadOnlyList<BigInteger> ContinuedFractionPeriod { get; }
     /// <summary>Gets the non-repeating continued-fraction prefix, including the integral partial quotient.</summary>
@@ -79,7 +79,7 @@ public sealed class QuadraticOstrowskiSystem {
     }
 
     /// <summary>Constructs the exact system of a positive irrational quadratic surd.</summary>
-    public static QuadraticOstrowskiSystem Create(QuadraticSurd basis) {
+    public static QuadraticOstrowskiSystem Create(RealQuadratic basis) {
         if (
             (basis.Sign <= 0) ||
             basis.IsRational ||
