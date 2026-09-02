@@ -750,6 +750,7 @@ internal static class WorldBootComposition {
         // the feed.
         services.AddSingleton<WheelStore>();
         services.AddSingleton(implementationFactory: static sp => new WorldWheelFeed(
+            clock: sp.GetRequiredService<IInputClock>(),
             icons: sp.GetRequiredService<WorldIconTable>(),
             pointer: sp.GetRequiredService<WorldPointer>(),
             roster: sp.GetRequiredService<PlayerRoster>(),
