@@ -432,6 +432,70 @@ public sealed class BindingVocabularyCheckTests {
         ));
     }
 
+    [Fact]
+    public void ANullModifierRowIsSkippedNotThrown() {
+        // The declared-modifier id set is built by projecting every row's Id; a null row NRE'd there, nine lines
+        // above the loop that already guards that exact case. A malformed row is BindingProfile.Compile's refusal
+        // to make — this gate's job is to keep reporting vocabulary findings around it.
+        var document = new BindingProfileDocument(
+            Version: BindingProfileDocument.CurrentVersion,
+            Modifiers: [null!],
+            Chords: [
+                new BindingChordDefinition(
+                    Group: "play",
+                    Chord: [],
+                    Page: new BindingPageDefinition(
+                        Id: "base",
+                        Entries: [new BindingPageEntryDefinition(Command: "typo", Sources: ["keyboard.a"])]
+                    )
+                ),
+            ]
+        );
+        var errors = BindingVocabularyCheck.Validate(
+            document: document,
+            lookups: new BindingVocabularyLookups(
+                Command: static _ => null,
+                SourceKind: null
+            )
+        ).Errors;
+
+        Assert.Contains(
+            actualString: Assert.Single(collection: errors),
+            expectedSubstring: "names no registered command"
+        );
+    }
+    [Fact]
+    public void ANullModifierIdIsSkippedNotThrown() {
+        // The row's sibling shape: the row is present but its id is not. Pinned beside the null-row case so the
+        // guard that skips one is never narrowed to the other.
+        var document = new BindingProfileDocument(
+            Version: BindingProfileDocument.CurrentVersion,
+            Modifiers: [new BindingModifierDefinition(Id: null!, Sources: [])],
+            Chords: [
+                new BindingChordDefinition(
+                    Group: "play",
+                    Chord: [],
+                    Page: new BindingPageDefinition(
+                        Id: "base",
+                        Entries: [new BindingPageEntryDefinition(Command: "typo", Sources: ["keyboard.a"])]
+                    )
+                ),
+            ]
+        );
+        var errors = BindingVocabularyCheck.Validate(
+            document: document,
+            lookups: new BindingVocabularyLookups(
+                Command: static _ => null,
+                SourceKind: null
+            )
+        ).Errors;
+
+        Assert.Contains(
+            actualString: Assert.Single(collection: errors),
+            expectedSubstring: "names no registered command"
+        );
+    }
+
     private static BindingProfileDocument Document(BindingPageEntryDefinition entry) {
         return new BindingProfileDocument(
             Version: BindingProfileDocument.CurrentVersion,
