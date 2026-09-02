@@ -59,8 +59,9 @@ public sealed class CommandEchoTests {
     // closing '"' and leave the run unterminated.
     [InlineData("C:\\my games\\", "\"C:\\\\my games\\\\\"")]
     // Whitespace is char.IsWhiteSpace, not a listed set: a vertical tab and a non-breaking space split a reader that
-    // splits the way the wire tokenizer does, so both are reserved too.
-    [InlineData("a\vb", "\"a\vb\"")]
+    // splits the way the wire tokenizer does, so both are reserved too. The vertical tab is additionally a CONTROL
+    // character, which .NET counts as a line ending, so quoting alone cannot contain it and it is escaped.
+    [InlineData("a\vb", "\"a\\u000bb\"")]
     [InlineData("a\u00a0b", "\"a\u00a0b\"")]
     public void AValueIsQuotedExactlyWhenItCarriesAReservedCharacter(string value, string expected) {
         Assert.Equal(actual: CommandEcho.Quote(value: value), expected: expected);
@@ -80,6 +81,30 @@ public sealed class CommandEchoTests {
             key: "message",
             value: value
         ).Close(), comparisonType: StringComparison.Ordinal, expectedSubstring: "\n");
+    }
+    [Theory]
+    // .NET's own line-ending rule — the one string.ReplaceLineEndings and MemoryExtensions.EnumerateLines apply, and
+    // therefore the one a driver reading an echo stream applies — breaks on far more than '\n' and '\r'. Escaping only
+    // the three ASCII breaks left `[world.note: message="two<FF>lines"]` as TWO lines for every such reader, which is
+    // exactly the tear the escaping exists to prevent. The repository's own wire tests use '\f' as a separator, so this
+    // is not hypothetical.
+    [InlineData("two\flines", "\"two\\u000clines\"")]
+    [InlineData("two\u0085lines", "\"two\\u0085lines\"")]
+    [InlineData("two\u2028lines", "\"two\\u2028lines\"")]
+    [InlineData("two\u2029lines", "\"two\\u2029lines\"")]
+    // A control character that is not whitespace at all did not even force the quoting before, so it rode through raw.
+    [InlineData("bell\u0007", "\"bell\\u0007\"")]
+    public void EveryControlCharacterAndUnicodeSeparatorIsEscapedSoAnEchoIsStillOneLine(string value, string expected) {
+        Assert.Equal(actual: CommandEcho.Quote(value: value), expected: expected);
+
+        var line = CommandEcho.Open(verb: "world.note").Field(
+            key: "message",
+            value: value
+        ).Close();
+
+        _ = Assert.Single(collection: line.ReplaceLineEndings(replacementText: "\n").Split(separator: '\n'));
+        // The escape is the writer's, so the reader has to be its exact inverse or the value comes back mangled.
+        Assert.Equal(actual: CommandEcho.Unquote(token: CommandEcho.Quote(value: value)), expected: value);
     }
     [Fact]
     public void AFieldValueCarryingADelimiterCannotEndTheTokenSegmentOrEnvelope() {
