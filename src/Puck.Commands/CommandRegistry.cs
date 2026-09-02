@@ -45,8 +45,9 @@ public sealed class CommandRegistry {
     // The built-in `wire.errors [reset]` verb, registered beside `help`/`wire.ack`: it reports (or clears) the count of
     // submitted lines this registry REFUSED. Every rejection — an unknown verb, a parse error, a handler's IsError
     // result on either dispatch path, a Simulation re-parse that failed to reach its handler, and a host's DEFERRED
-    // refusal reported through NoteDeferredRejection — increments the same counter, so a scripted driver reads one
-    // number back instead of pattern-matching free-form error text.
+    // refusal reported through NoteDeferredRejection — increments the same counter, so a driver reads one number back
+    // instead of pattern-matching free-form error text. It counts the lines its CALLER submitted: a line a handler
+    // submits of its own reaches this count only through the verdict that handler returns (see SubmitStamped).
     private readonly Argument<string[]> m_wireErrorsArgument = new(name: "mode") {
         Arity = ArgumentArity.ZeroOrMore,
         Description = "reset",
@@ -258,7 +259,7 @@ public sealed class CommandRegistry {
 
         // The wire's own control verb, beside help: `wire.ack [on|quiet]` reports or flips the acknowledgement mode.
         m_wireAckCommand = new Command(
-            description: "Sets or reports the stdin acknowledgement mode: wire.ack [on|quiet] — `on` (default) echoes every accepted command; `quiet` drops the success acks of side-effecting verbs (errors and query verbs like body.where still echo); no argument reports the current mode.",
+            description: "Sets or reports the acknowledgement mode for accepted commands: wire.ack [on|quiet] — `on` (default) echoes every accepted command; `quiet` drops the bare success acknowledgements of side-effecting verbs, while failures and any verb that answers with data still echo; no argument reports the current mode.",
             name: WireAckCommandName
         ) {
             m_wireAckArgument,
@@ -267,7 +268,7 @@ public sealed class CommandRegistry {
 
         // The wire's rejection readback, beside wire.ack: `wire.errors [reset]`.
         m_wireErrorsCommand = new Command(
-            description: "Reports the number of submitted lines this session REFUSED (unknown verb, parse error, a handler's failure result, or a deferred refusal a host raised a tick after accepting the line): wire.errors [reset] — no argument reports the running count; `reset` reports it and zeroes the counter. A scripted run asserts `[wire.errors: 0 rejected]` to prove no step silently no-opped.",
+            description: "Reports the number of submitted lines this session REFUSED — an unknown verb, a parse error, a handler's failure result, or a refusal raised after the line was accepted: wire.errors [reset] — no argument reports the running count; `reset` reports it and zeroes the counter. It is the one number that says whether any submitted line silently no-opped.",
             name: WireErrorsCommandName
         ) {
             m_wireErrorsArgument,
