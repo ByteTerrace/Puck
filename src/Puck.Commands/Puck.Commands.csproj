@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <AssemblyName>Puck.Commands</AssemblyName>
-        <Description>A single, modality-aware command surface for driving deterministic simulations: keyboard, mouse, gamepad, console text, AI, replay, and network input all become the same typed, named command carrying a per-frame value. The fixed-step path captures every modality into ordered per-slot snapshots and applies exactly one snapshot per host-owned tick.</Description>
+        <!-- The gallery card truncates, so the first sentence has to stand alone; the detail follows it. -->
+        <Description>One typed command surface for deterministic fixed-step simulations. Keyboard, mouse, gamepad, console text, authored interface controls, replay, and network input all become the same named command carrying a per-frame value, so a handler never learns where its input came from. The fixed-step path orders every modality into per-slot snapshots and applies exactly one per host-owned tick. Source-available and dual-licensed: free for noncommercial use under PolyForm Noncommercial 1.0.0, paid commercial license otherwise.</Description>
         <IsPackable>true</IsPackable>
         <PackageId>ByteTerrace.Puck.Commands</PackageId>
         <PackageTags>bindings;commands;determinism;input;simulation</PackageTags>
