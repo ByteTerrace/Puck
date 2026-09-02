@@ -989,7 +989,6 @@ public sealed class PagedInputBindingsTests {
         Assert.Equal(expected: "belt", actual: bindings.WheelFor(slot: 3)?.Id);
         Assert.Equal(expected: "belt", actual: bindings.WheelFor(slot: 0)?.Id);
     }
-
     [Fact]
     public async Task WheelForNeverCreatesSlotStateBeneathTheSnapshotThread() {
         // WheelFor is called off the snapshot thread, once per presentation frame. A mutating read — one that

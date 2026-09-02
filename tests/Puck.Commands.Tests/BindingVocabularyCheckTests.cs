@@ -290,7 +290,6 @@ public sealed class BindingVocabularyCheckTests {
 
         Assert.Empty(collection: errors);
     }
-
     [Fact]
     public void ADeclaredModifiersOwnSourcesAreCheckedAgainstTheControlCatalog() {
         // The third place a physical source id appears, and the one the gate used to skip: a typo here compiles
@@ -385,7 +384,6 @@ public sealed class BindingVocabularyCheckTests {
 
         Assert.Equal(expected: "modal", actual: bindings.ViewFor(slot: 0).PageId);
     }
-
     [Fact]
     public void TheReportIsTheWholeAnswerAndCarriesNoCallerState() {
         var document = Document(entry: new BindingPageEntryDefinition(Sources: ["gamepad.buttonSouht"], Command: "jump"));

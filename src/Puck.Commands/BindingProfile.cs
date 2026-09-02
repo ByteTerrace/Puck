@@ -421,6 +421,7 @@ public static class BindingProfile {
             PageId: page.Id
         );
     }
+
     // The single-page reading of the flattening Compile does in bulk: walk one page's Inherits chain to its root and
     // apply the overlays back outward. Compile resolves EVERY page at once (memoized per row, with the same-group
     // check the row indices make cheap), so it cannot answer for a caller holding only a document and one page id —
@@ -492,6 +493,7 @@ public static class BindingProfile {
 
         return effective;
     }
+
     // Page inheritance is authoring-only. Flattening it here keeps the input fold at one table lookup while giving
     // a modal page source-level overrides instead of forcing it to duplicate a resting page's unrelated controls.
     private static BindingPageDefinition OverlayInheritedPage(BindingPageDefinition inherited, BindingPageDefinition page) {
