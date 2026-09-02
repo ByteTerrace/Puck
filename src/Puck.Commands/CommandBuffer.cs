@@ -34,12 +34,15 @@ public readonly struct CommandBuffer<T> : IReadOnlyList<T>, IEquatable<CommandBu
     );
 
     /// <inheritdoc/>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is negative or not less than
+    /// <see cref="Count"/>.</exception>
     public T this[int index] {
         get {
-            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
-                index,
-                Count
-            );
+            // ONE unsigned comparison covers both ends: a negative index reinterprets as a huge unsigned value and
+            // fails here rather than dereferencing the (possibly null) backing array below.
+            if (((uint)index) >= ((uint)Count)) {
+                throw new ArgumentOutOfRangeException(paramName: nameof(index));
+            }
 
             return m_items![index];
         }

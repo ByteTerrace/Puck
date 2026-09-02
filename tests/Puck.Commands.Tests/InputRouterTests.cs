@@ -508,6 +508,35 @@ public sealed class InputRouterTests {
 
         return retired;
     }
+    [Fact]
+    public void BoundDispatchCarriesTheBindingRowsTextAndNeverTheSignalsTypedPayload() {
+        // A bound press with authored argument text: the entry carries the LINE the binding row composes, which is
+        // what CommandRegistry.ApplySnapshot re-parses at tick time.
+        var authored = new InputRouter(
+            registry: new CommandRegistry(modules: [new DigitalModule(command: Command)]),
+            bindings: new FixedBindings(binding: new CommandBinding(Command: Command, Text: "8")),
+            principalResolver: new ConsolePrincipal()
+        );
+
+        authored.Capture(signal: InputSignal.Press(source: "key.w"));
+
+        var press = Assert.Single(collection: Assert.Single(collection: authored.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue).Lanes).Entries);
+
+        Assert.Equal(expected: $"{Command} 8", actual: press.Text);
+
+        // A TEXT-BEARING signal reaching the same binding contributes nothing to that payload: a typed character is
+        // not a command line, so forwarding it would have the registry refuse it as an unknown verb per keystroke.
+        // Only the row's own text decides Text — see the remarks on InputSignal.Typed.
+        var typed = Router(registry: out _);
+
+        typed.Capture(signal: InputSignal.Typed(source: "keyboard.text", text: "n"));
+
+        var character = Assert.Single(collection: Assert.Single(collection: typed.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue).Lanes).Entries);
+
+        Assert.Null(@object: character.Text);
+        Assert.Equal(expected: CommandPhase.Started, actual: character.Phase);
+    }
+
     private static InputRouter Router(out CommandRegistry registry) {
         registry = new CommandRegistry(modules: [new DigitalModule(command: Command)]);
 
