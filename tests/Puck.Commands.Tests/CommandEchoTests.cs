@@ -102,20 +102,26 @@ public sealed class CommandEchoTests {
         // The ordinary case is untouched: a safe name splices verbatim, so every existing instance/anchor tag reads
         // exactly as it did.
         Assert.Equal(
-            actual: CommandEcho.SpliceTag(tag: "instance:alpha", text: echo),
+            actual: CommandEcho.SpliceTag(prefix: "instance:", text: echo, value: "alpha"),
             expected: "[world.inhabitants: bodyIndex=0 instance:alpha]"
         );
 
-        // A name carrying a delimiter is spliced as ONE quoted token rather than closing the envelope it is being
-        // spliced into.
+        // A name carrying a delimiter is spliced as ONE token rather than closing the envelope it is being spliced
+        // into — and the reserved PREFIX stays outside the quote, because the readers of these tags test for exactly
+        // that prefix. Quoting the whole tag produced `"instance:my world"`, still one well-formed token and still
+        // invisible to WorldArgs.IsInstanceToken.
         Assert.Equal(
-            actual: CommandEcho.SpliceTag(tag: "instance:my world]", text: echo),
-            expected: "[world.inhabitants: bodyIndex=0 \"instance:my world]\"]"
+            actual: CommandEcho.SpliceTag(prefix: "instance:", text: echo, value: "my world]"),
+            expected: "[world.inhabitants: bodyIndex=0 instance:\"my world]\"]"
+        );
+        Assert.Equal(
+            actual: CommandEcho.SpliceTag(prefix: "instance:", text: echo, value: "my world"),
+            expected: "[world.inhabitants: bodyIndex=0 instance:\"my world\"]"
         );
 
         // A text that is not a closed echo is still returned untouched.
         Assert.Equal(
-            actual: CommandEcho.SpliceTag(tag: "instance:my world", text: "not an echo"),
+            actual: CommandEcho.SpliceTag(prefix: "instance:", text: "not an echo", value: "my world"),
             expected: "not an echo"
         );
     }
@@ -142,5 +148,42 @@ public sealed class CommandEchoTests {
             .Close();
 
         Assert.Equal(actual: line, expected: "[world.market: feeBasisPoints=1000 | listing id=1 status=Active]");
+    }
+    [Fact]
+    public void ASplicedTagSurvivesTheRoundTripBackThroughTheConsole() {
+        const string echo = "[world.inhabitants: bodyIndex=0]";
+
+        var seen = new List<string>();
+        var registry = new CommandRegistry(modules: [new TokenProbeModule(seen: seen)]);
+        var tagged = CommandEcho.SpliceTag(prefix: "instance:", text: echo, value: "my world");
+        var tag = tagged[(tagged.IndexOf(comparisonType: StringComparison.Ordinal, value: " instance:") + 1)..^1];
+
+        _ = registry.Submit(line: $"token.probe {tag}");
+
+        // The whole point of the tag: a script reads it off the echo and hands it straight back as an argument. It
+        // must arrive as ONE token whose reserved prefix is still the leading characters — the test every
+        // instance-addressed verb applies (WorldArgs.IsInstanceToken) — with the console's own splitter removing the
+        // value's quotes exactly as it does for a Field.
+        var token = Assert.Single(collection: seen);
+
+        Assert.Equal(actual: token, expected: "instance:my world");
+        Assert.StartsWith(actualString: token, comparisonType: StringComparison.Ordinal, expectedStartString: "instance:");
+    }
+
+    private sealed class TokenProbeModule(List<string> seen) : ICommandModule {
+        public IEnumerable<CommandDefinition> GetCommands() {
+            yield return CommandDefinition.WithWireArgs(
+                name: "token.probe",
+                description: "Records every trailing token it was handed.",
+                handler: (_, args) => {
+                    for (var index = 0; (index < args.Count); index++) {
+                        seen.Add(item: args[index].ToString());
+                    }
+
+                    return CommandResult.None;
+                },
+                bindability: CommandBindability.Unbindable
+            );
+        }
     }
 }

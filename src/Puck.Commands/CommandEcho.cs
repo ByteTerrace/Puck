@@ -21,7 +21,7 @@ namespace Puck.Commands;
 /// <c>']'</c> (it closes the envelope) and <c>'"'</c> (it opens a quoted run). A value carrying any of them would
 /// otherwise let a scripted driver's split land inside it — <c>path=C:\my games</c> reads as two tokens,
 /// <c>members=[seat1]</c> closes the envelope early — so <see cref="Field(string, string)"/> and
-/// <see cref="SpliceTag(string, string)"/> route their value through <see cref="Quote(string)"/> first. Whitespace
+/// <see cref="SpliceTag(string, string, string)"/> route their value through <see cref="Quote(string)"/> first. Whitespace
 /// here is <see cref="char.IsWhiteSpace(char)"/>, the same rule the wire tokenizer splits a submitted line on, so
 /// what this writer reserves is exactly what that reader separates on rather than an ASCII approximation of it.</para>
 /// <para>A value needing no quoting is emitted verbatim, so every echo that was already unambiguous reads exactly as
@@ -51,7 +51,7 @@ public sealed class CommandEcho {
     /// <summary>Renders <paramref name="value"/> as one echo token: verbatim when it carries none of the grammar's
     /// reserved characters (whitespace, <c>'|'</c>, <c>']'</c>, <c>'"'</c>), and otherwise as a double-quoted run
     /// escaped as the class remarks describe. <see cref="Field(string, string)"/> and
-    /// <see cref="SpliceTag(string, string)"/> already apply it; it is public so a verb composing a token by hand can
+    /// <see cref="SpliceTag(string, string, string)"/> already apply it; it is public so a verb composing a token by hand can
     /// reach the same rule rather than inventing a second one.</summary>
     /// <param name="value">The token text.</param>
     /// <returns>The token, quoted only if it needs to be.</returns>
@@ -190,17 +190,27 @@ public sealed class CommandEcho {
     /// <summary>Closes the echo line and returns the finished string.</summary>
     /// <returns>The finished <c>[verb: …]</c> line.</returns>
     public string Close() => m_builder.Append(value: ']').ToString();
-    /// <summary>Splices ` <paramref name="tag"/>` just inside an already-closed bracketed echo's trailing <c>]</c>,
-    /// or returns <paramref name="text"/> unchanged when it does not end in <c>]</c> — the shared surgery every
-    /// after-the-fact echo tag (instance, perception anchor) uses. Each caller computes its own tag text; the tag is
-    /// spliced as ONE token through <see cref="Quote(string)"/>, so a reserved character in the name a caller
-    /// interpolated cannot close the envelope it is being spliced into.</summary>
+    /// <summary>Splices ` <paramref name="prefix"/><paramref name="value"/>` just inside an already-closed bracketed
+    /// echo's trailing <c>]</c>, or returns <paramref name="text"/> unchanged when it does not end in <c>]</c> — the
+    /// shared surgery every after-the-fact echo tag (instance, perception anchor) uses.</summary>
+    /// <remarks>
+    /// The tag is a KEY and a VALUE, never one opaque string, because only the value may be quoted. A composite tag
+    /// quoted whole (<c>"instance:my world"</c>) hides its own reserved prefix behind the quote, and the readers of
+    /// these tags test for that prefix — so the tag would still be one well-formed token and still mean nothing to the
+    /// thing it was written for. The prefix therefore rides through verbatim (callers spell a declared literal there —
+    /// <c>instance:</c>, <c>anchor=body:</c> — never interpolated text) and only the value goes through
+    /// <see cref="Quote(string)"/>, which is enough for the whole tag to stay one token.
+    /// <para>A quoted value reads back exactly as <see cref="Field(string, string)"/>'s does: the console's own
+    /// splitter removes the pair when the line is resubmitted, so <c>instance:"my world"</c> reaches a verb as the
+    /// single token <c>instance:my world</c>.</para>
+    /// </remarks>
     /// <param name="text">The bracketed echo to tag.</param>
-    /// <param name="tag">The tag text, without surrounding brackets or the leading space.</param>
+    /// <param name="prefix">The tag's declared literal key, including its own separator (e.g. <c>instance:</c>).</param>
+    /// <param name="value">The tag's value, quoted only if it needs to be.</param>
     /// <returns>The tagged echo, or <paramref name="text"/> unchanged.</returns>
-    public static string SpliceTag(string text, string tag) =>
+    public static string SpliceTag(string text, string prefix, string value) =>
         (text.EndsWith(value: ']')
-            ? $"{text[..^1]} {Quote(value: tag)}]"
+            ? $"{text[..^1]} {prefix}{Quote(value: value)}]"
             : text
         );
 }
