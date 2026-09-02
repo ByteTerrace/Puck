@@ -183,6 +183,65 @@ public sealed class CommandRegistryBoundaryTests {
         Assert.Equal(actual: submitted, expected: ["sim.cancel", "sum 2 3"]);
     }
 
+    [Fact]
+    public void ATextEntryNamingAnIdThisRegistryCannotDecodeIsSkippedWithoutStrandingItsSession() {
+        var submitted = new List<string>();
+        // Two registries, and a host that wired the wrong router's sink: ids are interned per registry, so the id the
+        // WRITER minted here indexes nothing in the registry that applies the snapshot. It is the one public path to
+        // an out-of-range text entry — every other one is closed (a sink resolves its id from its own registry, and a
+        // snapshot built for another registry is refused whole).
+        var writer = new CommandRegistry(modules: [new ManyCommandsModule(count: 64), new SumModule()]);
+        var reader = new CommandRegistry(modules: [new BoundProbeModule()]);
+        var router = new InputRouter(
+            registry: reader,
+            bindings: new EmptyBindings(),
+            principalResolver: new ConsolePrincipal()
+        );
+        var source = new TextCommandSource(registry: writer);
+        var session = source.CreateSession(
+            onResult: (line, _) => submitted.Add(item: line),
+            principal: CommandPrincipal.Console,
+            simulationSink: router.ConsoleTextSink
+        );
+
+        session.Enqueue(line: "sim.wide payload");
+        session.Enqueue(line: "sum 2 3");
+        source.Collect();
+
+        Assert.Equal(actual: submitted, expected: ["sim.wide payload"]);
+
+        var snapshot = Tick(router: router);
+
+        reader.ApplySnapshot(snapshot: in snapshot);
+
+        // Nothing was dispatched — the reader has no command at that id — but the entry's read-after-write barrier
+        // still released, so the writer's session drains its queued line instead of rotating forever.
+        source.Collect();
+
+        Assert.Equal(actual: submitted, expected: ["sim.wide payload", "sum 2 3"]);
+    }
+
+    private sealed class ManyCommandsModule(int count) : ICommandModule {
+        public IEnumerable<CommandDefinition> GetCommands() {
+            for (var index = 0; (index < count); index++) {
+                yield return CommandDefinition.Verb(
+                    name: $"command.{index}",
+                    description: "Widens the interned id space.",
+                    valueKind: CommandValueKind.Digital,
+                    handler: static _ => CommandResult.None,
+                    bindability: CommandBindability.Bindable
+                );
+            }
+
+            yield return CommandDefinition.WithWireArgs(
+                name: "sim.wide",
+                description: "A deferred verb whose interned id is wider than the reading registry's table.",
+                handler: static (_, _) => CommandResult.None,
+                bindability: CommandBindability.Unbindable,
+                routing: CommandRouting.Simulation
+            );
+        }
+    }
     private sealed class ConsolePrincipal : ICommandPrincipalResolver {
         public CommandPrincipal PrincipalOf(int slot) => CommandPrincipal.Console;
     }

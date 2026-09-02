@@ -408,6 +408,14 @@ public sealed class CommandRegistry {
     private void ApplyEntry(in CommandEntry entry, int slot) {
         // A submitted text entry is routed FIRST — before the defensive id-range check below, which would otherwise
         // fall through to the bound-entry path with an id that indexes nothing.
+        //
+        // The range check on THIS branch is unreachable from any public path and is deliberately kept: an injected
+        // entry's id is interned from this very registry (CommandInjectionSink resolves it through TryGetId), and a
+        // snapshot built for another registry is refused whole before the loop starts, so the two ways an id could
+        // exceed m_nameById are both already closed. Nothing here decides whether the entry's barrier is released
+        // either — ApplySnapshot's per-entry finally owns that — so skipping the dispatch is the whole of what this
+        // guard does. It is therefore untested BY CONSTRUCTION: a test would have to forge an entry, which is exactly
+        // what CommandEntry's internal construction prevents.
         if (entry.Text is { } line) {
             if (
                 entry.Dispatch &&
