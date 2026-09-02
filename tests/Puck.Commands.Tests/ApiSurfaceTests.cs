@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Runtime.CompilerServices;
 
 using Xunit;
 
@@ -15,6 +16,14 @@ public sealed class ApiSurfaceTests {
         "Puck.Commands.CommandLane",
         "Puck.Commands.CommandSnapshot",
     ];
+    // Public settable state that is DELIBERATE, one line of reasoning per entry. A property that reaches this list
+    // without one is a defect wearing an allow-list entry.
+    private static readonly string[] MutableByDesign = [
+        // The frame-thread hold gate: a handler arms it to defer the REST of the frame's queued lines, so it is a
+        // control the host is meant to set from inside Collect rather than construction-time state. Its backing field
+        // is volatile and the threading contract is written at the declaration.
+        "Puck.Commands.TextCommandSource.HoldGate",
+    ];
     private static readonly string[] RetiredShapeMarkers = [
         "Compat",
         "Deprecated",
@@ -22,6 +31,10 @@ public sealed class ApiSurfaceTests {
         "Obsolete",
     ];
 
+    // An `init` accessor is an ordinary setter whose return parameter carries a required custom modifier of
+    // IsExternalInit — the only thing that distinguishes the two in metadata.
+    private static bool IsInitOnly(MethodInfo setter) =>
+        Array.IndexOf(array: setter.ReturnParameter.GetRequiredCustomModifiers(), value: typeof(IsExternalInit)) >= 0;
     private static IEnumerable<Type> ExportedTypes() =>
         typeof(CommandRegistry).Assembly.GetExportedTypes().OrderBy(keySelector: static type => type.FullName, comparer: StringComparer.Ordinal);
 
@@ -69,6 +82,31 @@ public sealed class ApiSurfaceTests {
             foreach (var field in type.GetFields(bindingAttr: BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly)) {
                 if (!field.IsLiteral && !field.IsInitOnly) {
                     offenders.Add(item: ((type.FullName + ".") + field.Name));
+                }
+            }
+        }
+
+        Assert.Equal(expected: string.Empty, actual: string.Join(separator: ", ", values: offenders));
+    }
+    [Fact]
+    public void PublicSurfaceExposesNoUndeclaredMutableProperty() {
+        // The field walk above is only half the question. A public non-init SETTER is the same reach-around a public
+        // field is — state a consumer can rewrite after every constructor and validation path in this assembly has
+        // run — and nothing here could see one, so a settable property could be added to any of the 100-plus exported
+        // types without a single test noticing. An `init` setter is not that: it can only run while the object is
+        // being created, which is what the declarative parts of a CommandDefinition are built with.
+        var offenders = new List<string>();
+
+        foreach (var type in ExportedTypes()) {
+            foreach (var property in type.GetProperties(bindingAttr: BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly)) {
+                if ((property.SetMethod is not { IsPublic: true } setter) || IsInitOnly(setter: setter)) {
+                    continue;
+                }
+
+                var name = ((type.FullName + ".") + property.Name);
+
+                if (!MutableByDesign.Contains(value: name, comparer: StringComparer.Ordinal)) {
+                    offenders.Add(item: name);
                 }
             }
         }
