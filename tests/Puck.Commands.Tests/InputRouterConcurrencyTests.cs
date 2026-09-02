@@ -79,10 +79,10 @@ public sealed class InputRouterConcurrencyTests {
         var nextByProducer = new int[producerCount];
 
         foreach (var source in observed) {
-            var separator = source.IndexOf(value: '.', comparisonType: StringComparison.Ordinal);
+            var separator = source.IndexOf(comparisonType: StringComparison.Ordinal, value: '.');
             var producer = int.Parse(
                 provider: CultureInfo.InvariantCulture,
-                s: source.AsSpan(start: 1, length: (separator - 1))
+                s: source.AsSpan(length: (separator - 1), start: 1)
             );
             var index = int.Parse(
                 provider: CultureInfo.InvariantCulture,

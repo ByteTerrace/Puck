@@ -68,7 +68,6 @@ public sealed class CommandBufferTests {
         Assert.Equal(actual: second, expected: first);
         Assert.Equal(actual: entries.Span.Length, expected: first.Count);
     }
-
     [Fact]
     public void AViewRetainedAcrossTheNextSnapshotRefusesToBeRead() {
         var router = new InputRouter(

@@ -142,6 +142,7 @@ public readonly struct CommandBuffer<T> : IReadOnlyList<T>, IEquatable<CommandBu
         public void Reset() => m_index = -1;
     }
 }
+
 // The lifetime token a router stamps onto every borrowed view it hands out. One instance per router, bumped once per
 // snapshot: a view compares the stamp it captured against this one, which is what turns "valid until the next
 // SnapshotForTick" from a remark into a check. A class rather than a counter read off the router so the comparison

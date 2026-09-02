@@ -39,6 +39,7 @@ public sealed partial class InputRouter {
 
         private int m_count;
         private int m_head;
+
         private T[] m_items = [];
 
         internal long DroppedCount;
@@ -168,6 +169,7 @@ public sealed partial class InputRouter {
             ));
         }
     }
+
     // The one door both capture entry points share: refuse a signal that names no control, then append it under the
     // gate, dropping the OLDEST retained signal first when the queue has reached its cap.
     private void CaptureSignal(in InputSignal signal, bool focusExemptOnly) {

@@ -68,7 +68,6 @@ public sealed class InputRouterMomentaryReleaseTests {
         Assert.Equal(actual: entries[1].Phase, expected: CommandPhase.Canceled);
         Assert.True(condition: router.IsCommandHeld(command: ChannelCommand, slot: 0));
     }
-
     [Fact]
     public void ATapFollowedByAFullSlotClearDeliversExactlyOneRelease() {
         var router = Router();
