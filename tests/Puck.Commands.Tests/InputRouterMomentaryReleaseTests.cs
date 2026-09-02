@@ -69,6 +69,28 @@ public sealed class InputRouterMomentaryReleaseTests {
         Assert.True(condition: router.IsCommandHeld(command: ChannelCommand, slot: 0));
     }
 
+    [Fact]
+    public void ATapFollowedByAFullSlotClearDeliversExactlyOneRelease() {
+        var router = Router();
+
+        router.SetActiveMaps(maps: ["play"], slot: 0);
+        router.Capture(signal: InputSignal.Press(source: "key.a"));
+
+        var pressed = Assert.Single(collection: Assert.Single(collection: router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue).Lanes).Entries);
+
+        Assert.Equal(actual: pressed.Phase, expected: CommandPhase.Started);
+
+        // ClearSlotHeld deliberately leaves IInputBindings alone, so the tap's scheduled release is still in flight:
+        // cancelling it here as well would hand the handler two releases for one tap.
+        _ = router.ClearSlotHeld(slot: 0);
+
+        var released = Assert.Single(collection: Assert.Single(collection: router.SnapshotForTick(tick: 2UL, windowEndTick: ulong.MaxValue).Lanes).Entries);
+
+        Assert.True(condition: released.Dispatch);
+        Assert.True(condition: (released.Phase is CommandPhase.Completed or CommandPhase.Canceled));
+        Assert.Empty(collection: router.SnapshotForTick(tick: 3UL, windowEndTick: ulong.MaxValue).Lanes);
+    }
+
     private static PagedInputBindings Bindings() {
         return new PagedInputBindings(profile: BindingProfile.Compile(
             channelCommandName: static _ => ChannelCommand,

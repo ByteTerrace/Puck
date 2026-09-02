@@ -297,13 +297,21 @@ public sealed class InputRouter : IDisposable {
     }
     // ONE cancellation per carried command, never two: a destination carrying both a live hold and a tap's pending
     // momentary release is one command owing one release, and the hold's own payload is the one that describes it.
-    private static void AppendCancellations(List<CommandInjection> cancellations, int slot, HeldCommandState state) {
+    //
+    // A pending momentary release is owed by the resolver's SCHEDULED edge, not by this table, so it is synthesized
+    // here only when the caller is about to destroy that edge (dischargesScheduledEdges). A caller that leaves
+    // IInputBindings alone leaves the obligation with its owner instead: cancelling it as well would deliver two
+    // releases for one tap.
+    private static void AppendCancellations(List<CommandInjection> cancellations, int slot, HeldCommandState state, bool dischargesScheduledEdges) {
         if (state.HasEntry) {
             cancellations.Add(item: CancellationFor(
                 entry: state.Entry,
                 slot: slot
             ));
-        } else if (state.HasPendingMomentaryRelease) {
+        } else if (
+            state.HasPendingMomentaryRelease &&
+            dischargesScheduledEdges
+        ) {
             cancellations.Add(item: CancellationFor(
                 entry: state.MomentaryEntry,
                 slot: slot
@@ -1869,6 +1877,11 @@ public sealed class InputRouter : IDisposable {
     /// wired implicitly. It does not touch <see cref="IInputBindings"/> chord/modifier state
     /// (<see cref="PagedInputBindings.Reset(int)"/> is that seam) and does not discard already-captured signals
     /// for the slot.
+    /// <para>Because it leaves the resolver alone, a <see cref="BindingActivatorMode.Tapped"/> completion's already
+    /// SCHEDULED release (see <see cref="IChordEdgeSource.DrainScheduledEdges"/>) is still in flight and delivers
+    /// itself on the next tick; this call does not also synthesize a cancellation for it, so one tap still produces
+    /// exactly one release. <see cref="SetActiveMaps"/> and <see cref="ReleaseHeld()"/> DO synthesize it, because
+    /// each of them resets the resolver and destroys the scheduled edge first.</para>
     /// </remarks>
     /// <param name="slot">The logical player slot to clear.</param>
     /// <returns>The number of toggle latches this slot carried in the on state and cleared; 0 when the slot had
@@ -1903,6 +1916,7 @@ public sealed class InputRouter : IDisposable {
             foreach (var state in held.Values) {
                 AppendCancellations(
                     cancellations: cancellations,
+                    dischargesScheduledEdges: false,
                     slot: slot,
                     state: state
                 );
@@ -2011,6 +2025,7 @@ public sealed class InputRouter : IDisposable {
             foreach (var state in held.Values) {
                 AppendCancellations(
                     cancellations: cancellations,
+                    dischargesScheduledEdges: true,
                     slot: slot,
                     state: state
                 );
@@ -2085,6 +2100,7 @@ public sealed class InputRouter : IDisposable {
 
                     AppendCancellations(
                         cancellations: cancellations,
+                        dischargesScheduledEdges: true,
                         slot: slot,
                         state: state
                     );
