@@ -14,7 +14,6 @@ public enum BodyMotionOp : byte {
     IntegrateLocalAttitude,
     ComputePlanarTargetVelocity,
     ComputeLocalTargetVelocity,
-    ComputeSwimTargetVelocity,
     ShapePlanarVelocity,
     SnapYawToPlanarIntent,
     ResolveVehicleFrame,
@@ -28,7 +27,6 @@ public enum BodyMotionOp : byte {
     RunActionTriggers,
     ApplyVerticalGravity,
     ApplyVerticalDecay,
-    ApplyBuoyancyAndSurface,
 
     /// <summary>Applies the current hold's vertical law: gravity for a hold gravity keeps, a rate-limited inward
     /// standoff for a grip, a fraction of gravity cancelled for a lift, nothing for a hold that holds by itself.

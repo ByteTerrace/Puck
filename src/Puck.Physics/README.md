@@ -21,8 +21,8 @@ selection into its intrinsic host phases), the per-body trigger and action-state
 (`CompiledActionSpec`, `CompiledTrigger`, `CompiledFactTrigger`, `CompiledPredicate`,
 `CompiledBodyInstruction`, `CompiledActionStateSlot`, `CompiledActionStateEnvelope`),
 and the compiled fixed-point tunings the stages read (`FixedMotionTuning`,
-`FixedVehicleTuning`, `FixedSwimTuning`, `FixedMotionDefaults`,
-`FixedMotionScalarEnvelope`). A grounded or swim kit shapes its planar
+`FixedVehicleTuning`, `FixedMotionDefaults`,
+`FixedMotionScalarEnvelope`). A grounded kit shapes its planar
 velocity through exactly one of two compiled forms:
 `FixedMotionTuning.PlanarDynamics` (`FixedMotionDynamics` — a compiled
 `Puck.Maths.SecondOrderDynamics.SecondOrderStep`, a pole-matched second-order

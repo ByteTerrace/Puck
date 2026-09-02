@@ -68,9 +68,9 @@ public sealed class CompiledBodyMotionProgram {
     /// <summary>Gets a value indicating whether this program's selected operations cede the vertical channel to a
     /// host's contact resolution — <see cref="BodyMotionOp.ApplyVerticalGravity"/>, or
     /// <see cref="BodyMotionOp.ApplyHold"/>, whose gravity and lift laws integrate the same channel. A program that
-    /// instead owns that channel directly (<see cref="BodyMotionOp.ApplyVerticalDecay"/>'s bleed, the swim surface
-    /// stage) must keep it: folding the resolved velocity back in every tick feeds a decay channel's own prior value
-    /// into itself, which is an unbounded loop rather than a correction.</summary>
+    /// instead owns that channel directly (<see cref="BodyMotionOp.ApplyVerticalDecay"/>'s bleed) must keep it:
+    /// folding the resolved velocity back in every tick feeds a decay channel's own prior value into itself, which
+    /// is an unbounded loop rather than a correction.</summary>
     public bool OwnsVerticalContactState => (Contains(operation: BodyMotionOp.ApplyVerticalGravity) || Contains(operation: BodyMotionOp.ApplyHold));
     /// <summary>Gets the operations grouped by their intrinsic host phase.</summary>
     public BodyMotionOp[][] Phases { get; }
@@ -90,11 +90,11 @@ public sealed class CompiledBodyMotionProgram {
         BodyMotionOp.FaceSensorTarget => 2,
         BodyMotionOp.ResolveYawAttitudeAndPlanarFrame or BodyMotionOp.IntegrateLocalAttitude or BodyMotionOp.ResolveVehicleFrame
             or BodyMotionOp.ResolveHold => 0,
-        BodyMotionOp.ComputePlanarTargetVelocity or BodyMotionOp.ComputeLocalTargetVelocity or BodyMotionOp.ComputeSwimTargetVelocity => 1,
+        BodyMotionOp.ComputePlanarTargetVelocity or BodyMotionOp.ComputeLocalTargetVelocity => 1,
         BodyMotionOp.ShapePlanarVelocity or BodyMotionOp.SnapYawToPlanarIntent or BodyMotionOp.ShapeVehicleVelocity => 2,
         BodyMotionOp.RunActionTriggers => 3,
-        BodyMotionOp.ApplyVerticalGravity or BodyMotionOp.ApplyVerticalDecay or BodyMotionOp.ApplyBuoyancyAndSurface
-            or BodyMotionOp.ApplyHold or BodyMotionOp.ApplyVerticalDrive => 4,
+        BodyMotionOp.ApplyVerticalGravity or BodyMotionOp.ApplyVerticalDecay or BodyMotionOp.ApplyHold
+            or BodyMotionOp.ApplyVerticalDrive => 4,
         BodyMotionOp.IntegratePlanarAndVerticalVelocity or BodyMotionOp.IntegrateScratchVelocity => 5,
         BodyMotionOp.CommitPose => 7,
         _ => throw Refuse(
@@ -113,15 +113,15 @@ public sealed class CompiledBodyMotionProgram {
         BodyMotionOp.SenseNearestInCone => BodyProgramAdmission.Sensors,
         BodyMotionOp.ProduceWanderIntent or BodyMotionOp.ProduceAttendIntent or BodyMotionOp.FaceSensorTarget => (BodyProgramAdmission.Sensors | BodyProgramAdmission.Channels | BodyProgramAdmission.ActionState),
         BodyMotionOp.ResolveYawAttitudeAndPlanarFrame or BodyMotionOp.IntegrateLocalAttitude or BodyMotionOp.ComputePlanarTargetVelocity
-            or BodyMotionOp.ComputeLocalTargetVelocity or BodyMotionOp.ComputeSwimTargetVelocity or BodyMotionOp.ShapePlanarVelocity
+            or BodyMotionOp.ComputeLocalTargetVelocity or BodyMotionOp.ShapePlanarVelocity
             or BodyMotionOp.SnapYawToPlanarIntent or BodyMotionOp.ResolveVehicleFrame or BodyMotionOp.ShapeVehicleVelocity
             => (BodyProgramAdmission.Channels | BodyProgramAdmission.Pose | BodyProgramAdmission.Velocity),
         // A hold reads intent, writes the body frame, and spends a body-lane state slot, so it claims every register
         // family a motion program owns.
         BodyMotionOp.ResolveHold => (BodyProgramAdmission.Channels | BodyProgramAdmission.Pose | BodyProgramAdmission.Velocity | BodyProgramAdmission.ActionState),
         BodyMotionOp.RunActionTriggers => (BodyProgramAdmission.Channels | BodyProgramAdmission.Velocity | BodyProgramAdmission.ActionState),
-        BodyMotionOp.ApplyVerticalGravity or BodyMotionOp.ApplyVerticalDecay or BodyMotionOp.ApplyBuoyancyAndSurface
-            or BodyMotionOp.ApplyHold or BodyMotionOp.ApplyVerticalDrive
+        BodyMotionOp.ApplyVerticalGravity or BodyMotionOp.ApplyVerticalDecay or BodyMotionOp.ApplyHold
+            or BodyMotionOp.ApplyVerticalDrive
             or BodyMotionOp.IntegratePlanarAndVerticalVelocity
             or BodyMotionOp.IntegrateScratchVelocity => (BodyProgramAdmission.Pose | BodyProgramAdmission.Velocity),
         BodyMotionOp.CommitPose => BodyProgramAdmission.Pose,

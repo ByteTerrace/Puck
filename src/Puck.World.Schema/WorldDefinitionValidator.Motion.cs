@@ -49,12 +49,6 @@ public static partial class WorldDefinitionValidator {
                 BodyMotionOp.ComputePlanarTargetVelocity => MotionTuningFacet.Sprint,
                 BodyMotionOp.ResolveYawAttitudeAndPlanarFrame or BodyMotionOp.SnapYawToPlanarIntent => MotionTuningFacet.WorldFrame,
                 BodyMotionOp.ResolveVehicleFrame or BodyMotionOp.ShapeVehicleVelocity => MotionTuningFacet.VehicleDrive,
-                // The swim program's planar half rides the SAME ShapePlanarVelocity op (and PlanarResponse facet)
-                // grounded uses; thrust additionally reads the sprint pair. The vertical channel has no op-specific
-                // facet of its own here — ApplyBuoyancyAndSurface below is the ONE vertical owner and already
-                // requires SwimBuoyancy, which subsumes it.
-                BodyMotionOp.ComputeSwimTargetVelocity => MotionTuningFacet.Sprint,
-                BodyMotionOp.ApplyBuoyancyAndSurface => MotionTuningFacet.Holds,
                 BodyMotionOp.ResolveHold or BodyMotionOp.ApplyHold => (MotionTuningFacet.GravityArc | MotionTuningFacet.Holds),
                 _ => MotionTuningFacet.None,
             };
@@ -62,9 +56,9 @@ public static partial class WorldDefinitionValidator {
 
         return facets;
     }
-    // The model→facet mapping: what each WorldMotionModel arm supplies. A new arm (swim/vehicle) is a localized
-    // addition here, alongside its record arm (WorldDefinition.cs), its WorldBody integrator, and any new
-    // BodyMotionOp cases RequiredMotionTuningFacets needs — never a hunt. Grounded supplies every facet defined
+    // The model→facet mapping: what each WorldMotionModel arm supplies. A new arm is a localized addition here,
+    // alongside its record arm (WorldDefinition.cs), its WorldBody integrator, and any new BodyMotionOp cases
+    // RequiredMotionTuningFacets needs — never a hunt. Grounded supplies every facet defined
     // today because it is, today, also the only arm the world's "free" body motion program authors (see
     // WorldMotionModel.Grounded's remarks) — a strict superset of what free's operations read.
     private static MotionTuningFacet SuppliedMotionTuningFacets(WorldMotionModel model) => model switch {
@@ -75,12 +69,6 @@ public static partial class WorldDefinitionValidator {
         // a vehicle model with ShapePlanarVelocity/ComputePlanarTargetVelocity/the yaw-frame ops refuses by name.
         WorldMotionModel.Vehicle => (MotionTuningFacet.Speed | MotionTuningFacet.GravityArc | MotionTuningFacet.GravityBleed
             | MotionTuningFacet.VehicleDrive),
-        // No gravity facets: a swim kit selecting ApplyVerticalGravity/ApplyVerticalDecay refuses here BY NAME —
-        // the medium owns the vertical channel, and the missing-facet line is the door that says so.
-        // The swim arm is an authoring spelling of one medium hold, so what it supplies is the hold vocabulary
-        // itself — the medium operations read that row, not an arm-shaped tuning of their own.
-        WorldMotionModel.Swim => (MotionTuningFacet.Speed | MotionTuningFacet.PlanarResponse | MotionTuningFacet.Sprint
-            | MotionTuningFacet.WorldFrame | MotionTuningFacet.Holds),
         _ => MotionTuningFacet.None,
     };
     private static bool TryScalar(BodyProgramParameters parameters, string name, out float value) => parameters.Scalars.TryGetValue(
@@ -551,18 +539,6 @@ public static partial class WorldDefinitionValidator {
                 );
 
                 break;
-            case WorldMotionModel.Swim swim:
-                ValidateSwimMotion(
-                    channelNames: channelNames,
-                    dynamicsNames: dynamicsNames,
-                    errors: errors,
-                    hasMedium: hasMedium,
-                    path: path,
-                    simulationRateHz: simulationRateHz,
-                    tuning: swim
-                );
-
-                break;
             default:
                 errors.Add(item: $"{path} is an unknown motion model kind '{model.GetType().Name}'.");
 
@@ -874,91 +850,6 @@ public static partial class WorldDefinitionValidator {
         ) {
             errors.Add(item: $"{path} [{envelope.Min}, {envelope.Max}] does not contain the kit's own {ownValueName} ({ownValue}).");
         }
-    }
-    // A kit's full swim locomotion tuning: thrust, medium dynamics, and the shared response/sprint/frame vocabulary.
-    // A swim kit in a world with no medium lattice row refuses HERE — the medium is the model's whole premise, and a
-    // silent dry-world swimmer would integrate against a surface that does not exist.
-    private static void ValidateSwimMotion(WorldMotionModel.Swim tuning, string path, ISet<string> channelNames, ISet<string> dynamicsNames, bool hasMedium, int simulationRateHz, List<string> errors) {
-        if (!hasMedium) {
-            errors.Add(item: $"{path} declares a swim model but the world authors no medium lattice row.");
-        }
-
-        RequirePositive(
-            value: tuning.ThrustSpeed,
-            name: $"{path}.thrustSpeed",
-            errors: errors
-        );
-        RequirePositive(
-            value: tuning.TurnSpeed,
-            name: $"{path}.turnSpeed",
-            errors: errors
-        );
-        RequirePositive(
-            value: tuning.VerticalThrustFraction,
-            name: $"{path}.verticalThrustFraction",
-            errors: errors
-        );
-
-        if (!float.IsFinite(f: tuning.Buoyancy)) {
-            errors.Add(item: $"{path}.buoyancy must be finite (was {tuning.Buoyancy}).");
-        }
-
-        RequirePositive(
-            value: tuning.MaxRiseSpeed,
-            name: $"{path}.maxRiseSpeed",
-            errors: errors
-        );
-        RequirePositive(
-            value: tuning.MaxSinkSpeed,
-            name: $"{path}.maxSinkSpeed",
-            errors: errors
-        );
-        RequirePositive(
-            value: tuning.SurfaceSettleRate,
-            name: $"{path}.surfaceSettleRate",
-            errors: errors
-        );
-        RequirePositive(
-            value: tuning.FloatDepth,
-            name: $"{path}.floatDepth",
-            errors: errors
-        );
-        RequirePositive(
-            value: tuning.SprintMultiplier,
-            name: $"{path}.sprintMultiplier",
-            errors: errors
-        );
-
-        if (
-            (tuning.SprintChannel is { Length: > 0 } sprintChannel) &&
-            !channelNames.Contains(item: sprintChannel)
-        ) {
-            errors.Add(item: $"{path}.sprintChannel '{sprintChannel}' names no declared composition channel.");
-        }
-
-        if (!Enum.IsDefined(value: tuning.MoveFrame)) {
-            errors.Add(item: $"{path}.moveFrame '{tuning.MoveFrame}' is not a defined MotionMoveFrame.");
-        }
-
-        // The seat-time speed clamp, this arm's own scalar — the SAME reusable gate Grounded.MoveSpeedEnvelope walks.
-        if (tuning.ThrustSpeedEnvelope is { } thrustSpeedEnvelope) {
-            ValidateScalarEnvelope(
-                envelope: thrustSpeedEnvelope,
-                ownValue: tuning.ThrustSpeed,
-                ownValueName: "thrustSpeed",
-                path: $"{path}.thrustSpeedEnvelope",
-                errors: errors
-            );
-        }
-
-        ValidatePlanarShaping(
-            dynamics: tuning.Dynamics,
-            dynamicsNames: dynamicsNames,
-            errors: errors,
-            path: path,
-            response: tuning.Response,
-            simulationRateHz: simulationRateHz
-        );
     }
     private static void ValidateVehicleMotion(WorldMotionModel.Vehicle tuning, string path, ISet<string> channelNames, List<string> errors) {
         RequirePositive(

@@ -825,20 +825,6 @@ public sealed partial class WorldBody {
             );
         }
     }
-    /// <summary>The medium a body of this kit stands in, or <see langword="null"/> when its kit authors none. Found
-    /// by walking the kit's own rows rather than by requiring <see cref="BodyMotionOp.ResolveHold"/> to have picked
-    /// one, so a program that names the medium operations directly reads the same law.</summary>
-    private FixedBodyMedium? KitMedium {
-        get {
-            for (var index = 0; (index < m_holds.Length); index++) {
-                if (m_holds[index].Bond == BodyHoldBond.Medium) {
-                    return m_holds[index].Medium;
-                }
-            }
-
-            return null;
-        }
-    }
     // The one medium law. The body's own commanded thrust is folded into the medium's drift BEFORE the convergence
     // runs, so nothing writes the vertical channel twice: below the bob band the medium drifts the body at its
     // buoyancy, inside the band (and above it, recovering a breach) it settles proportionally toward the float line,
@@ -921,7 +907,7 @@ public sealed partial class WorldBody {
                     ? row.EngageRate
                     : row.ReleaseRate
                 );
-                var maxDelta = m_swimThrustRampAccumulator.Integrate(
+                var maxDelta = m_mediumThrustRampAccumulator.Integrate(
                     elapsedTicks: scratch.StepTicks,
                     ratePerSecond: rate
                 );

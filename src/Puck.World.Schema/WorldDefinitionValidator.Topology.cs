@@ -714,8 +714,8 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: exception.Message);
         }
     }
-    /// <summary>Gets whether the document declares at least one medium lattice field — the premise a swim-model kit
-    /// requires (see <c>ValidateSwimMotion</c>).</summary>
+    /// <summary>Gets whether the document declares at least one medium lattice field — the premise a kit authoring
+    /// a <c>Medium</c> hold row requires.</summary>
     private static bool HasMediumField(WorldDefinition definition) {
         var fields = (definition.Fields?.Fields ?? []);
 

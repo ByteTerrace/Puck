@@ -82,13 +82,11 @@ public static class BodyMotionProgramRoles {
         ChannelRole.MoveAdvance or ChannelRole.MoveStrafe => (program.Contains(operation: BodyMotionOp.ComputePlanarTargetVelocity)
             || program.Contains(operation: BodyMotionOp.SnapYawToPlanarIntent)
             || program.Contains(operation: BodyMotionOp.ComputeLocalTargetVelocity)
-            || program.Contains(operation: BodyMotionOp.ComputeSwimTargetVelocity)
             || (program.Contains(operation: BodyMotionOp.ShapeVehicleVelocity) && (role == ChannelRole.MoveAdvance))),
         ChannelRole.Turn => (program.Contains(operation: BodyMotionOp.ResolveYawAttitudeAndPlanarFrame)
             || program.Contains(operation: BodyMotionOp.IntegrateLocalAttitude)
             || program.Contains(operation: BodyMotionOp.ResolveVehicleFrame)),
         ChannelRole.MoveUp => (program.Contains(operation: BodyMotionOp.ComputeLocalTargetVelocity)
-            || program.Contains(operation: BodyMotionOp.ComputeSwimTargetVelocity)
             || program.Contains(operation: BodyMotionOp.ApplyVerticalDrive)),
         // ResolveVehicleFrame reads Pitch only under a positive PitchRate, so Pitch is not REQUIRED for it — a
         // pitchless world's flying-vehicle pitch reads zero rather than refusing the kit.

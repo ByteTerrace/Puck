@@ -100,42 +100,6 @@ public static class WorldHoldFactory {
         )
         : default
     );
-    /// <summary>The medium hold a <see cref="WorldMotionModel.Swim"/> row spells — the swim arm is an authoring
-    /// spelling of exactly one medium row, compiled here so the law itself exists once. A kit authoring the arm and a
-    /// kit authoring the row reach the same <see cref="FixedBodyHold"/>.</summary>
-    /// <param name="swim">The authored swim arm.</param>
-    /// <returns>The single-row hold list that arm denotes.</returns>
-    public static FixedBodyHold[] Compile(WorldMotionModel.Swim swim) => [
-        new FixedBodyHold(
-            Bond: BodyHoldBond.Medium,
-            ConeAdmitsAbove: false,
-            ConeAdmitsBelow: false,
-            ConeCosFar: FixedQ4816.Zero,
-            ConeCosNear: FixedQ4816.Zero,
-            DriveAlignment: FixedQ4816.Zero,
-            Forward: BodyHoldForward.Heading,
-            Grip: FixedQ4816.Zero,
-            Kind: BodyHoldKind.None,
-            Lift: FixedQ4816.Zero,
-            Medium: CompileMedium(medium: new WorldHoldMedium(
-                Buoyancy: swim.Buoyancy,
-                FloatDepth: swim.FloatDepth,
-                MaxRiseSpeed: swim.MaxRiseSpeed,
-                MaxSinkSpeed: swim.MaxSinkSpeed,
-                SurfaceSettleRate: swim.SurfaceSettleRate,
-                ThrustFraction: swim.VerticalThrustFraction
-            )),
-            Name: "medium",
-            OnDrive: false,
-            Reach: FixedQ4816.Zero,
-            ReleaseOrdinal: -1,
-            ReleaseThreshold: FixedQ4816.Zero,
-            Speed: FixedQ4816.Zero,
-            SpendPerSecond: FixedQ4816.Zero,
-            SpendState: null,
-            UpLean: FixedQ4816.Zero
-        ),
-    ];
     /// <summary>Compiles one authored hold list against a world's channel table.</summary>
     /// <param name="holds">The authored rows in preference order, or <see langword="null"/> for a kit authoring
     /// none.</param>

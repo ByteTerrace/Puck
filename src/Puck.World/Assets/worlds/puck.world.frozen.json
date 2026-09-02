@@ -485,11 +485,12 @@
       "name": "fishMotion",
       "operations": [
         "ResolveYawAttitudeAndPlanarFrame",
-        "ComputeSwimTargetVelocity",
+        "ResolveHold",
+        "ComputePlanarTargetVelocity",
         "ShapePlanarVelocity",
         "SnapYawToPlanarIntent",
         "RunActionTriggers",
-        "ApplyBuoyancyAndSurface",
+        "ApplyHold",
         "ApplyVerticalDrive",
         "IntegratePlanarAndVerticalVelocity",
         "CommitPose"
@@ -906,18 +907,30 @@
           "radius": 0.2
         },
         "motion": {
-          "$type": "swim",
-          "buoyancy": 0.6,
+          "$type": "grounded",
           "facingSnap": true,
-          "floatDepth": 0.6,
-          "maxRiseSpeed": 1.0,
-          "maxSinkSpeed": 1.0,
+          "fallGravity": 1,
+          "holds": [
+            {
+              "bond": "Medium",
+              "hold": "None",
+              "medium": {
+                "buoyancy": 0.6,
+                "floatDepth": 0.6,
+                "maxRiseSpeed": 1.0,
+                "maxSinkSpeed": 1.0,
+                "surfaceSettleRate": 0.8,
+                "thrustFraction": 0.4
+              },
+              "name": "water"
+            }
+          ],
+          "maxFallSpeed": 1,
+          "moveSpeed": 1.0,
           "response": [],
+          "riseGravity": 1,
           "sprintMultiplier": 1,
-          "surfaceSettleRate": 0.8,
-          "thrustSpeed": 1.0,
-          "turnSpeed": 1.5,
-          "verticalThrustFraction": 0.4
+          "turnSpeed": 1.5
         },
         "name": "fishKit",
         "producers": {

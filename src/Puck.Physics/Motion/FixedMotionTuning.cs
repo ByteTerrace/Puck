@@ -26,7 +26,7 @@ public readonly record struct FixedMotionResponse(CompiledPredicate[] Gate, Fixe
 /// <summary>The one-time fixed-point compilation of a kit's <c>dynamics</c>-row planar shaping — the second-order
 /// follower alternative to <see cref="FixedMotionResponse"/>'s response table, bound to the world's own simulation
 /// step width. <see cref="Planar"/> steps the three-lane planar follower <c>ShapePlanarVelocity</c> reads and, for a
-/// swim kit, the SAME compiled step also drives the one-dimensional vertical lane <c>ApplyBuoyancyAndSurface</c>
+/// kit authoring a medium hold, the same compiled step also drives the one-dimensional vertical lane that hold's law
 /// reads (one authored row, one compiled propagator, two lane counts) — never a second compile.</summary>
 public readonly record struct FixedMotionDynamics(SecondOrderStep Planar);
 /// <summary>The compiled fixed-point form of an authored motion scalar envelope — the reusable seat-time clamp bound

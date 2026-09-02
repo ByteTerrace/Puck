@@ -435,7 +435,7 @@ public sealed partial class WorldPopulation {
     /// <summary>Samples every active body's medium free surface at its coupled lattice cell (the same coupling
     /// <see cref="WorldFieldLattice.TryBodyCellOf"/> resolves) and pushes it to the body — <see langword="null"/>
     /// for a body outside the lattice or over a zero-value medium cell. Called once per tick, before
-    /// <see cref="AdvanceSimulated"/>/<see cref="AdvanceSeats"/>, so a swim kit's phase-4 buoyancy stage reads this
+    /// <see cref="AdvanceSimulated"/>/<see cref="AdvanceSeats"/>, so a medium hold's phase-4 law reads this
     /// tick's surface rather than a stale one. A no-op world without a <c>fields</c> section costs one null
     /// check.</summary>
     public void SampleMediumSurfaces() {

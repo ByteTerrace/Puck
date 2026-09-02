@@ -56,7 +56,7 @@ public sealed partial class WorldBody {
             VehicleLongRemainder: m_vehicleLongAccumulator.Remainder,
             VehicleLatRemainder: m_vehicleLatAccumulator.Remainder,
             VehicleResidualRemainder: m_vehicleResidualAccumulator.Remainder,
-            SwimThrustRampRemainder: m_swimThrustRampAccumulator.Remainder,
+            MediumThrustRampRemainder: m_mediumThrustRampAccumulator.Remainder,
             PlanarFollowerPositionRawX: m_planarFollower.X.PositionRaw,
             PlanarFollowerPositionRawY: m_planarFollower.Y.PositionRaw,
             PlanarFollowerPositionRawZ: m_planarFollower.Z.PositionRaw,
@@ -217,7 +217,7 @@ public sealed partial class WorldBody {
     /// discontinuity itself has already collapsed the stale carries a fresh construction never had in the first
     /// place. The body-motion program is reapplied first, inside this method, before every other write below — see
     /// this method's own body for why: <see cref="SetBodyMotionProgram(string)"/> carries its own reset side effects
-    /// (re-pinning yaw/orientation, clearing swim medium facts, resetting the recency clocks) that would clobber
+    /// (re-pinning yaw/orientation, clearing the medium facts, resetting the recency clocks) that would clobber
     /// everything else this method restores if it ran after them. Writing the channel-timer arrays here (rather than
     /// at construction) keeps this the one place a restored body's action track re-arms, symmetric with the
     /// velocity/orientation fields beside it.</summary>
@@ -297,8 +297,8 @@ public sealed partial class WorldBody {
             remainder: state.VehicleResidualRemainder,
             ticksPerSecond: EngineTicksPerSecond
         );
-        m_swimThrustRampAccumulator = FixedRateAccumulator.FromRemainder(
-            remainder: state.SwimThrustRampRemainder,
+        m_mediumThrustRampAccumulator = FixedRateAccumulator.FromRemainder(
+            remainder: state.MediumThrustRampRemainder,
             ticksPerSecond: EngineTicksPerSecond
         );
         m_planarFollower = new SecondOrderState3(
@@ -474,11 +474,12 @@ public sealed partial class WorldBody {
     /// the same reasoning that justifies capturing <see cref="PlanarVelocity"/>/<see cref="VerticalVelocity"/>
     /// on top of the same reset, extended to their integration carries.
     /// <see cref="PlanarRampRemainder"/>/<see cref="VehicleLongRemainder"/>/<see cref="VehicleLatRemainder"/>/
-    /// <see cref="VehicleResidualRemainder"/>/<see cref="SwimThrustRampRemainder"/>/<see cref="OverlayRemainderX"/>,Y,Z —
-    /// the response/vehicle/swim/overlay rate accumulators' own <see cref="Puck.Maths.FixedRateAccumulator.Remainder"/>s.
+    /// <see cref="VehicleResidualRemainder"/>/<see cref="MediumThrustRampRemainder"/>/<see cref="OverlayRemainderX"/>,Y,Z —
+    /// the response/vehicle/medium/overlay rate accumulators' own <see cref="Puck.Maths.FixedRateAccumulator.Remainder"/>s.
     /// These are frame-independent (a rate of convergence, not a position), unlike the position/rotation/vertical
     /// accumulators excluded below — see this list's own "deliberately re-derived" entry for exactly why that
-    /// distinction holds. Kart makes the vehicle trio live for an ordinary seat; Dive makes the swim one live.
+    /// distinction holds. Kart makes the vehicle trio live for an ordinary seat; a medium hold makes the medium one
+    /// live.
     /// <see cref="PlanarFollowerPositionRawX"/>,Y,Z/<see cref="PlanarFollowerVelocityRawX"/>,Y,Z/
     /// <see cref="PlanarFollowerPreviousTarget"/>/<see cref="VerticalFollowerPositionRaw"/>/
     /// <see cref="VerticalFollowerVelocityRaw"/>/<see cref="VerticalFollowerPreviousTarget"/> — a kit shaping planar
@@ -508,7 +509,7 @@ public sealed partial class WorldBody {
     /// <see cref="FixedTickConversion.DurationEngineTicks"/>'s own seconds conversion, which would drift the
     /// restored duration from what was actually live) — the body's own future trajectory.</para>
     /// <para><b>Deliberately re-derived (with reason) — never added to this struct.</b>
-    /// <c>m_motionArm</c>/<c>m_tuning</c>/<c>m_vehicleTuning</c>/<c>m_swimTuning</c>/<c>m_driftChannelOrdinal</c>/
+    /// <c>m_motionArm</c>/<c>m_tuning</c>/<c>m_vehicleTuning</c>/<c>m_driftChannelOrdinal</c>/
     /// <c>m_sprintChannelOrdinal</c>/<c>m_laneBindings</c>/<c>m_channelThresholds</c>/<c>m_channelShapes</c>/
     /// <c>m_roleChannels</c>/<c>m_roleOrdinals</c>/<c>m_actionStateDefinitions</c>/<c>m_collider</c>/
     /// <c>m_maxSmoothError</c> — compiled kit config; <see cref="Puck.World.Server.WorldPopulation.RestoreDetachedSeat"/>
@@ -535,7 +536,7 @@ public sealed partial class WorldBody {
     /// query corrects it.) <c>m_obstructionWitness</c>/<c>m_obstructionWitnessPosition</c>/
     /// <c>m_obstructionWitnessGraceTicks</c> — explicitly documented at their own declaration as "Read-back only" for
     /// <c>world.contacts</c>; losing the latch only ever produces a missing witness until the next real push or grace
-    /// timeout, never a wrong positive one. <c>m_submerged</c>/<c>m_atSurface</c> — the swim surface stage
+    /// timeout, never a wrong positive one. <c>m_submerged</c>/<c>m_atSurface</c> — the medium hold's law
     /// re-derives both, purely as a function of the restored position and the freshly resampled medium surface, on
     /// the very next Advance.
     /// <c>m_heldChannels</c>/<c>m_channelReadHeld</c>/<c>m_channelReadComposed</c> — ordinary one-tick images; the
@@ -570,7 +571,7 @@ public sealed partial class WorldBody {
     /// <param name="PlanarVelocity">The ramped horizontal velocity the grounded model integrates.</param>
     /// <param name="VerticalVelocity">The vertical (gravity/jump) velocity.</param>
     /// <param name="Orientation">The full attitude — captured directly rather than re-derived from yaw alone, so a
-    /// future vehicle/swim seat kit's pitch/roll survives too (today's seat kits are grounded-only, where this always
+    /// future vehicle seat kit's pitch/roll survives too (today's seat kits are grounded-only, where this always
     /// agrees with the yaw already carried alongside it — see <see cref="Puck.World.Server.WorldPopulation.RestoreDetachedSeat"/>'s
     /// own remarks on the grounded-model exact case).</param>
     /// <param name="VehiclePitch">The vehicle frame's own climb-attitude scalar (inert, always zero, under a grounded
@@ -597,7 +598,7 @@ public sealed partial class WorldBody {
     /// <param name="VehicleLongRemainder">The vehicle arm's longitudinal convergence accumulator's own remainder.</param>
     /// <param name="VehicleLatRemainder">The vehicle arm's lateral convergence accumulator's own remainder.</param>
     /// <param name="VehicleResidualRemainder">The vehicle arm's residual convergence accumulator's own remainder.</param>
-    /// <param name="SwimThrustRampRemainder">The swim arm's thrust convergence accumulator's own remainder.</param>
+    /// <param name="MediumThrustRampRemainder">The medium law's thrust convergence accumulator's own remainder.</param>
     /// <param name="PlanarFollowerPositionRawX">The planar dynamics follower's X-lane Q32 position raw.</param>
     /// <param name="PlanarFollowerPositionRawY">The planar dynamics follower's Y-lane Q32 position raw.</param>
     /// <param name="PlanarFollowerPositionRawZ">The planar dynamics follower's Z-lane Q32 position raw.</param>
@@ -606,9 +607,9 @@ public sealed partial class WorldBody {
     /// <param name="PlanarFollowerVelocityRawZ">The planar dynamics follower's Z-lane Q32 velocity raw.</param>
     /// <param name="PlanarFollowerPreviousTarget">The planar dynamics follower's previously-seen target, for the
     /// next step's ZOH target-velocity derivative.</param>
-    /// <param name="VerticalFollowerPositionRaw">The swim vertical dynamics follower's Q32 position raw.</param>
-    /// <param name="VerticalFollowerVelocityRaw">The swim vertical dynamics follower's Q32 velocity raw.</param>
-    /// <param name="VerticalFollowerPreviousTarget">The swim vertical dynamics follower's previously-seen
+    /// <param name="VerticalFollowerPositionRaw">The medium's vertical dynamics follower's Q32 position raw.</param>
+    /// <param name="VerticalFollowerVelocityRaw">The medium's vertical dynamics follower's Q32 velocity raw.</param>
+    /// <param name="VerticalFollowerPreviousTarget">The medium's vertical dynamics follower's previously-seen
     /// target.</param>
     /// <param name="OverlayRemainderX">The dash overlay accumulator's X-axis remainder.</param>
     /// <param name="OverlayRemainderY">The dash overlay accumulator's Y-axis remainder.</param>
@@ -655,7 +656,7 @@ public sealed partial class WorldBody {
         long VehicleLongRemainder,
         long VehicleLatRemainder,
         long VehicleResidualRemainder,
-        long SwimThrustRampRemainder,
+        long MediumThrustRampRemainder,
         long PlanarFollowerPositionRawX,
         long PlanarFollowerPositionRawY,
         long PlanarFollowerPositionRawZ,

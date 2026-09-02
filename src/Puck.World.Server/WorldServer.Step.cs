@@ -1002,8 +1002,8 @@ public sealed partial class WorldServer {
 
         var stepStartEngineTick = (context.ElapsedTicks - context.StepTicks);
 
-        // Sample every active body's medium surface BEFORE either half of the tick advances it, so a swim kit's
-        // phase-4 buoyancy stage (inside AdvanceSimulated/AdvanceSeats' own body.Advance calls) reads this tick's
+        // Sample every active body's medium surface BEFORE either half of the tick advances it, so a medium
+        // hold's phase-4 law (inside AdvanceSimulated/AdvanceSeats' own body.Advance calls) reads this tick's
         // surface, never last tick's.
         m_population.SampleMediumSurfaces();
         m_population.AdvanceSimulated(

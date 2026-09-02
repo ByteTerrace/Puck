@@ -9,10 +9,10 @@ using Puck.Physics.Motion;
 namespace Puck.World.Tests;
 
 /// <summary>
-/// CONTRACT UNDER TEST: adversarial-review finding 1's WIDENED <see cref="WorldBody.TransferState"/> — the abort
-/// capture must be complete for a SWIM (Dive) kit body and a VEHICLE (Kart) kit body, not just the grounded-only
+/// CONTRACT UNDER TEST: the WIDENED <see cref="WorldBody.TransferState"/> — the abort capture must be complete
+/// for a MEDIUM-hold (Dive) kit body and a VEHICLE (Kart) kit body, not just the grounded-only
 /// shape <see cref="TransferAbortDynamicStateLawTests"/> already covers. Each law here builds its own MINIMAL but
-/// REAL vehicle/swim kit (motion model, channels, and one authored action exercising the action-track/action-state
+/// REAL vehicle/medium kit (motion model, channels, and one authored action exercising the action-track/action-state
 /// seams), drives the body into a genuinely non-rest state across EVERY newly captured field, then proves the
 /// detach/restore round trip reproduces every one of them exactly. <c>Puck.World</c> (the composition root) is out
 /// of reach for this project — see <see cref="TransferAbortDynamicStateLawTests"/>'s own remarks — so this proves
@@ -26,7 +26,7 @@ public sealed class TransferAbortKitWideningLawTests {
     private const int StrafeOrdinal = 1;
     private const int TurnOrdinal = 2;
     private const int SurgeOrdinal = 3; // the ONE composition channel bound to a real kit action below.
-    private const int UpOrdinal = 4; // swim only — trails "surge" so SurgeOrdinal addresses the same channel in both fixtures.
+    private const int UpOrdinal = 4; // the medium kit only — trails "surge" so SurgeOrdinal addresses the same channel in both fixtures.
     private const int UntimedPressOrdinal = 10; // an ordinal NO channel declares — PressChannel needs no binding.
     private const int TimedPressOrdinal = 11; // likewise, distinct from UntimedPressOrdinal.
 
@@ -103,7 +103,7 @@ public sealed class TransferAbortKitWideningLawTests {
             StateRaw = new WorldStateSection(World: Fixtures.BuildDocument().State, Identity: [new ActionStateSlot(Name: "surgeCounter", Kind: ActionStateKind.Counter, Initial: 0f)]),
         };
     }
-    private static WorldDefinition BuildSwimKitDocument() {
+    private static WorldDefinition BuildMediumKitDocument() {
         // "surge" stays at SurgeOrdinal (index 3), matching the vehicle kit's own layout above — "up" trails it so
         // the shared ordinal constants below address the same channel regardless of which fixture built the body.
         var channels = new WorldChannel[] {
@@ -114,30 +114,34 @@ public sealed class TransferAbortKitWideningLawTests {
             new(Name: "up", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveUp),
         };
 
-        var swim = new BodyMotionProgram(
-            Name: "swim",
+        var medium = new BodyMotionProgram(
+            Name: "medium",
             Version: "puck.body-motion.v1",
             Kind: BodyProgramKind.Motion,
             Operations: [
                 BodyMotionOp.ResolveYawAttitudeAndPlanarFrame,
-                BodyMotionOp.ComputeSwimTargetVelocity,
+                BodyMotionOp.ResolveHold,
+                BodyMotionOp.ComputePlanarTargetVelocity,
                 BodyMotionOp.ShapePlanarVelocity,
                 BodyMotionOp.RunActionTriggers,
-                BodyMotionOp.ApplyBuoyancyAndSurface,
+                BodyMotionOp.ApplyHold,
                 BodyMotionOp.IntegratePlanarAndVerticalVelocity,
                 BodyMotionOp.CommitPose,
             ]
         );
-        var swimAlt = swim with { Name = "swim-alt" };
+        var mediumAlt = medium with { Name = "medium-alt" };
         var wander = new BodyMotionProgram(Name: "wander", Version: "puck.body-motion.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceWanderIntent]);
 
         var kit = new WorldKit(
             Name: "diver-test",
-            BodyMotionProgram: "swim",
-            Motion: new WorldMotionModel.Swim(
-                ThrustSpeed: 3.2f,
+            BodyMotionProgram: "medium",
+            Motion: new WorldMotionModel.Grounded(
+                MoveSpeed: 3.2f,
                 TurnSpeed: 2.2f,
-                VerticalThrustFraction: 0.75f,
+                RiseGravity: 1f,
+                FallGravity: 1f,
+                MaxFallSpeed: 1f,
+                SprintMultiplier: 1f,
                 // Row 0 gates on "Recently Rising" — driving the Up channel positive for a few ticks makes Rising
                 // hold, which THIS row's own Recently clock then reflects (WorldBody.MotionRecency's own capture).
                 // Row 1 is the always-row (no gate), required last.
@@ -145,12 +149,21 @@ public sealed class TransferAbortKitWideningLawTests {
                     new MotionResponse(EngageRate: 9f, ReleaseRate: 5f, Gate: new ActionPredicate.Recently(Fact: ActionFact.Rising, WindowSeconds: 1f)),
                     new MotionResponse(EngageRate: 7f, ReleaseRate: 3.5f),
                 ],
-                Buoyancy: 0.5f,
-                MaxRiseSpeed: 2.4f,
-                MaxSinkSpeed: 3f,
-                SurfaceSettleRate: 6f,
-                FloatDepth: 1f,
-                SprintMultiplier: 1f
+                Holds: [
+                    new WorldHold(
+                        Bond: BodyHoldBond.Medium,
+                        Hold: BodyHoldKind.None,
+                        Medium: new WorldHoldMedium(
+                            Buoyancy: 0.5f,
+                            FloatDepth: 1f,
+                            MaxRiseSpeed: 2.4f,
+                            MaxSinkSpeed: 3f,
+                            SurfaceSettleRate: 6f,
+                            ThrustFraction: 0.75f
+                        ),
+                        Name: "water"
+                    ),
+                ]
             ),
             ProducersRaw: new Dictionary<string, BodyProgramParameters> {
                 ["wander"] = Fixtures.TravelerWanderParameters,
@@ -170,11 +183,11 @@ public sealed class TransferAbortKitWideningLawTests {
 
         return Fixtures.BuildDocument() with {
             ChannelsRaw = channels,
-            BodyMotionProgramsRaw = [swim, swimAlt, wander],
+            BodyMotionProgramsRaw = [medium, mediumAlt, wander],
             KitRowsRaw = [kit],
             DefaultSeatKitRaw = "diver-test",
-            // REQUIRED: WorldDefinitionValidator refuses a Swim-model kit when the world authors no medium lattice
-            // row. A lattice covering every spawn point with plenty of margin (the body drifts only a few
+            // REQUIRED: WorldDefinitionValidator refuses a kit authoring a Medium hold when the world authors no
+            // medium lattice row. A lattice covering every spawn point with plenty of margin (the body drifts only a few
             // simulation-tick-widths of distance over this law's short drive) at heightScale 5, value 1 reproduces
             // the SAME surface Y (5) the old waterline fixture floated bodies against.
             StateRaw = new WorldStateSection(
@@ -311,15 +324,15 @@ public sealed class TransferAbortKitWideningLawTests {
 
         // Structural, not a gap: the vehicle arm always compiles m_tuning from an EMPTY Response table
         // (WorldBody.SetTuning's own Vehicle arm), so RecencySlots is always 0 — MotionRecency is legitimately
-        // empty for every vehicle body, proven by the SWIM law below instead.
+        // empty for every vehicle body, proven by the MEDIUM law below instead.
         Assert.Empty(collection: capturedState.MotionRecency);
         Assert.Empty(collection: restoredState.MotionRecency);
 
         Assert.False(condition: population.IsSeatParked(slot: actor.Index));
     }
     [Fact]
-    public void DetachThenRestore_SwimKitBody_EveryNewlyCapturedFieldRoundTripsExactly() {
-        using var fixture = Fixtures.FreshServer(definition: BuildSwimKitDocument());
+    public void DetachThenRestore_MediumKitBody_EveryNewlyCapturedFieldRoundTripsExactly() {
+        using var fixture = Fixtures.FreshServer(definition: BuildMediumKitDocument());
         var actor = WorldPrincipal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(Principal: actor, Slot: actor.Index, IdentityName: null, WireProtocolKey: WorldProtocol.WireProtocolKey)).Accepted);
@@ -330,15 +343,15 @@ public sealed class TransferAbortKitWideningLawTests {
         body.SetIntentSource(source: IntentSource.Idle);
 
         // MUST run BEFORE the velocity-driving loop below — see the vehicle law's own remarks on why (CommitTeleport
-        // resets the swim ramp accumulator as part of its ordinary "a teleport must not carry momentum" contract).
-        var programSwitched = body.SetBodyMotionProgram(programName: "swim-alt");
+        // resets the medium ramp accumulator as part of its ordinary "a teleport must not carry momentum" contract).
+        var programSwitched = body.SetBodyMotionProgram(programName: "medium-alt");
 
         Assert.True(condition: programSwitched);
 
         body.SubmitIntent(intent: default(PlayerIntent).WithChannel(ordinal: ForwardOrdinal, value: FixedQ4816.One).WithChannel(ordinal: UpOrdinal, value: FixedQ4816.One));
 
         for (var tick = 0; (tick < 12); tick++) {
-            fixture.Step(); // swim thrust ramp accumulates; Up-channel thrust makes Rising hold, refreshing the Recently(Rising) response row's clock and firing the "surge" OnFact action once on the edge.
+            fixture.Step(); // the medium's thrust ramp accumulates; Up-channel thrust makes Rising hold, refreshing the Recently(Rising) response row's clock and firing the "surge" OnFact action once on the edge.
         }
 
         var pressOutcome = body.PressChannel(ordinal: TimedPressOrdinal, value: FixedQ4816.One, holdSeconds: 5f, authoredMaximum: FixedQ4816.FromInteger(value: 60));
@@ -353,14 +366,14 @@ public sealed class TransferAbortKitWideningLawTests {
         var capturedOrientation = body.FixedOrientation;
         var capturedState = body.CaptureTransferState();
 
-        Assert.Equal(expected: "swim-alt", actual: capturedState.BodyMotionProgramName);
+        Assert.Equal(expected: "medium-alt", actual: capturedState.BodyMotionProgramName);
         Assert.Equal(expected: IntentSource.Idle, actual: capturedState.Source);
         Assert.True(condition: capturedState.PreviousChannelBit[ForwardOrdinal]);
         Assert.True(condition: capturedState.PendingDefaultChannelPress[UntimedPressOrdinal]);
         Assert.Equal(expected: FixedQ4816.One, actual: capturedState.PendingDefaultChannelValue[UntimedPressOrdinal]);
         Assert.True(condition: (capturedState.ChannelTimerTicks[TimedPressOrdinal] > 0));
-        Assert.NotEqual(expected: 0L, actual: capturedState.SwimThrustRampRemainder);
-        // MotionRecency — the SWIM arm's own proof (the vehicle law above documents why it cannot prove this):
+        Assert.NotEqual(expected: 0L, actual: capturedState.MediumThrustRampRemainder);
+        // MotionRecency — the MEDIUM kit's own proof (the vehicle law above documents why it cannot prove this):
         // Response row 0's Recently(Rising) clock must have refreshed from the driven Up-channel thrust.
         Assert.NotEmpty(collection: capturedState.MotionRecency);
         Assert.True(condition: (capturedState.MotionRecency[0] > 0UL), userMessage: "the Recently(Rising) response row's clock must have refreshed while Rising held");
@@ -394,7 +407,7 @@ public sealed class TransferAbortKitWideningLawTests {
         Assert.Equal(expected: capturedState.PendingDefaultChannelValue, actual: restoredState.PendingDefaultChannelValue);
         Assert.Equal(expected: capturedState.ChannelTimerTicks[TimedPressOrdinal], actual: restoredState.ChannelTimerTicks[TimedPressOrdinal]);
         Assert.Equal(expected: capturedState.ChannelTimerValues[TimedPressOrdinal], actual: restoredState.ChannelTimerValues[TimedPressOrdinal]);
-        Assert.Equal(expected: capturedState.SwimThrustRampRemainder, actual: restoredState.SwimThrustRampRemainder);
+        Assert.Equal(expected: capturedState.MediumThrustRampRemainder, actual: restoredState.MediumThrustRampRemainder);
         Assert.Equal(expected: capturedState.MotionRecency, actual: restoredState.MotionRecency);
         Assert.Equal(expected: capturedState.LaneLatch, actual: restoredState.LaneLatch);
         Assert.Equal(expected: capturedState.LaneFactHeld, actual: restoredState.LaneFactHeld);
@@ -468,14 +481,14 @@ public sealed class TransferAbortKitWideningLawTests {
         Assert.Equal(expected: capturedState.PlanarFollowerPreviousTarget, actual: restoredState.PlanarFollowerPreviousTarget);
     }
     [Fact]
-    public void DetachThenRestore_SwimDynamicsKitBody_VerticalFollowerStateRoundTripsExactly() {
-        var document = BuildSwimKitDocument();
+    public void DetachThenRestore_MediumDynamicsKitBody_VerticalFollowerStateRoundTripsExactly() {
+        var document = BuildMediumKitDocument();
         var kit = document.Kits[0];
-        var swim = ((WorldMotionModel.Swim)kit.Motion);
+        var grounded = ((WorldMotionModel.Grounded)kit.Motion);
 
         document = document with {
             DynamicsRaw = [.. Fixtures.StandardDynamics, Settle],
-            KitRowsRaw = [kit with { Motion = swim with { Response = null, Dynamics = "settle" } }],
+            KitRowsRaw = [kit with { Motion = grounded with { Response = null, Dynamics = "settle" } }],
         };
 
         using var fixture = Fixtures.FreshServer(definition: document);

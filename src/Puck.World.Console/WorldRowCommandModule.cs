@@ -703,10 +703,6 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         provider: CultureInfo.InvariantCulture,
         handler: $"arm=vehicle topSpeed={vehicle.TopSpeed:0.###} accel={vehicle.Accel:0.###} grip={vehicle.Grip:0.###} boostMultiplier={vehicle.BoostMultiplier:0.###}"
     ),
-        WorldMotionModel.Swim swim => string.Create(
-        provider: CultureInfo.InvariantCulture,
-        handler: $"arm=swim thrustSpeed={swim.ThrustSpeed:0.###} buoyancy={swim.Buoyancy:0.###} maxRiseSpeed={swim.MaxRiseSpeed:0.###} maxSinkSpeed={swim.MaxSinkSpeed:0.###} {DescribeShaping(motion: swim)}"
-    ),
         _ => "arm=(none)",
     };
     private CommandResult HandleAssign(CommandContext context, WireArgs args) {
@@ -1084,7 +1080,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.kits",
-            description: "Reports the kit census (Immediate): one segment per declared kit row — name, body motion program, the motion model arm it compiles (grounded|vehicle|swim), and that arm's key movement scalars. The kits section's own read-back (world.row.set kits/world.row.remove kits has no listing of its own otherwise).",
+            description: "Reports the kit census (Immediate): one segment per declared kit row — name, body motion program, the motion model arm it compiles (grounded|vehicle), and that arm's key movement scalars. The kits section's own read-back (world.row.set kits/world.row.remove kits has no listing of its own otherwise).",
             handler: (context, args) => {
                 if (args.Count != 0) {
                     return CommandResult.Error(output: "[world.kits: no arguments — reports the kit census]");

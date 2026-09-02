@@ -54,7 +54,7 @@ a parallel version or a compatibility shim.
 
 **Second-order "personality" is one document section, referenced by every follower.** A world declares
 named pole-matched second-order responses (t3ssel8r's `f`/`ζ`/`r` vocabulary) once, in `dynamics`, and
-four independent consumers — a look's root/part followers, a camera boom, a grounded/swim kit's planar
+four independent consumers — a look's root/part followers, a camera boom, a grounded kit's planar
 shaping, a `state` cell's eased read — name a row rather than each inventing its own ease. The matched
 Z-transform state transition is transcribed into exactly two homes: `Puck.Maths` (fixed-point, simulation
 state) and `Puck.SdfVm.Views` (a `MathF` twin, presentation-only, never fed back into the tick) — never a
@@ -154,7 +154,7 @@ fold — git history only — and rows citing `puck.world.json` describe what is
 `water` field marked `medium` (a 5-unit pool) beside the existing fire/char chemistry, transported by a
 `flow` reaction that spills its edge share into `falls-flux`, which gates a `falls-mist` rule — plus
 `fish`/`critter` placements and `pond-cam`/`south-fall-cam` view layouts. `puck canary medium-submersion`
-proves a swim kit's `Submerged` fact flips both ways off `WorldPopulation.SampleMediumSurfaces`; `puck
+proves a medium hold's `Submerged` fact flips both ways off `WorldPopulation.SampleMediumSurfaces`; `puck
 canary flow-conservation-live` proves a spill row climbs strictly, live, only while a reaction keeps
 feeding its source. `puck parity` (both backends) holds unchanged — the parity world authors neither
 facet.
@@ -226,9 +226,8 @@ the attitude it is drawn at, because leaning the contact axis onto a ceiling tel
 floor is a ceiling and a released body falls through it; a producer's inward pull steers against the
 body's own HOME (its activation position, echoed by `body.where`'s `home=`) rather than the world
 origin, so a population spread over placements keeps to its own ground instead of congregating; and
-`bond: "medium"` folds the swim arm's buoyancy/surface band into the hold vocabulary, with the swim
-arm now an authoring spelling that compiles into exactly one medium row (one law, two spellings,
-pinned to a byte-identical trace). The vehicle arm did not fold: its drive facets are how a velocity
+`bond: "medium"` carries buoyancy and the surface band in the hold vocabulary — the one spelling of that
+law, pinned by `WorldMediumLawTests` to a recorded fixed-point trace. The vehicle arm did not fold: its drive facets are how a velocity
 is SHAPED, not what holds a body. The pip carries two arms and
 two legs on `stride` (contralateral, about X) and `reach` (diagonal pairs, in the wall plane). The
 checks: `body.pose spawn:wall`, `body.fly 0 1 0 0 0 0 2.5` (drive into the wall), then
@@ -287,7 +286,7 @@ body reads live, and refuses by name for an identity not owned here). An identit
 before the reshape still carries its seeded 0.01 rows and reads as an explicit 0.01 claim — cure it
 with `identity.motion`, or delete the state dir.
 
-**The foundation is complete and overshot.** Three motion arms (grounded, vehicle, swim); the portal
+**The foundation is complete and overshot.** Two motion arms (grounded, vehicle); the portal
 lane end to end — step into a frame and the whole party transfers, all-or-nothing across capacity
 *and* authorization; input vocabulary with ordered chord activators; the radial wheel; roster sync;
 durations authored in seconds with ticks derived at compile; per-world clocks; the market/auction

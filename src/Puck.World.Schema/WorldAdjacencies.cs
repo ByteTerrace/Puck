@@ -771,9 +771,9 @@ public static class WorldAdjacencyPolicy {
     /// commanded one. A settling body sags at most one step of gravity from rest and therefore never re-crosses; a
     /// body driven or already falling downward clears the deadband inside one step and transfers. The two-body
     /// contact envelope <see cref="TryReciprocalHysteresis"/> derives for a wall breaks the second half.</para>
-    /// <para>Per kit: the arm's gravity over one step, capped by its own terminal speed (a swimming arm declares no
-    /// acceleration, so its sink speed is the cap directly), carried over one more step to a distance. Every quotient
-    /// rounds outward and one raw unit is added last, so the result strictly exceeds the sag.</para>
+    /// <para>Per kit: the arm's gravity over one step, capped by its own terminal speed, carried over one more step
+    /// to a distance. Every quotient rounds outward and one raw unit is added last, so the result strictly exceeds
+    /// the sag.</para>
     /// </remarks>
     /// <param name="definition">The document whose kits, contact skin, and authority rate bound the sag.</param>
     /// <param name="depth">The derived deadband; zero when this returns <see langword="false"/>.</param>
@@ -798,11 +798,10 @@ public static class WorldAdjacencyPolicy {
             var (acceleration, terminalSpeed) = motion switch {
                 WorldMotionModel.Grounded grounded => (CeilingFixed(value: MathF.Abs(x: grounded.FallGravity)), CeilingFixed(value: MathF.Abs(x: grounded.MaxFallSpeed))),
                 WorldMotionModel.Vehicle vehicle => (CeilingFixed(value: MathF.Abs(x: vehicle.FallGravity)), CeilingFixed(value: MathF.Abs(x: vehicle.MaxFallSpeed))),
-                WorldMotionModel.Swim swim => (FixedQ4816.Zero, CeilingFixed(value: MathF.Abs(x: swim.MaxSinkSpeed))),
                 _ => (FixedQ4816.Zero, FixedQ4816.Zero),
             };
 
-            // A swimming arm declares no acceleration, so its terminal sink speed IS the one-step speed.
+            // An arm declaring no acceleration has its terminal speed as the one-step speed directly.
             var stepSpeed = terminalSpeed;
 
             if (acceleration > FixedQ4816.Zero) {

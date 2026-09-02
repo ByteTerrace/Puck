@@ -807,7 +807,7 @@ public sealed partial class WorldPopulation {
     /// <see cref="ActivateSeat"/>'s fresh-spawn path, the body is posed at <paramref name="position"/>/<paramref name="yawRadians"/>
     /// instead of the seat's authored spawn point, so a transfer that must abort after this seat already departed
     /// restores play exactly where it left off rather than teleporting it home. The seat kit every local seat
-    /// constructs today authors no <c>vehicle</c>/<c>swim</c> model, so <see cref="WorldBody.FixedOrientation"/> is
+    /// constructs today authors no <c>vehicle</c> model, so <see cref="WorldBody.FixedOrientation"/> is
     /// always a pure yaw rotation (pitch = roll = 0) for a seat body — capturing position and yaw alone therefore
     /// reconstructs the departed body's orientation bit-for-bit, the identical construction <see cref="ActivateSeat"/>'s
     /// own spawn already relies on. A seat kit that someday adopts a genuine free/vehicle attitude for a local seat

@@ -110,26 +110,23 @@ public sealed partial class WorldBody {
             ? new ulong[m_tuning.RecencySlots]
             : []
         );
-        // A program that lacks the surface stage must not leave stale medium facts behind — a swim→other switch
-        // clears them here; the swim program rewrites them next tick if the switch lands back on it.
+        // A program that lacks the medium law must not leave stale medium facts behind — a switch away from one
+        // clears them here; a switch back rewrites them next tick.
         m_submerged = false;
         m_atSurface = false;
         CommitTeleport(resetVertical: program.OwnsVerticalContactState);
         m_continuity = EntityContinuity.Teleport;
     }
     // The one dispatch point from a kit's declared WorldMotionModel to the compiled fixed-point tuning this class
-    // integrates under. A new model arm (swim/vehicle) is a localized addition here — a new case producing that
-    // model's own compiled/integrator state — never a hunt through Advance's op handlers, which stay generic over
-    // whatever the kit's body motion program selects. WorldDefinitionValidator has already refused an incoherent
+    // integrates under. A new model arm is a localized addition here — a new case producing that model's own
+    // compiled/integrator state — never a hunt through Advance's op handlers, which stay generic over whatever the
+    // kit's body motion program selects. WorldDefinitionValidator has already refused an incoherent
     // pairing (a program whose operations need a facet the declared model doesn't supply) before this ever runs.
     //
     // The vehicle arm also fills m_tuning, from its own gravity trio: ApplyVerticalGravity/ApplyVerticalDecay read
     // m_tuning's Rise/Fall/MaxFall whichever model authored them (the validator's GravityArc/GravityBleed facets
     // guarantee the vehicle row carries all three), and MoveSpeed/TurnSpeed mirror TopSpeed/SteerRate so the
-    // pre-dispatch Speed resolve stays well-formed — the vehicle ops themselves read only m_vehicleTuning. The swim
-    // arm compiles STRAIGHT into the shared m_tuning slots (WorldMotionTuningFactory.Compile(WorldMotionModel.Swim) maps
-    // ThrustSpeed/ThrustSpeedEnvelope onto MoveSpeed/MoveSpeedEnvelope) — no fork, so the grounded-shaped resolve is
-    // already arm-correct for swim; only the swim-specific half (buoyancy, float depth, ...) needs its own record.
+    // pre-dispatch Speed resolve stays well-formed — the vehicle ops themselves read only m_vehicleTuning.
     private void SetTuning(WorldMotionModel motion, FixedMotionDynamics? planarDynamics = null, FixedBodyHold[]? holds = null) {
         m_holds = (holds ?? []);
 
@@ -159,11 +156,6 @@ public sealed partial class WorldBody {
                     MaxFallSpeed: vehicle.MaxFallSpeed,
                     SprintMultiplier: 1f
                 ));
-                break;
-            case WorldMotionModel.Swim swim:
-                m_motionArm = CompiledMotionArm.Swim;
-                m_tuning = WorldMotionTuningFactory.Compile(dynamics: planarDynamics, tuning: swim);
-                m_vehicleTuning = default;
                 break;
             default:
                 throw new NotSupportedException(message: $"Motion model '{motion.GetType().Name}' has no compiled WorldBody integrator.");
@@ -622,9 +614,9 @@ public sealed partial class WorldBody {
         m_source = source;
         ClearTransientInput();
     }
-    /// <summary>Sets (or clears) the medium free surface this body's swim stages integrate against — sampled fresh
+    /// <summary>Sets (or clears) the medium free surface this body's medium hold integrates against — sampled fresh
     /// every tick from the population's field lattice at this body's coupled cell, before this body's own Advance
-    /// runs. Meaningful only to a swim-model kit; every other body carries it inertly.</summary>
+    /// runs. Meaningful only to a kit authoring a medium hold; every other body carries it inertly.</summary>
     /// <param name="surface">The medium surface's world-space Y, or <see langword="null"/> for no medium at this
     /// body's position.</param>
     public void SetMediumSurface(FixedQ4816? surface) {
@@ -728,9 +720,9 @@ public sealed partial class WorldBody {
     /// <summary>Gets the body that applied the latest targeted effect, held for one recipient advance.</summary>
     internal int AffectingSubject => m_affectingSubject;
 
-    /// <summary>Gets a value indicating whether the body's origin is inside the swim model's surface bob band as of
-    /// its last surface stage — the <c>world.contacts</c> read-back's swim witness. Always <see langword="false"/>
-    /// for a non-swim kit.</summary>
+    /// <summary>Gets a value indicating whether the body's origin is inside the medium's surface bob band as of the
+    /// medium hold's last evaluation — the <c>world.contacts</c> read-back's medium witness. Always
+    /// <see langword="false"/> for a kit authoring no medium hold.</summary>
     public bool AtSurface => m_atSurface;
     /// <summary>Gets the body motion program this player currently executes.</summary>
     public string BodyMotionProgram => m_bodyMotionProgram.Name;
@@ -751,10 +743,7 @@ public sealed partial class WorldBody {
     /// <summary>Gets the base move speed the sim integrates under right now, arm-aware. Under the grounded arm:
     /// <see cref="Profile"/>'s requested rate (or the tuning's profileless fallback) after the kit's
     /// <see cref="WorldMotionModel.Grounded.MoveSpeedEnvelope"/> clamp; a held sprint channel scales this after the
-    /// clamp (the envelope pins the base rate, not the sprinting rate). Under the swim arm: the same resolve,
-    /// verbatim — <see cref="WorldMotionModel.Swim.ThrustSpeedEnvelope"/> compiles into the identical shared
-    /// <c>MoveSpeedEnvelope</c> slot the grounded arm reads, so a seated player's live profile speed clamps the same
-    /// way. Under the vehicle arm: the kit's own <see cref="WorldMotionModel.Vehicle.TopSpeed"/> after its
+    /// clamp (the envelope pins the base rate, not the sprinting rate). Under the vehicle arm: the kit's own <see cref="WorldMotionModel.Vehicle.TopSpeed"/> after its
     /// <see cref="WorldMotionModel.Vehicle.TopSpeedEnvelope"/> clamp — the vehicle arm deliberately never reads
     /// <see cref="Profile"/>'s speed (a kart's speed is the kit's, not the seat's identity), and a held boost
     /// channel scales this after the clamp, on the same sprint-after-clamp precedent. Every arm, this is the same
@@ -847,9 +836,9 @@ public sealed partial class WorldBody {
     /// <c>body.control</c> verb's read/write). <see cref="IntentSource.Live"/> by default; see
     /// <see cref="IntentSource"/> for the merge rule.</summary>
     public IntentSource Source => m_source;
-    /// <summary>Gets a value indicating whether the body's origin is below the medium surface as of the swim model's last
-    /// surface stage — the <c>world.contacts</c> read-back's swim witness. Always <see langword="false"/> for a
-    /// non-swim kit.</summary>
+    /// <summary>Gets a value indicating whether the body's origin is below the medium surface as of the medium
+    /// hold's last evaluation — the <c>world.contacts</c> read-back's medium witness. Always
+    /// <see langword="false"/> for a kit authoring no medium hold.</summary>
     public bool Submerged => m_submerged;
     /// <summary>Gets the avatar's current heading in radians (0 = facing -Z; increases turning left / counter-clockwise).
     /// Under the grounded model this returns the authoritative heading scalar <c>m_yaw</c> directly (the orientation is a

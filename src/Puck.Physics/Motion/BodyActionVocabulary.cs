@@ -25,13 +25,13 @@ public enum ActionFact : byte {
     /// <summary>A targeted effect was applied by another body on the preceding completed tick.</summary>
     AffectedBy,
 
-    /// <summary>The body's origin is below the medium surface. Written by the swim model's surface stage
-    /// (<see cref="BodyMotionOp.ApplyBuoyancyAndSurface"/>); holds one tick behind that stage's evaluation, the same
+    /// <summary>The body's origin is below the medium surface. Written by the medium hold's law
+    /// (<see cref="BodyMotionOp.ApplyHold"/>); holds one tick behind that stage's evaluation, the same
     /// one-tick-behind discipline <see cref="Grounded"/> reads under.</summary>
     Submerged,
 
-    /// <summary>The body's origin is inside the swim model's surface bob band (within its float depth of the float
-    /// line). Written by the same surface stage as <see cref="Submerged"/>, on the same one-tick-behind terms.</summary>
+    /// <summary>The body's origin is inside the medium's surface bob band (within its float depth of the float
+    /// line). Written by the same medium law as <see cref="Submerged"/>, on the same one-tick-behind terms.</summary>
     AtSurface,
 
     /// <summary>The body holds a surface the contact resolve would refuse to stand it on — a face outside the

@@ -89,6 +89,13 @@ plus every admitted peer connection's re-minted admission grant; every other
 live `world.grant` acquisition drops). The `dirty` count in `world.status` IS
 the journal length.
 
+World-rule failures accumulate in a fixed-size category table. The first
+occurrence is narrated; repeated Level-rule failures only increment their
+counter. `world.rule.failures` reports the count and latest tick/rule/effect/reason.
+Rule/interaction installation is also guarded by a static aggregate work budget,
+reported beside evaluation slots in `world.budget`; dynamic body-index keys use
+a prebuilt string cache on the evaluation path.
+
 **Lifetime sweeps.** Five per-tick passes run side by side at the end of
 `WorldServer.StepCore`, each firing ORDINARY mutations under
 `WorldPrincipal.World`'s structural exemption so recovery is journalled rather
@@ -195,7 +202,7 @@ and a defined new ambient direction reseats the held axis then.
 A kit shaping its planar velocity through a `dynamics` row (rather than the
 engage/release response table) carries the follower's Q32 state — position
 and velocity raws, plus the previous commanded target the `r` term needs —
-as ordinary `WorldBody` sim state (`WorldBody.Dynamics.cs`); a swim kit's
+as ordinary `WorldBody` sim state (`WorldBody.Dynamics.cs`); a medium hold's
 vertical lane carries the scalar counterpart. Cross-world motion continuity
 round-trips their values through `TransferState`. A same-world authority
 checkpoint additionally carries their seeded latches, the arbitrary-up
@@ -716,7 +723,8 @@ live-vs-recorded hash divergence is narrated on stderr without stopping.
 whose leading tick groups are the parent's, with `ForkedFrom` in the header;
 the child is standalone. `replay.record <name>` captures the running session's record-start definition,
 active seats, mounted-guest receipts, and the per-tick server-input stream,
-while sampling the LIVE population's per-tick pose hash; `replay.stop`
+while sampling both the LIVE population's pose hash and complete authoritative
+state hash; `replay.stop`
 persists `<name>.puckreplay` and re-drives it once; `replay.verify <name>`
 rehydrates a fresh boot-image world, re-drives the stream offline, and
 reports MATCH or MISMATCH naming the first divergent tick (tick 0 indicts the
@@ -732,9 +740,11 @@ host bug, never folded into either refusal. `replay.inspect <name>
 then one line per tick carrying the recorded hash beside what changed that
 tick (authority entries, intent channel edges); `--poses` re-drives through
 the same `Drive` and prints each active body's pose per line, naming the
-first divergent tick. Presentation (screen pixels,
+first pose-divergent tick. The MATCH/MISMATCH verdict uses the authoritative
+trace; the pose trace remains the human-readable trajectory diagnostic.
+Presentation (screen pixels,
 cameras, overlays, audio) is excluded by design: a match proves the
-authoritative pose trajectory, not the HUD. Known scope limit — the tape
+authoritative simulation state, not the HUD. Known scope limit — the tape
 captures every one of the twelve envelope payload kinds except `Lever`
 (command, grant, revoke, session, designation, rebuild, mutation, undo,
 composition, query, and screen-op) plus intents and the two

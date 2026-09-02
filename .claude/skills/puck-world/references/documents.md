@@ -470,7 +470,7 @@ constants through the SAME fixed-point derivation
 (`Puck.Maths.SecondOrderDynamics.Create`) the simulation compiles from, and a
 live reference count across cameras, looks, look parts, kits, and state.
 Consumers: a look's `motion.dynamics`/`motion.partDynamics` (root and per-part
-followers), a camera program's `dynamics` op (the boom ease), a grounded/swim
+followers), a camera program's `dynamics` op (the boom ease), a grounded
 kit's `motion.dynamics` (planar velocity shaping — exactly one of `dynamics`
 or the engage/release `response` table, never both, never neither), and a
 `state` row/cell's `dynamics` trait (the eased read, above).
@@ -1001,37 +1001,27 @@ steering, a held `BoostChannel` riding the sprint ordinal seam, and
 `PitchRate` selecting the flying variant; `kart.world.json`'s kits are the
 worked example — its contact-pinned variants pair the arm with a program
 keeping `ApplyVerticalGravity`, its flyer with `ApplyVerticalDecay`, which
-is what decides vertical contact ownership per the seam's rule), and
-`"swim"` (`WorldMotionModel.Swim` — `dive.world.json`'s `diver` kit is the
-worked example: thrust/turn rates, buoyancy, the surface band, its own
-response table, `moveFrame: "World"` + `facingSnap: true` (camera-relative
-swim, facing snapped to the swim direction), and a pinned
-`thrustSpeedEnvelope` `{ min: 3.2, max: 3.2 }` — `ThrustSpeed`/
-`ThrustSpeedEnvelope` compile STRAIGHT into the SAME shared
-`FixedMotionTuning.MoveSpeed`/`MoveSpeedEnvelope` slots grounded's do, so the
-grounded-shaped speed resolve is arm-correct for swim with NO fork; only the
-swim-specific half — buoyancy, the rise/sink clamp, `FloatDepth`,
-`SurfaceSettleRate` — compiles into its own `FixedSwimTuning` record, read
-only by the swim-only ops). Grounded carries the jump-kit constants
+is what decides vertical contact ownership per the seam's rule). Grounded
+carries the jump-kit constants
 (rise/fall gravity, the velocity-response table); Vehicle carries its own
-drive constants above; Swim carries thrust/turn speed, buoyancy, the
-rise/sink clamp, and its own response table (gated on `AtSurface`, not
-`Grounded`). Grounded and Swim additionally shape their planar (Swim: thrust-plane)
+drive constants above. Grounded shapes its planar
 velocity through exactly ONE of two mechanisms — the engage/release
 `Response` table (`MotionResponse` rows, gated on movement regime) or a named
 `Dynamics` row (a pole-matched second-order follower — see the `dynamics`
 section above); a kit authoring both, or neither, refuses by name
 (`WorldDefinitionValidator.ValidatePlanarShaping`). A grounded row additionally
 authors `Holds` (below), the ordered list `ResolveHold`/`ApplyHold` read.
+Submerged locomotion is a grounded kit authoring a `bond: "Medium"` hold row,
+not an arm of its own.
 `Dynamics` compiles once
 per kit (`WorldKit.Compile`) against the world's own `simulation.rateHz` —
 a world authoring no simulation rate cannot compile one and refuses by name.
 The follower's state lives in `WorldBody` as ordinary sim state, included in
 whatever the body snapshot/checkpoint covers; changing which mechanism a kit
 uses, or retuning a live `dynamics` row, is expected to change replay hashes.
-All three arms share `SprintMultiplier`/`SprintChannel` — a HELD
-(not edge-triggered) channel that scales the commanded planar (or, for Swim,
-thrust) speed while it reads held, default `1`/`null` (no sprint) —
+Both arms share `SprintMultiplier`/`SprintChannel` — a HELD
+(not edge-triggered) channel that scales the commanded planar speed while it
+reads held, default `1`/`null` (no sprint) —
 Vehicle's `BoostChannel` rides the SAME held-multiplier ordinal seam under a
 different name; resolved to `FixedWorldKit.SprintChannelOrdinal` the same way
 `WanderFlavor.PressChannel` resolves its own ordinal, since a channel name
@@ -1047,10 +1037,9 @@ the submitted intent BEFORE the wire — determinism: the sim never reads a
 camera pose) and, with `FacingSnap` on, snaps the body's facing to
 `Atan2` of the commanded direction every tick carrying input, no ramp — the
 camera-frame 3D-platformer feel `jump.world.json`'s `vaulter` kit authors
-(Grounded), and `dive.world.json`'s `diver` kit authors (Swim — under
-`World`, the aim's elevation also splits the commanded forward into planar
-and vertical channels client-side; the explicit `MoveUp` channel is
-orthogonal and stays live regardless of `MoveFrame`).
+(Grounded). Under `World` a seat's aim elevation also splits the commanded
+forward into planar and vertical channels client-side; the explicit `MoveUp`
+channel is orthogonal and stays live regardless of `MoveFrame`.
 
 **Response-row ORDER shadows regimes — author air rows first.** The
 velocity-response table evaluates in order, first open gate wins, and a
@@ -1071,46 +1060,35 @@ read (the `free` program's facets are a strict subset), so the world's
 `free`-program kits also author a `grounded` motion row. `vehicle` supplies
 its own gravity trio (`GravityArc`/`GravityBleed`) plus `VehicleDrive`, and
 deliberately none of grounded's planar-shaping facets — a vehicle kit never
-authors a `grounded`/`free` row. `swim` supplies its own two facets
-(`SwimThrust`, `SwimBuoyancy`) and deliberately none of grounded's gravity
-facets — a swim kit never authors a `grounded` row, and a world declaring a
-`swim` model with no medium lattice row (`state.world[].lattice.medium`)
-refuses at boot (a swim kit implies a medium to swim in). A further model is
-another record arm, a new
+authors a `grounded`/`free` row. A world whose kit authors a `Medium` hold row
+with no medium lattice row (`state.world[].lattice.medium`) refuses at boot.
+A further model is another record arm, a new
 `CompiledBodyMotionProgram` capability where one is needed (see
-`CompiledBodyMotionProgram.OwnsVerticalContactState` — the swim program sets
-this `false`, so the contact resolve never writes its vertical channel), and
+`CompiledBodyMotionProgram.OwnsVerticalContactState`), and
 a new `SuppliedMotionTuningFacets`/`WorldBody.SetTuning` case — never a hunt.
 
-A seated player's live profile overrides the kit's `MoveSpeed`/`ThrustSpeed`
+A seated player's live profile overrides the kit's `MoveSpeed`
 (feel stays real-time under `profile.set`/`identity.motion`);
-`Grounded.MoveSpeedEnvelope` / `Swim.ThrustSpeedEnvelope` (owner ruling,
-2026-08-06, Swim folded in the same wave `dive.world.json`'s `diver` kit
-pins its authored `3.2` through) is the world's own counter-pin — an
+`Grounded.MoveSpeedEnvelope` is the world's own counter-pin — an
 authored `MotionScalarEnvelope { min, max }` that clamps the RESOLVED
 speed at the seat-time read (`WorldBody.ResolveMoveSpeed`, before the
 program ever sees it), regardless of whether it came from the profile or
 the profileless fallback. Absent (the default) is wide-open, today's
 behavior exactly; `min == max` pins the effective speed outright; the
-validator refuses `min > max` and refuses a kit whose OWN `MoveSpeed`/
-`ThrustSpeed` falls outside its own envelope, by name. `identity.show`'s
+validator refuses `min > max` and refuses a kit whose OWN `MoveSpeed`
+falls outside its own envelope, by name. `identity.show`'s
 `moveEffective=` echoes what the sim actually applied beside `move=` (the
 profile's raw request) — the two diverge only when an envelope is
 narrower than what the profile asked for. `MotionScalarEnvelope` is the
 reusable shape every arm's own overridable scalar adopts, never a bespoke
-bound — both arms compile into the SAME shared `FixedMotionTuning.MoveSpeedEnvelope`
-slot (`WorldMotionTuningFactory.Compile(WorldMotionModel.Swim)` passes
-`ThrustSpeedEnvelope` into it), so `WorldBody.ResolveMoveSpeed`/
-`EffectiveMoveSpeed` are arm-correct by construction with no per-arm resolve.
+bound.
 
 `ResolveMoveSpeed` is a per-arm dispatch (`WorldBody`'s private
-`CompiledMotionArm` — `Grounded`/`Vehicle`/`Swim`, set by `SetTuning` alongside
+`CompiledMotionArm` — `Grounded`/`Vehicle`, set by `SetTuning` alongside
 the compiled tuning) — one resolve shared by the sim and every read-back so
 the two can never disagree; a new arm adds a member, a `SetTuning` case, and a
-`ResolveMoveSpeed` case, never a hunt. `Swim`'s case rides `Grounded`'s
-verbatim (a shared `case` fallthrough) since its speed compiles into the SAME
-`m_tuning`/`MoveSpeedEnvelope` slots grounded reads — no separate resolve
-needed; only `Vehicle` forks, into its own `m_vehicleTuning`.
+`ResolveMoveSpeed` case, never a hunt. Only `Vehicle` forks, into its own
+`m_vehicleTuning`.
 `Vehicle.TopSpeedEnvelope`
 (owner ruling, 2026-08-06) is the vehicle arm's OWN counter-pin over the SAME
 shape, clamping `m_vehicleTuning.TopSpeed` instead of a seated profile — the
@@ -1226,18 +1204,14 @@ and a positive `spend.ratePerSecond`. A kit whose program selects
 `ResolveHold`/`ApplyHold` under a model that supplies no `Holds` facet refuses
 by name through the same `MotionTuningFacet` gate every other operation walks.
 
-The `swim` motion arm is an authoring spelling of exactly one `Medium` row:
-`FixedWorldKit.Compile` turns it into that row, and `ApplyBuoyancyAndSurface`/
-`ComputeSwimTargetVelocity` are doors onto the same compiled law rather than a
-second implementation of it (`WorldMediumLawTests` pins the two spellings to a
-byte-identical trace). The arm survives only because
-`puck.world.frozen.json`'s `fishKit` authors it; retiring that row retires the
-arm and its two operations with it.
+A `Medium` row is the ONLY spelling of the medium law — `ApplyHold` runs it
+against the row `ResolveHold` took, and `WorldMediumLawTests` pins it to a
+recorded 240-tick fixed-point trace. `puck.world.frozen.json`'s `fishKit` is
+the worked example: a `grounded` arm whose `fishMotion` program runs
+`ResolveHold`/`ApplyHold`, with one `water` row carrying the six medium facets.
 
 Read back with `body.hold` (`[body.hold: body:<n> hold=<name|none>
-normal=(x, y, z) spend=<left|n/a>]`). A program that reaches the medium law
-through the swim operations rather than through `ResolveHold` holds no row, so
-`body.hold` reads `none` there while the law still runs. The current row index, its anchor and
+normal=(x, y, z) spend=<left|n/a>]`). The current row index, its anchor and
 normal, and the spend accumulator's remainder are simulation state: captured in
 `IntegrationResidue`, carried through `WorldAuthorityCheckpointCodec`, and part
 of the replay hash.

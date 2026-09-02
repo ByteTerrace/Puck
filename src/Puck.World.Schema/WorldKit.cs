@@ -235,7 +235,7 @@ public readonly record struct FixedWorldKit(
 
         // An arm without a held-multiplier channel resolves -1 here the same way a kit with the field unset does —
         // "no sprint" by construction, not a special case (DeclaredSprintChannel is the one arm-dispatch read,
-        // covering Grounded's and Swim's sprint and the vehicle arm's boost, the same held-multiplier seam). The
+        // covering Grounded's sprint and the vehicle arm's boost, the same held-multiplier seam). The
         // vehicle arm's drift channel is its own held read, resolved the same way below.
         var sprintOrdinal = (((kit.Motion.DeclaredSprintChannel is { Length: > 0 } sprintChannel)
             && channels.TryGetOrdinal(
@@ -330,14 +330,9 @@ public readonly record struct FixedWorldKit(
             RoleOrdinals: roleOrdinals,
             RoleMask: roleMask,
             ActionState: actionState,
-            // The swim arm is an authoring spelling of one medium hold, so it compiles into the same list a kit
-            // authoring that row reaches — the medium law exists once, whichever spelling names it.
-            Holds: ((kit.Motion is WorldMotionModel.Swim swim)
-                ? WorldHoldFactory.Compile(swim: swim)
-                : WorldHoldFactory.Compile(
-                    channels: channels,
-                    holds: kit.Motion.DeclaredHolds
-                )
+            Holds: WorldHoldFactory.Compile(
+                channels: channels,
+                holds: kit.Motion.DeclaredHolds
             ),
             PlanarDynamics: planarDynamics
         );

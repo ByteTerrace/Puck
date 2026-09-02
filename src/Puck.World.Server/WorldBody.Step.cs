@@ -263,29 +263,6 @@ public sealed partial class WorldBody {
         StageProducerIntent(intent: in scratch.Intent);
     }
 
-    // The swim model's ONE vertical owner: both the medium's target and the response-row convergence happen HERE,
-    // never split into a separate stage — a second constant-rate owner of the same channel always beats the first,
-    // which would leave an idle body short of its float line or let a held ascent breach it. The medium's own
-    // target folds into the commanded thrust target BEFORE the convergence runs — below the bob
-    // band the target is a constant trim drift (Buoyancy, clamped to the terminal speeds); inside the band and
-    // above it (breach recovery) the target is a proportional settle toward the float line — displacement times
-    // SurfaceSettleRate — capped upward at the
-    // buoyant drift (continuity at the band edge) and downward at the sink terminal. The sum of medium target and
-    // staged thrust (ComputeSwimTargetVelocity's SwimVerticalTarget) converges through the SAME matching response
-    // row's engage/release rate the planar half rides — engage while the vertical stick is deflected, release while
-    // centered — so a held ascent parks where thrust and settle balance instead of racing to the surface. The two
-    // swim facts are written here, read one tick behind by gates, exactly like m_grounded.
-    // The medium's surface stage, for a program that names it directly rather than reaching it through ApplyHold.
-    // Both doors run the one law (ApplyMedium) against the one compiled medium row, so an authored swim arm and an
-    // authored medium hold cannot drift apart.
-    private void ApplyBuoyancyAndSurface(ref BodyMotionScratch scratch) {
-        if (KitMedium is { } medium) {
-            ApplyMedium(
-                medium: in medium,
-                scratch: ref scratch
-            );
-        }
-    }
     private void ApplyEffects(CompiledBodyInstruction[] effects, ref BodyMotionScratch scratch) {
         foreach (var effect in effects) {
             if (effect.Target == ActionTarget.Self) {
@@ -568,12 +545,6 @@ public sealed partial class WorldBody {
 
         return ((forward / length), (strafe / length));
     }
-    // --- The medium's stages. ---
-    // The planar thrust target is the grounded target, unchanged: a pure-yaw frame carries no Y, so planar thrust
-    // never leaks into the vertical channel, and the medium's own vertical half is the MoveUp role the medium law
-    // reads directly (see WorldBody.Hold.cs's MediumThrust). The two used to be one operation computing both; the
-    // vertical half moved to the law that consumes it, which is why nothing here forks on the model any more.
-    private void ComputeSwimTargetVelocity(ref BodyMotionScratch scratch) => ComputePlanarTargetVelocity(scratch: ref scratch);
     // The canonical orientation decomposed to Tait-Bryan angles (radians), the exact inverse of OrientationFromEuler's
     // Ry(yaw)·Rx(pitch)·Rz(roll) construction (the codebase-wide yaw-about-+Y / pitch-about-+X / roll-about-+Z
     // convention). Yaw is atan2 of the facing's horizontal components; pitch is the facing's elevation; roll is the bank
@@ -637,9 +608,6 @@ public sealed partial class WorldBody {
             case BodyMotionOp.ComputeLocalTargetVelocity:
                 ComputeLocalTargetVelocity(scratch: ref scratch);
                 break;
-            case BodyMotionOp.ComputeSwimTargetVelocity:
-                ComputeSwimTargetVelocity(scratch: ref scratch);
-                break;
             case BodyMotionOp.ShapePlanarVelocity:
                 scratch.Velocity = ShapePlanarVelocity(
                     intent: in scratch.Intent,
@@ -667,9 +635,6 @@ public sealed partial class WorldBody {
                 break;
             case BodyMotionOp.ApplyVerticalDecay:
                 ApplyVerticalDecay(scratch: ref scratch);
-                break;
-            case BodyMotionOp.ApplyBuoyancyAndSurface:
-                ApplyBuoyancyAndSurface(scratch: ref scratch);
                 break;
             case BodyMotionOp.ApplyHold:
                 ApplyHold(scratch: ref scratch);
@@ -1193,22 +1158,19 @@ public sealed partial class WorldBody {
         m_verticalPreviousTarget = default;
         m_verticalFollowerSeeded = false;
 
-        // The swim carries are momentum and medium facts on the same terms — a warp never carries a dive across, and
-        // a body warped out of the water must not read Submerged until the surface stage says so again.
-        m_swimThrustRampAccumulator.Reset();
+        // The medium carries are momentum and medium facts on the same terms — a warp never carries a dive across,
+        // and a body warped out of the water must not read Submerged until the medium law says so again.
+        m_mediumThrustRampAccumulator.Reset();
         m_submerged = false;
         m_atSurface = false;
     }
     // The one seat-time resolve, per arm. Shared by Advance (which feeds this into the program) and
     // EffectiveMoveSpeed (which only reads it back) so the two can never compute two different answers to "what
-    // speed is this body actually moving at". A new model arm (swim) adds its own case here, alongside its
-    // SetTuning case (see CompiledMotionArm's remarks).
+    // speed is this body actually moving at". A new model arm adds its own case here, alongside its SetTuning case
+    // (see CompiledMotionArm's remarks).
     private FixedQ4816 ResolveMoveSpeed() {
         switch (m_motionArm) {
             case CompiledMotionArm.Grounded:
-            case CompiledMotionArm.Swim:
-                // Swim compiles into the SAME shared m_tuning slots grounded reads (see SetTuning's remarks), so it
-                // rides this same case rather than forking its own.
                 var resolved = (Profile?.FixedMoveSpeed ?? m_tuning.MoveSpeed);
 
                 return (m_tuning.MoveSpeedEnvelope?.Clamp(value: resolved) ?? resolved);
@@ -1225,8 +1187,8 @@ public sealed partial class WorldBody {
     // body still shouldn't clip through a wall. The vertical WRITE-BACK (m_verticalVelocity, m_planarVelocity, the
     // grounded position-accumulator reset) is gated on CompiledBodyMotionProgram.OwnsVerticalContactState: only a
     // program that itself integrates gravity (ApplyVerticalGravity) has ceded its vertical channel to contact
-    // resolution. A program that instead owns that channel directly (free's ApplyVerticalDecay bleed; the coming
-    // swim arm) must keep it — folding the resolved velocity back in every tick regardless would feed a decay
+    // resolution. A program that instead owns that channel directly (free's ApplyVerticalDecay bleed) must keep it
+    // — folding the resolved velocity back in every tick regardless would feed a decay
     // channel's own prior value back into itself, an unbounded loop rather than a correction (the defect this
     // gate exists to close). m_grounded/m_lastContactCount stay informational for every model (RunActionTriggers'
     // ActionFact.Grounded/Airborne reads them under any program), since they never feed back into an integration.
@@ -1822,7 +1784,7 @@ public sealed partial class WorldBody {
     private FixedVector3 ShapePlanarVelocity(FixedVector3 target, in PlayerIntent intent, ulong stepTicks) {
         if (m_tuning.PlanarDynamics is { Planar: { } planar }) {
             // stepTicks can differ from planar.StepTicks for exactly one tick — see the identical note in
-            // ApplyBuoyancyAndSurface.
+            // ApplyMedium.
             var ceiling = (((m_sprintChannelOrdinal >= 0) && (intent[m_sprintChannelOrdinal] >= m_channelThresholds[m_sprintChannelOrdinal]))
                 ? (ResolveMoveSpeed() * m_tuning.SprintMultiplier)
                 : ResolveMoveSpeed()

@@ -105,24 +105,6 @@ public static class WorldFacePortalPolicy {
                     );
 
                     break;
-                case WorldMotionModel.Swim swim:
-                    ceiling = FixedQ4816.Max(
-                        x: ceiling,
-                        y: Scaled(
-                            baseSpeed: (swim.ThrustSpeedEnvelope?.Max ?? swim.ThrustSpeed),
-                            multiplier: swim.SprintMultiplier
-                        )
-                    );
-                    ceiling = FixedQ4816.Max(
-                        x: ceiling,
-                        y: Magnitude(value: swim.MaxRiseSpeed)
-                    );
-                    ceiling = FixedQ4816.Max(
-                        x: ceiling,
-                        y: Magnitude(value: swim.MaxSinkSpeed)
-                    );
-
-                    break;
                 default:
                     break;
             }

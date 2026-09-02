@@ -609,7 +609,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteInt64(value: state.VehicleLongRemainder);
         writer.WriteInt64(value: state.VehicleLatRemainder);
         writer.WriteInt64(value: state.VehicleResidualRemainder);
-        writer.WriteInt64(value: state.SwimThrustRampRemainder);
+        writer.WriteInt64(value: state.MediumThrustRampRemainder);
         writer.WriteInt64(value: state.PlanarFollowerPositionRawX);
         writer.WriteInt64(value: state.PlanarFollowerPositionRawY);
         writer.WriteInt64(value: state.PlanarFollowerPositionRawZ);
@@ -729,7 +729,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         var vehicleLongRemainder = reader.ReadInt64();
         var vehicleLatRemainder = reader.ReadInt64();
         var vehicleResidualRemainder = reader.ReadInt64();
-        var swimThrustRampRemainder = reader.ReadInt64();
+        var mediumThrustRampRemainder = reader.ReadInt64();
         var planarFollowerPositionRawX = reader.ReadInt64();
         var planarFollowerPositionRawY = reader.ReadInt64();
         var planarFollowerPositionRawZ = reader.ReadInt64();
@@ -860,7 +860,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             PlanarVelocity: planarVelocity,
             PreviousChannelBit: previousChannelBit,
             Source: source,
-            SwimThrustRampRemainder: swimThrustRampRemainder,
+            MediumThrustRampRemainder: mediumThrustRampRemainder,
             TapeIntents: tapeIntents,
             TapeRemainingTicks: tapeRemainingTicks,
             VehicleLatRemainder: vehicleLatRemainder,

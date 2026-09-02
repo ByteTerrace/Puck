@@ -53,14 +53,15 @@
   },
   "bodyMotionPrograms": [
     {
-      "name": "swim",
+      "name": "medium",
       "version": "puck.body-motion.v1",
       "kind": "Motion",
       "operations": [
         "ResolveYawAttitudeAndPlanarFrame",
-        "ComputeSwimTargetVelocity",
+        "ResolveHold",
+        "ComputePlanarTargetVelocity",
         "ShapePlanarVelocity",
-        "ApplyBuoyancyAndSurface",
+        "ApplyHold",
         "IntegratePlanarAndVerticalVelocity",
         "CommitPose"
       ]
@@ -70,19 +71,31 @@
     "rows": [
       {
         "name": "diver",
-        "bodyMotionProgram": "swim",
+        "bodyMotionProgram": "medium",
         "motion": {
-          "$type": "swim",
-          "thrustSpeed": 3.2,
+          "$type": "grounded",
+          "moveSpeed": 3.2,
           "turnSpeed": 2.2,
-          "verticalThrustFraction": 0.75,
+          "riseGravity": 1,
+          "fallGravity": 1,
+          "maxFallSpeed": 1,
           "response": [],
-          "buoyancy": 0.5,
-          "maxRiseSpeed": 2.4,
-          "maxSinkSpeed": 3,
-          "surfaceSettleRate": 6,
-          "floatDepth": 1,
-          "sprintMultiplier": 1
+          "sprintMultiplier": 1,
+          "holds": [
+            {
+              "name": "water",
+              "bond": "Medium",
+              "hold": "None",
+              "medium": {
+                "buoyancy": 0.5,
+                "maxRiseSpeed": 2.4,
+                "maxSinkSpeed": 3,
+                "surfaceSettleRate": 6,
+                "floatDepth": 1,
+                "thrustFraction": 0.75
+              }
+            }
+          ]
         },
         "collider": { "$type": "sphere", "radius": 0.5 },
         "bodyContact": "Solid"

@@ -320,8 +320,8 @@ authors a global waterline any more — a medium is lattice content like any
 other field, so it can vary by region, rise and fall under a reaction, or be
 absent entirely (a body outside every medium field's footprint floats
 against nothing). `medium` refuses without a `heightScale` greater than
-zero — a surface-less medium is meaningless. The swim motion model is the
-live consumer — its buoyancy/surface stage reads the surface
+zero — a surface-less medium is meaningless. A kit's `bond: "Medium"` hold row
+is the live consumer — its law reads the surface
 `WorldPopulation.SampleMediumSurfaces` resamples onto each body every tick —
 and a hover kit's float-over height remains a later, not-yet-built consumer.
 `world.status` echoes the declared medium field names (`none` when there is
@@ -1072,7 +1072,7 @@ probes` refuses by name enumerating siblings — though it does carry its own
 
 `WorldDynamicsRow` (`WorldDynamics.cs`): named `{name, f, zeta, r}` rows — the
 t3ssel8r-style pole-matched second-order response every follower consumer
-(a look's root/part followers, a camera boom, a grounded/swim kit's planar
+(a look's root/part followers, a camera boom, a grounded kit's planar
 shaping, a `state` cell's eased read) names by `name` rather than authoring
 inline. `f` (Hz, positive), `zeta` (damping ratio, non-negative), and `r`
 (initial response) are validated against `WorldDynamics`' ceilings
