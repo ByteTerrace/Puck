@@ -7,6 +7,10 @@ namespace Puck.Commands.Tests;
 /// <summary>Exercises the text-dispatch surface: the wire-native fast path and its argument parsing, rejection
 /// accounting, quiet acknowledgements, interned command identity, and command-map gating.</summary>
 public sealed class CommandRegistryTests {
+    // help, wire.ack and wire.errors: the registry's own verbs, registered like a module's and interned like a
+    // module's, so they take three of the 16-bit ids a snapshot entry can name.
+    private const int BuiltInCommandCount = 3;
+
     [Fact]
     public void WireNativeFastPathParsesTrailingArguments() {
         var registry = new CommandRegistry(modules: [new CoreModule()]);
@@ -187,12 +191,15 @@ public sealed class CommandRegistryTests {
     }
     [Fact]
     public void MoreCommandsThanTheSnapshotIdSpaceCanRepresentAreRefused() {
-        _ = Assert.Throws<InvalidOperationException>(testCode: static () => new CommandRegistry(modules: [new ManyCommandsModule(count: (ushort.MaxValue + 2))]));
+        // The registry's own three verbs are ordinary registrations and take three of the 16-bit ids, so a module may
+        // contribute one fewer than the module cap this used to name.
+        _ = Assert.Throws<InvalidOperationException>(testCode: static () => new CommandRegistry(modules: [new ManyCommandsModule(count: ((ushort.MaxValue + 1) - BuiltInCommandCount + 1))]));
     }
     [Fact]
     public void TheFinalRepresentableCommandIdStillResolves() {
-        var registry = new CommandRegistry(modules: [new ManyCommandsModule(count: (ushort.MaxValue + 1))]);
+        var registry = new CommandRegistry(modules: [new ManyCommandsModule(count: ((ushort.MaxValue + 1) - BuiltInCommandCount))]);
 
+        Assert.Equal(actual: registry.CommandCount, expected: (ushort.MaxValue + 1));
         Assert.NotEmpty(collection: registry.GetName(id: ushort.MaxValue));
     }
     [Fact]
@@ -515,8 +522,42 @@ public sealed class CommandRegistryTests {
 
         Assert.False(condition: definitions.IsDefault);
         Assert.False(condition: maps.IsDefault);
-        Assert.Equal(expected: ["alpha", "beta", "ping", "sum"], actual: definitions.Select(selector: static metadata => metadata.Name));
+        // The whole dispatchable catalogue, the registry's own verbs included: a listing verb, the help text and the
+        // binding vocabulary all read this, and a verb Submit dispatches but Definitions denies existed let the three
+        // of them each be right and still disagree.
+        Assert.Equal(expected: ["alpha", "beta", "help", "ping", "sum", "wire.ack", "wire.errors"], actual: definitions.Select(selector: static metadata => metadata.Name));
         Assert.Equal(actual: maps, expected: [CommandMaps.Global, "combat"]);
+    }
+    [Fact]
+    public void TheBuiltInsAnswerTheSameLookupsEveryVerbTheRegistryDispatchesDoes() {
+        var registry = new CommandRegistry(modules: [new CoreModule()]);
+
+        foreach (var name in new[] { "help", "wire.ack", "wire.errors" }) {
+            // Submit dispatches all three, so TryGetId and TryGetMetadata answering false for them made the catalogue
+            // disagree with the dispatcher — and TryGetId's own doc claimed otherwise.
+            Assert.True(condition: registry.TryGetId(id: out var id, name: name));
+            Assert.Equal(actual: registry.GetName(id: id), expected: name);
+            Assert.True(condition: registry.TryGetMetadata(metadata: out var metadata, name: name));
+            Assert.Equal(actual: metadata.Name, expected: name);
+            // What keeps a built-in off a binding page is its BINDABILITY, which a vocabulary check refuses by name,
+            // rather than its absence from a catalogue, which the same check reports as an unknown command.
+            Assert.Equal(actual: metadata.Bindability, expected: CommandBindability.Unbindable);
+            Assert.Equal(actual: metadata.Routing, expected: CommandRouting.Immediate);
+        }
+
+        // Case-insensitively, like every other name.
+        Assert.True(condition: registry.TryGetMetadata(metadata: out _, name: "WIRE.ACK"));
+    }
+    [Fact]
+    public void ABuiltInRefusesAnArgumentItDoesNotTake() {
+        var registry = new CommandRegistry(modules: [new CoreModule()]);
+
+        Assert.Contains(actualString: registry.Submit(line: "help").Output, comparisonType: StringComparison.Ordinal, expectedSubstring: "sum - ");
+        // help lists the built-ins too, so `help` answers for the whole surface a line can reach.
+        Assert.Contains(actualString: registry.Submit(line: "help").Output, comparisonType: StringComparison.Ordinal, expectedSubstring: "wire.errors - ");
+        Assert.True(condition: registry.Submit(line: "help extra").IsError);
+        Assert.True(condition: registry.Submit(line: "wire.ack on quiet").IsError);
+        Assert.True(condition: registry.Submit(line: "wire.errors nope").IsError);
     }
     [Fact]
     public void ALineWiderThanTheWireTokenCapAgreesWithItsQuotedForm() {
