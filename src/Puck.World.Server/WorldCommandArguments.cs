@@ -97,6 +97,38 @@ public static class WorldCommandArguments {
 
         return Unwrap(tail: span.Trim());
     }
+    /// <summary>Strips <paramref name="leadingTokens"/> leading tokens exactly as <see cref="RawAfter"/> does, then —
+    /// only when the line's LAST token is <paramref name="keyword"/> — that token too: the shape a verb whose
+    /// free-text tail is followed by an OPTIONAL literal word needs (<c>world.load &lt;path&gt; [force]</c>).</summary>
+    /// <remarks>The keyword is recognized off the registry's own tokenization (<see cref="WireArgs.Is"/>) rather than
+    /// by scanning the raw line, so the two ends of the reconstruction can never disagree about where a token begins —
+    /// a hand-rolled <c>anyOf: [' ', '\t']</c> scan absorbed the keyword into the tail for a line the tokenizer had
+    /// already split (<c>world.load &lt;path&gt;\vforce</c> loaded a file whose name ended in <c>\vforce</c>).
+    /// <para>The keyword is only recognized when a token PRECEDES it: a line that is the bare word and nothing else
+    /// carries no tail, and the grammars that use this all spell a REQUIRED tail before the optional word, so
+    /// <c>world.load force</c> names a file called <c>force</c> rather than flagging an absent path.</para></remarks>
+    /// <param name="context">The invoking context, whose <see cref="CommandContext.Text"/> carries the raw line.</param>
+    /// <param name="args">The tokenized arguments, which decide whether the keyword is present.</param>
+    /// <param name="leadingTokens">How many leading tokens to strip, the verb included.</param>
+    /// <param name="keyword">The optional trailing word, compared case-insensitively.</param>
+    /// <param name="present">Whether that word was the line's last token.</param>
+    /// <returns>The text between the leading tokens and the keyword, or <see cref="string.Empty"/> when the line
+    /// carries none.</returns>
+    public static string RawBeforeKeyword(CommandContext context, in WireArgs args, int leadingTokens, string keyword, out bool present) {
+        present = ((args.Count >= 2) && args.Is(
+            index: (args.Count - 1),
+            value: keyword
+        ));
+
+        return RawBetween(
+            args: in args,
+            context: context,
+            leadingTokens: leadingTokens,
+            trailingTokens: (present
+                ? 1
+                : 0)
+        );
+    }
 
     // The first whitespace character by CATEGORY, the rule CommandRegistry's wire tokenizer splits a submitted line
     // on. Scanned rather than looked up because char.IsWhiteSpace is a Unicode category test, not a listed set.
