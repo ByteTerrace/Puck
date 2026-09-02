@@ -133,10 +133,9 @@ public sealed class CommandRegistry {
             : ((observers as ICommandObserver[]) ?? observers.ToArray())
         );
 
-        // Attribution for the loud-failure name guard below: which owner first claimed a given command
-        // name/alias. Ctor-scoped — the registry is immutable once built, so nothing after this loop can
-        // introduce a new collision. The registry's own built-ins claim their names FIRST, so a module that
-        // declares e.g. "wire.errors" collides and throws exactly like colliding with another module.
+        // Attribution for Register's loud-failure name guard: which owner first claimed a given command name/alias.
+        // Ctor-scoped — the registry is immutable once built, so nothing after construction can introduce a new
+        // collision.
         var claimedBy = new Dictionary<string, string>(comparer: StringComparer.OrdinalIgnoreCase);
         var commandCount = 0;
 
@@ -162,6 +161,81 @@ public sealed class CommandRegistry {
                 );
             }
         }
+
+        // Intern a stable id per distinct command. Ordinal-sort the canonical names so the assignment is
+        // identical across machines and builds (independent of module registration order); aliases resolve to
+        // their command's id. The registry's own built-ins are interned beside a module's commands: they are
+        // dispatched, so they are named, described and resolvable exactly like everything else this registry answers
+        // for. Being unbindable is what keeps them off a binding page, not being absent from the catalogue.
+        m_nameById = m_byName.Values
+            .Select(selector: static definition => definition.Name)
+            .Distinct(comparer: StringComparer.OrdinalIgnoreCase)
+            .OrderBy(
+            keySelector: static name => name,
+            comparer: StringComparer.Ordinal
+        )
+            .ToArray();
+
+        for (var id = 0; (id < m_nameById.Length); id++) {
+            m_idByName[m_nameById[id]] = ((ushort)id);
+        }
+
+        foreach (var (name, definition) in m_byName) {
+            m_idByName[name] = m_idByName[definition.Name];
+        }
+
+        m_definitionById = new CommandDefinition[m_nameById.Length];
+        m_mapIndexById = new int[m_nameById.Length];
+        m_metadataById = new CommandMetadata[m_nameById.Length];
+        var mapNames = new List<string> { CommandMaps.Global };
+
+        m_mapIndexByName[CommandMaps.Global] = 0;
+
+        for (var id = 0; (id < m_nameById.Length); id++) {
+            var definition = m_byName[m_nameById[id]];
+
+            if (!m_mapIndexByName.TryGetValue(
+                key: definition.Map,
+                value: out var mapIndex
+            )) {
+                mapIndex = mapNames.Count;
+                m_mapIndexByName.Add(
+                    key: definition.Map,
+                    value: mapIndex
+                );
+                mapNames.Add(item: definition.Map);
+            }
+
+            m_definitionById[id] = definition;
+            m_mapIndexById[id] = mapIndex;
+            m_metadataById[id] = definition.Metadata;
+        }
+
+        m_mapNames = [.. mapNames];
+        DefaultModality = CompileModality(activeMaps: []);
+
+        // The wire-native table: every name/alias whose definition carries a WireArgs handler. Immediate commands
+        // dispatch through it now; Simulation commands use the same tokenization before injection and again when the
+        // tick applies, avoiding two System.CommandLine object graphs while preserving the original line as payload.
+        // Case-INSENSITIVE, exactly like m_byName and m_idByName, so one identity rule governs every surface a
+        // command name reaches. m_byName's keys carry each name and alias verbatim.
+        var wirePath = new Dictionary<string, CommandDefinition>(comparer: StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (name, definition) in m_byName) {
+            if (definition.WireArgsHandler is not null) {
+                wirePath[name] = definition;
+            }
+        }
+
+        m_wirePath = wirePath.ToFrozenDictionary(comparer: StringComparer.OrdinalIgnoreCase);
+        m_wirePathAlt = m_wirePath.GetAlternateLookup<ReadOnlySpan<char>>();
+        m_byNameAlt = m_byName.GetAlternateLookup<ReadOnlySpan<char>>();
+        m_metadata = [.. m_byTextCommand.Values
+            .Select(selector: static definition => definition.Metadata)
+            .OrderBy(
+            keySelector: static metadata => metadata.Name,
+            comparer: StringComparer.Ordinal
+        )];
 
         // The one registration body, so the registry's own verbs cannot be registered on a slightly different set of
         // rules than a module's.
@@ -242,82 +316,6 @@ public sealed class CommandRegistry {
                 definition.TextCommand.Aliases.Add(item: alias);
             }
         }
-
-        // Intern a stable id per distinct command. Ordinal-sort the canonical names so the assignment is
-        // identical across machines and builds (independent of module registration order); aliases resolve to
-        // their command's id. The registry's own built-ins are interned beside a module's commands: they are
-        // dispatched, so they are named, described and resolvable exactly like everything else this registry answers
-        // for. Being unbindable is what keeps them off a binding page, not being absent from the catalogue.
-        m_nameById = m_byName.Values
-            .Select(selector: static definition => definition.Name)
-            .Distinct(comparer: StringComparer.OrdinalIgnoreCase)
-            .OrderBy(
-            keySelector: static name => name,
-            comparer: StringComparer.Ordinal
-        )
-            .ToArray();
-
-        for (var id = 0; (id < m_nameById.Length); id++) {
-            m_idByName[m_nameById[id]] = ((ushort)id);
-        }
-
-        foreach (var (name, definition) in m_byName) {
-            m_idByName[name] = m_idByName[definition.Name];
-        }
-
-        m_definitionById = new CommandDefinition[m_nameById.Length];
-        m_mapIndexById = new int[m_nameById.Length];
-        m_metadataById = new CommandMetadata[m_nameById.Length];
-        var mapNames = new List<string> { CommandMaps.Global };
-
-        m_mapIndexByName[CommandMaps.Global] = 0;
-
-        for (var id = 0; (id < m_nameById.Length); id++) {
-            var definition = m_byName[m_nameById[id]];
-
-            if (!m_mapIndexByName.TryGetValue(
-                key: definition.Map,
-                value: out var mapIndex
-            )) {
-                mapIndex = mapNames.Count;
-                m_mapIndexByName.Add(
-                    key: definition.Map,
-                    value: mapIndex
-                );
-                mapNames.Add(item: definition.Map);
-            }
-
-            m_definitionById[id] = definition;
-            m_mapIndexById[id] = mapIndex;
-            m_metadataById[id] = definition.Metadata;
-        }
-
-        m_mapNames = [.. mapNames];
-        DefaultModality = CompileModality(activeMaps: []);
-
-        // The wire-native table: every name/alias whose definition carries a WireArgs handler. Immediate commands
-        // dispatch through it now; Simulation commands use the same tokenization before injection and again when the
-        // tick applies, avoiding two System.CommandLine object graphs while preserving the original line as payload.
-        // Case-INSENSITIVE, exactly like m_byName and m_idByName, so one identity rule governs every surface a
-        // command name reaches. m_byName's keys carry each name and alias verbatim.
-        var wirePath = new Dictionary<string, CommandDefinition>(comparer: StringComparer.OrdinalIgnoreCase);
-
-        foreach (var (name, definition) in m_byName) {
-            if (definition.WireArgsHandler is not null) {
-                wirePath[name] = definition;
-            }
-        }
-
-        m_wirePath = wirePath.ToFrozenDictionary(comparer: StringComparer.OrdinalIgnoreCase);
-        m_wirePathAlt = m_wirePath.GetAlternateLookup<ReadOnlySpan<char>>();
-        m_byNameAlt = m_byName.GetAlternateLookup<ReadOnlySpan<char>>();
-        m_metadata = [.. m_byTextCommand.Values
-            .Select(selector: static definition => definition.Metadata)
-            .OrderBy(
-            keySelector: static metadata => metadata.Name,
-            comparer: StringComparer.Ordinal
-        )];
-
     }
 
     internal CommandModality CreateModality(ReadOnlySpan<string> activeMaps) {
