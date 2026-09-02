@@ -201,6 +201,22 @@ public sealed class CommandRegistry {
                     throw new InvalidOperationException(message: $"Command '{definition.Name}' (registered by {moduleName}) declares an empty command map.");
                 }
 
+                // A command has ONE name, and these are the two halves of it: Name is what the interned id, the
+                // binding vocabulary and the wire table resolve, while TextCommand.Name is what the parser matches.
+                // Split them and the command registers, answers TryGetId for one spelling, and dispatches only for the
+                // other — which the registry then reports as unknown. Closing CommandDefinition's identity setters
+                // puts that out of a consumer's reach, so this is the guard for THIS assembly: the two factories are
+                // the only builders today, and an internal `with` that set one half would otherwise be a silent
+                // half-registered command rather than a composition-root refusal. Ordinally, because CanonicalizeVerb
+                // rewrites a line's verb to Name before the parser, which matches VERBATIM.
+                if (!string.Equals(
+                    a: definition.Name,
+                    b: definition.TextCommand.Name,
+                    comparisonType: StringComparison.Ordinal
+                )) {
+                    throw new InvalidOperationException(message: $"Command '{definition.Name}' (registered by {moduleName}) carries a text command named '{definition.TextCommand.Name}'. A command's dispatch identity and its text identity are one name; build definitions through CommandDefinition.Verb or CommandDefinition.WithWireArgs and do not rename the text command afterwards.");
+                }
+
                 // A definition owns a System.CommandLine object graph, and registering it MUTATES that graph (a root
                 // parent, and one alias per declared alias). Handing the same cached instance to two registries would
                 // therefore let the second registry's construction rewrite the first one's live parser state — a

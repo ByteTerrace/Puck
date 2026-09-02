@@ -14,6 +14,12 @@ namespace Puck.Commands;
 /// <para>Definitions are built through <see cref="Verb"/> and <see cref="WithWireArgs"/> only, and the handler they
 /// carry is internal: what a command is (its <see cref="CommandMetadata"/>) is public, what it does is reachable
 /// solely through the registry's stamped dispatch.</para>
+/// <para>The IDENTITY-BEARING members — <see cref="Name"/>, <see cref="TextCommand"/>, <see cref="Description"/> and
+/// <see cref="Map"/> — are readable but not settable from outside this assembly, because <c>with</c> would otherwise
+/// bypass both factories and split a command in half: <c>Verb(name: "jump", …) with { Name = "fly" }</c> registers,
+/// answers <see cref="CommandRegistry.TryGetId"/> for <c>fly</c>, and yet dispatches only for the line <c>jump</c>,
+/// which the registry reports as unknown. The declarative members beside them (routing, bindability, value kind,
+/// aliases, scope) stay open: none of them can disagree with the System.CommandLine object this definition owns.</para>
 /// </remarks>
 public sealed record CommandDefinition {
     /// <summary>Initializes a new instance of the <see cref="CommandDefinition"/> class.</summary>
@@ -67,13 +73,13 @@ public sealed record CommandDefinition {
     /// <summary>Gets whether a binding document may name this command as a destination.</summary>
     public CommandBindability Bindability { get; init; }
     /// <summary>Gets the human-readable description shown in help output.</summary>
-    public string Description { get; init; }
+    public string Description { get; internal init; }
     /// <summary>Gets whether this is a HELD verb: the handler reads the phase (active on Started/Active, released
     /// on Completed/Canceled), so a plain-bound entry — no <c>activateOn</c> — delivers both edges, exactly as a
     /// channel destination does. An author binds it once; only an explicit <c>activateOn</c> narrows to one edge.</summary>
     public bool Held { get; init; }
     /// <summary>Gets the command map that classifies source-driven activation.</summary>
-    public string Map { get; init; }
+    public string Map { get; internal init; }
     /// <summary>Gets the publicly readable facts about this command — including whether it accepts wire arguments —
     /// that <see cref="CommandRegistry.Definitions"/> hands out.</summary>
     public CommandMetadata Metadata => new(
@@ -87,9 +93,9 @@ public sealed record CommandDefinition {
         AcceptsWireArgs: (WireArgsHandler is not null)
     );
     /// <summary>Gets the unique name used to identify and dispatch the command.</summary>
-    public string Name { get; init; }
+    public string Name { get; internal init; }
     /// <summary>Gets the <see cref="Command"/> used to parse the command from a text line.</summary>
-    public Command TextCommand { get; init; }
+    public Command TextCommand { get; internal init; }
     /// <summary>Gets the shape of the value the command carries.</summary>
     public CommandValueKind ValueKind { get; init; }
 

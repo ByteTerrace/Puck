@@ -473,6 +473,18 @@ public sealed class CommandRegistryTests {
         _ = Assert.Throws<InvalidOperationException>(testCode: () => new CommandRegistry(modules: [module]));
     }
     [Fact]
+    public void ACommandsDispatchIdentityAndTextIdentityCannotBeSplitApart() {
+        // A `with` expression bypasses both factories, so the identity-bearing members are readable but not settable
+        // from outside this assembly: `Verb(name: "jump", ...) with { Name = "fly" }` used to register, answer
+        // TryGetId("fly"), and yet dispatch only for the line "jump" — which the registry then called unknown.
+        foreach (var name in new[] { nameof(CommandDefinition.Description), nameof(CommandDefinition.Map), nameof(CommandDefinition.Name), nameof(CommandDefinition.TextCommand) }) {
+            var setter = typeof(CommandDefinition).GetProperty(name: name)!.SetMethod;
+
+            Assert.NotNull(@object: setter);
+            Assert.False(condition: setter!.IsPublic, userMessage: $"{name} is settable by a consumer");
+        }
+    }
+    [Fact]
     public void RunawayReEntrantSubmissionIsRefusedRatherThanOverflowingTheStack() {
         var registry = new CommandRegistry(modules: [new ReEntrantModule()]);
 
