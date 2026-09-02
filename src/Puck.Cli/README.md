@@ -537,6 +537,19 @@ restored — and in **write mode it rewrites any whitespace drift in the root**,
 which on an unswept root is the whitespace sweep for that root. Run `-WhatIf`
 first; the tree-wide sweep is deliberately its own, separately-landed change.
 
+Choosing the projects is only half the scoping, because a project formats every
+compile item it carries and some of those are LINKED IN from outside it.
+`build/VerifiedCodeAttribute.cs` is linked into every project, so a run over one
+project used to rewrite a file two directories above the root it was handed.
+Phase 0 therefore also passes `--include <root>/`, which confines each
+invocation to the requested root. `dotnet format` matches that pattern against
+each document's path relative to the WORKING DIRECTORY, and it reads a pattern
+as a directory only when the pattern ends in a separator, so a root that cannot
+be spelled that way, meaning one that does not sit under the working directory,
+gets no pattern at all rather than one the matcher would quietly match nothing
+for.
+That run is unscoped, and it says so on stderr before it starts.
+
 | Pass | Rewrite | In the bare-`format` set |
 |---|---|---|
 | `attr-order` | one attribute per list/line, alphabetized. | yes |
