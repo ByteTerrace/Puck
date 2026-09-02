@@ -98,19 +98,34 @@ public sealed record BindingSessionPlan(
         var reserved = new List<string>();
         var seen = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
 
+        // Null ELEMENTS are skipped as carefully as null collections: a hole anywhere in these four lists is
+        // BindingProfile.Compile's refusal to make, in its own words, and crashing here would deny the caller both
+        // the plan AND that refusal. A null row reserves nothing, which is exactly what it selects.
         foreach (var modifier in (document.Modifiers ?? [])) {
+            if (modifier is null) {
+                continue;
+            }
+
             _ = modifierIds.Add(item: modifier.Id);
 
             foreach (var source in (modifier.Sources ?? [])) {
-                if (seen.Add(item: source)) {
+                if (
+                    (source is not null) &&
+                    seen.Add(item: source)
+                ) {
                     reserved.Add(item: source);
                 }
             }
         }
 
         foreach (var row in (document.Chords ?? [])) {
+            if (row is null) {
+                continue;
+            }
+
             foreach (var member in row.Members) {
                 if (
+                    (member is not null) &&
                     !modifierIds.Contains(item: member) &&
                     seen.Add(item: member)
                 ) {

@@ -105,9 +105,11 @@ public static class BindingVocabularyCheck {
 
         // OrdinalIgnoreCase, matching how BindingProfile.Compile resolves a row member against a declared modifier
         // id: a member differing only by case IS that modifier there, so refusing it here as an unknown control
-        // would contradict the structural gate.
+        // would contradict the structural gate. A null row is skipped for the same reason the loop below skips one —
+        // a malformed row is the structural gate's refusal to make, and this gate answers a malformed document with
+        // its vocabulary findings rather than an exception.
         var declaredModifierIds = new HashSet<string>(
-            collection: (document.Modifiers ?? []).Select(selector: static modifier => modifier.Id),
+            collection: (document.Modifiers ?? []).Where(predicate: static modifier => (modifier is not null)).Select(selector: static modifier => modifier.Id),
             comparer: StringComparer.OrdinalIgnoreCase
         );
 

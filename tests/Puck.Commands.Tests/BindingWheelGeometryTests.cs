@@ -394,6 +394,50 @@ public sealed class BindingWheelGeometryTests {
             new BindingWheelStyleDefinition(SectorOffset: 0.9f),
         ];
     }
+
+    [InlineData(-1)]
+    [InlineData(0)]
+    [Theory]
+    public void ARadialWithNoSectorsIsRefusedByNameAtEveryPublicDoor(int sectorCount) {
+        // The sector arithmetic divides and takes a remainder by sectorCount, so an empty radial used to surface as
+        // a bare DivideByZeroException from inside private geometry — a crash naming neither the argument nor the
+        // door it entered. A radial with no sectors selects nothing at all; that is an argument the caller got
+        // wrong, refused by name.
+        var style = new BindingWheelStyleDefinition();
+        var vector = new Vector2(
+            x: 0f,
+            y: -1f
+        );
+
+        Assert.Equal(
+            actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => BindingWheelGeometry.SelectDirection(
+                sectorCount: sectorCount,
+                style: style,
+                vector: vector
+            )).ParamName,
+            expected: "sectorCount"
+        );
+        Assert.Equal(
+            actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => BindingWheelGeometry.SelectAxis(
+                sectorCount: sectorCount,
+                style: style,
+                vector: vector
+            )).ParamName,
+            expected: "sectorCount"
+        );
+        Assert.Equal(
+            actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => BindingWheelGeometry.SelectSpatial(
+                mode: BindingWheelSpatialSelectionMode.Angle,
+                ringCount: 1,
+                sectorCount: sectorCount,
+                style: style,
+                unit: 100f,
+                vector: (vector * 200f)
+            )).ParamName,
+            expected: "sectorCount"
+        );
+    }
+
     // The screen-space vector at an ABSOLUTE clockwise angle from twelve o'clock (0, -1), at a chosen magnitude.
     private static Vector2 VectorAt(double clockwise, double magnitude) {
         return new Vector2(

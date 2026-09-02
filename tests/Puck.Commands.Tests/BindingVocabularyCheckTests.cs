@@ -431,6 +431,90 @@ public sealed class BindingVocabularyCheckTests {
             lookups: null!
         ));
     }
+    [Fact]
+    public void ANullModifierRowIsSkippedNotThrown() {
+        // The declared-modifier id set is built by projecting every row's Id; a null row NRE'd there, nine lines
+        // above the loop that already guards that exact case. A malformed row is BindingProfile.Compile's refusal
+        // to make — this gate's job is to keep reporting vocabulary findings around it.
+        var document = new BindingProfileDocument(
+            Version: BindingProfileDocument.CurrentVersion,
+            Modifiers: [null!],
+            Chords: [
+                new BindingChordDefinition(
+                    Group: "play",
+                    Chord: [],
+                    Page: new BindingPageDefinition(
+                        Id: "base",
+                        Entries: [new BindingPageEntryDefinition(Command: "typo", Sources: ["keyboard.a"])]
+                    )
+                ),
+            ]
+        );
+        var errors = BindingVocabularyCheck.Validate(
+            document: document,
+            lookups: new BindingVocabularyLookups(
+                Command: static _ => null,
+                SourceKind: null
+            )
+        ).Errors;
+
+        Assert.Contains(
+            actualString: Assert.Single(collection: errors),
+            expectedSubstring: "names no registered command"
+        );
+    }
+    [Fact]
+    public void ANullModifierIdIsSkippedNotThrown() {
+        // The row's sibling shape: the row is present but its id is not. Pinned beside the null-row case so the
+        // guard that skips one is never narrowed to the other.
+        var document = new BindingProfileDocument(
+            Version: BindingProfileDocument.CurrentVersion,
+            Modifiers: [new BindingModifierDefinition(Id: null!, Sources: [])],
+            Chords: [
+                new BindingChordDefinition(
+                    Group: "play",
+                    Chord: [],
+                    Page: new BindingPageDefinition(
+                        Id: "base",
+                        Entries: [new BindingPageEntryDefinition(Command: "typo", Sources: ["keyboard.a"])]
+                    )
+                ),
+            ]
+        );
+        var errors = BindingVocabularyCheck.Validate(
+            document: document,
+            lookups: new BindingVocabularyLookups(
+                Command: static _ => null,
+                SourceKind: null
+            )
+        ).Errors;
+
+        Assert.Contains(
+            actualString: Assert.Single(collection: errors),
+            expectedSubstring: "names no registered command"
+        );
+    }
+    [Fact]
+    public void ADefaultReportReadsAsAnEmptyCleanOne() {
+        // A struct's default is always reachable — an unassigned field, a `new T[n]` slot, a `default` in a switch
+        // arm — and this one wrapped a default ImmutableArray, so reading the report's ONLY member threw a bare
+        // NullReferenceException. "No refusals" is the honest reading of an unfilled report, so that is what it
+        // answers.
+        var report = default(BindingVocabularyReport);
+
+        Assert.True(condition: report.IsClean);
+        // The member the crash came out of: reading Length off a default ImmutableArray is the NRE.
+        Assert.False(condition: report.Errors.IsDefault);
+        Assert.Empty(collection: report.Errors);
+    }
+    [Fact]
+    public void AReportConstructedFromADefaultArrayReadsAsAnEmptyCleanOne() {
+        // The same hole reached through the constructor rather than around it.
+        var report = new BindingVocabularyReport(Errors: default);
+
+        Assert.True(condition: report.IsClean);
+        Assert.Empty(collection: report.Errors);
+    }
 
     private static BindingProfileDocument Document(BindingPageEntryDefinition entry) {
         return new BindingProfileDocument(
