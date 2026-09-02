@@ -14,8 +14,9 @@ namespace Puck.Commands;
 /// <see cref="CommandPhase.Active"/> when a channel chord is recovered from held digital state, or
 /// <see cref="CommandPhase.Completed"/> on chord break.</param>
 /// <param name="Value">The value the edge carries (the row's press value, or its inactive twin on release).</param>
-/// <param name="Dispatch">Whether the edge's handler fires (a press always dispatches; a release dispatches only
-/// for a <see cref="BindingCommandDefinition.HoldRelease"/> row — either way the release clears the carried held state).</param>
+/// <param name="Dispatch">Whether the edge's handler fires (a press always dispatches; a release dispatches for a
+/// <see cref="BindingCommandDefinition.HoldRelease"/> row and for every CHANNEL destination, whose verb handler is
+/// the only thing that frees the channel — either way the release clears the carried held state).</param>
 /// <param name="Momentary">Whether a <see cref="CommandPhase.Started"/> edge should carry no held state forward
 /// (<see langword="false"/>, the default, is every existing chord-command/Held-activator row: it marks the router's
 /// carried-held table exactly like a physical hold, re-asserting every subsequent tick until a real

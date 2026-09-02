@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Numerics;
 using Puck.Commands;
 using Puck.Input;
@@ -181,6 +182,9 @@ public sealed class BindingBarAuthoredLayoutLawTests {
                 Label: null,
                 Icon: null,
                 Buttons: [],
+                // These cases are about PLACEMENT, so the page binds nothing: every socket the layout places draws
+                // as unbound, and the source lookup a bound socket would answer through is empty to match Buttons.
+                ButtonsBySource: FrozenDictionary<string, BindingPageButtonView>.Empty,
                 Modifiers: [],
                 CommandChords: []
             )

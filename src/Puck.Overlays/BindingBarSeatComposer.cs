@@ -28,24 +28,6 @@ public static class BindingBarSeatComposer {
             ? glyph
             : OverlayResolvedGlyph.None
         );
-    // Matched against the row's SOURCE IDS, never its Source display label: a row binding several controls
-    // ("gamepad.buttonSouth,keyboard.space") joins them into one label, so comparing that label to a single
-    // control's id answers false for every multi-source row and leaves its slot drawing as unbound.
-    private static BindingPageButtonView? FindButton(BindingPageView view, string source) {
-        foreach (var button in view.Buttons) {
-            for (var index = 0; (index < button.Sources.Count); index++) {
-                if (string.Equals(
-                    a: button.Sources[index],
-                    b: source,
-                    comparisonType: StringComparison.OrdinalIgnoreCase
-                )) {
-                    return button;
-                }
-            }
-        }
-
-        return null;
-    }
 
     /// <summary>Answers whether a physical control is currently held, from the seat's ACTIVE page view — only the
     /// active page's routed command carries a live held sample, and only the active bank draws it (a stacked wing
@@ -59,15 +41,15 @@ public static class BindingBarSeatComposer {
         ArgumentNullException.ThrowIfNull(argument: activeView);
         ArgumentNullException.ThrowIfNull(argument: isCommandHeld);
 
-        var binding = FindButton(
-            view: activeView,
-            source: source
-        );
-
-        return ((binding is not null) && isCommandHeld(binding.Command));
+        return (activeView.ButtonsBySource.TryGetValue(
+            key: source,
+            value: out var binding
+        ) && isCommandHeld(binding.Command));
     }
-    /// <summary>Composes the bar's modifier indicators from a page view (the active page's chord IS the held modifier
-    /// sequence, so <see cref="BindingModifierView.Required"/> doubles as "held right now").</summary>
+    /// <summary>Composes the bar's modifier indicators from a page view: a modifier's pip lights when the page's own
+    /// row requires it (see <see cref="BindingModifierView.Required"/>) — that is, when the modifier is one of the
+    /// row's unordered <c>held</c> members or one of its ordered <c>chord</c> members, both of which must be down for
+    /// this page to be the selected one.</summary>
     /// <param name="view">The seat's active page view.</param>
     /// <param name="text">Whether the bar draws its atlas text; <see langword="false"/> leaves each modifier a bare
     /// plate (every modifier badge resolves from a text LABEL).</param>
@@ -151,9 +133,15 @@ public static class BindingBarSeatComposer {
                 glyph: resolveBadge(source),
                 text: text
             );
-            var binding = FindButton(
-                view: view,
-                source: source
+            // One hashed probe per socket into the page's precomputed source→button lookup. This runs per slot, per
+            // bank, per seat, every frame, so a linear scan over Buttons — each row's own source list walked in turn —
+            // was quadratic work for an answer the compiler can table once.
+            var binding = (view.ButtonsBySource.TryGetValue(
+                key: source,
+                value: out var found
+            )
+                ? found
+                : null
             );
             // A momentary press lights only on the live bank (isPressed is null for a wing). A latched toggle is a
             // fact about the seat, not the live page: it lights on every bank that binds it, judged against this
