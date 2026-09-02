@@ -1,8 +1,12 @@
+using System.Text.Json.Serialization;
+using Puck.Abstractions.Documents;
+
 namespace Puck.World;
 
 /// <summary>The engine motion role a declared world channel's value drives directly — the continuous signed axes the
 /// body motion ops read (discrete verbs are composition channels, not roles; every role channel is bipolar by
 /// validator rule). A compiled <see cref="WorldChannelTable"/> resolves each claimed role to its authored ordinal.</summary>
+[JsonConverter(typeof(StrictEnumConverter<ChannelRole>))]
 public enum ChannelRole : byte {
     /// <summary>Motion along facing, +1 ahead / -1 back.</summary>
     MoveAdvance,

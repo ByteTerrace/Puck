@@ -69,6 +69,31 @@ public sealed class WorldCommandArgumentsTests {
         // No trailing token to strip: the whole tail is the payload.
         Assert.Equal(expected: "{\"id\":\"hp\"}", actual: registry.Submit(line: "tail.between {\"id\":\"hp\"}").Output);
     }
+    [Fact]
+    public void AnOptionalTrailingKeywordIsRecognizedWhateverWhitespacePrecedesIt() {
+        var registry = Registry();
+
+        // world.load's grammar: <path> [force]. The keyword is decided off the registry's own tokens, so the exotic
+        // separators the tokenizer splits on are found here too — the ' '/'\t' scan this replaced left `force` glued
+        // to the path, and world.load then went looking for a file called `w.json\vforce`.
+        Assert.Equal(expected: "w.json|force", actual: registry.Submit(line: "tail.keyword w.json\vforce").Output);
+        Assert.Equal(expected: "w.json|force", actual: registry.Submit(line: "tail.keyword w.json\fforce").Output);
+        Assert.Equal(expected: "w.json|force", actual: registry.Submit(line: "tail.keyword w.json\tforce").Output);
+        Assert.Equal(expected: "w.json|force", actual: registry.Submit(line: "tail.keyword w.json force").Output);
+        // Case-insensitive, matching the spelling world.load has always accepted.
+        Assert.Equal(expected: "w.json|force", actual: registry.Submit(line: "tail.keyword w.json FORCE").Output);
+    }
+    [Fact]
+    public void AnAbsentTrailingKeywordLeavesTheWholeTailAlone() {
+        var registry = Registry();
+
+        Assert.Equal(expected: "w.json|plain", actual: registry.Submit(line: "tail.keyword w.json").Output);
+        // A path whose own last token merely CONTAINS the keyword is not the keyword.
+        Assert.Equal(expected: "my forced.json|plain", actual: registry.Submit(line: "tail.keyword my forced.json").Output);
+        // Nothing precedes the word, so it is the tail rather than the flag: the grammars using this all spell a
+        // required tail first, and `world.load force` has always named a file called `force`.
+        Assert.Equal(expected: "force|plain", actual: registry.Submit(line: "tail.keyword force").Output);
+    }
 
     private sealed class TailProbeModule : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
@@ -102,6 +127,24 @@ public sealed class WorldCommandArgumentsTests {
                         ? 0
                         : 1)
                 )),
+                bindability: CommandBindability.Unbindable
+            );
+            yield return CommandDefinition.WithWireArgs(
+                name: "tail.keyword",
+                description: "Echoes the raw tail after its verb, less an optional trailing `force` word, then whether that word was there.",
+                handler: static (context, args) => {
+                    var tail = WorldCommandArguments.RawBeforeKeyword(
+                        args: in args,
+                        context: context,
+                        keyword: "force",
+                        leadingTokens: 1,
+                        present: out var present
+                    );
+
+                    return new CommandResult(Output: $"{tail}|{(present
+                        ? "force"
+                        : "plain")}");
+                },
                 bindability: CommandBindability.Unbindable
             );
         }

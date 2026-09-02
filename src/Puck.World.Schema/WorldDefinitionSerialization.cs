@@ -1,4 +1,3 @@
-using Puck.Physics.Motion;
 using System.Globalization;
 using System.Numerics;
 using System.Text.Json;
@@ -23,15 +22,16 @@ namespace Puck.World;
 /// <see cref="DocumentExtensionsPolicy"/> instead (a reserved '$'/'_' prefix passes; any
 /// other key is a validator rejection). Nothing else in the graph carries that attribute, so every nested row is
 /// unconditionally strict. Every enum the document graph carries declares its own strict by-name
-/// conversion (writes the exact declared member name, refuses a numeric token on read) — most at the enum's own
-/// declaration via <c>[JsonConverter(typeof(StrictEnumConverter&lt;TEnum&gt;))]</c> (<see cref="BodyMotionOp"/>,
-/// <see cref="IntentSource"/>, <see cref="WorldContactRequirement"/>, <see cref="ActionFact"/>,
-/// <see cref="ShadowTier"/>, <see cref="WorldRenderScaleTier"/>,
-/// <see cref="Puck.Abstractions.Presentation.PresentMode"/>, <see cref="Puck.World.Protocol.WorldCapability"/>,
-/// and every <c>Puck.Commands</c> binding enum — while two whose declarations sit outside a project that can name
-/// the converter carry their closed <see cref="StrictEnumConverter{TEnum}"/> instance on this context below instead
-/// (a source-gen context may register a closed generic converter for a type it does not own, unlike the non-generic
-/// factory this replaced, which the generator refused unconditionally).
+/// conversion (writes the exact declared member name, refuses a numeric token on read) at the enum's OWN
+/// declaration via <c>[JsonConverter(typeof(StrictEnumConverter&lt;TEnum&gt;))]</c> (<see cref="Puck.Physics.Motion.BodyMotionOp"/>,
+/// <see cref="IntentSource"/>, <see cref="WorldContactRequirement"/>, <see cref="Puck.Physics.Motion.ActionFact"/>,
+/// <see cref="Puck.Physics.Motion.ActionStateComparison"/>, <see cref="ChannelRole"/>, <see cref="ShadowTier"/>,
+/// <see cref="WorldRenderScaleTier"/>, <see cref="Puck.Abstractions.Presentation.PresentMode"/>,
+/// <see cref="Puck.World.Protocol.WorldCapability"/>, and every <c>Puck.Commands</c> binding enum) — never on this
+/// context's converter list. That is the point rather than a tidiness: a converter listed on a context binds THAT
+/// context alone, so the same enum reached through a second context (Puck.Commands' own
+/// <c>BindingProfileJsonContext</c>) would write a different token. Declaring it on the type decides the wire form
+/// once, and every context that reaches the enum inherits the decision.
 /// <c>UseStringEnumConverter</c> writes by name too but has no <c>allowIntegerValues</c> knob, so it still accepts a
 /// numeric wire value on read. <see cref="Vector2"/>, <see cref="Vector3"/> and <see cref="Quaternion"/> ride
 /// <see cref="Puck.Assets.Documents.Vector2JsonConverter"/>/<see cref="Puck.Assets.Documents.Vector3JsonConverter"/>/<see cref="Puck.Assets.Documents.QuaternionJsonConverter"/>
@@ -228,7 +228,7 @@ namespace Puck.World;
     // their converter at their own declaration now (Puck.Commands references Puck.Abstractions for exactly that),
     // so this context and Puck.Commands.BindingProfileJsonContext read the shape off the TYPE rather than each
     // repeating a registration the other could drift from.
-    Converters = new[] { typeof(Puck.Assets.Documents.Vector2JsonConverter), typeof(Puck.Assets.Documents.Vector3JsonConverter), typeof(Puck.Assets.Documents.QuaternionJsonConverter), typeof(CreationDocumentJsonConverter), typeof(WorldBackendPreferenceJsonConverter), typeof(SurfaceFormatJsonConverter), typeof(GrantSubjectJsonConverter), typeof(WorldPrincipalJsonConverter), typeof(ChannelReachMaskJsonConverter), typeof(ChannelConsentMaskJsonConverter), typeof(MutationKindMaskJsonConverter), typeof(DocumentWriteMaskJsonConverter), typeof(WorldStateRowJsonConverter), typeof(WorldSafeNameJsonConverter), typeof(WorldCellNameJsonConverter), typeof(WorldDestinationDurabilityJsonConverter), typeof(WorldPortalTravelJsonConverter), typeof(WorldPortalArrivalJsonConverter), typeof(WorldDestinationScopeJsonConverter), typeof(StrictEnumConverter<ChannelRole>), typeof(StrictEnumConverter<ActionStateComparison>) },
+    Converters = new[] { typeof(Puck.Assets.Documents.Vector2JsonConverter), typeof(Puck.Assets.Documents.Vector3JsonConverter), typeof(Puck.Assets.Documents.QuaternionJsonConverter), typeof(CreationDocumentJsonConverter), typeof(WorldBackendPreferenceJsonConverter), typeof(SurfaceFormatJsonConverter), typeof(GrantSubjectJsonConverter), typeof(WorldPrincipalJsonConverter), typeof(ChannelReachMaskJsonConverter), typeof(ChannelConsentMaskJsonConverter), typeof(MutationKindMaskJsonConverter), typeof(DocumentWriteMaskJsonConverter), typeof(WorldStateRowJsonConverter), typeof(WorldSafeNameJsonConverter), typeof(WorldCellNameJsonConverter), typeof(WorldDestinationDurabilityJsonConverter), typeof(WorldPortalTravelJsonConverter), typeof(WorldPortalArrivalJsonConverter), typeof(WorldDestinationScopeJsonConverter) },
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     // The OTHER half of strict parse. UnmappedMemberHandling below refuses a member the model does not have; this
     // refuses a member the model REQUIRES and the document does not carry. Without it, a constructor parameter with

@@ -1,4 +1,6 @@
+using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 using Puck.Assets.Documents;
 using Puck.Commands;
@@ -19,14 +21,57 @@ public sealed class BindingDocumentWireShapeTests {
         "page",
     ];
 
+    private static string BasisPath() => Path.Combine(
+        path1: AppContext.BaseDirectory,
+        path2: "Assets",
+        path3: "puck.basis.frozen.json"
+    );
+    // Every CommandValue-shaped node anywhere in the shipped basis, found by SHAPE rather than by path: an authored
+    // constant rides a binding page entry, a wheel ring entry, and anywhere else a command takes a value, and a walk
+    // that enumerated the paths it knew about would keep passing as new ones appeared.
+    private static IEnumerable<JsonNode> BasisCommandValues() {
+        var pending = new Stack<JsonNode>();
+
+        pending.Push(item: JsonNode.Parse(json: File.ReadAllText(path: BasisPath()))!);
+
+        while (pending.Count > 0) {
+            var node = pending.Pop();
+
+            if (node is JsonArray array) {
+                foreach (var item in array) {
+                    if (item is { }) {
+                        pending.Push(item: item);
+                    }
+                }
+
+                continue;
+            }
+
+            if (node is not JsonObject json) {
+                continue;
+            }
+
+            if (
+                (json.Count == 2) &&
+                json.ContainsKey(propertyName: "kind") &&
+                (json[propertyName: "raw"] is JsonArray { Count: 4 })
+            ) {
+                yield return json;
+
+                continue;
+            }
+
+            foreach (var (_, value) in json) {
+                if (value is { }) {
+                    pending.Push(item: value);
+                }
+            }
+        }
+    }
     // The `document` member of every bindingOverlays row of the shipped basis world, as authored. Held as
     // JsonElement rather than a parsed model so each caller decides which context reads it.
     private static IEnumerable<JsonElement> BasisBindingOverlays() {
-        using var basis = JsonDocument.Parse(json: File.ReadAllText(path: Path.Combine(
-            path1: AppContext.BaseDirectory,
-            path2: "Assets",
-            path3: "puck.basis.frozen.json"
-        )));
+        using var basis = JsonDocument.Parse(json: File.ReadAllText(path: BasisPath()));
 
         foreach (var overlay in basis.RootElement.GetProperty(propertyName: "bindingOverlays").EnumerateArray()) {
             if (overlay.TryGetProperty(propertyName: "document", value: out var document)) {
@@ -128,6 +173,45 @@ public sealed class BindingDocumentWireShapeTests {
         // The fixture is only worth anything if the basis actually carries bindings; a silently empty walk would
         // pass every assertion above.
         Assert.True(condition: (documents > 0));
+    }
+    [Fact]
+    public void TheShippedBasisSpellsEveryCommandValueTheWayItsOwnWriterDoes() {
+        // A checked-in document that the canonical writer would write back DIFFERENTLY rewrites itself on the first
+        // save, turning someone's unrelated edit into a diff nobody made. CommandValue.Raw is a Vector4 of floats and
+        // Utf8JsonWriter spells a whole float without a fractional part, so the authored `2.0` came back as `2`. The
+        // expected text is re-derived from the converter here rather than restated, so this cannot drift from it.
+        var converter = new CommandValueJsonConverter();
+        var options = new JsonSerializerOptions();
+        var values = 0;
+
+        foreach (var authored in BasisCommandValues()) {
+            var text = authored.ToJsonString();
+            var reader = new Utf8JsonReader(jsonData: Encoding.UTF8.GetBytes(s: text));
+
+            Assert.True(condition: reader.Read());
+
+            var value = converter.Read(
+                options: options,
+                reader: ref reader,
+                typeToConvert: typeof(CommandValue)
+            );
+
+            using var stream = new MemoryStream();
+
+            using (var writer = new Utf8JsonWriter(utf8Json: stream)) {
+                converter.Write(
+                    options: options,
+                    value: value,
+                    writer: writer
+                );
+            }
+
+            Assert.Equal(actual: Encoding.UTF8.GetString(bytes: stream.ToArray()), expected: text);
+            ++values;
+        }
+
+        // A walk that found nothing would pass every assertion above.
+        Assert.True(condition: (values > 0));
     }
     [Fact]
     public void TheShippedBasisBindingsReadBackThroughThePackageContextAlone() {
