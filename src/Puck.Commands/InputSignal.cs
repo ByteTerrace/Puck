@@ -35,7 +35,9 @@ namespace Puck.Commands;
 /// <param name="Slot">The lane the signal addresses directly, for a source whose seat is authored rather than
 /// discovered (a document-bound sense measurement), or <see cref="UnresolvedSlot"/> to resolve the lane from
 /// <paramref name="DeviceId"/> through the slot resolver. An authored-lane signal never seats a device and never
-/// counts as player activity.</param>
+/// counts as player activity. <see cref="UnresolvedSlot"/> is the ONLY negative value a signal may carry — every
+/// other one is refused by <see cref="InputRouter.Capture(in InputSignal)"/> rather than silently read as
+/// "resolve from the device".</param>
 public readonly record struct InputSignal(
     string Source,
     InputDeviceId DeviceId,

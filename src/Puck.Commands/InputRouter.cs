@@ -49,6 +49,8 @@ public sealed partial class InputRouter : IDisposable {
     private readonly Func<InputDeviceId, int> m_slotResolver;
 
     private bool m_disposed;
+    private bool m_hasProducedSnapshot;
+    private ulong m_previousSnapshotTick;
     private ulong m_sequence;
     private int m_snapshotLaneCount;
 
@@ -2034,12 +2036,33 @@ public sealed partial class InputRouter : IDisposable {
     /// The engine-tick time at which this tick's window closes. Captured input whose
     /// <see cref="InputSignal.CaptureTick"/> precedes it is consumed; later-stamped input waits for a future tick.
     /// </param>
+    /// <remarks>One snapshot per host-owned tick, in NON-DECREASING tick order. The buffers the returned snapshot
+    /// borrows are retired by the next call (see <see cref="CommandBuffer{T}"/>).</remarks>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="tick"/> precedes the tick this router last
+    /// produced a snapshot for.</exception>
     /// <exception cref="ObjectDisposedException">This router has been disposed.</exception>
     public CommandSnapshot SnapshotForTick(ulong tick, ulong windowEndTick) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this
         );
+
+        // The host owns the tick number and advances it; a tick BEHIND the one this router last answered is a
+        // mis-wired pump, and it silently produces nonsense — held state carried forward from a future tick, capture
+        // windows re-opened over input already consumed. Caught on the first frame instead.
+        if (
+            m_hasProducedSnapshot &&
+            (tick < m_previousSnapshotTick)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: tick,
+                message: $"A router produces one snapshot per host-owned tick, in non-decreasing tick order; it last produced tick {m_previousSnapshotTick}.",
+                paramName: nameof(tick)
+            );
+        }
+
+        m_hasProducedSnapshot = true;
+        m_previousSnapshotTick = tick;
 
         // Every view handed out by an earlier call now points at storage this call is about to rewrite. Retiring the
         // generation HERE, before any of it moves, is what makes a retained snapshot throw instead of quietly

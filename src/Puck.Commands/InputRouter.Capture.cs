@@ -188,6 +188,19 @@ public sealed partial class InputRouter {
             );
         }
 
+        if (
+            (signal.Slot < 0) &&
+            (signal.Slot != InputSignal.UnresolvedSlot)
+        ) {
+            // UnresolvedSlot is THE sentinel. Any other negative would otherwise be read as "resolve the lane from
+            // the device" and land the signal in whatever seat the resolver names — a silently wrong lane rather
+            // than the authored one the caller asked for.
+            throw new ArgumentException(
+                message: $"A captured input signal addresses a lane by a non-negative slot, or {nameof(InputSignal.UnresolvedSlot)} ({InputSignal.UnresolvedSlot}) to resolve one from its device; {signal.Slot} is neither.",
+                paramName: nameof(signal)
+            );
+        }
+
         lock (m_captureGate) {
             m_capturedSignals.Add(item: new CapturedSignal(
                 Sequence: m_sequence++,

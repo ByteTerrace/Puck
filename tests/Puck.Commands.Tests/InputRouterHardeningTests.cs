@@ -272,6 +272,27 @@ public sealed class InputRouterHardeningTests {
         _ = Assert.Throws<ArgumentException>(testCode: () => router.Capture(signal: InputSignal.Press(source: "")));
     }
     [Fact]
+    public void CaptureRefusesANegativeSlotThatIsNotTheUnresolvedSentinel() {
+        var router = Router(bindings: new EmptyBindings());
+
+        // Every negative used to read as "resolve the lane from the device", so a caller's arithmetic slip landed
+        // the signal in whichever seat the resolver named rather than the authored one.
+        _ = Assert.Throws<ArgumentException>(testCode: () => router.Capture(signal: InputSignal.Press(source: "key.x") with { Slot = -5, }));
+        _ = Assert.Throws<ArgumentException>(testCode: () => router.CaptureFocusExempt(signal: InputSignal.Press(source: "key.x") with { Slot = int.MinValue, }));
+
+        router.Capture(signal: InputSignal.Press(source: "key.x") with { Slot = InputSignal.UnresolvedSlot, });
+        router.Capture(signal: InputSignal.Press(source: "key.y") with { Slot = 0, });
+    }
+    [Fact]
+    public void SnapshotForTickRefusesATickBehindTheOneItLastProduced() {
+        var router = Router(bindings: new EmptyBindings());
+
+        _ = router.SnapshotForTick(tick: 10UL, windowEndTick: 10UL);
+        // Non-decreasing, not strictly increasing: a host that re-produces its current tick is not mis-wired.
+        _ = router.SnapshotForTick(tick: 10UL, windowEndTick: 11UL);
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => router.SnapshotForTick(tick: 9UL, windowEndTick: 12UL));
+    }
+    [Fact]
     public void TheCaptureQueueDropsItsOldestBeyondTheCap() {
         const int overflow = 5;
 
