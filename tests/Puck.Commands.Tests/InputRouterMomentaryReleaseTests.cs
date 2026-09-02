@@ -111,6 +111,32 @@ public sealed class InputRouterMomentaryReleaseTests {
         Assert.Empty(collection: router.SnapshotForTick(tick: 6UL, windowEndTick: ulong.MaxValue).Lanes);
     }
     [Fact]
+    public void ATapFollowedByItsDevicesDisconnectDeliversExactlyOneRelease() {
+        var device = InputDeviceId.FromConnectionKey(key: "tapping-pad");
+        var router = Router();
+
+        router.SetActiveMaps(maps: ["play"], slot: 0);
+        router.Capture(signal: InputSignal.Press(
+            deviceId: device,
+            source: "key.a"
+        ));
+
+        var pressed = Assert.Single(collection: Assert.Single(collection: router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue).Lanes).Entries);
+
+        Assert.Equal(actual: pressed.Phase, expected: CommandPhase.Started);
+
+        // The device unplugs between the tap's press and its scheduled release. A per-device release does not reset
+        // IInputBindings, so that edge is still in flight and remains the one release this tap owes: cancelling it
+        // here as well would hand the handler two.
+        router.ReleaseHeld(device: device);
+
+        var released = Assert.Single(collection: Assert.Single(collection: router.SnapshotForTick(tick: 2UL, windowEndTick: ulong.MaxValue).Lanes).Entries);
+
+        Assert.True(condition: released.Dispatch);
+        Assert.True(condition: (released.Phase is CommandPhase.Completed or CommandPhase.Canceled));
+        Assert.Empty(collection: router.SnapshotForTick(tick: 3UL, windowEndTick: ulong.MaxValue).Lanes);
+    }
+    [Fact]
     public void ATapFollowedByAFullSlotClearDeliversExactlyOneRelease() {
         var router = Router();
 

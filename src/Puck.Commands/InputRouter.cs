@@ -138,6 +138,10 @@ public sealed partial class InputRouter : IDisposable {
         public List<HeldControlId>? Controls;
         public CommandEntry Entry;
         public bool HasEntry;
+        // A tap's one-tick obligation, owed by the RESOLVER's scheduled edge rather than by this table. Every path
+        // that destroys that edge (SetActiveMaps, ReleaseHeld()) cancels this too; every path that leaves the
+        // resolver alone (ClearSlotHeld, ReleaseHeld(InputDeviceId)) leaves it to its owner. IsEmpty counts it, so
+        // the state carrying the payload survives until one or the other happens.
         public bool HasPendingMomentaryRelease;
         // The payload a pending momentary release cancels with, kept SEPARATE from Entry: a tap and a live hold can
         // name one destination (a chord row and a page activator over the same channel), and folding the tap's press
@@ -1294,6 +1298,13 @@ public sealed partial class InputRouter : IDisposable {
                     continue;
                 }
 
+                // HasPendingMomentaryRelease is deliberately not touched here, and the state carrying it is
+                // deliberately not dropped (IsEmpty counts it). THE RULE: a pending momentary is cancelled exactly
+                // when the thing that would deliver it is destroyed — the resolver's scheduled edge (see
+                // IChordEdgeSource.DrainScheduledEdges). SetActiveMaps and ReleaseHeld() reset IInputBindings and so
+                // must synthesize it; this path resets nothing, so that edge still lands next tick and cancelling it
+                // as well would hand one tap two releases.
+
                 if (state.Contributions is { } contributions) {
                     for (var index = (contributions.Count - 1); (index >= 0); index--) {
                         var contribution = contributions[index];
@@ -1951,6 +1962,12 @@ public sealed partial class InputRouter : IDisposable {
     }
     /// <summary>Releases held commands owned by one physical device without disturbing other seats or devices.</summary>
     /// <param name="device">The device whose held state is being withdrawn.</param>
+    /// <remarks>It leaves <see cref="IInputBindings"/> alone (see <see cref="PagedInputBindings.Reset(int)"/> for why
+    /// one device's disconnect must not wipe a slot's chord state), so a <see cref="BindingActivatorMode.Tapped"/>
+    /// completion's already SCHEDULED release (<see cref="IChordEdgeSource.DrainScheduledEdges"/>) is still in flight
+    /// and delivers itself on the next tick. This call therefore does not also synthesize a cancellation for it — one
+    /// tap still produces exactly one release, whichever device unplugs in between. Same rule, same reason, as
+    /// <see cref="ClearSlotHeld"/>.</remarks>
     public void ReleaseHeld(InputDeviceId device) => ReleaseHeld(
         device: device,
         preservePressedControls: false
