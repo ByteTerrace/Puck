@@ -349,6 +349,36 @@ public sealed class InputRouterHardeningTests {
         Assert.Equal(actual: bindings.Resolved.Count, expected: 4);
     }
     [Fact]
+    public void DeviceKindClassificationIsCaseInsensitiveLikeEverySourceIdResolution() {
+        var slots = new FakeSlotResolver(raiseDisconnect: out _);
+        var router = new InputRouter(
+            registry: new CommandRegistry(modules: [new ProbeModule()]),
+            bindings: new EmptyBindings(),
+            principalResolver: new ConsolePrincipal(),
+            slotResolver: slots
+        );
+
+        // A source id is case-insensitive everywhere it is RESOLVED — the compiled profile's table, the router's own
+        // dispatch — and a console line reaches the router with whatever case it was typed in. A mis-cased keyboard
+        // classified as a Gamepad hands the kind-aware couch-sharing rule a wrong answer about the very slot it is
+        // deciding, which is the one thing this classification exists to inform.
+        router.Capture(signal: InputSignal.Press(source: "KEYBOARD.A"));
+        router.Capture(signal: InputSignal.Press(source: "Mouse.Button1"));
+        router.Capture(signal: InputSignal.Press(source: "keyboard.b"));
+        router.Capture(signal: InputSignal.Press(source: "pad.a"));
+        _ = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+
+        Assert.Equal(
+            actual: slots.ObservedKinds,
+            expected: [
+                InputDeviceKind.Keyboard,
+                InputDeviceKind.Mouse,
+                InputDeviceKind.Keyboard,
+                InputDeviceKind.Gamepad,
+            ]
+        );
+    }
+    [Fact]
     public void DisposeDetachesTheRouterFromItsCollaborators() {
         var bindings = new ReloadableBindings();
         var slots = new FakeSlotResolver(raiseDisconnect: out _);
@@ -483,9 +513,11 @@ public sealed class InputRouterHardeningTests {
         public event Action<InputDeviceId>? DeviceSlotChanging;
 
         public bool HasSubscribers => (DeviceSlotChanging is not null);
+        public List<InputDeviceKind> ObservedKinds { get; } = [];
 
         public int ResolveSlot(InputDeviceId device) => 0;
         public bool CommitSlot(InputDeviceId device, int slot) => true;
+        public void ObserveDeviceKind(InputDeviceId device, InputDeviceKind kind) => ObservedKinds.Add(item: kind);
     }
     private sealed class RecordingBindings : IInputBindings {
         public List<string> Resolved { get; } = [];

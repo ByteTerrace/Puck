@@ -1063,12 +1063,17 @@ public sealed partial class InputRouter : IDisposable {
     // rather than a reference to that vocabulary, since Puck.Commands sits below Puck.Input in the dependency
     // layering. Anything else (a probe source, an authored/injected source) classifies as Gamepad, the roster's own
     // defensive floor for a device it cannot otherwise place.
+    //
+    // OrdinalIgnoreCase because case is authored-document noise in a source id, never identity: the compiled
+    // profile's table and this router's dispatch both resolve case-insensitively, and a console line arrives with
+    // whatever case it was typed in. Reading the prefix any more strictly than the id is resolved would seat a
+    // mis-cased keyboard as a gamepad.
     private static InputDeviceKind ClassifyDeviceKind(string source) {
-        if (source.StartsWith(comparisonType: StringComparison.Ordinal, value: "keyboard.")) {
+        if (source.StartsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: "keyboard.")) {
             return InputDeviceKind.Keyboard;
         }
 
-        if (source.StartsWith(comparisonType: StringComparison.Ordinal, value: "mouse.")) {
+        if (source.StartsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: "mouse.")) {
             return InputDeviceKind.Mouse;
         }
 
