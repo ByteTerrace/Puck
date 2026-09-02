@@ -377,94 +377,153 @@ public sealed class CommandRegistry {
         );
     }
 
+    // Applies one snapshot entry. Extracted from ApplySnapshot's loop so the loop is nothing but the per-entry
+    // exception boundary and the barrier release — a body inline there would invite a future `continue` to skip past
+    // one or the other, which is the exact defect the boundary exists to close.
+    private void ApplyEntry(in CommandEntry entry, int slot) {
+        // A submitted text entry is routed FIRST — before the defensive id-range check below, which would otherwise
+        // fall through to the bound-entry path with an id that indexes nothing.
+        if (entry.Text is { } line) {
+            if (
+                entry.Dispatch &&
+                (((int)entry.CommandId) < m_nameById.Length)
+            ) {
+                ApplySubmittedSimulation(
+                    line: line,
+                    expectedCommandId: entry.CommandId,
+                    phase: entry.Phase,
+                    value: entry.Value,
+                    principal: entry.Principal,
+                    slot: slot
+                );
+            }
+
+            return;
+        }
+
+        if (
+            !entry.Dispatch ||
+            (((int)entry.CommandId) >= m_nameById.Length)
+        ) {
+            return;
+        }
+
+        var definition = m_definitionById[entry.CommandId];
+        var context = new CommandContext(
+            assignedSlot: entry.AssignedSlot,
+            deviceId: entry.Device,
+            origin: entry.Origin,
+            parse: null,
+            phase: entry.Phase,
+            principal: entry.Principal,
+            registry: this,
+            slot: slot,
+            source: entry.Source,
+            text: null,
+            value: entry.Value
+        );
+
+        // One entry's handler must not decide whether the REST of the tick runs: Dispatch converts an escaped
+        // exception into an error result observers see, and a fault is counted here so it reaches wire.errors
+        // (an ordinary IsError verdict from a bound press is not a refused submission and is not counted).
+        _ = Dispatch(
+            context: in context,
+            definition: definition,
+            faulted: out var faulted
+        );
+
+        if (faulted) {
+            NoteRejection();
+        }
+    }
     // Executes a simulation-routed text command from its tick snapshot. Submit identified the line's verb before
     // injection but did NOT parse its arguments; this is the line's one and only parse, and it recreates the handler's
     // ordinary text context without re-routing it. The entry's phase, value and principal ride the entry rather than
     // being re-derived: the door that queued the line already decided them.
-    private void ApplySubmittedSimulation(string line, ushort expectedCommandId, CommandPhase phase, CommandValue value, CommandPrincipal principal, int slot, TextSubmissionBarrier? submissionBarrier) {
-        try {
-            Span<Range> tokenRanges = stackalloc Range[MaxWireTokens];
+    //
+    // The entry's read-after-write barrier is NOT this method's to release: ApplySnapshot's per-entry boundary owns
+    // that, so a throw anywhere in here — the parse, CanonicalizeVerb, a handler's exception rendering — releases it
+    // exactly once and cannot strand the session.
+    private void ApplySubmittedSimulation(string line, ushort expectedCommandId, CommandPhase phase, CommandValue value, CommandPrincipal principal, int slot) {
+        Span<Range> tokenRanges = stackalloc Range[MaxWireTokens];
 
-            if (
-                TryResolveWireLine(
-                definition: out var wireDefinition,
+        if (
+            TryResolveWireLine(
+            definition: out var wireDefinition,
+            line: line,
+            tokenCount: out var tokenCount,
+            tokenRanges: tokenRanges
+        ) &&
+            (expectedCommandId < m_definitionById.Length) &&
+            ReferenceEquals(
+            objA: wireDefinition,
+            objB: m_definitionById[expectedCommandId]
+        )
+        ) {
+            var wireResult = DispatchWire(
+                definition: wireDefinition!,
                 line: line,
-                tokenCount: out var tokenCount,
-                tokenRanges: tokenRanges
-            ) &&
-                (expectedCommandId < m_definitionById.Length) &&
-                ReferenceEquals(
-                objA: wireDefinition,
-                objB: m_definitionById[expectedCommandId]
-            )
-            ) {
-                var wireResult = DispatchWire(
-                    definition: wireDefinition!,
-                    line: line,
-                    argumentRanges: tokenRanges[1..tokenCount],
-                    phase: phase,
-                    value: value,
-                    principal: principal,
-                    slot: slot,
-                    observe: true,
-                    faulted: out _
-                );
-
-                if (wireResult.IsError) {
-                    NoteRejection();
-                }
-
-                return;
-            }
-
-            var parseResult = m_root.Parse(
-                commandLine: CanonicalizeVerb(line: line),
-                configuration: WireParserConfiguration
-            );
-
-            if (
-                (parseResult.Errors.Count != 0) ||
-                !m_byTextCommand.TryGetValue(
-                key: parseResult.CommandResult.Command,
-                value: out var definition
-            ) ||
-                (expectedCommandId >= m_definitionById.Length) ||
-                !ReferenceEquals(
-                objA: definition,
-                objB: m_definitionById[expectedCommandId]
-            )
-            ) {
-                // A snapshot-routed line that does not parse to the command it was injected as never reaches its
-                // handler. Submit returned None for it, so this is the only place it can be counted — without it a
-                // Simulation-routed rejection stays invisible to wire.errors.
-                NoteRejection();
-
-                return;
-            }
-
-            var context = new CommandContext(
-                origin: CommandOrigin.Text,
-                parse: parseResult,
+                argumentRanges: tokenRanges[1..tokenCount],
                 phase: phase,
+                value: value,
                 principal: principal,
-                registry: this,
                 slot: slot,
-                text: line,
-                value: value
+                observe: true,
+                faulted: out _
             );
 
-            // Submit returned None when it injected this line, so its handler's verdict lands here rather than at the
-            // console call site — count a failure so a deferred mutation's rejection reaches wire.errors too.
-            if (Dispatch(
-                context: in context,
-                definition: definition,
-                faulted: out _,
-                suppressWireAck: true
-            ).IsError) {
+            if (wireResult.IsError) {
                 NoteRejection();
             }
-        } finally {
-            submissionBarrier?.Complete();
+
+            return;
+        }
+
+        var parseResult = m_root.Parse(
+            commandLine: CanonicalizeVerb(line: line),
+            configuration: WireParserConfiguration
+        );
+
+        if (
+            (parseResult.Errors.Count != 0) ||
+            !m_byTextCommand.TryGetValue(
+            key: parseResult.CommandResult.Command,
+            value: out var definition
+        ) ||
+            (expectedCommandId >= m_definitionById.Length) ||
+            !ReferenceEquals(
+            objA: definition,
+            objB: m_definitionById[expectedCommandId]
+        )
+        ) {
+            // A snapshot-routed line that does not parse to the command it was injected as never reaches its
+            // handler. Submit returned None for it, so this is the only place it can be counted — without it a
+            // Simulation-routed rejection stays invisible to wire.errors.
+            NoteRejection();
+
+            return;
+        }
+
+        var context = new CommandContext(
+            origin: CommandOrigin.Text,
+            parse: parseResult,
+            phase: phase,
+            principal: principal,
+            registry: this,
+            slot: slot,
+            text: line,
+            value: value
+        );
+
+        // Submit returned None when it injected this line, so its handler's verdict lands here rather than at the
+        // console call site — count a failure so a deferred mutation's rejection reaches wire.errors too.
+        if (Dispatch(
+            context: in context,
+            definition: definition,
+            faulted: out _,
+            suppressWireAck: true
+        ).IsError) {
+            NoteRejection();
         }
     }
     /// <summary>Reports or flips the wire acknowledgement mode for the built-in <c>wire.ack</c> verb.</summary>
@@ -809,6 +868,11 @@ public sealed class CommandRegistry {
             m_rejections++;
         }
     }
+    // Notifies every observer of one dispatch. An observer is an I/O SINK (a launcher writing the verdict to stdout, a
+    // host publishing a console frame), so a throw from one is a fault in a reporting surface, never in the tick: each
+    // call gets its own boundary so one broken sink cannot silence the sinks after it, abandon the rest of the tick's
+    // entries, or strand a later submitted line's read-after-write barrier. A swallowed notification is counted as a
+    // refusal, because the verdict it carried never reached the operator.
     private void NotifyObservers(in CommandContext context, CommandDefinition definition, CommandResult result) {
         if (m_observers.Length == 0) {
             return;
@@ -824,7 +888,11 @@ public sealed class CommandRegistry {
         );
 
         for (var index = 0; (index < m_observers.Length); index++) {
-            m_observers[index].OnCommand(activation: in activation);
+            try {
+                m_observers[index].OnCommand(activation: in activation);
+            } catch (Exception) {
+                NoteRejection();
+            }
         }
     }
     private static void QueueSimulation(
@@ -1151,10 +1219,15 @@ public sealed class CommandRegistry {
     /// argument is what is closed, not the method: <see cref="CommandSnapshot"/>, <see cref="CommandLane"/>, and
     /// <see cref="CommandEntry"/> are all internal to construct, so the only snapshot a caller can obtain is one the
     /// mixer built. Narrowing this method instead would leave the forgeable value type in a caller's hands.</para>
-    /// <para>Every entry runs behind an exception boundary, and this method NEVER propagates a handler's exception: one
-    /// throwing handler must not decide whether the rest of the tick's entries run, and must not skip the entry that
-    /// releases a submitted line's read-after-write barrier. A fault becomes an error result observers see and the
-    /// <c>wire.errors</c> count records.</para>
+    /// <para>ONCE THE SNAPSHOT IS ACCEPTED, this method never propagates: every entry runs inside its own boundary, so
+    /// no exception raised while applying one entry — a handler's, an observer's, or one the registry's own decoding of
+    /// a submitted line raised — decides whether the rest of the tick's entries run, and each entry's submitted-line
+    /// read-after-write barrier is released whether its body completed or threw. A contained fault is counted in the
+    /// <c>wire.errors</c> total, and a handler fault additionally becomes an error result observers see.</para>
+    /// <para>The registry-mismatch refusal below is the one throw this method still makes, and it happens BEFORE any
+    /// entry is examined: a snapshot built for another registry carries entries this one cannot decode at all, so it is
+    /// refused whole rather than half-applied. Nothing has been dispatched and no barrier has been touched when it
+    /// throws — the caller that mixed two registries owns the stranded queue, and the fix is at that call site.</para>
     /// </summary>
     /// <param name="snapshot">The tick's input snapshot to apply.</param>
     /// <exception cref="ArgumentException"><paramref name="snapshot"/> was produced for a different registry.</exception>
@@ -1175,63 +1248,19 @@ public sealed class CommandRegistry {
 
         foreach (var lane in snapshot.Lanes) {
             foreach (var entry in lane.Entries) {
-                // A submitted text entry owns its session's read-after-write barrier, so it is routed FIRST — before
-                // the defensive id-range check below, which would otherwise `continue` past the only code that
-                // releases that barrier and strand the session's queue forever.
-                if (entry.Text is { } line) {
-                    if (
-                        entry.Dispatch &&
-                        (((int)entry.CommandId) < m_nameById.Length)
-                    ) {
-                        ApplySubmittedSimulation(
-                            line: line,
-                            expectedCommandId: entry.CommandId,
-                            phase: entry.Phase,
-                            value: entry.Value,
-                            principal: entry.Principal,
-                            slot: lane.Slot,
-                            submissionBarrier: entry.SubmissionBarrier
-                        );
-                    } else {
-                        entry.SubmissionBarrier?.Complete();
-                    }
-
-                    continue;
-                }
-
-                if (
-                    !entry.Dispatch ||
-                    (((int)entry.CommandId) >= m_nameById.Length)
-                ) {
-                    continue;
-                }
-
-                var definition = m_definitionById[entry.CommandId];
-                var context = new CommandContext(
-                    assignedSlot: entry.AssignedSlot,
-                    deviceId: entry.Device,
-                    origin: entry.Origin,
-                    parse: null,
-                    phase: entry.Phase,
-                    principal: entry.Principal,
-                    registry: this,
-                    slot: lane.Slot,
-                    source: entry.Source,
-                    text: null,
-                    value: entry.Value
-                );
-
-                // One entry's handler must not decide whether the REST of the tick runs: Dispatch converts an escaped
-                // exception into an error result observers see, and a fault is counted here so it reaches wire.errors
-                // (an ordinary IsError verdict from a bound press is not a refused submission and is not counted).
-                _ = Dispatch(
-                    context: in context,
-                    definition: definition,
-                    faulted: out var faulted
-                );
-
-                if (faulted) {
+                // The boundary is the ENTRY, not the handler: the handler's own catch cannot cover the code that
+                // decodes a submitted line (the parse, CanonicalizeVerb) or renders a fault, and an escape from either
+                // would abandon the rest of the lane and strand every later entry's barrier. Releasing the barrier in
+                // the finally is what makes that guarantee structural rather than a rule each branch remembers.
+                try {
+                    ApplyEntry(
+                        entry: in entry,
+                        slot: lane.Slot
+                    );
+                } catch (Exception) {
                     NoteRejection();
+                } finally {
+                    entry.SubmissionBarrier?.Complete();
                 }
             }
         }
