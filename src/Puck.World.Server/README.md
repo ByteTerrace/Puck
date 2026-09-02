@@ -110,7 +110,11 @@ market retention pruning and the other recovery mutations remain undoable.
 sim step, snapshot emission, binding resolution — allocates nothing; document
 and JSON work is confined to the boundaries (load, save, and mutation
 application), and a mutation rebuilds only the changed section's derived
-state, never the whole document's.
+state, never the whole document's. The binding half of that claim carries one
+documented bound: `InputRouter` folds a signal's per-command memos in a stack
+buffer sized for 32 bindings on one source, far above what one page plus the
+host plane authors, and a signal that exceeded it would fall back to a heap
+buffer for that fold alone.
 
 ## The field lattice (`WorldFieldLattice.cs`)
 

@@ -196,8 +196,11 @@ Facts a script needs:
   `[world.grant denied: …]`-shaped line and drops; `world.why` and
   `world.refusals` are the read-backs.
 - Row-valued mutation verbs take one inline-JSON argument in the exact wire
-  shape of the document section; a parse error echoes inline and submits
-  nothing.
+  shape of the document section; a malformed row echoes its error and mutates
+  nothing. These verbs are Simulation-routed, so the line is not parsed at
+  submit: the row's own error echoes when its tick applies, and a line whose
+  SHAPE the parser refuses is a deferred refusal, counted into `wire.errors` at
+  that tick rather than answered by the submitting call.
 
 ## What lives here
 

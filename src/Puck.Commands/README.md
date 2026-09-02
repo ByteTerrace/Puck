@@ -14,8 +14,14 @@ running one snapshot per step and for keeping command handlers and simulation
 code deterministic.
 
 `dotnet pack` produces `ByteTerrace.Puck.Commands`; the first NuGet.org release
-has not been published yet. The project depends on `ByteTerrace.Puck.Maths` and
-[`System.CommandLine`](https://www.nuget.org/packages/System.CommandLine).
+has not been published yet. The project depends on `ByteTerrace.Puck.Assets`,
+`ByteTerrace.Puck.Maths`, and
+[`System.CommandLine`](https://www.nuget.org/packages/System.CommandLine), and
+`ByteTerrace.Puck.Assets` brings `ByteTerrace.Puck.Abstractions` with it. That
+closure is worth knowing before a Native AOT publish: this assembly builds under
+the repository's AOT and trim analyzers, but `ByteTerrace.Puck.Assets` declares
+itself not AOT-compatible, so the package cannot promise for what it depends on
+what it can promise for itself.
 
 ## ✨ Key features
 
@@ -53,7 +59,7 @@ graph LR
     Console(["⌨️ Administrative stdin"]) --> Submit
     SeatText(["⌨️ Seat text session"]) --> Submit
     Submit(["submitted line"]) -->|"Immediate: parse + run as stamped principal"| Handler
-    Submit -->|"Simulation: queue through that principal's sink"| Router
+    Submit -->|"Simulation: resolve the leading verb,<br/>queue through that principal's sink<br/>(parsed once, at apply time)"| Router
     Router(["🎚️ InputRouter<br/>orders commands per slot and<br/>stamps the host-resolved principal"]) --> Snapshot(["📋 CommandSnapshot"])
     Snapshot --> Pump(["⏱️ Host fixed-step pump"])
     Pump -->|"ApplySnapshot"| Apply(["🗄️ CommandRegistry<br/>map-gated dispatch"])
@@ -177,6 +183,25 @@ between ticks, while the window host releases it on focus loss. Bound input
 always passes through an `InputRouter`; without one, a composition root cannot
 dispatch a binding.
 
+Every edge the router synthesizes rather than captures (a transient impulse's
+inactive twin, and every deterministic cancellation from focus loss, a
+disconnect, a binding reload, or a map transition) is delivered on the tick
+after the one that caused it. That delay comes from drain ORDER rather than from
+any clock stamp: `SnapshotForTick` drains the owed edges at its top, before the
+tick's own due signals, so anything synthesized during a fold is visible only to
+the next call. A catch-up of N steps therefore cannot stretch the gap between an
+input's active and inactive edge.
+
+A device whose terminal focus is released captures through
+`CaptureFocusExempt`. Only commands declaring `CommandInputScope.FocusExempt`
+may dispatch, and only the host-owned always-active plane answers, so a typed
+key cannot press a gameplay page's binding. A RELEASE is still forwarded through
+the page resolver with its answer discarded, because that resolver holds the
+chord tracker, the press latches, and the armed command rows; a release those
+never observe would leave a page flipped and a row armed until the console
+closes. The chord edges such a release produces, such as an armed row's owed
+completion, are delivered.
+
 Edge-reported controls may stream digital `Active` reassertions while physically
 held. Reassertions rebuild modifier/page state and recover continuous channel
 destinations, but never fire ordinary commands, toggles, or activator gestures.
@@ -242,14 +267,24 @@ for the source's resolved slot enter its snapshot, so mode changes do not
 rewrite the binding table or affect another player.
 `PagedInputBindings` adds named pages, modifier keys, multi-key chords, and
 radial selection wheels. A flat `IInputBindings` implementation can ignore all
-of those features.
+of those features. A wheel's sector decision (`BindingWheelGeometry`) reads the
+same on every machine: the angle comes from `Puck.Maths`' fixed-point
+`FixedQ4816.Atan2` and every other step is an exactly-rounded IEEE operation,
+because the sector a commit dispatches enters the deterministic command lane.
+Modifier ids compare case-insensitively, so a chord member that differs from a
+declared modifier only in case resolves to that modifier, and two modifiers
+whose ids differ only in case are refused at compile.
 
 `BindingVocabularyCheck` validates a document against the registered commands.
 It refuses an unknown command, a command not declared `Bindable`, or a value
-whose kind differs from the command's declaration. The check is a host
-responsibility rather than an `InputRouter` runtime check. `Puck.World` routes
-its documents through this validator and supplies command metadata when its live
-registry is available. Another host can obtain the same guarantee by supplying
+whose kind differs from the command's declaration. It checks the physical half
+the same way, against the caller's control catalog: a page source, a raw
+chord-row member, and an activator step that the catalog cannot resolve are each
+refused by name, since all three would compile into a control that never
+signals. The check is a host responsibility rather than an `InputRouter` runtime
+check. `Puck.World` routes its documents through this validator and supplies
+command metadata when its live registry is available. Another host can obtain
+the same guarantee by supplying
 its registry before accepting authored bindings. This keeps an authored page
 from exposing a protected administrative command that its author was not meant
 to reach.
@@ -259,15 +294,44 @@ to reach.
 Two public paths reach a handler:
 
 1. **Fixed-step input.** `InputRouter.Capture` accepts device-style signals,
-   while `InputRouter.Activate` accepts a command activation produced by an
-   authored interface. `SnapshotForTick` groups both by logical slot. For each
-   slot, `ICommandPrincipalResolver.PrincipalOf(slot)` supplies the actor that
-   the host currently recognizes there; the router does not guess that a slot
+   refusing one that names no source, while `InputRouter.Activate` accepts a
+   command activation produced by an authored interface for a non-negative slot.
+   `SnapshotForTick` groups both by logical slot. For each slot,
+   `ICommandPrincipalResolver.PrincipalOf(slot)` supplies the actor that the
+   host currently recognizes there; the router does not guess that a slot
    belongs to a local seat.
 2. **Submitted text.** `CommandRegistry.Submit` runs an immediate command as
    `CommandPrincipal.Console`. A command declared `CommandRouting.Simulation`
    instead enters the router through `ConsoleTextSink` and runs when the host
-   applies its fixed-step snapshot.
+   applies its fixed-step snapshot. `Submit` resolves such a line by its leading
+   verb alone; the line's own parse happens once, when its tick applies.
+
+Four properties of the submitted line are worth stating outright, because a
+scripted driver depends on them:
+
+- **An `@`-prefixed argument is an ordinary token.** System.CommandLine's
+  response-file expansion is switched off for both of the registry's parse
+  sites, so a submitted line never reads the filesystem and never depends on the
+  working directory.
+- **Command identity is case-insensitive end to end.** A binding row naming
+  `Player.Move`, the interned id it resolves to, and the line built from that
+  spelling all reach the same handler. System.CommandLine itself matches
+  case-sensitively, so the full parse substitutes the canonical spelling for the
+  leading verb rather than the registry narrowing to match the parser.
+- **A handler that throws never propagates out of `Submit` or `ApplySnapshot`.**
+  The escaped exception becomes an `IsError` result naming it, visible to
+  observers and counted by `wire.errors`. The rest of the tick's entries still
+  run, and a submitted line's read-after-write barrier still releases.
+- **A deferred line's argument errors arrive a tick late.** Because a
+  Simulation-class line is not parsed at submit, a malformed argument SHAPE is
+  counted into `wire.errors` when its tick applies rather than answered by
+  `Submit`'s return value. A handler-level refusal, such as an unparsable inline
+  JSON row, always ran at apply time and still echoes there.
+
+Read-after-write ordering across submitted lines is a `TextCommandSession`
+guarantee rather than a `Submit` one: `TextCommandSource.Collect` holds that
+session's following non-Simulation line until its pending Simulation submission
+has applied, and each session's hold is independent of every other session's.
 
 The addon pump (`Puck.World.Addons`' `AddonSimulationPump`) is not a third
 `Puck.Commands` path. `Puck.World.Addons` reads its typed submissions and turns
@@ -275,16 +339,22 @@ them directly into world intents under the addon's mounted identity.
 
 The public API prevents callers from inventing another path. A handler needs a
 `CommandContext`, whose constructor is internal, and
-`CommandRegistry.Definitions` returns non-invokable `CommandMetadata`.
+`CommandRegistry.Definitions` returns non-invokable `CommandMetadata` as an
+`ImmutableArray<CommandMetadata>`, since an `IReadOnlyList` over the backing
+array would be one cast away from being rewritten (`CommandRegistry.Maps`
+returns an `ImmutableArray<string>` for the same reason).
 `ApplySnapshot` remains public because the host loop lives in another assembly,
 but `CommandEntry`, `CommandLane`, and `CommandSnapshot` are internal to
 construct and public only to read. The only snapshot a caller can create
-directly is an empty one, which dispatches nothing.
+directly is an empty one, which dispatches nothing. `ApiSurfaceTests` fails the
+suite if a public constructor appears on any of the four, so this is enforced
+rather than merely asserted.
 
 ## 📋 Core types
 
-This table is the conceptual map. The [generated API reference](../../docs/api)
-owns the complete member-by-member surface.
+This table is the conceptual map. The
+[generated API reference](https://byteterrace.com/reference/) owns the complete
+member-by-member surface.
 
 | Type | Role |
 |------|------|
@@ -305,7 +375,8 @@ owns the complete member-by-member surface.
 | `IInputBindings` / `PagedInputBindings` | The slot-aware binding boundary, and the stateful chord/page/wheel implementation of it. |
 | `CommandInjectionSink` | The read-only public face of the console sink used to queue simulation-class submitted text under `CommandPrincipal.Console`. |
 | `TextCommandSource` | Queue and per-frame pump for command lines through the registry's text path. |
-| `InputRouter` | Owns each slot's active maps, captures timestamped physical signals and pre-resolved injections, then emits ordered per-tick, per-slot snapshots. |
+| `InputRouter` | Owns each slot's active maps, captures timestamped physical signals and pre-resolved injections, then emits ordered per-tick, per-slot snapshots. Disposable: a host that replaces a router must dispose the old one, or it keeps mutating its held tables on every binding reload and device disconnect. |
+| `CommandEcho` | The bracketed `[verb: key=value …]` echo grammar a read-back or mutation verb writes, defined once rather than hand-spelled per verb. `Field` and `SpliceTag` route their value through `Quote`, so a reserved character inside a value cannot end the token, the segment, the envelope, or the line. |
 | `CommandSnapshot` / `CommandLane` / `CommandEntry` | Canonical deterministic input for one fixed tick, built and applied within it — ephemeral, never itself persisted, with local device identities excluded from its deterministic content. |
 
 ## 📌 Design notes
@@ -328,10 +399,24 @@ owns the complete member-by-member surface.
 - **`help` is built in.** The registry auto-registers a `help` command listing
   every command and description.
 - **Thread-safety.** `InputRouter.Capture` accepts signals from device I/O
-  threads while the fixed-step thread builds snapshots. `TextCommandSource`'s
-  queue likewise permits a background producer while the frame thread
-  collects. `CommandRegistry`, `SnapshotForTick`, and the remaining mutable
-  router operations are driven from the host's single fixed-step thread.
+  threads while the fixed-step thread builds snapshots; it refuses a signal that
+  names no source, and past `InputRouter.MaxCapturedSignals` (4096) it drops the
+  OLDEST queued signal and counts it in `InputRouter.DroppedCaptureCount`, so a
+  producer stamping capture ticks the host loop never reaches cannot grow the
+  queue forever. `TextCommandSource`'s queue likewise permits a background
+  producer while the frame thread collects. `CommandRegistry`,
+  `SnapshotForTick`, and the remaining mutable router operations are driven from
+  the host's single fixed-step thread.
+  `PagedInputBindings` mutates only on that thread as well; `ViewFor` and
+  `WheelFor` are its two cross-thread readers, and both are non-mutating reads
+  answered from the currently-loaded compiled profile, so a reader can never
+  create slot state or observe a page row left over from a profile a `Reload`
+  has replaced.
+- **Lifetime.** `InputRouter` is `IDisposable`. `Dispose` detaches it from the
+  binding-reload and device-slot edges it subscribed to at construction and is
+  pump-thread-only, called after the producers have stopped. A router owned for
+  the process lifetime needs no explicit call, since the container that resolved
+  it disposes it with the host.
 
 ## 🧪 Testing
 
@@ -341,7 +426,18 @@ dotnet test tests/Puck.Commands.Tests
 
 The suite covers registry composition and collision refusals, router capture
 ordering and snapshot determinism, paged bindings (chords, modifiers, pages,
-wheels), held-input ordering, binding sessions, vocabulary checks, and argument
-parsing.
+wheels), radial sector geometry and gesture state, held-input ordering, binding
+sessions and their compiled profiles, vocabulary checks, argument parsing, and
+the echo grammar's quoting. `InputRouterHardeningTests` pins the router
+behaviors an audit found unproven: the one-tick obligations a modality
+transition used to destroy, the resolver state a focus-exempt release used to
+bypass, the ordering-only delay of every synthesized edge, and the entry-point
+refusals and capture bound. `TextCommandSessionTests` covers the per-session
+read-after-write barrier. `ApiSurfaceTests` and `PackagingTests` cover the
+published surface itself: that the snapshot shapes stay internal to construct,
+that no public member carries `[Obsolete]`, a retired-shape name, or a mutable
+field, and that the package identity and the shipped XML documentation survive
+a pack.
 
-See the [generated API reference](../../docs/api) for full member docs.
+See the [generated API reference](https://byteterrace.com/reference/) for full
+member docs.
