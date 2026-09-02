@@ -290,6 +290,29 @@ public sealed class InputRouterHardeningTests {
         Assert.Equal(actual: bindings.Resolved[0], expected: $"key.{overflow}");
     }
     [Fact]
+    public void TheInjectionQueueDropsItsOldestBeyondTheCap() {
+        // The injection door is the one a diverged clock base — or a stalled pump — floods just as easily as the raw
+        // signal door: every entry stamped ahead of the window is retained and re-scanned on every drain.
+        const int total = (InputRouter.MaxCapturedInjections * 4);
+
+        var activation = Activation();
+        var router = Router(bindings: new EmptyBindings());
+
+        for (var index = 0; (index < total); index++) {
+            Assert.True(condition: router.Activate(
+                activation: activation,
+                slot: 0
+            ));
+        }
+
+        Assert.Equal(actual: router.DroppedInjectionCount, expected: ((long)(total - InputRouter.MaxCapturedInjections)));
+        Assert.Equal(actual: router.DroppedCaptureCount, expected: 0L);
+        Assert.Equal(
+            actual: Assert.Single(collection: router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue).Lanes).Entries.Count,
+            expected: InputRouter.MaxCapturedInjections
+        );
+    }
+    [Fact]
     public void TypedCharactersAreNeverLatchedAsRepeatedPresses() {
         var bindings = new RecordingBindings();
         var router = Router(bindings: bindings);
