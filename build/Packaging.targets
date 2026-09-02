@@ -14,6 +14,7 @@
         <EmbedUntrackedSources>true</EmbedUntrackedSources>
         <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
         <IncludeSymbols>true</IncludeSymbols>
+        <PackageIcon>icon.png</PackageIcon>
         <PackageLicenseFile>LICENSE.md</PackageLicenseFile>
         <PackageProjectUrl>https://github.com/ByteTerrace/Puck</PackageProjectUrl>
         <PackageReadmeFile>README.md</PackageReadmeFile>
@@ -25,6 +26,13 @@
         <Version>0.1.0-alpha</Version>
     </PropertyGroup>
     <ItemGroup Condition="'$(IsPackable)' == 'true'">
+        <!--
+            The gallery icon. One shared 200x200 PNG for every packable project (NuGet.org accepts PNG/JPG up to
+            1 MB; this is 41 KB). PackagePath carries the FILENAME, not just the directory: pack derives the packed
+            entry's name from the source file otherwise, and `logo.png` in the root would not be the `icon.png` that
+            <PackageIcon> names — NU5046 at pack time. Link only affects how the item shows in an IDE.
+        -->
+        <None Include="$(MSBuildThisFileDirectory)..\docs\site\_theme\logo.png" Link="icon.png" Pack="true" PackagePath="icon.png" Visible="false" />
         <None Include="$(MSBuildThisFileDirectory)..\LICENSE.md" Pack="true" PackagePath="\" Visible="false" />
         <None Include="$(MSBuildThisFileDirectory)..\LICENSING.md" Pack="true" PackagePath="\" Visible="false" />
         <None Include="$(MSBuildProjectDirectory)\README.md" Pack="true" PackagePath="\" Visible="false" />
