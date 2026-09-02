@@ -524,9 +524,26 @@ public sealed class InputRouterTests {
 
         Assert.Equal(expected: $"{Command} 8", actual: press.Text);
 
-        // A TEXT-BEARING signal reaching the same binding contributes nothing to that payload: a typed character is
-        // not a command line, so forwarding it would have the registry refuse it as an unknown verb per keystroke.
-        // Only the row's own text decides Text — see the remarks on InputSignal.Typed.
+        // A TEXT-BEARING signal reaching that same authored row does not get to overwrite the line: the row still
+        // decides, so the payload is "<command> 8" rather than the typed character. A typed character is not a
+        // command line, and forwarding it would have the registry refuse it as an unknown verb once per keystroke.
+        // Its own router, because the press above is still held and would fold this tick into a dispatch-less edge.
+        var overtyped = new InputRouter(
+            registry: new CommandRegistry(modules: [new DigitalModule(command: Command)]),
+            bindings: new FixedBindings(binding: new CommandBinding(Command: Command, Text: "8")),
+            principalResolver: new ConsolePrincipal()
+        );
+
+        overtyped.Capture(signal: InputSignal.Typed(source: "keyboard.text", text: "n"));
+
+        Assert.Equal(
+            actual: Assert.Single(collection: Assert.Single(collection: overtyped.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue).Lanes).Entries).Text,
+            expected: $"{Command} 8"
+        );
+
+        // And where the row authors NO text there is nothing for the signal's payload to be mistaken for: the entry
+        // carries null rather than "n". See the remarks on InputSignal.Typed for why this is the settled behaviour
+        // rather than an oversight.
         var typed = Router(registry: out _);
 
         typed.Capture(signal: InputSignal.Typed(source: "keyboard.text", text: "n"));
