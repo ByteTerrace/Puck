@@ -667,7 +667,7 @@ public sealed class CommandRegistry {
         try {
             faulted = false;
             result = definition.Handler(arg: context);
-        } catch (Exception exception) {
+        } catch (Exception exception) when (IsContainable(exception: exception)) {
             faulted = true;
             result = HandlerFault(
                 definition: definition,
@@ -728,7 +728,7 @@ public sealed class CommandRegistry {
                     ranges: argumentRanges
                 )
             );
-        } catch (Exception exception) {
+        } catch (Exception exception) when (IsContainable(exception: exception)) {
             faulted = true;
             result = HandlerFault(
                 definition: definition,
@@ -757,6 +757,17 @@ public sealed class CommandRegistry {
     /// <returns>An <see cref="CommandResult.IsError"/> result naming the command, the exception type, and its message.</returns>
     private static CommandResult HandlerFault(CommandDefinition definition, Exception exception) =>
         CommandResult.Error(output: $"[{definition.Name}: handler threw {exception.GetType().Name}: {exception.Message}]");
+    // The one rule every dispatch boundary in this type filters on, written once so the three handler boundaries, the
+    // observer boundary and the per-entry boundary cannot drift apart.
+    //
+    // An OperationCanceledException is a HOST SIGNAL, not a verdict about a command: a handler raises it by observing
+    // the host's own shutdown/cancellation token, so it belongs to the pump that owns that token and must unwind to it
+    // — reporting it as `[verb: handler threw OperationCanceledException]` and a wire.errors bump would turn a
+    // requested shutdown into a line the host has to pattern-match its way back out of, and would let the tick carry on
+    // dispatching entries after the host asked it to stop. Everything else is CONTAINED: a module verb's own bug is a
+    // verdict about that verb alone, and must not decide whether the rest of the tick's entries run, whether the other
+    // observers hear about this dispatch, or whether a later submitted line's read-after-write barrier is released.
+    private static bool IsContainable(Exception exception) => (exception is not OperationCanceledException);
     /// <summary>Returns the default "fully active" value used for a text invocation that supplies no explicit value.</summary>
     /// <param name="kind">The value kind of the command being invoked.</param>
     /// <returns>An active value for digital and axis kinds; an inactive value for kinds that have no meaningful impulse.</returns>
@@ -890,7 +901,7 @@ public sealed class CommandRegistry {
         for (var index = 0; (index < m_observers.Length); index++) {
             try {
                 m_observers[index].OnCommand(activation: in activation);
-            } catch (Exception) {
+            } catch (Exception exception) when (IsContainable(exception: exception)) {
                 NoteRejection();
             }
         }
@@ -1039,7 +1050,7 @@ public sealed class CommandRegistry {
 
             try {
                 result = definition.Handler(arg: context);
-            } catch (Exception exception) {
+            } catch (Exception exception) when (IsContainable(exception: exception)) {
                 result = HandlerFault(
                     definition: definition,
                     exception: exception
@@ -1219,11 +1230,15 @@ public sealed class CommandRegistry {
     /// argument is what is closed, not the method: <see cref="CommandSnapshot"/>, <see cref="CommandLane"/>, and
     /// <see cref="CommandEntry"/> are all internal to construct, so the only snapshot a caller can obtain is one the
     /// mixer built. Narrowing this method instead would leave the forgeable value type in a caller's hands.</para>
-    /// <para>ONCE THE SNAPSHOT IS ACCEPTED, this method never propagates: every entry runs inside its own boundary, so
-    /// no exception raised while applying one entry — a handler's, an observer's, or one the registry's own decoding of
-    /// a submitted line raised — decides whether the rest of the tick's entries run, and each entry's submitted-line
-    /// read-after-write barrier is released whether its body completed or threw. A contained fault is counted in the
-    /// <c>wire.errors</c> total, and a handler fault additionally becomes an error result observers see.</para>
+    /// <para>ONCE THE SNAPSHOT IS ACCEPTED, this method propagates nothing but a cancellation: every entry runs inside
+    /// its own boundary, so no exception raised while applying one entry — a handler's, an observer's, or one the
+    /// registry's own decoding of a submitted line raised — decides whether the rest of the tick's entries run, and each
+    /// entry's submitted-line read-after-write barrier is released whether its body completed or threw. A contained
+    /// fault is counted in the <c>wire.errors</c> total, and a handler fault additionally becomes an error result
+    /// observers see. The single exception is an <see cref="OperationCanceledException"/>, which is a HOST SIGNAL rather
+    /// than a verdict about a command: it unwinds to the pump that owns the cancelled token, releasing its own entry's
+    /// barrier on the way out and leaving the tick's remaining entries unapplied, which is what a requested shutdown
+    /// asks for.</para>
     /// <para>The registry-mismatch refusal below is the one throw this method still makes, and it happens BEFORE any
     /// entry is examined: a snapshot built for another registry carries entries this one cannot decode at all, so it is
     /// refused whole rather than half-applied. Nothing has been dispatched and no barrier has been touched when it
@@ -1257,7 +1272,7 @@ public sealed class CommandRegistry {
                         entry: in entry,
                         slot: lane.Slot
                     );
-                } catch (Exception) {
+                } catch (Exception exception) when (IsContainable(exception: exception)) {
                     NoteRejection();
                 } finally {
                     entry.SubmissionBarrier?.Complete();
@@ -1319,12 +1334,16 @@ public sealed class CommandRegistry {
     /// line's own parse happens once, when its tick applies. A malformed argument on such a line is therefore refused
     /// a tick later — through the <c>wire.errors</c> count — rather than in this call's return value.</para>
     /// <para>An exception a handler lets escape never leaves this method: it becomes an
-    /// <see cref="CommandResult.IsError"/> result naming the exception, counted like any other refusal. The same rule
-    /// governs <see cref="ApplySnapshot"/>, where it additionally guarantees that one throwing handler cannot skip the
-    /// rest of the tick's entries. Read-after-write ordering across submitted lines is not this method's to give — it
-    /// is a <see cref="TextCommandSession"/> guarantee, honored by <see cref="TextCommandSource.Collect"/>.</para>
+    /// <see cref="CommandResult.IsError"/> result naming the exception, counted like any other refusal. The one
+    /// exception is an <see cref="OperationCanceledException"/> — a handler raises that by observing the HOST's
+    /// cancellation token, so it is a signal to the caller rather than a verdict about the command, and it propagates
+    /// unchanged and uncounted. The same rule governs <see cref="ApplySnapshot"/>, where containment additionally
+    /// guarantees that one throwing handler cannot skip the rest of the tick's entries. Read-after-write ordering across
+    /// submitted lines is not this method's to give — it is a <see cref="TextCommandSession"/> guarantee, honored by
+    /// <see cref="TextCommandSource.Collect"/>.</para>
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="line"/> is <see langword="null"/>.</exception>
+    /// <exception cref="OperationCanceledException">A handler observed the host's cancellation token.</exception>
     public CommandResult Submit(string line) {
         ArgumentNullException.ThrowIfNull(line);
 

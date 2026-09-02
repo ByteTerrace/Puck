@@ -139,6 +139,50 @@ public sealed class CommandRegistryBoundaryTests {
         Assert.Empty(collection: applied);
     }
 
+    [Fact]
+    public void ACancellationSignalUnwindsToTheHostInsteadOfBecomingAWireError() {
+        var registry = new CommandRegistry(modules: [new CancellingModule()]);
+
+        // A handler raises this by observing the HOST's token, so it is a request to stop rather than a verdict about
+        // the verb: converting it into `[cancel.probe: handler threw …]` would leave the host to pattern-match its own
+        // shutdown back out of the wire, and would count it as a refused line.
+        _ = Assert.Throws<OperationCanceledException>(testCode: () => registry.Submit(line: "cancel.probe"));
+        _ = Assert.Throws<OperationCanceledException>(testCode: () => registry.Submit(line: "cancel.probe \"quoted\""));
+        Assert.Equal(expected: "[wire.errors: 0 rejected]", actual: registry.Submit(line: "wire.errors").Output);
+    }
+    [Fact]
+    public void ACancellationSignalUnwindsOutOfApplySnapshotAfterReleasingItsOwnBarrier() {
+        var submitted = new List<string>();
+        var registry = new CommandRegistry(modules: [new SumModule(), new CancellingSimulationModule()]);
+        var router = new InputRouter(
+            registry: registry,
+            bindings: new EmptyBindings(),
+            principalResolver: new ConsolePrincipal()
+        );
+        var source = new TextCommandSource(registry: registry);
+        var session = source.CreateSeatSession(
+            onResult: (line, _) => submitted.Add(item: line),
+            router: router,
+            slot: 0
+        );
+
+        session.Enqueue(line: "sim.cancel");
+        session.Enqueue(line: "sum 2 3");
+        source.Collect();
+
+        Assert.Equal(actual: submitted, expected: ["sim.cancel"]);
+
+        var snapshot = Tick(router: router);
+
+        _ = Assert.Throws<OperationCanceledException>(testCode: () => registry.ApplySnapshot(snapshot: in snapshot));
+
+        // Unwinding still runs the per-entry finally, so the session is not left holding a barrier no later tick can
+        // release; the host decides whether to drain again after the cancellation it asked for.
+        source.Collect();
+
+        Assert.Equal(actual: submitted, expected: ["sim.cancel", "sum 2 3"]);
+    }
+
     private sealed class ConsolePrincipal : ICommandPrincipalResolver {
         public CommandPrincipal PrincipalOf(int slot) => CommandPrincipal.Console;
     }
@@ -146,6 +190,30 @@ public sealed class CommandRegistryBoundaryTests {
         private readonly CommandBinding[] m_bindings = [new CommandBinding(Command: command)];
 
         public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) => m_bindings;
+    }
+    private sealed class EmptyBindings : IInputBindings {
+        public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) => null;
+    }
+    private sealed class CancellingModule : ICommandModule {
+        public IEnumerable<CommandDefinition> GetCommands() {
+            yield return CommandDefinition.WithWireArgs(
+                name: "cancel.probe",
+                description: "Observes an already-cancelled host token.",
+                handler: static (_, _) => throw new OperationCanceledException(),
+                bindability: CommandBindability.Unbindable
+            );
+        }
+    }
+    private sealed class CancellingSimulationModule : ICommandModule {
+        public IEnumerable<CommandDefinition> GetCommands() {
+            yield return CommandDefinition.WithWireArgs(
+                name: "sim.cancel",
+                description: "Observes an already-cancelled host token when its tick applies.",
+                handler: static (_, _) => throw new OperationCanceledException(),
+                bindability: CommandBindability.Unbindable,
+                routing: CommandRouting.Simulation
+            );
+        }
     }
     private sealed class RecordingObserver(List<string> seen) : ICommandObserver {
         public void OnCommand(in CommandActivation activation) => seen.Add(item: activation.Name);
