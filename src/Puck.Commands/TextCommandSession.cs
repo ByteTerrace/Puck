@@ -76,15 +76,35 @@ public sealed class TextCommandSession : ITextCommandSink {
 
 // Process-local coordination only: the reference rides a live snapshot entry so applying that exact submission
 // releases only its originating session's read-after-write barrier.
+//
+// The count is written with interlocked operations even though the registry's own contract puts every Begin and
+// Complete on the frame thread. It costs one uncontended CAS on a path that already parses and dispatches a command
+// line, and it removes the need to reason about the contract twice: the reference rides a snapshot entry and a
+// snapshot is a value a host can hold, so a torn read here would be a stranded session — the failure this whole
+// mechanism exists to prevent — rather than an off-by-one nobody notices.
 internal sealed class TextSubmissionBarrier {
     private int m_pending;
 
-    public bool HasPending => (m_pending != 0);
+    public bool HasPending => (Volatile.Read(location: ref m_pending) != 0);
 
-    public void Begin() => m_pending++;
+    public void Begin() => Interlocked.Increment(location: ref m_pending);
     public void Complete() {
-        if (m_pending != 0) {
-            m_pending--;
+        // A clamped decrement: the count never goes below zero, not even transiently, so a concurrent HasPending can
+        // never read a negative count as "still pending".
+        var pending = Volatile.Read(location: ref m_pending);
+
+        while (pending != 0) {
+            var observed = Interlocked.CompareExchange(
+                comparand: pending,
+                location1: ref m_pending,
+                value: (pending - 1)
+            );
+
+            if (observed == pending) {
+                return;
+            }
+
+            pending = observed;
         }
     }
 }
