@@ -11,12 +11,13 @@ namespace Puck.Commands;
 /// concentric shells rather than selected by chord; each ring's entries are the wheel's SECTORS, and every sector is
 /// an ordinary command binding activated through the originating seat's input-router lane.
 /// </summary>
-/// <remarks>A sector row deliberately narrows the page-entry shape: it carries a
-/// <see cref="BindingPageEntryDefinition.Command"/> destination and an optional stable id, and NOTHING else — no
-/// <c>Sources</c>/<c>Activator</c> (the radial gesture is the trigger), no <c>Channel</c>/<c>Scale</c> (a radial choice
-/// is a one-shot command activation), no <c>Mode</c> (it has no held state), and no <c>Label</c> (display text
-/// resolves from <paramref name="LabelRow"/>, keyed by the sector's id). Command <c>Value</c>, <c>ActivateOn</c>, and
-/// <c>Text</c> remain meaningful and compile into the same activation shape an ordinary binding uses: a sector's
+/// <remarks>A sector row deliberately narrows the page-entry shape. It REQUIRES a
+/// <see cref="BindingPageEntryDefinition.Command"/> destination, and every member that would mean nothing on a
+/// radial choice is refused BY NAME rather than ignored — no <c>Sources</c>/<c>Activator</c> (the radial gesture is
+/// the trigger), no <c>Channel</c>/<c>Scale</c> (a radial choice is a one-shot command activation), no <c>Mode</c>
+/// (it has no held state), and no <c>Label</c> (display text resolves from <paramref name="LabelRow"/>, keyed by the
+/// sector's id). What remains is the optional stable id and the command's own shape: <c>Value</c>, <c>ActivateOn</c>,
+/// and <c>Text</c> compile into the same activation an ordinary binding uses — a sector's
 /// commit is a press, so its <see cref="BindingPageEntryDefinition.Text"/> rides the activation as the submitted line
 /// <c>&lt;command&gt; &lt;text&gt;</c> under exactly the page entry's contract — nonblank, single-line, no longer
 /// than <see cref="BindingProfile.MaxTextPayloadLength"/>, targeting a wire-args command, and refused beside an
