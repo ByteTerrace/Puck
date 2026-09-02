@@ -88,7 +88,7 @@ internal sealed class TernaryLinesRewriter : CSharpSyntaxRewriter {
         return visited.ReplaceTokens(
             tokens: closes,
             computeReplacementToken: (oldToken, _) => ((hangs && oldToken.Equals(other: first))
-                ? oldToken.WithLeadingTrivia(SyntaxFactory.CarriageReturnLineFeed, SyntaxFactory.Whitespace(text: indent))
+                ? oldToken.WithLeadingTrivia(RewriteShaping.EndOfLine, SyntaxFactory.Whitespace(text: indent))
                 : oldToken.WithLeadingTrivia()));
     }
 
@@ -113,7 +113,7 @@ internal sealed class TernaryLinesRewriter : CSharpSyntaxRewriter {
     }
     private static ConditionalExpressionSyntax Layout(ConditionalExpressionSyntax conditional, string conditionIndent) {
         var branchIndent = (conditionIndent + "    ");
-        var branchLead = new[] { SyntaxFactory.CarriageReturnLineFeed, SyntaxFactory.Whitespace(text: branchIndent) };
+        var branchLead = new[] { RewriteShaping.EndOfLine, SyntaxFactory.Whitespace(text: branchIndent) };
 
         var whenTrue = ((conditional.WhenTrue is ConditionalExpressionSyntax trueChain)
             ? Layout(conditionIndent: branchIndent, conditional: trueChain).WithLeadingTrivia()
