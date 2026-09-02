@@ -84,6 +84,11 @@ public sealed class InputRouter : IDisposable {
     // from the wall clock instead would defer them past every step of an N-step catch-up, making the gap between an
     // input's active and inactive edge a function of frame pacing.
     private readonly List<CommandInjection> m_pendingInjections = [];
+    // Which physical controls are currently DEFLECTED, shared by both capture routes. The companion to
+    // m_pressedControls, covering the continuous shapes a first-down latch cannot: an analog control never reports a
+    // Started event, so only its own samples say whether a hand is on it — and only a control that was deflected is
+    // RELEASING when it next reports zero.
+    private readonly HashSet<HeldControlId> m_activeControls = [];
     // Physical first-down truth is shared by focused and focus-exempt capture. A console-opening press can move its
     // device between those routes before the OS emits repeats or the release; one latch must still recognize them as
     // the same press.
@@ -533,6 +538,23 @@ public sealed class InputRouter : IDisposable {
             _ = m_pressedControls.Remove(item: physicalControl);
         }
 
+        // Deflection truth, updated for BOTH capture routes so a control pressed while focused is still known to be
+        // down when its release arrives on the focus-exempt one. A transient impulse is an event, not a held control,
+        // so it never enters — nothing would ever take it out again.
+        var wasActive = m_activeControls.Contains(item: physicalControl);
+
+        if (latchesPress) {
+            if (
+                signal.Value.IsActive &&
+                !signal.Transient &&
+                (signal.Phase is not (CommandPhase.Completed or CommandPhase.Canceled))
+            ) {
+                _ = m_activeControls.Add(item: physicalControl);
+            } else {
+                _ = m_activeControls.Remove(item: physicalControl);
+            }
+        }
+
         // A control going inactive is a RELEASE — the one shape that must reach the resolver even under focus
         // exemption (see below), and the one that releases stranded holds.
         var isReleasing = ((signal.Phase is CommandPhase.Completed or CommandPhase.Canceled) || !signal.Value.IsActive);
@@ -542,7 +564,16 @@ public sealed class InputRouter : IDisposable {
         // chord/modifier tracker, the press latches, and the armed command rows, and a release those never see leaves
         // the page flipped and the row armed for as long as the seat console stays open. Presses stay withheld —
         // nothing may flip a page or arm a row while the device's focus is released.
-        var forwardsToResolver = (!focusExemptOnly || isReleasing);
+        // A RELEASE here is narrower than isReleasing: a continuous producer streams inactive samples forever (a stick
+        // sitting at centre reports every frame), and those are the device REPORTING, not a release. Forwarding them
+        // would consult the authored page — creating slot state, advancing the chord tracker and driving row
+        // activators — on every frame a seat console stays open. Only a control this router has seen DEFLECTED is
+        // releasing when it reports inactive.
+        var forwardsToResolver = (
+            !focusExemptOnly ||
+            (signal.Phase is CommandPhase.Completed or CommandPhase.Canceled) ||
+            (!signal.Value.IsActive && wasActive)
+        );
         var resolvedPageBindings = (forwardsToResolver
             ? m_bindings.Resolve(
                 signal: signal,
@@ -566,6 +597,19 @@ public sealed class InputRouter : IDisposable {
             // Chord-command edges synthesized by this signal's resolve fold into the same lane with their OWN
             // phase and value (the physical signal's phase may be a mid-sweep Active) — see IChordEdgeSource.
             foreach (var edge in m_chordEdges.DrainChordEdges(slot: slot)) {
+                // Under focus exemption this drain exists to deliver what the RELEASE owes — the broken row's
+                // completion — never to press something new. A member release can leave a SHORTER row exactly
+                // satisfied (releasing left out of [left, right] completes [right]), and that row's press must
+                // neither dispatch nor latch a command that never declared CommandInputScope.FocusExempt: a latched
+                // press would re-assert for as long as the seat console stays open.
+                if (
+                    focusExemptOnly &&
+                    (edge.Phase is not (CommandPhase.Completed or CommandPhase.Canceled)) &&
+                    !IsFocusExemptEdge(edge: in edge)
+                ) {
+                    continue;
+                }
+
                 ApplyChordEdge(
                     workingBySlot: workingBySlot,
                     slot: slot,
@@ -1251,6 +1295,17 @@ public sealed class InputRouter : IDisposable {
     // Whether any physical control is still down for a DIGITAL command in a slot — the logical-hold test the
     // first-down / last-up edge logic reads. An analog or chord hold carries no controls and answers false here even
     // though it is carried; IsCommandHeld(int, string) is the "carried at all" test.
+    // Whether a synthesized chord edge names a command the host declared reachable without ordinary terminal focus.
+    // An edge whose command this router cannot resolve names nothing dispatchable, so it is not exempt either.
+    private bool IsFocusExemptEdge(in BindingChordEdge edge) {
+        return (
+            TryResolveCommandId(
+            id: out var commandId,
+            name: edge.Command
+        ) &&
+            m_registry.IsFocusExemptCommand(commandId: commandId)
+        );
+    }
     private bool IsControlDownFor(int slot, ushort commandId) => TryGetHeldDevice(
         commandId: commandId,
         device: out _,
@@ -1369,6 +1424,7 @@ public sealed class InputRouter : IDisposable {
         var toDrop = new List<HeldCommand>();
 
         if (!preservePressedControls) {
+            m_activeControls.RemoveWhere(match: control => (control.Device == device));
             m_pressedControls.RemoveWhere(match: control => (control.Device == device));
         }
 
@@ -1963,6 +2019,7 @@ public sealed class InputRouter : IDisposable {
             m_pendingInjections.Clear();
         }
 
+        m_activeControls.Clear();
         m_freeHeldStates.Clear();
         m_heldBySlot.Clear();
         m_lastInputTickBySlot.Clear();
@@ -2033,6 +2090,7 @@ public sealed class InputRouter : IDisposable {
             }
         }
 
+        m_activeControls.Clear();
         m_heldBySlot.Clear();
         m_pressedControls.Clear();
         m_toggleLatches.Clear();
