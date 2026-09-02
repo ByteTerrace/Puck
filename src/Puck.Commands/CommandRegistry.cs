@@ -872,6 +872,15 @@ public sealed class CommandRegistry {
         var canonical = CanonicalNameFor(verb: verb);
 
         if (canonical is null) {
+            // A QUOTED verb (`"SUM" 2 3`) reaches the parser with its quotes already removed, so the identity that has
+            // to be canonicalised is the one INSIDE them — the raw token carries the quotes and matches nothing here.
+            // Rewriting it to the bare canonical name is what the parser would have accepted had the line been spelled
+            // that way, and it is exactly what the unquoted path does; without it `"SUM" 2 3` was the one spelling of a
+            // command that neither half of the routing decision could see, and it was refused as unknown.
+            canonical = CanonicalNameFor(verb: UnquotedVerb(verb: verb));
+        }
+
+        if (canonical is null) {
             return line;
         }
 
@@ -879,6 +888,24 @@ public sealed class CommandRegistry {
             str0: canonical,
             str1: trimmed[verb.Length..]
         );
+    }
+    // The content of a verb token that is one whole double-quoted run, or an empty span for anything else. A token
+    // carrying a further '"' inside it is not one run — the parser splices such a token together from several — and is
+    // left to the parse rather than being guessed at here.
+    private static ReadOnlySpan<char> UnquotedVerb(ReadOnlySpan<char> verb) {
+        if (
+            (verb.Length >= 2) &&
+            (verb[0] == '"') &&
+            (verb[^1] == '"')
+        ) {
+            var inner = verb[1..^1];
+
+            if (inner.IndexOf(value: '"') < 0) {
+                return inner;
+            }
+        }
+
+        return [];
     }
     // The canonical spelling a verb token must be rewritten to before the parser sees it, or null when it needs no
     // rewrite (it already matches verbatim, or names nothing this registry knows and will be refused anyway). The

@@ -282,6 +282,48 @@ public sealed class CommandRegistryTests {
         Assert.Equal(expected: "[wire.errors: 0 rejected]", actual: registry.Submit(line: "WIRE.ERRORS").Output);
     }
     [Fact]
+    public void AQuotedVerbResolvesCaseInsensitivelyLikeEveryOtherSpelling() {
+        var registry = new CommandRegistry(modules: [new CoreModule(), new EchoModule()]);
+
+        // A quoted verb reaches the parser with its quotes removed, so the identity to canonicalise is the one INSIDE
+        // them. Reading the raw token instead left `"SUM" 2 3` as the one spelling neither half of the routing
+        // decision could see: the span lookup missed on the quotes and System.CommandLine, which matches command names
+        // ordinally, then refused the uppercase name it was handed.
+        Assert.Equal(expected: "5", actual: registry.Submit(line: "\"SUM\" 2 3").Output);
+        Assert.Equal(expected: "a b", actual: registry.Submit(line: "\"Echo.First\" \"a b\"").Output);
+        Assert.Equal(expected: "[wire.errors: 0 rejected]", actual: registry.Submit(line: "\"WIRE.ERRORS\"").Output);
+
+        // The exactly-spelled quoted forms that already worked are untouched, and an unknown quoted verb is still
+        // refused rather than being rewritten into something.
+        Assert.Equal(expected: "5", actual: registry.Submit(line: "\"sum\" 2 3").Output);
+        Assert.True(condition: registry.Submit(line: "\"does.not.exist\"").IsError);
+    }
+    [Fact]
+    public void ASimulationLineWhoseQuotedVerbIsMisCasedIsStillQueuedRatherThanRefused() {
+        var applied = new List<string>();
+        var registry = new CommandRegistry(modules: [new RecordingSimulationModule(applied: applied)]);
+        var router = new InputRouter(
+            registry: registry,
+            bindings: new EmptyBindings(),
+            principalResolver: new ConsolePrincipal()
+        );
+
+        registry.RouteSimulationTo(sink: router.ConsoleTextSink);
+
+        // Both halves of the fix have to hold together: the submit-time parse canonicalises the quoted verb so the
+        // line routes into the deterministic lane, and the apply-time parse canonicalises the SAME original line so it
+        // still resolves to the command it was injected as.
+        Assert.Equal(expected: CommandResult.None, actual: registry.Submit(line: "\"SIM.RECORD\" payload"));
+        Assert.Empty(collection: applied);
+
+        var snapshot = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+
+        registry.ApplySnapshot(snapshot: in snapshot);
+
+        Assert.Equal(actual: applied, expected: ["payload"]);
+        Assert.Equal(expected: "[wire.errors: 0 rejected]", actual: registry.Submit(line: "wire.errors").Output);
+    }
+    [Fact]
     public void ASimulationLineSpelledInAnotherCaseDispatchesWhenItsTickApplies() {
         var applied = new List<string>();
         var registry = new CommandRegistry(modules: [new RecordingSimulationModule(applied: applied)]);
