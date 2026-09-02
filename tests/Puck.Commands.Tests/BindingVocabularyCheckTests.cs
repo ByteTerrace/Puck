@@ -303,6 +303,103 @@ public sealed class BindingVocabularyCheckTests {
         Assert.Empty(collection: errors);
     }
 
+    [Fact]
+    public void ADeclaredModifiersOwnSourcesAreCheckedAgainstTheControlCatalog() {
+        // The third place a physical source id appears, and the one the gate used to skip: a typo here compiles
+        // into a modifier that can never latch, so the page it selects is dead forever with no refusal line.
+        var document = new BindingProfileDocument(
+            Version: BindingProfileDocument.CurrentVersion,
+            Modifiers: [
+                new BindingModifierDefinition(Id: "aim", Sources: ["gamepad.buttonSouht"]),
+                new BindingModifierDefinition(Id: "type", Sources: ["keyboard.text"]),
+                new BindingModifierDefinition(Id: "look", Sources: ["gamepad.leftTrigger"]),
+            ],
+            Chords: [new BindingChordDefinition(
+                Group: "play",
+                Chord: ["aim"],
+                Page: new BindingPageDefinition(Id: "modal", Entries: [])
+            )]
+        );
+        var errors = new List<string>();
+
+        BindingVocabularyCheck.Validate(
+            document: document,
+            command: null,
+            sourceKind: static source => ((source == "gamepad.buttonSouht")
+            ? null
+            : CommandValueKind.Digital),
+            sourceAddressable: static source => (source != "keyboard.text"),
+            errors: errors
+        );
+
+        Assert.Equal(expected: 2, actual: errors.Count);
+        Assert.Contains(collection: errors, filter: static error => (error == "modifier \"aim\" declares unknown control \"gamepad.buttonSouht\""));
+        Assert.Contains(collection: errors, filter: static error => (error == "modifier \"type\" declares unaddressable control \"keyboard.text\""));
+    }
+    [Fact]
+    public void AMisCasedSourceIsNotAnUnknownControl() {
+        // The catalog resolves source ids case-insensitively because BindingProfile compiles and dispatches them
+        // that way (InputSourceVocabulary's remarks state the rule). A gate holding a stricter opinion than the
+        // compiler refuses rows that press and release perfectly well.
+        var catalog = new HashSet<string>(
+            collection: ["gamepad.buttonSouth", "gamepad.leftTrigger",],
+            comparer: StringComparer.OrdinalIgnoreCase
+        );
+        var document = new BindingProfileDocument(
+            Version: BindingProfileDocument.CurrentVersion,
+            Modifiers: [new BindingModifierDefinition(Id: "look", Sources: ["Gamepad.LeftTrigger"])],
+            Chords: [
+                new BindingChordDefinition(
+                    Group: "play",
+                    Chord: [],
+                    Page: new BindingPageDefinition(
+                        Id: "base",
+                        Entries: [new BindingPageEntryDefinition(Sources: ["Gamepad.ButtonSouth"], Command: "action")]
+                    )
+                ),
+                new BindingChordDefinition(
+                    Group: "play",
+                    Chord: ["LOOK"],
+                    Page: new BindingPageDefinition(Id: "modal", Entries: [])
+                ),
+            ]
+        );
+        var errors = new List<string>();
+
+        BindingVocabularyCheck.Validate(
+            document: document,
+            command: static name => new CommandMetadata(
+                Name: name,
+                ValueKind: CommandValueKind.Digital,
+                Routing: CommandRouting.Immediate,
+                Bindability: CommandBindability.Bindable
+            ),
+            sourceKind: source => (catalog.Contains(item: source)
+            ? CommandValueKind.Digital
+            : null),
+            errors: errors
+        );
+
+        Assert.Empty(collection: errors);
+
+        // And the same document compiles into a profile that really does dispatch the mis-cased row.
+        var profile = BindingProfile.Compile(document: document);
+        var bindings = new PagedInputBindings(profile: profile);
+
+        // The canonically-spelled control drives the mis-cased row.
+        Assert.NotEmpty(collection: (bindings.Resolve(
+            signal: InputSignal.Press(source: "gamepad.buttonSouth"),
+            slot: 0
+        ) ?? []));
+        // And the mis-cased modifier source latches the chord whose mis-cased member names it, flipping the page.
+        _ = bindings.Resolve(
+            signal: InputSignal.Press(source: "gamepad.leftTrigger"),
+            slot: 0
+        );
+
+        Assert.Equal(expected: "modal", actual: bindings.ViewFor(slot: 0).PageId);
+    }
+
     private static BindingProfileDocument Document(BindingPageEntryDefinition entry) {
         return new BindingProfileDocument(
             Version: BindingProfileDocument.CurrentVersion,

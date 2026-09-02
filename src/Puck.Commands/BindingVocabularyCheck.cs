@@ -23,9 +23,10 @@ namespace Puck.Commands;
 /// <see cref="BindingActivatorMode.Tapped"/> activator's sequence. Empty sources/commands are skipped entirely — they
 /// are the structural gate's findings, not this one's.</para>
 /// <para>The physical half is symmetrical with the command half: a source a caller's catalog cannot resolve is
-/// refused by name, whether it appears as a page entry's <c>sources</c>, an activator step, or a chord row's
-/// <c>held</c>/<c>chord</c> member that names no declared modifier. All three compile to a control that will never
-/// signal, so all three are permanently dead rows — the exact class of typo this gate exists to turn loud. An
+/// refused by name, whether it appears as a page entry's <c>sources</c>, an activator step, a declared
+/// <see cref="BindingProfileDocument.Modifiers"/> entry's own <c>sources</c>, or a chord row's
+/// <c>held</c>/<c>chord</c> member that names no declared modifier. All four compile to a control that will never
+/// signal, so all four are permanently dead rows — the exact class of typo this gate exists to turn loud. An
 /// axis-COMPONENT source resolves its BASE control instead, and a control marked unaddressable is refused for that
 /// reason alone (one refusal per source, never both). Callers that pass no <c>sourceKind</c> keep every other
 /// check.</para></remarks>
@@ -128,6 +129,33 @@ public static class BindingVocabularyCheck {
             collection: (document.Modifiers ?? []).Select(selector: static modifier => modifier.Id),
             comparer: StringComparer.OrdinalIgnoreCase
         );
+
+        // The THIRD place a physical source id appears, and the one that used to go unchecked. A declared
+        // modifier's own sources are ordinary controls: a typo here compiles into a modifier no signal can ever
+        // latch, so every page that modifier selects is dead forever — the same failure a typo'd page source
+        // causes, refused in the same words for the same reason.
+        foreach (var modifier in (document.Modifiers ?? [])) {
+            if (
+                (modifier is null) ||
+                (sourceKind is null)
+            ) {
+                continue;
+            }
+
+            foreach (var modifierSource in (modifier.Sources ?? [])) {
+                if (string.IsNullOrEmpty(value: modifierSource)) {
+                    continue;
+                }
+
+                // One refusal per source, matching the page-source rule: an unaddressable control answers null
+                // for its kind too, so falling through would report it twice.
+                if (!(sourceAddressable?.Invoke(arg: modifierSource) ?? true)) {
+                    errors.Add(item: $"modifier \"{modifier.Id}\" declares unaddressable control \"{modifierSource}\"");
+                } else if (sourceKind(arg: modifierSource) is null) {
+                    errors.Add(item: $"modifier \"{modifier.Id}\" declares unknown control \"{modifierSource}\"");
+                }
+            }
+        }
 
         foreach (var row in (document.Chords ?? [])) {
             if (row is null) {

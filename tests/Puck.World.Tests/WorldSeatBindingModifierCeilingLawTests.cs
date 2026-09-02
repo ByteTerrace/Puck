@@ -28,9 +28,12 @@ public sealed class WorldSeatBindingModifierCeilingLawTests {
     };
     // A rebind carrying `count` distinct modifiers (unique id AND unique source, so composition unions rather than
     // absorbs them). Unreferenced modifiers still count against the ceiling — the compiler seeds every declared one.
+    // The sources are REAL declared controls (the open-ended numbered mouse-button family), because a modifier's own
+    // sources are now checked against the control catalog: a fabricated "source.N" is refused as an unknown control
+    // before the ceiling this law is about is ever reached.
     private static BindingProfileDocument RebindWithModifiers(int count) => new(
         Version: BindingProfileDocument.CurrentVersion,
-        Modifiers: [.. Enumerable.Range(count: count, start: 0).Select(selector: static index => new BindingModifierDefinition(Id: $"mod{index}", Sources: [$"source.{index}"]))],
+        Modifiers: [.. Enumerable.Range(count: count, start: 0).Select(selector: static index => new BindingModifierDefinition(Id: $"mod{index}", Sources: [$"mouse.button{(index + 1)}"]))],
         Chords: []
     );
 
