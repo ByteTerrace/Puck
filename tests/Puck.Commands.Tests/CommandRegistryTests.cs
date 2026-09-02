@@ -303,6 +303,35 @@ public sealed class CommandRegistryTests {
         Assert.Equal(expected: "[wire.errors: 0 rejected]", actual: registry.Submit(line: "wire.errors").Output);
     }
     [Fact]
+    public void ASimulationLineWhoseVerbIsQUOTEDIsStillQueuedRatherThanRunInline() {
+        var applied = new List<string>();
+        var registry = new CommandRegistry(modules: [new CoreModule(), new RecordingSimulationModule(applied: applied)]);
+        var router = new InputRouter(
+            registry: registry,
+            bindings: new EmptyBindings(),
+            principalResolver: new ConsolePrincipal()
+        );
+
+        registry.RouteSimulationTo(sink: router.ConsoleTextSink);
+
+        // A quoted verb token is the PARSER's to unquote — the wire path refuses the line for its '"' and the
+        // leading-token span lookup cannot see through the quote — so the routing decision has to survive to the far
+        // side of the parse. Without that, this Simulation-routed handler ran INLINE at submit: absent from the
+        // deterministic lane, and absent from every replay of it.
+        Assert.Equal(expected: CommandResult.None, actual: registry.Submit(line: "\"sim.record\" payload"));
+        Assert.Empty(collection: applied);
+
+        // An Immediate verb spelled the same way is unaffected: it has no lane to wait for and still answers inline.
+        Assert.Equal(expected: "5", actual: registry.Submit(line: "\"sum\" 2 3").Output);
+
+        var snapshot = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+
+        registry.ApplySnapshot(snapshot: in snapshot);
+
+        Assert.Equal(actual: applied, expected: ["payload"]);
+        Assert.Equal(expected: "[wire.errors: 0 rejected]", actual: registry.Submit(line: "wire.errors").Output);
+    }
+    [Fact]
     public void ADeferredLineDispatchesWithTheEdgeItsSnapshotEntryRecorded() {
         var phases = new List<CommandPhase>();
         var registry = new CommandRegistry(modules: [new PhaseProbeModule(phases: phases)]);
@@ -588,6 +617,21 @@ public sealed class CommandRegistryTests {
         // The macro that PROPAGATES its nested refusal counts exactly one, not two.
         Assert.True(condition: registry.Submit(line: "macro.propagates").IsError);
         Assert.Equal(expected: "[wire.errors: 1 rejected]", actual: registry.Submit(line: "wire.errors").Output);
+    }
+    [Fact]
+    public void AMacroVerbsRefusalIsCountedOnceHoweverDeeplyItNested() {
+        var registry = new CommandRegistry(modules: [new MacroModule()]);
+
+        // The documented rule, at the depth that makes it a rule rather than a coincidence: `macro.deep` submits
+        // `macro.propagates`, which submits the refused line. ONE console line was sent, so wire.errors reports one
+        // refusal — not one per frame the error result unwound through.
+        Assert.True(condition: registry.Submit(line: "macro.deep").IsError);
+        Assert.Equal(expected: "[wire.errors: 1 rejected]", actual: registry.Submit(line: "wire.errors reset").Output);
+
+        // …and the other half of the same rule: a swallowed refusal is invisible to the counter at any depth, so a
+        // macro verb that must not hide a failure has to report it back.
+        Assert.False(condition: registry.Submit(line: "macro.deep.swallows").IsError);
+        Assert.Equal(expected: "[wire.errors: 0 rejected]", actual: registry.Submit(line: "wire.errors").Output);
     }
 
     private sealed class CoreModule : ICommandModule {
@@ -919,6 +963,24 @@ public sealed class CommandRegistryTests {
                 name: "macro.propagates",
                 description: "Submits a line that is refused, and returns its refusal.",
                 handler: static (context, _) => (context.Registry?.Submit(line: "does.not.exist") ?? CommandResult.None),
+                bindability: CommandBindability.Unbindable
+            );
+            yield return CommandDefinition.WithWireArgs(
+                name: "macro.deep",
+                description: "Submits a macro that submits a refused line, and returns the refusal through both frames.",
+                handler: static (context, _) => (context.Registry?.Submit(line: "macro.propagates") ?? CommandResult.None),
+                bindability: CommandBindability.Unbindable
+            );
+            yield return CommandDefinition.WithWireArgs(
+                name: "macro.deep.swallows",
+                description: "Submits a macro that submits a refused line, and answers success anyway.",
+                handler: static (context, _) => {
+                    var nested = (context.Registry?.Submit(line: "macro.propagates") ?? CommandResult.None);
+
+                    Assert.True(condition: nested.IsError);
+
+                    return new CommandResult(Output: "ok");
+                },
                 bindability: CommandBindability.Unbindable
             );
         }

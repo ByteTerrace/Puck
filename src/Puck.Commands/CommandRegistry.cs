@@ -268,7 +268,7 @@ public sealed class CommandRegistry {
 
         // The wire's rejection readback, beside wire.ack: `wire.errors [reset]`.
         m_wireErrorsCommand = new Command(
-            description: "Reports the number of submitted lines this session REFUSED — an unknown verb, a parse error, a handler's failure result, or a refusal raised after the line was accepted: wire.errors [reset] — no argument reports the running count; `reset` reports it and zeroes the counter. It is the one number that says whether any submitted line silently no-opped.",
+            description: "Reports the number of submitted lines this session REFUSED — an unknown verb, a parse error, a handler's failure result, or a refusal raised after the line was accepted: wire.errors [reset] — no argument reports the running count; `reset` reports it and zeroes the counter. It is the one number that says whether any submitted line silently no-opped. It counts the lines YOU submitted: a verb that submits lines of its own contributes one refusal when it reports the failure back, and none when it swallows it.",
             name: WireErrorsCommandName
         ) {
             m_wireErrorsArgument,
@@ -606,7 +606,9 @@ public sealed class CommandRegistry {
 
         return CommandResult.Error(output: $"[wire.ack: unknown mode '{mode[0]}' — expected on | quiet]");
     }
-    /// <summary>Reports (and optionally clears) the refused-submission count for the built-in <c>wire.errors</c> verb.</summary>
+    /// <summary>Reports (and optionally clears) the refused-submission count for the built-in <c>wire.errors</c> verb.
+    /// The count is over the lines the CALLER submitted — see <see cref="Submit"/>'s remarks for what a macro verb's
+    /// own nested submissions do and do not contribute.</summary>
     /// <param name="mode">The parsed trailing tokens: empty reports the count; <c>reset</c> reports and zeroes it.</param>
     /// <returns>A result echoing the count, or an <see cref="CommandResult.IsError"/> result for a bad argument.</returns>
     private CommandResult ApplyWireErrors(string[] mode) {
@@ -1062,11 +1064,16 @@ public sealed class CommandRegistry {
             );
         }
 
-        // A Simulation-class line is routed by its leading VERB alone, before any parse. Submit's only decision for
-        // such a line is which command it names and whether a sink is wired; its arguments are read by the handler at
-        // apply time, from a parse ApplySubmittedSimulation must do anyway. Parsing here as well would parse the same
-        // line twice — the cost the wire path exists to avoid, paid on the one path that cannot skip a parse — so a
-        // malformed argument on a deferred line is refused a tick later (through wire.errors) rather than synchronously.
+        // THE FIRST HALF OF THE ROUTING DECISION: a Simulation-class line whose verb token stands on its own is routed
+        // by that leading VERB alone, before any parse. Submit's only decision for such a line is which command it
+        // names and whether a sink is wired; its arguments are read by the handler at apply time, from a parse
+        // ApplySubmittedSimulation must do anyway. Parsing here as well would parse the same line twice — the cost the
+        // wire path exists to avoid, paid on the one path that cannot skip a parse — so a malformed argument on a
+        // deferred line is refused a tick later (through wire.errors) rather than synchronously.
+        //
+        // This lookup reads the raw token, so it resolves exactly the spellings the parser resolves VERBATIM. A verb
+        // the parser would unquote (`"sim.record" payload`) is not one of them, and is routed after the parse instead —
+        // see the second half, below. Routing must never be decided by only one of the two.
         var verb = LeadingVerb(line: line);
 
         if (
@@ -1114,6 +1121,21 @@ public sealed class CommandRegistry {
             key: command,
             value: out var definition
         )) {
+            // THE SECOND HALF OF THE ROUTING DECISION, and the one that is authoritative: it routes by the command the
+            // PARSER resolved rather than by the line's leading token. The pre-parse lookup above reads a raw span, so
+            // it cannot see through a quote — `"sim.record" payload` carries a '"', which the wire path refuses and
+            // which System.CommandLine strips — and every spelling the parser accepts but that span lookup does not
+            // would otherwise run its Simulation handler INLINE at submit: outside the deterministic lane, and missing
+            // from every replay of the session. Routing here costs nothing on the hot path (this branch has already
+            // paid for a parse) and cannot double-queue: the pre-parse route returns before reaching it.
+            if (TryQueueSimulation(
+                definition: definition,
+                line: line,
+                session: session
+            )) {
+                return CommandResult.None;
+            }
+
             var context = new CommandContext(
                 origin: CommandOrigin.Text,
                 parse: parseResult,
@@ -1420,9 +1442,20 @@ public sealed class CommandRegistry {
     /// <para>The line is data: it names a command and supplies its tokens, and nothing about it reaches the
     /// filesystem. System.CommandLine's response-file expansion is switched OFF for both of this type's parse sites,
     /// so an <c>@</c>-prefixed token is an ordinary token rather than a file to splice in.</para>
-    /// <para>Deferring a Simulation command DEFERS ITS ARGUMENTS TOO: only the leading verb is resolved here, and the
-    /// line's own parse happens once, when its tick applies. A malformed argument on such a line is therefore refused
-    /// a tick later — through the <c>wire.errors</c> count — rather than in this call's return value.</para>
+    /// <para>Deferring a Simulation command DEFERS ITS ARGUMENTS TOO: for a line whose verb token stands on its own,
+    /// only that leading verb is resolved here and the line's own parse happens once, when its tick applies. A
+    /// malformed argument on such a line is therefore refused a tick later — through the <c>wire.errors</c> count —
+    /// rather than in this call's return value. A line the parser must unquote to name its verb
+    /// (<c>"sim.record" payload</c>) is routed AFTER that parse instead, so it costs one extra parse; what a line is
+    /// never allowed to cost is running a <see cref="CommandRouting.Simulation"/> handler inline, outside the
+    /// deterministic lane and outside every replay of the session.</para>
+    /// <para><c>wire.errors</c> COUNTS THE LINES ITS CALLER SUBMITTED, not the calls this method made. A handler may
+    /// submit lines of its own (a macro verb), and those nested lines reach the count only through the verdict that
+    /// handler returns: a macro that propagates a nested refusal as <see cref="CommandResult.IsError"/> contributes
+    /// exactly one refusal however deeply it nested, and a macro that swallows one and answers success contributes
+    /// nothing. That is the question the number answers — "how many of the lines I sent were refused" — so a macro
+    /// verb that must not hide a failure has to propagate it; counting every frame instead reported the nesting depth
+    /// of one console line.</para>
     /// <para>An exception a handler lets escape never leaves this method: it becomes an
     /// <see cref="CommandResult.IsError"/> result naming the exception, counted like any other refusal. The one
     /// exception is an <see cref="OperationCanceledException"/> — a handler raises that by observing the HOST's
