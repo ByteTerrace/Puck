@@ -98,6 +98,9 @@ public sealed partial class InputRouter : IDisposable {
     // Snapshot output is borrowed until the next SnapshotForTick call. Retain one entry array per observed slot and
     // one lane array for the router, growing only when a new high-water mark is reached.
     private readonly Dictionary<int, SnapshotEntryBuffer> m_snapshotEntriesBySlot = [];
+    // The borrowed-storage lifetime token stamped onto every view this router hands out, bumped once per snapshot —
+    // see CommandBuffer's remarks. One instance for the router's whole life; only the stamp inside it moves.
+    private readonly SnapshotGeneration m_snapshotGeneration = new();
     private CommandLane[] m_snapshotLanes = [];
 
     private readonly record struct HeldCommand(int Slot, ushort CommandId);
@@ -1000,8 +1003,9 @@ public sealed partial class InputRouter : IDisposable {
 
             m_snapshotLanes[laneIndex++] = new CommandLane(
                 entries: new CommandBuffer<CommandEntry>(
-                    items: entries,
-                    count: working.Count
+                    count: working.Count,
+                    generation: m_snapshotGeneration,
+                    items: entries
                 ),
                 slot: slot
             );
@@ -1020,6 +1024,7 @@ public sealed partial class InputRouter : IDisposable {
         return new CommandSnapshot(
             lanes: new CommandBuffer<CommandLane>(
                 count: activeLaneCount,
+                generation: m_snapshotGeneration,
                 items: m_snapshotLanes
             ),
             registry: m_registry,
@@ -2035,6 +2040,11 @@ public sealed partial class InputRouter : IDisposable {
             condition: m_disposed,
             instance: this
         );
+
+        // Every view handed out by an earlier call now points at storage this call is about to rewrite. Retiring the
+        // generation HERE, before any of it moves, is what makes a retained snapshot throw instead of quietly
+        // answering with this tick's contents under the old tick number.
+        m_snapshotGeneration.Stamp++;
 
         // Take this tick's due signals (CaptureTick before the window close), leaving later-stamped signals for
         // a future tick. Total order: capture time, then the unique capture sequence — deterministic for a given
