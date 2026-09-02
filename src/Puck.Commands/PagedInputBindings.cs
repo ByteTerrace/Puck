@@ -202,6 +202,10 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
                             Command: activatorEntry.Edge.Command,
                             Source: activatorEntry.Edge.Source,
                             Dispatch: activatorEntry.Edge.DispatchRelease,
+                            // MOMENTARY, on the release too: it discharges the obligation the press above created
+                            // and nothing more. A chord row may name this same destination, and that hold's own
+                            // release is a different physical control's to deliver.
+                            Momentary: true,
                             Phase: CommandPhase.Completed,
                             Value: activatorEntry.Edge.ReleaseValue
                         )

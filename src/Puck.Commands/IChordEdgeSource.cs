@@ -24,8 +24,12 @@ namespace Puck.Commands;
 /// <see cref="BindingActivatorMode.Tapped"/> completion's press: its own release is already scheduled one tick
 /// later (see <see cref="IChordEdgeSource.DrainScheduledEdges"/>), so marking it held too would make the tick
 /// carrying that scheduled release also carry a stale, non-dispatching re-assertion of the press — harmless to a
-/// dispatch-gated reader, but not the clean single-entry pulse a tap is supposed to produce. Ignored on a
-/// <see cref="CommandPhase.Completed"/> edge (a release never marks anything held regardless).</param>
+/// dispatch-gated reader, but not the clean single-entry pulse a tap is supposed to produce. On a
+/// <see cref="CommandPhase.Completed"/> edge it says the release BELONGS to that momentary press and discharges
+/// only its obligation: a chord row and a page activator may name one destination, and a tap's scheduled release
+/// must leave a hold a physical control is still holding down alone — dropping it there would stop the hold
+/// re-asserting with no cancellation ever reaching its handler. An ordinary release (the default) is the hold's
+/// own and drops it.</param>
 /// <param name="DispatchRelease">Whether the release paired with a <see cref="CommandPhase.Started"/> edge dispatches.
 /// For a momentary press, the router retains this fact without carrying the press into later snapshots, so a modality
 /// transition can deliver a cancellation instead of stranding the handler that consumed its press. Ignored on a

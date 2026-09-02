@@ -69,6 +69,48 @@ public sealed class InputRouterMomentaryReleaseTests {
         Assert.True(condition: router.IsCommandHeld(command: ChannelCommand, slot: 0));
     }
     [Fact]
+    public void ATapsScheduledReleaseLeavesALiveChordHoldOnTheSameCommandIntact() {
+        var router = Router();
+
+        router.SetActiveMaps(maps: ["play"], slot: 0);
+        PressThrough(
+            router: router,
+            source: "mouse.button1",
+            tick: 1UL
+        );
+        PressThrough(
+            router: router,
+            source: "key.a",
+            tick: 2UL
+        );
+
+        // The tap's release, scheduled one tick after its press, arrives now. It discharges the TAP's obligation and
+        // nothing else: the chord hold on the same destination is owed to a physical control that is still down.
+        var scheduled = Assert.Single(collection: router.SnapshotForTick(tick: 3UL, windowEndTick: ulong.MaxValue).Lanes).Entries.ToArray();
+
+        Assert.Equal(actual: scheduled.Length, expected: 2);
+        Assert.Equal(actual: scheduled[1].Phase, expected: CommandPhase.Completed);
+        Assert.True(condition: router.IsCommandHeld(command: ChannelCommand, slot: 0));
+
+        // And it keeps re-asserting, with its own payload, for as long as the chord is held.
+        var carried = Assert.Single(collection: Assert.Single(collection: router.SnapshotForTick(tick: 4UL, windowEndTick: ulong.MaxValue).Lanes).Entries);
+
+        Assert.Equal(actual: carried.Phase, expected: CommandPhase.Active);
+        Assert.False(condition: carried.Dispatch);
+
+        // The chord's OWN release is the one that drops it, and it dispatches exactly once.
+        router.Capture(signal: InputSignal.Release(source: "mouse.button1"));
+
+        var released = Assert.Single(
+            collection: Assert.Single(collection: router.SnapshotForTick(tick: 5UL, windowEndTick: ulong.MaxValue).Lanes).Entries,
+            predicate: static entry => (entry.Phase == CommandPhase.Completed)
+        );
+
+        Assert.True(condition: released.Dispatch);
+        Assert.False(condition: router.IsCommandHeld(command: ChannelCommand, slot: 0));
+        Assert.Empty(collection: router.SnapshotForTick(tick: 6UL, windowEndTick: ulong.MaxValue).Lanes);
+    }
+    [Fact]
     public void ATapFollowedByAFullSlotClearDeliversExactlyOneRelease() {
         var router = Router();
 

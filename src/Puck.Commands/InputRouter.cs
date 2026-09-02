@@ -388,6 +388,15 @@ public sealed partial class InputRouter : IDisposable {
                 state.HasPendingMomentaryRelease = true;
                 state.MomentaryEntry = entry;
             }
+        } else if (edge.Momentary) {
+            // A MOMENTARY release is the tap's own (see BindingChordEdge.Momentary): it discharges the one-tick
+            // obligation its press created and leaves everything else standing. A chord row and a page activator
+            // may name one destination, and dropping the hold here would stop it re-asserting a tick after an
+            // unrelated tap, with no cancellation ever reaching its handler.
+            DischargeMomentary(
+                commandId: commandId,
+                slot: slot
+            );
         } else {
             DropHeld(
                 commandId: commandId,
@@ -1089,6 +1098,33 @@ public sealed partial class InputRouter : IDisposable {
                 y: right.Entry.Source
             )
         );
+    }
+    // Discharges the one-tick obligation a Tapped activator's press left behind, dropping the command's carried state
+    // only when nothing else remains. Deliberately NOT DropHeld: a live hold on the same destination is a separate
+    // obligation owed to a control that is still physically down, and only that control's own release ends it.
+    private void DischargeMomentary(int slot, ushort commandId) {
+        if (
+            !m_heldBySlot.TryGetValue(
+            key: slot,
+            value: out var held
+        ) ||
+            !held.TryGetValue(
+            key: commandId,
+            value: out var state
+        )
+        ) {
+            return;
+        }
+
+        state.HasPendingMomentaryRelease = false;
+        state.MomentaryEntry = default;
+
+        if (state.IsEmpty) {
+            DropHeld(
+                commandId: commandId,
+                slot: slot
+            );
+        }
     }
     // Removes one command from a slot's held table and drops the now-empty slot entry — the single remove-and-prune
     // idiom every release path (focus loss, device disconnect, an inactive analog sample, a chord release) shares.
