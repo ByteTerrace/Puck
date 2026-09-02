@@ -54,7 +54,6 @@ public sealed class WorldCommandArgumentsTests {
         // Fewer tokens than the address names carries no tail at all.
         Assert.Equal(expected: string.Empty, actual: registry.Submit(line: "tail.after two").Output);
     }
-
     [Fact]
     public void ATrailingPositionalTokenIsStrippedWhateverWhitespacePrecedesIt() {
         var registry = Registry();
