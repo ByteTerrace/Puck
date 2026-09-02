@@ -52,9 +52,34 @@ public sealed class CommandEchoTests {
     [InlineData("[seat1]", "\"[seat1]\"")]
     [InlineData("a|b", "\"a|b\"")]
     [InlineData("say \"hi\"", "\"say \\\"hi\\\"\"")]
-    [InlineData("line\tbreak", "\"line\tbreak\"")]
+    // A backslash is not itself reserved — it is only special INSIDE a quoted run — so a path carrying one but no
+    // reserved character still rides through verbatim.
+    [InlineData("C:\\games\\", "C:\\games\\")]
+    // ...and when something else does force the quoting, the trailing backslash is escaped so it cannot swallow the
+    // closing '"' and leave the run unterminated.
+    [InlineData("C:\\my games\\", "\"C:\\\\my games\\\\\"")]
+    // Whitespace is char.IsWhiteSpace, not a listed set: a vertical tab and a non-breaking space split a reader that
+    // splits the way the wire tokenizer does, so both are reserved too.
+    [InlineData("a\vb", "\"a\vb\"")]
+    [InlineData("a\u00a0b", "\"a\u00a0b\"")]
     public void AValueIsQuotedExactlyWhenItCarriesAReservedCharacter(string value, string expected) {
         Assert.Equal(actual: CommandEcho.Quote(value: value), expected: expected);
+    }
+    [Theory]
+    [InlineData("line\tbreak", "\"line\\tbreak\"")]
+    [InlineData("two\nlines", "\"two\\nlines\"")]
+    [InlineData("two\r\nlines", "\"two\\r\\nlines\"")]
+    public void ALineBreakIsEscapedRatherThanCarriedSoAnEchoIsAlwaysOneLine(string value, string expected) {
+        var quoted = CommandEcho.Quote(value: value);
+
+        Assert.Equal(actual: quoted, expected: expected);
+
+        // The point of escaping rather than merely quoting these: a driver splits the stream into LINES before it
+        // looks for tokens, so a carried newline would tear the record in half no matter how well it was quoted.
+        Assert.DoesNotContain(actualString: CommandEcho.Open(verb: "world.note").Field(
+            key: "message",
+            value: value
+        ).Close(), comparisonType: StringComparison.Ordinal, expectedSubstring: "\n");
     }
     [Fact]
     public void AFieldValueCarryingADelimiterCannotEndTheTokenSegmentOrEnvelope() {
