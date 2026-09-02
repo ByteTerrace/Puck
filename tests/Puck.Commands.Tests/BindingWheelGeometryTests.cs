@@ -394,6 +394,7 @@ public sealed class BindingWheelGeometryTests {
             new BindingWheelStyleDefinition(SectorOffset: 0.9f),
         ];
     }
+
     [InlineData(-1)]
     [InlineData(0)]
     [Theory]
@@ -436,6 +437,7 @@ public sealed class BindingWheelGeometryTests {
             expected: "sectorCount"
         );
     }
+
     // The screen-space vector at an ABSOLUTE clockwise angle from twelve o'clock (0, -1), at a chosen magnitude.
     private static Vector2 VectorAt(double clockwise, double magnitude) {
         return new Vector2(

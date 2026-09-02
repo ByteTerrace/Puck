@@ -431,7 +431,6 @@ public sealed class BindingVocabularyCheckTests {
             lookups: null!
         ));
     }
-
     [Fact]
     public void ANullModifierRowIsSkippedNotThrown() {
         // The declared-modifier id set is built by projecting every row's Id; a null row NRE'd there, nine lines
@@ -495,7 +494,6 @@ public sealed class BindingVocabularyCheckTests {
             expectedSubstring: "names no registered command"
         );
     }
-
     [Fact]
     public void ADefaultReportReadsAsAnEmptyCleanOne() {
         // A struct's default is always reachable — an unassigned field, a `new T[n]` slot, a `default` in a switch

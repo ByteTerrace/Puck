@@ -12,7 +12,6 @@ namespace Puck.Commands.Tests;
 /// name the author never typed on the next save. Refusing the token is the only outcome that keeps a round-trip
 /// honest.</remarks>
 public sealed class CommandValueJsonConverterTests {
-    [Theory]
     [InlineData("0")]
     [InlineData("2")]
     [InlineData(" Axis2D")]
@@ -22,6 +21,7 @@ public sealed class CommandValueJsonConverterTests {
     [InlineData("axis2d")]
     [InlineData("Nonsense")]
     [InlineData("")]
+    [Theory]
     public void AKindThatIsNotAnExactDeclaredMemberNameIsRefused(string kind) {
         var exception = Assert.Throws<JsonException>(testCode: () => JsonSerializer.Deserialize<CommandValue>(json: $$"""{"kind":{{JsonSerializer.Serialize(value: kind)}},"raw":[0,0,0,0]}"""));
 
@@ -35,12 +35,12 @@ public sealed class CommandValueJsonConverterTests {
         // The JSON NUMBER form, distinct from the numeric STRING above: neither is a member name.
         _ = Assert.Throws<JsonException>(testCode: () => JsonSerializer.Deserialize<CommandValue>(json: """{"kind":2,"raw":[0,0,0,0]}"""));
     }
-    [Theory]
     [InlineData(CommandValueKind.Digital)]
     [InlineData(CommandValueKind.Axis1D)]
     [InlineData(CommandValueKind.Axis2D)]
     [InlineData(CommandValueKind.Axis3D)]
     [InlineData(CommandValueKind.Orientation)]
+    [Theory]
     public void EveryDeclaredKindRoundTripsByName(CommandValueKind kind) {
         var value = new CommandValue(
             Kind: kind,

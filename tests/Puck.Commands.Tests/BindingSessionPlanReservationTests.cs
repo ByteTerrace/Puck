@@ -106,7 +106,6 @@ public sealed class BindingSessionPlanReservationTests {
             expected: ["menu:pad.east", "grapple:pad.south",]
         );
     }
-
     [Fact]
     public void ANullRowOrMemberIsSkippedRatherThanDereferenced() {
         // The reservation walk was hardened against null COLLECTIONS but not against null ELEMENTS, so a hole in

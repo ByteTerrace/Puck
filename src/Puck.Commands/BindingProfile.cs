@@ -476,6 +476,7 @@ public static class BindingProfile {
             rowGroups: rowGroups
         )[pageRow.RowIndex];
     }
+
     // The one page-inheritance walk in this file, shared by Compile (which arrives with the row tables already
     // built) and EffectivePage (which rebuilds them). Sharing the WALK rather than only OverlayInheritedPage is the
     // point: the same-group rule, the empty-inherits refusal and the cycle refusal all live here, so the whole
@@ -565,7 +566,6 @@ public static class BindingProfile {
 
         return effectivePages;
     }
-
     // Page inheritance is authoring-only. Flattening it here keeps the input fold at one table lookup while giving
     // a modal page source-level overrides instead of forcing it to duplicate a resting page's unrelated controls.
     private static BindingPageDefinition OverlayInheritedPage(BindingPageDefinition inherited, BindingPageDefinition page) {
