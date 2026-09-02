@@ -27,7 +27,7 @@ public sealed class CommandInjectionSink {
 
     // Queues one pre-resolved command under this sink's bound identity and lane. Internal: the registry's text path is
     // the only producer, and admitting an external one would mean admitting whatever principal it asserted.
-    internal void Inject(ushort commandId, CommandValue value, CommandPhase phase, string? text, bool completesTextSubmission, TextSubmissionBarrier? submissionBarrier = null) {
+    internal void Inject(ushort commandId, CommandValue value, CommandPhase phase, string? text, TextSubmissionBarrier? submissionBarrier = null) {
         m_router.Enqueue(injection: new CommandInjection(
             CommandId: commandId,
             Value: value,
@@ -37,7 +37,6 @@ public sealed class CommandInjectionSink {
             Slot: m_slot,
             Text: text
         ) {
-            CompletesTextSubmission = completesTextSubmission,
             SubmissionBarrier = submissionBarrier,
         });
     }

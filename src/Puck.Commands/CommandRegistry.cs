@@ -842,7 +842,6 @@ public sealed class CommandRegistry {
                 value: value,
                 phase: CommandPhase.Started,
                 text: line,
-                completesTextSubmission: true,
                 submissionBarrier: session?.Barrier
             );
         } catch {

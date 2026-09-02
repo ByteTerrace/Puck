@@ -48,6 +48,28 @@ public sealed class WireArgsTests {
         Assert.Equal(expected: "False|False|False|False|0|0", actual: registry.Submit(line: "wire.optional").Output);
     }
     [Fact]
+    public void EveryWideningParseAnswersTheSameWayForAnAbsentToken() {
+        var registry = new CommandRegistry(modules: [new ProbeModule()]);
+
+        // TryLong/TryULong/TryUnsignedDigits are peers of TryInt/TryFloat, so an absent token is a miss for all of
+        // them too — half the family answering "no" and the other half throwing IndexOutOfRangeException would make
+        // "probe an optional argument" a per-method gamble.
+        Assert.Equal(expected: "False|False|False|0|0|0", actual: registry.Submit(line: "wire.optional.wide").Output);
+        Assert.Equal(expected: "True|True|True|12|12|12", actual: registry.Submit(line: "wire.optional.wide x x x x x x x x x 12").Output);
+    }
+    [Fact]
+    public void AFloatRunTooShortForItsRangeFailsBeforeItAllocates() {
+        var registry = new CommandRegistry(modules: [new ProbeModule()]);
+
+        // The common failure is a verb called with too few arguments: it yields the empty array, never a zeroed one
+        // sized for a range the tail could not hold.
+        Assert.Equal(expected: "False|0", actual: registry.Submit(line: "wire.floats 1 2").Output);
+        Assert.Equal(expected: "True|3", actual: registry.Submit(line: "wire.floats 1 2 3").Output);
+
+        // A present-but-unparsable token still yields the full-length array, zeroed from the token that failed.
+        Assert.Equal(expected: "False|3", actual: registry.Submit(line: "wire.floats 1 two 3").Output);
+    }
+    [Fact]
     public void NumericTokensParseInvariantlyAndFailAsIndividualTokens() {
         var registry = new CommandRegistry(modules: [new ProbeModule()]);
 
@@ -90,6 +112,30 @@ public sealed class WireArgsTests {
                     args.TryFloat(index: 9, value: out var absentReal),
                     absentInteger,
                     absentReal
+                )),
+                bindability: CommandBindability.Unbindable
+            );
+            yield return CommandDefinition.WithWireArgs(
+                name: "wire.optional.wide",
+                description: "Reports how the widening parses answer for a present and an absent token at index nine.",
+                handler: static (_, args) => new CommandResult(Output: string.Join(
+                    separator: '|',
+                    args.TryLong(index: 9, value: out var absentLong),
+                    args.TryULong(index: 9, value: out var absentUnsigned),
+                    args.TryUnsignedDigits(index: 9, value: out var absentDigits),
+                    absentLong,
+                    absentUnsigned,
+                    absentDigits
+                )),
+                bindability: CommandBindability.Unbindable
+            );
+            yield return CommandDefinition.WithWireArgs(
+                name: "wire.floats",
+                description: "Parses three consecutive floats, reporting the verdict and the array length it handed back.",
+                handler: static (_, args) => new CommandResult(Output: string.Join(
+                    separator: '|',
+                    args.TryFloats(count: 3, start: 0, values: out var values),
+                    values.Length
                 )),
                 bindability: CommandBindability.Unbindable
             );
