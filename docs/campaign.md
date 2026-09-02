@@ -113,6 +113,10 @@ reference radius. The latter lowers deterministically through the same softened
 fixed-point kernel the server solves; it does not infer force from a solid or
 SDF gradient. `world.gravity` exposes the authored promise, derived mass, and
 last solve work, while `world.budget` carries the source/evaluation price.
+Acceleration and contact support remain separate frame inputs: opposed solved
+gravity supplies ambient up in every world. Collision's `GradientDerivedUp`
+requirement additionally lets a measured walkable support normal own grounded
+orientation; without it, support is a grounding fact rather than a frame source.
 Bounded local `areas` now ride static or body-attached placements: inclusive
 sphere and yaw-local box bounds choose directional or inward-radial acceleration,
 then fold over the global answer by deterministic priority/authored order with

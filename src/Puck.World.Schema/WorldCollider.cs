@@ -227,8 +227,9 @@ public readonly record struct FixedWorldCollider(FixedBodyColliderVolume[] Volum
 /// <summary>The one-time fixed-point compilation of the world's contact tuning — read by the analytic contact field
 /// and the grounded integrator. <see cref="GroundedThreshold"/> is the compiled <c>cos(maxSlopeDegrees)</c> a contact
 /// normal's up-alignment must clear to ground a body (the same test both providers use). <see cref="GradientUp"/> is
-/// the compiled <see cref="WorldContactRequirement.GradientDerivedUp"/> requirement: without it the body up axis stays
-/// world <c>+Y</c>, so a vertical face pushes but never grounds.</summary>
+/// the compiled <see cref="WorldContactRequirement.GradientDerivedUp"/> requirement: it lets field gradients and
+/// measured support normals supply surface-relative up; without it, the caller's ambient up owns the walkable
+/// contact test.</summary>
 public readonly record struct FixedWorldCollision(
     FixedQ4816 ContactSkin,
     int MaxIterations,

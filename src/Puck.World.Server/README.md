@@ -63,7 +63,8 @@ static rows use authored pose, while attached rows refresh through
 participation is separate from vector magnitude, so a zero Replace, exact
 cancellation, or radial center suppresses kit fallback, while a body outside
 every area in an areas-only document retains it. The same participation verdict
-gates field-owned up/contact-normal behavior when a body crosses an area edge.
+gates gravity-derived ambient orientation when a body crosses an area edge and,
+under the surface-following body-frame policy, gates contact-normal orientation.
 `gravitationalConstant > 0` runs the global body-source solve even with no
 static attractors. Composition additions saturate per Q48.16 component instead
 of wrapping, and a later Replace remains an ordinary assignment.
@@ -181,6 +182,15 @@ rotated, rounded, non-box, smoothed, and boolean-carved geometry is therefore
 conservative there. A solid row participates in simulation, which is why
 mutating scene, screen, creation, or placement geometry is a real authority
 widening.
+
+Body-frame policy is compiled separately from that provider seam. Every body
+uses opposed solved gravity (or the contact field's ambient up fallback) as its
+ambient frame. Authoring `GradientDerivedUp` additionally selects
+surface-following: a measured walkable support normal may orient a grounded
+body. Without it, the normal remains a grounding fact, so a rounded lip cannot
+silently pitch the body. A live collision rebuild installs the new policy
+beside the new provider; the adoption rule is authoritative on the next step,
+and a defined new ambient direction reseats the held axis then.
 
 A kit shaping its planar velocity through a `dynamics` row (rather than the
 engage/release response table) carries the follower's Q32 state — position

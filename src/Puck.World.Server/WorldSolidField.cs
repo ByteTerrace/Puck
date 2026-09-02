@@ -21,9 +21,10 @@ namespace Puck.World.Server;
 /// a screen's right/up is a UV frame only, never a geometry rotation (see <see cref="SdfProgramBuilder"/>'s
 /// <c>ScreenSlab</c> overload doc). Orienting a screen volume for real is a two-surface arc — render and contact must
 /// both rotate together — and neither does today.</para>
-/// <para>"Up" is world <c>+Y</c> unless the world authors <see cref="WorldContactRequirement.GradientDerivedUp"/>,
-/// which derives it from the field gradient instead (a planetoid, an inverted ceiling, or the inside of a sphere are
-/// all walkable); without that requirement a vertical face pushes a body but never grounds it.</para>
+/// <para>The field's ambient "up" is world <c>+Y</c> unless the world authors
+/// <see cref="WorldContactRequirement.GradientDerivedUp"/>, which derives it from the field gradient instead (a
+/// planetoid, an inverted ceiling, or the inside of a sphere are all walkable). Contact resolution receives the
+/// body's already-resolved ambient up separately, so authored gravity may still define another walkability axis.</para>
 /// <para>Immutable and per-revision: it holds no per-body state, so one instance is shared by reference across all 128
 /// bodies and installing a rebuild is a single reference swap on <see cref="WorldServer"/>. The wrapped
 /// <see cref="SdfFieldEvaluator"/> holds only a managed <c>CompiledInstruction[]</c>, so a replaced instance needs no

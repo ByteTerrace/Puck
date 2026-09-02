@@ -1358,21 +1358,25 @@ public sealed partial class WorldBody {
 
             m_grounded = contactResolution.Grounded;
 
-            // A standing body's up is the SURFACE it stands on, not the direction its field pulls. The two differ
-            // wherever a floor is not perpendicular to the field — a flat floor under a field tilted by distant
-            // attractors is the ordinary case — and walking the field's tangent instead of the floor's carries the
-            // body off the floor a little further every tick.
+            // Under SurfaceFollowing, a standing body's up is the SURFACE it stands on, not the direction its field
+            // pulls. The two differ wherever a floor is not perpendicular to the field — a flat floor under a field
+            // tilted by distant attractors is the ordinary case — and walking the field's tangent instead of the
+            // floor's carries the body off the floor a little further every tick.
             //
             // The velocity is carried into the new frame by the SAME rotation. Decomposing motion that was tangent to
             // the old surface against a rotated up reads part of it as climbing, and the write-back below stores that
             // as ballistic velocity: on a sphere that is a launch, and the faster the body runs the harder it is
             // thrown off.
-            // Only where this body participates in an authored solved field: outside every area in an area-only world
-            // the up axis has a single source already (world +Y, or the field provider's own per-sample gradient), and
-            // adopting a measured contact normal on top would make it wobble, which a marginal handoff — an adjacency
-            // seam strip — cannot absorb.
+            // Only under SurfaceFollowing: a measured normal is a fact about the surface, and only a body policy that
+            // admits surface-following may let it move the axis — a rounded lip or a blended corner tilts the normal,
+            // and adopting that tilt under Ambient pitches the body over and lets the face beside it read as
+            // ground. And only where this body participates in an authored solved field:
+            // outside every area in an area-only world the up axis has a single source already (the field provider's
+            // own per-sample gradient), and adopting a measured contact normal on top would make it wobble, which a
+            // marginal handoff — an adjacency seam strip — cannot absorb.
             if (
                 m_grounded &&
+                (m_upPolicy == WorldBodyUpPolicy.SurfaceFollowing) &&
                 TrySolvedGravity(acceleration: out _) &&
                 (contactResolution.GroundNormal != FixedVector3.Zero)
             ) {
@@ -1386,12 +1390,23 @@ public sealed partial class WorldBody {
                 // The ceiling is far above any real curvature (a body at full sprint on the tightest planetoid turns
                 // its normal an order of magnitude slower), so ordinary running still tracks the surface exactly and
                 // only a discontinuity is spread — over a few ticks, which reads as instant.
-                var transport = SteerUpToward(
-                    accumulator: ref m_contactUpTurnAccumulator,
-                    halfRate: ContactUpTurnHalfRate,
-                    stepTicks: scratch.StepTicks,
-                    target: contactResolution.GroundNormal
-                );
+                FixedQuaternion transport;
+
+                if (m_upNeedsReseat) {
+                    m_upNeedsReseat = false;
+                    transport = FixedQuaternion.FromTo(
+                        from: m_up,
+                        to: contactResolution.GroundNormal
+                    );
+                    SetUp(next: contactResolution.GroundNormal);
+                } else {
+                    transport = SteerUpToward(
+                        accumulator: ref m_contactUpTurnAccumulator,
+                        halfRate: ContactUpTurnHalfRate,
+                        stepTicks: scratch.StepTicks,
+                        target: contactResolution.GroundNormal
+                    );
+                }
 
                 resolvedVelocity = transport.Rotate(vector: resolvedVelocity);
                 scratch.Up = m_up;
@@ -1465,11 +1480,6 @@ public sealed partial class WorldBody {
             m_obstructionWitnessGraceTicks = 0;
         }
     }
-    // The body up axis this grounded step integrates against. The contact field answers it (constant +Y from the
-    // analytic provider AND from a field provider without GradientDerivedUp; the surface gradient only when the world
-    // authors that requirement); a degenerate field query leaves the held value
-    // untouched rather than snapping to something arbitrary. Only a collider-bearing kit with a field pays the query;
-    // everything else keeps +Y, so the flat world never calls TryUp and integrates byte-identically.
     // A body's own authored-field answer this tick, or false when the world authors no field or this body matched no
     // local area in an area-only field. True does NOT imply a nonzero vector: Replace can author a zero-G pocket,
     // Combine can cancel exactly, and a radial contribution is zero at its own centre.
@@ -1604,13 +1614,18 @@ public sealed partial class WorldBody {
 
         return step;
     }
+    // The ONE body-frame authority. Every policy follows solved gravity (or the contact field's ambient fallback),
+    // preserving gravity's existing directional contract. SurfaceFollowing alone may keep a measured support normal
+    // while grounded. A degenerate ambient query leaves the held value untouched rather than snapping to an arbitrary
+    // direction. Centralizing every policy arm here makes a live policy rebuild authoritative on the very next step
+    // instead of retaining whichever surface the previous policy last adopted.
     private FixedVector3 ResolveUp(ulong stepTicks) {
-
-        // A STANDING body's up is the surface it stands on, and it keeps it. The two candidates disagree wherever a
-        // surface is not perpendicular to the field — every point of a planetoid under any second attractor — and
-        // recomputing from the field each tick would flip the axis back and forth between them, rotating the planar
-        // velocity one way and then the other until the body simply stops making progress.
+        // A SurfaceFollowing STANDING body's up is the surface it stands on, and it keeps it. The two candidates
+        // disagree wherever a surface is not perpendicular to the field — every point of a planetoid under any second
+        // attractor — and recomputing from the field each tick would flip the axis back and forth between them,
+        // rotating the planar velocity one way and then the other until the body simply stops making progress.
         if (
+            (m_upPolicy == WorldBodyUpPolicy.SurfaceFollowing) &&
             m_grounded &&
             TrySolvedGravity(acceleration: out _) &&
             (m_up != FixedVector3.Zero)
@@ -1652,6 +1667,10 @@ public sealed partial class WorldBody {
             up: out var up
         )
         ) {
+            if (m_upNeedsReseat) {
+                m_upNeedsReseat = false;
+            }
+
             SetUp(next: up);
         }
 

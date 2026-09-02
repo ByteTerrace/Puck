@@ -41,6 +41,7 @@ public sealed partial class WorldPopulation {
             channels: m_channels,
             section: definition.Attachment
         );
+        m_bodyUpPolicy = WorldBodyUpPolicyCompiler.Compile(collision: definition.Collision);
         m_targetRows = definition.TargetRegisters;
         m_targets = WorldTargetRegisterTable.Compile(
             registers: definition.TargetRegisters,
@@ -431,7 +432,10 @@ public sealed partial class WorldPopulation {
         // velocity, intent, and every other body property remain untouched.
         for (var index = 0; (index < Capacity); index++) {
             if (m_entries[index] is { Active: true, Body: { } body }) {
-                body.SetContactField(field: m_contactField);
+                body.SetContactConfiguration(
+                    field: m_contactField,
+                    upPolicy: m_bodyUpPolicy
+                );
                 body.SetGravityField(field: m_gravityField);
             }
         }
@@ -550,7 +554,10 @@ public sealed partial class WorldPopulation {
             );
             // Hand the (possibly rebuilt) contact field to every live body, so a live solid-geometry or collision-tuning
             // edit takes effect on the next tick.
-            body.SetContactField(field: m_contactField);
+            body.SetContactConfiguration(
+                field: m_contactField,
+                upPolicy: m_bodyUpPolicy
+            );
             body.SetGravityField(field: m_gravityField);
             body.SetAttachmentPolicy(policy: m_fixedAttachment);
         }

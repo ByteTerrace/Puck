@@ -74,6 +74,9 @@ public sealed partial class WorldBody {
     private static readonly FixedQ4816 ContactUpTurnHalfRate = FixedQ4816.FromDouble(value: 6.28318530717959d);
 
     private IContactField? m_contactField;
+    // The body-owned frame policy compiled from the world document. The contact field remains a geometry seam and
+    // never carries this integration decision, so wrapping or replacing a provider cannot silently change it.
+    private WorldBodyUpPolicy m_upPolicy;
 
     // The population's live gravity field and this body's index into it, refreshed per Advance.
     private int m_entityIndex = -1;
@@ -274,9 +277,9 @@ public sealed partial class WorldBody {
     // recompile (the clocks are bound to the OLD table shape).
     private ulong[] m_motionRecency = [];
     // The body's up axis — the direction its gravity opposes, its planar move plane is perpendicular to, and its attitude
-    // stands against. Constant +Y under the analytic provider; the FIELD provider derives it from the surface gradient
-    // each grounded step (arbitrary-up /
-    // planetoid walking as a data choice), HELD from the previous step when a query is degenerate.
+    // stands against. Ambient follows opposed solved gravity or the contact field's fallback; SurfaceFollowing also
+    // admits a measured support normal while grounded. Held from the previous step only when the active policy's
+    // ambient query is degenerate.
     private FixedVector3 m_up = UnitY;
 
     // Set by a teleport: the next up resolve SNAPS to the field instead of steering toward it, because the body did

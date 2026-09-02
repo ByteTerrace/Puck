@@ -28,7 +28,10 @@ public sealed partial class WorldPopulation {
             planarDynamics: kit.PlanarDynamics
         );
 
-        body.SetContactField(field: m_contactField);
+        body.SetContactConfiguration(
+            field: m_contactField,
+            upPolicy: m_bodyUpPolicy
+        );
         body.SetGravityField(field: m_gravityField);
         body.SetAttachmentPolicy(policy: m_fixedAttachment);
 
@@ -88,7 +91,10 @@ public sealed partial class WorldPopulation {
             planarDynamics: kit.PlanarDynamics
         );
 
-        player.SetContactField(field: m_contactField);
+        player.SetContactConfiguration(
+            field: m_contactField,
+            upPolicy: m_bodyUpPolicy
+        );
         player.SetGravityField(field: m_gravityField);
         player.SetAttachmentPolicy(policy: m_fixedAttachment);
 
@@ -253,7 +259,10 @@ public sealed partial class WorldPopulation {
             Profile = profile,
         };
 
-        body.SetContactField(field: m_contactField);
+        body.SetContactConfiguration(
+            field: m_contactField,
+            upPolicy: m_bodyUpPolicy
+        );
         body.SetGravityField(field: m_gravityField);
         body.SetAttachmentPolicy(policy: m_fixedAttachment);
 
@@ -847,7 +856,10 @@ public sealed partial class WorldPopulation {
             Profile = profile,
         };
 
-        body.SetContactField(field: m_contactField);
+        body.SetContactConfiguration(
+            field: m_contactField,
+            upPolicy: m_bodyUpPolicy
+        );
         body.SetGravityField(field: m_gravityField);
         body.SetAttachmentPolicy(policy: m_fixedAttachment);
         body.Pose(

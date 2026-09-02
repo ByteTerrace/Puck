@@ -145,6 +145,10 @@ public sealed partial class WorldPopulation {
     // band, or m_baseContactField unwrapped otherwise. Composed by
     // ComposeContactField, the ONE place either input changes.
     private IContactField? m_baseContactField;
+    // The authoritative body-frame policy compiled from the collision requirements. Contact providers report
+    // geometric facts; every body receives this policy separately so provider composition (including adjacency)
+    // never decides how those facts orient simulation state.
+    private WorldBodyUpPolicy m_bodyUpPolicy;
     private WorldContactCensus m_contactCensus;
     private IContactField? m_contactField;
     // The compiled population distribution (fixed point). SIM-AFFECTING: SeedSimulated reads only this, never the authored floats.

@@ -925,8 +925,9 @@ public sealed class FixedFieldContactSolver(
     }
     /// <inheritdoc/>
     public bool TryUp(in FixedVector3 position, out FixedVector3 up) {
-        // Gradient-derived up is authored (WorldContactRequirement.GradientDerivedUp), never assumed: a flat-up world
-        // keeps world +Y so its walls push without ever grounding, at zero field-query cost.
+        // Gradient-derived ambient up is authored (WorldContactRequirement.GradientDerivedUp), never assumed. When
+        // disabled this provider answers +Y at zero field-query cost; a caller may still pass another resolved up to
+        // the contact solve (for example, one opposed to authored gravity).
         if (!m_gradientUp) {
             up = UnitY;
 

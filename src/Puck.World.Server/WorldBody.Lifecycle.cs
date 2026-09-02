@@ -532,8 +532,26 @@ public sealed partial class WorldBody {
     public void SetContactField(IContactField? field) {
         m_contactField = field;
     }
-    /// <summary>Sets (or clears) the world gravity field this body reads its solved acceleration and up axis from —
-    /// the population hands it the live field on activation and every rebuild.</summary>
+    /// <summary>Sets the contact field together with the body-frame policy compiled from the same live definition.
+    /// This is the population's activation/rebuild seam; keeping the policy out of <see cref="IContactField"/> leaves
+    /// that public physics abstraction provider-neutral.</summary>
+    /// <param name="field">The world contact field.</param>
+    /// <param name="upPolicy">The body-frame policy compiled from the live world's contact requirements.</param>
+    internal void SetContactConfiguration(IContactField? field, WorldBodyUpPolicy upPolicy) {
+        SetContactField(field: field);
+
+        if (m_upPolicy != upPolicy) {
+            // A policy transition invalidates the authority that produced the held axis. Snap to the new ambient
+            // authority on the next resolve, and discard fractional turn budgets accumulated under the old one.
+            m_upNeedsReseat = true;
+            m_upTurnAccumulator.Reset();
+            m_contactUpTurnAccumulator.Reset();
+        }
+
+        m_upPolicy = upPolicy;
+    }
+    /// <summary>Sets (or clears) the world gravity field this body reads its solved acceleration and ambient up axis
+    /// from — the population hands it the live field on activation and every rebuild.</summary>
     /// <param name="field">The world gravity field, or <see langword="null"/> for a world authoring none.</param>
     public void SetGravityField(WorldGravityField? field) {
         m_gravityField = field;

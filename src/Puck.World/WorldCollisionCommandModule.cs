@@ -209,7 +209,7 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.collision.probe",
-            description: "Reads the live field the simulation solves against (Immediate): world.collision.probe <x> <y> <z> prints signed distance, material, unit gradient, and an up= column (gradient when GradientDerivedUp is authored, +Y otherwise — the body up axis, not the printed gradient, which is always the contact-push normal). Requires a field-selecting contact requirement.",
+            description: "Reads the live field the simulation solves against (Immediate): world.collision.probe <x> <y> <z> prints signed distance, material, unit gradient, and the field's ambient up mode (gradient when GradientDerivedUp is authored, +Y otherwise). Body-frame policy separately decides whether that candidate, solved gravity, or a measured support normal may orient a body. Requires a field-selecting contact requirement.",
             handler: (_, args) => Probe(args: args)
         );
         yield return CommandDefinition.WithWireArgs(

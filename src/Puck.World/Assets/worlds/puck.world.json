@@ -150,8 +150,7 @@
     "maxIterations": 4,
     "maxSlopeDegrees": 60.0,
     "requirements": [
-      "SmoothUnionContact",
-      "GradientDerivedUp"
+      "SmoothUnionContact"
     ]
   },
   "defaultSeatKit": "walker",

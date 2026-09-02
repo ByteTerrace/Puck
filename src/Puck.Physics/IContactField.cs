@@ -48,8 +48,8 @@ public interface IContactField {
             velocity: ref velocity,
             volumes: volumes
         );
-    /// <summary>Returns the world up axis at a position — the direction a grounded body's gravity opposes and a
-    /// standing test aligns against.</summary>
+    /// <summary>Returns this provider's ambient up candidate at a position. The consuming integrator decides whether
+    /// that geometric fact may orient a body; contact providers do not own body-frame policy.</summary>
     /// <param name="position">The body's foot point.</param>
     /// <param name="up">The unit up axis on return.</param>
     /// <returns><see langword="true"/> when an up axis is available.</returns>
@@ -91,14 +91,13 @@ public interface IContactField {
     }
 }
 /// <summary>The outcome of one <see cref="IContactField.Resolve"/> call — the grounded verdict every integrator
-/// consults, plus the last resolved non-walkable contact's surface normal. The normal is read-back only: it feeds no
-/// integration and changes no simulation behavior.</summary>
+/// consults, plus measured walkable and non-walkable contact normals. The obstruction normal is read-back only;
+/// an integrator may adopt the ground normal according to its own body-frame policy.</summary>
 /// <param name="Grounded"><see langword="true"/> when the body is standing on a walkable surface after resolution.</param>
 /// <param name="ObstructionNormal">The last resolved non-walkable contact's unit surface normal this call, or
 /// <see cref="FixedVector3.Zero"/> when nothing obstructed the body. A walkable push (the ground, a ramp) never
 /// writes this — only a contact whose alignment fails the grounded test does.</param>
 /// <param name="GroundNormal">The unit surface normal of the last WALKABLE push, or <see cref="FixedVector3.Zero"/>
-/// when the body did not ground. A standing body's up is the surface it stands on, not the direction its gravity
-/// pulls: the two differ wherever a floor is not perpendicular to the field, and walking the field's tangent instead
-/// of the floor's would carry the body off a flat floor.</param>
+/// when the body did not ground. This is a measured contact fact, not an instruction to rotate the body; the
+/// consuming integrator's frame policy decides whether to adopt it.</param>
 public readonly record struct ContactResolution(bool Grounded, FixedVector3 ObstructionNormal, FixedVector3 GroundNormal = default);

@@ -173,7 +173,10 @@ public sealed partial class WorldPopulation {
                 profile: profile
             );
 
-            body.SetContactField(field: m_contactField);
+            body.SetContactConfiguration(
+                field: m_contactField,
+                upPolicy: m_bodyUpPolicy
+            );
             body.SetGravityField(field: m_gravityField);
             body.SetAttachmentPolicy(policy: m_fixedAttachment);
             body.Pose(
