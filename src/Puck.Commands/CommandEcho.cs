@@ -28,9 +28,17 @@ namespace Puck.Commands;
 /// it did. One that needs it is emitted as a double-quoted run in which <c>'\'</c> and <c>'"'</c> are
 /// backslash-escaped and a line break is escaped rather than carried (<c>\n</c>, <c>\r</c>, and <c>\t</c> beside
 /// them) — quoting a raw newline would still leave the record split across two lines, which is precisely the split a
-/// line-oriented driver makes FIRST, before it unquotes anything. An echo is therefore always exactly one line.
-/// Undoing it is one pass: a token starting with <c>'"'</c> runs to the next unescaped <c>'"'</c>, and inside it
-/// <c>\n</c>, <c>\r</c> and <c>\t</c> are those three characters while <c>\x</c> is <c>x</c>.</para>
+/// line-oriented driver makes FIRST, before it unquotes anything. An echo is therefore always exactly one line.</para>
+/// <para><b>Reading it back.</b> The quoting opens where the VALUE begins, not where the token does — a
+/// <see cref="Field(string, string)"/> emits <c>key="…"</c> and a <see cref="SpliceTag(string, string, string)"/> emits
+/// <c>prefix:"…"</c> — so a reader that splits the envelope body on whitespace first has already torn
+/// <c>path="C:\\my games"</c> into two pieces before it looks for a quote. Undoing an echo is therefore ONE pass over
+/// the line, not a split followed by an unquote: a token runs until the first whitespace that is not inside a quoted
+/// run; a <c>'"'</c> opens or closes such a run and is not itself part of the value; and inside a run <c>\n</c>,
+/// <c>\r</c> and <c>\t</c> are those three characters while <c>\x</c> is <c>x</c>.
+/// <see cref="TryReadToken(string, ref int, out string)"/> is that pass, and
+/// <see cref="Unquote(string)"/> is the exact inverse of <see cref="Quote(string)"/> for one token already in hand —
+/// they exist so a driver reads back through the writer's own rule instead of a second, drifting copy of it.</para>
 /// <para><see cref="Head(string)"/> and <see cref="Text(string)"/> are deliberately NOT quoted: a head word is a
 /// declared literal from a closed set, and <see cref="Text(string)"/> exists precisely for a prose segment nobody
 /// machine-parses. Anything a driver reads back is a <see cref="Field(string, string)"/>.</para>
@@ -95,6 +103,111 @@ public sealed class CommandEcho {
         }
 
         return builder.Append(value: '"').ToString();
+    }
+    /// <summary>Reads one whole token out of an echo line, starting at <paramref name="index"/>, and decodes it — the
+    /// ONE pass that undoes what this writer emits, and the exact inverse of the token shapes
+    /// <see cref="Field(string, string)"/>, <see cref="Head(string)"/> and
+    /// <see cref="SpliceTag(string, string, string)"/> produce.</summary>
+    /// <remarks>Leading whitespace is skipped, then the token runs to the first whitespace OUTSIDE a quoted run. A
+    /// <c>'"'</c> opens or closes a run and is never part of the value, so <c>key="a b"</c> comes back whole as
+    /// <c>key=a b</c>; inside a run <c>\n</c>, <c>\r</c> and <c>\t</c> decode to those characters and <c>\x</c> to
+    /// <c>x</c>. Splitting the line on whitespace FIRST and unquoting afterwards cannot work — the quoting opens where
+    /// the value does, mid-token, so the split has already landed inside it.
+    /// <para>This reads tokens, not structure: the caller still decides what the envelope, the <c>" | "</c> segment
+    /// separators, and a token's own <c>=</c> or <c>:</c> mean.</para></remarks>
+    /// <param name="line">The echo line to read.</param>
+    /// <param name="index">The position to read from; on return, the position just past the token that was read.</param>
+    /// <param name="token">The decoded token, or <see cref="string.Empty"/> when none remained.</param>
+    /// <returns><see langword="true"/> when a token was read; <see langword="false"/> at the end of the line.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="line"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is negative or past the line's end.</exception>
+    public static bool TryReadToken(string line, ref int index, out string token) {
+        ArgumentNullException.ThrowIfNull(line);
+        ArgumentOutOfRangeException.ThrowIfNegative(index);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            other: line.Length,
+            value: index
+        );
+
+        while (
+            (index < line.Length) &&
+            char.IsWhiteSpace(c: line[index])
+        ) {
+            index++;
+        }
+
+        if (index >= line.Length) {
+            token = string.Empty;
+
+            return false;
+        }
+
+        var builder = new StringBuilder();
+        var quoted = false;
+
+        while (index < line.Length) {
+            var character = line[index];
+
+            if (
+                !quoted &&
+                char.IsWhiteSpace(c: character)
+            ) {
+                break;
+            }
+
+            if (character == '"') {
+                quoted = !quoted;
+                index++;
+
+                continue;
+            }
+
+            // Escapes are read only INSIDE a run, because Quote only writes them there: an unquoted value carrying a
+            // backslash (`C:\games\`) needed no quoting in the first place and means the backslash literally.
+            if (
+                quoted &&
+                (character == '\\') &&
+                ((index + 1) < line.Length)
+            ) {
+                _ = builder.Append(value: (line[index + 1] switch {
+                    'n' => '\n',
+                    'r' => '\r',
+                    't' => '\t',
+                    var escaped => escaped,
+                }));
+                index += 2;
+
+                continue;
+            }
+
+            _ = builder.Append(value: character);
+            index++;
+        }
+
+        token = builder.ToString();
+
+        return true;
+    }
+    /// <summary>Decodes one token already in hand — the exact inverse of <see cref="Quote(string)"/>, so
+    /// <c>Unquote(Quote(v)) == v</c> for every <paramref name="token"/> this writer can emit.</summary>
+    /// <remarks>Reads by the same one-pass rule <see cref="TryReadToken(string, ref int, out string)"/> applies, and
+    /// therefore stops at the first whitespace outside a quoted run. Pass exactly what <see cref="Quote(string)"/>
+    /// returned; a reader working from a whole line wants <see cref="TryReadToken(string, ref int, out string)"/>
+    /// instead, which finds the token boundaries the split cannot.</remarks>
+    /// <param name="token">The token text, as this writer emitted it.</param>
+    /// <returns>The decoded value.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="token"/> is <see langword="null"/>.</exception>
+    public static string Unquote(string token) {
+        var index = 0;
+
+        return (TryReadToken(
+            index: ref index,
+            line: token,
+            token: out var decoded
+        )
+            ? decoded
+            : string.Empty
+        );
     }
 
     // Whether a driver's own split could land inside this value. Whitespace is tested by CATEGORY rather than against
@@ -202,7 +315,8 @@ public sealed class CommandEcho {
     /// <see cref="Quote(string)"/>, which is enough for the whole tag to stay one token.
     /// <para>A quoted value reads back exactly as <see cref="Field(string, string)"/>'s does: the console's own
     /// splitter removes the pair when the line is resubmitted, so <c>instance:"my world"</c> reaches a verb as the
-    /// single token <c>instance:my world</c>.</para>
+    /// single token <c>instance:my world</c>, and <see cref="TryReadToken(string, ref int, out string)"/> is the same
+    /// rule for a driver reading the echo directly.</para>
     /// </remarks>
     /// <param name="text">The bracketed echo to tag.</param>
     /// <param name="prefix">The tag's declared literal key, including its own separator (e.g. <c>instance:</c>).</param>

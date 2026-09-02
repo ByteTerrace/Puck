@@ -170,6 +170,75 @@ public sealed class CommandEchoTests {
         Assert.StartsWith(actualString: token, comparisonType: StringComparison.Ordinal, expectedStartString: "instance:");
     }
 
+    [Theory]
+    // Every shape Quote can emit round-trips through its own inverse, including the ones the old published rule got
+    // wrong: a value carrying spaces, quotes, backslashes, the envelope's own ']' and the segment '|', and the line
+    // breaks that are escaped rather than carried.
+    [InlineData("plain")]
+    [InlineData("C:\\my games\\cache")]
+    [InlineData("[seat1|seat2]")]
+    [InlineData("he said \"hi\"")]
+    [InlineData("two\nlines")]
+    [InlineData("carriage\r\nreturn")]
+    [InlineData("line\tbreak")]
+    [InlineData("a\vb")]
+    [InlineData("")]
+    public void QuoteAndUnquoteAreExactInverses(string value) {
+        Assert.Equal(actual: CommandEcho.Unquote(token: CommandEcho.Quote(value: value)), expected: value);
+    }
+    [Fact]
+    public void AWholeEchoLineDecodesInOnePassThatASplitCannotDo() {
+        var line = CommandEcho.Open(verb: "world.update")
+            .Field(key: "path", value: "C:\\my games")
+            .Field(key: "members", value: "[seat1|seat2]")
+            .Segment()
+            .Head(head: "listing")
+            .Close();
+        var tokens = new List<string>();
+        var index = 0;
+
+        while (CommandEcho.TryReadToken(
+            index: ref index,
+            line: line,
+            token: out var token
+        )) {
+            tokens.Add(item: token);
+        }
+
+        // The quoting opens where the VALUE does, mid-token, so a driver that split on whitespace FIRST got
+        // `path="C:\\my` and `games"` and decoded neither. One pass keeps the field whole.
+        Assert.Equal(actual: tokens, expected: ["[world.update:", "path=C:\\my games", "members=[seat1|seat2]", "|", "listing]"]);
+    }
+    [Fact]
+    public void ASplicedTagDecodesThroughTheSameOnePass() {
+        var tagged = CommandEcho.SpliceTag(
+            prefix: "instance:",
+            text: CommandEcho.Open(verb: "world.inhabitants").Field(key: "bodyIndex", value: 0).Close(),
+            value: "my world"
+        );
+        var tokens = new List<string>();
+        var index = 0;
+
+        while (CommandEcho.TryReadToken(
+            index: ref index,
+            line: tagged,
+            token: out var token
+        )) {
+            tokens.Add(item: token);
+        }
+
+        Assert.Equal(actual: tokens, expected: ["[world.inhabitants:", "bodyIndex=0", "instance:my world]"]);
+    }
+    [Fact]
+    public void ReadingPastTheEndOfALineAnswersFalseRatherThanLooping() {
+        var index = 0;
+
+        Assert.True(condition: CommandEcho.TryReadToken(index: ref index, line: "  only  ", token: out var token));
+        Assert.Equal(actual: token, expected: "only");
+        Assert.False(condition: CommandEcho.TryReadToken(index: ref index, line: "  only  ", token: out var trailing));
+        Assert.Equal(actual: trailing, expected: string.Empty);
+    }
+
     private sealed class TokenProbeModule(List<string> seen) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
