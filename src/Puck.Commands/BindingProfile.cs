@@ -422,76 +422,148 @@ public static class BindingProfile {
         );
     }
 
-    // The single-page reading of the flattening Compile does in bulk: walk one page's Inherits chain to its root and
-    // apply the overlays back outward. Compile resolves EVERY page at once (memoized per row, with the same-group
-    // check the row indices make cheap), so it cannot answer for a caller holding only a document and one page id —
-    // BindingSessionPlan.FromPage is that caller, and reading a page's raw Entries there walked only the overrides
-    // while every runtime reader saw the flattened set. Both routes apply the SAME OverlayInheritedPage, which is
-    // where the rule actually lives; the duplication here is the walk, not the rule.
+    // The single-page reading of the flattening Compile does in bulk, for a caller holding only a document and one
+    // page id — BindingSessionPlan.FromPage is that caller, and reading a page's raw Entries there walked only the
+    // overrides while every runtime reader saw the flattened set. It re-derives the two tables the walk needs (the
+    // group each row sits in, the row each page id names) and then runs the SAME ResolveEffectivePages: a walk of
+    // its own here is what let the plan flatten across a group boundary Compile refuses, so the rule has exactly one
+    // implementation and the two routes cannot disagree about which documents are legal.
     internal static BindingPageDefinition? EffectivePage(BindingProfileDocument document, string pageId) {
-        var pagesById = new Dictionary<string, BindingPageDefinition>(comparer: StringComparer.Ordinal);
+        var documentRows = (document.Chords ?? []);
+        var groupIndexByName = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
+        var pageRowsById = new Dictionary<string, (int GroupIndex, int RowIndex)>(comparer: StringComparer.Ordinal);
+        var rowGroups = new int[documentRows.Count];
 
-        foreach (var row in (document.Chords ?? [])) {
+        for (var rowIndex = 0; (rowIndex < documentRows.Count); rowIndex++) {
+            var row = documentRows[rowIndex];
+            // A row naming no group is Compile's refusal to make, in its own words; here it simply sits in the
+            // anonymous group, where it can inherit nothing and nothing can inherit it.
+            var rowGroup = (ResolveIdentifier(identifier: row?.Group) ?? string.Empty);
+
+            if (!groupIndexByName.TryGetValue(
+                key: rowGroup,
+                value: out var groupIndex
+            )) {
+                groupIndex = groupIndexByName.Count;
+                groupIndexByName[rowGroup] = groupIndex;
+            }
+
+            rowGroups[rowIndex] = groupIndex;
+
             if (
-                (row?.Page is { } candidate) &&
-                !string.IsNullOrEmpty(value: candidate.Id)
+                (row?.Page is { } page) &&
+                !string.IsNullOrEmpty(value: page.Id)
             ) {
-                _ = pagesById.TryAdd(
-                    key: candidate.Id,
-                    value: candidate
+                // First row wins, exactly as Compile's own TryAdd does before it refuses the duplicate by name.
+                _ = pageRowsById.TryAdd(
+                    key: page.Id,
+                    value: (GroupIndex: groupIndex, RowIndex: rowIndex)
                 );
             }
         }
 
-        if (!pagesById.TryGetValue(
+        if (!pageRowsById.TryGetValue(
             key: pageId,
-            value: out var page
+            value: out var pageRow
         )) {
             return null;
         }
 
-        // Descend to the root, then overlay outward. A cycle would otherwise spin forever here; Compile refuses the
-        // same document by name, so this walk refuses rather than pretending the chain ended.
-        var chain = new List<BindingPageDefinition>();
-        var walked = new HashSet<string>(comparer: StringComparer.Ordinal);
+        return ResolveEffectivePages(
+            document: document,
+            documentRows: documentRows,
+            pageRowsById: pageRowsById,
+            rowGroups: rowGroups
+        )[pageRow.RowIndex];
+    }
+    // The one page-inheritance walk in this file, shared by Compile (which arrives with the row tables already
+    // built) and EffectivePage (which rebuilds them). Sharing the WALK rather than only OverlayInheritedPage is the
+    // point: the same-group rule, the empty-inherits refusal and the cycle refusal all live here, so the whole
+    // document is resolved — and refused — identically whichever door asked.
+    private static BindingPageDefinition?[] ResolveEffectivePages(BindingProfileDocument document, IReadOnlyList<BindingChordDefinition> documentRows, Dictionary<string, (int GroupIndex, int RowIndex)> pageRowsById, int[] rowGroups) {
+        var effectivePages = new BindingPageDefinition?[documentRows.Count];
+        // Marked while a row sits on the chain currently being walked; a chain that re-enters a marked row is a cycle.
+        // A finished row needs no mark of its own — its effective page IS the record that it is done.
+        var pageInProgress = new bool[documentRows.Count];
 
-        while (true) {
-            if (!walked.Add(item: page.Id)) {
-                throw new ArgumentException(
-                    message: $"Page inheritance contains a cycle at page \"{page.Id}\".",
-                    paramName: nameof(document)
+        // Walked as an explicit chain rather than by recursion: an inheritance depth is bounded only by the number of
+        // authored pages, so a generated document a few thousand pages deep would have overflowed the stack — an
+        // uncatchable process kill — before the cycle refusal below ever got to speak. The descent collects the chain
+        // to the first page that inherits nothing (or is already resolved); the ascent applies the overlays outward.
+        var chain = new List<int>();
+
+        void ResolvePage(int startRowIndex) {
+            chain.Clear();
+
+            var rowIndex = startRowIndex;
+
+            while (effectivePages[rowIndex] is null) {
+                if (pageInProgress[rowIndex]) {
+                    throw new ArgumentException(
+                        message: $"Page inheritance contains a cycle at page \"{documentRows[rowIndex].Page!.Id}\".",
+                        paramName: nameof(document)
+                    );
+                }
+
+                pageInProgress[rowIndex] = true;
+                chain.Add(item: rowIndex);
+
+                var page = documentRows[rowIndex].Page!;
+
+                if (page.Inherits is not { Length: > 0 } inheritedId) {
+                    if (page.Inherits is not null) {
+                        throw new ArgumentException(
+                            message: $"Page \"{page.Id}\" carries an empty inherited page id.",
+                            paramName: nameof(document)
+                        );
+                    }
+
+                    effectivePages[rowIndex] = page;
+
+                    break;
+                }
+
+                if (
+                    !pageRowsById.TryGetValue(
+                    key: inheritedId,
+                    value: out var inheritedRow
+                ) ||
+                    (inheritedRow.GroupIndex != rowGroups[rowIndex])
+                ) {
+                    throw new ArgumentException(
+                        message: $"Page \"{page.Id}\" inherits invalid page \"{inheritedId}\"; inherited pages must exist in the same group.",
+                        paramName: nameof(document)
+                    );
+                }
+
+                rowIndex = inheritedRow.RowIndex;
+            }
+
+            for (var chainIndex = (chain.Count - 1); (chainIndex >= 0); chainIndex--) {
+                var chainRowIndex = chain[chainIndex];
+
+                if (effectivePages[chainRowIndex] is not null) {
+                    continue;
+                }
+
+                var page = documentRows[chainRowIndex].Page!;
+
+                effectivePages[chainRowIndex] = OverlayInheritedPage(
+                    inherited: effectivePages[pageRowsById[page.Inherits!].RowIndex]!,
+                    page: page
                 );
             }
-
-            chain.Add(item: page);
-
-            if (page.Inherits is not { Length: > 0 } inheritedId) {
-                break;
-            }
-
-            if (!pagesById.TryGetValue(
-                key: inheritedId,
-                value: out var inherited
-            )) {
-                throw new ArgumentException(
-                    message: $"Page \"{page.Id}\" inherits invalid page \"{inheritedId}\"; inherited pages must exist in the same group.",
-                    paramName: nameof(document)
-                );
-            }
-
-            page = inherited;
         }
 
-        var effective = chain[^1];
-
-        for (var chainIndex = (chain.Count - 2); (chainIndex >= 0); chainIndex--) {
-            effective = OverlayInheritedPage(
-                inherited: effective,
-                page: chain[chainIndex]
-            );
+        for (var rowIndex = 0; (rowIndex < documentRows.Count); rowIndex++) {
+            // Null rows are Compile's own refusal, made before it ever gets here; EffectivePage reaches this walk
+            // without that pass, so a hole in the rows is skipped rather than dereferenced.
+            if (documentRows[rowIndex]?.Page is not null) {
+                ResolvePage(startRowIndex: rowIndex);
+            }
         }
 
-        return effective;
+        return effectivePages;
     }
 
     // Page inheritance is authoring-only. Flattening it here keeps the input fold at one table lookup while giving
@@ -1064,85 +1136,12 @@ public static class BindingProfile {
 
         // Resolve opt-in page inheritance after every page id and owning group is known. Cycles, missing pages,
         // and cross-group inheritance are refused before any runtime table is built.
-        var effectivePages = new BindingPageDefinition?[documentRows.Count];
-        // Marked while a row sits on the chain currently being walked; a chain that re-enters a marked row is a cycle.
-        // A finished row needs no mark of its own — its effective page IS the record that it is done.
-        var pageInProgress = new bool[documentRows.Count];
-
-        // Walked as an explicit chain rather than by recursion: an inheritance depth is bounded only by the number of
-        // authored pages, so a generated document a few thousand pages deep would have overflowed the stack — an
-        // uncatchable process kill — before the cycle refusal below ever got to speak. The descent collects the chain
-        // to the first page that inherits nothing (or is already resolved); the ascent applies the overlays outward.
-        var chain = new List<int>();
-
-        void ResolvePage(int startRowIndex) {
-            chain.Clear();
-
-            var rowIndex = startRowIndex;
-
-            while (effectivePages[rowIndex] is null) {
-                if (pageInProgress[rowIndex]) {
-                    throw new ArgumentException(
-                        message: $"Page inheritance contains a cycle at page \"{documentRows[rowIndex].Page!.Id}\".",
-                        paramName: nameof(document)
-                    );
-                }
-
-                pageInProgress[rowIndex] = true;
-                chain.Add(item: rowIndex);
-
-                var page = documentRows[rowIndex].Page!;
-
-                if (page.Inherits is not { Length: > 0 } inheritedId) {
-                    if (page.Inherits is not null) {
-                        throw new ArgumentException(
-                            message: $"Page \"{page.Id}\" carries an empty inherited page id.",
-                            paramName: nameof(document)
-                        );
-                    }
-
-                    effectivePages[rowIndex] = page;
-
-                    break;
-                }
-
-                if (
-                    !pageRowsById.TryGetValue(
-                    key: inheritedId,
-                    value: out var inheritedRow
-                ) ||
-                    (inheritedRow.GroupIndex != rowGroups[rowIndex])
-                ) {
-                    throw new ArgumentException(
-                        message: $"Page \"{page.Id}\" inherits invalid page \"{inheritedId}\"; inherited pages must exist in the same group.",
-                        paramName: nameof(document)
-                    );
-                }
-
-                rowIndex = inheritedRow.RowIndex;
-            }
-
-            for (var chainIndex = (chain.Count - 1); (chainIndex >= 0); chainIndex--) {
-                var chainRowIndex = chain[chainIndex];
-
-                if (effectivePages[chainRowIndex] is not null) {
-                    continue;
-                }
-
-                var page = documentRows[chainRowIndex].Page!;
-
-                effectivePages[chainRowIndex] = OverlayInheritedPage(
-                    inherited: effectivePages[pageRowsById[page.Inherits!].RowIndex]!,
-                    page: page
-                );
-            }
-        }
-
-        for (var rowIndex = 0; (rowIndex < documentRows.Count); rowIndex++) {
-            if (documentRows[rowIndex].Page is not null) {
-                ResolvePage(startRowIndex: rowIndex);
-            }
-        }
+        var effectivePages = ResolveEffectivePages(
+            document: document,
+            documentRows: documentRows,
+            pageRowsById: pageRowsById,
+            rowGroups: rowGroups
+        );
 
         // Context rows — the structural half only (shape, key uniqueness, group existence); family/state admission
         // against the engine's published registry is the host's vocabulary gate. Every refusal names the offending row.
