@@ -348,7 +348,7 @@ radial selection wheels.
 
 **The paged-binding layer is optional.** Most of the exported surface is it: the
 `Binding*` document model, the `Compiled*` profile shapes it compiles into, and
-the `Wheel*` view and geometry types a radial presenter reads. A host that
+the `BindingWheel*` view and geometry types a radial presenter reads. A host that
 implements `IInputBindings` as a flat table needs none of them, so what
 IntelliSense lists is not the API you have to learn. The core types table below
 is.
