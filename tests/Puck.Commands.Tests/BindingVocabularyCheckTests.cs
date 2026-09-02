@@ -120,8 +120,8 @@ public sealed class BindingVocabularyCheckTests {
             errors: errors
         );
 
-        Assert.Contains(collection: errors, filter: static error => error.Contains(value: "accepts no wire arguments", comparisonType: StringComparison.Ordinal));
-        Assert.Contains(collection: errors, filter: static error => error.Contains(value: "has no press edge", comparisonType: StringComparison.Ordinal));
+        Assert.Contains(collection: errors, filter: static error => error.Contains(comparisonType: StringComparison.Ordinal, value: "accepts no wire arguments"));
+        Assert.Contains(collection: errors, filter: static error => error.Contains(comparisonType: StringComparison.Ordinal, value: "has no press edge"));
 
         errors.Clear();
 
@@ -146,7 +146,6 @@ public sealed class BindingVocabularyCheckTests {
 
         Assert.Empty(collection: errors);
     }
-
     [Fact]
     public void APlainSourceTheCatalogCannotResolveIsRefusedByName() {
         // The structural gate has no physical vocabulary, so a typo'd source compiles into a row that tables a
@@ -244,7 +243,6 @@ public sealed class BindingVocabularyCheckTests {
 
         Assert.Empty(collection: errors);
     }
-
     [Fact]
     public void AWheelSectorsTextRequiresAWireArgsCommand() {
         // A sector commit submits "<command> <text>" through InputRouter.Activate exactly as a bound press does, so
