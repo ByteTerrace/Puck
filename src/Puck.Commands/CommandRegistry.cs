@@ -124,6 +124,13 @@ public sealed class CommandRegistry {
     // null until a host wires one (the live console-driving registry), so every other registry keeps the inline path.
     // The sink carries its OWN bound principal — this field never chooses one.
     private CommandInjectionSink? m_injectionSink;
+    // How many observer notifications were swallowed because the sink threw. Counted SEPARATELY from m_rejections
+    // because the two answer different questions: a rejection is a line the caller submitted and this registry
+    // refused, while an observer fault is a reporting surface that broke while describing a line nobody refused. They
+    // were one counter, so three faulty sinks turned one bound gamepad press — a line the caller never submitted at
+    // all — into `[wire.errors: 3 rejected]`, and a scripted driver asserting zero refusals was poisoned by a UI sink.
+    // Saturating like m_rejections, and reported beside it (never folded into it) by `wire.errors`.
+    private int m_observerFaults;
     // The count wire.errors reports. Saturating rather than wrapping: a run that refused int.MaxValue lines has a
     // number that stops being useful, but a NEGATIVE count reads as a defect in the counter rather than in the run.
     private int m_rejections;
@@ -268,7 +275,7 @@ public sealed class CommandRegistry {
 
         // The wire's rejection readback, beside wire.ack: `wire.errors [reset]`.
         m_wireErrorsCommand = new Command(
-            description: "Reports the number of submitted lines this session REFUSED — an unknown verb, a parse error, a handler's failure result, or a refusal raised after the line was accepted: wire.errors [reset] — no argument reports the running count; `reset` reports it and zeroes the counter. It is the one number that says whether any submitted line silently no-opped. It counts the lines YOU submitted: a verb that submits lines of its own contributes one refusal when it reports the failure back, and none when it swallows it.",
+            description: "Reports the number of submitted lines this session REFUSED — an unknown verb, a parse error, a handler's failure result, or a refusal raised after the line was accepted: wire.errors [reset] — no argument reports the running count; `reset` reports it and zeroes the counter. It is the one number that says whether any submitted line silently no-opped. It counts the lines YOU submitted: a verb that submits lines of its own contributes one refusal when it reports the failure back, and none when it swallows it. A command observer that threw while being told about a dispatch is a broken reporting surface rather than a refused line, so it is reported as a separate trailing `| <n> observer faults` segment, and only when there have been some.",
             name: WireErrorsCommandName
         ) {
             m_wireErrorsArgument,
@@ -608,7 +615,8 @@ public sealed class CommandRegistry {
     }
     /// <summary>Reports (and optionally clears) the refused-submission count for the built-in <c>wire.errors</c> verb.
     /// The count is over the lines the CALLER submitted — see <see cref="Submit"/>'s remarks for what a macro verb's
-    /// own nested submissions do and do not contribute.</summary>
+    /// own nested submissions do and do not contribute. A swallowed observer notification is reported beside it as its
+    /// own segment, never folded into it: a broken reporting sink says nothing about whether a line was refused.</summary>
     /// <param name="mode">The parsed trailing tokens: empty reports the count; <c>reset</c> reports and zeroes it.</param>
     /// <returns>A result echoing the count, or an <see cref="CommandResult.IsError"/> result for a bad argument.</returns>
     private CommandResult ApplyWireErrors(string[] mode) {
@@ -627,14 +635,24 @@ public sealed class CommandRegistry {
             return CommandResult.Error(output: $"[wire.errors: unknown mode '{mode[0]}' — expected `reset`]");
         }
 
-        // Read the count BEFORE `reset` zeroes it, and do not let this verb's own report count as a rejection.
+        // Read the counts BEFORE `reset` zeroes them, and do not let this verb's own report count as a rejection.
+        var faults = m_observerFaults;
         var rejected = m_rejections;
 
         if (mode.Length == 1) {
+            m_observerFaults = 0;
             m_rejections = 0;
         }
 
-        return new CommandResult(Output: $"[wire.errors: {rejected} rejected]");
+        // The refusal count is the answer, and it is reported alone whenever it IS the whole story — a driver reading
+        // `[wire.errors: 0 rejected]` must not have to parse a second number that is almost always zero. A broken
+        // reporting sink is a different fault about a different thing, so it earns its own segment rather than being
+        // folded into the refusals, and it is named only when it happened.
+        return new CommandResult(Output: ((faults == 0)
+            ? $"[wire.errors: {rejected} rejected]"
+            : $"[wire.errors: {rejected} rejected | {faults} observer fault{((faults == 1)
+                ? string.Empty
+                : "s")}]"));
     }
     /// <summary>Builds the help listing of every registered command and its description, ordinal-ordered by name — the
     /// same order <see cref="Definitions"/> and the interned id assignment use, so a listing verb and the help text
@@ -916,6 +934,12 @@ public sealed class CommandRegistry {
 
         return false;
     }
+    // Counts one swallowed observer notification, saturating like NoteRejection and for the same reason.
+    private void NoteObserverFault() {
+        if (m_observerFaults != int.MaxValue) {
+            m_observerFaults++;
+        }
+    }
     // Counts one refusal, saturating at int.MaxValue. A count that wrapped negative would read as a defect in the
     // counter rather than in the run wire.errors exists to describe.
     private void NoteRejection() {
@@ -980,14 +1004,17 @@ public sealed class CommandRegistry {
     // Hands one activation to every observer, each behind its own boundary. An observer is an I/O SINK (a launcher
     // writing the verdict to stdout, a host publishing a console frame), so a throw from one is a fault in a reporting
     // surface, never in the tick: one broken sink must not silence the sinks after it, abandon the rest of the tick's
-    // entries, or strand a later submitted line's read-after-write barrier. A swallowed notification is counted as a
-    // refusal, because the verdict it carried never reached the operator.
+    // entries, or strand a later submitted line's read-after-write barrier. A swallowed notification is counted — the
+    // verdict it carried never reached the operator — but as an OBSERVER FAULT, never as a refusal: wire.errors answers
+    // "how many of the lines I submitted were refused", and one activation is published to every observer, so counting
+    // faults there measured sink health times observer count instead. A bound gamepad press with three broken sinks
+    // submitted no line at all and used to report three refusals.
     private void PublishActivation(in CommandActivation activation) {
         for (var index = 0; (index < m_observers.Length); index++) {
             try {
                 m_observers[index].OnCommand(activation: in activation);
             } catch (Exception exception) when (IsContainable(exception: exception)) {
-                NoteRejection();
+                NoteObserverFault();
             }
         }
     }
