@@ -324,6 +324,40 @@ public sealed class CommandRegistryTests {
         // than the release branch a hard-coded Completed would hand it.
         Assert.Equal(actual: phases, expected: [CommandPhase.Started]);
     }
+    [Theory]
+    // The wire-native branch: a plain `verb arg` line resolves through the wire table with no parse at all.
+    [InlineData("edge.wire", "hello")]
+    // The System.CommandLine branch, reached two ways: a QUOTED line (no line carrying a '"' takes the wire path)…
+    [InlineData("edge.wire", "\"a b\"")]
+    // …and a bare Verb, which has no wire handler to resolve to whatever its line looks like.
+    [InlineData("edge.parse", " ")]
+    public void ABoundTextPressCarriesItsOwnEdgeAndValueDownBothDecodePaths(string command, string text) {
+        var seen = new List<(CommandPhase Phase, CommandValue Value)>();
+        var registry = new CommandRegistry(modules: [new EdgeProbeModule(seen: seen)]);
+        var router = new InputRouter(
+            registry: registry,
+            bindings: new FixedBindings(
+                command: command,
+                text: text
+            ),
+            principalResolver: new ConsolePrincipal()
+        );
+
+        router.Capture(signal: InputSignal.Press(source: "key.a"));
+
+        var snapshot = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+
+        registry.ApplySnapshot(snapshot: in snapshot);
+
+        var (phase, value) = Assert.Single(collection: seen);
+
+        // The ENTRY decides both, not the decode path: a bound press is a Started edge carrying the control's own
+        // Digital sample. Re-deriving them here would hand a HELD verb the release branch, and would hand it the
+        // command's DECLARED impulse — Axis1D — for a key that has no magnitude.
+        Assert.Equal(actual: phase, expected: CommandPhase.Started);
+        Assert.Equal(actual: value, expected: CommandValue.Digital(active: true));
+        Assert.Equal(actual: value.Kind, expected: CommandValueKind.Digital);
+    }
     [Fact]
     public void TheSubmittedLineIsTheHandlersContextTextOnEveryTextPath() {
         var seen = new List<string?>();
@@ -782,6 +816,37 @@ public sealed class CommandRegistryTests {
                 bindability: CommandBindability.Bindable,
                 held: true,
                 routing: CommandRouting.Simulation
+            );
+        }
+    }
+    // Two shapes of the same probe: a wire-native verb (the DispatchWire branch of ApplySubmittedSimulation) and a
+    // bare Verb (its System.CommandLine parse branch). Both declare Axis1D so a re-derived impulse would be visibly
+    // the wrong KIND for the Digital press that actually drove them.
+    private sealed class EdgeProbeModule(List<(CommandPhase Phase, CommandValue Value)> seen) : ICommandModule {
+        public IEnumerable<CommandDefinition> GetCommands() {
+            yield return CommandDefinition.WithWireArgs(
+                name: "edge.wire",
+                description: "Records the edge and value its dispatch carried.",
+                handler: (context, _) => {
+                    seen.Add(item: (Phase: context.Phase, Value: context.Value));
+
+                    return CommandResult.None;
+                },
+                bindability: CommandBindability.Bindable,
+                held: true,
+                valueKind: CommandValueKind.Axis1D
+            );
+            yield return CommandDefinition.Verb(
+                name: "edge.parse",
+                description: "Records the edge and value its dispatch carried.",
+                valueKind: CommandValueKind.Axis1D,
+                handler: context => {
+                    seen.Add(item: (Phase: context.Phase, Value: context.Value));
+
+                    return CommandResult.None;
+                },
+                bindability: CommandBindability.Bindable,
+                held: true
             );
         }
     }
