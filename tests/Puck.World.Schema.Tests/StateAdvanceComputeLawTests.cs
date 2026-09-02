@@ -82,4 +82,21 @@ public sealed class StateAdvanceComputeLawTests {
         Assert.Equal(expected: Oracle(advance: fast, baseValue: 0L, row: row, tick: 100_000UL), actual: fast.ComputeCurrentValue(baseValue: 0L, currentTick: 100_000UL, row: row));
         Assert.Equal(expected: slowValue, actual: slow.ComputeCurrentValue(baseValue: 0L, currentTick: 100_000UL, row: row));
     }
+
+    [Fact]
+    public void ComputeCurrentValue_DoesNotChangeRecordEqualityOrHashCode() {
+        var row = Row(kind: CellKind.Fixed);
+        var left = new WorldStateAdvance(EpochTick: 7, RateDenominator: 3, RateNumerator: -5);
+        var right = new WorldStateAdvance(EpochTick: 7, RateDenominator: 3, RateNumerator: -5);
+        var hashBefore = left.GetHashCode();
+
+        Assert.Equal(expected: right, actual: left);
+        Assert.Equal(expected: right.GetHashCode(), actual: hashBefore);
+
+        _ = left.ComputeCurrentValue(baseValue: 100L, currentTick: 17UL, row: row);
+
+        Assert.Equal(expected: right, actual: left);
+        Assert.Equal(expected: hashBefore, actual: left.GetHashCode());
+        Assert.Equal(expected: right.GetHashCode(), actual: left.GetHashCode());
+    }
 }

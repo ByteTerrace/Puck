@@ -1200,7 +1200,8 @@ public static class WorldRuleCompiler {
                     Kind: WorldRuleFactKind.Reduction,
                     Row: rowName,
                     Key: null,
-                    Reduce: op
+                    Reduce: op,
+                    StateHandle: ResolveWorldStateHandle(definition: definition, name: rowName)
                 ),
                 ValueKind: reduceValueKind,
                 Describe: describe
@@ -1624,7 +1625,8 @@ public static class WorldRuleCompiler {
                     Kind: WorldRuleFactKind.StateCell,
                     Row: name,
                     Key: null,
-                    KeyFrom: dynamicKey
+                    KeyFrom: dynamicKey,
+                    StateHandle: ResolveWorldStateHandle(definition: definition, name: name)
                 ),
                 ValueKind: row.Kind,
                 Describe: describe
@@ -1663,7 +1665,8 @@ public static class WorldRuleCompiler {
             Operand: new CompiledWorldOperand(
                 Kind: WorldRuleFactKind.StateCell,
                 Row: name,
-                Key: resolvedKey
+                Key: resolvedKey,
+                StateHandle: ResolveWorldStateHandle(definition: definition, name: name)
             ),
             ValueKind: row.Kind,
             Describe: describe
@@ -1711,13 +1714,19 @@ public static class WorldRuleCompiler {
         );
 
         if (hasValue) {
-            var value = FixedQ4816.FromDouble(value: compare.Value!.Value);
+            var value = LiteralToRaw(
+                kind: lhs.ValueKind,
+                literal: compare.Value!.Value,
+                ruleName: ruleName,
+                verb: "compareState"
+            );
             var describe = $"{lhs.Describe} {DescribeComparison(comparison: comparison)} {compare.Value.Value.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}";
 
             return new CompiledWorldPredicate(
                 Left: lhs.Operand,
                 Comparison: comparison,
                 Value: value,
+                ValueKind: lhs.ValueKind,
                 Comparand: null,
                 Describe: describe
             );
@@ -1751,6 +1760,7 @@ public static class WorldRuleCompiler {
             Left: lhs.Operand,
             Comparison: comparison,
             Value: default,
+            ValueKind: lhs.ValueKind,
             Comparand: rhs.Operand,
             Describe: mixedDescribe
         );
@@ -1846,7 +1856,7 @@ public static class WorldRuleCompiler {
     // value XOR valueSeconds XOR (fromState, fromKey): the same duality ResolvePredicate enforces for compareState's
     // comparand, applied to the write side and widened by one spelling. 'fromKey' is an appendage of 'fromState' on
     // the same terms 'comparandKey' is.
-    private static CompiledWorldEffect ResolveWrite(string rowName, string? key, ActionTarget target, WorldDocumentWriteKind write, float? value, string? fromState, string? fromKey, decimal? valueSeconds, string? text, string ruleName, WorldDefinition definition, string verb) {
+    private static CompiledWorldEffect ResolveWrite(string rowName, string? key, ActionTarget target, WorldDocumentWriteKind write, decimal? value, string? fromState, string? fromKey, decimal? valueSeconds, string? text, string ruleName, WorldDefinition definition, string verb) {
         if (target != ActionTarget.Self) {
             throw new WorldRuleException(
                 refusal: WorldRuleRefusal.TargetInadmissible,
@@ -2021,13 +2031,12 @@ public static class WorldRuleCompiler {
 
         if (hasValue) {
             var literal = value!.Value;
-            var raw = row.Kind switch {
-                CellKind.Int => checked((long)MathF.Round(x: literal)),
-                CellKind.Fixed => FixedQ4816.FromDouble(value: literal).Value,
-                _ => ((literal != 0f)
-                ? 1L
-                : 0L), // Bool — Text already refused above.
-            };
+            var raw = LiteralToRaw(
+                kind: row.Kind,
+                literal: literal,
+                ruleName: ruleName,
+                verb: verb
+            );
 
             return new CompiledWorldEffect(
                 Kind: WorldRuleEffectKind.Write,
@@ -2071,6 +2080,34 @@ public static class WorldRuleCompiler {
             From: source.Operand,
             KeyFrom: destinationKeyFrom
         );
+    }
+    private static long LiteralToRaw(CellKind kind, decimal literal, string ruleName, string verb) {
+        try {
+            var raw = kind switch {
+                CellKind.Int => checked((long)decimal.Round(d: literal, decimals: 0, mode: MidpointRounding.ToEven)),
+                CellKind.Fixed => WorldStateNumericLiteral.ToFixed(value: literal).Value,
+                _ => ((literal != decimal.Zero) ? 1L : 0L), // Bool — Text is refused before numeric lowering.
+            };
+
+            return raw;
+        } catch (OverflowException) {
+            throw new WorldRuleException(
+                refusal: WorldRuleRefusal.StateCellUnaddressable,
+                ruleName: ruleName,
+                detail: $"'{verb}' literal {literal.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)} is outside the representable {DescribeCellKind(kind: kind)} state range"
+            );
+        }
+    }
+    private static WorldStateHandle ResolveWorldStateHandle(WorldDefinition definition, string name) {
+        if (definition.StateCatalog.TryResolve(
+            lane: WorldStateOwnershipLane.World,
+            name: name,
+            handle: out var handle
+        )) {
+            return handle;
+        }
+
+        throw new InvalidOperationException(message: $"Validated world state row '{name}' is absent from its compiled catalog.");
     }
     private static bool TryParseReduceOp(string text, out WorldStateReduceOp op) {
         op = text switch {
@@ -2380,5 +2417,15 @@ public static class WorldRuleCompiler {
     }
 
     // One resolved operand (address + value kind + read-back spelling) plus the cell kind the mixed-kind guard reads.
-    private readonly record struct ResolvedOperand(CompiledWorldOperand Operand, CellKind ValueKind, string Describe);
+    private readonly record struct ResolvedOperand {
+        public ResolvedOperand(CompiledWorldOperand Operand, CellKind ValueKind, string Describe) {
+            this.Operand = Operand with { ValueKind = ValueKind };
+            this.ValueKind = ValueKind;
+            this.Describe = Describe;
+        }
+
+        public string Describe { get; }
+        public CompiledWorldOperand Operand { get; }
+        public CellKind ValueKind { get; }
+    }
 }

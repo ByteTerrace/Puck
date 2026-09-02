@@ -387,6 +387,30 @@ discriminators: a row carrying both, or a `value` beside a `capacity`
 (declaring a capacity is declaring keyed-row intent), refuses by name.
 Omitting both is a declared-but-empty row.
 
+Runtime rule operands compile world-row names to catalog-bound handles. Keyed
+reductions and arg-extrema resolve the row once and evaluate each candidate once,
+so aggregate cost is linear in cell count. Rule numeric literals are exact JSON
+decimal values (not binary32); integer values beyond 2^24 retain their low bits,
+and fixed literals lower through the invariant Q48.16 parser. Contiguous state
+effects in one rule are preflighted as one candidate and apply atomically. A
+value-only `UpsertStateCell` uses targeted cell validation/install; declaration
+changes still use whole-document validation and rebuild the affected compiled
+surfaces.
+
+An advancing trait's compiled rational lives in a weak external cache, never in
+record equality. Dynamics `y0`/`v0` are always raw Q48.16 continuous-state bits,
+even for an integer target. Cycle save projections carry `substepTicks` in
+`[0,ticksPerStep)` so reload preserves the next transition, not only the value
+visible at the save tick.
+
+`world.state.hash` defaults to the historical `capture` digest and accepts an
+explicit `capture|pose|world|authoritative` scope. `capture` remains the manifest
+digest (pose plus resolved `state.world` values); `pose` is the replay pose fold;
+`world` includes stored state traits plus resolved values; `authoritative` adds
+the tick, poses, rule/interaction edge latches, per-body body/identity action
+registers, and live field-lattice cells. Use the named authoritative scope when
+future-decision state, rather than manifest compatibility, is the assertion.
+
 ```json
 "state": {
   "world": [{"name":"score","kind":"int","value":0,"min":0,"max":1000}],

@@ -4,8 +4,9 @@ using Puck.Maths;
 namespace Puck.World;
 
 /// <summary>
-/// The one (row, key) → raw-value read over a world document's <c>state</c> section. Every live numeric read of a
-/// declared cell resolves here — a world rule's gate comparand and its live copy operand, a rule effect's
+/// The one (row, key) → raw-value implementation over a world document's <c>state</c> section, exposed through a
+/// name-resolving entrance and a compiled-handle entrance. Every live numeric read of a declared cell resolves here
+/// — a world rule's gate comparand and its live copy operand, a rule effect's
 /// read-modify-write, the <c>world.state</c> console read-backs, the HUD <c>state.&lt;row&gt;</c>/
 /// <c>state.&lt;row&gt;.&lt;key&gt;</c> binding, and the <c>UpsertStateCell</c> Add compose arm — so no two of them
 /// can drift in how a pair addresses a cell, or in what that cell currently holds.
@@ -34,8 +35,9 @@ namespace Puck.World;
 /// for the advancing cell and the stored value for every other. This is the trait's only application site, which is
 /// what makes a reader and a writer unable to disagree: an <c>add</c> composes against what a reader sees (the
 /// compose arm reads here too), a rule gates on it, a HUD gauge draws it, and <c>world.state</c> echoes it, all from
-/// this one computation — and because <see cref="Reduce"/>/<see cref="ArgExtremum"/> already resolve each candidate
-/// cell through this same seam rather than reading <see cref="WorldStateCell.Value"/> off the row directly, a
+/// this one computation — and because <see cref="Reduce"/>/<see cref="ArgExtremum"/> resolve the row once and each
+/// candidate cell once through the same known-cell computation rather than reading
+/// <see cref="WorldStateCell.Value"/> directly, a
 /// <c>$reduce:</c>/<c>$argmax:</c>/<c>$argmin:</c> operand over a table of independently advancing cells sees every
 /// cell's live value for free — no special case anywhere in either method.</para>
 /// <para><b>Allocation-free.</b> The HUD path runs this once per bound element per frame, so this is an ordinal
@@ -92,15 +94,15 @@ public static class WorldStateReader {
     }
     /// <summary>Finds the winning cell's key over a keyed row under <paramref name="op"/>
     /// (<see cref="WorldStateReduceOp.Max"/> or <see cref="WorldStateReduceOp.Min"/>), resolving each candidate
-    /// cell's value through this same per-(row, key) seam as <see cref="TryRead"/> rather than walking the row's
-    /// declared cell list raw. A cell key that does not parse as a non-negative integer, or that
+    /// cell's value through the same known-cell computation as <see cref="TryRead"/> after resolving the row once.
+    /// A cell key that does not parse as a non-negative integer, or that
     /// <paramref name="isCandidateIndex"/> rejects, is excluded from the comparison; ties go to the lowest parsed
     /// index.</summary>
     /// <param name="definition">The document to read.</param>
     /// <param name="rowName">The state row's name.</param>
     /// <param name="op">The extremum to find (<see cref="WorldStateReduceOp.Max"/> or
     /// <see cref="WorldStateReduceOp.Min"/>).</param>
-    /// <param name="tick">The tick this read is answering AS OF; forwarded to each per-cell <see cref="TryRead"/>.</param>
+    /// <param name="tick">The tick this read is answering AS OF; used by each candidate's value-over-time trait.</param>
     /// <param name="isCandidateIndex">An optional additional filter over a cell key's parsed index (for example, a
     /// caller-side population-capacity bound). <see langword="null"/> admits every non-negative parsed index.</param>
     /// <returns>The winning cell's key, or <see langword="null"/> when the row is absent, holds no cells, or no cell
@@ -124,10 +126,9 @@ public static class WorldStateReader {
             return null;
         }
 
-        var isFixed = (declared.Kind == CellKind.Fixed);
         var bestIndex = -1;
         string? bestKey = null;
-        var bestValue = FixedQ4816.Zero;
+        var bestValue = 0L;
 
         foreach (var candidate in (declared.Cells ?? [])) {
             if (
@@ -140,25 +141,8 @@ public static class WorldStateReader {
                 continue;
             }
 
-            if (
-                !TryRead(
-                definition: definition,
-                rowName: rowName,
-                key: candidate.Key,
-                tick: tick,
-                row: out _,
-                rawValue: out var raw,
-                text: out _
-            ) ||
-                (raw is null)
-            ) {
-                continue;
-            }
-
-            var value = (isFixed
-                ? FixedQ4816.FromRawBits(value: raw.Value)
-                : FixedQ4816.FromInteger(value: raw.Value)
-            );
+            ReadKnownCell(row: declared, cell: candidate, tick: tick, rawValue: out var raw, text: out _);
+            var value = raw!.Value;
             var better = ((bestIndex < 0) || ((op == WorldStateReduceOp.Max)
                 ? (value > bestValue)
                 : (value < bestValue)));
@@ -199,8 +183,8 @@ public static class WorldStateReader {
 
         return false;
     }
-    /// <summary>Reduces a keyed row's cell values with <paramref name="op"/>, resolving each cell through this same
-    /// per-(row, key) seam as <see cref="TryRead"/> rather than walking the row's declared cell list raw — so a
+    /// <summary>Reduces a keyed row's cell values with <paramref name="op"/>, resolving the row once and each cell
+    /// once through the same known-cell computation as <see cref="TryRead"/> — so a
     /// table whose cells independently advance (<see cref="WorldStateCell.Advance"/>) reduces over every cell's live
     /// value for free, never a stale base read straight off <see cref="WorldStateCell.Value"/>.</summary>
     /// <param name="definition">The document to read.</param>
@@ -208,7 +192,7 @@ public static class WorldStateReader {
     /// <param name="op">The reduction to apply. <see cref="WorldStateReduceOp.Count"/> answers with the row's cell
     /// count as an integer regardless of the row's <see cref="WorldStateRow.Kind"/>; the others preserve that
     /// kind.</param>
-    /// <param name="tick">The tick this read is answering as of; forwarded to each per-cell <see cref="TryRead"/>.</param>
+    /// <param name="tick">The tick this read is answering as of; used by each cell's value-over-time trait.</param>
     /// <returns>The reduced value, or <see cref="FixedQ4816.Zero"/> when the row is absent or holds no cells.</returns>
     public static FixedQ4816 Reduce(WorldDefinition definition, string rowName, WorldStateReduceOp op, ulong tick) {
         if (!TryRead(
@@ -223,53 +207,41 @@ public static class WorldStateReader {
             return FixedQ4816.Zero;
         }
 
-        var keys = (declared.Cells ?? []);
+        var raw = ReduceRaw(row: declared, op: op, tick: tick);
+        var kind = ((op == WorldStateReduceOp.Count) ? CellKind.Int : declared.Kind);
+
+        return ((kind == CellKind.Fixed)
+            ? FixedQ4816.FromRawBits(value: raw)
+            : FixedQ4816.FromInteger(value: raw));
+    }
+
+    /// <summary>Reduces a resolved row directly in its native raw encoding. Each declared cell is read once, so the
+    /// walk is linear in cell count.</summary>
+    /// <param name="row">The already-resolved row.</param>
+    /// <param name="op">The reduction to apply.</param>
+    /// <param name="tick">The tick at which value-over-time traits are evaluated.</param>
+    /// <returns>The native raw reduction, or zero for an empty row.</returns>
+    public static long ReduceRaw(WorldStateRow row, WorldStateReduceOp op, ulong tick) {
+        ArgumentNullException.ThrowIfNull(argument: row);
+        var cells = (row.Cells ?? []);
 
         if (op == WorldStateReduceOp.Count) {
-            return FixedQ4816.FromInteger(value: keys.Count);
+            return cells.Count;
         }
 
-        if (keys.Count == 0) {
-            return FixedQ4816.Zero;
-        }
-
-        var isFixed = (declared.Kind == CellKind.Fixed);
         var hasAcc = false;
-        var acc = FixedQ4816.Zero;
+        var acc = 0L;
 
-        foreach (var candidate in keys) {
-            if (
-                !TryRead(
-                definition: definition,
-                rowName: rowName,
-                key: candidate.Key,
-                tick: tick,
-                row: out _,
-                rawValue: out var raw,
-                text: out _
-            ) ||
-                (raw is null)
-            ) {
-                continue;
-            }
-
-            var value = (isFixed
-                ? FixedQ4816.FromRawBits(value: raw.Value)
-                : FixedQ4816.FromInteger(value: raw.Value)
-            );
-
+        foreach (var cell in cells) {
+            ReadKnownCell(row: row, cell: cell, tick: tick, rawValue: out var raw, text: out _);
+            var value = raw!.Value;
             acc = (!hasAcc
                 ? value
                 : (op switch {
-                    WorldStateReduceOp.Sum => (acc + value),
-                    WorldStateReduceOp.Max => ((value > acc)
-                    ? value
-                    : acc),
-                    _ => ((value < acc)
-                    ? value
-                    : acc), // Min.
-                })
-            );
+                    WorldStateReduceOp.Sum => unchecked(acc + value),
+                    WorldStateReduceOp.Max => ((value > acc) ? value : acc),
+                    _ => ((value < acc) ? value : acc),
+                }));
             hasAcc = true;
         }
 
@@ -338,6 +310,10 @@ public static class WorldStateReader {
             return;
         }
 
+        ReadKnownCell(row: row, cell: cell, tick: tick, rawValue: out rawValue, text: out text);
+    }
+
+    private static void ReadKnownCell(WorldStateRow row, WorldStateCell cell, ulong tick, out long? rawValue, out string? text) {
         rawValue = (((row.Advance is { } advance) && (cell.Key == WorldStateRow.SlotKey))
             ? advance.ComputeCurrentValue(
                 row: row,
@@ -433,7 +409,7 @@ public static class WorldStateReader {
             trait: out _
         )
         ) {
-            rawValue = row.ClampToEnvelope(value: DynamicsFixedToRaw(
+            rawValue = row.ClampToEnvelope(value: DynamicsFixedToRowRaw(
                 row: row,
                 value: sample.Value
             ));
@@ -498,15 +474,9 @@ public static class WorldStateReader {
 
         sample = dynamicsRow.Compiled.Evaluate(
             elapsedTicks: elapsed,
-            initialValue: DynamicsRawToFixed(
-                row: row,
-                raw: trait.Y0
-            ),
-            initialVelocity: DynamicsRawToFixed(
-                row: row,
-                raw: trait.V0
-            ),
-            target: DynamicsRawToFixed(
+            initialValue: DynamicsTraitRawToFixed(raw: trait.Y0),
+            initialVelocity: DynamicsTraitRawToFixed(raw: trait.V0),
+            target: DynamicsRowRawToFixed(
                 row: row,
                 raw: cell.Value
             ),
@@ -515,23 +485,25 @@ public static class WorldStateReader {
 
         return true;
     }
-    /// <summary>Converts a <see cref="WorldStateRow"/>-kind raw value — a <see cref="WorldStateCell.Value"/>, or a
-    /// <see cref="WorldStateDynamics.Y0"/>/<see cref="WorldStateDynamics.V0"/>, which ride the identical per-kind
-    /// encoding — into the continuous quantity a follower computes in.</summary>
+    /// <summary>Converts a row-stored target into the continuous quantity a follower computes in.</summary>
     /// <param name="row">The carrying row, for its <see cref="CellKind"/>.</param>
     /// <param name="raw">The raw value.</param>
     /// <returns>Raw <c>FixedQ4816</c> bits reinterpreted for <see cref="CellKind.Fixed"/>; <paramref name="raw"/>
     /// lifted as a whole number for every other kind.</returns>
-    public static FixedQ4816 DynamicsRawToFixed(WorldStateRow row, long raw) => ((row.Kind == CellKind.Fixed)
+    public static FixedQ4816 DynamicsRowRawToFixed(WorldStateRow row, long raw) => ((row.Kind == CellKind.Fixed)
         ? FixedQ4816.FromRawBits(value: raw)
         : FixedQ4816.FromInteger(value: raw));
-    /// <summary>The inverse of <see cref="DynamicsRawToFixed"/> — narrows a continuous value back to the row's own
+    /// <summary>Reads fixed-native dynamics state from its raw carrier.</summary>
+    public static FixedQ4816 DynamicsTraitRawToFixed(long raw) => FixedQ4816.FromRawBits(value: raw);
+    /// <summary>Writes continuous dynamics state to its fixed-native raw carrier without narrowing.</summary>
+    public static long DynamicsFixedToTraitRaw(FixedQ4816 value) => value.Value;
+    /// <summary>The inverse of <see cref="DynamicsRowRawToFixed"/> — narrows a continuous value back to the row's own
     /// raw encoding: exact for <see cref="CellKind.Fixed"/>, nearest whole number (ties to even) for every other
     /// kind.</summary>
     /// <param name="row">The carrying row, for its <see cref="CellKind"/>.</param>
     /// <param name="value">The continuous value.</param>
     /// <returns>The row-kind-encoded raw value.</returns>
-    public static long DynamicsFixedToRaw(WorldStateRow row, FixedQ4816 value) => ((row.Kind == CellKind.Fixed)
+    public static long DynamicsFixedToRowRaw(WorldStateRow row, FixedQ4816 value) => ((row.Kind == CellKind.Fixed)
         ? value.Value
         : (FixedQ4816.Round(value: value).Value >> FixedQ4816.FractionBitCount));
 }

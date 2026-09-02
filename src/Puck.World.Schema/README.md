@@ -725,8 +725,9 @@ CLAMPS the computed value on every read without rewriting the stored base — th
 read side of the envelope duality (a computed value clamps; an explicit write
 refuses).
 
-`WorldStateAdvance.ComputeCurrentValue` has exactly ONE caller,
-`WorldStateReader.TryRead` above, and that is the whole design: a rule's
+`WorldStateAdvance.ComputeCurrentValue` has one application site,
+`WorldStateReader`'s known-cell computation, and that is the whole design: both
+the name and compiled-handle read entrances, a rule's
 `compareState`, a HUD gauge, `world.state`'s read-backs and the
 `UpsertStateCell` **Add compose arm** all resolve through it, so a reader and a
 writer can never disagree about what an advancing row holds. In particular an
@@ -773,11 +774,11 @@ bookkeeping is not reachable here at all: `drawCursor`/`drawDecks` are typed row
 FIELDS, never cells, so nothing can name them as an accumulator. `WorldStateReader.TryRead` checks the row's own trait first
 (only relevant for the slot cell) and falls back to the CELL's own trait
 otherwise, so a scalar row's behavior is untouched. Because
-`WorldStateReader.Reduce`/`ArgExtremum` already resolve each candidate cell
-through this identical seam rather than reading `WorldStateCell.Value` off
-the row directly, a `$reduce:sum`/`$argmax:`/`$argmin:` rule operand over a
-table of independently advancing cells sees every cell's LIVE value for
-free — no special case in either method. A per-cell VALUE write
+`WorldStateReader.Reduce`/`ArgExtremum` resolve the row once and each candidate
+cell once through that identical known-cell computation rather than repeating
+row/key scans or reading `WorldStateCell.Value` directly. A
+`$reduce:sum`/`$argmax:`/`$argmin:` rule operand over a table of independently
+advancing cells therefore sees every cell's LIVE value in one linear pass. A per-cell VALUE write
 (`world.state.cell.set`, `UpsertStateCell`) carries no advance payload of its
 own, so it PRESERVES whatever the cell already declared and re-bases its
 epoch to the write's tick — `WorldServer.RebaseCellTraits`'s widened job,
@@ -794,7 +795,11 @@ own trait the same way the row line echoes the row's:
 — `row`, `y0`, `v0`, `epochTick`), `advance`'s closed-form sibling: mutually
 exclusive with `advance`/`draw`/a bare `value`, naming a `dynamics` section
 row whose pole-matched second-order response `WorldStateReader.TryReadEased`
-evaluates lazily from `(y0, v0)` at the elapsed tick — no per-tick write. The
+evaluates lazily from `(y0, v0)` at the elapsed tick — no per-tick write. `y0`
+and `v0` are ALWAYS raw Q48.16 continuous-state bits, including on an `int`
+row; only the stored target and the final presented sample use the carrying
+row's encoding. That preserves sub-unit position and velocity across an integer
+target's rebase instead of quantizing the follower at every write. The
 stored cell value stays the TRUTH the target; a write rebases the trait
 (`RebaseCellTraits`'s `RebaseDynamics` arm) the same way it rebases `advance`
 — the live eased sample and a `Retarget` velocity kick become the new
@@ -802,7 +807,7 @@ stored cell value stays the TRUTH the target; a write rebases the trait
 `dynamics=<row> y0=<v> v0=<v>@epoch<n> eased=<v>` beside `value=`.
 
 **A row or keyed cell may instead declare `cycle`** (`WorldStateCycle` —
-`plane`, `output`, `ticksPerStep`, `epochTick`): the tick-indexed rotation,
+`plane`, `output`, `ticksPerStep`, `epochTick`, `substepTicks`): the tick-indexed rotation,
 mutually exclusive with `advance`/`dynamics`/`draw`/`lattice` and scalar-only
 at the row level the same way those are. The value is a pure function of the
 server tick through `Puck.Maths.CyclicRotation` — `plane` 0..3 selects one of
@@ -824,9 +829,10 @@ does an advancing row's. A cycling row is refused as a `state:<row>` control
 context the same way an advancing one is. `world.state` echoes
 `cycle=plane<p>:<output>/<ticksPerStep>@epoch<n>` beside the live `value=`.
 `world.save` settles a cycling cell in the serialized projection only: the
-stored value becomes the current rotation index (or node) and `epochTick`
-projects to `0`, so a reload reads the same value at its first tick; a partial
-step under `ticksPerStep` is not carried.
+stored value becomes the current rotation index (or node), `epochTick` projects
+to `0`, and `substepTicks` carries the elapsed portion of the current step. A
+reload therefore preserves both the first value and the tick of the next
+transition; `substepTicks` is refused outside `[0, ticksPerStep)`.
 
 **A keyed `text`-kind row IS the text-table primitive** — an authored, named
 collection of strings (flavor lines, names, phrases) a HUD `Binding` or
@@ -1009,17 +1015,27 @@ effects in that SAME rule instead — a rule's `Effects` list is not limited to 
 row write; the copy operand is for the decoupled case, where the resetting rule
 is not the thing that changed the counter.
 
-A copy is also the only EXACT write spelling. `Value` is a `float`, so a literal
-above 2^24 is already rounded before the compiler sees it (16777217 compiles to
-16777216, and `world.rules` reads the rounded number back); the copy path moves
-the source cell's bits unchanged — an exact shift for `int`/`bool`, verbatim raw
-bits for `fixed`, no float anywhere (`WorldServer.ConvertWorldFactToRaw`). An
+A literal and a copy are both exact write spellings. `Value` is a JSON decimal
+number carried as `decimal`, so an integer such as 16777217 reaches compilation
+unchanged; `fixed` literals lower through the invariant decimal parser rather
+than binary floating point. The copy path likewise moves the source cell's bits
+unchanged — an exact shift for `int`/`bool`, verbatim raw bits for `fixed`, no
+float anywhere. An out-of-carrier literal refuses by the rule's name. An
 `int` cell is refused outside `WorldStateCapacity.MinIntCellValue`..
 `MaxIntCellValue` (`FixedQ4816`'s own integer band) at the document validator,
 because every engine read of one lifts it to fixed point.
 
 Ordering is declaration order, on both sides: a later rule's copy operand reads
-an earlier rule's same-tick write exactly as a later gate does.
+an earlier rule's same-tick write exactly as a later gate does. Within one rule,
+each contiguous run of state effects is preflighted against one private
+candidate; either the whole run installs in order or none of it does, so a later
+range/capacity refusal cannot leave the earlier writes partially applied.
+
+The high-frequency `UpsertStateCell` path validates only the addressed mutable
+cell and installs only value-derived state. Declaration-shape mutations retain
+whole-document validation and rebuild the compiled rule/input/field surfaces;
+a value-only rule, countdown, field scalar, or console write does not pay those
+unrelated rebuild costs.
 
 See `WorldRule`'s own remarks in `WorldRules.cs` for the edge-with-a-moving-
 threshold reasoning in full.

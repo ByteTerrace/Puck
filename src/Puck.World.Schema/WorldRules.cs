@@ -480,6 +480,10 @@ public enum WorldRuleFactKind : byte {
 /// when <paramref name="SymmetryOtherCell"/> is <see langword="null"/>.</param>
 /// <param name="SymmetryOtherCell">The cell the other node is read from live, or <see langword="null"/> for the literal
 /// <paramref name="SymmetryArgument"/>; an empty key addresses a slot row's own cell.</param>
+/// <param name="ValueKind">The raw encoding returned by this operand. Carrying it beside the address lets the
+/// runtime compare integer cells without narrowing them through binary32.</param>
+/// <param name="StateHandle">The compiled world-lane row handle for state-backed operands; invalid for channels
+/// that do not read a state row.</param>
 public readonly record struct CompiledWorldOperand(
     WorldRuleFactKind Kind,
     string? Row,
@@ -494,14 +498,18 @@ public readonly record struct CompiledWorldOperand(
     CompiledCellRef? KeyFrom = null,
     WorldSymmetryFunction Symmetry = WorldSymmetryFunction.Ring,
     long SymmetryArgument = 0L,
-    CompiledCellRef? SymmetryOtherCell = null
+    CompiledCellRef? SymmetryOtherCell = null,
+    CellKind ValueKind = CellKind.Fixed,
+    WorldStateHandle StateHandle = default
 );
 /// <summary>One compiled, flattened conjunct of a world rule's gate — <see cref="ActionPredicate.All"/> flattens away
 /// at compile time exactly as a per-body gate does, so evaluation walks one flat array with no recursion.</summary>
 /// <param name="Left">The primary operand — the <c>(State, Key)</c> side of the authored <c>compareState</c>.</param>
 /// <param name="Comparison">The comparison to apply.</param>
-/// <param name="Value">The authored constant comparand, converted to fixed point at compile time — read only when
+/// <param name="Value">The authored constant comparand, converted directly from its exact decimal token to the
+/// left operand's raw cell encoding at compile time — read only when
 /// <paramref name="Comparand"/> is <see langword="null"/> (the constant spelling).</param>
+/// <param name="ValueKind">The encoding carried by <paramref name="Value"/>.</param>
 /// <param name="Comparand">The comparand operand — another row/reserved channel read live on the same terms as
 /// <paramref name="Left"/> (the <c>(ComparandState, ComparandKey)</c> spelling) — or <see langword="null"/> when the
 /// comparand is the authored constant <paramref name="Value"/> instead.</param>
@@ -511,7 +519,8 @@ public readonly record struct CompiledWorldOperand(
 public readonly record struct CompiledWorldPredicate(
     CompiledWorldOperand Left,
     ActionStateComparison Comparison,
-    FixedQ4816 Value,
+    long Value,
+    CellKind ValueKind,
     CompiledWorldOperand? Comparand,
     string Describe
 );

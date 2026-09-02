@@ -208,6 +208,21 @@ public sealed class WorldFieldLattice {
     /// <summary>Gets a counter that moves on every cell write.</summary>
     public int Revision => m_revision;
 
+    // The field portion of WorldRuntimeStateHash's authoritative boundary. Field-major/cell-major is the same
+    // canonical order Capture and the checkpoint codec use, without allocating a checkpoint-shaped jagged array.
+    internal void AppendStateHash(ref Fnv1aHash hash) {
+        hash.Add(value: ((uint)FieldCount));
+        hash.Add(value: ((uint)CellCount));
+
+        for (var field = 0; (field < FieldCount); field++) {
+            hash.Add(value: Fnv1aHash.Compute(values: m_names[field].AsSpan()));
+
+            for (var cell = 0; (cell < CellCount); cell++) {
+                hash.Add(value: m_values[field][cell].Value);
+            }
+        }
+    }
+
     /// <summary>Describes the exact structural field-program work performed on one cadence step.</summary>
     /// <param name="activeBodyCount">The number of active body slots.</param>
     /// <param name="bodyCapacity">The body-table capacity every body node scans.</param>

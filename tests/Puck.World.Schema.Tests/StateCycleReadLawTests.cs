@@ -122,15 +122,25 @@ public sealed class StateCycleReadLawTests {
         Assert.Equal(expected: 1L, actual: Read(definition: definition, row: "spin", tick: 31UL));
     }
     [Fact]
-    public void SettledPhase_ReproducesTheLiveValueAtTickZero() {
+    public void SettledPhase_PreservesTheCurrentValueAndNextTransition() {
         foreach (var output in new[] { WorldCycleOutput.Step, WorldCycleOutput.Node }) {
             var cycle = new WorldStateCycle(EpochTick: 3, Output: output, Plane: 2, TicksPerStep: 4);
             var live = BuildDefinition(SlotRow(name: "r", kind: CellKind.Int, value: 9L, cycle: cycle));
-            var liveValue = Read(definition: live, row: "r", tick: 203UL);
             var liveRow = SlotRow(name: "r", kind: CellKind.Int, value: 9L, cycle: cycle);
-            var settled = BuildDefinition(SlotRow(name: "r", kind: CellKind.Int, value: cycle.SettledPhase(baseValue: 9L, currentTick: 203UL, row: liveRow), cycle: (cycle with { EpochTick = 0 })));
+            var settledAt = 205UL;
+            var settled = BuildDefinition(SlotRow(
+                name: "r",
+                kind: CellKind.Int,
+                value: cycle.SettledPhase(baseValue: 9L, currentTick: settledAt, row: liveRow),
+                cycle: (cycle with { EpochTick = 0, SubstepTicks = cycle.SettledSubstep(currentTick: settledAt) })
+            ));
 
-            Assert.Equal(expected: liveValue, actual: Read(definition: settled, row: "r", tick: 0UL));
+            for (var elapsed = 0UL; elapsed < 12UL; elapsed++) {
+                Assert.Equal(
+                    expected: Read(definition: live, row: "r", tick: (settledAt + elapsed)),
+                    actual: Read(definition: settled, row: "r", tick: elapsed)
+                );
+            }
         }
     }
     [Fact]
@@ -152,6 +162,7 @@ public sealed class StateCycleReadLawTests {
         Assert.Contains(expectedSubstring: "only int/fixed cells turn", actualString: Refusal(SlotRow(name: "r", kind: CellKind.Text, value: 0L, cycle: new WorldStateCycle())));
         Assert.Contains(expectedSubstring: ".cycle.plane 4", actualString: Refusal(SlotRow(name: "r", kind: CellKind.Int, value: 0L, cycle: new WorldStateCycle(Plane: 4))));
         Assert.Contains(expectedSubstring: ".cycle.ticksPerStep 0", actualString: Refusal(SlotRow(name: "r", kind: CellKind.Int, value: 0L, cycle: new WorldStateCycle(TicksPerStep: 0))));
+        Assert.Contains(expectedSubstring: ".cycle.substepTicks", actualString: Refusal(SlotRow(name: "r", kind: CellKind.Int, value: 0L, cycle: new WorldStateCycle(TicksPerStep: 4, SubstepTicks: 4))));
         Assert.Contains(expectedSubstring: ".cycle.epochTick", actualString: Refusal(SlotRow(name: "r", kind: CellKind.Int, value: 0L, cycle: new WorldStateCycle(EpochTick: -1))));
         Assert.Contains(expectedSubstring: "is not a defined WorldCycleOutput", actualString: Refusal(SlotRow(name: "r", kind: CellKind.Fixed, value: 0L, cycle: new WorldStateCycle(Output: unchecked((WorldCycleOutput)byte.MaxValue)))));
         Assert.Contains(expectedSubstring: "is not a symmetry-lattice node", actualString: Refusal(SlotRow(name: "r", kind: CellKind.Int, value: 240L, cycle: new WorldStateCycle(Output: WorldCycleOutput.Node))));

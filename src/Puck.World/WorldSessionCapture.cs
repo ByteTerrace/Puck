@@ -343,19 +343,19 @@ internal static class WorldSessionCapture {
             return (row with {
                 Dynamics = (rowDynamics with {
                     EpochTick = 0,
-                    V0 = WorldStateReader.DynamicsFixedToRaw(row: row, value: sample.Velocity),
-                    Y0 = WorldStateReader.DynamicsFixedToRaw(row: row, value: sample.Value),
+                    V0 = WorldStateReader.DynamicsFixedToTraitRaw(value: sample.Velocity),
+                    Y0 = WorldStateReader.DynamicsFixedToTraitRaw(value: sample.Value),
                 }),
             });
         }
 
-        // A cycling slot settles to its current rotation index (or node) at epoch zero, so a boot from the projection
-        // reads the same value at its first tick; a partial step under ticksPerStep is not carried.
+        // A cycling slot settles to its current rotation index (or node) at epoch zero and carries its current
+        // substep remainder, so reload preserves both the value now and the tick of the next transition.
         if (row.Cycle is { } rowCycle) {
             var slot = row.Cells![0];
 
             return (row with {
-                Cycle = (rowCycle with { EpochTick = 0 }),
+                Cycle = (rowCycle with { EpochTick = 0, SubstepTicks = rowCycle.SettledSubstep(currentTick: tick) }),
                 Cells = [(slot with { Value = rowCycle.SettledPhase(baseValue: slot.Value, currentTick: tick, row: row) })],
             });
         }
@@ -387,7 +387,7 @@ internal static class WorldSessionCapture {
                 settledCells ??= new List<WorldStateCell>(collection: cells);
                 settledCells[index] = (cell with {
                     Value = cellCycle.SettledPhase(baseValue: cell.Value, currentTick: tick, row: row),
-                    Cycle = (cellCycle with { EpochTick = 0 }),
+                    Cycle = (cellCycle with { EpochTick = 0, SubstepTicks = cellCycle.SettledSubstep(currentTick: tick) }),
                 });
 
                 continue;
@@ -408,8 +408,8 @@ internal static class WorldSessionCapture {
                 settledCells[index] = (cell with {
                     Dynamics = (cellDynamics with {
                         EpochTick = 0,
-                        V0 = WorldStateReader.DynamicsFixedToRaw(row: row, value: cellSample.Velocity),
-                        Y0 = WorldStateReader.DynamicsFixedToRaw(row: row, value: cellSample.Value),
+                        V0 = WorldStateReader.DynamicsFixedToTraitRaw(value: cellSample.Velocity),
+                        Y0 = WorldStateReader.DynamicsFixedToTraitRaw(value: cellSample.Value),
                     }),
                 });
             }

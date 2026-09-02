@@ -407,7 +407,7 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
-        void ValidateCounterState(string name, float? value) {
+        void ValidateCounterState(string name, decimal? value) {
             if (!stateSlots.TryGetValue(
                 key: name,
                 value: out var slot
@@ -420,11 +420,9 @@ public static partial class WorldDefinitionValidator {
             if (value is not { } constant) {
                 errors.Add(item: $"{path}.value is required at body scope — a live copy source ('fromState') is legitimate only in a world rule.");
             } else {
-                RequireFinite(
-                    errors: errors,
-                    name: $"{path}.value",
-                    value: constant
-                );
+                if (!WorldStateNumericLiteral.TryToFixed(value: constant, result: out _)) {
+                    errors.Add(item: $"{path}.value is outside the Q48.16 action-state range.");
+                }
             }
         }
 
@@ -561,11 +559,9 @@ public static partial class WorldDefinitionValidator {
                 if (compare.Value is not { } compareValue) {
                     errors.Add(item: $"{path}.value is required at body scope — a per-body predicate names an authored constant (a comparand row reference is legitimate only in a world rule).");
                 } else {
-                    RequireFinite(
-                        errors: errors,
-                        name: $"{path}.value",
-                        value: compareValue
-                    );
+                    if (!WorldStateNumericLiteral.TryToFixed(value: compareValue, result: out _)) {
+                        errors.Add(item: $"{path}.value is outside the Q48.16 action-state range.");
+                    }
                 }
                 break;
             case ActionPredicate.TimerElapsed elapsed:

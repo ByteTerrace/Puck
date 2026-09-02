@@ -1,5 +1,6 @@
 using Puck.Assets.Documents;
 using System.Text.Json.Serialization;
+using Puck.Maths;
 using Puck.Physics.Motion;
 using Puck.World.Protocol;
 
@@ -51,7 +52,7 @@ public abstract record ActionPredicate {
     public sealed record CompareState(
         string State,
         ActionStateComparison Comparison,
-        float? Value = null,
+        decimal? Value = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Key = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ComparandState = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ComparandKey = null
@@ -128,7 +129,7 @@ public abstract record ActionEffect {
     /// name) re-resolves on the write, this is how a rule restyles what a body wears.</param>
     public sealed record SetState(
         string State,
-        float? Value = null,
+        decimal? Value = null,
         ActionTarget Target = ActionTarget.Self,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Key = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromState = null,
@@ -151,7 +152,7 @@ public abstract record ActionEffect {
     /// converted tick count is the addend rather than the replacement.</param>
     public sealed record AddState(
         string State,
-        float? Value = null,
+        decimal? Value = null,
         ActionTarget Target = ActionTarget.Self,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Key = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromState = null,
@@ -281,6 +282,18 @@ public abstract record ActionEffect {
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float PitchDegrees = 0f,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float RollDegrees = 0f
     ) : ActionEffect;
+}
+
+internal static class WorldStateNumericLiteral {
+    public static FixedQ4816 ToFixed(decimal value) => TryToFixed(value: value, result: out var result)
+        ? result
+        : throw new OverflowException(message: $"The exact decimal literal '{value.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}' is outside the Q48.16 state range.");
+
+    public static bool TryToFixed(decimal value, out FixedQ4816 result) => FixedQ4816.TryParse(
+        s: value.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
+        provider: System.Globalization.CultureInfo.InvariantCulture,
+        result: out result
+    );
 }
 /// <summary>One trigger channel of a lane binding: a gate, a press latch (the buffer — a press stays pending until the
 /// gate opens or the latch expires; the release channel latches nothing), and the effects a fire applies in order.</summary>

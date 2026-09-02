@@ -82,9 +82,9 @@ public sealed class ChannelWorldRuleFactLawTests {
                     Gate: new ActionPredicate.CompareState(
                         State: gate,
                         Comparison: ActionStateComparison.GreaterOrEqual,
-                        Value: 1f
+                        Value: 1m
                     ),
-                    Effects: [new ActionEffect.SetState(State: beacon.Value, Value: 1f)])
+                    Effects: [new ActionEffect.SetState(State: beacon.Value, Value: 1m)])
             ],
         };
     }

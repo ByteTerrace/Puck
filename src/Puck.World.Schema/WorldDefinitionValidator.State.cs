@@ -4,6 +4,61 @@ using Puck.Maths;
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
+    /// <summary>Validates the bounded value surface affected by one scalar state-cell mutation. The containing
+    /// definition has already passed full validation; this check is therefore intentionally limited to properties
+    /// an <c>UpsertStateCell</c> mutation can change.</summary>
+    public static bool TryValidateRuntimeStateCell(WorldDefinition definition, string rowName, string key, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+        reason = string.Empty;
+
+        if (
+            WorldDefinitionRows.FindStateRow(rows: definition.State, name: rowName) is not { } row ||
+            !WorldCellName.TryParse(candidate: key, name: out var cellKey, reason: out _) ||
+            WorldDefinitionRows.FindCell(cells: row.Cells, key: cellKey) is not { } cell
+        ) {
+            reason = $"state row '{rowName}' cell '{key}' did not resolve after composition";
+            return false;
+        }
+
+        var capacity = Math.Clamp(value: (row.Capacity ?? WorldStateCapacity.MaxCellsPerRow), min: 1, max: WorldStateCapacity.MaxCellsPerRow);
+
+        if ((row.Cells?.Count ?? 0) > capacity) {
+            reason = $"state row '{rowName}' cell count exceeds its capacity of {capacity}";
+            return false;
+        }
+
+        if (row.Kind == CellKind.Text) {
+            if (cell.Text is null || cell.Text.Length > WorldStateCapacity.MaxTextValueLength) {
+                reason = $"state row '{rowName}' cell '{key}' text is missing or exceeds {WorldStateCapacity.MaxTextValueLength} characters";
+                return false;
+            }
+
+            return true;
+        }
+
+        if ((row.Kind == CellKind.Bool) && (cell.Value is not (0 or 1))) {
+            reason = $"state row '{rowName}' cell '{key}' value {cell.Value} must be 0 or 1";
+            return false;
+        }
+
+        if (row.NonNegative && (cell.Value < 0L)) {
+            reason = $"state row '{rowName}' cell '{key}' value is negative";
+            return false;
+        }
+
+        if ((row.Min is { } min) && (row.Max is { } max) && ((cell.Value < min) || (cell.Value > max))) {
+            reason = $"state row '{rowName}' cell '{key}' value {DescribeValue(kind: row.Kind, raw: cell.Value)} is outside its declared range {DescribeValue(kind: row.Kind, raw: min)}..{DescribeValue(kind: row.Kind, raw: max)}";
+            return false;
+        }
+
+        if ((row.Kind == CellKind.Int) && ((cell.Value < WorldStateCapacity.MinIntCellValue) || (cell.Value > WorldStateCapacity.MaxIntCellValue))) {
+            reason = $"state row '{rowName}' cell '{key}' value {cell.Value} is outside the representable int range {WorldStateCapacity.MinIntCellValue}..{WorldStateCapacity.MaxIntCellValue}";
+            return false;
+        }
+
+        return true;
+    }
+
     // Fixed-kind values speak DECIMAL in refusal text — never the raw Q48.16 bit pattern — matching the document
     // JSON, console verb, and read-back conventions the same value crosses.
     private static string DescribeValue(CellKind kind, long raw) =>
@@ -156,6 +211,10 @@ public static partial class WorldDefinitionValidator {
 
         if (cycle.TicksPerStep <= 0) {
             errors.Add(item: $"{path}.ticksPerStep {cycle.TicksPerStep} must be positive.");
+        }
+
+        if ((cycle.SubstepTicks < 0) || (cycle.SubstepTicks >= cycle.TicksPerStep)) {
+            errors.Add(item: $"{path}.substepTicks {cycle.SubstepTicks} must be in 0..ticksPerStep-1.");
         }
 
         RequireNonNegativeEpoch(

@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
 using Puck.Maths;
@@ -279,8 +280,9 @@ public sealed record WorldStateRow(
 /// function of the base, <see cref="EpochTick"/>, the rate, and the tick asked about. An explicit write —
 /// <c>UpsertStateRow</c> re-authoring the row, or a slot-cell <c>UpsertStateCell</c> — rebases: the written value
 /// becomes the new base and <see cref="EpochTick"/> becomes the tick the write applied at.</para>
-/// <para><see cref="ComputeCurrentValue"/> has exactly one caller, <see cref="WorldStateReader.TryRead"/>, so every
-/// read-back, rule gate, HUD binding, and arithmetic write resolves an advancing row through the same code. An
+/// <para><see cref="ComputeCurrentValue"/> is applied only by <see cref="WorldStateReader"/>'s central known-cell
+/// computation, so both its name and compiled-handle entrances, every aggregate, read-back, rule gate, HUD binding,
+/// and arithmetic write resolve an advancing row through the same code. An
 /// <c>add</c> against an advancing row adds to what a reader sees, never to the stored base.</para>
 /// <para>A rule's own <c>compareState</c> reads an advancing row's live computed value like any other row. A rule's
 /// <c>setState</c>/<c>addState</c> effect against an advancing row's slot cell is an explicit write, so it rebases —
@@ -384,20 +386,11 @@ public sealed record WorldStateAdvance(long RateNumerator, long RateDenominator,
         );
     }
     private CompiledDiscreteMeasure64 CompiledFor(long scale) {
-        var cache = m_compiled;
-
-        if ((cache is null) || (cache.Scale != scale) || (cache.RateNumerator != RateNumerator) || (cache.RateDenominator != RateDenominator)) {
-            _ = ExactMeasure(scale: scale).TryCompileInt64(compiled: out var compiled);
-            cache = new CompiledMeasureCache(
-                Compiled: compiled,
-                RateDenominator: RateDenominator,
-                RateNumerator: RateNumerator,
-                Scale: scale
-            );
-            m_compiled = cache;
-        }
-
-        return cache.Compiled;
+        var cache = CompiledMeasures.GetValue(
+            key: this,
+            createValueCallback: static advance => new CompiledMeasureCache(advance)
+        );
+        return scale == FixedQ4816.One.Value ? cache.Fixed : cache.Integer;
     }
     private DiscreteMeasure ExactMeasure(long scale) =>
         DiscreteMeasure.Rational(
@@ -405,14 +398,22 @@ public sealed record WorldStateAdvance(long RateNumerator, long RateDenominator,
             numerator: (BigInteger.Abs(value: ((BigInteger)RateNumerator)) * scale)
         );
 
-    // The compiled measure for the last scale this trait was read at. The record's own rate fields are the cache key, so
-    // a `with` copy that changes the rate recompiles on its first read rather than answering from the copied cache; the
-    // holder is one immutable reference, so a concurrent reader sees either the old cache or the new one, never a torn
-    // mix. An invalid compiled value (a rate the bounded form cannot hold) is cached too, so the exact fallback is
-    // taken without recompiling on every read.
-    private CompiledMeasureCache? m_compiled;
+    // Runtime acceleration belongs beside the immutable record, not inside its synthesized equality/hash surface.
+    // A weak key keeps the cache lifetime coupled to the trait while allowing both supported encodings to be compiled
+    // once. Invalid compiled values are cached too, so an exact-only rate does not retry compilation on every read.
+    private static readonly ConditionalWeakTable<WorldStateAdvance, CompiledMeasureCache> CompiledMeasures = new();
 
-    private sealed record CompiledMeasureCache(CompiledDiscreteMeasure64 Compiled, long RateNumerator, long RateDenominator, long Scale);
+    private sealed class CompiledMeasureCache {
+        public CompiledMeasureCache(WorldStateAdvance advance) {
+            _ = advance.ExactMeasure(scale: 1L).TryCompileInt64(compiled: out var integer);
+            _ = advance.ExactMeasure(scale: FixedQ4816.One.Value).TryCompileInt64(compiled: out var fixedPoint);
+            Integer = integer;
+            Fixed = fixedPoint;
+        }
+
+        public CompiledDiscreteMeasure64 Fixed { get; }
+        public CompiledDiscreteMeasure64 Integer { get; }
+    }
 }
 /// <summary>
 /// A <see cref="WorldStateCell"/>/<see cref="WorldStateRow"/>'s second-order easing trait: the STORED value stays the
@@ -424,14 +425,11 @@ public sealed record WorldStateAdvance(long RateNumerator, long RateDenominator,
 /// — the same rebase discipline <see cref="WorldStateAdvance"/>'s own write rule follows, so a retune never jumps.
 /// </summary>
 /// <param name="Row">The referenced <c>dynamics</c> row name; must resolve.</param>
-/// <param name="Y0">The follower's position at <see cref="EpochTick"/> — the eased value observed at the last
-/// rebase, carried in the SAME per-kind encoding as <see cref="WorldStateCell.Value"/> (raw <c>FixedQ4816</c> bits
-/// for a <see cref="CellKind.Fixed"/> row, a whole number for every other kind — see
-/// <c>Puck.World.WorldStateReader.DynamicsRawToFixed</c>). On an int row this rounds the eased value to a whole
-/// unit at every rebase.</param>
-/// <param name="V0">The follower's velocity at <see cref="EpochTick"/>, per second, in the same per-kind encoding
-/// as <see cref="Y0"/>. On an int row this rounds a sub-half-unit-per-second velocity — and so a sub-half-unit
-/// <c>r</c> kick — to zero.</param>
+/// <param name="Y0">The follower's position at <see cref="EpochTick"/> as raw <c>FixedQ4816</c> bits, independent
+/// of the carrying row's stored-value kind. Keeping the continuous state fixed-native preserves sub-unit phase when
+/// an integer target is rebased.</param>
+/// <param name="V0">The follower's velocity at <see cref="EpochTick"/>, per second, as raw
+/// <c>FixedQ4816</c> bits. A sub-unit response kick therefore survives an integer-row rebase.</param>
 /// <param name="EpochTick">The server tick <see cref="Y0"/>/<see cref="V0"/> were captured at.</param>
 public sealed record WorldStateDynamics(string Row, long Y0, long V0, long EpochTick = 0);
 /// <summary>What a <see cref="WorldStateCycle"/> cell reads: the rotation as a step count, a fraction of a turn or a
@@ -479,16 +477,18 @@ public enum WorldCycleOutput : byte {
 /// ring at one, seven, eleven or thirteen positions per step. A declared envelope clamps the computed value on
 /// every read, exactly as it does an advancing row's.</para>
 /// <para><c>world.save</c> settles a cycling cell in the serialized projection only: the stored value becomes the
-/// current rotation index (or node) and the epoch returns to zero, so a boot from the saved document reads the same
-/// value at its first tick; a partial step under <see cref="TicksPerStep"/> is not carried.</para>
+/// current rotation index (or node), the epoch returns to zero, and <see cref="SubstepTicks"/> carries the elapsed
+/// portion of the current step, so both the first value and the next transition remain continuous after reload.</para>
 /// </remarks>
 /// <param name="Plane">The rotation plane, <c>0..3</c>, selecting the steps-per-tick speed 1, 7, 11 or 13.</param>
 /// <param name="Output">What the cell reads; must suit the carrying row's <see cref="CellKind"/>.</param>
 /// <param name="TicksPerStep">The server ticks one step lasts; refused at zero or below.</param>
 /// <param name="EpochTick">The server tick the step count is measured from; a tick before it reads as step zero. A
 /// negative value is refused.</param>
+/// <param name="SubstepTicks">Elapsed ticks already accumulated toward the next step at <see cref="EpochTick"/>;
+/// must be non-negative and less than <see cref="TicksPerStep"/>.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldStateCycle(int Plane = 0, WorldCycleOutput Output = WorldCycleOutput.Step, long TicksPerStep = 1, long EpochTick = 0) {
+public sealed record WorldStateCycle(int Plane = 0, WorldCycleOutput Output = WorldCycleOutput.Step, long TicksPerStep = 1, long EpochTick = 0, long SubstepTicks = 0) {
     /// <summary>Gets a value indicating whether <paramref name="output"/> reads through the symmetry lattice rather
     /// than the bare rotation.</summary>
     public static bool IsLatticeOutput(WorldCycleOutput output) => (output is WorldCycleOutput.Node or WorldCycleOutput.ProjectionX or WorldCycleOutput.ProjectionY or WorldCycleOutput.Ring);
@@ -568,13 +568,28 @@ public sealed record WorldStateCycle(int Plane = 0, WorldCycleOutput Output = Wo
         return ((row.Kind == CellKind.Fixed) ? (settled << FixedQ4816.FractionBitCount) : settled);
     }
 
+    /// <summary>Returns the elapsed remainder within the current step when settling at a tick.</summary>
+    public long SettledSubstep(ulong currentTick) {
+        var duration = ((ulong)Math.Max(val1: TicksPerStep, val2: 1L));
+        var elapsedRemainder = (Elapsed(currentTick: currentTick) % duration);
+        var carried = Math.Min(val1: ((ulong)Math.Max(val1: SubstepTicks, val2: 0L)), val2: (duration - 1UL));
+
+        return ((long)((carried + elapsedRemainder) % duration));
+    }
+
     // The plane's own step count in [0, 30) at a tick: whole steps since the epoch, reduced modulo the period before
     // the plane speed multiplies them, so no tick count can overflow the rotation arithmetic.
     private int PlaneStep(ulong currentTick) {
-        var epoch = ((ulong)Math.Max(val1: EpochTick, val2: 0L));
-        var steps = ((currentTick <= epoch) ? 0UL : ((currentTick - epoch) / ((ulong)Math.Max(val1: TicksPerStep, val2: 1L))));
+        var duration = ((ulong)Math.Max(val1: TicksPerStep, val2: 1L));
+        var elapsed = Elapsed(currentTick: currentTick);
+        var carried = Math.Min(val1: ((ulong)Math.Max(val1: SubstepTicks, val2: 0L)), val2: (duration - 1UL));
+        var steps = ((elapsed / duration) + (((elapsed % duration) + carried) / duration));
 
         return CyclicRotation.Step(plane: Plane, tick: ((long)(steps % ((ulong)CyclicRotation.Period))));
+    }
+    private ulong Elapsed(ulong currentTick) {
+        var epoch = ((ulong)Math.Max(val1: EpochTick, val2: 0L));
+        return ((currentTick <= epoch) ? 0UL : (currentTick - epoch));
     }
 }
 /// <summary>How a <see cref="WorldGenerator"/>'s entries — a Markov context's alternatives, or a weighted numeric

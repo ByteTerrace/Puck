@@ -6,6 +6,7 @@ using Puck.Physics.Motion;
 namespace Puck.World.Server;
 
 public sealed partial class WorldServer {
+    private bool m_ruleStatePreflightRejected;
     /// <summary>Observes a music segment transition the instant it commits (the same tick <c>MusicDirector</c>
     /// records it, from the music-step call site in <see cref="StepCore"/>) — mirroring
     /// <see cref="SaveEffectTap"/>/<see cref="WorldMachineHost.MachineLifecycleTap"/>'s "the server calls out, the
@@ -271,12 +272,27 @@ public sealed partial class WorldServer {
 
         var applied = false;
 
-        foreach (var effect in rule.Effects) {
-            applied |= FireWorldRuleEffect(
-                effect: effect,
-                stepTicks: stepTicks,
-                tick: tick
-            );
+        for (var index = 0; index < rule.Effects.Length;) {
+            if (rule.Effects[index].Kind is WorldRuleEffectKind.Write or WorldRuleEffectKind.Countdown) {
+                var end = (index + 1);
+
+                while ((end < rule.Effects.Length) && (rule.Effects[end].Kind is WorldRuleEffectKind.Write or WorldRuleEffectKind.Countdown)) {
+                    end++;
+                }
+
+                if (PreflightWorldRuleStateEffects(effects: rule.Effects, start: index, end: end, tick: tick, stepTicks: stepTicks)) {
+                    for (; index < end; index++) {
+                        applied |= FireWorldRuleEffect(effect: rule.Effects[index], stepTicks: stepTicks, tick: tick);
+                    }
+                } else {
+                    index = end;
+                }
+
+                continue;
+            }
+
+            applied |= FireWorldRuleEffect(effect: rule.Effects[index], stepTicks: stepTicks, tick: tick);
+            index++;
         }
 
         return applied;
@@ -477,7 +493,7 @@ public sealed partial class WorldServer {
     // (the one exception being a removePlacement on a possessed carrier, which the CarrierPossessed guard below skips
     // outright rather than submitting). SAVE is the one exception to all of this: it submits no WorldMutation at all (see
     // ActionEffect.Save's remarks) and is handled before the mutation switch below ever runs.
-    private bool FireWorldRuleEffect(CompiledWorldEffect effect, ulong tick, ulong stepTicks) {
+    private bool FireWorldRuleEffect(CompiledWorldEffect effect, ulong tick, ulong stepTicks, bool preflight = false) {
         if (effect.Kind == WorldRuleEffectKind.Save) {
             // No compose, no validate, no install, no journal — SaveEffectTap performs the identical settle-at-save
             // capture 'world.save' itself runs, straight to the world's own loaded file. A null tap (no composition
@@ -557,7 +573,7 @@ public sealed partial class WorldServer {
                     return false;
                 }
 
-                return TryApplyMutation(
+                return ApplyWorldRuleMutation(
                     mutation: new WorldMutation.UpsertStateCell(
                         Principal: WorldPrincipal.World,
                         Row: effect.Row,
@@ -569,7 +585,8 @@ public sealed partial class WorldServer {
                     tick: tick,
                     connectionId: SubmissionEnvelope.LocalConnectionId,
                     correlationId: 0,
-                    preMetered: false
+                    preMetered: false,
+                    preflight: preflight
                 );
             }
 
@@ -601,7 +618,7 @@ public sealed partial class WorldServer {
                         value: ReadWorldFact(
                             operand: from,
                             tick: tick
-                        ).Value,
+                        ),
                         kind: row.Kind
                     )
                     : effect.RawValue
@@ -625,7 +642,7 @@ public sealed partial class WorldServer {
                 return false;
             }
 
-            return TryApplyMutation(
+            return ApplyWorldRuleMutation(
                 mutation: new WorldMutation.UpsertStateCell(
                     Principal: WorldPrincipal.World,
                     Row: effect.Row,
@@ -636,7 +653,8 @@ public sealed partial class WorldServer {
                 tick: tick,
                 connectionId: SubmissionEnvelope.LocalConnectionId,
                 correlationId: 0,
-                preMetered: false
+                preMetered: false,
+                preflight: preflight
             );
         }
 
@@ -686,13 +704,90 @@ public sealed partial class WorldServer {
             _ => throw new InvalidOperationException(message: $"world rule effect kind '{effect.Kind}' has no fire mapping."),
         };
 
-        return TryApplyMutation(
+        return ApplyWorldRuleMutation(
             connectionId: SubmissionEnvelope.LocalConnectionId,
             correlationId: 0,
             mutation: mutation,
             preMetered: false,
-            tick: tick
+            tick: tick,
+            preflight: preflight
         );
+    }
+    private bool ApplyWorldRuleMutation(WorldMutation mutation, ulong tick, int connectionId, long correlationId, bool preMetered, bool preflight) {
+        if (!preflight) {
+            return TryApplyMutation(
+                mutation: mutation,
+                tick: tick,
+                connectionId: connectionId,
+                correlationId: correlationId,
+                preMetered: preMetered
+            );
+        }
+
+        var current = m_definition;
+
+        if (!TryCompose(
+            current: current,
+            mutation: mutation,
+            tick: tick,
+            instanceIdentity: InstanceIdentity,
+            candidate: out var candidate,
+            reason: out var composeReason,
+            evictedKey: out _
+        )) {
+            m_ruleStatePreflightRejected = true;
+            Reject(
+                connectionId: connectionId,
+                correlationId: correlationId,
+                mutation: mutation,
+                reason: composeReason
+            );
+            return false;
+        }
+
+        candidate = RebaseCellTraits(candidate: candidate, mutation: mutation, original: current, tick: tick);
+
+        if (!TryValidateMutationCandidate(candidate: candidate, mutation: mutation, reason: out var validationReason)) {
+            m_ruleStatePreflightRejected = true;
+            Reject(
+                connectionId: connectionId,
+                correlationId: correlationId,
+                mutation: mutation,
+                reason: validationReason
+            );
+            return false;
+        }
+
+        m_definition = candidate;
+        return true;
+    }
+    // A contiguous run of state effects is one transaction boundary. Compose and validate the entire ordered run
+    // against a private candidate first; only a clean run is replayed through the ordinary apply/journal door. Live
+    // fromState reads still see every preceding candidate write because m_definition is temporarily the candidate,
+    // but no candidate escapes this synchronous preflight and the installed definition is restored in finally.
+    private bool PreflightWorldRuleStateEffects(CompiledWorldEffect[] effects, int start, int end, ulong tick, ulong stepTicks) {
+        var installed = m_definition;
+        m_ruleStatePreflightRejected = false;
+
+        try {
+            for (var index = start; index < end; index++) {
+                _ = FireWorldRuleEffect(
+                    effect: effects[index],
+                    stepTicks: stepTicks,
+                    tick: tick,
+                    preflight: true
+                );
+
+                if (m_ruleStatePreflightRejected) {
+                    return false;
+                }
+            }
+
+            return true;
+        } finally {
+            m_definition = installed;
+            m_ruleStatePreflightRejected = false;
+        }
     }
     // Body state, not document state: the same WorldBody.Pose door ApplyCommand's SnapPose arm (body.pose) uses,
     // but as the world's own act — no drive-gate or grant check, since a gated body is one a rule still needs to
@@ -786,11 +881,13 @@ public sealed partial class WorldServer {
                 )
                 : new WorldFact(
                     Value: predicate.Value,
+                    Kind: predicate.ValueKind,
                     IsForever: false
                 )
             );
 
-            if (!predicate.Comparison.Holds(
+            if (!WorldFactHolds(
+                comparison: predicate.Comparison,
                 value: value.Value,
                 valueIsForever: value.IsForever,
                 expected: expected.Value,
@@ -801,6 +898,23 @@ public sealed partial class WorldServer {
         }
 
         return true;
+    }
+    private static bool WorldFactHolds(ActionStateComparison comparison, long value, bool valueIsForever, long expected, bool expectedIsForever) {
+        var sign = ((valueIsForever, expectedIsForever)) switch {
+            (true, true) => 0,
+            (true, false) => 1,
+            (false, true) => -1,
+            _ => value.CompareTo(value: expected),
+        };
+
+        return comparison switch {
+            ActionStateComparison.Equal => (sign == 0),
+            ActionStateComparison.NotEqual => (sign != 0),
+            ActionStateComparison.Less => (sign < 0),
+            ActionStateComparison.LessOrEqual => (sign <= 0),
+            ActionStateComparison.Greater => (sign > 0),
+            _ => (sign >= 0),
+        };
     }
     // The live half of link liveness: each DIRECT projection in the tick's frozen graph whose delivered snapshot tick
     // advanced is one refresh. An authored row the source could not resolve contributes no projection at all, which
@@ -1492,6 +1606,42 @@ public sealed partial class WorldServer {
         }
 
         public void BeginSweep() => m_touched.Clear();
+        public void AppendStateHash(ref Fnv1aHash hash, CompiledWorldRule[] compiled) {
+            hash.Add(value: ((uint)compiled.Length));
+
+            foreach (var rule in compiled) {
+                hash.Add(value: Fnv1aHash.Compute(values: rule.Name.AsSpan()));
+
+                if (!m_byRule.TryGetValue(
+                    key: rule.Name,
+                    value: out var bindings
+                )) {
+                    hash.Add(value: 0U);
+                    continue;
+                }
+
+                var ordered = bindings.ToArray();
+
+                Array.Sort(
+                    array: ordered,
+                    comparison: static (left, right) => {
+                        var result = left.Key.Left.CompareTo(value: right.Key.Left);
+
+                        return ((result != 0)
+                            ? result
+                            : left.Key.Right.CompareTo(value: right.Key.Right)
+                        );
+                    }
+                );
+                hash.Add(value: ((uint)ordered.Length));
+
+                foreach (var (binding, held) in ordered) {
+                    hash.Add(value: ((uint)binding.Left));
+                    hash.Add(value: ((uint)binding.Right));
+                    hash.Add(value: ((byte)(held ? 1 : 0)));
+                }
+            }
+        }
         public Dictionary<LatchKey, bool> Bindings(string name) {
             ref var bindings = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(
                 dictionary: m_byRule,

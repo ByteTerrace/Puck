@@ -1,5 +1,6 @@
 using Xunit;
 
+using Puck.Maths;
 using Puck.World.Protocol;
 
 namespace Puck.World.Tests;
@@ -99,12 +100,15 @@ public sealed class StateDynamicsRebaseLawTests {
         // The rebased Y0 is the SAME live eased value just sampled above (bit-exact, since no tick elapsed between
         // the sample and the write applying) — a genuine capture of where the follower actually was, never the old
         // truth (300) nor the new one (600).
-        Assert.Equal(actual: trait.Y0, expected: midFlight);
+        var rebasedRowValue = (FixedQ4816.Round(value: FixedQ4816.FromRawBits(value: trait.Y0)).Value >> FixedQ4816.FractionBitCount);
+
+        Assert.Equal(actual: rebasedRowValue, expected: midFlight);
+        Assert.NotEqual(expected: 0L, actual: (trait.Y0 & (FixedQ4816.One.Value - 1L)));
         Assert.Equal(actual: trait.EpochTick, expected: unchecked((long)rewriteTick));
 
         // Continuity: reading right back at the rebase tick reports EXACTLY Y0 — the write never jumps the follower.
         Assert.True(condition: WorldStateReader.TryReadEased(definition: fixture.Server.Definition, key: "0", rawValue: out var atRebase, row: out _, rowName: "gauge", text: out _, tick: rewriteTick));
-        Assert.Equal(actual: atRebase, expected: trait.Y0);
+        Assert.Equal(actual: atRebase, expected: rebasedRowValue);
 
         // Chasing the NEW target: read far in the future (the closed form needs no further Step() calls) and
         // confirm convergence to 600, never back to the old truth of 300.
@@ -154,7 +158,7 @@ public sealed class StateDynamicsRebaseLawTests {
                 new WorldStateCell(
                     Key: WorldCellName.Parse(candidate: "1"),
                     Value: MarketFixtures.BidderStartingGold,
-                    Dynamics: new WorldStateDynamics(EpochTick: 0, Row: "kickZero", V0: 0, Y0: MarketFixtures.BidderStartingGold)
+                    Dynamics: new WorldStateDynamics(EpochTick: 0, Row: "kickZero", V0: 0, Y0: (MarketFixtures.BidderStartingGold << FixedQ4816.FractionBitCount))
                 ),
                 new WorldStateCell(Key: WorldCellName.Parse(candidate: "2"), Value: MarketFixtures.BidderStartingGold),
             ]
@@ -206,7 +210,7 @@ public sealed class StateDynamicsRebaseLawTests {
         // AT REST at its old truth (500) with a zero-response (r=0) row, the captured sample is unchanged by the
         // write and the retarget kick is zero, so the follower keeps sitting at 500 for this one instant even
         // though truth just moved to 490 — it is truth, never the trait, that reflects the spend immediately.
-        Assert.Equal(actual: trait.Y0, expected: MarketFixtures.BidderStartingGold);
+        Assert.Equal(actual: trait.Y0, expected: (MarketFixtures.BidderStartingGold << FixedQ4816.FractionBitCount));
         Assert.Equal(actual: trait.V0, expected: 0L);
         Assert.True(condition: WorldStateReader.TryRead(definition: fixture.Server.Definition, key: "1", rawValue: out var truth, row: out _, rowName: MarketFixtures.GoldRow.Value, text: out _, tick: appliedTick));
         Assert.Equal(actual: truth, expected: (MarketFixtures.BidderStartingGold - 10));

@@ -176,7 +176,7 @@ public static class BodyActionSpecFactory {
                         name: compare.State,
                         stateSlots: stateSlots
                     ),
-                    Value: FixedQ4816.FromDouble(value: constant),
+                    Value: WorldStateNumericLiteral.ToFixed(value: constant),
                     Comparison: compare.Comparison,
                     Kind: CompiledPredicateKind.CompareState
                 ));
@@ -229,7 +229,7 @@ public static class BodyActionSpecFactory {
         ),
             ActionEffect.SetState set => new CompiledBodyInstruction(
             Operation: BodyMotionOp.SetState,
-            Value: FixedQ4816.FromDouble(value: RequireBodyEffectValue(
+            Value: WorldStateNumericLiteral.ToFixed(value: RequireBodyEffectValue(
                 value: set.Value,
                 fromState: set.FromState,
                 fromKey: set.FromKey,
@@ -251,7 +251,7 @@ public static class BodyActionSpecFactory {
         ),
             ActionEffect.AddState add => new CompiledBodyInstruction(
             Operation: BodyMotionOp.AddState,
-            Value: FixedQ4816.FromDouble(value: RequireBodyEffectValue(
+            Value: WorldStateNumericLiteral.ToFixed(value: RequireBodyEffectValue(
                 value: add.Value,
                 fromState: add.FromState,
                 fromKey: add.FromKey,
@@ -382,7 +382,7 @@ public static class BodyActionSpecFactory {
     // A per-body action-state slot has no world state row to copy from — setState/addState's live 'fromState'/
     // 'fromKey' spelling is legitimate only in a world rule (WorldRuleCompiler); a body-scope effect always writes an
     // authored constant, so 'value' is required here on the same terms compareState's own body-scope 'value' is.
-    private static float RequireBodyEffectValue(float? value, string? fromState, string? fromKey, decimal? valueSeconds, string actionName, string effectName, string state) {
+    private static decimal RequireBodyEffectValue(decimal? value, string? fromState, string? fromKey, decimal? valueSeconds, string actionName, string effectName, string state) {
         if (
             (fromState is not null) ||
             (fromKey is not null)

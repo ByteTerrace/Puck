@@ -21,7 +21,7 @@ public sealed class WorldRuleCountdownLawTests {
             Rules = [
                 new WorldRule(
                     Name: WorldCellName.Parse(candidate: "cooldown-tick"),
-                    Gate: new ActionPredicate.CompareState(State: countdownName.Value, Comparison: ActionStateComparison.Greater, Value: 0f),
+                    Gate: new ActionPredicate.CompareState(State: countdownName.Value, Comparison: ActionStateComparison.Greater, Value: 0m),
                     Effects: [new ActionEffect.CountdownState(State: countdownName.Value)])
             ],
         };

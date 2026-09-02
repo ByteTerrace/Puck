@@ -876,6 +876,24 @@ public sealed partial class WorldServer {
             );
         }
     }
+    // A scalar state write changes runtime values, not declaration shape. Keep the authoritative document as the
+    // journal/save source while retaining the compiled rule/catalog/group/machine products that depend only on
+    // declarations; only state-sensitive grants and field reactions observe the new value immediately.
+    private void InstallRuntimeStateValue(WorldDefinition definition) {
+        m_definition = definition;
+        m_grants.SyncState(definition: definition);
+        m_population.InstallFields(definition: definition);
+    }
+
+    private static bool TryValidateMutationCandidate(WorldDefinition candidate, WorldMutation mutation, out string reason) => mutation switch {
+        WorldMutation.UpsertStateCell state => WorldDefinitionValidator.TryValidateRuntimeStateCell(
+            definition: candidate,
+            rowName: state.Row,
+            key: state.Key,
+            reason: out reason
+        ),
+        _ => WorldDefinitionValidator.TryValidateLocally(definition: candidate, reason: out reason),
+    };
     private void Reject(WorldMutation mutation, string reason, int connectionId, long correlationId) {
         Console.Error.WriteLine(value: $"[world.mutation rejected: {Describe(mutation: mutation)} — {reason}]");
         EchoTap?.Invoke(obj: new WorldEditEcho(
@@ -1052,10 +1070,7 @@ public sealed partial class WorldServer {
             return false;
         }
 
-        if (!WorldDefinitionValidator.TryValidateLocally(
-            definition: candidate,
-            reason: out var validationReason
-        )) {
+        if (!TryValidateMutationCandidate(candidate: candidate, mutation: mutation, reason: out var validationReason)) {
             Reject(
                 connectionId: connectionId,
                 correlationId: correlationId,
@@ -1218,13 +1233,17 @@ public sealed partial class WorldServer {
             // narration, disposal of a superseded guest) moves until then. Narration and superseded-guest disposal
             // (Finish) run only AFTER the journal write below, so neither can still be unwound by what Finish
             // itself does.
-            Install(
-                definition: candidate,
-                rebuildPopulation: (AffectsPopulation(mutation: mutation) || RefreshesLookAssignment(
-                candidate: candidate,
-                mutation: mutation
-            ) || (solidAffecting && WorldContactSelection.RequiresField(collision: candidate.Collision)))
-            );
+            if (mutation is WorldMutation.UpsertStateCell) {
+                InstallRuntimeStateValue(definition: candidate);
+            } else {
+                Install(
+                    definition: candidate,
+                    rebuildPopulation: (AffectsPopulation(mutation: mutation) || RefreshesLookAssignment(
+                    candidate: candidate,
+                    mutation: mutation
+                ) || (solidAffecting && WorldContactSelection.RequiresField(collision: candidate.Collision)))
+                );
+            }
 
             if (mutation is WorldMutation.Generate generated) {
                 RepaintLatticeDrawAfterGenerate(

@@ -414,11 +414,11 @@ public sealed partial class WorldServer {
 
         var kicked = dynamicsRow.Compiled.Retarget(
             current: sample,
-            newTarget: WorldStateReader.DynamicsRawToFixed(
+            newTarget: WorldStateReader.DynamicsRowRawToFixed(
                 raw: newTarget,
                 row: originalRow
             ),
-            oldTarget: WorldStateReader.DynamicsRawToFixed(
+            oldTarget: WorldStateReader.DynamicsRowRawToFixed(
                 row: originalRow,
                 raw: originalCell.Value
             )
@@ -426,14 +426,8 @@ public sealed partial class WorldServer {
 
         return new WorldStateDynamics(
             Row: candidateTrait.Row,
-            Y0: WorldStateReader.DynamicsFixedToRaw(
-                row: originalRow,
-                value: sample.Value
-            ),
-            V0: WorldStateReader.DynamicsFixedToRaw(
-                row: originalRow,
-                value: kicked.Velocity
-            ),
+            Y0: WorldStateReader.DynamicsFixedToTraitRaw(value: sample.Value),
+            V0: WorldStateReader.DynamicsFixedToTraitRaw(value: kicked.Velocity),
             EpochTick: epoch
         );
     }

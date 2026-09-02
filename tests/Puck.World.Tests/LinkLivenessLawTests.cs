@@ -354,7 +354,7 @@ public sealed class LinkLivenessLawTests {
                         Comparison: ActionStateComparison.GreaterOrEqual,
                         Value: grace
                     ),
-                    Effects: [new ActionEffect.SetState(State: alarm.Value, Value: 1f)])
+                    Effects: [new ActionEffect.SetState(State: alarm.Value, Value: 1m)])
             ],
         };
     }

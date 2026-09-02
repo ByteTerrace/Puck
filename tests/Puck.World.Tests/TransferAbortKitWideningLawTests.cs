@@ -89,7 +89,7 @@ public sealed class TransferAbortKitWideningLawTests {
                 ["surge"] = new ActionSpec(
                     OnPress: null,
                     OnRelease: null,
-                    OnFact: [new ActionFactTrigger(Fact: ActionFact.Falling, Effects: [new ActionEffect.AddState(State: "surgeCounter", Value: 1f)], Mode: ActionTriggerMode.Edge)]
+                    OnFact: [new ActionFactTrigger(Fact: ActionFact.Falling, Effects: [new ActionEffect.AddState(State: "surgeCounter", Value: 1m)], Mode: ActionTriggerMode.Edge)]
                 ),
             },
             Collider: null
@@ -162,7 +162,7 @@ public sealed class TransferAbortKitWideningLawTests {
                 ["surge"] = new ActionSpec(
                     OnPress: null,
                     OnRelease: null,
-                    OnFact: [new ActionFactTrigger(Fact: ActionFact.Rising, Effects: [new ActionEffect.AddState(State: "surgeCounter", Value: 1f)], Mode: ActionTriggerMode.Edge)]
+                    OnFact: [new ActionFactTrigger(Fact: ActionFact.Rising, Effects: [new ActionEffect.AddState(State: "surgeCounter", Value: 1m)], Mode: ActionTriggerMode.Edge)]
                 ),
             },
             Collider: null

@@ -6,6 +6,37 @@ using Puck.Physics.Motion;
 namespace Puck.World.Server;
 
 public sealed partial class WorldBody {
+    // The action-state portion of WorldRuntimeStateHash's authoritative boundary. Definition order is the compiled
+    // register order, so no sort or temporary collection is needed.
+    internal void AppendActionStateHash(ref Fnv1aHash hash) {
+        hash.Add(value: ((uint)m_actionStateDefinitions.Length));
+
+        for (var slot = 0; (slot < m_actionStateDefinitions.Length); slot++) {
+            var definition = m_actionStateDefinitions[slot];
+
+            hash.Add(value: Fnv1aHash.Compute(values: definition.Name.AsSpan()));
+            hash.Add(value: ((byte)definition.Kind));
+            hash.Add(value: ((byte)definition.Lifetime));
+            hash.Add(value: m_actionStateValues[slot].Value);
+            hash.Add(value: m_actionStateTimers[slot]);
+        }
+
+        hash.Add(value: ((uint)m_laneActions.Length));
+
+        for (var lane = 0; (lane < m_laneActions.Length); lane++) {
+            ref var runtime = ref m_laneActions[lane];
+
+            hash.Add(value: runtime.Latch);
+            hash.Add(value: runtime.FactHeld);
+            hash.Add(value: ((uint)(runtime.Recency?.Length ?? 0)));
+
+            if (runtime.Recency is { } recency) {
+                for (var index = 0; (index < recency.Length); index++) {
+                    hash.Add(value: recency[index]);
+                }
+            }
+        }
+    }
     internal void AppendDurableStateDeclarations(List<(string Name, ActionStateKind Kind)> declarations) {
         foreach (var definition in m_actionStateDefinitions) {
             if (definition.Lifetime == ActionStateLifetime.Durable) {
