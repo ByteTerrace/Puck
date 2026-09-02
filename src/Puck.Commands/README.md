@@ -276,6 +276,9 @@ same way: a stick sitting at centre reports every frame and is the device
 reporting rather than a release, so it is forwarded only when
 `IInputBindings.HoldsSource` says the resolver is holding that source down. A
 flat resolver holds nothing, answers `false` by default, and never sees one.
+The paged resolver reads such a sample as a RELEASE, exactly as it reads a
+`Completed` or `Canceled` edge, so an analog chord member returning to rest is
+released rather than left held for the life of the slot's state.
 
 Edge-reported controls may stream digital `Active` reassertions while physically
 held. Reassertions rebuild modifier/page state and recover continuous channel
@@ -318,8 +321,9 @@ modal replacement.
 `CommandMaps.Global` is implicit for every slot and is the default map for a
 definition. Removing a map deterministically cancels that slot's affected
 holds and resets that slot's binding tracker so streamed held controls can
-re-establish only continuous state through the newly active maps. Text commands remain outside player modality; their stamped principal
-and the handler's authority checks decide what they may do.
+re-establish only continuous state through the newly active maps. Text
+commands remain outside player modality; their stamped principal and the
+handler's authority checks decide what they may do.
 
 A map exists because a command declared it, and `SetActiveMaps` refuses a name no
 registration claimed. Two more definitions in the quick start's `GameplayModule`
@@ -377,9 +381,11 @@ SectorOffset` sectors clockwise of twelve o'clock and sweeps from half a sector
 before that centre, so a direction lying exactly on a seam selects the sector
 CLOCKWISE of the seam. The reading is quantised, so that promise holds to within
 one and a half steps of the Q16 angle grid (2.3e-5 rad); inside that band of a
-seam, the clockwise sector is selected too. `BindingWheelGrace` holds the
-selection-grace window separately, counted on engine ticks the caller supplies
-rather than on a clock of its own.
+seam, the clockwise sector is selected too. A wheel with no sectors selects
+nothing, so `SelectAxis`, `SelectDirection` and `SelectSpatial` each refuse a
+`sectorCount` of zero or less with `ArgumentOutOfRangeException` before any
+policy runs. `BindingWheelGrace` holds the selection-grace window separately,
+counted on engine ticks the caller supplies rather than on a clock of its own.
 
 Modifier ids compare case-insensitively, so a chord member that differs from a
 declared modifier only in case resolves to that modifier, and two modifiers
@@ -392,20 +398,22 @@ A binding document has exactly one JSON spelling.
 `BindingProfileJsonContext` is the sanctioned entry point for reading and
 writing one from this package, and every bespoke spelling in the graph is
 declared at the type rather than on a context: `CommandValue` and `ChannelRef`
-carry their own converters, and every enum is written and read by exact declared
-member name, with a numeric token refused. That is why a profile written from
-this package and the same profile written as a section of a `Puck.World`
-document are the same bytes rather than two shapes a reader has to guess
-between. Reads are strict in both directions: a member the model does not have
-is refused by name, and so is a member the model requires and the document
-omits.
+carry their own converters, and every enum, `CommandValue`'s own `kind` among
+them, is written and read by exact declared member name, with a numeric token
+refused. That is why a profile written from this package and the same profile
+written as a section of a `Puck.World` document are the same bytes rather than
+two shapes a reader has to guess between. Reads are strict in both directions: a
+member the model does not have is refused by name, and so is a member the model
+requires and the document omits.
 
 `BindingSessionPlan.FromPage` builds a guided rebinding session from one page,
 walking that page's EFFECTIVE entries: a page carrying `inherits` presents its
-own overrides plus everything it merely keeps, flattened by the rule
-`BindingProfile.Compile` applies at runtime. It reserves every source that
-drives page selection, declared modifiers and raw chord members alike, because
-capturing one would break page selection for the whole profile.
+own overrides plus everything it merely keeps, flattened by the same
+inheritance walk `BindingProfile.Compile` runs rather than a second copy of it.
+A document `Compile` refuses (an `inherits` naming a page in another group, a
+cycle) is therefore refused here too. It reserves every source that drives page
+selection, declared modifiers and raw chord members alike, because capturing one
+would break page selection for the whole profile.
 
 `BindingVocabularyCheck.Validate(document, lookups)` validates a document
 against the live vocabularies and returns a `BindingVocabularyReport`: every
@@ -414,17 +422,21 @@ vocabularies arrive as one `BindingVocabularyLookups`, each lookup
 independently optional, so a caller with no registry keeps the physical checks
 and a caller with no channel table keeps the command ones. A report is the whole
 answer rather than a delta, so the check appends to nothing the caller already
-holds.
+holds, and a default-constructed one reads clean rather than throwing: `Errors`
+answers an empty array for the report an initializer never reached.
 
 On the command half it refuses an unknown command, a command not declared
 `Bindable`, a value whose kind differs from the command's declaration, and
-authored text bound to a command that accepts no wire arguments. On the physical
-half it refuses, by name, a source the caller's control catalog cannot resolve
-in any of the four places a document can name one: a page entry's `sources`, an
-activator step, a declared modifier's own `sources`, and a chord row's
-`held`/`chord` member that names no declared modifier. All four compile into a
-control that never signals, which is the class of typo this gate exists to turn
-loud.
+authored text bound to a command that accepts no wire arguments. The registry's
+own `help`, `wire.ack` and `wire.errors` are refused by that second rule rather
+than the first: they are ordinary registrations declared `Unbindable`, so a row
+naming one is answered by what the verb is rather than by calling a verb the
+registry dispatches unknown. On the physical half it refuses, by name, a source
+the caller's control catalog cannot resolve in any of the four places a document
+can name one: a page entry's `sources`, an activator step, a declared modifier's
+own `sources`, and a chord row's `held`/`chord` member that names no declared
+modifier. All four compile into a control that never signals, which is the class
+of typo this gate exists to turn loud.
 
 The check is a host responsibility rather than an `InputRouter` runtime check.
 `Puck.World` routes its documents through it and supplies command metadata when
@@ -463,9 +475,17 @@ Two public paths reach a handler:
    longer line falls through to the full parse and reaches the same handler by
    the slower road.
 
-Five properties of the submitted line are worth stating outright, because a
+Six properties of the submitted line are worth stating outright, because a
 scripted driver depends on them:
 
+- **A line that names no command is refused, not ignored.** A blank or
+  whitespace-only line answers `[wire.reject: a blank line names no command]`
+  and is counted, because `wire.errors` promises to say whether a submitted line
+  silently no-opped and a blank line is the purest no-op there is. An unknown
+  verb leads with the sentence that answers the question, the
+  `wire.reject: unknown command '…'` line pointing at `help`, rather than with
+  System.CommandLine's "Required command was not provided", which is about its
+  own grammar and not about the line.
 - **An `@`-prefixed argument is an ordinary token.** System.CommandLine's
   response-file expansion is switched off for both of the registry's parse
   sites, so a submitted line never reads the filesystem and never depends on the
@@ -483,14 +503,18 @@ scripted driver depends on them:
   and notifies no observer. A host cannot watch `Submit` faults through an
   observer; it reads them from the returned `CommandResult`.
   The boundary is the ENTRY rather than
-  the handler, so it also contains what an observer throws and what the
-  registry's own decoding of a submitted line raises; the rest of the tick's
-  entries still run, and each entry's read-after-write barrier releases whether
-  its body completed or threw. The single exception is an
+  the handler, so it also contains what the registry's own decoding of a
+  submitted line raises; an observer gets a boundary of its own, one per
+  observer, so a broken sink cannot silence the sinks after it. The rest of the
+  tick's entries still run, and each entry's read-after-write barrier releases
+  whether its body completed or threw. The single exception is an
   `OperationCanceledException`, which a handler raises by observing the HOST's
   cancellation token: that is a signal to the caller rather than a verdict about
   a command, so it propagates unchanged and uncounted, leaving the tick's
   remaining entries unapplied, which is what a requested shutdown asks for.
+  `ApplySnapshot` still releases the read-after-write barrier of every entry it
+  abandons behind the one that raised, so the owning `TextCommandSession` can
+  drain again rather than waiting forever on a submission no later tick reaches.
 - **A deferred line's argument errors arrive a tick late.** Because a
   Simulation-class line whose verb stands alone is not parsed at submit, a
   malformed argument SHAPE is counted into `wire.errors` AND published to
@@ -507,7 +531,14 @@ scripted driver depends on them:
   bounded at eight: a chain that submits deeper is refused with
   `[wire.reject: command submission nested more than 8 deep — '<line>' refused]`,
   so an accidental cycle answers as an ordinary error rather than overflowing
-  the stack and taking the session with it.
+  the stack and taking the session with it. An `ICommandObserver` that throws
+  while being told about a dispatch is not one of those lines either. It is a
+  reporting surface that broke rather than a line anybody refused, so it is
+  counted on its own and reported beside the refusals as a trailing
+  `| <n> observer faults` segment, named only when there have been some;
+  `[wire.errors: 0 rejected]` stays the whole answer for a run that refused
+  nothing. Three broken sinks watching one bound gamepad press, a line no
+  caller submitted at all, therefore add nothing to the refused count.
 
 Read-after-write ordering across submitted lines is a `TextCommandSession`
 guarantee rather than a `Submit` one: `TextCommandSource.Collect` holds that
@@ -552,14 +583,14 @@ member-by-member surface.
 
 | Type | Role |
 |------|------|
-| `CommandRegistry` | The immutable command catalog and dispatch hub. Aggregates modules, interns command and map metadata, and dispatches snapshots and text lines. |
+| `CommandRegistry` | The immutable command catalog and dispatch hub. Aggregates modules and its own three verbs, interns command and map metadata, and dispatches snapshots and text lines. |
 | `CommandDefinition` | Named, typed, invokable command — the shared identity behind every way it can be driven. Its identity-bearing members (`Name`, `TextCommand`, `Description`, `Map`) are readable but settable only inside the assembly, so a `with` expression cannot split a command's dispatch identity from its text identity. Build one through `Verb` or `WithWireArgs`, which refuse a null handler, name, or description at the registration rather than at the first dispatch. |
 | `ICommandModule` | Unit of composition: contributes a set of `CommandDefinition`s. |
 | `CommandContext` | Per-invocation state handed to a handler (value, phase, logical slot, stamped principal, local device, parse result, text, registry). Internal to construct. |
 | `CommandPrincipal` / `CommandPrincipalKind` | The acting identity a dispatch carries: `Console`, `Seat`, `Addon`, or `Peer`. |
 | `ICommandPrincipalResolver` | The host's answer to *who is acting through slot N*, which the router stamps onto that slot's commands. |
 | `CommandBindability` | Whether a binding document may name a command. Required at every registration; `Unspecified` is refused by name. |
-| `CommandMetadata` | The public read-only face of a registration — what `Definitions` returns. Its eight members are the name, value kind, routing, bindability, input scope, map, whether the command is a held verb, and whether it accepts wire arguments; the vocabulary gate reads that last one to decide whether a binding row may carry authored text. |
+| `CommandMetadata` | The public read-only face of a registration, the registry's own three verbs included — what `Definitions` returns. Its eight members are the name, value kind, routing, bindability, input scope, map, whether the command is a held verb, and whether it accepts wire arguments; the vocabulary gate reads that last one to decide whether a binding row may carry authored text. |
 | `CommandResult` | What a handler returns for the transcript (output text + optional clear). |
 | `CommandValue` / `CommandValueKind` | The per-frame value, tagged with its shape, packed into a `Vector4`. |
 | `CommandPhase` | Transition the activation represents: `Started`, `Active`, `Completed`, `Canceled`. |
@@ -570,7 +601,7 @@ member-by-member surface.
 | `CommandInjectionSink` | The read-only public face of the console sink used to queue simulation-class submitted text under `CommandPrincipal.Console`. |
 | `TextCommandSource` | Queue and per-frame pump for command lines through the registry's text path. |
 | `InputRouter` | Owns each slot's active maps, captures timestamped physical signals and pre-resolved injections, then emits ordered per-tick, per-slot snapshots. Disposable: a host that replaces a router must dispose the old one, or it keeps mutating its held tables on every binding reload and device disconnect. |
-| `CommandEcho` | The bracketed `[verb: key=value …]` echo grammar a read-back or mutation verb writes, defined once rather than hand-spelled per verb. `Field` routes its value through `Quote`, and `SpliceTag(text, prefix, value)` quotes only the VALUE, because the tag's declared literal prefix has to stay readable to the readers that test for it. Either way a reserved character inside a value cannot end the token, the segment, the envelope, or the line; `Unquote` is the exact inverse of `Quote`, and `TryReadToken` is what a driver reading a whole echo line wants instead. |
+| `CommandEcho` | The bracketed `[verb: key=value …]` echo grammar a read-back or mutation verb writes, defined once rather than hand-spelled per verb. `Field` routes its value through `Quote`, and `SpliceTag(text, prefix, value)` quotes only the VALUE, because the tag's declared literal prefix has to stay readable to the readers that test for it. Either way a reserved character inside a value cannot end the token, the segment, the envelope, or the line. `Quote` emits a value verbatim unless it carries whitespace, a backslash, or one of the grammar's own delimiters, and otherwise as a double-quoted run in which a backslash doubles, newline, carriage return and tab take their short spellings, and every other control character, both Unicode line and paragraph separators, and an interior quote ride as `\uXXXX`. One encoding serves two readers, which is why an interior quote rides as `\u0022` rather than `\"` and a value carrying a backslash is always quoted: the console's resubmit splitter knows quoted runs and no escapes at all, so once it has stripped the run every backslash left is unambiguously an escape for `Unescape` to invert. `Unquote` is the exact inverse of `Quote` for a token already in hand, and `TryReadToken` is what a driver reading a whole echo line wants instead. |
 | `CommandSnapshot` / `CommandLane` / `CommandEntry` | Canonical deterministic input for one fixed tick, built and applied within it — ephemeral, never itself persisted, with local device identities excluded from its deterministic content. |
 
 ## 📌 Design notes
@@ -590,8 +621,12 @@ member-by-member surface.
   principal inside a handler would discard that attribution.
 - **Unknown / inactive is silent.** A signal naming an unknown command, or one
   whose map is inactive, is ignored without error.
-- **`help` is built in.** The registry auto-registers a `help` command listing
-  every command and description.
+- **The registry's own three verbs are ordinary registrations.** `help`,
+  `wire.ack` and `wire.errors` are `CommandDefinition`s the registry yields
+  before it reads a module's, declared `Unbindable` and `Immediate`. So
+  `TryGetId` and `TryGetMetadata` answer for them, `Definitions` is the whole
+  dispatchable catalogue rather than the catalogue minus three, and the `help`
+  listing covers every command and description including its own.
 - **`wire.ack` sets how loud an accepted line is.** `wire.ack on`, the default,
   echoes every accepted command; `wire.ack quiet` drops the bare success
   acknowledgements, and only those. A verb opts into being droppable by
