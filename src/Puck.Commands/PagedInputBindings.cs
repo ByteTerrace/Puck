@@ -62,7 +62,9 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
         // The sources whose press COMPLETED a command chord they are a member of, and which that chord therefore
         // owns: the page's own binding for that source does not also resolve, and neither does its release. A
         // source whose RELEASE merely left some other row satisfied is never listed here — that row does not
-        // contain it, so its authored release still resolves. Cleared as each source releases.
+        // contain it, so its authored release still resolves. Cleared as each source releases — where a release is
+        // an explicit Completed/Canceled edge OR an inactive sample, because a continuous producer has only the
+        // latter to report one with (see Resolve).
         public required HashSet<string> ChordConsumed { get; init; }
         public required Dictionary<string, IReadOnlyList<CommandBinding>> Latches { get; init; }
         public required CompiledBindingProfile Profile { get; init; }
@@ -628,7 +630,16 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
             return null;
         }
 
-        if (signal.Phase is CommandPhase.Completed or CommandPhase.Canceled) {
+        // What counts as a RELEASE here is exactly what counts as one for BindingChordTracker.Apply above and for
+        // InputRouter.ApplySignal: an explicit Completed/Canceled edge, OR an inactive sample. The second half is
+        // not a nicety — a CONTINUOUS producer has no release edge to send and reports its return to rest as an
+        // Active-phase inactive sample, so reading only the phase leaves an analog chord member in ChordConsumed
+        // for the life of the slot state: HoldsSource answers "held" forever (defeating the router's focus-exempt
+        // idle gate) and the source's own page binding resolves to null forever, group flips included.
+        if (
+            (signal.Phase is CommandPhase.Completed or CommandPhase.Canceled) ||
+            !signal.Value.IsActive
+        ) {
             if (state.ChordConsumed.Remove(item: signal.Source)) {
                 return null;
             }

@@ -1206,6 +1206,91 @@ public sealed class PagedInputBindingsTests {
             Phase: CommandPhase.Active
         );
     }
+    [Fact]
+    public void HoldsSourceGoesFalseOnceAnAnalogChordSourceHasReturnedToRest() {
+        var bindings = new PagedInputBindings(profile: AnalogChordProfile());
+
+        Resolve(
+            bindings: bindings,
+            signal: Trigger(value: 0.9f)
+        );
+
+        Assert.True(condition: bindings.HoldsSource(slot: 0, source: "pad.leftTrigger"));
+
+        // A CONTINUOUS producer reports its release the only way it can — an Active-phase inactive sample. That is
+        // the release everywhere else (BindingChordTracker.Apply, InputRouter.ApplySignal), so the chord's claim on
+        // the source ends with it; otherwise the router's focus-exempt idle gate is answered "held" forever.
+        Resolve(
+            bindings: bindings,
+            signal: Trigger(value: 0f)
+        );
+
+        Assert.False(condition: bindings.HoldsSource(slot: 0, source: "pad.leftTrigger"));
+    }
+    [Fact]
+    public void AnAnalogChordSourcesPageBindingResolvesAgainAfterItReturnsToRest() {
+        var bindings = new PagedInputBindings(profile: AnalogChordProfile());
+
+        Resolve(
+            bindings: bindings,
+            signal: Trigger(value: 0.9f)
+        );
+        Resolve(
+            bindings: bindings,
+            signal: Trigger(value: 0f)
+        );
+
+        // The group carrying the chord row is no longer active, and the trigger's own claim ended when it centred,
+        // so the menu page's entry for it is what the next deflection resolves to.
+        Assert.True(condition: bindings.SetActiveGroup(slot: 0, group: "menu"));
+
+        var deflected = Trigger(value: 0.9f);
+
+        Assert.NotNull(@object: bindings.Resolve(
+            pressesWithheld: false,
+            signal: in deflected,
+            slot: 0
+        ));
+    }
+
+    private static CompiledBindingProfile AnalogChordProfile() {
+        return BindingProfile.Compile(
+            channelCommandName: static _ => ChannelCommand,
+            document: new BindingProfileDocument(
+                Version: BindingProfileDocument.CurrentVersion,
+                Modifiers: [new BindingModifierDefinition(Id: "lt", Sources: ["pad.leftTrigger"])],
+                Chords: [
+                    new BindingChordDefinition(
+                        Group: "play",
+                        Chord: [],
+                        Page: new BindingPageDefinition(Id: "play.base", Entries: [new BindingPageEntryDefinition(
+                            Sources: ["pad.leftTrigger"],
+                            Channel: new ChannelRef.Name(Value: "aim")
+                        )])
+                    ),
+                    new BindingChordDefinition(
+                        Group: "play",
+                        Held: ["lt"],
+                        Command: new BindingCommandDefinition(Command: ActionCommand)
+                    ),
+                    new BindingChordDefinition(
+                        Group: "menu",
+                        Chord: [],
+                        Page: new BindingPageDefinition(Id: "menu.base", Entries: [new BindingPageEntryDefinition(
+                            Sources: ["pad.leftTrigger"],
+                            Channel: new ChannelRef.Name(Value: "scroll")
+                        )])
+                    ),
+                ]
+            )
+        );
+    }
+    private static InputSignal Trigger(float value) => new(
+        Source: "pad.leftTrigger",
+        DeviceId: default,
+        Value: CommandValue.Axis(value: value),
+        Phase: CommandPhase.Active
+    );
     private static CompiledBindingProfile WheelProfile(string wheelId) {
         return BindingProfile.Compile(document: new BindingProfileDocument(
             Version: BindingProfileDocument.CurrentVersion,
