@@ -151,6 +151,10 @@ public sealed class InputRouter : IDisposable {
         public CommandEntry Entry;
         public bool HasEntry;
         public bool HasPendingMomentaryRelease;
+        // The payload a pending momentary release cancels with, kept SEPARATE from Entry: a tap and a live hold can
+        // name one destination (a chord row and a page activator over the same channel), and folding the tap's press
+        // into the hold's carried entry would make every later re-assertion replay the tap's dispatched Started edge.
+        public CommandEntry MomentaryEntry;
 
         public bool IsEmpty => (!HasEntry && !HasPendingMomentaryRelease && (Contributions is not { Count: > 0 }));
         public bool IsHeld => (HasEntry || (Contributions is { Count: > 0 }));
@@ -159,6 +163,7 @@ public sealed class InputRouter : IDisposable {
             Entry = default;
             HasEntry = false;
             HasPendingMomentaryRelease = false;
+            MomentaryEntry = default;
             Controls?.Clear();
             Contributions?.Clear();
         }
@@ -290,13 +295,17 @@ public sealed class InputRouter : IDisposable {
             controls.Add(item: control);
         }
     }
+    // ONE cancellation per carried command, never two: a destination carrying both a live hold and a tap's pending
+    // momentary release is one command owing one release, and the hold's own payload is the one that describes it.
     private static void AppendCancellations(List<CommandInjection> cancellations, int slot, HeldCommandState state) {
-        if (
-            state.HasEntry ||
-            state.HasPendingMomentaryRelease
-        ) {
+        if (state.HasEntry) {
             cancellations.Add(item: CancellationFor(
                 entry: state.Entry,
+                slot: slot
+            ));
+        } else if (state.HasPendingMomentaryRelease) {
+            cancellations.Add(item: CancellationFor(
+                entry: state.MomentaryEntry,
                 slot: slot
             ));
         }
@@ -404,15 +413,16 @@ public sealed class InputRouter : IDisposable {
                 edge.DispatchRelease
             ) {
                 // A tapped channel carries no Active reassertion, but its scheduled release still owns
-                // cleanup. Retain only the cancellation payload so a map transition between the two ticks cannot
+                // cleanup. Retain only the cancellation payload — in its OWN slot, so a live hold on the same
+                // destination keeps re-asserting its own entry — so a map transition between the two ticks cannot
                 // strand the handler after its Started edge.
                 var state = HeldFor(
                     commandId: commandId,
                     slot: slot
                 );
 
-                state.Entry = entry;
                 state.HasPendingMomentaryRelease = true;
+                state.MomentaryEntry = entry;
             }
         } else {
             DropHeld(
@@ -2060,45 +2070,51 @@ public sealed class InputRouter : IDisposable {
             value: out var held
         );
 
-        // A pending momentary release (a Tapped activator's completion — see ApplyChordEdge) is a ONE-TICK
-        // obligation, not a modality-scoped hold: the edge that would deliver it lives in the resolver's scheduled
-        // queue, and the Reset below deletes it. So it is cancelled UNCONDITIONALLY, before that Reset and
-        // regardless of whether its command's map survives the transition — the loop below only cancels holds whose
-        // map went inactive, which would leave the handler that consumed the tap's press waiting forever for a
-        // completion nothing can now produce.
+        // ONE decision per carried command, so a destination carrying two obligations is never cancelled twice for
+        // one transition. A command whose map goes inactive is cancelled and dropped whole. A command whose map
+        // SURVIVES still owes its pending momentary release (a Tapped activator's completion — see ApplyChordEdge):
+        // that is a ONE-TICK obligation, not a modality-scoped hold, and the edge that would deliver it lives in the
+        // resolver's scheduled queue, which the Reset below deletes — leaving the handler that consumed the tap's
+        // press waiting forever for a completion nothing can now produce. Both run BEFORE that Reset.
         if (held is not null) {
-            List<ushort>? pendingToDrop = null;
+            List<ushort>? commandsToDrop = null;
 
             foreach (var (commandId, state) in held) {
+                if (!next.ActiveCommands[commandId]) {
+                    cancellations ??= [];
+
+                    AppendCancellations(
+                        cancellations: cancellations,
+                        slot: slot,
+                        state: state
+                    );
+                    (commandsToDrop ??= []).Add(item: commandId);
+
+                    continue;
+                }
+
                 if (!state.HasPendingMomentaryRelease) {
                     continue;
                 }
 
                 (cancellations ??= []).Add(item: CancellationFor(
-                    entry: state.Entry,
+                    entry: state.MomentaryEntry,
                     slot: slot
                 ));
                 state.HasPendingMomentaryRelease = false;
-
-                if (!state.HasEntry) {
-                    state.Entry = default;
-                }
+                state.MomentaryEntry = default;
 
                 if (state.IsEmpty) {
-                    (pendingToDrop ??= []).Add(item: commandId);
+                    (commandsToDrop ??= []).Add(item: commandId);
                 }
             }
 
-            if (pendingToDrop is not null) {
-                foreach (var commandId in pendingToDrop) {
+            if (commandsToDrop is not null) {
+                foreach (var commandId in commandsToDrop) {
                     DropHeld(
                         commandId: commandId,
                         slot: slot
                     );
-                }
-
-                if (held.Count == 0) {
-                    held = null;
                 }
             }
         }
@@ -2106,36 +2122,6 @@ public sealed class InputRouter : IDisposable {
         // Map transitions invalidate page/chord release ownership for this slot. Edge-reported controls remain
         // physically held at the input source and reassert through the new modality in press order next frame.
         m_bindings.Reset(slot: slot);
-
-        if (held is not null) {
-            List<ushort>? commandsToDrop = null;
-
-            foreach (var (commandId, state) in held) {
-                if (next.ActiveCommands[commandId]) {
-                    continue;
-                }
-
-                cancellations ??= [];
-                commandsToDrop ??= [];
-                AppendCancellations(
-                    cancellations: cancellations,
-                    slot: slot,
-                    state: state
-                );
-                RecycleHeldState(state: state);
-                commandsToDrop.Add(item: commandId);
-            }
-
-            if (commandsToDrop is not null) {
-                foreach (var commandId in commandsToDrop) {
-                    _ = held.Remove(key: commandId);
-                }
-
-                if (held.Count == 0) {
-                    _ = m_heldBySlot.Remove(key: slot);
-                }
-            }
-        }
 
         List<(int Slot, ushort CommandId)>? latchesToDrop = null;
 
