@@ -452,7 +452,6 @@ public sealed class InputRouter : IDisposable {
             text: injection.Text,
             value: injection.Value
         ) {
-            CompletesTextSubmission = injection.CompletesTextSubmission,
             SubmissionBarrier = injection.SubmissionBarrier,
         });
     }

@@ -121,6 +121,25 @@ public sealed class BindingProfileValidationTests {
             new BindingPageEntryDefinition(Sources: null, Command: "action", Text: "argument"),
             new BindingPageEntryDefinition(Sources: null, Command: "action")
         )));
+        // …and only a press: a sector activating on any other phase carries no line, exactly as a page entry does not.
+        _ = Assert.Throws<ArgumentException>(testCode: static () => BindingProfile.Compile(document: DocumentWithWheel(
+            new BindingPageEntryDefinition(
+                Sources: null,
+                Command: "action",
+                ActivateOn: CommandPhase.Completed,
+                Text: "argument"
+            ),
+            new BindingPageEntryDefinition(Sources: null, Command: "action")
+        )));
+    }
+    [Fact]
+    public void WheelSectorRefusesAnAuthoredLabel() {
+        // A sector's display text resolves from the wheel's labelRow keyed by the sector id, so a label authored on
+        // the sector row itself would silently mean nothing — refused by name like every other foreign sector member.
+        _ = Assert.Throws<ArgumentException>(testCode: static () => BindingProfile.Compile(document: DocumentWithWheel(
+            new BindingPageEntryDefinition(Sources: null, Command: "action", Label: "Choose"),
+            new BindingPageEntryDefinition(Sources: null, Command: "action")
+        )));
     }
     [Fact]
     public void TextPayloadsMustBeNonblankSingleLineAndBounded() {
@@ -160,6 +179,20 @@ public sealed class BindingProfileValidationTests {
                 ),
             ]
         )));
+
+        // A wheel sector's text reaches the same per-tick transport through InputRouter.Activate, so it is measured
+        // against the same bound rather than riding into a snapshot unchecked.
+        foreach (var text in new[] {
+            string.Empty,
+            " \t ",
+            "first\nsecond",
+            new string(c: 'a', count: (BindingProfile.MaxTextPayloadLength + 1)),
+        }) {
+            _ = Assert.Throws<ArgumentException>(testCode: () => BindingProfile.Compile(document: DocumentWithWheel(
+                new BindingPageEntryDefinition(Sources: null, Command: "action", Text: text),
+                new BindingPageEntryDefinition(Sources: null, Command: "action")
+            )));
+        }
     }
     [Fact]
     public void TextPayloadPreservesOuterWhitespaceAndTreatsSeparatorsAsArguments() {

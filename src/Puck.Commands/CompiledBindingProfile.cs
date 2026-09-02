@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Collections.Immutable;
 
 namespace Puck.Commands;
@@ -16,16 +17,22 @@ namespace Puck.Commands;
 /// recompose, no recompilation.
 /// </remarks>
 public sealed class CompiledBindingProfile {
+    // Every lookup here is built once, at compile time, and then read for the whole life of the profile — a group
+    // switch, a modifier resolution per raw input signal, a wheel probe per page flip. That is FrozenDictionary's
+    // exact shape: pay the construction cost once to make every subsequent read faster than Dictionary's. The
+    // comparers are the compiler's own and are load-bearing document semantics, so each is carried across
+    // explicitly rather than left to the default (ToFrozenDictionary's no-comparer overload would silently
+    // substitute one).
     private readonly int[][] m_commandRowsByGroup;
-    private readonly Dictionary<string, int> m_groupIndexByName;
+    private readonly FrozenDictionary<string, int> m_groupIndexByName;
     private readonly ImmutableArray<string> m_groups;
-    private readonly Dictionary<string, int> m_modifierIndexBySource;
+    private readonly FrozenDictionary<string, int> m_modifierIndexBySource;
     private readonly ImmutableArray<BindingModifierDefinition> m_modifiers;
     private readonly int[][] m_pageRowsByGroup;
-    private readonly Dictionary<string, int> m_pageRowByPageId;
+    private readonly FrozenDictionary<string, int> m_pageRowByPageId;
     private readonly int[] m_restingRowByGroup;
     private readonly CompiledChordRow[] m_rows;
-    private readonly Dictionary<int, BindingWheelView> m_wheelViewByRow;
+    private readonly FrozenDictionary<int, BindingWheelView> m_wheelViewByRow;
 
     // One compiled chord row: exactly one of (Table, View) — the page meaning — or Command is present. A PAGE
     // meaning row may additionally carry row-scoped Activators — entries whose trigger is an ordered sequence
@@ -37,7 +44,7 @@ public sealed class CompiledBindingProfile {
         int GroupIndex,
         int[] Chord,
         int[] Held,
-        IReadOnlyDictionary<string, IReadOnlyList<CommandBinding>>? Table,
+        FrozenDictionary<string, IReadOnlyList<CommandBinding>>? Table,
         BindingPageView? View,
         CompiledCommandEdge? Command,
         IReadOnlyList<CompiledActivatorEntry>? Activators = null
@@ -172,9 +179,11 @@ public sealed class CompiledBindingProfile {
     internal CompiledChordRow RowAt(int rowIndex) {
         return m_rows[rowIndex];
     }
-    /// <summary>Gets a page row's binding table.</summary>
+    /// <summary>Gets a page row's binding table, keyed by base source (<c>OrdinalIgnoreCase</c>). Returned as the
+    /// concrete <see cref="FrozenDictionary{TKey, TValue}"/> so the per-signal lookup binds directly instead of
+    /// dispatching through <see cref="IReadOnlyDictionary{TKey, TValue}"/>.</summary>
     /// <param name="rowIndex">A page-meaning row index.</param>
-    internal IReadOnlyDictionary<string, IReadOnlyList<CommandBinding>> TableOf(int rowIndex) {
+    internal FrozenDictionary<string, IReadOnlyList<CommandBinding>> TableOf(int rowIndex) {
         return m_rows[rowIndex].Table!;
     }
     /// <summary>Attempts to resolve a source to the modifier it drives.</summary>
@@ -262,26 +271,27 @@ public sealed class CompiledBindingProfile {
     ) {
         m_commandRowsByGroup = commandRowsByGroup;
         m_pageRowsByGroup = pageRowsByGroup;
-        m_groupIndexByName = groupIndexByName;
+        m_groupIndexByName = groupIndexByName.ToFrozenDictionary(comparer: groupIndexByName.Comparer);
         m_groups = ImmutableArray.CreateRange(items: groups);
-        m_modifierIndexBySource = modifierIndexBySource;
+        m_modifierIndexBySource = modifierIndexBySource.ToFrozenDictionary(comparer: modifierIndexBySource.Comparer);
         m_modifiers = ImmutableArray.CreateRange(items: modifiers);
         m_restingRowByGroup = restingRowByGroup;
         m_rows = rows;
-        m_wheelViewByRow = wheelViewByRow;
+        m_wheelViewByRow = wheelViewByRow.ToFrozenDictionary();
         ActivatorCount = activatorCount;
 
         // A page id is profile-unique by authoring contract (BindingPageDefinition.Id), so one flat table covers
-        // every group; a row with no page meaning (a bare command/channel row) contributes nothing.
-        m_pageRowByPageId = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
+        // every group; a row with no page meaning (a bare command/channel row) contributes nothing. Ordinal, because
+        // TryGetPageView's caller names a page id it read out of the same document the compiler read.
+        var pageRowByPageId = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
 
         for (var rowIndex = 0; (rowIndex < rows.Length); rowIndex++) {
             if (rows[rowIndex].View is { PageId: { Length: > 0 } pageId }) {
-                m_pageRowByPageId[pageId] = rowIndex;
+                pageRowByPageId[pageId] = rowIndex;
             }
         }
 
-        PageIds = [.. m_pageRowByPageId.Keys];
+        m_pageRowByPageId = pageRowByPageId.ToFrozenDictionary(comparer: pageRowByPageId.Comparer);
     }
 
     /// <summary>Gets the total number of row activators declared across every page in this profile — the size a
@@ -291,9 +301,6 @@ public sealed class CompiledBindingProfile {
     public int DefaultGroupIndex => 0;
     /// <summary>Gets the group names, in first-declared order (index 0 is the default group).</summary>
     public IReadOnlyList<string> Groups => m_groups;
-    /// <summary>Gets every declared page's profile-unique id, across every group — the identity vocabulary a
-    /// consumer validates a page reference against (see <see cref="TryGetPageView"/>).</summary>
-    public IReadOnlyCollection<string> PageIds { get; }
     /// <summary>Gets the modifier declarations, in document order (a chord references them by index).</summary>
     public IReadOnlyList<BindingModifierDefinition> Modifiers => m_modifiers;
     /// <summary>Gets the number of compiled chord rows.</summary>

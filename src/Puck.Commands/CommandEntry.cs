@@ -51,9 +51,9 @@ public readonly record struct CommandEntry {
         Value = value;
     }
 
-    /// <summary>Whether applying this local live entry releases <see cref="TextCommandSource"/>'s deferred-mutation
-    /// drain barrier. Local-only like <see cref="Device"/>; a re-driven entry reconstructs it as <see langword="false"/>.</summary>
-    internal bool CompletesTextSubmission { get; init; }
+    /// <summary>The per-session read-after-write barrier this entry releases when it is applied, or
+    /// <see langword="null"/>. Local-only coordination like <see cref="Device"/>, never deterministic snapshot
+    /// identity; a re-driven entry reconstructs it as <see langword="null"/>.</summary>
     internal TextSubmissionBarrier? SubmissionBarrier { get; init; }
 
     /// <summary>Whether the physical signal that produced this entry created its device-to-slot assignment. Unlike
