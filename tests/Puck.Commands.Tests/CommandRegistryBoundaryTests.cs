@@ -182,6 +182,50 @@ public sealed class CommandRegistryBoundaryTests {
         Assert.Equal(actual: submitted, expected: ["sim.cancel", "sum 2 3"]);
     }
     [Fact]
+    public void ACancellationReleasesTheBarriersOfTheEntriesItLeavesUnapplied() {
+        var applied = new List<string>();
+        var submitted = new List<string>();
+        var registry = new CommandRegistry(modules: [
+            new SumModule(),
+            new CancellingSimulationModule(),
+            new RecordingSimulationModule(applied: applied),
+        ]);
+        var router = new InputRouter(
+            registry: registry,
+            bindings: new EmptyBindings(),
+            principalResolver: new ConsolePrincipal()
+        );
+        var source = new TextCommandSource(registry: registry);
+        var session = source.CreateSeatSession(
+            onResult: (line, _) => submitted.Add(item: line),
+            router: router,
+            slot: 0
+        );
+
+        // Collect keeps draining Simulation-routed lines, so BOTH deferred lines fold into the same tick and each one
+        // holds a Begin() on this session's barrier. The immediate line behind them waits for that barrier to clear.
+        session.Enqueue(line: "sim.cancel");
+        session.Enqueue(line: "sim.record second");
+        session.Enqueue(line: "sum 2 3");
+        source.Collect();
+
+        Assert.Equal(actual: submitted, expected: ["sim.cancel", "sim.record second"]);
+
+        var snapshot = Tick(router: router);
+
+        _ = Assert.Throws<OperationCanceledException>(testCode: () => registry.ApplySnapshot(snapshot: in snapshot));
+
+        // The cancellation applies a PREFIX: the second entry never ran.
+        Assert.Empty(collection: applied);
+
+        // …but it is never going to run either, so its barrier had to be released on the way out. Leaving it standing
+        // suspended the session permanently — Collect saw a pending submission for a line the tick had abandoned and
+        // rotated the session to the tail on every frame from then on, so `sum 2 3` never drained.
+        source.Collect();
+
+        Assert.Equal(actual: submitted, expected: ["sim.cancel", "sim.record second", "sum 2 3"]);
+    }
+    [Fact]
     public void ATextEntryNamingAnIdThisRegistryCannotDecodeIsSkippedWithoutStrandingItsSession() {
         var submitted = new List<string>();
         // Two registries, and a host that wired the wrong router's sink: ids are interned per registry, so the id the

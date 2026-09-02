@@ -1014,6 +1014,21 @@ public sealed class CommandRegistry {
             throw;
         }
     }
+    // Releases the read-after-write barriers of every entry a cancelled tick abandons — the ones from
+    // (fromLane, fromEntry) to the end of the snapshot. The cancelling entry's OWN barrier is not among them:
+    // ApplySnapshot's per-entry finally releases that one as the exception unwinds through it, and completing it twice
+    // would decrement a count another line is holding.
+    private static void ReleaseAbandonedBarriers(in CommandSnapshot snapshot, int fromLane, int fromEntry) {
+        for (var laneIndex = fromLane; (laneIndex < snapshot.Lanes.Length); laneIndex++) {
+            var entries = snapshot.Lanes[laneIndex].Entries;
+
+            for (var entryIndex = ((laneIndex == fromLane)
+                ? fromEntry
+                : 0); (entryIndex < entries.Length); entryIndex++) {
+                entries[entryIndex].SubmissionBarrier?.Complete();
+            }
+        }
+    }
     // Submit's body. Submit itself owns the rejection accounting so no return path here has to remember to count.
     private CommandResult SubmitCore(string line, TextCommandSession? session) {
         if (string.IsNullOrWhiteSpace(value: line)) {
@@ -1348,9 +1363,11 @@ public sealed class CommandRegistry {
     /// entry's submitted-line read-after-write barrier is released whether its body completed or threw. A contained
     /// fault is counted in the <c>wire.errors</c> total, and a handler fault additionally becomes an error result
     /// observers see. The single exception is an <see cref="OperationCanceledException"/>, which is a HOST SIGNAL rather
-    /// than a verdict about a command: it unwinds to the pump that owns the cancelled token, releasing its own entry's
-    /// barrier on the way out and leaving the tick's remaining entries unapplied, which is what a requested shutdown
-    /// asks for.</para>
+    /// than a verdict about a command: it unwinds to the pump that owns the cancelled token, so a cancelled tick applies
+    /// a PREFIX of its entries and leaves the rest unapplied, which is what a requested shutdown asks for. The entries
+    /// it abandons still have their read-after-write barriers released on the way out — an unapplied entry is one no
+    /// later tick will ever reach, so a barrier left standing for it would suspend its <see cref="TextCommandSession"/>
+    /// forever and the host could never drain that session again, cancelled or not.</para>
     /// <para>The registry-mismatch refusal below is the one throw this method still makes, and it happens BEFORE any
     /// entry is examined: a snapshot built for another registry carries entries this one cannot decode at all, so it is
     /// refused whole rather than half-applied. Nothing has been dispatched and no barrier has been touched when it
@@ -1373,8 +1390,14 @@ public sealed class CommandRegistry {
             );
         }
 
-        foreach (var lane in snapshot.Lanes) {
-            foreach (var entry in lane.Entries) {
+        // Indexed rather than foreach because a cancellation has to name the entries BEHIND the one that raised it: it
+        // abandons them, and abandoning an entry without releasing its barrier is what strands a session.
+        for (var laneIndex = 0; (laneIndex < snapshot.Lanes.Length); laneIndex++) {
+            var lane = snapshot.Lanes[laneIndex];
+
+            for (var entryIndex = 0; (entryIndex < lane.Entries.Length); entryIndex++) {
+                var entry = lane.Entries[entryIndex];
+
                 // The boundary is the ENTRY, not the handler: the handler's own catch cannot cover the code that
                 // decodes a submitted line (the parse, CanonicalizeVerb) or renders a fault, and an escape from either
                 // would abandon the rest of the lane and strand every later entry's barrier. Releasing the barrier in
@@ -1386,6 +1409,19 @@ public sealed class CommandRegistry {
                     );
                 } catch (Exception exception) when (IsContainable(exception: exception)) {
                     NoteRejection();
+                } catch (Exception exception) when (!IsContainable(exception: exception)) {
+                    // A host cancellation is the one throw that leaves the loop, so the entries behind this one are
+                    // never applied and never will be — no later tick revisits an abandoned snapshot. Their barriers
+                    // are released here, before the unwind, because the alternative is a TextCommandSession that
+                    // reports a pending submission forever and can therefore never drain another line: a shutdown
+                    // request would silently break every session whose lines shared the cancelled tick.
+                    ReleaseAbandonedBarriers(
+                        fromEntry: (entryIndex + 1),
+                        fromLane: laneIndex,
+                        snapshot: in snapshot
+                    );
+
+                    throw;
                 } finally {
                     entry.SubmissionBarrier?.Complete();
                 }
