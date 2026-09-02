@@ -5,4 +5,8 @@ world.wait 30
 world.state
 world.wait 40
 world.state
+world.wait 170
+world.state dial
+world.state dialNode
+world.symmetry.word 0 1 2 3 4 5 node:5
 wire.errors

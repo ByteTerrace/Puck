@@ -973,8 +973,10 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 );
                 var placements = $"placements {placementInstances} static instance(s) ({server.Definition.Placements.Count} row(s))";
                 var curves = $"curves {population.CountCurveFollowers()} follower(s)";
+                var ruleBudget = WorldRuleWorkBudget.Measure(definition: server.Definition);
+                var rules = $"rules {ruleBudget.RuleRows}/{WorldRuleCapacity.MaxRules}, interactions {ruleBudget.InteractionRows}/{WorldInteractionCapacity.MaxInteractions}, worst {ruleBudget.EvaluationSlots} evaluation(s), {ruleBudget.WorkUnitsPerTick}/{WorldRuleCapacity.MaxWorkUnitsPerTick} work unit(s) / tick";
 
-                return new CommandResult(Output: $"[world.budget: {render} | {far} | {lattice} | {gravity} | {placements} | state {rows} row(s) | {curves}]");
+                return new CommandResult(Output: $"[world.budget: {render} | {far} | {lattice} | {gravity} | {placements} | state {rows} row(s) | {rules} | {curves}]");
             }
         );
         yield return CommandDefinition.WithWireArgs(

@@ -78,7 +78,7 @@ public abstract record WorldReplayEntry {
     internal sealed record Composition(WorldComposition Value, WorldPrincipal Actor) : WorldReplayEntry;
     /// <summary>A read-back query and the identity the envelope stamped. Re-executed on re-drive at the same
     /// position it held live, so any read-back state its composition touches is reproduced; the answer itself is
-    /// discarded, since a query moves no simulation state and the tape's verdict is the pose trace.</summary>
+    /// discarded, since a query moves no simulation state and therefore cannot alter either replay trace.</summary>
     /// <param name="Value">The query.</param>
     /// <param name="Actor">The identity the envelope stamped.</param>
     internal sealed record Query(WorldQuery Value, WorldPrincipal Actor) : WorldReplayEntry;
@@ -192,14 +192,19 @@ public readonly record struct WorldReplayTickInput(IReadOnlyList<WorldReplayEntr
 /// tick <c>Tick</c> is its first live tick. Never greater than the child's own <see cref="WorldReplaySnapshot.TickCount"/>,
 /// which <see cref="WorldReplaySnapshot.Read"/> refuses by name.</param>
 public readonly record struct WorldReplayForkProvenance(string ParentName, int Tick);
+/// <summary>The two replay traces computed in one re-drive: diagnostic poses and the verification boundary.</summary>
+/// <param name="Pose">The historical pose-only trace used by trajectory inspection.</param>
+/// <param name="Authoritative">The authoritative state-system trace used for replay verdicts.</param>
+public readonly record struct WorldReplayHashTraces(ulong[] Pose, ulong[] Authoritative);
 /// <summary>
 /// A deterministic world-state recording: the server starting state captured at record-start plus the per-tick
 /// server-input stream that drove the recorded span, so the recording replays through a fresh world. The starting state
 /// is the record-start <see cref="WorldDefinition"/> (embedded as its canonical JSON) and the active seats; the fresh
 /// world's starting body state is that definition's deterministic boot image (a fresh <see cref="WorldServer"/>
-/// reconstructs it exactly), not a per-body pose snapshot. The recording also carries the live session's per-tick pose
-/// hash trace (<see cref="RecordedHashes"/>) so a replay's fresh re-drive is verified against the actual running
-/// session, tick by tick rather than only at the tail.
+/// reconstructs it exactly), not a per-body pose snapshot. The recording carries both the live session's per-tick
+/// pose trace (<see cref="RecordedHashes"/>) for inspection and the broader authoritative trace
+/// (<see cref="RecordedAuthoritativeHashes"/>) used for replay verdicts, sampled against the actual running session
+/// tick by tick rather than only at the tail.
 /// </summary>
 /// <remarks>
 /// <para>The seat's profile rates are pinned, not re-resolved. A seated profile's MoveSpeed/TurnSpeed are read live off
@@ -220,7 +225,7 @@ public readonly record struct WorldReplayForkProvenance(string ParentName, int T
 /// boot-image start already has, and it reports honestly as a mismatch rather than as a false match. Screen machines
 /// and their pixels, camera rigs, overlays, and audio are
 /// presentation and are excluded: they are re-derived from the definition by the live client each frame and never feed
-/// back into simulation, so a replay reproduces the authoritative population trajectory (the hashed poses) but does not
+/// back into simulation, so a replay reproduces the hashed authoritative server state but does not
 /// re-run the emulated cabinets or redraw the HUD. Because the fresh world starts from the definition boot image, a
 /// replayed tail matches the live tail precisely when the live session was still at that boot image at record-start (a
 /// boot-anchored capture); a mid-session capture — the session already moved from boot — faithfully re-drives its stream
@@ -233,7 +238,7 @@ public readonly record struct WorldReplayForkProvenance(string ParentName, int T
 /// float fields of the recorded <see cref="WorldCommand"/>s verbatim; those are authored values — the numbers an
 /// operator typed — which round-trip bit-exactly through the shared command leaf and quantize deterministically at
 /// one apply site each. They never break the guarantee, but they are not absent from the on-disk form.) A
-/// fresh world built from this recording and driven by the recorded stream produces a bit-identical per-tick pose hash
+/// fresh world built from this recording and driven by the recorded stream produces bit-identical per-tick pose and authoritative hashes
 /// on every run, machine, and backend at a fixed code version. <see cref="Drive"/> is the offline re-drive the
 /// replay/verify side runs; the record side samples the live population instead, so a match proves the fresh re-drive
 /// reproduces the running session, not merely another re-drive of itself.</para>
@@ -271,7 +276,7 @@ public sealed class WorldReplaySnapshot {
     // artifact pins (Puck.Scripting.AddonAbi). A tape-shape change does not re-key the ABI, and an ABI break does
     // not re-key this constant — MountedAddons below records what actually mounted, so an ABI break invalidates an
     // existing tape through receipt mismatch without a byte-offset change here.
-    private const uint Magic = 0x504B_464Bu; // "PKFK" — puck replay tape; re-keyed for the fork-provenance header slot (ForkedFrom). Retired: 0x504B_4146 ("PKAF"), 0x504B_4C4B ("PKLK"), 0x504B_4341 ("PKCA"), 0x504B_5754 ("PKWT").
+    private const uint Magic = 0x504B_4155u; // "PKAU" — puck replay tape; re-keyed for the authoritative hash trace. Retired: 0x504B_464B ("PKFK"), 0x504B_4146 ("PKAF"), 0x504B_4C4B ("PKLK"), 0x504B_4341 ("PKCA"), 0x504B_5754 ("PKWT").
     // A shape-identity token, not a version sequence, pinned at 1 permanently: this build writes and reads exactly
     // one tape shape, so there is no older shape to be newer than. A token that disagrees refuses the file by name
     // (found vs. expected) instead of decoding it as nonsense.
@@ -289,15 +294,20 @@ public sealed class WorldReplaySnapshot {
     public required IReadOnlyList<WorldAddonReceipt> MountedAddons { get; init; }
     /// <summary>Gets the live session's per-tick pose hash trace — one entry per recorded tick, sampled off the live
     /// population after each tick's server step, so the last entry is the state the running world actually reached. A
-    /// replay recomputes the whole trace by re-driving this recording through a fresh world (<see cref="Drive"/>) and
-    /// compares against this one, so a match is a genuine live-vs-replay fidelity proof rather than a fresh re-drive
-    /// compared against another fresh re-drive of the same stream. Its length always equals <see cref="TickCount"/>;
-    /// keeping every entry rather than only the tail is what lets a mismatch name the tick it began at.</summary>
+    /// replay recomputes this diagnostic trace by re-driving the recording through a fresh world
+    /// (<see cref="Drive"/>); <see cref="RecordedAuthoritativeHashes"/> drives the verdict. Its length always equals
+    /// <see cref="TickCount"/>; keeping every entry rather than only the tail lets pose inspection name the tick
+    /// visible motion first diverged.</summary>
     public required ulong[] RecordedHashes { get; init; }
-    /// <summary>Gets the live session's tail pose hash — the last entry of <see cref="RecordedHashes"/>, or <c>0</c> when
-    /// nothing was recorded.</summary>
-    public ulong RecordedTailHash => ((RecordedHashes.Length > 0)
-        ? RecordedHashes[^1]
+    /// <summary>Gets the live session's tail pose-only hash, or <c>0</c> when nothing was recorded.</summary>
+    public ulong RecordedPoseTailHash => ((RecordedHashes.Length > 0) ? RecordedHashes[^1] : 0UL);
+    /// <summary>Gets the live session's per-tick authoritative state-system hashes: world state, rule and interaction
+    /// latches, body action state, live fields, and poses. Replay verdicts compare this trace;
+    /// <see cref="RecordedHashes"/> remains the pose-only diagnostic trace.</summary>
+    public required ulong[] RecordedAuthoritativeHashes { get; init; }
+    /// <summary>Gets the live session's tail authoritative hash, or <c>0</c> when nothing was recorded.</summary>
+    public ulong RecordedTailHash => ((RecordedAuthoritativeHashes.Length > 0)
+        ? RecordedAuthoritativeHashes[^1]
         : 0UL
     );
     /// <summary>Gets the seats active at record-start, re-joined into the fresh world before the stream replays — each
@@ -1334,14 +1344,22 @@ public sealed class WorldReplaySnapshot {
     /// <see cref="WorldServer"/> it is handed (or rely on <see cref="Drive"/> attaching it) — a host that never
     /// reaches <see cref="WorldServer.AttachAddons"/> re-drives with no guests and produces a MATCH that proves
     /// nothing.</param>
-    /// <returns>The per-tick state-hash trace, one entry per recorded tick.</returns>
+    /// <returns>The per-tick pose-hash trace, one entry per recorded tick. <see cref="DriveTraces"/> exposes both
+    /// traces and is what verdicts use.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="profiles"/>, <paramref name="engines"/>, or
     /// <paramref name="addonHostFactory"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidDataException">The guests this recording pins are not the guests the fresh world would
     /// re-run.</exception>
     /// <exception cref="WorldReplayCodecException">A host-side codec bug: an authority-entry kind the re-drive switch
     /// below does not handle, which would silently drop a recorded input from the re-drive.</exception>
-    public ulong[] Drive(WorldOwnedWorlds profiles, IEnumerable<IScreenMachineEngine> engines, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory) {
+    public ulong[] Drive(WorldOwnedWorlds profiles, IEnumerable<IScreenMachineEngine> engines, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory) => DriveTraces(
+        profiles: profiles,
+        engines: engines,
+        addonHostFactory: addonHostFactory
+    ).Pose;
+
+    /// <summary>Re-drives once and returns both the pose inspection trace and authoritative state-system trace.</summary>
+    public WorldReplayHashTraces DriveTraces(WorldOwnedWorlds profiles, IEnumerable<IScreenMachineEngine> engines, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory) {
         ArgumentNullException.ThrowIfNull(argument: profiles);
         ArgumentNullException.ThrowIfNull(argument: engines);
         ArgumentNullException.ThrowIfNull(argument: addonHostFactory);
@@ -1418,7 +1436,8 @@ public sealed class WorldReplaySnapshot {
             simulationRate: SimulationRate,
             recordedTickCount: Ticks.Count
         );
-        var hashes = new ulong[Ticks.Count];
+        var poseHashes = new ulong[Ticks.Count];
+        var authoritativeHashes = new ulong[Ticks.Count];
 
         for (var tick = 0; (tick < Ticks.Count); tick++) {
             var expectedMutationOutcomes = new List<bool>();
@@ -1444,10 +1463,14 @@ public sealed class WorldReplaySnapshot {
                 replayed: replayedMutationOutcomes,
                 tick: tick
             );
-            hashes[tick] = HashState(population: population);
+            poseHashes[tick] = HashState(population: population);
+            authoritativeHashes[tick] = WorldRuntimeStateHash.HashAuthoritative(
+                server: server,
+                tick: (server.NextInputTick - 1UL)
+            );
         }
 
-        return hashes;
+        return new WorldReplayHashTraces(Pose: poseHashes, Authoritative: authoritativeHashes);
     }
     /// <summary>Feeds one recorded tick's input into <paramref name="server"/> through the same doors a live
     /// submission uses, at the pre-step position the live command-apply window holds: the authority entries in
@@ -1569,8 +1592,8 @@ public sealed class WorldReplaySnapshot {
                     break;
                 case WorldReplayEntry.Query query:
                     // Re-executed so any read-back state the composition touches is reproduced at the same
-                    // position it was live; the answer itself is discarded, since the tape's verdict is the pose
-                    // trace and a query moves no simulation state.
+                    // position it was live; the answer itself is discarded because a query moves no simulation
+                    // state and therefore cannot alter either replay trace.
                     _ = server.Answer(query: query.Value);
 
                     break;
@@ -1782,6 +1805,16 @@ public sealed class WorldReplaySnapshot {
                 recordedHashes[index] = reader.ReadUInt64();
             }
 
+            var authoritativeHashCount = ReadCount(
+                minimumBytesEach: 8,
+                reader: reader,
+                what: "authoritative hash"
+            );
+            var recordedAuthoritativeHashes = new ulong[authoritativeHashCount];
+            for (var index = 0; index < authoritativeHashCount; index++) {
+                recordedAuthoritativeHashes[index] = reader.ReadUInt64();
+            }
+
             var definitionLength = ReadCount(
                 minimumBytesEach: 1,
                 reader: reader,
@@ -1903,6 +1936,9 @@ public sealed class WorldReplaySnapshot {
             if (recordedHashes.Length != ticks.Count) {
                 throw new InvalidDataException(message: $"Corrupt .puckreplay recording: {recordedHashes.Length} recorded hashes for {ticks.Count} ticks.");
             }
+            if (recordedAuthoritativeHashes.Length != ticks.Count) {
+                throw new InvalidDataException(message: $"Corrupt .puckreplay recording: {recordedAuthoritativeHashes.Length} recorded authoritative hashes for {ticks.Count} ticks.");
+            }
 
             // A child carries its copied prefix in its own Ticks, so a provenance claiming more copied ticks than the
             // tape holds is doctored or truncated after the header.
@@ -1915,6 +1951,7 @@ public sealed class WorldReplaySnapshot {
                 ForkedFrom = forkedFrom,
                 MountedAddons = mountedAddons,
                 RecordedHashes = recordedHashes,
+                RecordedAuthoritativeHashes = recordedAuthoritativeHashes,
                 Seats = seats,
                 SimulationRate = simulationRate,
                 Ticks = ticks,
@@ -2006,6 +2043,11 @@ public sealed class WorldReplaySnapshot {
         writer.Write(value: recording.RecordedHashes.Length);
 
         foreach (var hash in recording.RecordedHashes) {
+            writer.Write(value: hash);
+        }
+
+        writer.Write(value: recording.RecordedAuthoritativeHashes.Length);
+        foreach (var hash in recording.RecordedAuthoritativeHashes) {
             writer.Write(value: hash);
         }
 

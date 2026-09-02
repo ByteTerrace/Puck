@@ -188,11 +188,14 @@ public static class WorldDefinitionFileSource {
     public static bool TryParseComposed(string json, string sourceName, IWorldNeighbourResolver? neighbours, bool validateAdjacencyClaims, out WorldDefinition? definition, out string reason) {
         definition = null;
 
+        // This is the loader's first parse: a reference into a draw site that has not filled yet stays attached and
+        // resolves on the post-draw pass (WorldDefinitionLoader), the one door that runs the draw resolver.
         if (!WorldJsonPayload.TryParse(
             json: json,
             info: WorldJsonContext.Default.WorldDefinition,
             value: out var parsed,
-            error: out var parseError
+            error: out var parseError,
+            deferDrawSites: true
         )) {
             reason = $"{sourceName} is not a valid {WorldDefinition.SchemaVersion} document: {parseError}";
 

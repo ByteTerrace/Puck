@@ -723,8 +723,8 @@ live-vs-recorded hash divergence is narrated on stderr without stopping.
 whose leading tick groups are the parent's, with `ForkedFrom` in the header;
 the child is standalone. `replay.record <name>` captures the running session's record-start definition,
 active seats, mounted-guest receipts, and the per-tick server-input stream,
-while sampling both the LIVE population's pose hash and complete authoritative
-state hash; `replay.stop`
+while sampling both the LIVE population's pose hash and authoritative state-system
+hash; `replay.stop`
 persists `<name>.puckreplay` and re-drives it once; `replay.verify <name>`
 rehydrates a fresh boot-image world, re-drives the stream offline, and
 reports MATCH or MISMATCH naming the first divergent tick (tick 0 indicts the
@@ -743,8 +743,8 @@ the same `Drive` and prints each active body's pose per line, naming the
 first pose-divergent tick. The MATCH/MISMATCH verdict uses the authoritative
 trace; the pose trace remains the human-readable trajectory diagnostic.
 Presentation (screen pixels,
-cameras, overlays, audio) is excluded by design: a match proves the
-authoritative simulation state, not the HUD. Known scope limit — the tape
+cameras, overlays, audio) is excluded by design: a match proves the covered
+state-system lanes, not the whole document, grant table, HUD, or machine cores. Known scope limit — the tape
 captures every one of the twelve envelope payload kinds except `Lever`
 (command, grant, revoke, session, designation, rebuild, mutation, undo,
 composition, query, and screen-op) plus intents and the two

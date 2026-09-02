@@ -11,7 +11,7 @@ namespace Puck.World;
 /// <remarks>
 /// <para><b>Read-only and parse-only</b>, mirroring <c>Server.WorldStorageNeighbourResolver</c>'s own contract
 /// exactly: parses through <see cref="WorldJsonPayload.TryParse{T}(string, System.Text.Json.Serialization.Metadata.JsonTypeInfo{T},
-/// out T, out string)"/> and <see cref="WorldDefinitionMigrations.Apply"/> only — never
+/// out T, out string, bool)"/> and <see cref="WorldDefinitionMigrations.Apply"/> only — never
 /// <see cref="WorldDefinitionValidator.Validate"/> — because the neighbour's own validity (which may in turn need its
 /// own neighbour resolver, for a border of its own) is that world's own boot concern, not a proof this resolver
 /// re-derives. A read that fails for any reason (missing file, unreadable, not valid UTF-8, does not parse) answers

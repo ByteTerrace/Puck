@@ -46,6 +46,7 @@ public sealed class WorldSymmetryChannelLawTests {
             ("$symmetry:cycle:-7:node", WorldSymmetryFunction.Cycle, -7L),
             ("$symmetry:reflect:17:node", WorldSymmetryFunction.Reflect, 17L),
             ("$symmetry:orthogonal:239:node", WorldSymmetryFunction.Orthogonal, 239L),
+            ("$symmetry:innerProduct:17:node", WorldSymmetryFunction.InnerProduct, 17L),
         }) {
             var operand = Compile(channel: channel);
 
@@ -80,6 +81,7 @@ public sealed class WorldSymmetryChannelLawTests {
     public void MalformedSpellings_RefuseByName() {
         Assert.Contains(expectedSubstring: "names no symmetry function", actualString: Refusal(channel: "$symmetry:spin:node"));
         Assert.Contains(expectedSubstring: "needs an argument", actualString: Refusal(channel: "$symmetry:reflect:node"));
+        Assert.Contains(expectedSubstring: "needs an argument", actualString: Refusal(channel: "$symmetry:innerProduct:node"));
         Assert.Contains(expectedSubstring: "takes no argument", actualString: Refusal(channel: "$symmetry:ring:3:node"));
         Assert.Contains(expectedSubstring: "neither a node", actualString: Refusal(channel: "$symmetry:reflect:240:node"));
         Assert.Contains(expectedSubstring: "whole number of ring steps", actualString: Refusal(channel: "$symmetry:cycle:x:node"));
@@ -100,5 +102,7 @@ public sealed class WorldSymmetryChannelLawTests {
         Assert.Equal(expected: 5, actual: SymmetryLattice.Antipode(node: SymmetryLattice.Antipode(node: 5)));
         Assert.Equal(expected: 5, actual: SymmetryLattice.Reflect(mirror: 17, node: SymmetryLattice.Reflect(mirror: 17, node: 5)));
         Assert.Equal(expected: (SymmetryLattice.Reflect(mirror: 17, node: 5) == 5), actual: SymmetryLattice.AreOrthogonal(first: 5, second: 17));
+        Assert.Equal(expected: (SymmetryLattice.InnerProduct(first: 5, second: 17) == 0), actual: SymmetryLattice.AreOrthogonal(first: 5, second: 17));
+        Assert.InRange(actual: SymmetryLattice.InnerProduct(first: 5, second: 17), low: -2, high: 2);
     }
 }

@@ -113,7 +113,34 @@ public static class WorldStateReader {
         WorldStateReduceOp op,
         ulong tick,
         Func<int, bool>? isCandidateIndex = null
+    ) => ArgExtremum(
+        definition: definition,
+        rowName: rowName,
+        op: op,
+        tick: tick,
+        state: isCandidateIndex,
+        isCandidateIndex: static (index, predicate) => ((predicate is null) || predicate(arg: index))
+    );
+    /// <summary>Finds the winning cell like <see cref="ArgExtremum(WorldDefinition,string,WorldStateReduceOp,ulong,Func{int,bool}?)"/>,
+    /// passing caller state separately to a static candidate predicate so hot callers need not allocate a closure.</summary>
+    /// <typeparam name="TState">The caller's filter-state carrier.</typeparam>
+    /// <param name="definition">The document to read.</param>
+    /// <param name="rowName">The state row's name.</param>
+    /// <param name="op">The extremum to find.</param>
+    /// <param name="tick">The tick this read answers as of.</param>
+    /// <param name="state">State passed to <paramref name="isCandidateIndex"/>.</param>
+    /// <param name="isCandidateIndex">The allocation-free candidate predicate.</param>
+    /// <returns>The winning cell key, or <see langword="null"/> when none qualifies.</returns>
+    public static string? ArgExtremum<TState>(
+        WorldDefinition definition,
+        string rowName,
+        WorldStateReduceOp op,
+        ulong tick,
+        TState state,
+        Func<int, TState, bool> isCandidateIndex
     ) {
+        ArgumentNullException.ThrowIfNull(argument: isCandidateIndex);
+
         if (!TryRead(
             definition: definition,
             key: null,
@@ -130,13 +157,15 @@ public static class WorldStateReader {
         string? bestKey = null;
         var bestValue = 0L;
 
-        foreach (var candidate in (declared.Cells ?? [])) {
+        var cells = (declared.Cells ?? []);
+        for (var candidateIndex = 0; candidateIndex < cells.Count; candidateIndex++) {
+            var candidate = cells[candidateIndex];
             if (
                 !TryParseCandidateIndex(
                 key: candidate.Key,
                 index: out var index
             ) ||
-                ((isCandidateIndex is not null) && !isCandidateIndex(index))
+                !isCandidateIndex(arg1: index, arg2: state)
             ) {
                 continue;
             }
@@ -232,7 +261,8 @@ public static class WorldStateReader {
         var hasAcc = false;
         var acc = 0L;
 
-        foreach (var cell in cells) {
+        for (var index = 0; index < cells.Count; index++) {
+            var cell = cells[index];
             ReadKnownCell(row: row, cell: cell, tick: tick, rawValue: out var raw, text: out _);
             var value = raw!.Value;
             acc = (!hasAcc

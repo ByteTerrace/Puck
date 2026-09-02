@@ -41,12 +41,18 @@ public sealed class WorldStateCommandModule(IWorldConsoleAuthority authority, IS
             row: row,
             server: server
         )}{DescribeCycle(cycle: cycle)}]";
-    // A cycle trait — what it is (plane and output), how fast it turns (ticks per step) and where its clock sits
-    // (epoch); the value on the same line is the live rotation the stored phase has been carried to.
+    // A cycle trait — what it is (generator, power and output), how fast it turns (ticks per step), where its clock
+    // sits (epoch) and the period the generator derives; the value on the same line is the live rotation the stored
+    // phase has been carried to.
     private static string DescribeCycle(WorldStateCycle? cycle) =>
         ((cycle is { } c)
-            ? $" cycle=plane{c.Plane}:{c.Output}/{c.TicksPerStep}@epoch{c.EpochTick}"
+            ? $" cycle={DescribeWord(word: c.Word)}^{c.Power}:{c.Output}/{c.TicksPerStep}@epoch{c.EpochTick}{((c.SubstepTicks != 0L) ? $"+{c.SubstepTicks}" : string.Empty)} order={c.Order}"
             : string.Empty
+        );
+    private static string DescribeWord(IReadOnlyList<int>? word) =>
+        ((word is null)
+            ? "coxeter"
+            : $"[{string.Join(separator: ',', values: word)}]"
         );
     // Formats an Advance trait — shared by DescribeRow's row line (against row.Advance) and DescribeCell's cell
     // line (against a keyed cell's own Advance): what the trait IS (rate) and where its clock sits (epoch), the
@@ -56,9 +62,9 @@ public sealed class WorldStateCommandModule(IWorldConsoleAuthority authority, IS
             ? $" advance={a.RateNumerator}/{a.RateDenominator}@epoch{a.EpochTick}"
             : string.Empty
         );
-    // A cell's own second-order easing trait — y0/v0 formatted through DescribeValue since they ride the SAME
-    // per-kind encoding an ordinary cell value does (WorldStateDynamics' own convention) — plus the LIVE eased
-    // value, read through the same WorldStateReader.TryReadEased the HUD's state.<row>[.<key>] binding resolves.
+    // A cell's own second-order easing trait — y0/v0 are the follower's continuous state, raw FixedQ4816 bits on
+    // every row kind, so they print in the fixed spelling — plus the LIVE eased value in the row's own encoding, read
+    // through the same WorldStateReader.TryReadEased the HUD's state.<row>[.<key>] binding resolves.
     private static string DescribeDynamics(WorldServer server, WorldStateRow row, string key, WorldStateDynamics? dynamics) {
         if (dynamics is not { } d) {
             return string.Empty;
@@ -85,15 +91,7 @@ public sealed class WorldStateCommandModule(IWorldConsoleAuthority authority, IS
             )}";
         }
 
-        return $" dynamics={d.Row} y0={DescribeValue(
-            raw: d.Y0,
-            row: row,
-            text: null
-        )} v0={DescribeValue(
-            raw: d.V0,
-            row: row,
-            text: null
-        )}@epoch{d.EpochTick}{eased}";
+        return $" dynamics={d.Row} y0={FixedQ4816.FromRawBits(value: d.Y0)} v0={FixedQ4816.FromRawBits(value: d.V0)}@epoch{d.EpochTick}{eased}";
     }
     // The site's per-context dealt masks, by the source's context declaration ordinal.
     private static string DescribeDecks(WorldStateRow row) {
@@ -428,6 +426,20 @@ public sealed class WorldStateCommandModule(IWorldConsoleAuthority authority, IS
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
+            name: "world.rule.failures",
+            description: "Prints bounded runtime rule-effect refusal counters (Immediate): category, total occurrences, latest tick/rule/effect, and the latest concrete reason. Level-triggered failures log only their category's first occurrence; this read-back keeps the exact count without stderr spam.",
+            handler: (context, args) => {
+                if (CommandResult.RequireNoArguments(args: args, verb: "world.rule.failures") is { } refusal) {
+                    return refusal;
+                }
+                if (!authority.TryResolveServer(context: context, error: out var error, server: out var server, verb: "world.rule.failures")) {
+                    return error;
+                }
+                return new CommandResult(Output: server.DescribeRuleRuntimeDiagnostics());
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "world.state.cell.set",
             description: $"Upserts ONE cell inside an already-declared row, leaving the row's own shape untouched (declare or redeclare the row with world.row.set state <row-json>): world.state.cell.set <row> <key> <value> [add] | <row> <key> <text...>. DISPATCHES ON THE ROW'S OWN DECLARED KIND: when <row> is ALREADY LIVE as a text-kind row, everything after <key> is taken as the RAW TAIL — spaces included, no quoting needed, no 'add' (a string has no addition) — replacing the cell wholesale; otherwise (int/fixed/bool, or a row this SAME batch has not yet declared — the one case this door cannot see live, which falls through to this grammar exactly as it always has) <value> is a single token resolved AT COMPOSE against the row's declared kind (so a same-batch world.row.set state declaring <row> ahead of this line composes first and this line lands against it, deterministically): DECIMAL text for a fixed-kind row (e.g. \"12.5\"), a whole number for int, or true|false for bool — never raw FixedQ4816 bits. The optional trailing 'add' token adds <value> to the key's current value (0 if the key is absent) instead of replacing it — refused on bool, and never admitted on a text write. Reaches any row — pass the reserved key '{WorldStateRow.SlotKey}' to write a one-value row's own cell. Writing '{WorldStateRow.SlotKey}' on a row declaring 'advance' RE-BASES it: the written value becomes the new base and its epoch becomes this tick, exactly like redeclaring the row. Writing a KEYED cell that already carries its OWN advance re-bases that cell the same way, preserving its rate. A row or cell declaring 'dynamics' instead rebases the SAME way, preserving which dynamics row it names: its Y0/V0 become the live eased value/velocity at this tick (never the raw write) plus a velocity kick signed by that row's own response, and its epoch becomes this tick — the write moves TRUTH, never the follower's own position, which keeps chasing from wherever it actually was. A trailing 'add' adds to the row's LIVE truth — the accumulated value for 'advance', the stored value itself for 'dynamics' (never the eased follower position) — rather than to the stored base. Buffers and applies at the tick boundary; rejected loudly (against the CANDIDATE this batch has built so far, never a stale read) if <row> names no state row (declare it first), if a numeric/bool write targets a text-kind row or vice versa, if 'add' targets a bool-kind row, if <value> does not parse under <row>'s kind, if the written text exceeds WorldStateCapacity.MaxTextValueLength, if <key> carries the reserved '$' prefix and is not a cell this row's shape mints with a value it could have minted (a GENERATOR row's '$cursor' is a non-negative sample count; a '$deck<n>' names a declared context, exists only under a non-withReplacement mode, and deals no bit past its context's alternative count), or — at whole-document revalidation — if the resulting value falls outside the row's declared envelope, a non-negative row's value would go negative, the write would grow the row past its capacity, or the acting principal lacks a Mutate/section:state or Edit/state:<row> hold admitting UpsertStateCell.",
             handler: (context, args) => {
@@ -471,7 +483,7 @@ public sealed class WorldStateCommandModule(IWorldConsoleAuthority authority, IS
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.symmetry",
-            description: "Reads the symmetry lattice back for one node (Immediate): world.symmetry <node> [other]. Prints the node's ring, antipode, canonical ray, projected point and its thirty-step ring walk — the values a '$symmetry:' rule operand or a cycle trait's Node/ProjectionX/ProjectionY output would read — and, with a second node, the reflection through it and whether the two rays are orthogonal.",
+            description: "Reads the symmetry lattice back for one node (Immediate): world.symmetry <node> [other]. Prints the node's ring, antipode, canonical ray, projected point and its thirty-step ring walk — the values a '$symmetry:' rule operand or a cycle trait's Node/ProjectionX/ProjectionY output would read — and, with a second node, the reflection through it, whether the two rays are orthogonal, and their exact inner product (-2..2; 1 marks a sixty-degree neighbour).",
             handler: (context, args) => {
                 if (
                     ((args.Count != 1) && (args.Count != 2)) ||
@@ -516,7 +528,59 @@ public sealed class WorldStateCommandModule(IWorldConsoleAuthority authority, IS
                         );
                     }
 
-                    line += $"{Environment.NewLine}[world.symmetry node={node} other={other} reflect={SymmetryLattice.Reflect(mirror: other, node: node)} orthogonal={(SymmetryLattice.AreOrthogonal(first: node, second: other) ? 1 : 0)}]";
+                    line += $"{Environment.NewLine}[world.symmetry node={node} other={other} reflect={SymmetryLattice.Reflect(mirror: other, node: node)} orthogonal={(SymmetryLattice.AreOrthogonal(first: node, second: other) ? 1 : 0)} innerProduct={SymmetryLattice.InnerProduct(first: node, second: other)}]";
+                }
+
+                return new CommandResult(Output: line);
+            },
+            routing: CommandRouting.Immediate
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.symmetry.word",
+            description: "Reads a word of reflections back (Immediate): world.symmetry.word <mirror>... [node:<n>]. Bakes the word a cycle trait would author as its generator (one to eight mirror nodes, applied first to last) and prints its derived order — the period a cycle carrying it loops in — and, given a node, that node's orbit under the word in step order, so an author can see the dial a word makes before authoring it.",
+            handler: (context, args) => {
+                var usage = $"<mirror 0..{SymmetryLattice.NodeCount - 1}>... [node:<0..{SymmetryLattice.NodeCount - 1}>]";
+                var mirrors = new List<int>(capacity: SymmetryWord.MaximumLength);
+                var seed = -1;
+
+                for (var index = 0; (index < args.Count); index++) {
+                    var token = args[index].ToString();
+
+                    if (token.StartsWith(value: "node:", comparisonType: StringComparison.Ordinal)) {
+                        if ((index != (args.Count - 1)) || !int.TryParse(s: token["node:".Length..], style: System.Globalization.NumberStyles.None, provider: System.Globalization.CultureInfo.InvariantCulture, result: out seed) || (seed >= SymmetryLattice.NodeCount)) {
+                            return CommandResult.Usage(form: usage, verb: "world.symmetry.word");
+                        }
+
+                        continue;
+                    }
+
+                    if (!args.TryInt(index: index, value: out var mirror) || (mirror < 0) || (mirror >= SymmetryLattice.NodeCount) || (mirrors.Count == SymmetryWord.MaximumLength)) {
+                        return CommandResult.Usage(form: usage, verb: "world.symmetry.word");
+                    }
+
+                    mirrors.Add(item: mirror);
+                }
+
+                if (mirrors.Count == 0) {
+                    return CommandResult.Usage(form: usage, verb: "world.symmetry.word");
+                }
+
+                var word = SymmetryWord.Create(mirrors: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: mirrors));
+                var line = $"[world.symmetry.word mirrors={DescribeWord(word: mirrors)} order={word.Order} identity={(word.IsIdentity ? 1 : 0)}]";
+
+                if (seed >= 0) {
+                    var orbit = new System.Text.StringBuilder();
+                    var cursor = seed;
+
+                    for (var step = 0; (step < word.OrbitLength(node: seed)); step++) {
+                        if (step > 0) { orbit.Append(value: ','); }
+
+                        orbit.Append(value: cursor);
+                        cursor = word.Apply(node: cursor);
+                    }
+
+                    line += $"{Environment.NewLine}[world.symmetry.word node={seed} orbitLength={word.OrbitLength(node: seed)} orbit={orbit}]";
                 }
 
                 return new CommandResult(Output: line);

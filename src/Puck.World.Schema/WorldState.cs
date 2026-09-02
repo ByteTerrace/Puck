@@ -1,5 +1,4 @@
 using System.Numerics;
-using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
 using Puck.Maths;
@@ -331,23 +330,18 @@ public sealed record WorldStateAdvance(long RateNumerator, long RateDenominator,
                 : 1L
             );
             var elapsed = (currentTick - ((ulong)Math.Max(val1: EpochTick, val2: 0L)));
-            var magnitude = AccumulatedMagnitude(
-                elapsed: elapsed,
-                scale: scale
-            );
 
-            // A magnitude past long.MaxValue can still land inside long once the base is added (a drain from a positive
-            // base), so the sum is formed exactly and saturated as a whole rather than the magnitude alone.
-            if (magnitude > long.MaxValue) {
-                var exact = (baseValue + ((RateNumerator < 0) ? -magnitude : magnitude));
+            if (TryAccumulate(elapsed: elapsed, scale: scale, magnitude: out var magnitude)) {
+                delta = ((RateNumerator < 0) ? -magnitude : magnitude);
+            }
+            else {
+                // A magnitude past long.MaxValue can still land inside long once the base is added (a drain from a
+                // positive base), so the sum is formed exactly and saturated as a whole rather than the magnitude alone.
+                var wide = AccumulatedMagnitude(elapsed: elapsed, scale: scale);
+                var exact = (baseValue + ((RateNumerator < 0) ? -wide : wide));
 
                 return row.ClampToEnvelope(value: ((exact > long.MaxValue) ? long.MaxValue : ((exact < long.MinValue) ? long.MinValue : ((long)exact))));
             }
-
-            delta = ((RateNumerator < 0)
-                ? -((long)magnitude)
-                : ((long)magnitude)
-            );
         }
 
         // A saturating add into long and a clamp after is the same answer as clamping the exact sum: every envelope
@@ -363,34 +357,46 @@ public sealed record WorldStateAdvance(long RateNumerator, long RateDenominator,
 
     // |rate| · scale allocated over the elapsed ticks, as ⌊elapsed · |rate| · scale / denominator⌋ — the exact
     // rational allocation of DiscreteMeasure. The compiled signed-64-bit form answers every read the tick can produce
-    // without touching BigInteger; the exact form remains behind it for a rate or an elapsed span the bounded
-    // representation cannot hold, so the two never disagree on a value, only on cost.
-    private BigInteger AccumulatedMagnitude(ulong elapsed, long scale) {
+    // in long arithmetic; the exact form remains behind it for a rate or an elapsed span the bounded representation
+    // cannot hold, so the two never disagree on a value, only on cost.
+    private bool TryAccumulate(ulong elapsed, long scale, out long magnitude) {
         var compiled = CompiledFor(scale: scale);
 
         if (
             compiled.IsValid &&
             (elapsed <= long.MaxValue) &&
             compiled.TryAmountBetween(
-                amount: out var amount,
+                amount: out magnitude,
                 end: ((long)elapsed),
                 start: 0L
             )
         ) {
-            return amount;
+            return true;
         }
 
-        return ExactMeasure(scale: scale).AmountBetween(
-            end: elapsed,
-            start: BigInteger.Zero
-        );
+        magnitude = 0L;
+
+        return false;
     }
+    private BigInteger AccumulatedMagnitude(ulong elapsed, long scale) =>
+        (TryAccumulate(elapsed: elapsed, scale: scale, magnitude: out var magnitude)
+            ? magnitude
+            : ExactMeasure(scale: scale).AmountBetween(
+                end: elapsed,
+                start: BigInteger.Zero
+            ));
     private CompiledDiscreteMeasure64 CompiledFor(long scale) {
-        var cache = CompiledMeasures.GetValue(
-            key: this,
-            createValueCallback: static advance => new CompiledMeasureCache(advance)
-        );
-        return scale == FixedQ4816.One.Value ? cache.Fixed : cache.Integer;
+        var cache = m_compiled;
+
+        // The rate fields are the cache key, so a `with` copy that changes the rate recompiles on its first read
+        // rather than answering from the copied cache; the holder is one immutable reference, so a concurrent reader
+        // sees either the old cache or the new one. Each scale compiles on its first read only.
+        if ((cache is null) || (cache.RateNumerator != RateNumerator) || (cache.RateDenominator != RateDenominator)) {
+            cache = new CompiledMeasureCache(RateNumerator: RateNumerator, RateDenominator: RateDenominator);
+            m_compiled = cache;
+        }
+
+        return cache.For(advance: this, scale: scale);
     }
     private DiscreteMeasure ExactMeasure(long scale) =>
         DiscreteMeasure.Rational(
@@ -398,21 +404,36 @@ public sealed record WorldStateAdvance(long RateNumerator, long RateDenominator,
             numerator: (BigInteger.Abs(value: ((BigInteger)RateNumerator)) * scale)
         );
 
-    // Runtime acceleration belongs beside the immutable record, not inside its synthesized equality/hash surface.
-    // A weak key keeps the cache lifetime coupled to the trait while allowing both supported encodings to be compiled
-    // once. Invalid compiled values are cached too, so an exact-only rate does not retry compilation on every read.
-    private static readonly ConditionalWeakTable<WorldStateAdvance, CompiledMeasureCache> CompiledMeasures = new();
+    /// <summary>Tests equality over the authored members alone; the compiled-measure cache is runtime acceleration
+    /// and never part of the record's identity.</summary>
+    public bool Equals(WorldStateAdvance? other) =>
+        ((other is not null) && (RateNumerator == other.RateNumerator) && (RateDenominator == other.RateDenominator) && (EpochTick == other.EpochTick));
+    /// <inheritdoc />
+    public override int GetHashCode() => HashCode.Combine(value1: RateNumerator, value2: RateDenominator, value3: EpochTick);
 
-    private sealed class CompiledMeasureCache {
-        public CompiledMeasureCache(WorldStateAdvance advance) {
-            _ = advance.ExactMeasure(scale: 1L).TryCompileInt64(compiled: out var integer);
-            _ = advance.ExactMeasure(scale: FixedQ4816.One.Value).TryCompileInt64(compiled: out var fixedPoint);
-            Integer = integer;
-            Fixed = fixedPoint;
+    // Runtime acceleration beside the immutable record, excluded from its equality above. Invalid compiled values are
+    // cached too, so an exact-only rate does not retry compilation on every read.
+    private CompiledMeasureCache? m_compiled;
+
+    private sealed class CompiledMeasureCache(long RateNumerator, long RateDenominator) {
+        private CompiledDiscreteMeasure64? m_fixed;
+        private CompiledDiscreteMeasure64? m_integer;
+
+        public long RateNumerator { get; } = RateNumerator;
+        public long RateDenominator { get; } = RateDenominator;
+
+        public CompiledDiscreteMeasure64 For(WorldStateAdvance advance, long scale) {
+            if (scale == FixedQ4816.One.Value) {
+                return (m_fixed ??= Compile(advance: advance, scale: scale));
+            }
+
+            return (m_integer ??= Compile(advance: advance, scale: scale));
         }
+        private static CompiledDiscreteMeasure64 Compile(WorldStateAdvance advance, long scale) {
+            _ = advance.ExactMeasure(scale: scale).TryCompileInt64(compiled: out var compiled);
 
-        public CompiledDiscreteMeasure64 Fixed { get; }
-        public CompiledDiscreteMeasure64 Integer { get; }
+            return compiled;
+        }
     }
 }
 /// <summary>
@@ -433,54 +454,59 @@ public sealed record WorldStateAdvance(long RateNumerator, long RateDenominator,
 /// <param name="EpochTick">The server tick <see cref="Y0"/>/<see cref="V0"/> were captured at.</param>
 public sealed record WorldStateDynamics(string Row, long Y0, long V0, long EpochTick = 0);
 /// <summary>What a <see cref="WorldStateCycle"/> cell reads: the rotation as a step count, a fraction of a turn or a
-/// unit-rotation component, or the rotation carried around a ring of the symmetry lattice as a node index or a
+/// unit-rotation component, or the rotation carried along a symmetry-lattice orbit as a node index, its ring or a
 /// projected coordinate. The integer outputs belong to <see cref="CellKind.Int"/> cells and the fixed outputs to
 /// <see cref="CellKind.Fixed"/> cells.</summary>
 [JsonConverter(typeof(StrictEnumConverter<WorldCycleOutput>))]
 public enum WorldCycleOutput : byte {
-    /// <summary>The rotation's step count in <c>[0, 30)</c>, twelve degrees per step — an int cell.</summary>
+    /// <summary>The rotation's step count in <c>[0, order)</c>, one full turn per <see cref="WorldStateCycle.Order"/>
+    /// steps — an int cell.</summary>
     Step,
-    /// <summary>The rotation as a fraction of one turn, <c>⌊step · 2^16 / 30⌋</c> in raw <c>FixedQ4816</c> bits, so the
-    /// value wraps once per loop the way <c>render.cycle</c> keys read a row — a fixed cell.</summary>
+    /// <summary>The rotation as a fraction of one turn, <c>⌊step · 2^16 / order⌋</c> in raw <c>FixedQ4816</c> bits, so
+    /// the value wraps once per loop the way <c>render.cycle</c> keys read a row — a fixed cell.</summary>
     Turns,
-    /// <summary>The unit rotation's cosine, the baked rotor's real part — a fixed cell.</summary>
+    /// <summary>The unit rotation's cosine, the real part of the order's root of unity at the step — a fixed cell.</summary>
     Cos,
-    /// <summary>The unit rotation's sine, the baked rotor's imaginary part — a fixed cell.</summary>
+    /// <summary>The unit rotation's sine, the imaginary part of that root of unity — a fixed cell.</summary>
     Sin,
-    /// <summary>The symmetry-lattice node the phase node has been carried to around its ring, in <c>[0, 240)</c> — an
-    /// int cell whose stored value is the node the walk starts from.</summary>
+    /// <summary>The symmetry-lattice node the phase node has been carried to along its orbit under the generator, in
+    /// <c>[0, 240)</c> — an int cell whose stored value is the node the walk starts from.</summary>
     Node,
     /// <summary>The current node's projected X coordinate on the plane of eight concentric rings — a fixed cell.</summary>
     ProjectionX,
     /// <summary>The current node's projected Y coordinate on that plane — a fixed cell.</summary>
     ProjectionY,
-    /// <summary>The ring, 0..7, the current node lies on — an int cell; constant for a given phase node, since a walk
-    /// never leaves its ring.</summary>
+    /// <summary>The ring, 0..7, the current node lies on — an int cell; constant along the lattice's own cycle, and a
+    /// value that moves under a word whose orbits cross rings.</summary>
     Ring,
 }
 /// <summary>
-/// A row's or cell's tick-indexed rotation trait: the value is a pure function of the server tick, read through
-/// <c>Puck.Maths.CyclicRotation</c> — four planes whose step counts per tick are 1, 7, 11 and 13 twelfths of a turn,
-/// all closing together every thirty steps — and, for the lattice outputs, through <c>Puck.Maths.SymmetryLattice</c>'s
-/// ring cycle, which the same rotation drives one node per step. Nothing accumulates and nothing is rebased: the
-/// mapping is tick-absolute, so a replay, a reconnect, or a fresh read at any tick lands on the same bits.
+/// A row's or cell's tick-indexed rotation trait: the value is a pure function of the server tick through a
+/// generator of the symmetry lattice's reflection group — <c>Puck.Maths.SymmetryWord</c>, the lattice's own
+/// thirty-step cycle when no <see cref="Word"/> is authored — raised to <see cref="Power"/> once per step. The
+/// generator's order is the loop's period, derived from the word rather than authored: a word of order twelve is a
+/// twelve-position dial, one of order twenty-four a day. Nothing accumulates and nothing is rebased: the mapping is
+/// tick-absolute, so a replay, a reconnect, or a fresh read at any tick lands on the same bits.
 /// </summary>
 /// <remarks>
 /// <para>The trait advances one step every <see cref="TicksPerStep"/> ticks from <see cref="EpochTick"/>, so a loop
-/// lasts <c>30 · TicksPerStep</c> ticks. The stored cell value is the phase: for the rotation outputs a whole number of
-/// twelve-degree steps added to the plane's own step count, for the lattice outputs the node the ring walk starts
+/// lasts <c>Order · TicksPerStep</c> ticks. The stored cell value is the phase: for the rotation outputs a whole
+/// number of steps added to the rotation's own step count, for the lattice outputs the node the orbit walk starts
 /// from (reduced into <c>[0, 240)</c>) — both read in the row's own displayed unit, so a <see cref="CellKind.Fixed"/>
 /// row's phase is the whole part of its value. An explicit write therefore sets the phase — no epoch moves — and a
 /// rule's <c>addState</c> against a cycling cell turns it by whole steps or nodes.</para>
-/// <para>The rotation index is <c>(CyclicRotation.Step(plane, steps) + phase) mod 30</c>; <see cref="WorldCycleOutput.Node"/>
-/// carries the phase node <c>CyclicRotation.Step(plane, steps)</c> ring positions along, so the four planes walk a
-/// ring at one, seven, eleven or thirteen positions per step. A declared envelope clamps the computed value on
-/// every read, exactly as it does an advancing row's.</para>
+/// <para>The rotation index is <c>(Power · steps + phase) mod Order</c>; <see cref="WorldCycleOutput.Node"/> applies
+/// the generator <c>Power · steps</c> times to the phase node. With no word, powers 1, 7, 11 and 13 are the lattice
+/// cycle's four rotation planes. A declared envelope clamps the computed value on every read, exactly as it does an
+/// advancing row's.</para>
 /// <para><c>world.save</c> settles a cycling cell in the serialized projection only: the stored value becomes the
 /// current rotation index (or node), the epoch returns to zero, and <see cref="SubstepTicks"/> carries the elapsed
 /// portion of the current step, so both the first value and the next transition remain continuous after reload.</para>
 /// </remarks>
-/// <param name="Plane">The rotation plane, <c>0..3</c>, selecting the steps-per-tick speed 1, 7, 11 or 13.</param>
+/// <param name="Word">The generator as a word of reflections — mirror nodes, one to eight, applied first to last —
+/// or <see langword="null"/> for the lattice's own cycle. A word that moves no node is refused: it loops nothing.</param>
+/// <param name="Power">How many applications of the generator one step is; nonzero, and smaller in magnitude than
+/// the generator's order, since a power reduces modulo the order and a multiple of it would be the identity.</param>
 /// <param name="Output">What the cell reads; must suit the carrying row's <see cref="CellKind"/>.</param>
 /// <param name="TicksPerStep">The server ticks one step lasts; refused at zero or below.</param>
 /// <param name="EpochTick">The server tick the step count is measured from; a tick before it reads as step zero. A
@@ -488,7 +514,41 @@ public enum WorldCycleOutput : byte {
 /// <param name="SubstepTicks">Elapsed ticks already accumulated toward the next step at <see cref="EpochTick"/>;
 /// must be non-negative and less than <see cref="TicksPerStep"/>.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldStateCycle(int Plane = 0, WorldCycleOutput Output = WorldCycleOutput.Step, long TicksPerStep = 1, long EpochTick = 0, long SubstepTicks = 0) {
+public sealed record WorldStateCycle(
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<int>? Word = null,
+    int Power = 1,
+    WorldCycleOutput Output = WorldCycleOutput.Step,
+    long TicksPerStep = 1,
+    long EpochTick = 0,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] long SubstepTicks = 0
+) {
+    // The baked generator and the word it was baked from, resolved on first use; a pure function of Word, so it
+    // never enters equality, and a `with` copy that swaps the word re-bakes rather than answering from the copy.
+    private SymmetryWord? m_generator;
+    private IReadOnlyList<int>? m_generatorWord;
+
+    /// <summary>Gets the baked generator: the authored <see cref="Word"/>, or the lattice's own cycle when none is
+    /// authored.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">The word is empty, longer than eight letters, or names a letter
+    /// outside the node range — shapes the validator refuses first.</exception>
+    [JsonIgnore]
+    public SymmetryWord Generator {
+        get {
+            var word = Word;
+
+            if ((m_generator is not { } baked) || !ReferenceEquals(objA: m_generatorWord, objB: word)) {
+                baked = Bake(word: word);
+                m_generator = baked;
+                m_generatorWord = word;
+            }
+
+            return baked;
+        }
+    }
+    /// <summary>Gets the loop's period in steps: the generator's order.</summary>
+    [JsonIgnore]
+    public int Order => Generator.Order;
+
     /// <summary>Gets a value indicating whether <paramref name="output"/> reads through the symmetry lattice rather
     /// than the bare rotation.</summary>
     public static bool IsLatticeOutput(WorldCycleOutput output) => (output is WorldCycleOutput.Node or WorldCycleOutput.ProjectionX or WorldCycleOutput.ProjectionY or WorldCycleOutput.Ring);
@@ -496,25 +556,58 @@ public sealed record WorldStateCycle(int Plane = 0, WorldCycleOutput Output = Wo
     /// cell; every other output is read by a <see cref="CellKind.Fixed"/> cell.</summary>
     public static bool IsIntegerOutput(WorldCycleOutput output) => (output is WorldCycleOutput.Step or WorldCycleOutput.Node or WorldCycleOutput.Ring);
 
+    private static SymmetryWord Bake(IReadOnlyList<int>? word) =>
+        ((word is null)
+            ? SymmetryWord.Coxeter
+            : SymmetryWord.Create(mirrors: [.. word]));
+
     /// <summary>Returns the stored phase of a cell in whole units — the raw value itself for an <see cref="CellKind.Int"/>
     /// row, the whole part of a <see cref="CellKind.Fixed"/> row's raw value.</summary>
     /// <param name="kind">The carrying row's kind.</param>
     /// <param name="baseValue">The stored raw cell value.</param>
     public static long Phase(CellKind kind, long baseValue) =>
         ((kind == CellKind.Fixed) ? (baseValue >> FixedQ4816.FractionBitCount) : baseValue);
-    /// <summary>Returns the rotation index in <c>[0, 30)</c> the trait has reached at a tick from a stored phase — the
-    /// step count the rotation outputs read and the ring displacement the lattice outputs apply.</summary>
+    /// <summary>Resolves the generator without throwing, naming the authoring defect when the word cannot bake.</summary>
+    /// <param name="generator">The baked generator, on success.</param>
+    /// <param name="reason">Why the word was refused, on failure.</param>
+    /// <returns><see langword="true"/> when the word bakes.</returns>
+    public bool TryResolveGenerator([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out SymmetryWord? generator, out string reason) {
+        if (Word is { } letters) {
+            if ((letters.Count < 1) || (letters.Count > SymmetryWord.MaximumLength)) {
+                generator = null;
+                reason = $"word holds {letters.Count} letters — a word is one to {SymmetryWord.MaximumLength} mirror nodes, or omitted for the lattice's own cycle";
+
+                return false;
+            }
+
+            for (var index = 0; (index < letters.Count); index++) {
+                if ((letters[index] < 0) || (letters[index] >= SymmetryLattice.NodeCount)) {
+                    generator = null;
+                    reason = $"word[{index}] {letters[index]} is not a symmetry-lattice node 0..{SymmetryLattice.NodeCount - 1}";
+
+                    return false;
+                }
+            }
+        }
+
+        generator = Generator;
+        reason = string.Empty;
+
+        return true;
+    }
+    /// <summary>Returns the rotation index in <c>[0, <see cref="Order"/>)</c> the trait has reached at a tick from a
+    /// stored phase — the step count the rotation outputs read.</summary>
     /// <param name="phase">The stored phase, in whole steps (see <see cref="Phase"/>).</param>
     /// <param name="currentTick">The tick to compute as of.</param>
     public int RotationIndex(long phase, ulong currentTick) =>
-        ((int)(((long)PlaneStep(currentTick: currentTick)) + phase).FloorModulo(modulus: ((long)CyclicRotation.Period)));
+        ((int)(Rotation(currentTick: currentTick) + phase).FloorModulo(modulus: ((long)Order)));
     /// <summary>Returns the lattice node the trait has reached at a tick from a stored phase node.</summary>
     /// <param name="phaseNode">The stored phase (see <see cref="Phase"/>), a node index reduced into <c>[0, 240)</c>.</param>
     /// <param name="currentTick">The tick to compute as of.</param>
     public int CurrentNode(long phaseNode, ulong currentTick) =>
-        SymmetryLattice.Cycle(
+        Generator.Apply(
             node: ((int)phaseNode.FloorModulo(modulus: ((long)SymmetryLattice.NodeCount))),
-            steps: PlaneStep(currentTick: currentTick)
+            steps: Rotation(currentTick: currentTick)
         );
     /// <summary>Computes the cell's current raw value: the selected <see cref="Output"/> at <paramref name="currentTick"/>
     /// from the stored phase, clamped into the row's declared envelope.</summary>
@@ -539,13 +632,14 @@ public sealed record WorldStateCycle(int Plane = 0, WorldCycleOutput Output = Wo
             };
         }
         else {
+            var order = Order;
             var index = RotationIndex(currentTick: currentTick, phase: phase);
 
             value = Output switch {
                 WorldCycleOutput.Step => index,
-                WorldCycleOutput.Turns => ((((long)index) << FixedQ4816.FractionBitCount) / CyclicRotation.Period),
-                WorldCycleOutput.Cos => CyclicRotation.Rotor(step: index).Real.Value,
-                _ => CyclicRotation.Rotor(step: index).Imaginary.Value,
+                WorldCycleOutput.Turns => ((((long)index) << FixedQ4816.FractionBitCount) / order),
+                WorldCycleOutput.Cos => CyclicRotation.Rotor(step: index, order: order).Real.Value,
+                _ => CyclicRotation.Rotor(step: index, order: order).Imaginary.Value,
             };
         }
 
@@ -576,16 +670,53 @@ public sealed record WorldStateCycle(int Plane = 0, WorldCycleOutput Output = Wo
 
         return ((long)((carried + elapsedRemainder) % duration));
     }
+    /// <summary>Determines whether another trait spells the same rotation: the same word letter for letter, power,
+    /// output, step length, epoch and substep.</summary>
+    /// <param name="other">The trait to compare with.</param>
+    public bool Equals(WorldStateCycle? other) =>
+        (other is not null) &&
+        (Power == other.Power) &&
+        (Output == other.Output) &&
+        (TicksPerStep == other.TicksPerStep) &&
+        (EpochTick == other.EpochTick) &&
+        (SubstepTicks == other.SubstepTicks) &&
+        SameWord(left: Word, right: other.Word);
+    /// <inheritdoc/>
+    public override int GetHashCode() {
+        var hash = new HashCode();
 
-    // The plane's own step count in [0, 30) at a tick: whole steps since the epoch, reduced modulo the period before
-    // the plane speed multiplies them, so no tick count can overflow the rotation arithmetic.
-    private int PlaneStep(ulong currentTick) {
+        hash.Add(value: Power);
+        hash.Add(value: Output);
+        hash.Add(value: TicksPerStep);
+        hash.Add(value: EpochTick);
+        hash.Add(value: SubstepTicks);
+
+        if (Word is { } letters) {
+            foreach (var letter in letters) { hash.Add(value: letter); }
+        }
+
+        return hash.ToHashCode();
+    }
+
+    private static bool SameWord(IReadOnlyList<int>? left, IReadOnlyList<int>? right) {
+        if (ReferenceEquals(objA: left, objB: right)) { return true; }
+        if ((left is null) || (right is null) || (left.Count != right.Count)) { return false; }
+
+        for (var index = 0; (index < left.Count); index++) {
+            if (left[index] != right[index]) { return false; }
+        }
+
+        return true;
+    }
+    // The generator applications reached at a tick: whole steps since the epoch (with the carried substep), reduced
+    // modulo the order before the power multiplies them, so no tick count can overflow the arithmetic.
+    private long Rotation(ulong currentTick) {
         var duration = ((ulong)Math.Max(val1: TicksPerStep, val2: 1L));
         var elapsed = Elapsed(currentTick: currentTick);
         var carried = Math.Min(val1: ((ulong)Math.Max(val1: SubstepTicks, val2: 0L)), val2: (duration - 1UL));
         var steps = ((elapsed / duration) + (((elapsed % duration) + carried) / duration));
 
-        return CyclicRotation.Step(plane: Plane, tick: ((long)(steps % ((ulong)CyclicRotation.Period))));
+        return (((long)(steps % ((ulong)Order))) * Power);
     }
     private ulong Elapsed(ulong currentTick) {
         var epoch = ((ulong)Math.Max(val1: EpochTick, val2: 0L));
@@ -663,6 +794,15 @@ public enum WorldGeneratorSource : byte {
     /// target's raw value as-is. One fixed-cost advance per draw. The unshaped-entropy primitive: no distribution is
     /// applied.</summary>
     StreamDraw,
+
+    /// <summary>One uniform draw over an orbit of the symmetry lattice: the thirty nodes of <see cref="WorldGenerator.Ring"/>,
+    /// or the nodes <see cref="WorldGenerator.Node"/> visits under <see cref="WorldGenerator.Word"/> (the lattice's
+    /// own cycle when none is authored, so the node's ring) — reads those fields and <see cref="WorldGenerator.Mode"/>,
+    /// writes the node index in the site's displayed unit (a fixed site stores <c>node.0</c>, the phase a cycle trait
+    /// reads). The cards are the orbit's nodes in walk order, equally weighted, dealt under
+    /// a deck mode through the site's one <see cref="WorldStateRow.DrawDecks"/> mask exactly as a weighted numeric
+    /// source is; exactly two advances per draw.</summary>
+    SymmetryOrbit,
 }
 /// <summary>One numeric outcome of a <see cref="WorldGeneratorSource.WeightedNumeric"/> source: the raw value it
 /// writes and its relative weight — the numeric twin of <see cref="WorldGeneratorAlternative"/>, minus
@@ -695,12 +835,12 @@ public sealed record WorldGeneratorWeightedNumeric(long Value, ulong Weight, [pr
 /// reaches a terminal context (one declaring no alternatives). A walk that has emitted <see cref="Bound"/> tokens
 /// without terminating refuses the whole emission by name rather than truncating it. A single self-terminating
 /// context with <see cref="Bound"/> 1 is the degenerate flat weighted text draw.</para>
-/// <para>The other three sources are numeric and always exactly one draw — <see cref="Bound"/> is meaningless beside
+/// <para>The other sources are numeric and always exactly one draw — <see cref="Bound"/> is meaningless beside
 /// them and must be left at its default. Each source's fields are both-or-neither against the fields the others
 /// own: declaring <see cref="Contexts"/> beside <see cref="RangeMin"/> is refused by name rather than silently
 /// ignored.</para>
-/// <para><see cref="Mode"/> belongs to the two alias-table shapes — per context for Markov, over the outcome set for
-/// weighted numeric — and persists across emissions in the drawing site's own <see cref="WorldStateRow.DrawDecks"/>
+/// <para><see cref="Mode"/> belongs to the alias-table shapes — per context for Markov, over the outcome set for
+/// weighted numeric, over the orbit for a symmetry orbit — and persists across emissions in the drawing site's own <see cref="WorldStateRow.DrawDecks"/>
 /// masks. <see cref="WorldGeneratorSource.UniformRange"/> and <see cref="WorldGeneratorSource.StreamDraw"/> have no
 /// entry set and never deal.</para>
 /// </remarks>
@@ -710,7 +850,7 @@ public sealed record WorldGeneratorWeightedNumeric(long Value, ulong Weight, [pr
 /// <c>1..</c><see cref="WorldGeneratorCapacity.MaxEmissionBound"/>. Left at <see cref="DefaultBound"/> by a numeric
 /// source.</param>
 /// <param name="Contexts">Markov only: the declared contexts, at least one, uniquely keyed.</param>
-/// <param name="Mode">Markov and weighted numeric: how the entries are consumed (see <see cref="WorldGeneratorMode"/>).</param>
+/// <param name="Mode">Markov, weighted numeric and symmetry orbit: how the entries are consumed (see <see cref="WorldGeneratorMode"/>).</param>
 /// <param name="RangeMin"><see cref="WorldGeneratorSource.UniformRange"/> only: the closed range's inclusive lower
 /// bound — both bounds present or neither. Raw-encoded per the destination site's <see cref="CellKind"/> (raw
 /// <c>FixedQ4816</c> bits for a <c>fixed</c> site) — unlike a site row's own <c>min</c>/<c>max</c>, which a
@@ -721,6 +861,13 @@ public sealed record WorldGeneratorWeightedNumeric(long Value, ulong Weight, [pr
 /// <param name="Weighted"><see cref="WorldGeneratorSource.WeightedNumeric"/> only: the weighted numeric outcomes, at
 /// least one, at least one carrying a non-zero weight; under a deck <see cref="Mode"/> each outcome contributes
 /// <see cref="WorldGeneratorWeightedNumeric.Count"/> cards to the pass.</param>
+/// <param name="Ring"><see cref="WorldGeneratorSource.SymmetryOrbit"/> only: the ring, 0..7, whose thirty nodes are
+/// the cards — exactly one of <see cref="Ring"/> and <see cref="Node"/>.</param>
+/// <param name="Node"><see cref="WorldGeneratorSource.SymmetryOrbit"/> only: the node, 0..239, whose orbit under
+/// <see cref="Word"/> is the cards.</param>
+/// <param name="Word"><see cref="WorldGeneratorSource.SymmetryOrbit"/> beside <see cref="Node"/> only: the word of
+/// reflections (one to eight mirror nodes, applied first to last) the orbit is taken under, or <see langword="null"/>
+/// for the lattice's own cycle — the same generator vocabulary a <see cref="WorldStateCycle"/> authors.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldGenerator(
     WorldGeneratorSource Source = WorldGeneratorSource.Markov,
@@ -732,7 +879,10 @@ public sealed record WorldGenerator(
     WorldGeneratorMode Mode = WorldGeneratorMode.WithReplacement,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? RangeMin = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? RangeMax = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldGeneratorWeightedNumeric>? Weighted = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldGeneratorWeightedNumeric>? Weighted = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Ring = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Node = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<int>? Word = null
 ) {
     /// <summary>The <see cref="Bound"/> an undeclared source carries — one emitted token. <see cref="Bound"/> is
     /// Markov-only and not nullable, so "left at its default" is the only reading of "not declared" available to it; a

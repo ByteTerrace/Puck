@@ -1,6 +1,5 @@
 using Puck.World.Protocol;
 
-using Puck.Maths;
 
 namespace Puck.World.Server;
 
@@ -70,7 +69,7 @@ public sealed partial class WorldServer {
 
             candidate = current.WithWorldState(rows: Upsert(
                 list: current.State,
-                item: (siteRow with { DrawCursor = (siteRow.DrawCursor + cellCount), DrawDecks = (decksAfter ?? siteRow.DrawDecks) }),
+                item: (siteRow with { DrawCursor = (siteRow.DrawCursor + cellCount), DrawDecks = WorldGeneratorEngine.DecksAfter(generator: fillSource, fired: decksAfter, previous: siteRow.DrawDecks) }),
                 keyOf: static (WorldStateRow row) => row.Name
             ));
             reason = string.Empty;
@@ -138,16 +137,15 @@ public sealed partial class WorldServer {
             )
             : new WorldStateCell(
                 Key: WorldStateRow.SlotKey,
-                // A numeric draw is whole units; a fixed row stores Q48.16, so the integer is promoted rather than
-                // landing as raw bits (7 would otherwise read as 7/65536).
-                Value: ((siteRow.Kind == CellKind.Fixed)
-                    ? FixedQ4816.FromInteger(value: fired.Numeric!.Value).Value
-                    : fired.Numeric!.Value)
+                // A numeric draw is already in the site's own encoding — raw FixedQ4816 bits on a fixed row — the
+                // contract the source's range/outcome values, the validator's domain narrowing and a lattice fill all
+                // share.
+                Value: fired.Numeric!.Value
             )
         );
         var state = Upsert(
             list: current.State,
-            item: (siteRow with { Cells = [cell], DrawCursor = (siteRow.DrawCursor + fired.Samples), DrawDecks = (fired.Decks ?? siteRow.DrawDecks) }),
+            item: (siteRow with { Cells = [cell], DrawCursor = (siteRow.DrawCursor + fired.Samples), DrawDecks = WorldGeneratorEngine.DecksAfter(generator: generator, fired: fired.Decks, previous: siteRow.DrawDecks) }),
             keyOf: static (WorldStateRow row) => row.Name
         );
 

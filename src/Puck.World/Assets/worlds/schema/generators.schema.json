@@ -24,7 +24,8 @@
               "Markov",
               "UniformRange",
               "WeightedNumeric",
-              "StreamDraw"
+              "StreamDraw",
+              "SymmetryOrbit"
             ],
             "default": "Markov"
           },
@@ -110,7 +111,7 @@
             "default": null
           },
           "mode": {
-            "description": "Markov and weighted numeric: how the entries are consumed (see WorldGeneratorMode).",
+            "description": "Markov, weighted numeric and symmetry orbit: how the entries are consumed (see WorldGeneratorMode).",
             "enum": [
               "WithReplacement",
               "WithoutReplacement",
@@ -169,6 +170,33 @@
                 "weight"
               ],
               "additionalProperties": false
+            },
+            "default": null
+          },
+          "ring": {
+            "description": "SymmetryOrbit only: the ring, 0..7, whose thirty nodes are the cards \u2014 exactly one of Ring and Node.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "node": {
+            "description": "SymmetryOrbit only: the node, 0..239, whose orbit under Word is the cards.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "word": {
+            "description": "SymmetryOrbit beside Node only: the word of reflections (one to eight mirror nodes, applied first to last) the orbit is taken under, or null for the lattice\u0027s own cycle \u2014 the same generator vocabulary a WorldStateCycle authors.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "integer"
             },
             "default": null
           }

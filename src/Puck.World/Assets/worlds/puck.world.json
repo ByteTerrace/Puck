@@ -5915,7 +5915,6 @@
       {
         "cycle": {
           "output": "Turns",
-          "plane": 0,
           "ticksPerStep": 1
         },
         "kind": "fixed",

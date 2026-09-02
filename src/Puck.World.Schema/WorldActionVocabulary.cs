@@ -15,6 +15,8 @@ namespace Puck.World;
 [JsonDerivedType(typeof(ActionPredicate.CompareState), typeDiscriminator: "compareState")]
 [JsonDerivedType(typeof(ActionPredicate.TimerElapsed), typeDiscriminator: "timerElapsed")]
 [JsonDerivedType(typeof(ActionPredicate.All), typeDiscriminator: "all")]
+[JsonDerivedType(typeof(ActionPredicate.Any), typeDiscriminator: "any")]
+[JsonDerivedType(typeof(ActionPredicate.Not), typeDiscriminator: "not")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record ActionPredicate {
     /// <summary>The fact holds this tick.</summary>
@@ -61,6 +63,198 @@ public abstract record ActionPredicate {
     public sealed record TimerElapsed(string State) : ActionPredicate;
     /// <summary>Every inner predicate holds (conjunction).</summary>
     public sealed record All(IReadOnlyList<ActionPredicate> Predicates) : ActionPredicate;
+    /// <summary>At least one inner predicate holds (disjunction). The list must be non-empty.</summary>
+    /// <param name="Predicates">The non-empty child-predicate list.</param>
+    public sealed record Any(IReadOnlyList<ActionPredicate> Predicates) : ActionPredicate;
+    /// <summary>Inverts one predicate.</summary>
+    /// <param name="Predicate">The child predicate to invert.</param>
+    public sealed record Not(ActionPredicate Predicate) : ActionPredicate;
+}
+
+/// <summary>A bounded postfix numeric expression evaluated by a world rule. Each token either pushes a value or
+/// consumes preceding values; the compiler proves stack shape and numeric kind before simulation begins.</summary>
+/// <param name="Tokens">The postfix tokens, in evaluation order.</param>
+public sealed record WorldValueExpression(IReadOnlyList<WorldValueToken> Tokens);
+/// <summary>One authored token in a <see cref="WorldValueExpression"/>.</summary>
+[JsonDerivedType(typeof(WorldValueToken.Constant), typeDiscriminator: "constant")]
+[JsonDerivedType(typeof(WorldValueToken.State), typeDiscriminator: "state")]
+[JsonDerivedType(typeof(WorldValueToken.Add), typeDiscriminator: "add")]
+[JsonDerivedType(typeof(WorldValueToken.Subtract), typeDiscriminator: "subtract")]
+[JsonDerivedType(typeof(WorldValueToken.Multiply), typeDiscriminator: "multiply")]
+[JsonDerivedType(typeof(WorldValueToken.Divide), typeDiscriminator: "divide")]
+[JsonDerivedType(typeof(WorldValueToken.Min), typeDiscriminator: "min")]
+[JsonDerivedType(typeof(WorldValueToken.Max), typeDiscriminator: "max")]
+[JsonDerivedType(typeof(WorldValueToken.Clamp), typeDiscriminator: "clamp")]
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
+public abstract record WorldValueToken {
+    /// <summary>An exact authored decimal, converted to the destination row's numeric kind at compile time.</summary>
+    /// <param name="Value">The exact decimal literal.</param>
+    public sealed record Constant(decimal Value) : WorldValueToken;
+    /// <summary>A live state cell or reserved world-rule channel.</summary>
+    /// <param name="Name">The state row or reserved-channel name.</param>
+    /// <param name="Key">The optional keyed-row cell.</param>
+    public sealed record State(
+        string Name,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Key = null
+    ) : WorldValueToken;
+    /// <summary>Consumes two values and pushes their sum.</summary>
+    public sealed record Add : WorldValueToken;
+    /// <summary>Consumes two values and pushes left minus right.</summary>
+    public sealed record Subtract : WorldValueToken;
+    /// <summary>Consumes two values and pushes their product in the destination row's numeric domain.</summary>
+    public sealed record Multiply : WorldValueToken;
+    /// <summary>Consumes two values and pushes left divided by right; zero fails the effect or transaction.</summary>
+    public sealed record Divide : WorldValueToken;
+    /// <summary>Consumes two values and pushes the lesser.</summary>
+    public sealed record Min : WorldValueToken;
+    /// <summary>Consumes two values and pushes the greater.</summary>
+    public sealed record Max : WorldValueToken;
+    /// <summary>Consumes value, minimum, maximum (in that authored order) and pushes the inclusive clamp.</summary>
+    public sealed record Clamp : WorldValueToken;
+}
+
+/// <summary>How a rule-triggered body designation chooses its target.</summary>
+[JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<WorldBodyDesignationKind>))]
+public enum WorldBodyDesignationKind : byte {
+    /// <summary>Designate another active body.</summary>
+    Body,
+    /// <summary>Clear the register.</summary>
+    Clear,
+}
+
+/// <summary>One deterministic presentation-neutral cue emitted by an authored rule.</summary>
+/// <param name="Name">The cue's stable authored identifier.</param>
+/// <param name="Payload">An optional bounded payload interpreted by the consumer.</param>
+/// <param name="Body">An optional active-body index associated with the cue.</param>
+/// <param name="Tick">The simulation tick that emitted it.</param>
+public readonly record struct WorldGameplayCue(string Name, string? Payload, int? Body, ulong Tick) {
+    /// <summary>Determines whether a cue name is a bounded dot-separated token suitable for a document and log.</summary>
+    /// <param name="candidate">The candidate cue name.</param>
+    /// <returns><see langword="true"/> when the name is non-empty, bounded, begins and ends with an ASCII letter or
+    /// digit, and otherwise contains only ASCII letters, digits, dots, hyphens, or underscores.</returns>
+    public static bool IsValidName(string? candidate) {
+        if (
+            (candidate is not { Length: > 0 }) ||
+            (candidate.Length > WorldRuleCapacity.MaxCueNameLength) ||
+            !char.IsAsciiLetterOrDigit(c: candidate[0]) ||
+            !char.IsAsciiLetterOrDigit(c: candidate[^1])
+        ) {
+            return false;
+        }
+
+        foreach (var character in candidate) {
+            if (
+                !char.IsAsciiLetterOrDigit(c: character) &&
+                (character != '.') &&
+                (character != '-') &&
+                (character != '_')
+            ) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+}
+/// <summary>The finite, non-recursive effect vocabulary admitted inside an atomic world-rule transaction. It mirrors
+/// the rollback-safe world-scope effects explicitly; nested transactions and persistence I/O have no wire shape.</summary>
+[JsonDerivedType(typeof(WorldTransactionStep.SetCell), typeDiscriminator: "setState")]
+[JsonDerivedType(typeof(WorldTransactionStep.AddCell), typeDiscriminator: "addState")]
+[JsonDerivedType(typeof(WorldTransactionStep.CountdownCell), typeDiscriminator: "countdownState")]
+[JsonDerivedType(typeof(WorldTransactionStep.RemoveCell), typeDiscriminator: "removeStateCell")]
+[JsonDerivedType(typeof(WorldTransactionStep.ScheduleCell), typeDiscriminator: "scheduleState")]
+[JsonDerivedType(typeof(WorldTransactionStep.GenerateStep), typeDiscriminator: "generate")]
+[JsonDerivedType(typeof(WorldTransactionStep.UpsertHudPanelStep), typeDiscriminator: "upsertHudPanel")]
+[JsonDerivedType(typeof(WorldTransactionStep.RemoveHudPanelStep), typeDiscriminator: "removeHudPanel")]
+[JsonDerivedType(typeof(WorldTransactionStep.UpsertPlacementStep), typeDiscriminator: "upsertPlacement")]
+[JsonDerivedType(typeof(WorldTransactionStep.RemovePlacementStep), typeDiscriminator: "removePlacement")]
+[JsonDerivedType(typeof(WorldTransactionStep.PoseStep), typeDiscriminator: "pose")]
+[JsonDerivedType(typeof(WorldTransactionStep.EmitCueStep), typeDiscriminator: "emitCue")]
+[JsonDerivedType(typeof(WorldTransactionStep.SetBodyVerticalVelocityStep), typeDiscriminator: "setBodyVerticalVelocity")]
+[JsonDerivedType(typeof(WorldTransactionStep.ScaleBodyVerticalVelocityStep), typeDiscriminator: "scaleBodyVerticalVelocity")]
+[JsonDerivedType(typeof(WorldTransactionStep.ApplyBodyImpulseStep), typeDiscriminator: "applyBodyImpulse")]
+[JsonDerivedType(typeof(WorldTransactionStep.DesignateBodyStep), typeDiscriminator: "designateBody")]
+[JsonDerivedType(typeof(WorldTransactionStep.PaintFieldStep), typeDiscriminator: "paintField")]
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
+public abstract record WorldTransactionStep {
+    /// <summary>Sets one state cell from exactly one numeric source spelling.</summary>
+    /// <param name="State">The destination row.</param>
+    /// <param name="Key">The optional destination cell key.</param>
+    /// <param name="Value">The literal source.</param>
+    /// <param name="FromState">The live source row or reserved channel.</param>
+    /// <param name="FromKey">The optional source cell key.</param>
+    /// <param name="ValueSeconds">The exact engine-tick duration source.</param>
+    /// <param name="Expression">The bounded postfix numeric source.</param>
+    public sealed record SetCell(
+        string State,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Key = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? Value = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromState = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromKey = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? ValueSeconds = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldValueExpression? Expression = null
+    ) : WorldTransactionStep;
+    /// <summary>Adds exactly one numeric source to a state cell.</summary>
+    /// <param name="State">The destination row.</param>
+    /// <param name="Key">The optional destination cell key.</param>
+    /// <param name="Value">The literal source.</param>
+    /// <param name="FromState">The live source row or reserved channel.</param>
+    /// <param name="FromKey">The optional source cell key.</param>
+    /// <param name="ValueSeconds">The exact engine-tick duration source.</param>
+    /// <param name="Expression">The bounded postfix numeric source.</param>
+    public sealed record AddCell(
+        string State,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Key = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? Value = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromState = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromKey = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? ValueSeconds = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldValueExpression? Expression = null
+    ) : WorldTransactionStep;
+    /// <summary>Consumes one non-negative integer countdown by the current engine-step width.</summary>
+    /// <param name="State">The countdown row.</param>
+    /// <param name="Key">The optional cell key.</param>
+    public sealed record CountdownCell(string State, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Key = null) : WorldTransactionStep;
+    /// <summary>Removes one addressed state cell.</summary>
+    /// <param name="State">The row to remove from.</param>
+    /// <param name="Key">The optional cell key.</param>
+    public sealed record RemoveCell(string State, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Key = null) : WorldTransactionStep;
+    /// <summary>Writes one absolute simulation-tick deadline.</summary>
+    /// <param name="State">The integer destination row.</param>
+    /// <param name="DelaySeconds">The non-negative delay, converted with the world's simulation rate and rounded up.</param>
+    /// <param name="Key">The optional cell key.</param>
+    public sealed record ScheduleCell(string State, decimal DelaySeconds, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Key = null) : WorldTransactionStep;
+    /// <summary>Redraws one declared state draw site.</summary>
+    public sealed record GenerateStep(string Row) : WorldTransactionStep;
+    /// <summary>Upserts one world HUD panel.</summary>
+    public sealed record UpsertHudPanelStep(WorldHudPanel Panel) : WorldTransactionStep;
+    /// <summary>Removes one world HUD panel.</summary>
+    public sealed record RemoveHudPanelStep(string Id) : WorldTransactionStep;
+    /// <summary>Upserts one placement row.</summary>
+    public sealed record UpsertPlacementStep(WorldPlacement Placement) : WorldTransactionStep;
+    /// <summary>Removes one placement row.</summary>
+    public sealed record RemovePlacementStep(string Id) : WorldTransactionStep;
+    /// <summary>Teleports an active body.</summary>
+    public sealed record PoseStep(
+        string Key,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SpawnPoint = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DocumentVector3? Position = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float YawDegrees = 0f,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float PitchDegrees = 0f,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float RollDegrees = 0f
+    ) : WorldTransactionStep;
+    /// <summary>Emits one deterministic gameplay cue.</summary>
+    public sealed record EmitCueStep(string Name, string? Payload = null, string? Key = null) : WorldTransactionStep;
+    /// <summary>Sets an active body's vertical velocity.</summary>
+    public sealed record SetBodyVerticalVelocityStep(string Key, decimal Velocity) : WorldTransactionStep;
+    /// <summary>Scales an active body's vertical velocity.</summary>
+    public sealed record ScaleBodyVerticalVelocityStep(string Key, decimal Factor) : WorldTransactionStep;
+    /// <summary>Applies a timed body-local planar impulse.</summary>
+    public sealed record ApplyBodyImpulseStep(string Key, DocumentVector3 BodyDirection, decimal Speed, decimal DurationSeconds) : WorldTransactionStep;
+    /// <summary>Sets or clears an active body's target register.</summary>
+    public sealed record DesignateBodyStep(string Key, string Register, WorldBodyDesignationKind Kind, string? TargetKey = null) : WorldTransactionStep;
+    /// <summary>Sets or adds a bounded live field neighborhood.</summary>
+    public sealed record PaintFieldStep(string Field, int X, int Y, int Z, decimal Value, WorldFieldWriteOp Operation = WorldFieldWriteOp.Set, int Radius = 0) : WorldTransactionStep;
 }
 /// <summary>An authored operand row lowered to a <see cref="BodyMotionOp"/> and executed by the body instruction
 /// interpreter when its trigger fires.</summary>
@@ -80,6 +274,15 @@ public abstract record ActionPredicate {
 [JsonDerivedType(typeof(ActionEffect.RemovePlacement), typeDiscriminator: "removePlacement")]
 [JsonDerivedType(typeof(ActionEffect.Save), typeDiscriminator: "save")]
 [JsonDerivedType(typeof(ActionEffect.Pose), typeDiscriminator: "pose")]
+[JsonDerivedType(typeof(ActionEffect.RemoveStateCell), typeDiscriminator: "removeStateCell")]
+[JsonDerivedType(typeof(ActionEffect.ScheduleState), typeDiscriminator: "scheduleState")]
+[JsonDerivedType(typeof(ActionEffect.Transaction), typeDiscriminator: "transaction")]
+[JsonDerivedType(typeof(ActionEffect.EmitCue), typeDiscriminator: "emitCue")]
+[JsonDerivedType(typeof(ActionEffect.SetBodyVerticalVelocity), typeDiscriminator: "setBodyVerticalVelocity")]
+[JsonDerivedType(typeof(ActionEffect.ScaleBodyVerticalVelocity), typeDiscriminator: "scaleBodyVerticalVelocity")]
+[JsonDerivedType(typeof(ActionEffect.ApplyBodyImpulse), typeDiscriminator: "applyBodyImpulse")]
+[JsonDerivedType(typeof(ActionEffect.DesignateBody), typeDiscriminator: "designateBody")]
+[JsonDerivedType(typeof(ActionEffect.PaintField), typeDiscriminator: "paintField")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record ActionEffect {
     /// <summary>Writes the body's vertical-velocity channel (the jump launch / the surge). Under the grounded model
@@ -127,6 +330,8 @@ public abstract record ActionEffect {
     /// spelling beside <paramref name="Value"/>/<paramref name="FromState"/>/<paramref name="ValueSeconds"/>, exactly
     /// one authored. Because every state-bound document value (a creation palette colour, a look-assignment row
     /// name) re-resolves on the write, this is how a rule restyles what a body wears.</param>
+    /// <param name="Expression">World scope only: a bounded numeric expression evaluated in the destination row's
+    /// integer or fixed-point domain. Exactly one source spelling is authored.</param>
     public sealed record SetState(
         string State,
         decimal? Value = null,
@@ -135,7 +340,8 @@ public abstract record ActionEffect {
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromState = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromKey = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? ValueSeconds = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Text = null
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Text = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldValueExpression? Expression = null
     ) : ActionEffect;
     /// <summary>Adds to a named state cell — a kit counter slot at body scope, a <c>state</c>-section row's cell at
     /// world scope (see <see cref="WorldRule"/>).</summary>
@@ -150,6 +356,7 @@ public abstract record ActionEffect {
     /// <param name="FromKey">The cell inside <paramref name="FromState"/> — see <see cref="SetState.FromKey"/>.</param>
     /// <param name="ValueSeconds">world scope only — see <see cref="SetState.ValueSeconds"/>'s remarks; here the
     /// converted tick count is the addend rather than the replacement.</param>
+    /// <param name="Expression">World scope only — see <see cref="SetState.Expression"/>.</param>
     public sealed record AddState(
         string State,
         decimal? Value = null,
@@ -157,7 +364,8 @@ public abstract record ActionEffect {
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Key = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromState = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromKey = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? ValueSeconds = null
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? ValueSeconds = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldValueExpression? Expression = null
     ) : ActionEffect;
     /// <summary>Decrements a world-state countdown by the current simulation step's engine-tick width, saturating at
     /// zero. world scope only: the destination must be a <c>kind=int nonNegative=true</c> row. Unlike an authored
@@ -170,6 +378,85 @@ public abstract record ActionEffect {
     public sealed record CountdownState(
         string State,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Key = null
+    ) : ActionEffect;
+    /// <summary>Removes one addressed cell from a declared world-state row. World scope only.</summary>
+    /// <param name="State">The row to remove from.</param>
+    /// <param name="Key">The optional cell key.</param>
+    public sealed record RemoveStateCell(
+        string State,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Key = null
+    ) : ActionEffect;
+    /// <summary>Writes an absolute simulation due tick into an integer state cell. The delay is converted against
+    /// the world's authored simulation rate and rounded up, so it never fires early. A companion rule compares
+    /// <c>$tick</c> against the cell and removes it after handling, forming a bounded, document-backed scheduler.</summary>
+    /// <param name="State">The integer destination row.</param>
+    /// <param name="DelaySeconds">The non-negative delay, rounded up to simulation ticks.</param>
+    /// <param name="Key">The optional cell key.</param>
+    public sealed record ScheduleState(
+        string State,
+        decimal DelaySeconds,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Key = null
+    ) : ActionEffect;
+    /// <summary>Applies a bounded list of state, document, body, cue, and field effects atomically after preflight.
+    /// When any effect refuses, none apply and <paramref name="OnFailure"/> runs instead. Nested transactions and
+    /// save effects are structurally unavailable because persistence I/O cannot be rolled back.</summary>
+    /// <param name="Effects">The main transaction branch.</param>
+    /// <param name="OnFailure">The optional branch run after a main-branch refusal.</param>
+    public sealed record Transaction(
+        IReadOnlyList<WorldTransactionStep> Effects,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldTransactionStep>? OnFailure = null
+    ) : ActionEffect;
+    /// <summary>Emits a deterministic, presentation-neutral gameplay cue. World scope only.</summary>
+    /// <param name="Name">The stable authored cue identifier.</param>
+    /// <param name="Payload">The optional bounded consumer payload.</param>
+    /// <param name="Key">The optional body key used for spatial presentation.</param>
+    public sealed record EmitCue(
+        string Name,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Payload = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Key = null
+    ) : ActionEffect;
+    /// <summary>Sets an active body's vertical velocity. <paramref name="Key"/> accepts the ordinary body-key
+    /// indirection and rule bindings.</summary>
+    /// <param name="Key">The body index or dynamic body-key spelling.</param>
+    /// <param name="Velocity">The fixed-point vertical velocity.</param>
+    public sealed record SetBodyVerticalVelocity(string Key, decimal Velocity) : ActionEffect;
+    /// <summary>Scales an active body's vertical velocity.</summary>
+    /// <param name="Key">The body index or dynamic body-key spelling.</param>
+    /// <param name="Factor">The fixed-point scale factor.</param>
+    public sealed record ScaleBodyVerticalVelocity(string Key, decimal Factor) : ActionEffect;
+    /// <summary>Applies a timed body-local planar impulse to an active body.</summary>
+    /// <param name="Key">The body index or dynamic body-key spelling.</param>
+    /// <param name="BodyDirection">The finite unit direction in body-local space.</param>
+    /// <param name="Speed">The fixed-point impulse speed.</param>
+    /// <param name="DurationSeconds">The non-negative exact engine-tick duration.</param>
+    public sealed record ApplyBodyImpulse(string Key, DocumentVector3 BodyDirection, decimal Speed, decimal DurationSeconds) : ActionEffect;
+    /// <summary>Sets or clears one active body's declared target register.</summary>
+    /// <param name="Key">The body whose register changes.</param>
+    /// <param name="Register">The declared target-register name.</param>
+    /// <param name="Kind">Whether to set a body target or clear the register.</param>
+    /// <param name="TargetKey">The required target body for <see cref="WorldBodyDesignationKind.Body"/>.</param>
+    public sealed record DesignateBody(
+        string Key,
+        string Register,
+        WorldBodyDesignationKind Kind,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? TargetKey = null
+    ) : ActionEffect;
+    /// <summary>Sets or adds a value over a bounded spherical neighborhood in a live lattice field.</summary>
+    /// <param name="Field">The declared lattice field.</param>
+    /// <param name="X">The center X coordinate, in lattice cells.</param>
+    /// <param name="Y">The center Y coordinate, in lattice cells.</param>
+    /// <param name="Z">The center Z coordinate, in lattice cells.</param>
+    /// <param name="Value">The fixed-point value to set or add.</param>
+    /// <param name="Operation">The set or add operation.</param>
+    /// <param name="Radius">The sphere radius, in lattice cells.</param>
+    public sealed record PaintField(
+        string Field,
+        int X,
+        int Y,
+        int Z,
+        decimal Value,
+        WorldFieldWriteOp Operation = WorldFieldWriteOp.Set,
+        int Radius = 0
     ) : ActionEffect;
     /// <summary>Starts a named timer slot with an authored duration.</summary>
     public sealed record StartTimer(string State, float Seconds, ActionTarget Target = ActionTarget.Self) : ActionEffect;

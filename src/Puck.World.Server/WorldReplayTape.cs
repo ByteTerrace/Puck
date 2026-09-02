@@ -35,10 +35,10 @@ public readonly record struct WorldReplayStopResult(string Path, WorldReplayVerd
 /// server-input stream — the intent submissions plus the ordered authority inputs (commands, grants, revokes) that reach
 /// the <see cref="LoopbackTransport"/> each tick — plus the record-start world definition, active seats, and mounted
 /// addon receipts, into a self-contained
-/// <see cref="WorldReplaySnapshot"/>. It also samples the live population's tail pose hash (the state the running world
-/// actually reached at the last recorded tick) and persists it as the recording's reference hash. A saved recording
+/// <see cref="WorldReplaySnapshot"/>. It samples both the live state-system hash used for the verdict and a narrower
+/// population-pose hash retained for trajectory inspection. A saved recording
 /// rehydrates a fresh world from its captured starting state and re-drives the captured stream through it
-/// (<see cref="WorldReplaySnapshot.Drive"/>); the replayed tail is compared against the live reference, so a MATCH is a
+/// (<see cref="WorldReplaySnapshot.Drive"/>); the replayed state trace is compared against the live reference, so a MATCH is a
 /// genuine live-vs-replay fidelity proof rather than a re-drive compared against another re-drive of the same stream.
 /// </summary>
 /// <remarks>
@@ -104,6 +104,8 @@ public sealed partial class WorldReplayTape {
     // RecordedHashes, so a replay's fresh re-drive is compared against the ACTUAL live session tick by tick, not against
     // another re-drive of itself and not only at the end.
     private readonly List<ulong> m_liveHashes = [];
+    // The verdict trace: authoritative state-system lanes at the same post-step boundary as m_liveHashes.
+    private readonly List<ulong> m_liveAuthoritativeHashes = [];
     // The current tick's accumulating input, rotated into m_ticks at each NoteTick. ONE authority list, not one per
     // kind: a command and a grant that crossed the link in a given order must replay in that order, and parallel lists
     // have no relative order left to preserve.
@@ -175,7 +177,7 @@ public sealed partial class WorldReplayTape {
     // per-tick traces to their first disagreement. Live-vs-replay, never replay-vs-replay — the recorded trace was
     // sampled off the running population, so a match is a fidelity proof rather than a re-drive agreeing with itself.
     private WorldReplayVerdict Compare(WorldReplaySnapshot recording) {
-        var replayedTrace = recording.Drive(
+        var replayedTrace = recording.DriveTraces(
             addonHostFactory: m_addonHostFactory,
             engines: m_engines,
             profiles: m_profiles
@@ -184,12 +186,12 @@ public sealed partial class WorldReplayTape {
         return new WorldReplayVerdict(
             Ticks: recording.TickCount,
             Recorded: recording.RecordedTailHash,
-            Replayed: ((replayedTrace.Length > 0)
-            ? replayedTrace[^1]
+            Replayed: ((replayedTrace.Authoritative.Length > 0)
+            ? replayedTrace.Authoritative[^1]
             : 0UL),
             DivergedAt: HashTrace.FirstDivergence(
-                left: recording.RecordedHashes,
-                right: replayedTrace
+                left: recording.RecordedAuthoritativeHashes,
+                right: replayedTrace.Authoritative
             )
         );
     }
@@ -236,6 +238,7 @@ public sealed partial class WorldReplayTape {
         m_seats = null;
         m_ticks = null;
         m_liveHashes.Clear();
+        m_liveAuthoritativeHashes.Clear();
         m_openMutationEntryIndices.Clear();
     }
 
@@ -334,10 +337,14 @@ public sealed partial class WorldReplayTape {
         ));
         m_currentAuthority = new List<WorldReplayEntry>();
         m_currentIntents = new List<IntentSubmission>();
-        // Sample the LIVE population's pose hash AFTER this tick's server step and APPEND it (never overwrite) — this
-        // is what lets the verdict name the first divergent tick. The trace stays one entry per tick, in lockstep
-        // with `ticks` above.
+        // Sample both traces AFTER this tick's server step and APPEND them (never overwrite). The authoritative
+        // state-system trace drives the verdict; the pose trace lets inspection localize visible motion divergence.
+        // Both stay one entry per tick, in lockstep with `ticks` above.
         m_liveHashes.Add(item: WorldReplaySnapshot.HashState(population: m_liveServer.Population));
+        m_liveAuthoritativeHashes.Add(item: WorldRuntimeStateHash.HashAuthoritative(
+            server: m_liveServer,
+            tick: (m_liveServer.NextInputTick - 1UL)
+        ));
 
         // A REBUILD (world.reset/world.load/world.reload) applies inside THIS same tick's server.Step, before
         // NoteTick runs — so by now m_liveServer.Definition already reflects whatever it swapped to. A tape spans
@@ -492,6 +499,7 @@ public sealed partial class WorldReplayTape {
             ForkedFrom = m_forkedFrom,
             MountedAddons = mountedAddons,
             RecordedHashes = [.. m_liveHashes],
+            RecordedAuthoritativeHashes = [.. m_liveAuthoritativeHashes],
             Seats = seats,
             // Stamped from the RECORD-START snapshot (see m_recordRateHz's own remarks) — the rate the recorded span
             // actually ran at, never the live server's rate as it happens to stand at stop time: a mid-capture
@@ -624,6 +632,7 @@ public sealed partial class WorldReplayTape {
         m_seats = CaptureActiveSeats();
         m_ticks = new List<WorldReplayTickInput>();
         m_liveHashes.Clear();
+        m_liveAuthoritativeHashes.Clear();
         AttachTaps();
         m_mode = WorldReplayMode.Recording;
 

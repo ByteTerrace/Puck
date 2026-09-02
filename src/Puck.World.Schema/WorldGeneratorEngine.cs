@@ -96,10 +96,26 @@ public static class WorldGeneratorEngine {
             }
 
             Weighted = EntrySet.TryBuild(counts: outcomeCounts, weights: outcomeWeights);
+
+            if (TryResolveOrbit(generator: generator, nodes: out var orbitNodes, reason: out _)) {
+                var orbitWeights = new ulong[orbitNodes.Length];
+                var orbitCounts = new int[orbitNodes.Length];
+
+                Array.Fill(array: orbitWeights, value: 1UL);
+                Array.Fill(array: orbitCounts, value: 1);
+                OrbitNodes = orbitNodes;
+                Orbit = EntrySet.TryBuild(counts: orbitCounts, weights: orbitWeights);
+            }
+            else {
+                OrbitNodes = [];
+                Orbit = null;
+            }
         }
 
         public EntrySet?[] Contexts { get; }
         public Dictionary<WorldCellName, int> Ordinals { get; }
+        public EntrySet? Orbit { get; }
+        public int[] OrbitNodes { get; }
         public EntrySet? Weighted { get; }
     }
     private sealed class EntrySet {
@@ -241,7 +257,7 @@ public static class WorldGeneratorEngine {
     }
     // The exact Walker/Vose construction AliasTable<T> uses, specialized to a short-lived card-index table backed
     // entirely by stack storage. Entry order, LIFO partition order, UQ0.32 rounding, power-of-two padding, and the
-    // two random advances are deliberately identical, so replacing the former heap table cannot move any stream.
+    // two random advances are deliberately identical, so every stream is a pure function of the entries and the seed.
     private static int SampleAlias(ReadOnlySpan<(int Element, ulong Weight)> entries, ref Pcg32XshRr generator) {
         var count = entries.Length;
         var columnCount = ((int)System.Numerics.BitOperations.RoundUpToPowerOf2(value: ((uint)count)));
@@ -402,7 +418,7 @@ public static class WorldGeneratorEngine {
     // One numeric sample of a non-Markov source at the generator's current position, threading the one deck a
     // weighted source deals through. The single draw TryFire answers and every cell of a TryFireBatch fill share
     // this body, so a fill's cell k is exactly the sample a site at cursor + k would have drawn.
-    private static bool TryDrawNumeric(WorldGenerator generator, ref Pcg32XshRr rng, ref ulong deck, out long value, out string reason) {
+    private static bool TryDrawNumeric(WorldGenerator generator, CellKind targetKind, ref Pcg32XshRr rng, ref ulong deck, out long value, out string reason) {
         switch (generator.Source) {
             case WorldGeneratorSource.UniformRange: {
                     var span = unchecked((uint)(generator.RangeMax!.Value - generator.RangeMin!.Value));
@@ -436,6 +452,23 @@ public static class WorldGeneratorEngine {
                 reason = string.Empty;
 
                 return true;
+            case WorldGeneratorSource.SymmetryOrbit: {
+                    var compiled = Compiled(generator: generator);
+                    var picked = Deal(
+                        deck: ref deck,
+                        mode: generator.Mode,
+                        reason: out reason,
+                        rng: ref rng,
+                        set: compiled.Orbit,
+                        what: "orbit"
+                    );
+
+                    // A node lands in the site's displayed unit — the phase convention a cycle trait reads — so a
+                    // fixed site stores node.0 rather than node raw bits.
+                    value = ((picked < 0) ? 0L : EncodeNode(node: compiled.OrbitNodes[picked], targetKind: targetKind));
+
+                    return (picked >= 0);
+                }
             default:
                 value = 0L;
                 reason = $"unrecognized generator source '{generator.Source}'";
@@ -443,6 +476,13 @@ public static class WorldGeneratorEngine {
                 return false;
         }
     }
+    /// <summary>Encodes a lattice node as a site of <paramref name="targetKind"/> stores it: the node itself on an
+    /// int site, the node as a whole fixed value on a fixed site.</summary>
+    /// <param name="node">The node index.</param>
+    /// <param name="targetKind">The site's declared kind.</param>
+    /// <returns>The raw cell value.</returns>
+    public static long EncodeNode(int node, CellKind targetKind) =>
+        ((targetKind == CellKind.Fixed) ? (((long)node) << FixedQ4816.FractionBitCount) : node);
     private static bool TryRunBatch(WorldGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<long>? decks, Span<long> values, int sampleCount, bool writeValues, out IReadOnlyList<long>? decksAfter, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: generator);
 
@@ -487,8 +527,16 @@ public static class WorldGeneratorEngine {
 
         rng.Advance(count: unchecked((((ulong)cursor) * AdvancesPerSample(source: generator.Source))));
 
-        var deals = (generator.Mode != WorldGeneratorMode.WithReplacement);
+        var deals = (Deals(source: generator.Source) && (generator.Mode != WorldGeneratorMode.WithReplacement));
         var deck = ((deals && (decks is { Count: > 0 })) ? unchecked((ulong)decks[0]) : 0UL);
+
+        // A pass that neither writes values nor deals has no output at all: its only purpose would be the tail decks,
+        // and a non-dealing source has none.
+        if (!deals && !writeValues) {
+            reason = string.Empty;
+
+            return true;
+        }
 
         for (var sample = 0; (sample < sampleCount); sample++) {
             if (!TryDrawNumeric(
@@ -496,6 +544,7 @@ public static class WorldGeneratorEngine {
                 generator: generator,
                 reason: out reason,
                 rng: ref rng,
+                targetKind: targetKind,
                 value: out var value
             )) {
                 return false;
@@ -579,24 +628,9 @@ public static class WorldGeneratorEngine {
 
         if (
             (sampleCount <= 0L) ||
-            (generator.Source != WorldGeneratorSource.WeightedNumeric) ||
+            (generator.Source is not (WorldGeneratorSource.WeightedNumeric or WorldGeneratorSource.SymmetryOrbit)) ||
             (generator.Mode != WorldGeneratorMode.WithoutReplacement)
         ) {
-            return true;
-        }
-
-        var outcomes = (generator.Weighted ?? []);
-        var cards = 0L;
-
-        foreach (var outcome in outcomes) {
-            if (outcome is not null) {
-                cards += Math.Max(val1: 1, val2: (outcome.Count ?? 1));
-            }
-        }
-
-        // The source-shape validator owns this earlier error. Stop here rather than attempting to enumerate an
-        // invalid oversized deck or emitting a misleading second batch-capacity diagnosis.
-        if (cards > WorldGeneratorCapacity.MaxCardsPerSet) {
             return true;
         }
 
@@ -604,17 +638,47 @@ public static class WorldGeneratorEngine {
         var card = 0;
         var available = 0L;
 
-        foreach (var outcome in outcomes) {
-            if (outcome is null) {
-                continue;
+        if (generator.Source == WorldGeneratorSource.SymmetryOrbit) {
+            // Every orbit card weighs one, so the undealt count is the orbit length less the dealt bits; an
+            // unresolvable orbit is the source-shape validator's refusal, not this one's.
+            if (!TryResolveOrbit(generator: generator, nodes: out var orbitNodes, reason: out _)) {
+                return true;
             }
 
-            for (var copy = Math.Max(val1: 1, val2: (outcome.Count ?? 1)); (copy > 0); copy--) {
-                if ((outcome.Weight != 0UL) && ((deck & (1UL << card)) == 0UL)) {
+            for (; (card < orbitNodes.Length); card++) {
+                if ((deck & (1UL << card)) == 0UL) {
                     available++;
                 }
+            }
+        }
+        else {
+            var outcomes = (generator.Weighted ?? []);
+            var cards = 0L;
 
-                card++;
+            foreach (var outcome in outcomes) {
+                if (outcome is not null) {
+                    cards += Math.Max(val1: 1, val2: (outcome.Count ?? 1));
+                }
+            }
+
+            // The source-shape validator owns this earlier error. Stop here rather than attempting to enumerate an
+            // invalid oversized deck or emitting a misleading second batch-capacity diagnosis.
+            if (cards > WorldGeneratorCapacity.MaxCardsPerSet) {
+                return true;
+            }
+
+            foreach (var outcome in outcomes) {
+                if (outcome is null) {
+                    continue;
+                }
+
+                for (var copy = Math.Max(val1: 1, val2: (outcome.Count ?? 1)); (copy > 0); copy--) {
+                    if ((outcome.Weight != 0UL) && ((deck & (1UL << card)) == 0UL)) {
+                        available++;
+                    }
+
+                    card++;
+                }
             }
         }
 
@@ -640,16 +704,105 @@ public static class WorldGeneratorEngine {
     /// <see cref="WorldGeneratorMode"/> other than <see cref="WorldGeneratorMode.WithReplacement"/> and persist dealt masks
     /// on its site.</summary>
     /// <param name="source">The source shape.</param>
-    /// <returns><see langword="true"/> for the two alias-table shapes, <see cref="WorldGeneratorSource.Markov"/> and
-    /// <see cref="WorldGeneratorSource.WeightedNumeric"/>.</returns>
-    public static bool Deals(WorldGeneratorSource source) => (source is WorldGeneratorSource.Markov or WorldGeneratorSource.WeightedNumeric);
+    /// <returns><see langword="true"/> for the three alias-table shapes, <see cref="WorldGeneratorSource.Markov"/>,
+    /// <see cref="WorldGeneratorSource.WeightedNumeric"/> and <see cref="WorldGeneratorSource.SymmetryOrbit"/>.</returns>
+    public static bool Deals(WorldGeneratorSource source) => (source is WorldGeneratorSource.Markov or WorldGeneratorSource.WeightedNumeric or WorldGeneratorSource.SymmetryOrbit);
+    /// <summary>Resolves the cards of a <see cref="WorldGeneratorSource.SymmetryOrbit"/> source: the nodes of its ring
+    /// in cycle order, or the orbit of its node under its word in step order.</summary>
+    /// <param name="generator">The source.</param>
+    /// <param name="nodes">The orbit's nodes, on success; empty otherwise.</param>
+    /// <param name="reason">Why the orbit could not be resolved, in the author's vocabulary, or empty on success.</param>
+    /// <returns><see langword="true"/> when the source is an orbit source whose fields name one orbit.</returns>
+    public static bool TryResolveOrbit(WorldGenerator generator, out int[] nodes, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: generator);
+
+        nodes = [];
+
+        if (generator.Source != WorldGeneratorSource.SymmetryOrbit) {
+            reason = $"source={WorldRefusalSpelling.GeneratorSource(source: generator.Source)} draws no symmetry orbit";
+
+            return false;
+        }
+
+        if ((generator.Ring is null) == (generator.Node is null)) {
+            reason = ((generator.Ring is null)
+                ? "declares neither 'ring' nor 'node' — an orbit source names a ring 0..7 or a node 0..239 whose orbit is the cards"
+                : "declares both 'ring' and 'node' — an orbit source names one or the other");
+
+            return false;
+        }
+
+        if (generator.Ring is { } ring) {
+            if (generator.Word is not null) {
+                reason = "declares 'word' beside 'ring' — a ring is the orbit under the lattice's own cycle; author 'node' with 'word' for another generator's orbit";
+
+                return false;
+            }
+
+            if ((ring < 0) || (ring >= SymmetryLattice.RingCount)) {
+                reason = $"ring {ring} is not a symmetry-lattice ring 0..{SymmetryLattice.RingCount - 1}";
+
+                return false;
+            }
+
+            nodes = new int[SymmetryLattice.RingSize];
+
+            for (var position = 0; (position < nodes.Length); position++) {
+                nodes[position] = SymmetryLattice.RingNode(ring: ring, position: position);
+            }
+
+            reason = string.Empty;
+
+            return true;
+        }
+
+        var seed = generator.Node!.Value;
+
+        if ((seed < 0) || (seed >= SymmetryLattice.NodeCount)) {
+            reason = $"node {seed} is not a symmetry-lattice node 0..{SymmetryLattice.NodeCount - 1}";
+
+            return false;
+        }
+
+        var cycle = new WorldStateCycle(Word: generator.Word);
+
+        if (!cycle.TryResolveGenerator(generator: out var word, reason: out var wordReason)) {
+            reason = wordReason;
+
+            return false;
+        }
+
+        nodes = new int[word.OrbitLength(node: seed)];
+
+        for (var step = 0; (step < nodes.Length); step++) {
+            nodes[step] = word.Apply(node: seed, steps: step);
+        }
+
+        reason = string.Empty;
+
+        return true;
+    }
+    /// <summary>Returns the dealt masks a site persists after an emission: the emission's own when it dealt, the
+    /// site's previous masks when a dealing source dealt nothing this time, and none at all for a source that never
+    /// deals — so a site re-authored to a non-dealing source sheds the masks its old source left behind.</summary>
+    /// <param name="generator">The site's resolved source.</param>
+    /// <param name="fired">The emission's dealt masks, or <see langword="null"/>.</param>
+    /// <param name="previous">The site's persisted masks before the emission.</param>
+    /// <returns>The masks to persist.</returns>
+    public static IReadOnlyList<long>? DecksAfter(WorldGenerator generator, IReadOnlyList<long>? fired, IReadOnlyList<long>? previous) {
+        ArgumentNullException.ThrowIfNull(argument: generator);
+
+        return ((Deals(source: generator.Source) && (generator.Mode != WorldGeneratorMode.WithReplacement))
+            ? (fired ?? previous)
+            : null);
+    }
     /// <summary>Returns how many <c>Pcg32XshRr</c> advances one sample of <paramref name="source"/> costs — the fixed-cost
     /// figure cursor seeking depends on being exact.</summary>
     /// <param name="source">The source shape.</param>
     /// <returns>The per-sample advance cost.</returns>
     public static ulong AdvancesPerSample(WorldGeneratorSource source) => source switch {
-        // The two alias-table shapes; Puck.Maths documents the cost as exactly two advances per sample.
-        WorldGeneratorSource.Markov or WorldGeneratorSource.WeightedNumeric => 2UL,
+        // The alias-table shapes; Puck.Maths documents the cost as exactly two advances per sample.
+        WorldGeneratorSource.Markov or WorldGeneratorSource.WeightedNumeric or WorldGeneratorSource.SymmetryOrbit => 2UL,
         // One fixed-cost draw each, never a rejection loop.
         WorldGeneratorSource.UniformRange or WorldGeneratorSource.StreamDraw => 1UL,
         _ => throw new ArgumentOutOfRangeException(
@@ -791,6 +944,7 @@ public static class WorldGeneratorEngine {
                         generator: generator,
                         reason: out reason,
                         rng: ref rng,
+                        targetKind: targetKind,
                         value: out var value
                     )) {
                         return false;

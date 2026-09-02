@@ -3684,6 +3684,15 @@
       "Id": "Puck.Maths.CyclicRotation.Rotor(System.Int64)",
       "State": "covered",
       "CoveredBy": [
+        "integer.symmetry-word-permutation-order-and-pairing",
+        "scalar.cyclic-rotation-closes-its-loop"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CyclicRotation.Rotor(System.Int64,System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.symmetry-word-permutation-order-and-pairing",
         "scalar.cyclic-rotation-closes-its-loop"
       ]
     },
@@ -20833,6 +20842,13 @@
       "Reason": "Node arithmetic on a fixed reflection lattice, not fixed-point algebra: THIS member carries no operand domain, subject shape or oracle in this suite (AreOrthogonal, Cycle, RayCycleFactors, RayCycleOrder and Reflect do, and are covered by the two reflection cases rather than waived). NARROW, and deliberately not smoothed over: the no-oracle argument is the whole of it, and no gate anywhere stands over these members — nothing in or out of this suite checks the E8/Ising mass spectrum or the reflection-world group-order closure, so they are gated by nothing. OWED: an in-suite E8/Ising mass-spectrum law and a group-order closure law, either of which would promote most of this list out of the register."
     },
     {
+      "Id": "Puck.Maths.SymmetryLattice.InnerProduct(System.Int32,System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.symmetry-word-permutation-order-and-pairing"
+      ]
+    },
+    {
       "Id": "Puck.Maths.SymmetryLattice.NodeCount",
       "State": "waived",
       "Reason": "Node arithmetic on a fixed reflection lattice, not fixed-point algebra: THIS member carries no operand domain, subject shape or oracle in this suite (AreOrthogonal, Cycle, RayCycleFactors, RayCycleOrder and Reflect do, and are covered by the two reflection cases rather than waived). NARROW, and deliberately not smoothed over: the no-oracle argument is the whole of it, and no gate anywhere stands over these members — nothing in or out of this suite checks the E8/Ising mass spectrum or the reflection-world group-order closure, so they are gated by nothing. OWED: an in-suite E8/Ising mass-spectrum law and a group-order closure law, either of which would promote most of this list out of the register."
@@ -20896,10 +20912,87 @@
       "Reason": "Node arithmetic on a fixed reflection lattice, not fixed-point algebra: THIS member carries no operand domain, subject shape or oracle in this suite (AreOrthogonal, Cycle, RayCycleFactors, RayCycleOrder and Reflect do, and are covered by the two reflection cases rather than waived). NARROW, and deliberately not smoothed over: the no-oracle argument is the whole of it, and no gate anywhere stands over these members — nothing in or out of this suite checks the E8/Ising mass spectrum or the reflection-world group-order closure, so they are gated by nothing. OWED: an in-suite E8/Ising mass-spectrum law and a group-order closure law, either of which would promote most of this list out of the register."
     },
     {
+      "Id": "Puck.Maths.SymmetryLattice.RingNode(System.Int32,System.Int64)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.symmetry-word-permutation-order-and-pairing"
+      ]
+    },
+    {
       "Id": "Puck.Maths.SymmetryLattice.RingSize",
       "State": "covered",
       "CoveredBy": [
         "integer.symmetry-lattice-exact-structure"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SymmetryWord.Apply(System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.symmetry-word-permutation-order-and-pairing"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SymmetryWord.Apply(System.Int32,System.Int64)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.symmetry-word-permutation-order-and-pairing"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SymmetryWord.Coxeter",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.symmetry-word-permutation-order-and-pairing"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SymmetryWord.Create(System.ReadOnlySpan<System.Int32>)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.symmetry-word-permutation-order-and-pairing"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SymmetryWord.IsIdentity",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.symmetry-word-permutation-order-and-pairing"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SymmetryWord.Length",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.symmetry-word-permutation-order-and-pairing"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SymmetryWord.MaximumLength",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.symmetry-word-permutation-order-and-pairing"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SymmetryWord.Mirrors",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.symmetry-word-permutation-order-and-pairing"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SymmetryWord.OrbitLength(System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.symmetry-word-permutation-order-and-pairing"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SymmetryWord.Order",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.symmetry-word-permutation-order-and-pairing"
       ]
     },
     {

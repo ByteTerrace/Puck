@@ -22,7 +22,7 @@ namespace Puck.World.Protocol;
 /// federation forwarder belongs on the SERVER twin, never here — this transport sees only the local connection.
 /// </para>
 /// </remarks>
-public sealed class LoopbackTransport : IServerLink {
+public sealed class LoopbackTransport : IPrincipalServerLink {
     private readonly IWorldServerHost m_server;
 
     private long m_correlationId;
@@ -160,13 +160,21 @@ public sealed class LoopbackTransport : IServerLink {
     }
     /// <inheritdoc/>
     public void Query(WorldQuery query, Action<QueryAnswer> completion) {
+        Query(
+            completion: completion,
+            principal: WorldPrincipal.Console,
+            query: query
+        );
+    }
+    /// <inheritdoc/>
+    public void Query(WorldQuery query, WorldPrincipal principal, Action<QueryAnswer> completion) {
         ArgumentNullException.ThrowIfNull(argument: completion);
 
-        // Queries carry no principal of their own; the envelope is the identity coordinate. In-process read-backs
-        // are trusted console/script readers, so loopback stamps Console. WorldTcpHost stamps its admitted peer
-        // instead, and WorldServer applies the same Observe gate to both before composing the answer.
+        // Queries carry no principal of their own; the envelope is the identity coordinate. The two-argument overload
+        // above preserves the trusted console/script surface, while an embedded principal-scoped caller reaches this
+        // overload and crosses the same Observe check as a wire peer.
         if (TryNextEnvelope(
-            principal: WorldPrincipal.Console,
+            principal: principal,
             payload: new WorldSubmissionPayload.Query(Value: query),
             envelope: out var envelope
         )) {

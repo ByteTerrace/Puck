@@ -1,0 +1,18 @@
+# boot, read the orbit-painted field, deal the ring site five times reading its ring each time, then confirm the wire stayed clean
+world.status
+world.state tiles
+world.fields
+world.generate pick
+world.wait 2
+world.state pick
+world.state pickRing
+world.generate pick
+world.wait 2
+world.state pick
+world.state pickRing
+world.generate pick
+world.wait 2
+world.state pick
+world.state pickRing
+world.symmetry.word 0 1 2 3 4 5 node:5
+wire.errors

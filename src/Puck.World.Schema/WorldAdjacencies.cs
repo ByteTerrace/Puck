@@ -407,6 +407,15 @@ public static class WorldAdjacencyPolicy {
             : fixedValue
         );
     }
+    private static FixedQ4816 CeilingFixed(decimal value) {
+        var fixedValue = FixedQ4816.Abs(value: WorldStateNumericLiteral.ToFixed(value: value));
+        var exact = ((decimal)fixedValue.Value / 65_536m);
+
+        return ((exact < decimal.Abs(value: value))
+            ? FixedQ4816.FromRawBits(value: checked(fixedValue.Value + 1L))
+            : fixedValue
+        );
+    }
 
     /// <summary>Resolves a destination row to its authored reference's neighbour key without opening it.</summary>
     public static string? DestinationNeighbourKey(WorldDefinition definition, string destinationName) {

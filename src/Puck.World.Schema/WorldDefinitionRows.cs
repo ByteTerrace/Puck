@@ -8,7 +8,12 @@ public static class WorldDefinitionRows {
     // the compiler caches ONE delegate instance rather than allocating one per call) and null-tolerant, so a
     // section's own nullability is never a second thing a caller must guard before resolving a name against it.
     private static T? Find<T>(IReadOnlyList<T>? rows, string name, Func<T, string> selector) {
-        foreach (var row in (rows ?? [])) {
+        if (rows is null) {
+            return default;
+        }
+
+        for (var index = 0; index < rows.Count; index++) {
+            var row = rows[index];
             if (
                 (((object?)row) is not null) &&
                 string.Equals(
@@ -35,7 +40,12 @@ public static class WorldDefinitionRows {
     /// <param name="key">The cell key to find.</param>
     /// <returns>The cell, or <see langword="null"/> when none carries that key.</returns>
     public static WorldStateCell? FindCell(IReadOnlyList<WorldStateCell>? cells, WorldCellName key) {
-        foreach (var cell in (cells ?? [])) {
+        if (cells is null) {
+            return null;
+        }
+
+        for (var index = 0; index < cells.Count; index++) {
+            var cell = cells[index];
             if (cell.Key == key) {
                 return cell;
             }

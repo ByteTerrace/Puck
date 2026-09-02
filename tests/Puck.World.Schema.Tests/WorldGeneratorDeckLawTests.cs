@@ -152,8 +152,8 @@ public sealed class WorldGeneratorDeckLawTests {
         var uniform = new WorldGenerator(Source: WorldGeneratorSource.UniformRange, Mode: WorldGeneratorMode.ReshuffleOnExhaustion, RangeMin: 0, RangeMax: 9);
         var stream = new WorldGenerator(Source: WorldGeneratorSource.StreamDraw, Mode: WorldGeneratorMode.WithoutReplacement);
 
-        Assert.Contains(expectedSubstring: "only markov and weightedNumeric deal", actualString: Validate(generator: uniform, kind: CellKind.Int, timing: WorldDrawTiming.Event));
-        Assert.Contains(expectedSubstring: "only markov and weightedNumeric deal", actualString: Validate(generator: stream, kind: CellKind.Int, timing: WorldDrawTiming.Event));
+        Assert.Contains(expectedSubstring: "only markov, weightedNumeric and symmetryOrbit deal", actualString: Validate(generator: uniform, kind: CellKind.Int, timing: WorldDrawTiming.Event));
+        Assert.Contains(expectedSubstring: "only markov, weightedNumeric and symmetryOrbit deal", actualString: Validate(generator: stream, kind: CellKind.Int, timing: WorldDrawTiming.Event));
 
         // A boot-timed state row draws once at first fill and keeps its facet, so a deck mode is admitted there the
         // same way it is for a Markov source; only the settle-and-clear document fields refuse a dealing source.

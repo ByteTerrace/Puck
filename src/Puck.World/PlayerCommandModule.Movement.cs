@@ -992,7 +992,7 @@ internal sealed partial class PlayerCommandModule {
                 tagInstance: true
             )
             ) {
-                // player.where's own anchor=body:N suffix, off the route as it stands now — it may have moved on
+                // body.where's own anchor=body:N suffix, off the route as it stands now — it may have moved on
                 // since the query was submitted.
                 var current = (seatRouter.TryRoute(slot: rosterSlot) ?? location);
 

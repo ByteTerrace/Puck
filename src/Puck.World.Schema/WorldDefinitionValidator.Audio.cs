@@ -14,9 +14,9 @@ public static partial class WorldDefinitionValidator {
         ));
     // The audio host-section defaults: the master gain rides the shared ceiling, the coalescing radius/fade are
     // physical, the curve token is v1's one recognized value, the listener policy resolves (focus | seat:<n> |
-    // a declared camera name), and every cue-table row resolves (a CLOSED event token, a live patch id, the gain
-    // ceiling in thousandths, a placement token whose emitter form names a declared speaker).
-    private static void ValidateAudioDefaults(WorldAudioDefaults audio, HashSet<string> cameras, HashSet<string> patchIds, HashSet<string> speakerNames, int localSeats, List<string> errors) {
+    // a declared camera name), and every cue-table row resolves (a published engine event or rule-emitted token, a
+    // live patch id, the gain ceiling in thousandths, and a placement whose emitter form names a declared speaker).
+    private static void ValidateAudioDefaults(WorldAudioDefaults audio, HashSet<string> cameras, HashSet<string> patchIds, HashSet<string> speakerNames, IReadOnlyList<WorldRule>? rules, int localSeats, List<string> errors) {
         RequireRange(
             value: audio.MasterGain,
             min: 0f,
@@ -74,13 +74,27 @@ public static partial class WorldDefinitionValidator {
             cues: audio.Cues,
             patchIds: patchIds,
             speakerNames: speakerNames,
+            ruleCueTokens: RuleCueTokens(rules: rules),
             errors: errors
         );
     }
-    // THE CUE TABLE: absent is empty; each row's event token must sit in the CLOSED published vocabulary,
-    // its patch must resolve, its gain rides the shared ceiling in thousandths, and an emitter placement must name
-    // a declared speaker (at-site and listener are the only other recognized placements).
-    private static void ValidateCues(IReadOnlyList<WorldAudioCue>? cues, HashSet<string> patchIds, HashSet<string> speakerNames, List<string> errors) {
+    private static HashSet<string> RuleCueTokens(IReadOnlyList<WorldRule>? rules) {
+        var tokens = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        foreach (var rule in (rules ?? [])) {
+            foreach (var effect in (rule?.Effects ?? [])) {
+                if ((effect is ActionEffect.EmitCue cue) && WorldGameplayCue.IsValidName(candidate: cue.Name)) {
+                    tokens.Add(item: cue.Name);
+                }
+            }
+        }
+
+        return tokens;
+    }
+    // The cue table admits either a published engine event or a cue emitted by this document's rules. Its patch
+    // resolves, its gain rides the shared ceiling in thousandths, and an emitter placement names a declared speaker
+    // (at-site and listener are the only other recognized placements).
+    private static void ValidateCues(IReadOnlyList<WorldAudioCue>? cues, HashSet<string> patchIds, HashSet<string> speakerNames, HashSet<string> ruleCueTokens, List<string> errors) {
         if (cues is null) {
             return;
         }
@@ -95,12 +109,13 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            if (!WorldAudioCue.IsEventToken(token: cue.Event)) {
-                errors.Add(item: $"{path}.event '{cue.Event}' is not a published cue event token ({string.Join(
+            var isPublished = WorldAudioCue.IsEventToken(token: cue.Event);
+            if (!isPublished && !ruleCueTokens.Contains(item: cue.Event)) {
+                errors.Add(item: $"{path}.event '{cue.Event}' is neither emitted by a world rule nor a published cue event token ({string.Join(
                     separator: " | ",
                     values: WorldAudioCue.EventTokens
                 )}).");
-            } else if (WorldAudioCue.IsProducerBypassedToken(token: cue.Event)) {
+            } else if (isPublished && WorldAudioCue.IsProducerBypassedToken(token: cue.Event)) {
                 errors.Add(item: $"{path}.event '{cue.Event}' is fired directly by its producer and can never be targeted by an authored audio.cues row.");
             }
 

@@ -1,7 +1,7 @@
 {
   "id": "state-cycle-trait",
-  "title": "A cycle trait turns a state row with the tick — rotation steps, turns, a rotor component, and a symmetry-lattice ring walk — and reads back the same bits at every fence",
-  "binding": "The positive leg boots a minimal headless fixture whose state rows each carry a cycle trait at twenty ticks per step: 'spin' (plane 0, Step) reads 0 at tick 0, 1 by tick 30 and 3 by tick 70; 'spinPhased' stores phase 7 and reads 10 at tick 70; 'spinTurns' (Turns) reads floor(3*2^16/30) = 0.0999908447265625; 'spinCos' on plane 3 (thirteen steps per step) reads the rotor cosine at index 13 (-0.913543701171875) then at index 39 mod 30 = 9 (-0.3090057373046875); 'orbit' (plane 1, Node) starts on node 5 and is carried seven ring positions per step to node 87 then node 54, and 'orbitX' reads that node's projected X. Every value is a pure function of the tick — no per-tick write, no journal entry — so a fence at any tick reads the same bits. The discriminating leg boots the same rows with no cycle trait: every row reads its stored value at all three fences and none of the positive leg's turned values ever appears.",
+  "title": "A cycle trait turns a state row with the tick — rotation steps, turns, a rotor component, a symmetry-lattice ring walk, and a word-generated twelve-step dial whose period is derived — and reads back the same bits at every fence",
+  "binding": "The positive leg boots a minimal headless fixture whose state rows each carry a cycle trait at twenty ticks per step: 'spin' (the lattice's own cycle, power 1, Step) reads 0 at tick 0, 1 by tick 30 and 3 by tick 70; 'spinPhased' stores phase 7 and reads 10 at tick 70; 'spinTurns' (Turns) reads floor(3*2^16/30) = 0.0999908447265625; 'spinCos' at power 13 (thirteen steps per step) reads the rotor cosine at index 13 (-0.913543701171875) then at index 39 mod 30 = 9 (-0.3090057373046875); 'orbit' (power 7, Node) starts on node 5 and is carried seven ring positions per step to node 87 then node 54, and 'orbitX' reads that node's projected X. Every value is a pure function of the tick — no per-tick write, no journal entry — so a fence at any tick reads the same bits. The discriminating leg boots the same rows with no cycle trait: every row reads its stored value at all three fences and none of the positive leg's turned values ever appears. 'dial' carries the word [0,1,2,3,4,5] — the Coxeter element of the E6 sub-diagram, order twelve — and reads 3 at tick 70 and 0 again by tick 240; 'dialNode' walks node 5's orbit under that word (5,4,3,58,…) and returns to 5 after twelve steps; 'dialRing' leaves ring 2 for ring 0 on the way, which the lattice's own cycle never does. world.symmetry.word prints the word's derived order and node 5's orbit. The discriminating leg's plain rows never reach those values and the word read-back still answers.",
   "bootShape": "headless",
   "requirements": [],
   "seconds": 5,
@@ -42,6 +42,26 @@
         "outcome": "accepted"
       },
       {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.state",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.state",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.symmetry.word",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
         "verb": "wire.errors",
         "occurrence": 1,
         "outcome": "accepted"
@@ -53,7 +73,7 @@
         "name": "spin-starts-at-phase-zero",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'spin' kind=int value=0 cycle=plane0:Step/20@epoch0]",
+        "text": "[world.state.row 'spin' kind=int value=0 cycle=coxeter^1:Step/20@epoch0 order=30]",
         "present": true
       },
       {
@@ -61,7 +81,7 @@
         "name": "spin-reaches-step-one-by-tick-30",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'spin' kind=int value=1 cycle=plane0:Step/20@epoch0]",
+        "text": "[world.state.row 'spin' kind=int value=1 cycle=coxeter^1:Step/20@epoch0 order=30]",
         "present": true
       },
       {
@@ -69,7 +89,7 @@
         "name": "spin-reaches-step-three-by-tick-70",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'spin' kind=int value=3 cycle=plane0:Step/20@epoch0]",
+        "text": "[world.state.row 'spin' kind=int value=3 cycle=coxeter^1:Step/20@epoch0 order=30]",
         "present": true
       },
       {
@@ -77,7 +97,7 @@
         "name": "phase-adds-to-the-step",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'spinPhased' kind=int value=10 cycle=plane0:Step/20@epoch0]",
+        "text": "[world.state.row 'spinPhased' kind=int value=10 cycle=coxeter^1:Step/20@epoch0 order=30]",
         "present": true
       },
       {
@@ -85,7 +105,7 @@
         "name": "turns-is-floor-of-step-over-thirty",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'spinTurns' kind=fixed value=0.0999908447265625 cycle=plane0:Turns/20@epoch0]",
+        "text": "[world.state.row 'spinTurns' kind=fixed value=0.0999908447265625 cycle=coxeter^1:Turns/20@epoch0 order=30]",
         "present": true
       },
       {
@@ -93,7 +113,7 @@
         "name": "plane-three-cos-at-step-thirteen",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'spinCos' kind=fixed value=-0.913543701171875 cycle=plane3:Cos/20@epoch0]",
+        "text": "[world.state.row 'spinCos' kind=fixed value=-0.913543701171875 cycle=coxeter^13:Cos/20@epoch0 order=30]",
         "present": true
       },
       {
@@ -101,7 +121,7 @@
         "name": "plane-three-cos-wraps-to-step-nine",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'spinCos' kind=fixed value=-0.3090057373046875 cycle=plane3:Cos/20@epoch0]",
+        "text": "[world.state.row 'spinCos' kind=fixed value=-0.3090057373046875 cycle=coxeter^13:Cos/20@epoch0 order=30]",
         "present": true
       },
       {
@@ -109,7 +129,7 @@
         "name": "orbit-starts-on-its-phase-node",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'orbit' kind=int value=5 cycle=plane1:Node/20@epoch0]",
+        "text": "[world.state.row 'orbit' kind=int value=5 cycle=coxeter^7:Node/20@epoch0 order=30]",
         "present": true
       },
       {
@@ -117,7 +137,7 @@
         "name": "orbit-walks-seven-ring-positions-per-step",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'orbit' kind=int value=87 cycle=plane1:Node/20@epoch0]",
+        "text": "[world.state.row 'orbit' kind=int value=87 cycle=coxeter^7:Node/20@epoch0 order=30]",
         "present": true
       },
       {
@@ -125,7 +145,7 @@
         "name": "orbit-walks-on-by-tick-70",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'orbit' kind=int value=54 cycle=plane1:Node/20@epoch0]",
+        "text": "[world.state.row 'orbit' kind=int value=54 cycle=coxeter^7:Node/20@epoch0 order=30]",
         "present": true
       },
       {
@@ -133,7 +153,63 @@
         "name": "projection-follows-the-node",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'orbitX' kind=fixed value=-0.0636749267578125 cycle=plane1:ProjectionX/20@epoch0]",
+        "text": "[world.state.row 'orbitX' kind=fixed value=-0.0636749267578125 cycle=coxeter^7:ProjectionX/20@epoch0 order=30]",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "dial-word-derives-order-twelve",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "[world.state.row 'dial' kind=int value=0 cycle=[0,1,2,3,4,5]^1:Step/20@epoch0 order=12]",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "dial-reaches-step-three-by-tick-70",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "[world.state.row 'dial' kind=int value=3 cycle=[0,1,2,3,4,5]^1:Step/20@epoch0 order=12]",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "dial-node-walks-the-words-orbit",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "[world.state.row 'dialNode' kind=int value=58 cycle=[0,1,2,3,4,5]^1:Node/20@epoch0 order=12]",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "dial-node-returns-after-its-orbit",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "[world.state.row 'dialNode' kind=int value=5 cycle=[0,1,2,3,4,5]^1:Node/20@epoch0 order=12]",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "dial-ring-moves-when-the-orbit-crosses-rings",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "[world.state.row 'dialRing' kind=int value=0 cycle=[0,1,2,3,4,5]^1:Ring/20@epoch0 order=12]",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "word-read-back-derives-the-order",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "[world.symmetry.word mirrors=[0,1,2,3,4,5] order=12 identity=0]",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "word-read-back-prints-the-orbit",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "[world.symmetry.word node=5 orbitLength=12 orbit=5,4,3,58,39,11,2,0,66,41,28,80]",
         "present": true
       },
       {
@@ -189,6 +265,26 @@
         "outcome": "accepted"
       },
       {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.state",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.state",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.symmetry.word",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
         "verb": "wire.errors",
         "occurrence": 1,
         "outcome": "accepted"
@@ -234,6 +330,30 @@
         "match": "contains",
         "text": "value=-0.913543701171875",
         "present": false
+      },
+      {
+        "type": "line",
+        "name": "dial-never-turns-without-the-trait",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "[world.state.row 'dial' kind=int value=3",
+        "present": false
+      },
+      {
+        "type": "line",
+        "name": "dial-node-never-leaves-its-node",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "[world.state.row 'dialNode' kind=int value=58",
+        "present": false
+      },
+      {
+        "type": "line",
+        "name": "word-read-back-still-answers",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "[world.symmetry.word mirrors=[0,1,2,3,4,5] order=12 identity=0]",
+        "present": true
       },
       {
         "type": "line",

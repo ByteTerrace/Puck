@@ -238,19 +238,69 @@ public sealed partial class WorldServer {
     // kind, matching the compiler's own ValueKind (WorldRuleCompiler.ResolveOperand's reduce branch). An empty row
     // reads as zero for every op — the same "absent reads as zero" precedent ReadStateCell itself follows for a
     // vanished cell.
-    private long ReadReduction(WorldStateHandle handle, WorldStateReduceOp op, ulong tick) =>
-        WorldStateReader.TryReadHandle(
+    private long ReadReduction(CompiledWorldOperand operand, ulong tick) {
+        if (!WorldStateReader.TryReadHandle(
             definition: m_definition,
             catalog: m_definition.StateCatalog,
-            handle: handle,
+            handle: operand.StateHandle,
             key: null,
             tick: tick,
             row: out var declared,
             rawValue: out _,
             text: out _
-        )
-            ? WorldStateReader.ReduceRaw(row: declared, op: op, tick: tick)
-            : 0L;
+        )) {
+            return 0L;
+        }
+        if (operand.FilterRow is null) {
+            return WorldStateReader.ReduceRaw(row: declared, op: operand.Reduce, tick: tick);
+        }
+
+        var hasValue = false;
+        var accumulator = 0L;
+        foreach (var cell in (declared.Cells ?? [])) {
+            if (
+                !WorldStateReader.TryReadHandle(
+                    definition: m_definition,
+                    catalog: m_definition.StateCatalog,
+                    handle: operand.FilterHandle,
+                    key: cell.Key.Value,
+                    tick: tick,
+                    row: out _,
+                    rawValue: out var filterRaw,
+                    text: out _
+                ) ||
+                (filterRaw.GetValueOrDefault() == 0L)
+            ) {
+                continue;
+            }
+            if (operand.Reduce == WorldStateReduceOp.Count) {
+                accumulator++;
+                continue;
+            }
+            if (!WorldStateReader.TryRead(
+                definition: m_definition,
+                rowName: declared.Name,
+                key: cell.Key.Value,
+                tick: tick,
+                row: out _,
+                rawValue: out var raw,
+                text: out _
+            ) || raw is null) {
+                continue;
+            }
+
+            accumulator = (!hasValue
+                ? raw.Value
+                : operand.Reduce switch {
+                    WorldStateReduceOp.Sum => unchecked(accumulator + raw.Value),
+                    WorldStateReduceOp.Max => Math.Max(accumulator, raw.Value),
+                    _ => Math.Min(accumulator, raw.Value),
+                }
+            );
+            hasValue = true;
+        }
+        return accumulator;
+    }
     // Reads a declared cell as fixed point off the LIVE definition (Install swaps it on every apply, so this is
     // always this tick's settled document), through the ONE shared (row, key) resolver — which computes an advancing
     // row's LIVE value rather than its stored base, so a rule composes with the trait instead of duplicating it. A
@@ -303,9 +353,9 @@ public sealed partial class WorldServer {
             ))
             : (int)Math.Clamp(value: operand.SymmetryArgument, min: -1L, max: (SymmetryLattice.NodeCount - 1L))
         );
-        var neutral = ((operand.Symmetry is WorldSymmetryFunction.Orthogonal or WorldSymmetryFunction.ProjectionX or WorldSymmetryFunction.ProjectionY) ? 0L : -1L);
+        var neutral = ((operand.Symmetry is WorldSymmetryFunction.Orthogonal or WorldSymmetryFunction.InnerProduct or WorldSymmetryFunction.ProjectionX or WorldSymmetryFunction.ProjectionY) ? 0L : -1L);
 
-        if ((node < 0) || ((operand.Symmetry is WorldSymmetryFunction.Reflect or WorldSymmetryFunction.Orthogonal) && (other < 0))) {
+        if ((node < 0) || ((operand.Symmetry is WorldSymmetryFunction.Reflect or WorldSymmetryFunction.Orthogonal or WorldSymmetryFunction.InnerProduct) && (other < 0))) {
             return FixedQ4816.FromInteger(value: neutral);
         }
 
@@ -316,6 +366,7 @@ public sealed partial class WorldServer {
             WorldSymmetryFunction.Cycle => FixedQ4816.FromInteger(value: SymmetryLattice.Cycle(node: node, steps: operand.SymmetryArgument)),
             WorldSymmetryFunction.Reflect => FixedQ4816.FromInteger(value: SymmetryLattice.Reflect(mirror: other, node: node)),
             WorldSymmetryFunction.Orthogonal => FixedQ4816.FromInteger(value: (SymmetryLattice.AreOrthogonal(first: node, second: other) ? 1L : 0L)),
+            WorldSymmetryFunction.InnerProduct => FixedQ4816.FromInteger(value: SymmetryLattice.InnerProduct(first: node, second: other)),
             WorldSymmetryFunction.ProjectionX => SymmetryLattice.Project(node: node).X,
             _ => SymmetryLattice.Project(node: node).Y,
         };
@@ -346,15 +397,12 @@ public sealed partial class WorldServer {
     )
         ? raw
         : (byte)0), kind: CellKind.Int),
-        WorldRuleFactKind.Reduction => Finite(value: ReadReduction(
-        handle: operand.StateHandle,
-        op: operand.Reduce,
-        tick: tick
-    ), kind: operand.ValueKind),
+        WorldRuleFactKind.Reduction => Finite(value: ReadReduction(operand: operand, tick: tick), kind: operand.ValueKind),
         WorldRuleFactKind.ArgBody => Finite(value: ResolveArgBody(
         row: operand.Row!,
         op: operand.Reduce,
-        tick: tick
+        tick: tick,
+        filterRow: operand.FilterRow
     ), kind: CellKind.Int),
         WorldRuleFactKind.BodyDistance => Finite(value: ReadBodyDistance(
         bodyA: operand.BodyA!.Value,
@@ -437,13 +485,21 @@ public sealed partial class WorldServer {
     // reader itself; the row can gain a non-numeric-keyed cell after compile via an ordinary world.state.cell.set,
     // and compile-time already proved the row is keyed, not that every future key will parse). Ties resolve to the
     // LOWEST eligible index, deterministically. Returns -1 ("no body") when no cell is eligible.
-    private int ResolveArgBody(string row, WorldStateReduceOp op, ulong tick) {
+    private int ResolveArgBody(string row, WorldStateReduceOp op, ulong tick, string? filterRow = null) {
         var winner = WorldStateReader.ArgExtremum(
             definition: m_definition,
             rowName: row,
             op: op,
             tick: tick,
-            isCandidateIndex: (index => (index < m_population.Capacity))
+            state: (Server: this, Capacity: m_population.Capacity, FilterRow: filterRow, Tick: tick),
+            isCandidateIndex: static (index, state) =>
+                (index < state.Capacity) &&
+                (state.Server.Body(index: index) is not null) &&
+                ((state.FilterRow is null) || (state.Server.ReadStateCell(
+                    row: state.FilterRow,
+                    key: WorldBodyKeyCache.Get(index: index),
+                    tick: state.Tick
+                ) != FixedQ4816.Zero))
         );
 
         return ((winner is null)
@@ -489,7 +545,7 @@ public sealed partial class WorldServer {
             ))
         );
 
-        return index.ToString(provider: System.Globalization.CultureInfo.InvariantCulture);
+        return WorldBodyKeyCache.Get(index: index);
     }
     // The nearest active body to 'from' (itself excluded) whose cell in the keyed tag row reads nonzero, or -1.
     private int ResolveNearestBody(CompiledBodyRef from, string row, ulong tick) {
@@ -515,7 +571,7 @@ public sealed partial class WorldServer {
                 (Body(index: index) is not { } candidate) ||
                 (ReadStateCell(
                 row: row,
-                key: index.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
+                key: WorldBodyKeyCache.Get(index: index),
                 tick: tick
             ) == FixedQ4816.Zero)
             ) {

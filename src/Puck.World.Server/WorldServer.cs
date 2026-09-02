@@ -392,6 +392,9 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// composition, screen op), and inside <see cref="Step"/> for the kinds buffered to the tick boundary (mutation,
     /// rebuild, undo, addon lifecycle) and for a fired world-rule effect.</summary>
     public Action<WorldEditEcho>? EchoTap { get; set; }
+    /// <summary>Observes deterministic presentation-neutral cues emitted by world rules. The callback runs
+    /// synchronously on the tick thread; consumers must hand off any presentation work without blocking it.</summary>
+    public Action<WorldGameplayCue>? GameplayCueTap { get; set; }
     /// <summary>Gets the engagement fold (headless design §1.8) — the seat/peer→screen route decision
     /// (<see cref="WorldCommand.ComposeControl"/>/<see cref="WorldCommand.DissolveControl"/> apply through it, from
     /// <see cref="ApplyCommand"/>), its per-tick pad fold (<see cref="Server.WorldEngagement.FoldTick"/>, folded into

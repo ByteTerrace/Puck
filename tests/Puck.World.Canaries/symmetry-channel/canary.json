@@ -1,7 +1,7 @@
 {
   "id": "symmetry-channel",
-  "title": "A rule reads the symmetry lattice through the $symmetry: channel — ring, antipode, canonical ray, a ring walk, a reflection through another cell, orthogonality and a projection — and world.symmetry echoes the same maps",
-  "binding": "The positive leg boots rows node=5 and mirror=17 and an Edge rule at tick 1 that copies seven $symmetry: reads of 'node' into seven result rows: ring (2), antipode (18), canonicalRay (5), cycle:7 (87 — the same node the state-cycle-trait canary's plane-1 orbit reaches after one step), reflect:cell:mirror (16), orthogonal:17 (0) and projectionX (0.238006591796875). world.symmetry 5 17 prints the lattice's own answers for the same node and mirror, and they agree line for line, so the channel is the lattice and not a second table. The discriminating leg boots the same rows and the same rule with plain fromState copies of 'node': every result row reads 5 (or 0 for the fixed projection), none of the symmetry values appears, and world.symmetry still answers — the lattice is there, the rule simply never asked it.",
+  "title": "A rule reads the symmetry lattice through the $symmetry: channel — ring, antipode, canonical ray, a ring walk, a reflection through another cell, orthogonality, the exact inner product and a projection — and world.symmetry echoes the same maps",
+  "binding": "The positive leg boots rows node=5 and mirror=17 and an Edge rule at tick 1 that copies eight $symmetry: reads of 'node' into eight result rows: ring (2), antipode (18), canonicalRay (5), cycle:7 (87 — the same node the state-cycle-trait canary's plane-1 orbit reaches after one step), reflect:cell:mirror (16), orthogonal:17 (0), innerProduct:17 (1 — nodes 5 and 17 are sixty-degree neighbours) and projectionX (0.238006591796875). world.symmetry 5 17 prints the lattice's own answers for the same node and mirror, and they agree line for line, so the channel is the lattice and not a second table. The discriminating leg boots the same rows and the same rule with plain fromState copies of 'node': every result row reads 5 (or 0 for the fixed projection), none of the symmetry values appears, and world.symmetry still answers — the lattice is there, the rule simply never asked it.",
   "bootShape": "headless",
   "requirements": [],
   "seconds": 5,
@@ -93,6 +93,14 @@
       },
       {
         "type": "line",
+        "name": "inner-product-through-a-literal-argument",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "[world.state.row 'pairing' kind=int value=1]",
+        "present": true
+      },
+      {
+        "type": "line",
         "name": "projection-through-the-channel",
         "stream": "stdout",
         "match": "contains",
@@ -112,7 +120,7 @@
         "name": "read-back-agrees-on-the-mirror",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.symmetry node=5 other=17 reflect=16 orthogonal=0]",
+        "text": "[world.symmetry node=5 other=17 reflect=16 orthogonal=0 innerProduct=1]",
         "present": true
       },
       {
@@ -179,6 +187,14 @@
       },
       {
         "type": "line",
+        "name": "pairing-stays-the-plain-copy",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "[world.state.row 'pairing' kind=int value=5]",
+        "present": true
+      },
+      {
+        "type": "line",
         "name": "no-ring-without-the-channel",
         "stream": "stdout",
         "match": "contains",
@@ -222,7 +238,7 @@
         "name": "read-back-agrees-on-the-mirror",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.symmetry node=5 other=17 reflect=16 orthogonal=0]",
+        "text": "[world.symmetry node=5 other=17 reflect=16 orthogonal=0 innerProduct=1]",
         "present": true
       },
       {

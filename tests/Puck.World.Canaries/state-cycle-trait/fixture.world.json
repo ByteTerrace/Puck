@@ -11,7 +11,6 @@
         "kind": "int",
         "value": 0,
         "cycle": {
-          "plane": 0,
           "output": "Step",
           "ticksPerStep": 20
         }
@@ -21,7 +20,6 @@
         "kind": "int",
         "value": 7,
         "cycle": {
-          "plane": 0,
           "output": "Step",
           "ticksPerStep": 20
         }
@@ -31,7 +29,6 @@
         "kind": "fixed",
         "value": "0",
         "cycle": {
-          "plane": 0,
           "output": "Turns",
           "ticksPerStep": 20
         }
@@ -41,7 +38,7 @@
         "kind": "fixed",
         "value": "0",
         "cycle": {
-          "plane": 3,
+          "power": 13,
           "output": "Cos",
           "ticksPerStep": 20
         }
@@ -51,7 +48,7 @@
         "kind": "int",
         "value": 5,
         "cycle": {
-          "plane": 1,
+          "power": 7,
           "output": "Node",
           "ticksPerStep": 20
         }
@@ -61,8 +58,59 @@
         "kind": "fixed",
         "value": "5",
         "cycle": {
-          "plane": 1,
+          "power": 7,
           "output": "ProjectionX",
+          "ticksPerStep": 20
+        }
+      },
+      {
+        "name": "dial",
+        "kind": "int",
+        "value": 0,
+        "cycle": {
+          "word": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "output": "Step",
+          "ticksPerStep": 20
+        }
+      },
+      {
+        "name": "dialNode",
+        "kind": "int",
+        "value": 5,
+        "cycle": {
+          "word": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "output": "Node",
+          "ticksPerStep": 20
+        }
+      },
+      {
+        "name": "dialRing",
+        "kind": "int",
+        "value": 5,
+        "cycle": {
+          "word": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "output": "Ring",
           "ticksPerStep": 20
         }
       }

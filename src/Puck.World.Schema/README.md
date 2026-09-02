@@ -604,7 +604,13 @@ process state) and is the only shape that writes TEXT and the only one that
 DEALS per context; `uniformRange` draws one value over `[rangeMin, rangeMax]`;
 `weightedNumeric` draws one value from an authored alias table and DEALS over
 its outcome set under the same `mode` vocabulary (one `drawDecks` mask — the
-numeric shuffle bag); `streamDraw` yields one raw 32-bit draw. An alternative or
+numeric shuffle bag); `streamDraw` yields one raw 32-bit draw; `symmetryOrbit`
+draws one node index uniformly over an orbit of the symmetry lattice — the
+thirty nodes of `ring` (0..7), or the orbit of `node` (0..239) under `word`
+(the same one-to-eight-mirror word a `cycle` trait authors, or omitted for the
+lattice's own cycle, so the node's ring) — and deals that orbit under `mode`
+through the same one mask, so `withoutReplacement` on a ring is "every node of
+the ring once per pass". An alternative or
 outcome may declare `count`: under a deck mode it is that many cards per pass
 (an outcome that should come out twice per pass declares `2`), under
 `withReplacement` it only scales the weight; a set's cards total at most 64,
@@ -803,31 +809,44 @@ target's rebase instead of quantizing the follower at every write. The
 stored cell value stays the TRUTH the target; a write rebases the trait
 (`RebaseCellTraits`'s `RebaseDynamics` arm) the same way it rebases `advance`
 — the live eased sample and a `Retarget` velocity kick become the new
-`(y0, v0)` at the writing tick. `world.state` echoes
+`(y0, v0)` at the writing tick. `y0`/`v0` are authored and echoed in the fixed spelling on every row kind (they are the follower's
+continuous state, not the row's unit). `world.state` echoes
 `dynamics=<row> y0=<v> v0=<v>@epoch<n> eased=<v>` beside `value=`.
 
 **A row or keyed cell may instead declare `cycle`** (`WorldStateCycle` —
-`plane`, `output`, `ticksPerStep`, `epochTick`, `substepTicks`): the tick-indexed rotation,
-mutually exclusive with `advance`/`dynamics`/`draw`/`lattice` and scalar-only
-at the row level the same way those are. The value is a pure function of the
-server tick through `Puck.Maths.CyclicRotation` — `plane` 0..3 selects one of
-the four rotation planes whose step counts per tick are 1, 7, 11 and 13
-twelfths of a turn, all closing together every thirty steps — with one step
-lasting `ticksPerStep` ticks from `epochTick`. `output` names what the cell
-reads: `Step` (0..29), `Node` or `Ring` (the node's ring, 0..7) on an `int` row;
-`Turns` (`⌊step·2^16/30⌋` raw, so it wraps once per loop the way `render.cycle`
-keys read a row), `Cos`, `Sin`, `ProjectionX` or `ProjectionY` on a `fixed` row. The lattice
-outputs read through `Puck.Maths.SymmetryLattice`: the stored value is the
-node (0..239) the ring walk starts from, carried one ring position per
-rotation step, and the projection outputs are that node's point on the plane
-of eight concentric rings of thirty. The stored cell value is the PHASE, in the
+`word`, `power`, `output`, `ticksPerStep`, `epochTick`, `substepTicks`): the
+tick-indexed rotation, mutually exclusive with `advance`/`dynamics`/`draw`/
+`lattice` and scalar-only at the row level the same way those are. The value
+is a pure function of the server tick through a generator of the symmetry
+lattice's reflection group (`Puck.Maths.SymmetryWord`): `word` is one to eight
+mirror nodes applied first to last, or omitted for the lattice's own
+thirty-step cycle (`Puck.Maths.CyclicRotation`), and `power` (nonzero, default
+1) is how many applications one step is — with no word, powers 1, 7, 11 and 13
+are the cycle's four rotation planes. The loop's period is the generator's
+order, derived from the word rather than authored: a word of order twelve is a
+twelve-position dial, and `world.symmetry.word <mirror>... [node:<n>]` prints a
+word's order and a node's orbit before it is authored. A word that moves no
+node, a power of zero, and a power at or past the order are refused. One step
+lasts `ticksPerStep` ticks from `epochTick`. `output` names what the cell
+reads: `Step` (0..order−1), `Node` or `Ring` (the node's ring, 0..7) on an
+`int` row; `Turns` (`⌊step·2^16/order⌋` raw, so it wraps once per loop the way
+`render.cycle` keys read a row), `Cos`, `Sin` (the order's root of unity at the
+step), `ProjectionX` or `ProjectionY` on a `fixed` row. The lattice outputs
+read through `Puck.Maths.SymmetryLattice`: the stored value is the node
+(0..239) the orbit walk starts from, carried `power` generator applications
+per step, and the projection outputs are that node's point on the plane of
+eight concentric rings of thirty; the lattice's own cycle never leaves a ring,
+so `Ring` is constant under it and moves only under a word whose orbits cross
+rings. The stored cell value is the PHASE, in the
 row's displayed unit (whole steps or a node index; a `fixed` row's phase is the
 whole part of its value): nothing accumulates and nothing rebases, an explicit
 write or a rule's `setState` sets the phase and `addState` turns it by whole
 steps, and a declared envelope clamps the computed value on every read as it
 does an advancing row's. A cycling row is refused as a `state:<row>` control
 context the same way an advancing one is. `world.state` echoes
-`cycle=plane<p>:<output>/<ticksPerStep>@epoch<n>` beside the live `value=`.
+`cycle=<coxeter|[m,…]>^<power>:<output>/<ticksPerStep>@epoch<n> order=<order>`
+beside the live `value=`, with `+<substepTicks>` appended after the epoch when
+a settled document carries part of a step.
 `world.save` settles a cycling cell in the serialized projection only: the
 stored value becomes the current rotation index (or node), `epochTick` projects
 to `0`, and `substepTicks` carries the elapsed portion of the current step. A
@@ -908,24 +927,22 @@ door the other walks around.
 
 ## The `rules` document — the per-body action primitive, one level up
 
-`WorldRules.cs` holds the OPTIONAL `rules` section. A `WorldRule` is
-`(Name, Gate, Effects, Mode)` over the SAME `ActionPredicate`, `ActionEffect` and
-`ActionTriggerMode` types a kit's per-body actions use — there is no second
-predicate or effect vocabulary, only a narrower admissible subset, refused BY
-NAME by `WorldRuleCompiler` at the document/mutation boundary: `all` and
-`compareState` gates; `setState`/`addState`/`generate` effects (each an ordinary
-document write); `upsertHudPanel`/`removeHudPanel`/`upsertPlacement`/
-`removePlacement` (each admitting an EXISTING `WorldMutation` kind into the rule
-effect set, riding the same seam `generate` proved); and `save` (a session
-snapshot to the world's own loaded file — the ONE effect with no `WorldMutation`
-of its own: it composes no candidate and journals nothing, so it rides
-`WorldServer.FireWorldRuleEffect` directly instead of `TryApplyMutation`, calling
-out through `WorldServer.SaveEffectTap` to the composition root, which alone can
-reach the render-lever/screen-binder/audio/pacing state the `world.save` fold
-needs — see `ActionEffect.Save`'s own remarks). The rest read or write a body's
-own state (`now`/`recently` read an engine fact, `timerElapsed` a per-body timer
-slot, the velocity/impulse/designate effects a body's kinematics) and are refused
-rather than reinterpreted.
+`WorldRules.cs` holds the optional `rules` section. A `WorldRule` is
+`(Name, Gate, Effects, Mode)` over the same `ActionPredicate`, `ActionEffect` and
+`ActionTriggerMode` types a kit's per-body actions use. `WorldRuleCompiler`
+checks the world-scope subset at the document or mutation boundary. Gates admit
+`all`, `any`, `not`, and `compareState`; they compile to a bounded postfix
+Boolean program, so nested logic does not allocate or recurse during a tick.
+
+The state effects are `setState`, `addState`, `countdownState`,
+`removeStateCell`, `scheduleState`, and `transaction`. Rules may also generate a
+text row, edit HUD panels or placements, save the session, pose or drive an
+active body, set or clear one of its target registers, emit a gameplay cue, and
+paint a bounded sphere into a live lattice field. Each effect keeps its native
+runtime meaning: document and state changes use ordinary `WorldMutation`
+admission, while save, pose, body, cue, and lattice effects use dedicated
+deterministic paths. A body-only action such as `startTimer` still refuses at
+world scope rather than being reinterpreted.
 
 Predicates and effects address a (row, KEY) PAIR: an omitted `key` means the
 row's slot cell, and `WorldStateRow.IsKeyed` is the discriminator, so rules reach
@@ -937,17 +954,22 @@ ADDRESS one. A `compareState` may instead name a reserved
 channel — `$tick` (the completed-tick counter), `$population` (the live
 active-entry count), `$region:<placementId>` (that region's live occupant count),
 `$machine:<screen>:<address>` (one live byte off a screen's booted machine),
-`$reduce:<max|min|sum|count>:<row>` (an aggregate over a keyed row's cells),
+`$reduce:<max|min|sum|count>:<row>` (an aggregate over a row's cells; append
+`:where:<filterRow>` to admit only keys whose numeric filter cell is nonzero),
 `$symmetry:<function>[:<argument>]:<row>` (a cell holding a symmetry-lattice
 node 0..239 read through `ring`, `antipode`, `canonicalRay`, `cycle:<steps>`,
-`reflect:<node|cell:<row>[.<key>]>`, `orthogonal:<node|cell:…>` (1/0), or
+`reflect:<node|cell:<row>[.<key>]>`, `orthogonal:<node|cell:…>` (1/0),
+`innerProduct:<node|cell:…>` (the two roots' exact pairing, −2..2; 1 marks one
+of a node's 56 neighbours at sixty degrees, so adjacency in the 240-node graph
+is one comparison), or
 `projectionX`/`projectionY`; the row is the last token and the operand's `key`
 addresses the cell as usual; a cell holding no node reads −1, or 0 for
-`orthogonal` and the projections — the door through which a rule reaches the
-lattice's whole symmetry group; `world.symmetry <node> [other]` reads the same
-maps back),
-`$argmax:<row>`/`$argmin:<row>` (the body naming a keyed row's extremal cell — a
-0-based entity index, or -1 for none — the entity-addressable primitive),
+`orthogonal`, `innerProduct` and the projections — the door through which a
+rule reaches the lattice's whole symmetry group; `world.symmetry <node> [other]`
+reads the same maps back),
+`$argmax:<row>`/`$argmin:<row>` (the active body naming a keyed row's extremal
+cell — a 0-based entity index, or -1 for none; these also accept
+`:where:<filterRow>`),
 `$distance:<bodyRefA>:<bodyRefB>`/`$los:<bodyRefA>:<bodyRefB>` (live distance, or
 1/0 line-of-sight, between two bodies named `body:<n>` or
 `argmax:<row>`/`argmin:<row>`), `$parked:<bodyRef>` (one named body's
@@ -986,23 +1008,25 @@ vocabulary — composition, not a new mechanism:
   For N>=2 the advance lands synchronously and self-closes the gate the next tick;
   a period of exactly 1 wants `Level` (tick and schedule move in lockstep, so the
   gate never re-closes).
-- **Cooldown (NOT a `$tick` threshold)**: a `$tick`+N "next allowed" deadline is a
-  FOOTGUN for a request-gated ability — once background ticks accrue, `$tick`
-  already sits past any freshly set deadline and the gate never spends the
-  cooldown. Use a relative COUNTDOWN: a `NonNegative` `int` `cooldownRemaining`, a
-  `Level` rule gated `cooldownRemaining > 0` decrementing it each tick, the ability
-  gated on `cooldownRemaining <= 0`, and use re-arms it (`setState … = N`). The
-  decrement's `> 0` gate is load-bearing: `NonNegative` REFUSES a negative
-  candidate (it does not silently clamp), so an ungated decrement would refuse
-  loudly every tick at 0 — the gate floors it cleanly. A countdown is immune to
-  absolute-tick drift by construction.
+- **Cooldown**: `scheduleState` writes the current simulation tick plus a
+  non-negative delay into an `int` row. Its seconds-to-ticks conversion uses the
+  world's simulation rate and rounds up, so the deadline never opens early. Gate
+  the ability on `$tick >= cooldownDue`; a companion effect can remove the keyed
+  deadline after handling it. A relative countdown remains useful when pausing
+  or explicitly spending engine-step time is the desired rule.
 - **Round boundary**: compare a `round` row against a DECLARED `roundLength` row
   (both same kind) — the cross-row spelling, exercising the kind match.
 
-`setState`/`addState` carry the SAME duality on the WRITE side: EITHER a literal
-`Value` OR a live copy `(FromState, FromKey)` — another row or reserved channel,
-read fresh every firing through the identical `ResolveOperand`/`ReadWorldFact`
-path the comparand uses — never both, never neither, kinds must match. This is
+`setState`/`addState` accept exactly one source: a literal `Value`, an exact
+engine-tick `ValueSeconds`, a live copy `(FromState, FromKey)`, or a numeric
+`Expression`. A copy or expression operand is read fresh every firing through
+the same `ResolveOperand`/`ReadWorldFact` path the comparand uses, and every
+operand must match the destination's `int` or `fixed` kind. Expressions are
+postfix token lists with a 64-token ceiling; they provide constants, state or
+reserved-channel reads, add, subtract, multiply, divide, minimum, maximum, and
+clamp. The compiler proves stack shape. Runtime overflow, division by zero, or
+an inverted clamp range refuses the effect instead of producing a wrapped or
+undefined result. This is
 what closes the round-reset gap the comparand alone cannot: a rule REACTING to a
 counter someone else advances (`compareState round != roundReflect`) can reset a
 whole set of other rows to authored literals AND resync `roundReflect` to
@@ -1030,6 +1054,41 @@ an earlier rule's same-tick write exactly as a later gate does. Within one rule,
 each contiguous run of state effects is preflighted against one private
 candidate; either the whole run installs in order or none of it does, so a later
 range/capacity refusal cannot leave the earlier writes partially applied.
+
+An explicit `transaction` makes that boundary visible in the document and adds
+an optional `onFailure` branch. Both branches accept at most 64 steps and may
+combine state cells, draw generation, HUD/placement mutations, poses, cues, body
+effects, and field paints. The whole branch is preflighted against each preceding
+candidate before anything escapes; a refusal runs `onFailure` with no leaked cue,
+impulse, paint, or document write. Placement steps form the final suffix because
+they may rebuild the active population. Nested transactions and `save` remain
+structurally unavailable: persistence I/O cannot be rolled back.
+`removeStateCell` lets the same transaction retire keyed membership cleanly.
+
+`emitCue` publishes a stable dotted token of at most 64 ASCII characters, an
+optional payload of at most 256 UTF-16 code units, an optional body association,
+and the simulation tick. An `audio.cues` row may bind either a published engine
+event or a token emitted by one of the same document's rules. The desktop
+composition root forwards the name and body position to that table; other
+consumers may observe the presentation-neutral token.
+Body effects accept literal or dynamically bound body keys and use the same
+fixed-point instruction path as authored body actions. `paintField` clips a
+sphere to the lattice, clamps every result to the field envelope, and caps its
+radius at eight cells, bounding one firing to at most 4,913 candidate visits.
+
+Rule execution has three independent ceilings: 128 ordinary rules, 64 top-level
+effects per rule/interaction, and 1,000,000 statically derived work units per
+tick. The cost includes gate/expression operands, keyed scans, `forEach`, the
+quadratic worst case of distance interactions, mutation rebuild weights, nested
+transaction preflight, and field-paint candidate visits. Validation refuses a
+document above the aggregate ceiling; `world.budget` prints the current rule,
+interaction, evaluation-slot, and work-unit totals. Interaction `range` is an
+exact JSON decimal lowered directly to fixed point, with no binary32 round trip.
+
+Live effect failures are bounded diagnostics, not a Level-rule log flood.
+`world.rule.failures` reports one fixed counter per refusal category plus its
+latest tick, rule, effect, and concrete reason; stderr narrates only the first
+occurrence of each category.
 
 The high-frequency `UpsertStateCell` path validates only the addressed mutable
 cell and installs only value-derived state. Declaration-shape mutations retain

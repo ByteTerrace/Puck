@@ -104,7 +104,7 @@ dissolved into placements' own policy block); `prototypes` (`prototypeId` refere
 `playerDefaults`/`seatLook`. `puck.world.frozen.json` (the frozen diorama — see
 the 2026-08-31 reset below) is the worked example: the island lattice burns,
 freezes, melts, and evaporates on the folded spelling, and its bodies carry the
-hp/targeting/attack, elemental-status, and state-driven-look suites. A value that turns with the tick is a `cycle` trait on a state row (`WorldStateCycle`, beside `advance` and `dynamics`), reading `Puck.Maths.CyclicRotation` and, for its lattice outputs, `Puck.Maths.SymmetryLattice` — a looping animation, a phase or a ring-slot address enters the game as a row every draw, rule, binding and HUD element already reads, never as a shader-side clock.
+hp/targeting/attack, elemental-status, and state-driven-look suites. A value that turns with the tick is a `cycle` trait on a state row (`WorldStateCycle`, beside `advance` and `dynamics`), driven by a generator of the symmetry lattice's reflection group (`Puck.Maths.SymmetryWord`: an authored word of mirrors whose derived order is the period, or the lattice's own thirty-step `Puck.Maths.CyclicRotation` cycle) and, for its lattice outputs, `Puck.Maths.SymmetryLattice` — a looping animation, a twelve-position dial, a phase or a ring-slot address enters the game as a row every draw, rule, binding and HUD element already reads, never as a shader-side clock; rules read the lattice's own pairing through `$symmetry:innerProduct`, and a `symmetryOrbit` generator source deals a ring or a word's orbit as a shuffle bag.
 
 **Gravity authoring names acceleration independently of geometry.** A world may
 author a uniform acceleration directly, retain explicit placement-plus-mass
@@ -649,8 +649,9 @@ What survives them, as work rather than prose:
   mutation naming an ordinary verb applies.
 - **Replay coverage.** `WorldReplayEntry` captures the full submission stream now — mutation, undo,
   composition, query, rebuild, screen op, transfer, and the `LinkDelivery` federation-liveness leaf
-  included — but `replay.verify` still proves the pose trajectory only: the hash covers no document,
-  grant-table, or HUD state, and delivered neighbour CONTENT stays untaped.
+  included. `replay.verify` now compares the state-system trace (world state, rule/interaction latches,
+  body action state, live fields, and poses), while retaining the pose trace for inspection. Whole-document,
+  grant-table, HUD, screen-machine, and delivered-neighbour content remain outside that digest.
 - **Unverified, check before scheduling** — session-lever routing (`world.volume`, the render levers,
   `world.save`); a screen route's pad kit and channel masks (document-only, no `body.engage` override
   for the mask); whether fuel is still the only stop for a spinning guest.

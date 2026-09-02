@@ -72,32 +72,21 @@ public sealed partial class WorldServer {
             ArrayPool<long>.Shared.Return(array: values);
         }
     }
-    // The apply-side half of a Generate on a lattice row: the compose advanced the row's pass, so the field now
-    // repaints at it. A Generate on an ordinary draw site wrote its cell in the document and paints nothing.
-    private void RepaintLatticeDrawAfterGenerate(WorldDefinition definition, string rowName) {
-        if (
-            (WorldDefinitionRows.FindStateRow(
-                rows: definition.State,
-                name: rowName
-            ) is { } row) &&
-            (row.Lattice is not null)
-        ) {
-            PaintLatticeDraw(
-                definition: definition,
-                row: row
-            );
-        }
-    }
-    // Undo preserves the live lattice allocation and reaction state. Repaint only rows whose persisted draw
-    // position actually moved, so rewinding an unrelated mutation cannot erase simulation-evolved cells.
+    // Every apply and every undo preserves the live lattice allocation and reaction state. Repaint only rows whose
+    // persisted draw position or draw fill actually moved, so an unrelated mutation cannot erase evolved cells.
     private void RepaintChangedLatticeDraws(WorldDefinition previous, WorldDefinition current) {
+        if (ReferenceEquals(objA: previous.State, objB: current.State)) {
+            return;
+        }
+
         foreach (var row in (current.State ?? [])) {
             if (
-                (WorldLatticeFill.FindDraw(trait: row.Lattice) is not null) &&
+                (WorldLatticeFill.FindDraw(trait: row.Lattice) is { } fill) &&
                 (WorldDefinitionRows.FindStateRow(rows: previous.State, name: row.Name.Value) is { } oldRow) &&
                 (
                     (oldRow.DrawCursor != row.DrawCursor) ||
-                    !(oldRow.DrawDecks ?? []).SequenceEqual(second: (row.DrawDecks ?? []))
+                    !SameDecks(left: oldRow.DrawDecks, right: row.DrawDecks) ||
+                    !Equals(objA: WorldLatticeFill.FindDraw(trait: oldRow.Lattice), objB: fill)
                 )
             ) {
                 PaintLatticeDraw(
@@ -106,5 +95,20 @@ public sealed partial class WorldServer {
                 );
             }
         }
+    }
+    private static bool SameDecks(IReadOnlyList<long>? left, IReadOnlyList<long>? right) {
+        var leftCount = (left?.Count ?? 0);
+
+        if (leftCount != (right?.Count ?? 0)) {
+            return false;
+        }
+
+        for (var index = 0; (index < leftCount); index++) {
+            if (left![index] != right![index]) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }

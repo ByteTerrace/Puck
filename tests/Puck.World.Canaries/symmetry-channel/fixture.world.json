@@ -47,6 +47,11 @@
         "value": -2
       },
       {
+        "name": "pairing",
+        "kind": "int",
+        "value": -3
+      },
+      {
         "name": "projX",
         "kind": "fixed",
         "value": "0"
@@ -93,6 +98,11 @@
           "$type": "setState",
           "state": "orthogonalFlag",
           "fromState": "$symmetry:orthogonal:17:node"
+        },
+        {
+          "$type": "setState",
+          "state": "pairing",
+          "fromState": "$symmetry:innerProduct:17:node"
         },
         {
           "$type": "setState",

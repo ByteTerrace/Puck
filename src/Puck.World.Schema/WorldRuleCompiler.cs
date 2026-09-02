@@ -10,9 +10,9 @@ namespace Puck.World;
 /// malformed rule refuses the mutation or the boot by name instead of throwing later, and once more (unwrapped —
 /// validation already proved success) inside the server's install path to obtain the live array the tick
 /// evaluates.</summary>
-public static class WorldRuleCompiler {
+public static partial class WorldRuleCompiler {
     // Shared by rules and interactions: an empty or absent effect list is refused in the subject's own noun.
-    private static CompiledWorldEffect[] CompileEffects(IReadOnlyList<ActionEffect>? effects, string ruleName, WorldDefinition definition, string subject) {
+    private static CompiledWorldEffect[] CompileEffects(IReadOnlyList<ActionEffect>? effects, string ruleName, WorldDefinition definition, string subject, bool allowTransaction = true) {
         if (effects is not { Count: > 0 }) {
             throw new WorldRuleException(
                 detail: $"{((subject == "rule")
@@ -23,10 +23,26 @@ public static class WorldRuleCompiler {
                 subject: subject
             );
         }
+        if (effects.Count > WorldRuleCapacity.MaxEffectsPerRule) {
+            throw new WorldRuleException(
+                detail: $"a {subject} carries {effects.Count} effects, exceeding the {WorldRuleCapacity.MaxEffectsPerRule}-effect ceiling",
+                refusal: WorldRuleRefusal.EffectKindInadmissible,
+                ruleName: ruleName,
+                subject: subject
+            );
+        }
 
         var compiled = new CompiledWorldEffect[effects.Count];
 
         for (var index = 0; (index < compiled.Length); index++) {
+            if (!allowTransaction && effects[index] is ActionEffect.Transaction) {
+                throw new WorldRuleException(
+                    refusal: WorldRuleRefusal.EffectKindInadmissible,
+                    ruleName: ruleName,
+                    detail: "a transaction cannot contain another transaction"
+                );
+            }
+
             compiled[index] = CompileEffect(
                 effect: effects[index],
                 ruleName: ruleName,
@@ -57,6 +73,7 @@ public static class WorldRuleCompiler {
         fromKey: set.FromKey,
         valueSeconds: set.ValueSeconds,
         text: set.Text,
+        expression: set.Expression,
         ruleName: ruleName,
         definition: definition,
         verb: "setState"
@@ -71,6 +88,7 @@ public static class WorldRuleCompiler {
         fromKey: add.FromKey,
         valueSeconds: add.ValueSeconds,
         text: null,
+        expression: add.Expression,
         ruleName: ruleName,
         definition: definition,
         verb: "addState"
@@ -115,10 +133,61 @@ public static class WorldRuleCompiler {
         effect: pose,
         ruleName: ruleName
     ),
+        ActionEffect.RemoveStateCell remove => ResolveRemoveStateCell(
+        definition: definition,
+        effect: remove,
+        ruleName: ruleName
+    ),
+        ActionEffect.ScheduleState schedule => ResolveScheduleState(
+        definition: definition,
+        effect: schedule,
+        ruleName: ruleName
+    ),
+        ActionEffect.Transaction transaction => ResolveTransaction(
+        definition: definition,
+        effect: transaction,
+        ruleName: ruleName
+    ),
+        ActionEffect.EmitCue cue => ResolveCue(
+        definition: definition,
+        effect: cue,
+        ruleName: ruleName
+    ),
+        ActionEffect.SetBodyVerticalVelocity body => ResolveBodyVerticalVelocity(
+        definition: definition,
+        key: body.Key,
+        operation: BodyMotionOp.SetVerticalVelocity,
+        ruleName: ruleName,
+        value: body.Velocity,
+        verb: "setBodyVerticalVelocity"
+    ),
+        ActionEffect.ScaleBodyVerticalVelocity body => ResolveBodyVerticalVelocity(
+        definition: definition,
+        key: body.Key,
+        operation: BodyMotionOp.ScaleVerticalVelocity,
+        ruleName: ruleName,
+        value: body.Factor,
+        verb: "scaleBodyVerticalVelocity"
+    ),
+        ActionEffect.ApplyBodyImpulse impulse => ResolveBodyImpulse(
+        definition: definition,
+        effect: impulse,
+        ruleName: ruleName
+    ),
+        ActionEffect.DesignateBody designate => ResolveBodyDesignation(
+        definition: definition,
+        effect: designate,
+        ruleName: ruleName
+    ),
+        ActionEffect.PaintField paint => ResolveFieldPaint(
+        definition: definition,
+        effect: paint,
+        ruleName: ruleName
+    ),
         _ => throw new WorldRuleException(
         refusal: WorldRuleRefusal.EffectKindInadmissible,
         ruleName: ruleName,
-        detail: $"'{effect.GetType().Name}' has no world-scope meaning — only 'setState', 'addState', 'countdownState', 'generate', 'upsertHudPanel', 'removeHudPanel', 'upsertPlacement', 'removePlacement', 'save' and 'pose' are admitted (the velocity, impulse, designate, timer and judge effects all address a body's own state)"
+        detail: $"'{effect.GetType().Name}' has no world-scope meaning"
     ),
     };
     private static CompiledWorldEffect ResolvePose(ActionEffect.Pose effect, string ruleName, WorldDefinition definition) {
@@ -283,9 +352,18 @@ public static class WorldRuleCompiler {
             + $"(≈{upperSeconds.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}s) — author one of those as 'valueSeconds', or (when no terminating decimal spells the ")
             + "intended duration exactly) author the raw whole engine-tick count directly via 'value' on the row and its companion decrement rule.");
     }
-    // Flattens the same ActionPredicate ADT a per-body gate walks: All recurses, CompareState resolves against world
-    // scope, every other case is irreducibly per-body and is refused by name (never reinterpreted).
-    private static void FlattenPredicate(ActionPredicate? predicate, List<CompiledWorldPredicate> gate, string ruleName, WorldDefinition definition) {
+    // Emits a bounded postfix Boolean program: leaf comparisons push, All/Any consume their child count, Not flips
+    // one result. The runtime therefore preserves arbitrary nesting without recursive evaluation or per-tick
+    // allocation.
+    private static void FlattenPredicate(ActionPredicate? predicate, List<CompiledWorldPredicate> gate, string ruleName, WorldDefinition definition, int depth = 0) {
+        if (depth >= WorldRuleCapacity.MaxPredicateTokens) {
+            throw new WorldRuleException(
+                refusal: WorldRuleRefusal.PredicateKindInadmissible,
+                ruleName: ruleName,
+                detail: $"a gate is nested past the {WorldRuleCapacity.MaxPredicateTokens}-token ceiling"
+            );
+        }
+
         switch (predicate) {
             case null:
                 break;
@@ -311,9 +389,49 @@ public static class WorldRuleCompiler {
                         definition: definition,
                         gate: gate,
                         predicate: inner,
-                        ruleName: ruleName
+                        ruleName: ruleName,
+                        depth: (depth + 1)
                     );
                 }
+
+                gate.Add(item: Logical(CompiledWorldPredicateKind.All, all.Predicates.Count, "all"));
+
+                break;
+            case ActionPredicate.Any any:
+                if (any.Predicates is not { Count: > 0 }) {
+                    throw new WorldRuleException(
+                        refusal: WorldRuleRefusal.PredicateKindInadmissible,
+                        ruleName: ruleName,
+                        detail: "an 'any' gate must carry at least one predicate"
+                    );
+                }
+
+                foreach (var inner in any.Predicates) {
+                    if (inner is null) {
+                        throw new WorldRuleException(
+                            refusal: WorldRuleRefusal.PredicateKindInadmissible,
+                            ruleName: ruleName,
+                            detail: "an 'any' gate contains a null predicate row"
+                        );
+                    }
+
+                    FlattenPredicate(predicate: inner, gate: gate, ruleName: ruleName, definition: definition, depth: (depth + 1));
+                }
+
+                gate.Add(item: Logical(CompiledWorldPredicateKind.Any, any.Predicates.Count, "any"));
+
+                break;
+            case ActionPredicate.Not not:
+                if (not.Predicate is null) {
+                    throw new WorldRuleException(
+                        refusal: WorldRuleRefusal.PredicateKindInadmissible,
+                        ruleName: ruleName,
+                        detail: "a 'not' gate must carry one non-null predicate"
+                    );
+                }
+
+                FlattenPredicate(predicate: not.Predicate, gate: gate, ruleName: ruleName, definition: definition, depth: (depth + 1));
+                gate.Add(item: Logical(CompiledWorldPredicateKind.Not, 1, "not"));
 
                 break;
             case ActionPredicate.CompareState compare:
@@ -328,9 +446,20 @@ public static class WorldRuleCompiler {
                 throw new WorldRuleException(
                     refusal: WorldRuleRefusal.PredicateKindInadmissible,
                     ruleName: ruleName,
-                    detail: $"'{predicate.GetType().Name}' has no world-scope meaning — only 'compareState' and 'all' are admitted ('now'/'recently' read a per-body engine fact and 'timerElapsed' reads a per-body timer slot; a world has neither)"
+                detail: $"'{predicate.GetType().Name}' has no world-scope meaning — world gates admit 'compareState', 'all', 'any', and 'not'"
                 );
         }
+
+        static CompiledWorldPredicate Logical(CompiledWorldPredicateKind kind, int arity, string describe) => new(
+            Left: default,
+            Comparison: default,
+            Value: 0L,
+            ValueKind: default,
+            Comparand: null,
+            Describe: describe,
+            Kind: kind,
+            Arity: arity
+        );
     }
     private static bool HasRegion(WorldDefinition definition, string placementId) {
         foreach (var placement in definition.Placements) {
@@ -599,11 +728,17 @@ public static class WorldRuleCompiler {
             detail: $"'generate' names no state row '{generate.Row}'"
         ));
 
-        if (row.Draw is not { } draw) {
+        // A lattice row painted by a draw fill is a generate target too: one whole-field pass per firing, with no
+        // timing of its own, resolved through the same source walk a slot site takes.
+        var draw = (row.Draw ?? ((WorldLatticeFill.FindDraw(trait: row.Lattice) is { } fill)
+            ? new WorldDraw(Source: fill.Source, Generator: fill.Generator, Timing: WorldDrawTiming.Event)
+            : null));
+
+        if (draw is null) {
             throw new WorldRuleException(
                 refusal: WorldRuleRefusal.GeneratorUnknown,
                 ruleName: ruleName,
-                detail: $"state row '{generate.Row}' declares no draw — 'generate' redraws a draw site"
+                detail: $"state row '{generate.Row}' declares no draw — 'generate' redraws a draw site or a lattice row painted by a draw fill"
             );
         }
 
@@ -907,7 +1042,7 @@ public static class WorldRuleCompiler {
         static WorldRuleException Malformed(string ruleName, string name, string detail) => new(
             refusal: WorldRuleRefusal.SymmetryChannelMalformed,
             ruleName: ruleName,
-            detail: $"'{name}' {detail} — a symmetry channel spells '{WorldRuleFacts.SymmetryPrefix}<ring|antipode|canonicalRay|cycle:<steps>|reflect:<node|cell:<row>[.<key>]>|orthogonal:<node|cell:<row>[.<key>]>|projectionX|projectionY>:<row>'"
+            detail: $"'{name}' {detail} — a symmetry channel spells '{WorldRuleFacts.SymmetryPrefix}<ring|antipode|canonicalRay|cycle:<steps>|reflect:<node|cell:<row>[.<key>]>|orthogonal:<node|cell:<row>[.<key>]>|innerProduct:<node|cell:<row>[.<key>]>|projectionX|projectionY>:<row>'"
         );
 
         if (tokens.Length < 2) {
@@ -922,12 +1057,13 @@ public static class WorldRuleCompiler {
             "cycle" => WorldSymmetryFunction.Cycle,
             "reflect" => WorldSymmetryFunction.Reflect,
             "orthogonal" => WorldSymmetryFunction.Orthogonal,
+            "innerProduct" => WorldSymmetryFunction.InnerProduct,
             "projectionX" => WorldSymmetryFunction.ProjectionX,
             "projectionY" => WorldSymmetryFunction.ProjectionY,
             _ => throw Malformed(ruleName: ruleName, name: name, detail: $"names no symmetry function '{tokens[0]}'"),
         };
         var argument = string.Join(separator: ':', values: tokens[1..^1]);
-        var takesArgument = (function is WorldSymmetryFunction.Cycle or WorldSymmetryFunction.Reflect or WorldSymmetryFunction.Orthogonal);
+        var takesArgument = (function is WorldSymmetryFunction.Cycle or WorldSymmetryFunction.Reflect or WorldSymmetryFunction.Orthogonal or WorldSymmetryFunction.InnerProduct);
 
         if (takesArgument == (argument.Length == 0)) {
             throw Malformed(ruleName: ruleName, name: name, detail: (takesArgument ? $"'{tokens[0]}' needs an argument" : $"'{tokens[0]}' takes no argument"));
@@ -1181,7 +1317,19 @@ public static class WorldRuleCompiler {
                 );
             }
 
-            var rowName = suffix[(separator + 1)..];
+            var rowAndFilter = suffix[(separator + 1)..];
+            const string WhereMarker = ":where:";
+            var where = rowAndFilter.IndexOf(value: WhereMarker, comparisonType: StringComparison.Ordinal);
+            var rowName = ((where < 0) ? rowAndFilter : rowAndFilter[..where]);
+            var filterRowName = ((where < 0) ? null : rowAndFilter[(where + WhereMarker.Length)..]);
+
+            if ((where >= 0) && string.IsNullOrEmpty(value: filterRowName)) {
+                throw new WorldRuleException(
+                    refusal: WorldRuleRefusal.ReduceChannelMalformed,
+                    ruleName: ruleName,
+                    detail: $"'{name}' carries ':where:' without a filter row"
+                );
+            }
             var reduceRow = ResolveNumericRow(
                 channel: name,
                 definition: definition,
@@ -1190,6 +1338,25 @@ public static class WorldRuleCompiler {
                 requireKeyed: false,
                 ruleName: ruleName
             );
+            WorldStateHandle filterHandle = default;
+            if (filterRowName is not null) {
+                _ = ResolveNumericRow(
+                    channel: name,
+                    definition: definition,
+                    malformed: WorldRuleRefusal.ReduceChannelMalformed,
+                    name: filterRowName,
+                    requireKeyed: true,
+                    ruleName: ruleName
+                );
+                if (!reduceRow.IsKeyed) {
+                    throw new WorldRuleException(
+                        refusal: WorldRuleRefusal.ReduceChannelMalformed,
+                        ruleName: ruleName,
+                        detail: $"'{name}' applies a keyed filter to non-keyed row '{rowName}'"
+                    );
+                }
+                filterHandle = ResolveWorldStateHandle(definition: definition, name: filterRowName);
+            }
             var reduceValueKind = ((op == WorldStateReduceOp.Count)
                 ? CellKind.Int
                 : reduceRow.Kind
@@ -1201,7 +1368,9 @@ public static class WorldRuleCompiler {
                     Row: rowName,
                     Key: null,
                     Reduce: op,
-                    StateHandle: ResolveWorldStateHandle(definition: definition, name: rowName)
+                    StateHandle: ResolveWorldStateHandle(definition: definition, name: rowName),
+                    FilterRow: filterRowName,
+                    FilterHandle: filterHandle
                 ),
                 ValueKind: reduceValueKind,
                 Describe: describe
@@ -1229,11 +1398,15 @@ public static class WorldRuleCompiler {
                 comparisonType: StringComparison.Ordinal,
                 value: WorldRuleFacts.ArgMaxPrefix
             );
-            var rowName = name[(isMax
+            var rowAndFilter = name[(isMax
                 ? WorldRuleFacts.ArgMaxPrefix.Length
                 : WorldRuleFacts.ArgMinPrefix.Length)..];
+            const string WhereMarker = ":where:";
+            var where = rowAndFilter.IndexOf(value: WhereMarker, comparisonType: StringComparison.Ordinal);
+            var rowName = ((where < 0) ? rowAndFilter : rowAndFilter[..where]);
+            var filterRowName = ((where < 0) ? null : rowAndFilter[(where + WhereMarker.Length)..]);
 
-            if (string.IsNullOrEmpty(value: rowName)) {
+            if (string.IsNullOrEmpty(value: rowName) || ((where >= 0) && string.IsNullOrEmpty(value: filterRowName))) {
                 throw new WorldRuleException(
                     refusal: WorldRuleRefusal.ArgChannelMalformed,
                     ruleName: ruleName,
@@ -1251,6 +1424,18 @@ public static class WorldRuleCompiler {
                 requireKeyed: true,
                 ruleName: ruleName
             );
+            WorldStateHandle filterHandle = default;
+            if (filterRowName is not null) {
+                _ = ResolveNumericRow(
+                    channel: name,
+                    definition: definition,
+                    malformed: WorldRuleRefusal.ArgChannelMalformed,
+                    name: filterRowName,
+                    requireKeyed: true,
+                    ruleName: ruleName
+                );
+                filterHandle = ResolveWorldStateHandle(definition: definition, name: filterRowName);
+            }
 
             return new ResolvedOperand(
                 Operand: new CompiledWorldOperand(
@@ -1259,7 +1444,9 @@ public static class WorldRuleCompiler {
                     Key: null,
                     Reduce: (isMax
                 ? WorldStateReduceOp.Max
-                : WorldStateReduceOp.Min)
+                : WorldStateReduceOp.Min),
+                    FilterRow: filterRowName,
+                    FilterHandle: filterHandle
                 ),
                 ValueKind: CellKind.Int,
                 Describe: describe
@@ -1714,17 +1901,17 @@ public static class WorldRuleCompiler {
         );
 
         if (hasValue) {
-            var value = LiteralToRaw(
+            var describe = $"{lhs.Describe} {DescribeComparison(comparison: comparison)} {compare.Value!.Value.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}";
+            var (value, lowered) = LowerConstantComparison(
+                comparison: comparison,
                 kind: lhs.ValueKind,
-                literal: compare.Value!.Value,
-                ruleName: ruleName,
-                verb: "compareState"
+                literal: compare.Value.Value,
+                ruleName: ruleName
             );
-            var describe = $"{lhs.Describe} {DescribeComparison(comparison: comparison)} {compare.Value.Value.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}";
 
             return new CompiledWorldPredicate(
                 Left: lhs.Operand,
-                Comparison: comparison,
+                Comparison: lowered,
                 Value: value,
                 ValueKind: lhs.ValueKind,
                 Comparand: null,
@@ -1856,230 +2043,24 @@ public static class WorldRuleCompiler {
     // value XOR valueSeconds XOR (fromState, fromKey): the same duality ResolvePredicate enforces for compareState's
     // comparand, applied to the write side and widened by one spelling. 'fromKey' is an appendage of 'fromState' on
     // the same terms 'comparandKey' is.
-    private static CompiledWorldEffect ResolveWrite(string rowName, string? key, ActionTarget target, WorldDocumentWriteKind write, decimal? value, string? fromState, string? fromKey, decimal? valueSeconds, string? text, string ruleName, WorldDefinition definition, string verb) {
-        if (target != ActionTarget.Self) {
-            throw new WorldRuleException(
-                refusal: WorldRuleRefusal.TargetInadmissible,
-                ruleName: ruleName,
-                detail: $"'{verb}' carries target '{target}' — a world rule has no entity to address, so a target is refused rather than parsed and discarded"
-            );
+    // A constant comparand against an int or bool operand is lowered EXACTLY: an integral literal is the raw it
+    // names, and a fractional one becomes the equivalent integer comparison (x > 1.5 is x >= 2, x <= 1.5 is x <= 1,
+    // x == 1.5 never holds, x != 1.5 always holds) rather than a rounded literal that would move the gate. A fixed
+    // operand keeps its exact fixed-point literal.
+    private static (long Value, ActionStateComparison Comparison) LowerConstantComparison(CellKind kind, decimal literal, ActionStateComparison comparison, string ruleName) {
+        if ((kind == CellKind.Fixed) || (decimal.Truncate(d: literal) == literal)) {
+            return (LiteralToRaw(kind: kind, literal: literal, ruleName: ruleName, verb: "compareState"), comparison);
         }
 
-        var row = (WorldDefinitionRows.FindStateRow(
-            rows: definition.State,
-            name: rowName
-        )
-            ?? throw new WorldRuleException(
-            refusal: WorldRuleRefusal.StateRowUnknown,
-            ruleName: ruleName,
-            detail: $"'{verb}' names no state row '{rowName}' — declare it with world.row.set state <json> first"
-        ));
+        var floor = LiteralToRaw(kind: kind, literal: decimal.Floor(d: literal), ruleName: ruleName, verb: "compareState");
+        var ceiling = LiteralToRaw(kind: kind, literal: decimal.Ceiling(d: literal), ruleName: ruleName, verb: "compareState");
 
-        var hasText = (text is not null);
-        var isTextRow = (row.Kind == CellKind.Text);
-
-        if (
-            (hasText && !isTextRow) ||
-            (isTextRow && !hasText && (fromState is null)) ||
-            (isTextRow && (write == WorldDocumentWriteKind.Add))
-        ) {
-            throw new WorldRuleException(
-                refusal: WorldRuleRefusal.StateCellUnaddressable,
-                ruleName: ruleName,
-                detail: (hasText
-                    ? $"state row '{rowName}' is kind={DescribeCellKind(kind: row.Kind)} — '{verb}' 'text' writes a kind=text row"
-                    : $"state row '{rowName}' is kind=text — '{verb}' writes it through 'text' or a text 'fromState' copy, never arithmetic"
-                )
-            );
-        }
-
-        CompiledCellRef? destinationKeyFrom = null;
-        string resolvedKey;
-
-        if (TryResolveDynamicKey(
-            cell: out var dynamicDestination,
-            definition: definition,
-            key: key,
-            keyFieldLabel: "key",
-            ruleName: ruleName,
-            verb: verb
-        )) {
-            if (!row.IsKeyed) {
-                throw new WorldRuleException(
-                    refusal: WorldRuleRefusal.StateCellUnaddressable,
-                    ruleName: ruleName,
-                    detail: $"'{verb}' key '{key}' addresses a cell by indirection, but row '{rowName}' is not keyed"
-                );
-            }
-
-            destinationKeyFrom = dynamicDestination;
-            resolvedKey = key!;
-        } else {
-            resolvedKey = ResolveKey(
-                key: key,
-                keyFieldLabel: "key",
-                row: row,
-                ruleName: ruleName,
-                verb: verb
-            );
-        }
-
-        var hasValue = (value is not null);
-        var hasFrom = (fromState is not null);
-        var hasValueSeconds = (valueSeconds is not null);
-
-        if (hasText) {
-            if (
-                hasValue ||
-                hasFrom ||
-                hasValueSeconds ||
-                (fromKey is not null)
-            ) {
-                throw new WorldRuleException(
-                    refusal: WorldRuleRefusal.EffectSourceAmbiguous,
-                    ruleName: ruleName,
-                    detail: $"'{verb}' names 'text' beside 'value'/'valueSeconds'/'fromState' — a text write has exactly one spelling"
-                );
-            }
-
-            return new CompiledWorldEffect(
-                Kind: WorldRuleEffectKind.Write,
-                Row: rowName,
-                Key: resolvedKey,
-                Write: write,
-                RawValue: 0L,
-                Generator: null,
-                Describe: $"{verb} {rowName}.{resolvedKey} = \"{text}\"",
-                Text: text,
-                KeyFrom: destinationKeyFrom
-            );
-        }
-
-        if (
-            (fromKey is not null) &&
-            (fromState is null)
-        ) {
-            throw new WorldRuleException(
-                refusal: WorldRuleRefusal.EffectSourceAmbiguous,
-                ruleName: ruleName,
-                detail: $"'{verb}' names 'fromKey' without 'fromState' — a copy source key addresses a cell inside a source row, which must be named"
-            );
-        }
-
-        var spellingCount = (((hasValue
-            ? 1
-            : 0) + (hasFrom
-            ? 1
-            : 0)) + (hasValueSeconds
-            ? 1
-            : 0));
-
-        if (spellingCount != 1) {
-            throw new WorldRuleException(
-                refusal: WorldRuleRefusal.EffectSourceAmbiguous,
-                ruleName: ruleName,
-                detail: $"'{verb}' must name EXACTLY ONE of 'value', 'valueSeconds', or 'fromState' — named {spellingCount}"
-            );
-        }
-
-        if (hasValueSeconds) {
-            if (row.Kind != CellKind.Int) {
-                throw new WorldRuleException(
-                    refusal: WorldRuleRefusal.StateCellUnaddressable,
-                    ruleName: ruleName,
-                    detail: $"state row '{rowName}' is kind={DescribeCellKind(kind: row.Kind)} — '{verb}' 'valueSeconds' authors a whole engine-tick countdown, meaningful only against a kind=int row"
-                );
-            }
-
-            var literalSeconds = valueSeconds!.Value;
-            var maximumSeconds = (((decimal)long.MaxValue) / FixedTickConversion.TicksPerSecond);
-
-            if (literalSeconds > maximumSeconds) {
-                throw new WorldRuleException(
-                    refusal: WorldRuleRefusal.DurationEngineTicksOutOfRange,
-                    ruleName: ruleName,
-                    detail: $"'{verb}' authors {rowName} 'valueSeconds' {literalSeconds.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)} — the duration exceeds the signed 64-bit state carrier's maximum of {long.MaxValue} engine ticks (approximately {maximumSeconds.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)} seconds)"
-                );
-            }
-
-            if (!FixedTickConversion.TryDurationEngineTicksExact(
-                seconds: literalSeconds,
-                ticks: out var ticks
-            )) {
-                throw new WorldRuleException(
-                    refusal: WorldRuleRefusal.DurationNotExactEngineTicks,
-                    ruleName: ruleName,
-                    detail: DescribeInexactDuration(
-                        literalSeconds: literalSeconds,
-                        rowName: rowName,
-                        verb: verb
-                    )
-                );
-            }
-
-            return new CompiledWorldEffect(
-                Kind: WorldRuleEffectKind.Write,
-                Row: rowName,
-                Key: resolvedKey,
-                Write: write,
-                RawValue: checked((long)ticks),
-                Generator: null,
-                Describe: $"{verb} {rowName}.{resolvedKey} = {literalSeconds.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}s ({ticks} engine ticks)",
-                KeyFrom: destinationKeyFrom
-            );
-        }
-
-        if (hasValue) {
-            var literal = value!.Value;
-            var raw = LiteralToRaw(
-                kind: row.Kind,
-                literal: literal,
-                ruleName: ruleName,
-                verb: verb
-            );
-
-            return new CompiledWorldEffect(
-                Kind: WorldRuleEffectKind.Write,
-                Row: rowName,
-                Key: resolvedKey,
-                Write: write,
-                RawValue: raw,
-                Generator: null,
-                Describe: $"{verb} {rowName}.{resolvedKey} = {literal.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}",
-                KeyFrom: destinationKeyFrom
-            );
-        }
-
-        var source = ResolveOperand(
-            allowText: isTextRow,
-            definition: definition,
-            fieldLabel: "fromState",
-            key: fromKey,
-            keyFieldLabel: "fromKey",
-            name: fromState!,
-            ruleName: ruleName,
-            verb: verb
-        );
-
-        if (source.ValueKind != row.Kind) {
-            throw new WorldRuleException(
-                refusal: WorldRuleRefusal.EffectSourceKindMismatch,
-                ruleName: ruleName,
-                detail: $"state row '{rowName}' is kind={DescribeCellKind(kind: row.Kind)} but 'fromState' '{fromState}' is kind={DescribeCellKind(kind: source.ValueKind)} — mixed-kind copies are refused; author both sides the same kind"
-            );
-        }
-
-        return new CompiledWorldEffect(
-            Kind: WorldRuleEffectKind.Write,
-            Row: rowName,
-            Key: resolvedKey,
-            Write: write,
-            RawValue: 0L,
-            Generator: null,
-            Describe: $"{verb} {rowName}.{resolvedKey} := {source.Describe}",
-            From: source.Operand,
-            KeyFrom: destinationKeyFrom
-        );
+        return comparison switch {
+            ActionStateComparison.Greater or ActionStateComparison.GreaterOrEqual => (ceiling, ActionStateComparison.GreaterOrEqual),
+            ActionStateComparison.Less or ActionStateComparison.LessOrEqual => (floor, ActionStateComparison.LessOrEqual),
+            ActionStateComparison.Equal => (long.MaxValue, ActionStateComparison.Greater),
+            _ => (long.MinValue, ActionStateComparison.GreaterOrEqual),
+        };
     }
     private static long LiteralToRaw(CellKind kind, decimal literal, string ruleName, string verb) {
         try {
@@ -2158,6 +2139,14 @@ public static class WorldRuleCompiler {
                 definition: definition
             );
 
+            if (gate.Count > WorldRuleCapacity.MaxPredicateTokens) {
+                throw new WorldRuleException(
+                    refusal: WorldRuleRefusal.PredicateKindInadmissible,
+                    ruleName: rule.Name,
+                    detail: $"gate compiles to {gate.Count} tokens, exceeding the {WorldRuleCapacity.MaxPredicateTokens}-token ceiling"
+                );
+            }
+
             return new CompiledWorldRule(
                 Name: rule.Name,
                 Mode: rule.Mode,
@@ -2187,6 +2176,9 @@ public static class WorldRuleCompiler {
 
         if (rules.Count == 0) {
             return [];
+        }
+        if (rules.Count > WorldRuleCapacity.MaxRules) {
+            throw new WorldRuleException(refusal: WorldRuleRefusal.EffectKindInadmissible, ruleName: "<rules>", detail: $"declares {rules.Count} rows, exceeding the {WorldRuleCapacity.MaxRules}-rule ceiling");
         }
 
         var seen = new HashSet<string>(
@@ -2260,6 +2252,9 @@ public static class WorldRuleCompiler {
 
         if (interactions.Count == 0) {
             return [];
+        }
+        if (interactions.Count > WorldInteractionCapacity.MaxInteractions) {
+            throw new WorldRuleException(refusal: WorldRuleRefusal.EffectKindInadmissible, ruleName: "<interactions>", detail: $"declares {interactions.Count} rows, exceeding the {WorldInteractionCapacity.MaxInteractions}-interaction ceiling", subject: "interaction");
         }
 
         var registry = new HashSet<string>(
@@ -2353,13 +2348,12 @@ public static class WorldRuleCompiler {
                     );
 
                     if (
-                        !float.IsFinite(f: row.Range) ||
-                        (row.Range < 0f)
+                        (row.Range < decimal.Zero)
                     ) {
                         throw new WorldRuleException(
                             refusal: WorldRuleRefusal.SpatialChannelMalformed,
                             ruleName: name,
-                            detail: $"'range' {row.Range} is not a finite non-negative distance",
+                            detail: $"'range' {row.Range} is not a non-negative distance",
                             subject: "interaction"
                         );
                     }
@@ -2404,7 +2398,7 @@ public static class WorldRuleCompiler {
                     Interaction: new CompiledInteraction(
                         CoOccurrence: row.CoOccurrence,
                         Left: row.Left,
-                        Range: FixedQ4816.FromDouble(value: row.Range),
+                        Range: WorldStateNumericLiteral.ToFixed(value: row.Range),
                         Right: row.Right
                     )
                 );

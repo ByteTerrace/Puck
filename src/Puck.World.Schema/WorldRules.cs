@@ -13,23 +13,14 @@ namespace Puck.World;
 /// </summary>
 /// <remarks>
 /// <para><b>What lifts unchanged, and what is refused by name.</b> <see cref="Gate"/> reuses
-/// <see cref="ActionPredicate"/> as the authored ADT — no new predicate type exists. Two of its five cases are
-/// admissible at world scope: <see cref="ActionPredicate.All"/> (a pure combinator) and
-/// <see cref="ActionPredicate.CompareState"/> (whose <c>State</c> resolves against the world's <c>state</c> section,
-/// or one of <see cref="WorldRuleFacts"/>'s reserved channels). <see cref="ActionPredicate.Now"/>/
-/// <see cref="ActionPredicate.Recently"/> read a per-body <see cref="ActionFact"/> that has no meaning without a body,
-/// and <see cref="ActionPredicate.TimerElapsed"/> reads a per-body timer slot; all three are refused at compile time,
-/// never reinterpreted. <see cref="Effects"/> likewise reuses <see cref="ActionEffect"/>, admitting
-/// <see cref="ActionEffect.SetState"/>/<see cref="ActionEffect.AddState"/> (a world state write),
-/// <see cref="ActionEffect.Generate"/> (firing a generator row — the join that makes generation and rules one arc),
-/// and — riding the same "admit an existing <c>WorldMutation</c> kind into the rule effect set" seam —
-/// <see cref="ActionEffect.UpsertHudPanel"/>/<see cref="ActionEffect.RemoveHudPanel"/> (a world rule authors/removes a
-/// HUD panel) and <see cref="ActionEffect.UpsertPlacement"/>/<see cref="ActionEffect.RemovePlacement"/> (a world rule
-/// spawns/removes a placement row); the velocity/impulse/designate/timer effects remain irreducibly per-body and are
-/// refused. <see cref="ActionEffect.Save"/> admits on different terms again — not an existing mutation kind at all,
-/// but engine I/O (a session snapshot of the world to its own file) with no document effect and no
-/// <c>WorldMutation</c> of its own; see its own remarks for why that is not a door. <see cref="ActionEffect.Pose"/>
-/// is the second mutation-less effect: a body pose write, not a document write.</para>
+/// <see cref="ActionPredicate"/> as the authored ADT — no second predicate type exists. Its boolean combinators and
+/// <see cref="ActionPredicate.CompareState"/> are admissible at world scope; per-body action-history predicates are
+/// refused at compile time because no implicit body exists. <see cref="Effects"/> likewise reuses
+/// <see cref="ActionEffect"/> for state writes, document mutations, generators, body pose/motion/designation, field
+/// paint, cues, and persistence. <see cref="ActionEffect.Transaction"/> makes the reversible subset atomic across
+/// those domains by preflighting the entire branch; nested transactions and <see cref="ActionEffect.Save"/> are
+/// excluded because neither has a bounded rollback representation. Every unsupported case is a named compile-time
+/// refusal, never a silent reinterpretation.</para>
 /// <para><b>Addressing is a (row, key) pair.</b> A world-scope <c>setState</c>/<c>addState</c>/<c>compareState</c>
 /// names the row in <c>State</c> and the cell in <c>Key</c>; a null key means the row's slot cell, which a keyed row
 /// does not have and is refused for rather than silently reading the row's first cell. Rules therefore reach keyed
@@ -77,15 +68,15 @@ namespace Puck.World;
 /// <c>round</c> by more than one or sets it outright. When the rule that advances the round is itself authored as a
 /// rule, the resets can live as ordinary additional effects in that same rule's <c>Effects</c> list instead (a rule
 /// is not limited to one row write); the copy operand exists for the decoupled case, where the resetting rule is not
-/// the thing that changed the counter. A copy is also the only exact write spelling: <c>Value</c> is a
-/// <see langword="float"/>, so an authored literal above 2^24 is already rounded by the time the compiler sees it
-/// (16777217 compiles to 16777216), while the copy path carries the source cell's bits through unchanged (see
+/// the thing that changed the counter. Literal values are decimals and therefore survive JSON parsing without the
+/// binary32 precision loss older documents incurred; a copy remains the spelling for carrying another cell's current
+/// raw value through unchanged (see
 /// <c>WorldServer.ConvertWorldFactToRaw</c>). A copy reads the same same-tick state a gate does, so an earlier
 /// rule's write is visible to a later rule's copy — declaration order decides it, deterministically.</para>
-/// <para><b>Coverage, precisely.</b> A rule's effects submit ordinary mutations, so the journal records them and
-/// <c>world.undo</c> rewinds them like any other write. The replay tape does not cover them: the tape carries
-/// commands, intents and session traffic, and has no mutation arm at all — a rule's writes are re-derived by
-/// re-execution on replay, exactly like the world-events feed.</para>
+/// <para><b>Coverage, precisely.</b> Document-writing effects submit ordinary mutations, so the journal records and
+/// <c>world.undo</c> rewinds them like any other write; runtime-only body, field, and cue effects are not journal
+/// entries. The replay tape records inputs rather than derived rule effects: replay re-executes the rules and checks
+/// the resulting state-system trace, with the pose trace retained separately for inspection.</para>
 /// <para><b>The trait boundary.</b> A <see cref="WorldStateRow"/>'s slot cell may separately declare
 /// <see cref="WorldStateRow.Advance"/>, and a keyed row's own cell may independently declare
 /// <see cref="WorldStateCell.Advance"/> (see <c>WorldState.cs</c>) — a continuous accumulation between observations,
@@ -147,14 +138,15 @@ public static class WorldRuleFacts {
     /// excluded from consideration, never a hard refusal — the same "an ineligible candidate reads as absent, not an
     /// error" posture <see cref="MachinePrefix"/>'s unbooted-machine case already sets): author a keyed row whose
     /// cell keys are body indices spelled as plain integers (<c>"0"</c>, <c>"3"</c>, …) — e.g. a per-body
-    /// <c>threat</c> tally — and <c>$argmax:threat</c> is "the body with the highest tally". Ties resolve to the
+    /// <c>threat</c> tally — and <c>$argmax:threat</c> is "the body with the highest tally". Appending
+    /// <c>:where:&lt;filterRow&gt;</c> admits only body indices whose numeric filter cell is nonzero. Ties resolve to the
     /// lowest eligible index, deterministically. An empty or entirely-ineligible row yields <c>-1</c> ("no body"),
     /// which composes with <see cref="DistancePrefix"/>/<see cref="LineOfSightPrefix"/>'s <c>argmax:&lt;row&gt;</c>
     /// body-reference token exactly as a literal <c>body:&lt;n&gt;</c> does — a spatial fact against "no body" simply
     /// never satisfies (see <c>WorldServer.ReadBodyDistance</c>'s sentinel).</summary>
     public const string ArgMaxPrefix = "$argmax:";
     /// <summary>The prefix; <c>$argmin:&lt;row&gt;</c> is <see cref="ArgMaxPrefix"/>'s dual — the body naming the
-    /// smallest cell.</summary>
+    /// smallest cell; it accepts the same optional <c>:where:&lt;filterRow&gt;</c> suffix.</summary>
     public const string ArgMinPrefix = "$argmin:";
     /// <summary>The prefix; <c>$nearest:&lt;bodyRef&gt;:&lt;row&gt;</c> yields the index of the active body nearest to
     /// <c>bodyRef</c> (itself excluded) whose cell in the keyed <c>row</c> reads nonzero — "the closest enemy" when
@@ -258,7 +250,8 @@ public static class WorldRuleFacts {
     /// integer (the number of cells present, regardless of what they hold). The reserved-channel exemption from
     /// <see cref="WorldRuleCompiler"/>'s ordinary (row, key) pair rule: a reduction addresses the whole row rather
     /// than one cell, so it is the one place a keyed row is read with no key at all — admitted deliberately, not a
-    /// hole in the pair rule (see <c>WorldRuleCompiler.ResolveOperand</c>'s reduce branch).</summary>
+    /// hole in the pair rule (see <c>WorldRuleCompiler.ResolveOperand</c>'s reduce branch). The optional suffix
+    /// <c>:where:&lt;filterRow&gt;</c> restricts the aggregate to matching keys whose numeric filter cell is nonzero.</summary>
     public const string ReducePrefix = "$reduce:";
     /// <summary>The prefix; <c>$region:&lt;placementId&gt;</c> compares that placement's live region occupant count —
     /// the same count the world-events feed already tracks per tick, read rather than duplicated.</summary>
@@ -280,10 +273,11 @@ public static class WorldRuleFacts {
     /// <c>ring</c> (the node's ring, 0..7), <c>antipode</c>, <c>canonicalRay</c> (the smaller node of the antipodal
     /// pair), <c>cycle:&lt;steps&gt;</c> (the node carried that many positions around its ring, negative walks back),
     /// <c>reflect:&lt;other&gt;</c> (the node reflected through the other node's hyperplane), <c>orthogonal:&lt;other&gt;</c>
-    /// (1 when the two nodes' rays are orthogonal, else 0), and <c>projectionX</c>/<c>projectionY</c> (the node's
-    /// point on the plane of eight rings, a fixed value). <c>&lt;other&gt;</c> is a node literal or
+    /// (1 when the two nodes' rays are orthogonal, else 0), <c>innerProduct:&lt;other&gt;</c> (the two roots' exact
+    /// pairing, -2..2 — 1 names one of the 56 neighbours at sixty degrees), and <c>projectionX</c>/<c>projectionY</c>
+    /// (the node's point on the plane of eight rings, a fixed value). <c>&lt;other&gt;</c> is a node literal or
     /// <c>cell:&lt;row&gt;[.&lt;key&gt;]</c>, a second cell read live. A source cell holding no node (outside 0..239)
-    /// reads <c>-1</c> for the node-valued functions, <c>0</c> for <c>orthogonal</c> and the projections — the
+    /// reads <c>-1</c> for the node-valued functions, <c>0</c> for <c>orthogonal</c>, <c>innerProduct</c> and the projections — the
     /// ordinary "absent reads as the neutral value" convention. A <c>fixed</c> source cell's node is the whole part of
     /// its value, the same reading a <see cref="WorldStateCycle"/> lattice output takes. With
     /// <see cref="WorldStateCycle"/>'s <c>Node</c> output driving a row and this channel reading it, a rule can gate
@@ -309,6 +303,9 @@ public enum WorldSymmetryFunction : byte {
     Reflect,
     /// <summary>1 when the node's ray and the other node's ray are orthogonal, else 0.</summary>
     Orthogonal,
+    /// <summary>The exact inner product of the node and the other node as roots, in <c>-2..2</c>: 2 with itself, -2
+    /// with its antipode, 1 for the 56 neighbours at sixty degrees, 0 for the orthogonal pairs.</summary>
+    InnerProduct,
     /// <summary>The node's projected X coordinate, a fixed value.</summary>
     ProjectionX,
     /// <summary>The node's projected Y coordinate, a fixed value.</summary>
@@ -484,6 +481,8 @@ public enum WorldRuleFactKind : byte {
 /// runtime compare integer cells without narrowing them through binary32.</param>
 /// <param name="StateHandle">The compiled world-lane row handle for state-backed operands; invalid for channels
 /// that do not read a state row.</param>
+/// <param name="FilterRow">The optional keyed row whose nonzero cells admit reduction candidates.</param>
+/// <param name="FilterHandle">The compiled handle for <paramref name="FilterRow"/>.</param>
 public readonly record struct CompiledWorldOperand(
     WorldRuleFactKind Kind,
     string? Row,
@@ -500,10 +499,24 @@ public readonly record struct CompiledWorldOperand(
     long SymmetryArgument = 0L,
     CompiledCellRef? SymmetryOtherCell = null,
     CellKind ValueKind = CellKind.Fixed,
-    WorldStateHandle StateHandle = default
+    WorldStateHandle StateHandle = default,
+    string? FilterRow = null,
+    WorldStateHandle FilterHandle = default
 );
-/// <summary>One compiled, flattened conjunct of a world rule's gate — <see cref="ActionPredicate.All"/> flattens away
-/// at compile time exactly as a per-body gate does, so evaluation walks one flat array with no recursion.</summary>
+/// <summary>One operation in a compiled postfix Boolean gate.</summary>
+public enum CompiledWorldPredicateKind : byte {
+    /// <summary>Evaluate one comparison.</summary>
+    Compare,
+    /// <summary>Conjoin <see cref="CompiledWorldPredicate.Arity"/> preceding results.</summary>
+    All,
+    /// <summary>Disjoin <see cref="CompiledWorldPredicate.Arity"/> preceding results.</summary>
+    Any,
+    /// <summary>Invert the preceding result.</summary>
+    Not,
+}
+/// <summary>One token in a compiled postfix world-rule gate. The representation preserves arbitrary nested
+/// <see cref="ActionPredicate.All"/>/<see cref="ActionPredicate.Any"/>/<see cref="ActionPredicate.Not"/> trees while
+/// evaluation remains a single bounded, allocation-free pass.</summary>
 /// <param name="Left">The primary operand — the <c>(State, Key)</c> side of the authored <c>compareState</c>.</param>
 /// <param name="Comparison">The comparison to apply.</param>
 /// <param name="Value">The authored constant comparand, converted directly from its exact decimal token to the
@@ -516,14 +529,72 @@ public readonly record struct CompiledWorldOperand(
 /// <param name="Describe">The authored spelling of this conjunct, for the <c>world.rules</c> read-back — an
 /// <see cref="ActionPredicate.All"/> gate prints its predicates rather than a type name, which is the whole point of
 /// keeping the text beside the compiled form.</param>
+/// <param name="Kind">The postfix Boolean operation.</param>
+/// <param name="Arity">The number of preceding results consumed by an <c>all</c> or <c>any</c> token.</param>
 public readonly record struct CompiledWorldPredicate(
     CompiledWorldOperand Left,
     ActionStateComparison Comparison,
     long Value,
     CellKind ValueKind,
     CompiledWorldOperand? Comparand,
-    string Describe
+    string Describe,
+    CompiledWorldPredicateKind Kind = CompiledWorldPredicateKind.Compare,
+    int Arity = 0
 );
+/// <summary>One opcode in a compiled numeric world-rule expression.</summary>
+public enum WorldExpressionOp : byte {
+    /// <summary>Push a compile-time literal.</summary>
+    Constant,
+    /// <summary>Push a live state/channel operand.</summary>
+    Operand,
+    /// <summary>Add.</summary>
+    Add,
+    /// <summary>Subtract.</summary>
+    Subtract,
+    /// <summary>Multiply.</summary>
+    Multiply,
+    /// <summary>Divide.</summary>
+    Divide,
+    /// <summary>Minimum.</summary>
+    Minimum,
+    /// <summary>Maximum.</summary>
+    Maximum,
+    /// <summary>Inclusive clamp.</summary>
+    Clamp,
+}
+/// <summary>One token in an allocation-free postfix numeric expression.</summary>
+/// <param name="Operation">The stack operation.</param>
+/// <param name="Constant">The raw destination-kind literal for a constant token.</param>
+/// <param name="Operand">The live operand for an operand token.</param>
+public readonly record struct CompiledWorldExpressionToken(WorldExpressionOp Operation, long Constant = 0L, CompiledWorldOperand? Operand = null);
+/// <summary>A world-driven body operation compiled entirely to deterministic numerics.</summary>
+/// <param name="Operation">The body instruction operation.</param>
+/// <param name="Value">The operation's fixed-point scalar.</param>
+/// <param name="Direction">The body-local direction for an impulse.</param>
+/// <param name="DurationTicks">The impulse duration, in engine ticks.</param>
+/// <param name="Register">The target-register name for a designation.</param>
+/// <param name="TargetKey">The literal target body key for a designation.</param>
+/// <param name="TargetKeyFrom">The live target-key indirection for a designation.</param>
+/// <param name="Designation">Whether a designation sets or clears its register.</param>
+public readonly record struct CompiledWorldBodyEffect(
+    BodyMotionOp Operation,
+    FixedQ4816 Value,
+    FixedVector3 Direction,
+    ulong DurationTicks,
+    string? Register = null,
+    string? TargetKey = null,
+    CompiledCellRef? TargetKeyFrom = null,
+    WorldBodyDesignationKind Designation = WorldBodyDesignationKind.Body
+);
+/// <summary>A bounded runtime lattice paint.</summary>
+/// <param name="Field">The declared field row.</param>
+/// <param name="X">The center X coordinate, in lattice cells.</param>
+/// <param name="Y">The center Y coordinate, in lattice cells.</param>
+/// <param name="Z">The center Z coordinate, in lattice cells.</param>
+/// <param name="Value">The fixed-point value to set or add.</param>
+/// <param name="Operation">The set or add operation.</param>
+/// <param name="Radius">The sphere radius, in lattice cells.</param>
+public readonly record struct CompiledWorldFieldPaint(string Field, int X, int Y, int Z, FixedQ4816 Value, WorldFieldWriteOp Operation, int Radius);
 /// <summary>What one compiled world-rule effect does.</summary>
 public enum WorldRuleEffectKind : byte {
     /// <summary>Write a state cell (<see cref="ActionEffect.SetState"/>/<see cref="ActionEffect.AddState"/>).</summary>
@@ -555,19 +626,34 @@ public enum WorldRuleEffectKind : byte {
     /// <summary>Teleport a body to a pose (<see cref="ActionEffect.Pose"/>) — submits no mutation; a pose is body
     /// state, not document state.</summary>
     Pose,
+
+    /// <summary>Remove an addressed state cell.</summary>
+    RemoveStateCell,
+
+    /// <summary>Write an absolute simulation due tick into an integer state cell.</summary>
+    ScheduleState,
+
+    /// <summary>Apply a preflighted state-cell mutation bundle with an optional failure branch.</summary>
+    Transaction,
+
+    /// <summary>Emit a presentation-neutral gameplay cue.</summary>
+    EmitCue,
+
+    /// <summary>Apply a deterministic operation to an active body.</summary>
+    Body,
+
+    /// <summary>Paint a bounded neighborhood in the live field lattice.</summary>
+    PaintField,
 }
-/// <summary>One compiled world-rule effect. Every kind but <see cref="WorldRuleEffectKind.Save"/> submits an ordinary
-/// mutation (<c>WorldMutation.UpsertStateCell</c>, <c>WorldMutation.Generate</c>,
-/// <c>WorldMutation.UpsertHudPanel</c>/<c>WorldMutation.RemoveHudPanel</c>, or
-/// <c>WorldMutation.UpsertPlacement</c>/<c>WorldMutation.RemovePlacement</c>) under
-/// <see cref="WorldPrincipal.World"/>, so journal and undo cover them exactly like any other write; <c>Save</c> rides
-/// <c>WorldServer.FireWorldRuleEffect</c>'s own I/O tap directly instead (see <see cref="ActionEffect.Save"/>).</summary>
-/// <param name="Kind">Which mutation this effect submits.</param>
+/// <summary>One compiled world-rule effect. Document and state effects submit ordinary mutations under
+/// <see cref="WorldPrincipal.World"/>, so journal and undo cover them like other writes. Save, pose, cue, body, and
+/// lattice effects instead use their dedicated deterministic runtime paths.</summary>
+/// <param name="Kind">The effect's execution path.</param>
 /// <param name="Row">The destination state row name for <see cref="WorldRuleEffectKind.Write"/>/
 /// <see cref="WorldRuleEffectKind.Generate"/>, the panel/placement id for
 /// <see cref="WorldRuleEffectKind.RemoveHudPanel"/>/<see cref="WorldRuleEffectKind.RemovePlacement"/>, or the
 /// spawn-point id (empty when <paramref name="Pose"/> carries a literal) for <see cref="WorldRuleEffectKind.Pose"/>.</param>
-/// <param name="Key">The destination cell key; the body index for <see cref="WorldRuleEffectKind.Pose"/>.</param>
+/// <param name="Key">The destination cell key, body index, or authored body-key indirection.</param>
 /// <param name="Write">Set or add, for <see cref="WorldRuleEffectKind.Write"/>.</param>
 /// <param name="RawValue">The authored constant, pre-converted to the destination row's raw encoding at compile
 /// time — read only when <paramref name="From"/> is <see langword="null"/> (the literal spelling).</param>
@@ -585,6 +671,13 @@ public enum WorldRuleEffectKind : byte {
 /// position; <see langword="null"/> when <paramref name="Row"/> names a spawn point instead.</param>
 /// <param name="Text">The text literal a <see cref="WorldRuleEffectKind.Write"/> into a <c>kind=text</c> row
 /// carries; <see langword="null"/> for a numeric write.</param>
+/// <param name="Expression">The compiled numeric expression, or <see langword="null"/> for another source spelling.</param>
+/// <param name="Effects">The atomic transaction's main branch.</param>
+/// <param name="OnFailure">The transaction's refusal branch.</param>
+/// <param name="Cue">The gameplay cue identifier, or <see langword="null"/> for another effect kind.</param>
+/// <param name="Payload">The optional cue payload.</param>
+/// <param name="Body">The compiled body operation.</param>
+/// <param name="Paint">The compiled lattice paint.</param>
 public readonly record struct CompiledWorldEffect(
     WorldRuleEffectKind Kind,
     string Row,
@@ -598,7 +691,14 @@ public readonly record struct CompiledWorldEffect(
     CompiledWorldOperand? From = null,
     CompiledWorldPose? Pose = null,
     string? Text = null,
-    CompiledCellRef? KeyFrom = null
+    CompiledCellRef? KeyFrom = null,
+    CompiledWorldExpressionToken[]? Expression = null,
+    CompiledWorldEffect[]? Effects = null,
+    CompiledWorldEffect[]? OnFailure = null,
+    string? Cue = null,
+    string? Payload = null,
+    CompiledWorldBodyEffect? Body = null,
+    CompiledWorldFieldPaint? Paint = null
 );
 /// <summary>A literal body pose compiled to deterministic numerics — angles in radians.</summary>
 /// <param name="Position">The world position.</param>
@@ -609,11 +709,33 @@ public readonly record struct CompiledWorldPose(FixedVector3 Position, FixedQ481
 /// <summary>One compiled rule: its name, its mode, the flattened gate, and the compiled effects.</summary>
 /// <param name="Name">The rule's name.</param>
 /// <param name="Mode">Level or edge (see <see cref="ActionTriggerMode"/>).</param>
-/// <param name="Gate">The flattened conjunction; empty means "always".</param>
+/// <param name="Gate">The flattened postfix Boolean program; empty means "always".</param>
 /// <param name="Effects">The compiled effects, in authored order.</param>
 /// <param name="ForEach">The keyed row a rule iterates (<see cref="WorldRule.ForEach"/>), or <see langword="null"/>.</param>
 /// <param name="Interaction">The co-occurrence an interaction evaluates, or <see langword="null"/> for a rule.</param>
 public sealed record CompiledWorldRule(string Name, ActionTriggerMode Mode, CompiledWorldPredicate[] Gate, CompiledWorldEffect[] Effects, string? ForEach = null, CompiledInteraction? Interaction = null);
+
+/// <summary>Hard bounds for rule programs; these are representation and per-tick work limits, not gameplay tuning.</summary>
+public static class WorldRuleCapacity {
+    /// <summary>The most ordinary rule rows a document may declare.</summary>
+    public const int MaxRules = 128;
+    /// <summary>The most top-level effects one rule or interaction may carry.</summary>
+    public const int MaxEffectsPerRule = 64;
+    /// <summary>The maximum statically derived rule/interaction work admitted for one simulation tick.</summary>
+    public const long MaxWorkUnitsPerTick = 1_000_000L;
+    /// <summary>The most postfix tokens in one Boolean gate.</summary>
+    public const int MaxPredicateTokens = 256;
+    /// <summary>The most postfix tokens in one numeric expression.</summary>
+    public const int MaxExpressionTokens = 64;
+    /// <summary>The most effects in one atomic transaction branch.</summary>
+    public const int MaxTransactionEffects = 64;
+    /// <summary>The greatest rule-triggered field-paint radius, in lattice cells.</summary>
+    public const int MaxFieldPaintRadius = 8;
+    /// <summary>The largest cue payload, in UTF-16 code units.</summary>
+    public const int MaxCuePayloadLength = 256;
+    /// <summary>The largest authored cue name, in ASCII code units.</summary>
+    public const int MaxCueNameLength = 64;
+}
 /// <summary>Names why a world rule was refused during compilation. Every member is tagged
 /// <see cref="RefusalAttribute"/> under the <c>world.rule.compile</c> door, so <c>world.refusals</c> lists the whole
 /// family: this enum is the one exception constructor (<see cref="WorldRuleException"/>) callers pick a reason
@@ -792,10 +914,35 @@ public enum WorldRuleRefusal : byte {
 /// <summary>Names why a world rule's effect refused to fire at runtime — distinct from <see cref="WorldRuleRefusal"/>
 /// (a compile-time refusal, which stops the rule from ever installing): a runtime effect refusal is a live,
 /// data-dependent decision the compiled rule could not have foreseen (whether a carrier happens to be possessed this
-/// tick), so it cannot be an exception at compile time — the rule installs, and the effect is silently skipped (with
-/// this reason narrated) on the tick it would otherwise fire. Tagged for <c>world.refusals</c> on the same terms as
-/// <see cref="WorldRuleRefusal"/>, under its own door.</summary>
+/// tick), so it cannot be an exception at compile time. The effect is skipped; the fixed-size diagnostic table
+/// counts the refusal and remembers its latest rule/tick, while only the category's first occurrence is narrated.
+/// <c>world.rule.failures</c> reads the table without growing the per-tick failure surface. Tagged for
+/// <c>world.refusals</c> on the same terms as <see cref="WorldRuleRefusal"/>, under its own door.</summary>
 public enum WorldRuleEffectRefusal : byte {
+    /// <summary>A numeric expression overflowed, divided by zero, or produced an invalid stack result.</summary>
+    [Refusal(door: "world.rule.effect", condition: "a rule expression overflows, divides by zero, or produces an invalid stack result", kind: RefusalKind.Verdict)]
+    Arithmetic,
+
+    /// <summary>A body-addressed effect resolves no active body.</summary>
+    [Refusal(door: "world.rule.effect", condition: "a rule body/pose/cue effect resolves no active body", kind: RefusalKind.Verdict)]
+    BodyInactive,
+
+    /// <summary>A designation resolves no valid active target body or target register.</summary>
+    [Refusal(door: "world.rule.effect", condition: "a rule designation resolves no valid active target body or target register", kind: RefusalKind.Verdict)]
+    BodyTargetInvalid,
+
+    /// <summary>A field paint has no matching live lattice field.</summary>
+    [Refusal(door: "world.rule.effect", condition: "a rule field paint has no matching live lattice field", kind: RefusalKind.Verdict)]
+    FieldUnavailable,
+
+    /// <summary>A save effect has no host persistence tap.</summary>
+    [Refusal(door: "world.rule.effect", condition: "a rule save effect has no host persistence tap", kind: RefusalKind.Verdict)]
+    SaveUnavailable,
+
+    /// <summary>An ordinary mutation produced by a rule refused composition, validation, or admission.</summary>
+    [Refusal(door: "world.rule.effect", condition: "a rule-produced mutation refuses composition, validation, or admission", kind: RefusalKind.Verdict)]
+    MutationRejected,
+
     /// <summary>A <c>removePlacement</c> effect targets a placement whose Inhabit facet binds a live body that a
     /// concrete <c>drive</c> grant currently possesses — despawning it would silently strand that grant against a
     /// slot a later, unrelated inhabitant can claim. This refuses rather than orphans to escrow: an escrow principal

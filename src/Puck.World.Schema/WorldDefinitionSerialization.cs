@@ -476,7 +476,7 @@ internal sealed class DocumentWriteMaskJsonConverter : NameListMaskJsonConverter
 /// <c>UnmappedMemberHandling.Disallow</c> policy, so this converter re-implements it by hand.</para>
 /// </summary>
 internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> {
-    private const string Shape = "{\"name\":…,\"kind\":\"int\"|\"fixed\"|\"bool\"|\"text\",\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"provenance\":…,\"advance\":{\"rateNumerator\":…,\"rateDenominator\":…,\"epochTick\":…},\"dynamics\":{\"row\":…,\"y0\":…,\"v0\":…,\"epochTick\":…},\"cycle\":{\"plane\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…,\"epochTick\":…}}],\"min\":…,\"max\":…,\"capacity\":…,\"nonNegative\":…,\"gatesDrive\":…,\"evicts\":…,\"advance\":{\"rateNumerator\":…,\"rateDenominator\":…,\"epochTick\":…},\"dynamics\":{\"row\":…,\"y0\":…,\"v0\":…,\"epochTick\":…},\"cycle\":{\"plane\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…,\"epochTick\":…},\"lattice\":{\"topology\":…,\"initial\":…,\"min\":…,\"max\":…,\"heightScale\":…,\"color\":…,\"paint\":[…]},\"draw\":{\"source\":… or \"generator\":{\"source\":\"markov\"|\"uniformRange\"|\"weightedNumeric\"|\"streamDraw\",…},\"timing\":\"boot\"|\"tickPeriod\"|\"event\"},\"drawCursor\":…,\"drawDecks\":[…]}";
+    private const string Shape = "{\"name\":…,\"kind\":\"int\"|\"fixed\"|\"bool\"|\"text\",\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"provenance\":…,\"advance\":{\"rateNumerator\":…,\"rateDenominator\":…,\"epochTick\":…},\"dynamics\":{\"row\":…,\"y0\":…,\"v0\":…,\"epochTick\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…,\"epochTick\":…,\"substepTicks\":…}}],\"min\":…,\"max\":…,\"capacity\":…,\"nonNegative\":…,\"gatesDrive\":…,\"evicts\":…,\"advance\":{\"rateNumerator\":…,\"rateDenominator\":…,\"epochTick\":…},\"dynamics\":{\"row\":…,\"y0\":…,\"v0\":…,\"epochTick\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…,\"epochTick\":…,\"substepTicks\":…},\"lattice\":{\"topology\":…,\"initial\":…,\"min\":…,\"max\":…,\"heightScale\":…,\"color\":…,\"paint\":[…]},\"draw\":{\"source\":… or \"generator\":{\"source\":\"markov\"|\"uniformRange\"|\"weightedNumeric\"|\"streamDraw\"|\"symmetryOrbit\",…},\"timing\":\"boot\"|\"tickPeriod\"|\"event\"},\"drawCursor\":…,\"drawDecks\":[…]}";
 
     private static string DescribeCellKind(CellKind cellKind) => cellKind switch {
         CellKind.Int => "int",
@@ -533,17 +533,19 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
             throw new JsonException(message: $"{context} requires member 'v0'.");
         }
 
+        // y0/v0 are the follower's continuous state and ride raw FixedQ4816 bits whatever the carrying row's kind
+        // (see WorldStateDynamics), so they are authored in the fixed spelling — a decimal string — on every row.
         return new WorldStateDynamics(
             Row: row,
             Y0: RequireNumeric(
                 context: $"{context}.y0",
                 element: y0Element,
-                kind: cellKind
+                kind: CellKind.Fixed
             ),
             V0: RequireNumeric(
                 context: $"{context}.v0",
                 element: v0Element,
-                kind: cellKind
+                kind: CellKind.Fixed
             ),
             EpochTick: epochTick
         );
@@ -802,25 +804,24 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
                 break;
         }
     }
-    // y0/v0 ride the SAME per-kind spelling ReadDynamics parses — a decimal string for a fixed row, a plain number
-    // for int — never raw bits.
-    private static void WriteDynamics(Utf8JsonWriter writer, string propertyName, CellKind kind, WorldStateDynamics dynamics) {
+    private static void WriteDynamics(Utf8JsonWriter writer, string propertyName, WorldStateDynamics dynamics) {
         writer.WritePropertyName(propertyName: propertyName);
         writer.WriteStartObject();
         writer.WriteString(
             propertyName: "row",
             value: dynamics.Row
         );
+        // The follower's continuous state is fixed-native on every row kind, so it is written in the fixed spelling.
         WriteOptionalNumeric(
             writer: writer,
             propertyName: "y0",
-            kind: kind,
+            kind: CellKind.Fixed,
             raw: dynamics.Y0
         );
         WriteOptionalNumeric(
             writer: writer,
             propertyName: "v0",
-            kind: kind,
+            kind: CellKind.Fixed,
             raw: dynamics.V0
         );
         writer.WriteNumber(
@@ -829,6 +830,7 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
         );
         writer.WriteEndObject();
     }
+
     private static void WriteOptionalNumeric(Utf8JsonWriter writer, string propertyName, CellKind kind, long? raw) {
         if (raw is not { } rawValue) {
             return;
@@ -1259,7 +1261,6 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
                 if (cell.Dynamics is { } cellDynamics) {
                     WriteDynamics(
                         dynamics: cellDynamics,
-                        kind: value.Kind,
                         propertyName: "dynamics",
                         writer: writer
                     );
@@ -1302,7 +1303,6 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
         if (value.Dynamics is { } rowDynamics) {
             WriteDynamics(
                 dynamics: rowDynamics,
-                kind: value.Kind,
                 propertyName: "dynamics",
                 writer: writer
             );

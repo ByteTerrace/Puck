@@ -1,5 +1,3 @@
-using Puck.Maths;
-
 namespace Puck.World;
 
 /// <summary>
@@ -123,15 +121,20 @@ internal static class WorldDrawBootResolver {
                 )
                 : new WorldStateCell(
                     Key: WorldStateRow.SlotKey,
-                    // A numeric draw is whole units; a fixed row stores Q48.16, so the integer is promoted rather than
-                    // landing as raw bits (7 would otherwise read as 7/65536).
-                    Value: ((row.Kind == CellKind.Fixed)
-                        ? FixedQ4816.FromInteger(value: fired.Numeric!.Value).Value
-                        : fired.Numeric!.Value)
+                    // A numeric draw is already in the site's own encoding — raw FixedQ4816 bits on a fixed row — the
+                    // contract the source's range/outcome values, the validator's domain narrowing and a lattice fill
+                    // all share.
+                    Value: fired.Numeric!.Value
                 )
             );
 
-            state.Add(item: (row with { Cells = [cell], DrawCursor = (row.DrawCursor + fired.Samples), DrawDecks = (fired.Decks ?? row.DrawDecks) }));
+            _ = WorldGeneratorEngine.TryResolveSource(
+                generators: definition.Generators,
+                draw: draw,
+                generator: out var generator,
+                reason: out _
+            );
+            state.Add(item: (row with { Cells = [cell], DrawCursor = (row.DrawCursor + fired.Samples), DrawDecks = WorldGeneratorEngine.DecksAfter(generator: generator, fired: fired.Decks, previous: row.DrawDecks) }));
             changed = true;
         }
 

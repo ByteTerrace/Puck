@@ -1287,6 +1287,12 @@ public static partial class WorldDefinitionValidator {
             definition: definition,
             errors: errors
         );
+        if (errors.Count == 0) {
+            var ruleBudget = WorldRuleWorkBudget.Measure(definition: definition);
+            if (ruleBudget.WorkUnitsPerTick > WorldRuleCapacity.MaxWorkUnitsPerTick) {
+                errors.Add(item: $"rules/interactions derive {ruleBudget.WorkUnitsPerTick} worst-case work units per tick, exceeding the maximum of {WorldRuleCapacity.MaxWorkUnitsPerTick}.");
+            }
+        }
 
         // Called early — the host section references no other section. Only an AUTHORED section validates: absence
         // reads the inert WorldHostDefaults.Absent (no presentation), whose zero extent is the meaning of "no
@@ -1810,6 +1816,7 @@ public static partial class WorldDefinitionValidator {
                 cameras: cameras,
                 patchIds: patchIds,
                 speakerNames: speakerNames,
+                rules: definition.Rules,
                 localSeats: definition.Population.LocalSeats,
                 errors: errors
             );

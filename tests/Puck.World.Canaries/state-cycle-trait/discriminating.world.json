@@ -35,6 +35,21 @@
         "name": "orbitX",
         "kind": "fixed",
         "value": "5"
+      },
+      {
+        "name": "dial",
+        "kind": "int",
+        "value": 0
+      },
+      {
+        "name": "dialNode",
+        "kind": "int",
+        "value": 5
+      },
+      {
+        "name": "dialRing",
+        "kind": "int",
+        "value": 5
       }
     ]
   }

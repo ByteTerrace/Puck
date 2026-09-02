@@ -402,6 +402,63 @@ public sealed class WorldFieldLattice {
         m_revision++;
     }
 
+    /// <summary>Sets or adds one bounded spherical neighborhood. Coordinates and radius are lattice-cell units;
+    /// cells outside the topology are clipped and every written value is clamped to the field envelope.</summary>
+    /// <param name="fieldName">The declared field row to paint.</param>
+    /// <param name="centerX">The sphere center on the lattice X axis, in cells.</param>
+    /// <param name="centerY">The sphere center on the lattice Y axis, in cells.</param>
+    /// <param name="centerZ">The sphere center on the lattice Z axis, in cells.</param>
+    /// <param name="radius">The non-negative sphere radius, in cells.</param>
+    /// <param name="operation">The set or add operation.</param>
+    /// <param name="value">The value to set or add before the field envelope is applied.</param>
+    /// <returns>The number of cells whose value changed.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="radius"/> is negative or
+    /// <paramref name="operation"/> is not defined.</exception>
+    public int PaintSphere(string fieldName, int centerX, int centerY, int centerZ, int radius, WorldFieldWriteOp operation, FixedQ4816 value) {
+        if (!TryFieldIndex(name: fieldName, field: out var field)) {
+            return 0;
+        }
+        ArgumentOutOfRangeException.ThrowIfNegative(value: radius);
+        if (!Enum.IsDefined(value: operation)) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(operation), actualValue: operation, message: "The field write operation is not defined.");
+        }
+
+        var minimumX = Math.Max(0, centerX - radius);
+        var maximumX = Math.Min(m_width - 1, centerX + radius);
+        var minimumY = Math.Max(0, centerY - radius);
+        var maximumY = Math.Min(m_layers - 1, centerY + radius);
+        var minimumZ = Math.Max(0, centerZ - radius);
+        var maximumZ = Math.Min(m_depth - 1, centerZ + radius);
+        var radiusSquared = checked(radius * radius);
+        var changed = 0;
+
+        for (var z = minimumZ; z <= maximumZ; z++) {
+            var dz = (z - centerZ);
+            for (var y = minimumY; y <= maximumY; y++) {
+                var dy = (y - centerY);
+                for (var x = minimumX; x <= maximumX; x++) {
+                    var dx = (x - centerX);
+                    if (checked((dx * dx) + (dy * dy) + (dz * dz)) > radiusSquared) {
+                        continue;
+                    }
+
+                    var cell = CellIndex(x: x, y: y, z: z);
+                    var before = m_values[field][cell];
+                    var requested = ((operation == WorldFieldWriteOp.Add)
+                        ? AddClamped(field: field, x: before, y: value)
+                        : value
+                    );
+                    Write(field: field, cell: cell, value: requested);
+                    if (m_values[field][cell] != before) {
+                        changed++;
+                    }
+                }
+            }
+        }
+
+        return changed;
+    }
+
     /// <summary>Resolves the cell a BODY couples to for the <see cref="WorldReaction.Emit"/>/
     /// <see cref="WorldReaction.Expose"/> reactions: the column under the body, with Y admitted up to the lattice's
     /// derived coupling ceiling (the volume's top plus the tallest surface any height-bearing field can raise) and

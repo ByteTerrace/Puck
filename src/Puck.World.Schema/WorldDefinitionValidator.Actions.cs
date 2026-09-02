@@ -281,6 +281,10 @@ public static partial class WorldDefinitionValidator {
                     valueSeconds: set.ValueSeconds,
                     verb: "setState"
                 );
+                RefuseExpression(
+                    expression: set.Expression,
+                    verb: "setState"
+                );
 
                 if (set.Text is not null) {
                     errors.Add(item: $"{path}.text is refused at body scope — 'setState' writes a numeric per-body action-state slot; a text write addresses a world state row, in the rules section.");
@@ -305,13 +309,17 @@ public static partial class WorldDefinitionValidator {
                     valueSeconds: add.ValueSeconds,
                     verb: "addState"
                 );
+                RefuseExpression(
+                    expression: add.Expression,
+                    verb: "addState"
+                );
                 ValidateCounterState(
                     name: add.State,
                     value: add.Value
                 );
                 break;
-            case ActionEffect.CountdownState:
-                errors.Add(item: $"{path} authors a WORLD state-row countdown, which has no body-scope meaning — admissible only inside a world rule's own effects.");
+            case ActionEffect.CountdownState or ActionEffect.RemoveStateCell or ActionEffect.ScheduleState or ActionEffect.Transaction or ActionEffect.EmitCue or ActionEffect.SetBodyVerticalVelocity or ActionEffect.ScaleBodyVerticalVelocity or ActionEffect.ApplyBodyImpulse or ActionEffect.DesignateBody or ActionEffect.PaintField:
+                errors.Add(item: $"{path} is a world-rule effect, which has no body-action meaning — admissible only inside a world rule's own effects.");
                 break;
             case ActionEffect.StartTimer timer:
                 if (!stateSlots.TryGetValue(
@@ -407,6 +415,12 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
+        void RefuseExpression(WorldValueExpression? expression, string verb) {
+            if (expression is not null) {
+                errors.Add(item: $"{path}.expression is refused at body scope — '{verb}' writes one per-body action-state slot from a literal; expressions address world state rows and are legitimate only in a world rule.");
+            }
+        }
+
         void ValidateCounterState(string name, decimal? value) {
             if (!stateSlots.TryGetValue(
                 key: name,
@@ -451,7 +465,10 @@ public static partial class WorldDefinitionValidator {
         }
 
         if (destination.Draw is not { } draw) {
-            errors.Add(item: $"{path}.row '{row}' declares no draw — 'generate' redraws a draw site.");
+            // A lattice row painted by a draw fill is redrawn a whole pass at a time and carries no timing.
+            if (WorldLatticeFill.FindDraw(trait: destination.Lattice) is null) {
+                errors.Add(item: $"{path}.row '{row}' declares no draw — 'generate' redraws a draw site or a lattice row painted by a draw fill.");
+            }
 
             return;
         }
@@ -461,7 +478,7 @@ public static partial class WorldDefinitionValidator {
         }
 
     }
-    // A motion-response gate: the body-fact predicate vocabulary ONLY. Now/Recently/All are accepted; the lane-scoped
+    // A motion-response gate: the body-fact predicate vocabulary ONLY. Now/Recently/All/Any/Not are accepted; the lane-scoped
     // CompareState/TimerElapsed are rejected by name ("action-state predicates apply only to action triggers"); an
     // unknown kind is loud. Mirrors ValidatePredicate's structure but narrows the admissible set.
     private static void ValidateMotionGate(ActionPredicate? predicate, string path, List<string> errors) {
@@ -496,6 +513,34 @@ public static partial class WorldDefinitionValidator {
                     ValidateMotionGate(
                         predicate: inner[index],
                         path: $"{path}.all[{index}]",
+                        errors: errors
+                    );
+                }
+
+                break;
+            case ActionPredicate.Any any:
+                if (any.Predicates is not { Count: > 0 } alternatives) {
+                    errors.Add(item: $"{path}.any must contain at least one predicate.");
+
+                    break;
+                }
+
+                for (var index = 0; (index < alternatives.Count); index++) {
+                    ValidateMotionGate(
+                        predicate: alternatives[index],
+                        path: $"{path}.any[{index}]",
+                        errors: errors
+                    );
+                }
+
+                break;
+            case ActionPredicate.Not not:
+                if (not.Predicate is null) {
+                    errors.Add(item: $"{path}.not must contain one predicate.");
+                } else {
+                    ValidateMotionGate(
+                        predicate: not.Predicate,
+                        path: $"{path}.not",
                         errors: errors
                     );
                 }
@@ -590,6 +635,35 @@ public static partial class WorldDefinitionValidator {
                     );
                 }
 
+                break;
+            case ActionPredicate.Any any:
+                if (any.Predicates is not { Count: > 0 } alternatives) {
+                    errors.Add(item: $"{path}.any must contain at least one predicate.");
+                    break;
+                }
+
+                for (var index = 0; (index < alternatives.Count); index++) {
+                    ValidatePredicate(
+                        predicate: alternatives[index],
+                        stateSlots: stateSlots,
+                        path: $"{path}.any[{index}]",
+                        errors: errors
+                    );
+                }
+
+                break;
+            case ActionPredicate.Not not:
+                if (not.Predicate is null) {
+                    errors.Add(item: $"{path}.not must contain one predicate.");
+                    break;
+                }
+
+                ValidatePredicate(
+                    predicate: not.Predicate,
+                    stateSlots: stateSlots,
+                    path: $"{path}.not",
+                    errors: errors
+                );
                 break;
             default:
                 errors.Add(item: $"{path} is an unknown predicate kind.");

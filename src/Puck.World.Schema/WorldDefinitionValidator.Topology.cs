@@ -310,7 +310,7 @@ public static partial class WorldDefinitionValidator {
 
             if (
                 (interaction.CoOccurrence == WorldInteractionCoOccurrence.Distance) &&
-                (interaction.Range < 0f)
+                (interaction.Range < decimal.Zero)
             ) {
                 errors.Add(item: $"{path}.range {interaction.Range} is negative — a distance threshold cannot be negative.");
             }
@@ -687,6 +687,10 @@ public static partial class WorldDefinitionValidator {
     private static void ValidateRules(IReadOnlyList<WorldRule>? rules, WorldDefinition definition, List<string> errors) {
         if (rules is not { Count: > 0 }) {
             return;
+        }
+
+        if (rules.Count > WorldRuleCapacity.MaxRules) {
+            errors.Add(item: $"rules count {rules.Count} exceeds the maximum of {WorldRuleCapacity.MaxRules}.");
         }
 
         for (var index = 0; (index < rules.Count); index++) {
@@ -1251,6 +1255,13 @@ public static partial class WorldDefinitionValidator {
                         rows: definition.State,
                         name: row.Field
                     )?.DrawDecks;
+
+                    ValidateDrawDecks(
+                        decks: drawDecks,
+                        errors: errors,
+                        generator: drawSource,
+                        path: $"state row '{row.Field}' drawDecks"
+                    );
 
                     if (
                         (latticeSamples > 0L) &&

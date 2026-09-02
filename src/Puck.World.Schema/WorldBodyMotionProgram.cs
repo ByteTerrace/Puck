@@ -99,28 +99,99 @@ public static class BodyMotionProgramRoles {
 /// <summary>The document intake for <see cref="CompiledActionSpec"/> — the one place an authored
 /// <see cref="ActionSpec"/> becomes the engine's compiled trigger form.</summary>
 public static class BodyActionSpecFactory {
-    /// <summary>Flattens a predicate ADT into a fixed-point conjunction gate, allocating one shared recency slot per
+    /// <summary>Flattens a predicate tree into a bounded postfix Boolean gate, allocating one shared recency slot per
     /// <see cref="ActionPredicate.Recently"/> instance.</summary>
     /// <param name="predicate">The authored predicate, or <see langword="null"/> for an open gate.</param>
-    /// <param name="gate">Receives the flattened conjunction.</param>
+    /// <param name="gate">Receives the flattened postfix program.</param>
     /// <param name="recencyFacts">The shared recency-clock fact table this gate appends to.</param>
     /// <param name="recencyWindows">The shared recency-clock window table, parallel to <paramref name="recencyFacts"/>.</param>
     /// <param name="stateSlots">The kit-wide named action-state lookup, or <see langword="null"/> when no slot may be
     /// referenced.</param>
-    public static void FlattenPredicate(ActionPredicate? predicate, List<CompiledPredicate> gate, List<ActionFact> recencyFacts, List<ulong> recencyWindows, IReadOnlyDictionary<string, int>? stateSlots = null) {
+    public static void FlattenPredicate(ActionPredicate? predicate, List<CompiledPredicate> gate, List<ActionFact> recencyFacts, List<ulong> recencyWindows, IReadOnlyDictionary<string, int>? stateSlots = null) =>
+        FlattenPredicate(predicate: predicate, gate: gate, recencyFacts: recencyFacts, recencyWindows: recencyWindows, stateSlots: stateSlots, depth: 0);
+    private static void FlattenPredicate(ActionPredicate? predicate, List<CompiledPredicate> gate, List<ActionFact> recencyFacts, List<ulong> recencyWindows, IReadOnlyDictionary<string, int>? stateSlots, int depth) {
+        if (depth >= CompiledPredicateCapacity.MaxTokens) {
+            throw new InvalidOperationException(message: $"An action gate is nested past the {CompiledPredicateCapacity.MaxTokens}-token ceiling.");
+        }
+
         switch (predicate) {
             case null:
                 break;
             case ActionPredicate.All all:
+                ArgumentNullException.ThrowIfNull(argument: all.Predicates);
                 foreach (var inner in all.Predicates) {
+                    if (inner is null) {
+                        throw new InvalidOperationException(message: "An 'all' action gate contains a null predicate.");
+                    }
                     FlattenPredicate(
                         gate: gate,
                         predicate: inner,
                         recencyFacts: recencyFacts,
                         recencyWindows: recencyWindows,
-                        stateSlots: stateSlots
+                        stateSlots: stateSlots,
+                        depth: (depth + 1)
                     );
                 }
+
+                gate.Add(item: new CompiledPredicate(
+                    Fact: default,
+                    RecencySlot: 0,
+                    StateSlot: -1,
+                    Value: default,
+                    Comparison: default,
+                    Kind: CompiledPredicateKind.All,
+                    Arity: all.Predicates.Count
+                ));
+
+                break;
+            case ActionPredicate.Any any:
+                if (any.Predicates is not { Count: > 0 }) {
+                    throw new InvalidOperationException(message: "An 'any' action gate must contain at least one predicate.");
+                }
+                foreach (var inner in any.Predicates) {
+                    if (inner is null) {
+                        throw new InvalidOperationException(message: "An 'any' action gate contains a null predicate.");
+                    }
+                    FlattenPredicate(
+                        gate: gate,
+                        predicate: inner,
+                        recencyFacts: recencyFacts,
+                        recencyWindows: recencyWindows,
+                        stateSlots: stateSlots,
+                        depth: (depth + 1)
+                    );
+                }
+
+                gate.Add(item: new CompiledPredicate(
+                    Fact: default,
+                    RecencySlot: 0,
+                    StateSlot: -1,
+                    Value: default,
+                    Comparison: default,
+                    Kind: CompiledPredicateKind.Any,
+                    Arity: any.Predicates.Count
+                ));
+
+                break;
+            case ActionPredicate.Not not:
+                ArgumentNullException.ThrowIfNull(argument: not.Predicate);
+                FlattenPredicate(
+                    gate: gate,
+                    predicate: not.Predicate,
+                    recencyFacts: recencyFacts,
+                    recencyWindows: recencyWindows,
+                    stateSlots: stateSlots,
+                    depth: (depth + 1)
+                );
+                gate.Add(item: new CompiledPredicate(
+                    Fact: default,
+                    RecencySlot: 0,
+                    StateSlot: -1,
+                    Value: default,
+                    Comparison: default,
+                    Kind: CompiledPredicateKind.Not,
+                    Arity: 1
+                ));
 
                 break;
             case ActionPredicate.Now now:
@@ -193,6 +264,10 @@ public static class BodyActionSpecFactory {
                 ));
                 break;
         }
+
+        if (gate.Count > CompiledPredicateCapacity.MaxTokens) {
+            throw new InvalidOperationException(message: $"An action gate compiles past the {CompiledPredicateCapacity.MaxTokens}-token ceiling.");
+        }
     }
 
     private static CompiledBodyInstruction CompileEffect(ActionEffect effect, IReadOnlyDictionary<string, int> stateSlots, CompiledBodyMotionProgram program, string actionName) {
@@ -232,6 +307,7 @@ public static class BodyActionSpecFactory {
                 fromState: set.FromState,
                 fromKey: set.FromKey,
                 valueSeconds: set.ValueSeconds,
+                expression: set.Expression,
                 actionName: actionName,
                 effectName: "setState",
                 state: set.State
@@ -254,6 +330,7 @@ public static class BodyActionSpecFactory {
                 fromState: add.FromState,
                 fromKey: add.FromKey,
                 valueSeconds: add.ValueSeconds,
+                expression: add.Expression,
                 actionName: actionName,
                 effectName: "addState",
                 state: add.State
@@ -380,7 +457,7 @@ public static class BodyActionSpecFactory {
     // A per-body action-state slot has no world state row to copy from — setState/addState's live 'fromState'/
     // 'fromKey' spelling is legitimate only in a world rule (WorldRuleCompiler); a body-scope effect always writes an
     // authored constant, so 'value' is required here on the same terms compareState's own body-scope 'value' is.
-    private static decimal RequireBodyEffectValue(decimal? value, string? fromState, string? fromKey, decimal? valueSeconds, string actionName, string effectName, string state) {
+    private static decimal RequireBodyEffectValue(decimal? value, string? fromState, string? fromKey, decimal? valueSeconds, WorldValueExpression? expression, string actionName, string effectName, string state) {
         if (
             (fromState is not null) ||
             (fromKey is not null)
@@ -390,6 +467,10 @@ public static class BodyActionSpecFactory {
 
         if (valueSeconds is not null) {
             throw new InvalidOperationException(message: $"Action '{actionName}' effect '{effectName}' on action state '{state}' carries a 'valueSeconds' — that spelling is WORLD SCOPE ONLY (a state row a world rule decrements once per simulation tick); a per-body effect writes an authored constant via 'value', or starts a proper timer via 'startTimer'.");
+        }
+
+        if (expression is not null) {
+            throw new InvalidOperationException(message: $"Action '{actionName}' effect '{effectName}' on action state '{state}' carries an 'expression' — expressions read world state and are admitted only in a world rule.");
         }
 
         return (value ?? throw new InvalidOperationException(message: $"Action '{actionName}' effect '{effectName}' on action state '{state}' carries no 'value' — a per-body effect writes an authored constant; a live copy source is legitimate only in a world rule."));

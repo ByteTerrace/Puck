@@ -1614,10 +1614,22 @@ public sealed partial class WorldServer {
                         rowName: m.Row,
                         key: m.Key,
                         tick: tick,
-                        row: out _,
+                        row: out var addendRow,
                         rawValue: out var addend,
                         text: out _
                     );
+
+                    // A cycling cell is the one exception: its stored value is a PHASE and its live value the rotation
+                    // the trait carried that phase to, so an add turns the phase by the operand rather than baking the
+                    // tick's rotation into it (which would double the turn on the next read).
+                    if (
+                        (addendRow is not null) &&
+                        WorldCellName.TryParse(candidate: m.Key, name: out var addendKey, reason: out _) &&
+                        (WorldDefinitionRows.FindCell(cells: addendRow.Cells, key: addendKey) is { } phaseCell) &&
+                        ((phaseCell.Cycle is not null) || ((phaseCell.Key == WorldStateRow.SlotKey) && (addendRow.Cycle is not null)))
+                    ) {
+                        addend = phaseCell.Value;
+                    }
 
                     long value;
 

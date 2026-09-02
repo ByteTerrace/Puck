@@ -30,7 +30,7 @@ public sealed partial class WorldServer {
         }
 
         var tick = (NextInputTick - 1UL);
-        var key = index.ToString(provider: System.Globalization.CultureInfo.InvariantCulture);
+        var key = WorldBodyKeyCache.Get(index: index);
         var tags = new List<string>();
 
         foreach (var name in names) {

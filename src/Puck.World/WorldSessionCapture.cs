@@ -309,6 +309,11 @@ internal static class WorldSessionCapture {
         return false;
     }
     private static WorldStateRow SettleRow(WorldDefinition definition, WorldStateRow row, ulong tick) {
+        // A declared-but-never-set slot row holds no cell yet, so there is nothing to settle and nothing to index.
+        if (row.Cells is not { Count: > 0 }) {
+            return row;
+        }
+
         // A slot-shaped row's OWN trait governs its one cell — the row-level counterpart of a keyed cell's own trait
         // below, and never both on the SAME cell (the validator refuses a slot-shaped row from declaring Advance or
         // Dynamics beside a keyed cells array, or the two together, in the first place).

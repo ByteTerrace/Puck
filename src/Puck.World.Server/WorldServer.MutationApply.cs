@@ -607,11 +607,18 @@ public sealed partial class WorldServer {
             if (request.Kind != WorldRebuildKind.Reset) {
                 m_machines.SetDocumentPath(documentPath: request.PathHint);
             }
+            // The lattice allocation and every evolved cell survive a rebuild, the hash and scatter paints included;
+            // a draw fill repaints only where the loaded document names a different pass than the one on the field.
+            var rebuiltFrom = m_definition;
+
             Install(
                 definition: candidate,
                 rebuildPopulation: true
             );
-            PaintLatticeDraws(definition: candidate);
+            RepaintChangedLatticeDraws(
+                previous: rebuiltFrom,
+                current: candidate
+            );
 
             if (rebuildAddonPlan is not null) {
                 m_addons!.Commit(plan: rebuildAddonPlan);
@@ -1233,7 +1240,17 @@ public sealed partial class WorldServer {
             // narration, disposal of a superseded guest) moves until then. Narration and superseded-guest disposal
             // (Finish) run only AFTER the journal write below, so neither can still be unwound by what Finish
             // itself does.
-            if (mutation is WorldMutation.UpsertStateCell) {
+            // A scalar state write keeps the compiled rules, catalog, groups and machines only while the candidate
+            // still carries the SAME state catalog identity the rules were compiled against — a document-value refresh
+            // or a slot-to-keyed reshape mints a new one, and a look-assignment rebind needs the population rebuild —
+            // so those cases take the full install like every other mutation.
+            var previous = m_definition;
+
+            if (
+                (mutation is WorldMutation.UpsertStateCell) &&
+                ReferenceEquals(objA: candidate.StateCatalog, objB: previous.StateCatalog) &&
+                !RefreshesLookAssignment(candidate: candidate, mutation: mutation)
+            ) {
                 InstallRuntimeStateValue(definition: candidate);
             } else {
                 Install(
@@ -1245,12 +1262,12 @@ public sealed partial class WorldServer {
                 );
             }
 
-            if (mutation is WorldMutation.Generate generated) {
-                RepaintLatticeDrawAfterGenerate(
-                    definition: candidate,
-                    rowName: generated.Row
-                );
-            }
+            // Whatever moved a lattice row's draw pass — a Generate, or a whole-row upsert that re-authored its
+            // cursor, decks or fill — repaints that row; every other row keeps its evolved cells.
+            RepaintChangedLatticeDraws(
+                previous: previous,
+                current: candidate
+            );
 
             if (addonPlan is not null) {
                 m_addons!.Commit(plan: addonPlan);

@@ -415,7 +415,7 @@
                         }
                       },
                       "gate": {
-                        "$ref": "./common.schema.json#/$defs/ActionPredicate",
+                        "$ref": "./common.schema.json#/$defs/ActionPredicateNullable",
                         "description": "An additional predicate that must hold beside Fact, or null for none.",
                         "default": null
                       },

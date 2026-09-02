@@ -245,9 +245,15 @@ value at every read/firing (effect `key`/`fromKey`, `compareState`
 same inside `$distance:`/`$los:`/`$nearest:`. `$symmetry:<function>[:<argument>]:<row>`
 reads a cell holding a symmetry-lattice node (0..239) through `ring`, `antipode`,
 `canonicalRay`, `cycle:<steps>`, `reflect:<node|cell:<row>[.<key>]>`,
-`orthogonal:<node|cell:…>` (1/0) or `projectionX`/`projectionY` — the row is the
+`orthogonal:<node|cell:…>` (1/0), `innerProduct:<node|cell:…>` (−2..2; 1 is a
+sixty-degree neighbour) or `projectionX`/`projectionY` — the row is the
 last token, `key` addresses the cell as usual, no node reads −1 (0 for
-orthogonal/projections); `world.symmetry <node> [other]` echoes the same maps.
+orthogonal/innerProduct/projections); `world.symmetry <node> [other]` echoes the
+same maps. A `cycle` trait's generator is `word` (one to eight mirror nodes) or
+the lattice's own cycle, raised to `power` per step; the period is the word's
+derived order (`world.symmetry.word <mirror>... [node:<n>]` prints it and a
+node's orbit). A `symmetryOrbit` generator source draws a node uniformly over
+`ring` or over `node`'s orbit under `word`, dealing the orbit under `mode`.
 `$nearest:<bodyRef>:<row>` is the
 nearest other active body whose cell in keyed `<row>` is nonzero (−1 for none,
 ties to the lowest index) — `puck.world.frozen.json`'s `auto-target` rule is
@@ -806,22 +812,28 @@ tick and `epochTick` projects to `0`, so a reloaded session keeps easing with
 no freeze.
 
 A row or a keyed cell may instead declare `cycle` (`WorldStateCycle`,
-`{plane, output, ticksPerStep, epochTick}`) — the tick-indexed rotation,
-mutually exclusive with `advance`/`dynamics`/`draw`/`lattice` and scalar-only
-at the row level the same way they are. The value is a pure function of the
-server tick through `Puck.Maths.CyclicRotation` (`plane` 0..3 picks the plane
-whose steps per tick are 1, 7, 11 or 13 twelfths of a turn; one step lasts
-`ticksPerStep` ticks from `epochTick`; every plane closes at step 30). `output`
-is `Step`/`Node`/`Ring` on an `int` row, `Turns`/`Cos`/`Sin`/`ProjectionX`/`ProjectionY`
-on a `fixed` row; the lattice outputs read `Puck.Maths.SymmetryLattice`, the
-stored value being the node (0..239) carried one ring position per step. The
-stored value is the PHASE in the row's displayed unit — nothing accumulates,
+`{word?, power, output, ticksPerStep, epochTick, substepTicks?}`) — the
+tick-indexed rotation, mutually exclusive with `advance`/`dynamics`/`draw`/
+`lattice` and scalar-only at the row level the same way they are. The value is
+a pure function of the server tick through a generator of the lattice's
+reflection group (`Puck.Maths.SymmetryWord`: `word` is one to eight mirror
+nodes, or omitted for the lattice's own thirty-step cycle, `Puck.Maths.CyclicRotation`;
+`power` is applications per step, nonzero and inside the order — with no word
+1, 7, 11 and 13 are the four rotation planes; one step lasts `ticksPerStep`
+ticks from `epochTick`). The period is the word's derived order (`Order` on
+the record; `world.symmetry.word` prints it); an identity word or power is
+refused. `output` is `Step`/`Node`/`Ring` on an `int` row,
+`Turns`/`Cos`/`Sin`/`ProjectionX`/`ProjectionY` on a `fixed` row — the rotation
+outputs read the order's root of unity (`CyclicRotation.Rotor(step, order)`),
+the lattice outputs read `Puck.Maths.SymmetryLattice`, the stored value being
+the node (0..239) carried `power` applications along its orbit per step. The
+stored value is the phase in the row's displayed unit — nothing accumulates,
 nothing rebases (`RebaseCellTraits` leaves it alone; `UpsertStateCell`
 preserves it), a write sets the phase, `addState` turns it. `world.state`
-echoes `cycle=plane<p>:<output>/<ticksPerStep>@epoch<n>`; `world.save`
-settles the value to the current index/node at epoch `0`. Read law:
-`tests/Puck.World.Schema.Tests/StateCycleReadLawTests.cs`; live proof:
-`tests/Puck.World.Canaries/state-cycle-trait`.
+echoes `cycle=<coxeter|[m,…]>^<power>:<output>/<ticksPerStep>@epoch<n>[+<substepTicks>] order=<n>`;
+`world.save` settles the value to the current index/node at epoch `0`. Read
+laws: `tests/Puck.World.Schema.Tests/StateCycleReadLawTests.cs` and
+`StateCycleWordLawTests.cs`; live proof: `tests/Puck.World.Canaries/state-cycle-trait`.
 
 World/owned-world ids (`Server/WorldOwnedWorlds.cs`) and `world.instance.start`
 names are `WorldSafeName` (the same `WorldSafeName.cs`) — the reserved-character
@@ -991,9 +1003,9 @@ other prototype-specific sections over it.
 **Kit motion model (`WorldKit.Motion`, a `WorldMotionModel` row).** A kit
 declares WHICH motion model it advances on, alongside `BodyMotionProgram`
 (which operations run each tick) — a `$type`-discriminated union
-(`WorldDefinition.cs`, the same pattern as `WorldScreenSource`), three arms:
+(`WorldDefinition.cs`, the same pattern as `WorldScreenSource`), two arms:
 `"grounded"` (`WorldMotionModel.Grounded`, authored under `motion` —
-e.g. `jump.world.json`'s `vaulter` kit), `"vehicle"`
+e.g. `jump.world.json`'s `vaulter` kit) and `"vehicle"`
 (`WorldMotionModel.Vehicle` — anisotropic body-frame drive for the
 `ResolveVehicleFrame`/`ShapeVehicleVelocity` ops: longitudinal
 accel/brake/coast, lateral grip with a held `DriftChannel`, speed-scaled

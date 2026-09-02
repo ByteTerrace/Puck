@@ -51,8 +51,9 @@ public static class WorldRuntimeStateHash {
         return hash.Value;
     }
 
-    /// <summary>Hashes every supported live state lane that can affect a later state decision. Presentation caches,
-    /// pending transport work, and diagnostics are deliberately outside this boundary.</summary>
+    /// <summary>Hashes the state system's authoritative live lanes: world rows and traits, fields, rule/interaction
+    /// latches, body action state, and poses. The rest of the world document, grants, presentation caches, pending
+    /// transport work, diagnostics, and screen-machine cores are deliberately outside this boundary.</summary>
     public static ulong HashAuthoritative(WorldServer server, ulong tick) {
         ArgumentNullException.ThrowIfNull(argument: server);
 
@@ -137,7 +138,15 @@ public static class WorldRuntimeStateHash {
         hash.Add(value: ((byte)(cycle is null ? 0 : 1)));
 
         if (cycle is not null) {
-            hash.Add(value: ((uint)cycle.Plane));
+            var word = cycle.Word;
+
+            hash.Add(value: ((uint)(word?.Count ?? 0)));
+
+            if (word is not null) {
+                foreach (var letter in word) { hash.Add(value: letter); }
+            }
+
+            hash.Add(value: cycle.Power);
             hash.Add(value: ((byte)cycle.Output));
             hash.Add(value: cycle.TicksPerStep);
             hash.Add(value: cycle.EpochTick);

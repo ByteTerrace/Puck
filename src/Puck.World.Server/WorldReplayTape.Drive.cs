@@ -13,7 +13,7 @@ namespace Puck.World;
 /// for a plain drive.</param>
 /// <param name="FastForward">Whether the drive steps as many recorded ticks per host step as the shell allows
 /// rather than one per live tick.</param>
-/// <param name="DivergedAt">The first driven tick whose live pose hash disagreed with the recording, or <c>-1</c>
+/// <param name="DivergedAt">The first driven tick whose live authoritative hash disagreed with the recording, or <c>-1</c>
 /// while every driven tick has matched.</param>
 public readonly record struct WorldReplayDriveProgress(string SourceName, int Cursor, int Target, int TapeTicks, string? ForkName, bool FastForward, int DivergedAt);
 public sealed partial class WorldReplayTape {
@@ -33,6 +33,7 @@ public sealed partial class WorldReplayTape {
         public bool Injected { get; set; }
         public int DivergedAt { get; set; } = -1;
         public List<ulong> LiveHashes { get; } = [];
+        public List<ulong> LiveAuthoritativeHashes { get; } = [];
         public List<bool> ExpectedMutationOutcomes { get; } = [];
         public Queue<bool> ReplayedMutationOutcomes { get; } = new();
     }
@@ -108,9 +109,11 @@ public sealed partial class WorldReplayTape {
         m_seats = [.. source.Seats];
         m_ticks = prefix;
         m_liveHashes.Clear();
+        m_liveAuthoritativeHashes.Clear();
         // The child's prefix hashes are what the live session reached while re-driving the parent — identical to
         // the parent's on a matching drive, and the honest live trace on a diverged one.
         m_liveHashes.AddRange(collection: drive.LiveHashes);
+        m_liveAuthoritativeHashes.AddRange(collection: drive.LiveAuthoritativeHashes);
         m_forkedFrom = new WorldReplayForkProvenance(
             ParentName: drive.SourceName,
             Tick: drive.Target
@@ -145,7 +148,7 @@ public sealed partial class WorldReplayTape {
 
         return null;
     }
-    // The live drive's per-tick close, from NoteTick: sample the live pose hash the step just produced, compare it
+    // The live drive's per-tick close, from NoteTick: sample the live pose and authoritative hashes the step just produced, compare the authoritative one
     // (and the tick's mutation outcomes) against the recording, and advance the cursor — ending the drive at its
     // target.
     private void NoteDriveTick() {
@@ -155,8 +158,13 @@ public sealed partial class WorldReplayTape {
 
         var tick = drive.Cursor;
         var liveHash = WorldReplaySnapshot.HashState(population: m_liveServer.Population);
+        var liveAuthoritativeHash = WorldRuntimeStateHash.HashAuthoritative(
+            server: m_liveServer,
+            tick: (m_liveServer.NextInputTick - 1UL)
+        );
 
         drive.LiveHashes.Add(item: liveHash);
+        drive.LiveAuthoritativeHashes.Add(item: liveAuthoritativeHash);
         drive.Injected = false;
 
         try {
@@ -174,14 +182,14 @@ public sealed partial class WorldReplayTape {
             }
         }
 
-        var recordedHash = drive.Source.RecordedHashes[tick];
+        var recordedHash = drive.Source.RecordedAuthoritativeHashes[tick];
 
         if (
-            (liveHash != recordedHash) &&
+            (liveAuthoritativeHash != recordedHash) &&
             (drive.DivergedAt < 0)
         ) {
             drive.DivergedAt = tick;
-            Console.Error.WriteLine(value: $"[replay.drive: divergence at tick {tick} of {drive.Target} — live hash 0x{liveHash:X16}, recorded 0x{recordedHash:X16}; the drive continues]");
+            Console.Error.WriteLine(value: $"[replay.drive: divergence at tick {tick} of {drive.Target} — live authoritative hash 0x{liveAuthoritativeHash:X16}, recorded 0x{recordedHash:X16}; the drive continues]");
         }
 
         drive.Cursor = (tick + 1);
