@@ -107,6 +107,46 @@ public sealed class BindingSessionPlanReservationTests {
         );
     }
 
+    [Fact]
+    public void ANullRowOrMemberIsSkippedRatherThanDereferenced() {
+        // The reservation walk was hardened against null COLLECTIONS but not against null ELEMENTS, so a hole in
+        // any of the four lists it reads crashed the plan builder before the page it was asked about was even
+        // consulted. A malformed row is BindingProfile.Compile's refusal to make; this walk simply reserves
+        // nothing for it.
+        var document = new BindingProfileDocument(
+            Version: BindingProfileDocument.CurrentVersion,
+            Modifiers: [
+                null!,
+                new BindingModifierDefinition(Id: "look", Sources: [null!, "pad.leftTrigger"]),
+            ],
+            Chords: [
+                null!,
+                new BindingChordDefinition(
+                    Group: "play",
+                    Chord: [],
+                    Page: new BindingPageDefinition(
+                        Id: "base",
+                        Entries: [new BindingPageEntryDefinition(Sources: ["pad.south"], Command: "jump")]
+                    )
+                ),
+                new BindingChordDefinition(
+                    Group: "play",
+                    Held: [null!],
+                    Chord: ["pad.leftShoulder"],
+                    Page: new BindingPageDefinition(Id: "modal", Entries: [])
+                ),
+            ]
+        );
+
+        Assert.Equal(
+            actual: (BindingSessionPlan.FromPage(
+                document: document,
+                pageId: "base"
+            ).ReservedSources ?? []).Order(comparer: StringComparer.Ordinal),
+            expected: ["pad.leftShoulder", "pad.leftTrigger"]
+        );
+    }
+
     // The reservation scenarios, each carrying a page "base" with at least one sourced entry to walk.
     private static IEnumerable<(string Label, BindingProfileDocument Document)> Documents() {
         yield return ("no declared modifiers, one raw chord member", Document(
